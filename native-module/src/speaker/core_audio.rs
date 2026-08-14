@@ -1,12 +1,18 @@
 use anyhow::Result;
 use ca::aggregate_device_keys as agg_keys;
-use cidre::{arc, av, cat, cf, core_audio as ca, ns, os};
+use cidre::{api, arc, av, cat, cf, core_audio as ca, ns, os};
 use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+
+fn strip_audio_suffix(s: &str) -> &str {
+    s.strip_suffix(":output")
+        .or_else(|| s.strip_suffix(":input"))
+        .unwrap_or(s)
+}
 
 struct Ctx {
     format: arc::R<av::AudioFormat>,
@@ -25,28 +31,64 @@ pub struct SpeakerInput {
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
+        // 0. Gate on macOS 14.4+. -[CATapDescription initExcludingProcesses:andDeviceUID:withStream:]
+        // was introduced in macOS 14.4 (Sonoma). The class itself exists from 14.2, so
+        // [CATapDescription alloc] succeeds on 14.2/14.3 but invoking this initializer there
+        // throws `unrecognized selector` and tears down the process before our Err can trigger
+        // the SCK fallback in macos.rs. See issue #249.
+        let pi = ns::ProcessInfo::current();
+        if !pi.is_os_at_least_version(api::OsVersion {
+            major: 14,
+            minor: 4,
+            patch: 0,
+        }) {
+            return Err(anyhow::anyhow!(
+                "CoreAudio process tap requires macOS 14.4+ (current OS lacks initExcludingProcesses:andDeviceUID:withStream:)"
+            ));
+        }
+
         // 1. Find the target output device
         let output_device = match device_id {
             Some(ref uid) if !uid.is_empty() && uid != "default" => {
+                let requested_uid = strip_audio_suffix(uid);
                 let devices = ca::System::devices()?;
-                devices
-                    .into_iter()
-                    .find(|d| d.uid().map(|u| u.to_string() == *uid).unwrap_or(false))
-                    .unwrap_or(ca::System::default_output_device()?)
+                match devices.into_iter().find(|d| {
+                    d.uid()
+                        .map(|u| strip_audio_suffix(&u.to_string()).eq_ignore_ascii_case(requested_uid))
+                        .unwrap_or(false)
+                }) {
+                    Some(device) => device,
+                    None => {
+                        println!(
+                            "[CoreAudioTap] Requested output UID '{}' not found; falling back to default output device",
+                            uid
+                        );
+                        ca::System::default_output_device()?
+                    }
+                }
             }
             _ => ca::System::default_output_device()?,
         };
 
         let output_uid = output_device.uid()?;
         println!("[CoreAudioTap] Target device UID: {}", output_uid);
+        let output_uid_ns = ns::String::with_str(&output_uid.to_string());
 
-        // 2. Create global tap
-        let sub_device = cf::DictionaryOf::with_keys_values(
-            &[ca::sub_device_keys::uid()],
-            &[output_uid.as_type_ref()],
+        // 2. Create a device-scoped tap with explicit mute behavior.
+        // Binding the tap to the output UID avoids the aggregate device starting
+        // successfully while the tap itself only receives zero-filled buffers.
+        // Apple's default is Unmuted but some macOS versions have shipped with
+        // inconsistent defaults — set it explicitly to match AudioCap reference.
+        let mut tap_desc = ca::TapDesc::alloc().init_excluding_processes_and_device(
+            &ns::Array::new(),
+            &output_uid_ns,
+            0,
         );
-
-        let tap_desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
+        tap_desc.set_mono(true);
+        tap_desc.set_mixdown(true);
+        // -[CATapDescription setMuteBehavior:] shipped in the same macOS 14.4 release as
+        // the device-bound init above. Don't split this from the 14.4 gate at the top of new().
+        tap_desc.set_mute_behavior(ca::TapMuteBehavior::Unmuted);
         let tap = tap_desc.create_process_tap()?;
         println!("[CoreAudioTap] Tap created: {:?}", tap.uid());
 
@@ -55,11 +97,17 @@ impl SpeakerInput {
             &[tap.uid().unwrap().as_type_ref()],
         );
 
-        // 3. Create aggregate device descriptor
+        // 3. Create aggregate device descriptor.
+        // CoreAudio only accepts `main_sub_device` when the same UID is also present in
+        // `sub_device_list`; otherwise HAL silently leaves the main sub-device empty
+        // and the tap can start without producing input buffers.
         let agg_name = cf::String::from_str("NativelySystemAudioTap");
         let agg_uid = cf::Uuid::new().to_cf_string();
 
-        // Assign arrays to variables first to prevent temporary lifetime drops
+        let sub_device = cf::DictionaryOf::with_keys_values(
+            &[ca::sub_device_keys::uid()],
+            &[output_uid.as_type_ref()],
+        );
         let sub_device_arr = cf::ArrayOf::from_slice(&[sub_device.as_ref()]);
         let sub_tap_arr = cf::ArrayOf::from_slice(&[sub_tap.as_ref()]);
 
@@ -75,7 +123,6 @@ impl SpeakerInput {
                 agg_keys::tap_list(),
             ],
             &[
-                // FIX: Add missing .as_type_ref() calls so all array elements are identical &cf::Type
                 cf::Boolean::value_true().as_type_ref(),
                 cf::Boolean::value_false().as_type_ref(),
                 cf::Boolean::value_true().as_type_ref(),
@@ -127,14 +174,14 @@ impl SpeakerInput {
         })
     }
 
-    pub fn stream(self) -> SpeakerStream {
-        SpeakerStream {
+    pub fn stream(self) -> Result<SpeakerStream> {
+        Ok(SpeakerStream {
             consumer: self.consumer,
             _device: self.device,
             _ctx: self._ctx,
             _tap: self.tap,
             current_sample_rate: self.current_sample_rate,
-        }
+        })
     }
 }
 
@@ -162,11 +209,7 @@ extern "C" fn proc(
     if let Some(view) = av::AudioPcmBuf::with_buf_list_no_copy(&ctx.format, input_data, None) {
         if let Some(data) = view.data_f32_at(0) {
             let buffer_channels = input_data.buffers[0].number_channels;
-            let actual_ch = if buffer_channels > 1 {
-                buffer_channels
-            } else {
-                2
-            };
+            let actual_ch = buffer_channels.max(1);
             push_audio(ctx, data, actual_ch);
         }
     } else if ctx.format.common_format() == av::audio::CommonFormat::PcmF32 {
@@ -178,14 +221,8 @@ extern "C" fn proc(
             let data =
                 unsafe { std::slice::from_raw_parts(first_buffer.data as *const f32, float_count) };
 
-            // BUGFIX: macOS CoreAudio Tap notoriously ignores mono ASBD requests
-            // and secretly returns interleaved stereo (L,R,L,R).
             let buffer_channels = first_buffer.number_channels;
-            let actual_ch = if buffer_channels > 1 {
-                buffer_channels
-            } else {
-                2
-            };
+            let actual_ch = buffer_channels.max(1);
 
             push_audio(ctx, data, actual_ch);
         }
@@ -257,5 +294,67 @@ impl Drop for SpeakerStream {
     fn drop(&mut self) {
         // `_device` is stopped when dropped — either by explicit `pause()` (which sets it to None)
         // or when `SpeakerStream` itself is destroyed. No explicit teardown needed.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for issue #249: pins the runtime version-gate contract.
+    /// `OsVersion::at_least()` resolves via `__isPlatformVersionAtLeast`, so this also proves
+    /// that the C entrypoint is linked and the compile-time `cidre::api` surface used by
+    /// `SpeakerInput::new` is wired correctly. Test host is macOS 14.4+ (Darwin 25.x).
+    #[test]
+    fn os_version_gate_resolves_macos_14_4_on_modern_hosts() {
+        // 14.4 must be reported true on a modern host (14.4+). If this flips, the gate is broken.
+        assert!(
+            api::OsVersion {
+                major: 14,
+                minor: 4,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 14.4 should report at_least() == true on a >=14.4 host"
+        );
+    }
+
+    /// Inverse direction: a fictitious far-future macOS must report false. Proves we
+    /// aren't accidentally short-circuiting to always-true.
+    #[test]
+    fn os_version_gate_rejects_future_version() {
+        assert!(
+            !api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 99.0 must not report at_least() == true"
+        );
+    }
+
+    /// Same contract via ProcessInfo (the API actually called from SpeakerInput::new).
+    /// Locks in that the cidre selector binding matches Foundation's
+    /// -[NSProcessInfo isOperatingSystemAtLeastVersion:] on this host.
+    #[test]
+    fn process_info_is_os_at_least_14_4_on_modern_hosts() {
+        let pi = ns::ProcessInfo::current();
+        assert!(
+            pi.is_os_at_least_version(api::OsVersion {
+                major: 14,
+                minor: 4,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(14.4) must be true on a >=14.4 host"
+        );
+        assert!(
+            !pi.is_os_at_least_version(api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(99.0) must be false"
+        );
     }
 }

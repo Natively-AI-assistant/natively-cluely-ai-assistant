@@ -37,13 +37,14 @@ export class ProcessingHelper {
       let groqApiKey = process.env.GROQ_API_KEY
       let openaiApiKey = process.env.OPENAI_API_KEY
       let claudeApiKey = process.env.CLAUDE_API_KEY
+      let deepseekApiKey = process.env.DEEPSEEK_API_KEY
 
       // Allow initializing without key (will be loaded in loadStoredCredentials or via Settings)
       if (!apiKey) {
         console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env. Will try CredentialsManager after ready.")
       }
 
-      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey)
+      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey)
     }
   }
 
@@ -58,6 +59,7 @@ export class ProcessingHelper {
     const groqKey = credManager.getGroqApiKey();
     const openaiKey = credManager.getOpenaiApiKey();
     const claudeKey = credManager.getClaudeApiKey();
+    const deepseekKey = credManager.getDeepseekApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -79,6 +81,17 @@ export class ProcessingHelper {
       this.llmHelper.setClaudeApiKey(claudeKey);
     }
 
+    if (deepseekKey) {
+      console.log("[ProcessingHelper] Loading stored DeepSeek API Key from CredentialsManager");
+      this.llmHelper.setDeepseekApiKey(deepseekKey);
+    }
+
+    const litellmBaseURL = credManager.getLitellmBaseURL();
+    if (litellmBaseURL) {
+      console.log("[ProcessingHelper] Loading stored LiteLLM config from CredentialsManager");
+      this.llmHelper.setLitellmConfig(credManager.getLitellmApiKey() || '', litellmBaseURL, credManager.getLitellmMaxTokens());
+    }
+
     const nativelyKey = credManager.getNativelyApiKey();
     if (nativelyKey) {
       console.log("[ProcessingHelper] Loading stored Natively API Key from CredentialsManager");
@@ -98,6 +111,7 @@ export class ProcessingHelper {
           openaiKey: openaiKey || undefined,
           geminiKey: geminiKey || undefined,
           // ollamaUrl is not fetched in CredentialsManager yet by default, but we pass these keys
+          providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
       });
 
       // CRITICAL: Retry pending embeddings now that we have a key
@@ -130,11 +144,11 @@ export class ProcessingHelper {
     // Load Languages
     const sttLanguage = credManager.getSttLanguage();
     const aiResponseLanguage = credManager.getAiResponseLanguage();
-    
+
     if (sttLanguage) {
       this.llmHelper.setSttLanguage(sttLanguage);
     }
-    
+
     if (aiResponseLanguage) {
       this.llmHelper.setAiResponseLanguage(aiResponseLanguage);
     }

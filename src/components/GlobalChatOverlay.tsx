@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check, Globe, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { genMessageId } from '../utils/messageId';
 import nativelyIcon from './icon.png';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
 
 // ============================================
 // Types
@@ -84,13 +86,6 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
                 {content}
-                {isStreaming && (
-                    <motion.span
-                        className="inline-block w-0.5 h-4 bg-text-secondary ml-0.5 align-middle"
-                        animate={{ opacity: [1, 0] }}
-                        transition={{ duration: 0.5, repeat: Infinity }}
-                    />
-                )}
             </div>
             {!isStreaming && content && (
                 <button
@@ -111,6 +106,30 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
 
 type ChatState = 'idle' | 'waiting_for_llm' | 'streaming_response' | 'error';
 
+// Hard client-side ceiling on the ragQueryGlobal IPC round-trip. The main
+// process has its own internal timeouts (worker deadman switch, stream
+// stall guard), but every one of those protects a DIFFERENT stage of the
+// pipeline — if the hang happens somewhere NONE of them cover (e.g. the
+// main thread itself blocked inside a synchronous native call before any
+// of those timers can even be scheduled), the `await` on this invoke() has
+// no ceiling of its own and can wait forever with the UI showing nothing.
+// This is the backstop: no matter what breaks on the other side of the IPC
+// boundary, the user gets an answer (even if it's "something went wrong")
+// within a bounded time instead of a silently frozen chat bubble.
+const RAG_QUERY_CLIENT_TIMEOUT_MS = 20000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`${label} timed out after ${ms}ms — the main process never responded`));
+        }, ms);
+        promise.then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            (e) => { clearTimeout(timer); reject(e); },
+        );
+    });
+}
+
 const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     isOpen,
     onClose,
@@ -121,9 +140,22 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [query, setQuery] = useState('');
     const streamBuffer = useStreamBuffer();
+    // Match the meeting chat overlay / modes manager --mm-bg exactly so
+    // the expanded card looks like the same dark grey surface.
+    const isLightTheme = useResolvedTheme() === 'light';
+    const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatWindowRef = useRef<HTMLDivElement>(null);
+    // Synchronous busy guard for submitQuestion. `chatState` alone isn't
+    // enough: it's React state, so two calls fired in quick succession (e.g.
+    // repeated Enter presses on the footer input) can both read it before a
+    // re-render lands, both pass the guard, and both register their own
+    // onRAGStreamChunk/onRAGStreamComplete listeners against the ONE shared
+    // streamBuffer — each call's `streamBuffer.reset()` then clobbers
+    // whatever the other call had already buffered, so the eventual
+    // completion can render empty. A ref updates immediately, no batching.
+    const submitInFlightRef = useRef(false);
 
     // Submit initial query when overlay opens
     useEffect(() => {
@@ -170,23 +202,32 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
 
     // Submit question using global RAG
     const submitQuestion = useCallback(async (question: string) => {
-        if (!question.trim() || chatState === 'waiting_for_llm' || chatState === 'streaming_response') return;
+        if (!question.trim() || submitInFlightRef.current) return;
+        submitInFlightRef.current = true;
 
         const userMessage: Message = {
-            id: `user-${Date.now()}`,
+            id: genMessageId(),
             role: 'user',
             content: question
         };
         setMessages(prev => [...prev, userMessage]);
         setChatState('waiting_for_llm');
         setErrorMessage(null);
-        
+
         // Scroll to bottom when user sends message
         setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
 
-        const assistantMessageId = `assistant-${Date.now()}`;
+        const assistantMessageId = genMessageId();
+
+        // Track active listener cleanups so the finally block can always
+        // remove them — even if the IPC done/error events never arrive.
+        // Without this, a hung stream leaves `chatState` stuck at
+        // 'waiting_for_llm' / 'streaming_response' and the guard at the
+        // top of submitQuestion silently drops every subsequent message
+        // (no user-message push, no response).
+        let activeCleanups: Array<() => void> = [];
 
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
@@ -214,7 +255,13 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             });
 
             const doneCleanup = window.electronAPI?.onRAGStreamComplete(() => {
-                const finalContent = streamBuffer.getBufferedContent();
+                // The stream can legitimately complete with zero chunks (e.g. a
+                // short non-question like "hi" fed through the strict RAG-grounding
+                // prompt can make the model return an empty/degenerate completion).
+                // Without this fallback, the bubble renders as nothing — no text,
+                // no error — which reads as "the app didn't respond at all".
+                const finalContent = streamBuffer.getBufferedContent().trim()
+                    || "I'm not sure how to answer that from your meetings — try asking a more specific question.";
                 setMessages(prev => prev.map(msg =>
                     msg.id === assistantMessageId
                         ? { ...msg, content: finalContent, isStreaming: false }
@@ -238,19 +285,66 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 errorCleanup?.();
             });
 
-            // Use global RAG query
-            const result = await window.electronAPI?.ragQueryGlobal(question);
+            if (tokenCleanup) activeCleanups.push(tokenCleanup);
+            if (doneCleanup) activeCleanups.push(doneCleanup);
+            if (errorCleanup) activeCleanups.push(errorCleanup);
 
-            if (result?.fallback) {
+            // Use global RAG query. Wrapped in a hard client-side ceiling — see
+            // RAG_QUERY_CLIENT_TIMEOUT_MS above for why this exists: nothing
+            // upstream of this call can guarantee the invoke() ever resolves.
+            let result: { fallback?: boolean; success?: boolean; error?: string } | undefined;
+            try {
+                const call = window.electronAPI?.ragQueryGlobal(question);
+                result = call
+                    ? await withTimeout(call, RAG_QUERY_CLIENT_TIMEOUT_MS, 'ragQueryGlobal')
+                    : undefined;
+            } catch (timeoutErr) {
+                console.error('[GlobalChat] ragQueryGlobal client-side timeout:', timeoutErr);
+                // Tear down the RAG listeners we just registered — the main
+                // process may still respond well after this point (its own
+                // internal timeouts run on a longer clock), and a late
+                // rag:stream-chunk/-complete/-error must not land on a message
+                // this function has already abandoned.
+                tokenCleanup?.();
+                doneCleanup?.();
+                errorCleanup?.();
+                activeCleanups = [];
+                setMessages(prev => prev.map(msg =>
+                    msg.id === assistantMessageId
+                        ? { ...msg, content: "This is taking longer than expected. Please try again.", isStreaming: false }
+                        : msg
+                ));
+                setChatState('error');
+                setErrorMessage("The search took too long to respond. Please try again.");
+                return;
+            }
+
+            // If electronAPI is unavailable or IPC failed, result will be undefined.
+            // Treat this as a fallback case to ensure the user gets SOME response.
+            if (!result || result.fallback) {
                 console.log("[GlobalChat] RAG unavailable, falling back to standard chat");
                 // Cleanup RAG listeners
                 tokenCleanup?.();
                 doneCleanup?.();
                 errorCleanup?.();
+                activeCleanups = [];
 
                 // Setup fallback listeners (Standard Gemini)
                 streamBuffer.reset();
-                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                // Stream-id guard (2026-07-31): these fallback listeners used to
+                // ignore the streamId meta entirely, so tokens from an ABANDONED
+                // earlier stream (client timeout below leaves main streaming)
+                // landed in the next request's bubble. Adopt the first tagged id
+                // seen after registration; drop anything older.
+                let adoptedStreamId: number | null = null;
+                const acceptsMeta = (meta?: { streamId?: number }) => {
+                    const id = meta?.streamId;
+                    if (typeof id !== 'number') return true;      // legacy untagged
+                    if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                    return id === adoptedStreamId;
+                };
+                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                    if (!acceptsMeta(meta)) return;
                     setChatState('streaming_response');
                     streamBuffer.appendToken(token, (content) => {
                         setMessages(prev => prev.map(msg =>
@@ -261,8 +355,11 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                     });
                 });
 
-                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
-                    const finalContent = streamBuffer.getBufferedContent();
+                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                    if (!acceptsMeta(payload)) return;
+                    // Same empty-completion guard as the RAG path above.
+                    const finalContent = streamBuffer.getBufferedContent().trim()
+                        || "I'm not sure how to answer that — try rephrasing your question.";
                     setMessages(prev => prev.map(msg =>
                         msg.id === assistantMessageId
                             ? { ...msg, content: finalContent, isStreaming: false }
@@ -275,7 +372,9 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                     oldErrorCleanup?.();
                 });
 
-                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                    if (meta?.source === 'phone-mirror') return;
+                    if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                     console.error('[GlobalChat] Gemini stream error:', error);
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                     setErrorMessage("Couldn't get a response. Please check your settings.");
@@ -286,8 +385,33 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                     oldErrorCleanup?.();
                 });
 
-                // Call standard chat
-                await window.electronAPI?.streamGeminiChat(question, undefined, undefined, { skipSystemPrompt: false, ignoreKnowledgeMode: true });
+                if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
+                if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
+                if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
+
+                // Call standard chat — same client-side ceiling as ragQueryGlobal above.
+                const fallbackCall = window.electronAPI?.streamGeminiChat(question, undefined, undefined, { skipSystemPrompt: false });
+                if (fallbackCall) {
+                    try {
+                        await withTimeout(fallbackCall, RAG_QUERY_CLIENT_TIMEOUT_MS, 'streamGeminiChat');
+                    } catch (timeoutErr) {
+                        console.error('[GlobalChat] streamGeminiChat client-side timeout:', timeoutErr);
+                        // Abandoning without cancelling left main streaming into
+                        // listeners the NEXT submit registers.
+                        try { (window.electronAPI as any)?.cancelChatStream?.(); } catch { /* best-effort */ }
+                        oldTokenCleanup?.();
+                        oldDoneCleanup?.();
+                        oldErrorCleanup?.();
+                        activeCleanups = [];
+                        setMessages(prev => prev.map(msg =>
+                            msg.id === assistantMessageId
+                                ? { ...msg, content: "This is taking longer than expected. Please try again.", isStreaming: false }
+                                : msg
+                        ));
+                        setChatState('error');
+                        setErrorMessage("The request took too long to respond. Please try again.");
+                    }
+                }
             }
 
         } catch (error) {
@@ -295,8 +419,18 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
             setErrorMessage("Something went wrong. Please try again.");
             setChatState('error');
+        } finally {
+            // Always remove listeners and reset chatState — even if the
+            // IPC done/error callbacks never fired. Without this, a single
+            // hung stream leaves chatState stuck and silently drops every
+            // subsequent submitQuestion (no user-message push, no response).
+            activeCleanups.forEach(fn => fn());
+            activeCleanups = [];
+            setChatState(prev => (prev === 'error' ? prev : 'idle'));
+            streamBuffer.reset();
+            submitInFlightRef.current = false;
         }
-    }, [chatState]);
+    }, []);
 
     return (
         <AnimatePresence
@@ -334,7 +468,8 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                             height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
                             opacity: { duration: 0.2 }
                         }}
-                        className="relative mx-auto w-full max-w-[680px] mb-0 bg-bg-secondary rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        className="relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle shrink-0">

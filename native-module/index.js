@@ -577,11 +577,15 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.MicrophoneCapture = nativeBinding.MicrophoneCapture
+module.exports.StealthKeyboardTap = nativeBinding.StealthKeyboardTap
 module.exports.SystemAudioCapture = nativeBinding.SystemAudioCapture
+module.exports.applyStealthToWindow = nativeBinding.applyStealthToWindow
 module.exports.deactivateDodoKey = nativeBinding.deactivateDodoKey
+module.exports.getDefaultOutputDeviceId = nativeBinding.getDefaultOutputDeviceId
 module.exports.getHardwareId = nativeBinding.getHardwareId
 module.exports.getInputDevices = nativeBinding.getInputDevices
 module.exports.getOutputDevices = nativeBinding.getOutputDevices
+module.exports.isAccessibilityGranted = nativeBinding.isAccessibilityGranted
 module.exports.validateDodoKey = nativeBinding.validateDodoKey
 module.exports.verifyDodoKey = nativeBinding.verifyDodoKey
 module.exports.verifyGumroadKey = nativeBinding.verifyGumroadKey

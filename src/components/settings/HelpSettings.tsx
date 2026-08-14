@@ -2,34 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
-    FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, ChevronRight, HelpCircle, Upload, CheckCircle2,
-    RefreshCw, LayoutGrid, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb, Bug,
-    SlidersHorizontal, PointerOff, ArrowRight
+    FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, HelpCircle, Upload, CheckCircle2,
+    RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
+    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, DollarSign, Building2
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
+import { AccordionSection } from '../ui/AccordionSection';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { isMac, getModifierSymbol } from '../../utils/platformUtils';
 import nativelyIcon from '../icon.png';
+import zoomCaptureModeScreenshot from '../../assets/zoom-capture-mode.png';
 
 // ----------------------
 // Animations & Mocks
 // ----------------------
 
+const CMD_SYMBOL = getModifierSymbol('cmd');
 const MOCK_BUTTONS = [
-    { icon: Pencil,        label: 'What to answer?',   kbd: '⌘1', color: 'blue'    },
-    { icon: Bug,           label: 'Bug Finder',        kbd: '⌘N', color: 'rose'    },
-    { icon: LayoutGrid,    label: 'System Design',     kbd: '⌘M', color: 'amber'   },
-    { icon: Sparkles,      label: 'AI Design',         kbd: '⌘K', color: 'teal'    },
-    { icon: Zap,           label: 'Answer',             kbd: '⌘5', color: 'emerald' },
+    { icon: Pencil, label: 'What to answer?', kbd: `${CMD_SYMBOL}1`, color: 'blue' },
+    { icon: MessageSquare, label: 'Clarify', kbd: `${CMD_SYMBOL}2`, color: 'indigo' },
+    { icon: RefreshCw, label: 'Recap', kbd: `${CMD_SYMBOL}7`, color: 'amber' },
+    { icon: HelpCircle, label: 'Follow Up Question', kbd: `${CMD_SYMBOL}4`, color: 'teal' },
+    { icon: Zap, label: 'Answer', kbd: `${CMD_SYMBOL}5`, color: 'emerald' },
 ] as const;
 
 const colorMap: Record<string, string> = {
-    blue:    'bg-blue-500/10 text-blue-500 border-blue-500/25',
-    indigo:  'bg-indigo-500/10 text-indigo-400 border-indigo-500/25',
-    amber:   'bg-amber-500/10 text-amber-500 border-amber-500/25',
-    teal:    'bg-teal-500/10 text-teal-500 border-teal-500/25',
+    blue: 'bg-blue-500/10 text-blue-500 border-blue-500/25',
+    indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/25',
+    amber: 'bg-amber-500/10 text-amber-500 border-amber-500/25',
+    teal: 'bg-teal-500/10 text-teal-500 border-teal-500/25',
     emerald: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25',
-    rose:    'bg-rose-500/10 text-rose-500 border-rose-500/25',
 };
 
 const MockAppInterface = () => {
@@ -97,7 +100,7 @@ const MockAppInterface = () => {
                             </div>
                         </div>
                         <div className="flex justify-end">
-                            <div className="max-w-[72.25%] px-[13.6px] py-[10.2px] text-[14px] leading-relaxed whitespace-pre-wrap bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-[20px] rounded-tr-[4px] shadow-sm font-medium">
+                            <div className="max-w-[72.25%] px-[13.6px] py-[10.2px] text-[14px] leading-relaxed whitespace-pre-wrap bg-accent-subtle border border-accent-border text-accent-primary rounded-[20px] rounded-tr-[4px] shadow-sm font-medium">
                                 <span className="font-semibold text-emerald-500 block mb-1 text-[12px]">🎯 Answer</span>
                                 A good approach would be to use a hash map to cache intermediate results and reduce time complexity to O(N).
                             </div>
@@ -124,9 +127,9 @@ const MockAppInterface = () => {
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] text-text-secondary opacity-60">
                                     <span className="hidden sm:inline">Ask anything on screen or conversation, or</span>
                                     <div className="flex items-center gap-1 opacity-80 sm:ml-0.5">
-                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">⌘</kbd>
+                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">{getModifierSymbol('cmd')}</kbd>
                                         <span className="text-[10px]">+</span>
-                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">⇧</kbd>
+                                        <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">{getModifierSymbol('shift')}</kbd>
                                         <span className="text-[10px]">+</span>
                                         <kbd className="px-1.5 py-0.5 rounded border text-[10px] font-sans min-w-[20px] text-center bg-bg-item-surface border-border-subtle text-text-primary shadow-sm">H</kbd>
                                     </div>
@@ -237,7 +240,7 @@ const MockMeetingInterfaceAnim = () => {
                             {/* Matches MeetingDetails: speaker + timestamp inline, then text below — no card/border */}
                             {[
                                 { speaker: 'Them', time: '10:32', text: 'Why did you use Redis over Memcached for the cart session?' },
-                                { speaker: 'Me',   time: '10:33', text: 'Because we needed sorted sets for rate limiting and automatic expiry without custom cron jobs.' },
+                                { speaker: 'Me', time: '10:33', text: 'Because we needed sorted sets for rate limiting and automatic expiry without custom cron jobs.' },
                             ].map((entry, i) => (
                                 <div key={i}>
                                     <div className="flex items-center gap-2 mb-1">
@@ -252,7 +255,7 @@ const MockMeetingInterfaceAnim = () => {
                     {tab === 'usage' && (
                         <motion.div key="usage" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="space-y-4">
                             <div className="flex justify-end pt-2">
-                                <div className="bg-accent-primary text-white px-4 py-2 rounded-2xl rounded-tr-sm max-w-[75%] text-xs leading-relaxed shadow-sm">
+                                <div className="bg-accent-primary text-on-accent px-4 py-2 rounded-2xl rounded-tr-sm max-w-[75%] text-xs leading-relaxed shadow-sm">
                                     Could you elaborate on the Redis rate limiting?
                                 </div>
                             </div>
@@ -298,7 +301,7 @@ const MockMeetingChatAnim = () => {
             {/* Messages */}
             <div className="p-5 space-y-5">
                 <div className="flex justify-end">
-                    <div className="bg-accent-primary text-white px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[75%] text-sm leading-relaxed shadow-sm">
+                    <div className="bg-accent-primary text-on-accent px-4 py-2.5 rounded-2xl rounded-tr-sm max-w-[75%] text-sm leading-relaxed shadow-sm">
                         What API dependencies did they mention?
                     </div>
                 </div>
@@ -320,85 +323,85 @@ const MockSearchPillAnim = () => {
     return (
         <div className="flex justify-center flex-col items-center py-10 rounded-[26px] border border-border-subtle relative overflow-hidden h-[340px] bg-bg-card">
             <div className="absolute inset-0 bg-black/5 backdrop-blur-[2px]" />
-            <motion.div 
-                 initial={{ y: -10, opacity: 0, scale: 0.95 }}
-                 animate={{ y: 0, opacity: 1, scale: 1 }}
-                 className={`w-[480px] ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'} backdrop-blur-xl backdrop-saturate-150 rounded-2xl shadow-md overflow-hidden z-10 transform-gpu relative border border-border-subtle`}
-             >
-                 {/* Input Row */}
-                 <div className="relative flex items-center border-b border-border-muted">
-                     <div className="absolute left-3 flex items-center pointer-events-none">
-                         <Search size={14} className="text-text-tertiary" />
-                     </div>
-                     <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
-                        <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-blue-500 ml-[2px] inline-block" />
-                     </div>
-                 </div>
+            <motion.div
+                initial={{ y: -10, opacity: 0, scale: 0.95 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                className={`w-[480px] ${isLight ? 'bg-[#F2F2F7]/90' : 'bg-[#161618]/90'} backdrop-blur-xl backdrop-saturate-150 rounded-2xl shadow-md overflow-hidden z-10 transform-gpu relative border border-border-subtle`}
+            >
+                {/* Input Row */}
+                <div className="relative flex items-center border-b border-border-muted">
+                    <div className="absolute left-3 flex items-center pointer-events-none">
+                        <Search size={14} className="text-text-tertiary" />
+                    </div>
+                    <div className="w-full bg-transparent pl-9 pr-4 py-2.5 text-[13px] text-text-primary outline-none flex items-center h-[38px]">
+                        <span className="opacity-90">System</span><motion.span animate={{ opacity: [1, 0, 1] }} transition={{ repeat: Infinity, duration: 1 }} className="w-[1.5px] h-3.5 bg-accent-primary ml-[2px] inline-block" />
+                    </div>
+                </div>
 
-                 {/* Results Panel mock */}
-                 <div className="w-[480px]">
-                     <div className="py-2">
-                         {/* Explore Section */}
-                         <div className="px-3 py-1">
-                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
-                                 Explore
-                             </div>
+                {/* Results Panel mock */}
+                <div className="w-[480px]">
+                    <div className="py-2">
+                        {/* Explore Section */}
+                        <div className="px-3 py-1">
+                            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                                Explore
+                            </div>
 
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left bg-bg-item-active transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
-                                     <Sparkles size={12} className="text-white" />
-                                 </div>
-                                 <span className="text-[13px] text-text-primary truncate">
-                                     System
-                                 </span>
-                             </div>
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left bg-bg-item-active transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
+                                    <Sparkles size={12} className="text-white" />
+                                </div>
+                                <span className="text-[13px] text-text-primary truncate">
+                                    System
+                                </span>
+                            </div>
 
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
-                                     <Search size={12} className="text-text-secondary" />
-                                 </div>
-                                 <span className="text-[13px] text-text-secondary">
-                                     Search for <span className="text-text-primary">"System"</span>
-                                 </span>
-                             </div>
-                         </div>
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
+                                    <Search size={12} className="text-text-secondary" />
+                                </div>
+                                <span className="text-[13px] text-text-secondary">
+                                    Search for <span className="text-text-primary">"System"</span>
+                                </span>
+                            </div>
+                        </div>
 
-                         {/* Sessions Section */}
-                         <div className="px-3 py-1 mt-1">
-                             <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
-                                 Sessions
-                             </div>
+                        {/* Sessions Section */}
+                        <div className="px-3 py-1 mt-1">
+                            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                                Sessions
+                            </div>
 
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
-                                     <FileText size={12} className="text-text-secondary" />
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                     <div className="text-[13px] text-text-primary truncate">
-                                         System Design Interview
-                                     </div>
-                                     <div className="text-[11px] text-text-tertiary">
-                                         Jan 12
-                                     </div>
-                                 </div>
-                             </div>
-                             
-                             <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
-                                 <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
-                                     <FileText size={12} className="text-text-secondary" />
-                                 </div>
-                                 <div className="flex-1 min-w-0">
-                                     <div className="text-[13px] text-text-primary truncate">
-                                         System Architecture Sync
-                                     </div>
-                                     <div className="text-[11px] text-text-tertiary">
-                                         Jan 08
-                                     </div>
-                                 </div>
-                             </div>
-                         </div>
-                     </div>
-                 </div>
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
+                                    <FileText size={12} className="text-text-secondary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[13px] text-text-primary truncate">
+                                        System Design Interview
+                                    </div>
+                                    <div className="text-[11px] text-text-tertiary">
+                                        Jan 12
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-bg-item-hover transition-colors">
+                                <div className="w-6 h-6 rounded-md bg-bg-item-surface flex items-center justify-center shrink-0 border border-border-subtle">
+                                    <FileText size={12} className="text-text-secondary" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-[13px] text-text-primary truncate">
+                                        System Architecture Sync
+                                    </div>
+                                    <div className="text-[11px] text-text-tertiary">
+                                        Jan 08
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </motion.div>
         </div>
     );
@@ -413,9 +416,9 @@ const MockPermissionsAnim = () => {
 
     return (
         <div className="flex justify-center flex-col items-center gap-4 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
-             <div className="w-[300px] bg-bg-elevated border border-border-subtle rounded-xl shadow-lg p-4 z-10">
+            <div className="w-[300px] bg-bg-elevated border border-border-subtle rounded-xl shadow-lg p-4 z-10">
                 <div className="flex items-center gap-3 mb-4 border-b border-border-subtle pb-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-accent-subtle text-accent-primary flex items-center justify-center">
                         <Monitor className="w-4 h-4" />
                     </div>
                     <div className="font-semibold text-sm text-text-primary">Screen Recording</div>
@@ -425,13 +428,13 @@ const MockPermissionsAnim = () => {
                         <img src={nativelyIcon} alt="Natively" className="w-6 h-6 object-contain rounded drop-shadow-sm opacity-90" />
                         <span className="text-text-primary text-sm font-medium">Natively</span>
                     </div>
-                    
-                    <motion.div 
+
+                    <motion.div
                         initial={false}
                         animate={{ backgroundColor: toggled ? '#3b82f6' : 'var(--bg-toggle-switch)' }}
                         className="w-10 h-6 rounded-full relative shadow-inner"
                     >
-                        <motion.div 
+                        <motion.div
                             initial={false}
                             animate={{ x: toggled ? 18 : 2 }}
                             className="absolute top-1 left-0 w-4 h-4 bg-white rounded-full shadow-md"
@@ -440,7 +443,9 @@ const MockPermissionsAnim = () => {
                 </div>
             </div>
             <div className="text-xs text-text-secondary text-center max-w-[280px]">
-                Natively requires Accessibility and Screen Recording permissions to analyze screen context.
+                {isMac
+                    ? 'Natively requires Accessibility and Screen Recording permissions to analyze screen context.'
+                    : 'Natively will ask for microphone access the first time you start a meeting.'}
             </div>
         </div>
     );
@@ -536,7 +541,7 @@ const MockFastModeAnim = () => {
     return (
         <div className="flex justify-center items-center py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
             <div className="flex flex-col items-center gap-4 z-10">
-                <motion.div 
+                <motion.div
                     className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center shadow-[0_0_30px_rgba(249,115,22,0.4)]"
                     animate={{ rotate: 360 }}
                     transition={{ ease: "linear", duration: 8, repeat: Infinity }}
@@ -548,9 +553,9 @@ const MockFastModeAnim = () => {
                     <div className="text-xs text-text-secondary mt-1">Routing via Groq LPU (Response &lt; 0.5s)</div>
                 </div>
             </div>
-            
+
             {/* Background pulses */}
-            <motion.div 
+            <motion.div
                 className="absolute inset-0 border-[6px] border-orange-500/20 rounded-xl"
                 animate={{ scale: [1, 1.05, 1], opacity: [0, 1, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
@@ -575,7 +580,7 @@ const getBadgeStyle = (color?: string) => {
 };
 
 const getIconStyle = (color?: string, isSelectedItem: boolean = false) => {
-    if (isSelectedItem) return 'bg-accent-primary text-white shadow-sm';
+    if (isSelectedItem) return 'bg-accent-primary text-on-accent shadow-sm';
     switch (color) {
         case 'blue': return 'bg-blue-500/10 text-blue-600';
         case 'orange': return 'bg-orange-500/10 text-orange-600';
@@ -597,7 +602,7 @@ const MockProviderSelectionAnim = () => {
     }, []);
 
     const options = [
-        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively"/> },
+        { id: 'natively', label: 'Natively API', badge: '', recommended: true, desc: 'Ultra-fast low latency transcription', color: 'indigo', icon: <img src={nativelyIcon} className={`w-[14px] h-[14px] object-contain opacity-80 ${isLight ? '' : 'filter brightness-0 invert'}`} alt="Natively" /> },
         { id: 'deepgram', label: 'Deepgram Nova-3', badge: 'Saved', recommended: false, desc: 'High-accuracy REST transcription', color: 'purple', icon: <Mic size={14} /> },
         { id: 'google', label: 'Google Cloud', badge: 'Saved', recommended: false, desc: 'gRPC streaming via Service Account', color: 'blue', icon: <Mic size={14} /> },
         { id: 'groq', label: 'Groq Whisper', badge: '', recommended: false, desc: 'Fast LPU whisper transcription', color: 'orange', icon: <Mic size={14} /> },
@@ -609,10 +614,10 @@ const MockProviderSelectionAnim = () => {
 
     return (
         <div className="flex justify-center flex-col items-center py-6 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[300px]">
-             <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
+            <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
                 <label className="text-xs font-medium text-text-secondary">Speech Provider</label>
                 <div className="relative">
-                    <button className={`w-full group bg-bg-input border border-border-subtle shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none ${isOpen ? 'ring-2 ring-accent-primary/20 border-accent-primary/50' : 'hover:shadow-md'}`}>
+                    <button className={`w-full group bg-bg-input border border-border-subtle shadow-sm rounded-xl p-2.5 pr-3.5 flex items-center justify-between transition-all duration-200 outline-none ${isOpen ? 'ring-2 ring-accent-border border-accent-focus' : 'hover:shadow-md'}`}>
                         <div className="flex items-center gap-3 overflow-hidden">
                             <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0 transition-all duration-300 transform ${getIconStyle(selected.color, false)}`}>
                                 {selected.icon}
@@ -640,8 +645,8 @@ const MockProviderSelectionAnim = () => {
                                 transition={{ duration: 0.15, ease: "easeOut" }}
                                 className={"absolute top-full left-0 w-full mt-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden z-20 bg-bg-elevated border border-border-subtle"}
                             >
-                                 <div className="max-h-[170px] overflow-hidden relative" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
-                                    <motion.div 
+                                <div className="max-h-[170px] overflow-hidden relative" style={{ WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
+                                    <motion.div
                                         className="p-1.5 space-y-0.5"
                                         animate={{ y: [0, 0, -110, -110, 0, 0] }}
                                         transition={{ duration: 3.5, ease: "easeInOut", repeat: Infinity }}
@@ -668,23 +673,23 @@ const MockProviderSelectionAnim = () => {
                                             );
                                         })}
                                     </motion.div>
-                                 </div>
+                                </div>
                             </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
             </div>
-            
+
             {/* Animated Cursor */}
-            <motion.div 
+            <motion.div
                 className="absolute w-5 h-5 z-30 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
-                animate={{ 
+                animate={{
                     x: isOpen ? 100 : 150,
                     y: isOpen ? 80 : 30
                 }}
                 transition={{ duration: 1.2, ease: 'easeInOut' }}
             >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z" /></svg>
             </motion.div>
         </div>
     );
@@ -699,7 +704,7 @@ const MockApiKeyFlowAnim = () => {
 
     return (
         <div className="flex justify-center flex-col items-center gap-2 py-8 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[240px]">
-             <div className="w-[380px] space-y-2 relative z-10">
+            <div className="w-[380px] space-y-2 relative z-10">
                 <label className="text-xs font-medium text-text-secondary block">Groq API Key</label>
                 <div className="flex gap-2">
                     <div className="flex-1 bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary flex items-center shadow-inner">
@@ -715,7 +720,7 @@ const MockApiKeyFlowAnim = () => {
                 <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center gap-3">
                         <div className="text-xs bg-bg-input px-3 py-1.5 rounded-md flex items-center gap-2 border border-border-subtle shadow-sm">
-                            {stage === 2 ? <RefreshCw size={12} className="text-blue-500 animate-spin" /> : stage > 2 ? <Check size={12} className="text-green-500" /> : <Play size={12} className="text-text-tertiary" />}
+                            {stage === 2 ? <RefreshCw size={12} className="text-accent-primary animate-spin" /> : stage > 2 ? <Check size={12} className="text-green-500" /> : <Play size={12} className="text-text-tertiary" />}
                             <span className={stage > 2 ? "text-green-500" : "text-text-primary"}>
                                 {stage === 2 ? 'Testing...' : stage > 2 ? 'Connected' : 'Test API Key'}
                             </span>
@@ -725,18 +730,18 @@ const MockApiKeyFlowAnim = () => {
                         <Trash2 size={16} />
                     </div>
                 </div>
-             </div>
-             
-             {/* Animated Cursor */}
-            <motion.div 
+            </div>
+
+            {/* Animated Cursor */}
+            <motion.div
                 className="absolute w-5 h-5 z-20 drop-shadow-lg"
-                animate={{ 
+                animate={{
                     x: stage === 0 ? 0 : stage === 1 ? 140 : stage === 2 ? -80 : stage === 4 ? 170 : 170,
                     y: stage === 0 ? 20 : stage === 1 ? 20 : stage === 2 ? 65 : stage === 4 ? 65 : 65
                 }}
                 transition={{ duration: 0.5, ease: 'easeInOut' }}
             >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z"/></svg>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L6.35 3.35a.5.5 0 0 0-.85.35Z" /></svg>
             </motion.div>
         </div>
     );
@@ -745,7 +750,7 @@ const MockApiKeyFlowAnim = () => {
 const ElevenLabsPermissionsMock = () => {
     return (
         <div className="w-full flex justify-center py-4 bg-bg-elevated rounded-xl border border-border-subtle mb-3 mt-2 shadow-sm">
-             <div className="flex items-center justify-between w-full max-w-[360px]">
+            <div className="flex items-center justify-between w-full max-w-[360px]">
                 <span className="text-[14.5px] text-text-primary font-medium tracking-tight">Speech to Text</span>
                 <div className="flex items-center bg-bg-main p-[3px] rounded-lg border border-border-subtle shadow-inner">
                     <div className="px-3.5 py-1.5 text-[13px] font-medium text-text-secondary">No Access</div>
@@ -756,57 +761,15 @@ const ElevenLabsPermissionsMock = () => {
     );
 };
 
-// ----------------------
-// Reusable Components
-// ----------------------
-
-interface AccordionSectionProps {
-    title: string;
-    icon: React.ReactNode;
-    children: React.ReactNode;
-    defaultOpen?: boolean;
-}
-
-const AccordionSection: React.FC<AccordionSectionProps> = ({ title, icon, children, defaultOpen = false }) => {
-    const [isOpen, setIsOpen] = useState(defaultOpen);
-
-    return (
-        <div className={`border rounded-xl mb-4 overflow-hidden transition-all duration-200 bg-bg-card border-border-subtle shadow-sm`}>
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className={`w-full flex items-center justify-between p-4 transition-colors hover:bg-bg-item-surface group`}
-            >
-                <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-bg-item-surface border border-border-subtle group-hover:border-border-muted transition-colors text-text-secondary`}>
-                        {icon}
-                    </div>
-                    <span className={`font-semibold text-sm text-text-primary`}>{title}</span>
-                </div>
-                {isOpen ? <ChevronDown className="w-5 h-5 text-text-tertiary" /> : <ChevronRight className="w-5 h-5 text-text-tertiary" />}
-            </button>
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2, ease: 'easeOut' }}
-                    >
-                        <div className={`p-5 border-t border-border-subtle text-sm leading-relaxed text-text-secondary`}>
-                            {children}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    );
-};
-
 const SetupGuide = () => {
+    const cmd = getModifierSymbol('cmd');
+    const shift = getModifierSymbol('shift');
     const steps = [
         {
             title: 'Grant Permissions',
-            desc: 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.',
+            desc: isMac
+                ? 'Enable Screen Recording and Accessibility for Natively in macOS Privacy & Security.'
+                : 'Approve the microphone prompt the first time you start a meeting (Settings → Privacy → Microphone).',
         },
         {
             title: 'Set Up Audio',
@@ -817,15 +780,19 @@ const SetupGuide = () => {
             desc: 'Open Settings → AI Providers and choose a built-in model, or add a Groq or OpenRouter key.',
         },
         {
+            title: 'Personalize (Optional)',
+            desc: 'Drop your resume + JD in Profile Intelligence, link your Google Calendar, or pick a Mode tailored to your session.',
+        },
+        {
             title: "You're all set.",
             desc: null,
         },
     ];
 
     const hotkeys = [
-        { label: 'Toggle', kbd: '⌘H' },
-        { label: 'Screenshot', kbd: '⌘⇧H' },
-        { label: 'Chat', kbd: '⌘K' },
+        { label: 'Toggle', kbd: `${cmd}H` },
+        { label: 'Screenshot', kbd: `${cmd}${shift}H` },
+        { label: 'Chat', kbd: `${cmd}K` },
     ];
 
     return (
@@ -880,28 +847,31 @@ const SetupGuide = () => {
 export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({ onNavigate }) => {
     const { shortcuts } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
-    
+
     // Kbd class applying theme variables natively
     const kbdClass = `px-1.5 py-0.5 rounded text-[10px] font-mono border inline-block bg-bg-item-surface border-border-subtle text-text-secondary shadow-sm`;
 
     return (
         <div className="w-full h-full flex flex-col animated fadeIn pb-10">
-            <div className="mb-6 shrink-0">
-                <h2 className={`text-2xl font-bold text-text-primary flex items-center gap-3`}>
-                    <HelpCircle className="w-6 h-6 text-accent-primary" />
-                    Help & Setup Guide
-                </h2>
-                <p className={`text-sm text-text-secondary mt-3 max-w-2xl`}>
+            <header className="mb-2 shrink-0">
+                <h3 className="text-lg font-bold text-text-primary mb-1">Help & Setup Guide</h3>
+                <p className="text-xs text-text-secondary mb-2">
                     Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
                 </p>
-            </div>
+            </header>
 
-            <div className="flex-1 space-y-2">
-                
+            {/* Stagger lives here, not on the root above: the root is just
+                header + this, so staggering it would cascade two items. These
+                18 children (15 AccordionSections) are all plain elements —
+                AccordionSection's root is a plain div, and every motion.* in
+                this file belongs to a Mock*Anim demo inside a COLLAPSED
+                accordion body, so nothing is mounted to collide with. */}
+            <div className="flex-1 space-y-2" data-settings-stagger>
+
                 {onNavigate && (
-                    <div 
-                        onClick={() => onNavigate('natively-api')}
-                        className="mb-8 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
+                    <div
+                        onClick={() => onNavigate('plans')}
+                        className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
                     >
                         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
                             <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">
@@ -928,40 +898,46 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </div>
 
                 <AccordionSection title="1. App Permissions Setup" icon={<Monitor className="w-4 h-4" />}>
-                     <div className="space-y-4">
-                        <p>Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:</p>
-                        <MockPermissionsAnim />
-                    <div className="space-y-3 mt-4">
+                    <div className="space-y-4">
+                        <p>
+                            {isMac
+                                ? 'Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
+                                : 'Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
+                        </p>
+                        {isMac && <MockPermissionsAnim />}
+                        <div className="space-y-3 mt-4">
                             <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">Hardware & Engine Configurations</h4>
-                            
+
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Mic size={14} className="text-blue-500" /> Microphone & Speaker Loopback Selection
+                                    <Mic size={14} className="text-accent-primary" /> Microphone & Speaker Loopback Selection
                                 </h5>
                                 <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
                                     Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                    <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                        <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
-                                    </h5>
-                                    <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                        The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
-                                    </p>
+                            {isMac && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
+                                        <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
+                                            <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
+                                        </h5>
+                                        <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
+                                            The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
+                                        </p>
+                                    </div>
+                                    <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
+                                        <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
+                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
+                                        </h5>
+                                        <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
+                                            Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                    <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                        <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
-                                    </h5>
-                                    <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                        Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
-                                    </p>
-                                </div>
-                            </div>
-                            
+                            )}
+
                             <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
                                 <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
                                     <Globe size={14} className="text-green-500" /> Language & Regional Accents
@@ -972,43 +948,55 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-3 mt-6">
-                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                    <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
-                                </h4>
-                                <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
-                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                        {isMac ? (
+                            <div className="flex flex-col gap-3 mt-6">
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
+                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                                </div>
+
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <Command className="w-4 h-4 text-purple-500" /> Accessibility
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
+                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                                </div>
                             </div>
-                            
-                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                    <Command className="w-4 h-4 text-purple-500" /> Accessibility
-                                </h4>
-                                <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
-                                <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                        ) : (
+                            <div className="flex flex-col gap-3 mt-6">
+                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
+                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
+                                        <Mic className="w-4 h-4 text-accent-primary" /> Microphone
+                                    </h4>
+                                    <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
+                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </AccordionSection>
 
                 <AccordionSection title="2. Audio STT Providers Setup (Microphone)" icon={<Mic className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
-                        
+
                         <MockProviderSelectionAnim />
 
                         <div className="space-y-4 pt-2">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
-                             <p className="text-xs text-text-secondary">We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.</p>
-                             
-                             <MockApiKeyFlowAnim />
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
+                            <p className="text-xs text-text-secondary">We strongly recommend testing connections before jumping into a live meeting. The system shows successful pings or explicit errors if credits/permissions fail.</p>
+
+                            <MockApiKeyFlowAnim />
                         </div>
 
                         <div className="space-y-3 pt-4">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Specific Provider Setup</h4>
-                             
-                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Specific Provider Setup</h4>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2">
                                 <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center">
                                     <span>1. Google Cloud STT</span>
                                     <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.cloud.google.com/apis/credentials') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Link</button>
@@ -1091,125 +1079,140 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                             </div>
                         </div>
 
+                        <div className="space-y-4 pt-4">
+                            <h4 className="font-semibold text-sm text-text-primary border-b border-border-subtle pb-1.5 flex items-center gap-1.5">
+                                <Globe className="w-4 h-4 text-accent-primary" /> Language Selection & Auto-Detection
+                            </h4>
+                            <p className="text-xs text-text-secondary leading-relaxed">
+                                In v2.8, the Speech-to-Text pipeline has expanded support to include <strong>Romanian</strong> and 16 other major regional languages.
+                            </p>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <ul className="text-[11px] text-text-secondary space-y-1.5 list-disc pl-4">
+                                    <li><strong>Auto-Detection:</strong> Toggle <strong>Auto-Detect Language</strong> in the Audio Settings to let the pipeline classify spoken languages automatically during conversations.</li>
+                                    <li><strong>Fixed Selection:</strong> Use the language dropdown selector to explicitly bind transcription to a specific language, optimizing transcription accuracy and latency.</li>
+                                </ul>
+                            </div>
+                        </div>
+
                     </div>
                 </AccordionSection>
 
                 <AccordionSection title="3. AI Providers & Prompt Engine" icon={<Key className="w-4 h-4" />}>
-                     <div className="space-y-4">
+                    <div className="space-y-4">
                         <p className="text-sm">Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.</p>
 
                         <div className="space-y-3 pt-2">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. Standard Cloud Providers</h4>
-                             
-                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. Standard Cloud Providers</h4>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
                                             <img src="https://groq.com/favicon.svg" alt="Groq" className="w-4 h-4 object-contain" /> Groq
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>llama-3.3-70b-versatile</strong>.</p>
-                                     <span className={kbdClass}>gsk_...</span>
-                                 </div>
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
-                                             <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Industry standard pipeline. Default models: <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
-                                     <span className={kbdClass}>sk-proj-...</span>
-                                 </div>
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
-                                            <img src="https://cdn.simpleicons.org/anthropic/000000" style={{filter: isLight ? '' : 'invert(1)'}} alt="Anthropic" className="w-4 h-4 object-contain" /> Anthropic
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Superior coding baseline parameters. Default: <strong>claude-4.6-sonnet</strong>.</p>
-                                     <span className={kbdClass}>sk-ant-...</span>
-                                 </div>
-                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
-                                     <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
-                                         <span className="flex items-center gap-2">
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>llama-3.3-70b-versatile</strong>.</p>
+                                    <span className={kbdClass}>gsk_...</span>
+                                </div>
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
+                                            <SiOpenai className={`w-3.5 h-3.5 ${isLight ? 'text-black' : 'text-white'}`} /> OpenAI
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://platform.openai.com/api-keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Industry standard pipeline. Default models: <strong>gpt-5.4-mini</strong> & <strong>gpt-5.4</strong>.</p>
+                                    <span className={kbdClass}>sk-proj-...</span>
+                                </div>
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
+                                            <img src="https://cdn.simpleicons.org/anthropic/000000" style={{ filter: isLight ? '' : 'invert(1)' }} alt="Anthropic" className="w-4 h-4 object-contain" /> Anthropic
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.anthropic.com/settings/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Superior coding baseline parameters. Default: <strong>claude-4.6-sonnet</strong>.</p>
+                                    <span className={kbdClass}>sk-ant-...</span>
+                                </div>
+                                <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">
+                                    <h5 className="font-semibold text-sm text-text-primary flex justify-between items-center mb-1">
+                                        <span className="flex items-center gap-2">
                                             <SiGoogle className="w-3.5 h-3.5 text-blue-500" /> Google Gemini
-                                         </span>
-                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
-                                     </h5>
-                                     <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default model: <strong>gemini-3.1-pro</strong>.</p>
-                                     <span className={kbdClass}>AIzaSy...</span>
-                                 </div>
-                             </div>
+                                        </span>
+                                        <button onClick={() => { (window as any).electronAPI?.openExternal('https://aistudio.google.com/app/apikey') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
+                                    </h5>
+                                    <p className="text-[11px] opacity-80 mb-2">Immense contextual window. Default model: <strong>gemini-3.1-pro</strong>.</p>
+                                    <span className={kbdClass}>AIzaSy...</span>
+                                </div>
+                            </div>
 
-                             <div className="mt-2 bg-bg-item-surface p-4 rounded-xl border border-border-subtle shadow-sm flex gap-3">
-                                 <div className="w-8 h-8 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center shrink-0">
-                                     <Zap className="w-4 h-4 text-accent-primary" />
-                                 </div>
-                                 <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
-                                     <strong className="text-text-primary font-bold">Autonomous Registry Sync:</strong> Natively utilizes a 14-day background sync clock (<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>) to silently poll upstream APIs. If Anthropic or OpenAI drops a new flagship architecture (e.g. GPT-5), your app dynamically absorbs it into the UI dropdown automatically.
-                                 </p>
-                             </div>
-                             
-                             <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
-                                 <h5 className="font-semibold text-[13px] text-text-primary mb-1">Configuring the Active Model Engine</h5>
-                                 <p className="text-[11px] text-text-secondary leading-relaxed">
-                                     Inside the Launcher UI (above the start button), you can hot-swap your <strong>Active Model</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
-                                 </p>
-                             </div>
+                            <div className="mt-2 bg-bg-item-surface p-4 rounded-xl border border-border-subtle shadow-sm flex gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-bg-elevated border border-border-subtle flex items-center justify-center shrink-0">
+                                    <Zap className="w-4 h-4 text-accent-primary" />
+                                </div>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mt-0.5">
+                                    <strong className="text-text-primary font-bold">Autonomous Registry Sync:</strong> Natively utilizes a 14-day background sync clock (<span className="font-mono bg-bg-elevated border border-border-muted px-1.5 py-0.5 rounded text-[10px] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.1)]">v2/api/models</span>) to silently poll upstream APIs. If Anthropic or OpenAI drops a new flagship architecture (e.g. GPT-5), your app dynamically absorbs it into the UI dropdown automatically.
+                                </p>
+                            </div>
+
+                            <div className="p-4 mt-2 rounded-xl border border-border-subtle bg-bg-item-surface">
+                                <h5 className="font-semibold text-[13px] text-text-primary mb-1">Configuring the Active Model Engine</h5>
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    Inside the Launcher UI (above the start button), you can hot-swap your <strong>Active Model</strong>. This dictation is extremely important—it determines the active core reasoning engine. If set to <strong>claude-3-5-sonnet</strong>, the intelligence agent uses Anthropic infrastructure exclusively for screen analysis. Switch to <strong>llama3:8b</strong> beneath it, and the architecture instantly reverts to generating responses via your offline GPU pipeline.
+                                </p>
+                            </div>
                         </div>
 
                         <div className="space-y-3 pt-4">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. Local Models (Ollama)</h4>
-                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
-                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                     You can run Natively completely offline with 100% data privacy using Ollama. Natively automatically scans <span className={kbdClass}>http://localhost:11434</span> for active models.
-                                 </p>
-                                 <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
-                                     <li>Download Ollama locally via <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button></li>
-                                     <li>
-                                        Open Terminal and run our recommended 8B parameter instruction model: 
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">2. Local Models (Ollama)</h4>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    You can run Natively completely offline with 100% data privacy using Ollama. Natively automatically scans <span className={kbdClass}>http://localhost:11434</span> for active models.
+                                </p>
+                                <ol className="list-decimal pl-4 text-xs space-y-2 opacity-90 text-text-secondary">
+                                    <li>Download Ollama locally via <button onClick={() => { (window as any).electronAPI?.openExternal('https://ollama.com/download') }} className="text-accent-primary hover:underline inline-flex items-center gap-1 font-medium">ollama.com <ExternalLink size={10} /></button></li>
+                                    <li>
+                                        Open Terminal and run our recommended 8B parameter instruction model:
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run llama3:8b</div>
-                                     </li>
-                                     <li>Alternatively, for faster generation without GPU, use Microsoft's smaller model:
+                                    </li>
+                                    <li>Alternatively, for faster generation without GPU, use Microsoft's smaller model:
                                         <div className="mt-1 bg-bg-input p-2 rounded border border-border-subtle font-mono text-[11px]">ollama run phi3</div>
-                                     </li>
-                                     <li>Return to Natively's AI Providers overlay, and you will see your Local models ready for usage.</li>
-                                 </ol>
-                             </div>
+                                    </li>
+                                    <li>Return to Natively's AI Providers overlay, and you will see your Local models ready for usage.</li>
+                                </ol>
+                            </div>
                         </div>
 
                         <div className="space-y-3 pt-4">
-                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">3. Custom Providers</h4>
-                             <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
-                                 <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
-                                     Use Custom Providers to hook up any standard external LLM router (like OpenRouter, LMStudio, or proprietary company endpoints). Create a new provider using a cURL command template.
-                                 </p>
-                                 <div className="bg-bg-input p-3 rounded-lg border border-border-subtle space-y-2">
-                                     <div className="text-[11px] font-mono text-text-secondary">
-                                         <div className="text-purple-400">curl</div> <span className="text-blue-400">https://openrouter.ai/api/v1/chat/completions</span> \
-                                         <br/>  -H <span className="text-green-400">"Authorization: Bearer YOUR_KEY"</span> \
-                                         <br/> ...
-                                     </div>
-                                 </div>
-                                 <div className="flex items-start gap-2 mt-2">
-                                     <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
-                                     <div className="text-xs text-text-secondary leading-relaxed">
-                                         <strong>Crucial: The Response Path.</strong> You must inform Natively how to parse the JSON text back. Deeply nested outputs must define the exact path array. For OpenAI/OpenRouter compliant endpoints, this is strictly: <span className={kbdClass}>choices[0].message.content</span>.
-                                     </div>
-                                 </div>
-                             </div>
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">3. Custom Providers</h4>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-3">
+                                <p className="text-xs opacity-90 leading-relaxed text-text-secondary">
+                                    Use Custom Providers to hook up any standard external LLM router (like OpenRouter, LMStudio, or proprietary company endpoints). Create a new provider using a cURL command template.
+                                </p>
+                                <div className="bg-bg-input p-3 rounded-lg border border-border-subtle space-y-2">
+                                    <div className="text-[11px] font-mono text-text-secondary">
+                                        <div className="text-purple-400">curl</div> <span className="text-blue-400">https://openrouter.ai/api/v1/chat/completions</span> \
+                                        <br />  -H <span className="text-green-400">"Authorization: Bearer YOUR_KEY"</span> \
+                                        <br /> ...
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-2 mt-2">
+                                    <div className="w-5 h-5 rounded bg-orange-500/20 text-orange-500 flex items-center justify-center shrink-0 mt-0.5"><Zap size={10} /></div>
+                                    <div className="text-xs text-text-secondary leading-relaxed">
+                                        <strong>Crucial: The Response Path.</strong> You must inform Natively how to parse the JSON text back. Deeply nested outputs must define the exact path array. For OpenAI/OpenRouter compliant endpoints, this is strictly: <span className={kbdClass}>choices[0].message.content</span>.
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                     </div>
                 </AccordionSection>
 
                 <AccordionSection title="4. Natively Interface Operations" icon={<Monitor className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
-                        
+
                         <div className="relative w-full flex flex-col p-2 sm:p-5 bg-bg-main rounded-[26px] border border-border-subtle shadow-inner">
                             <MockAppInterface />
                             <MockPillControlsAnim />
@@ -1224,28 +1227,32 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                             {([
-                                { Icon: Pencil,        color: 'blue',   title: 'What to Answer?',  badge: null,           bc: '',                                                          kbd: ['⌘','1'],        desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
-                                { Icon: Lightbulb,     color: 'violet', title: 'Coding brainstorm', badge: null,           bc: '',                                                          kbd: ['⌘','⇧','M'],    desc: 'Multi-approach spoken script (DSA / trade-offs). Separate from system design.' },
-                                { Icon: Sparkles,      color: 'teal',   title: 'AI Design',         badge: null,           bc: '',                                                          kbd: ['⌘','K'],        desc: 'Meta-style AI-enabled design interview crib sheet — agents, RAG, eval, safety, iteration; keywords and short lines only.' },
-                                { Icon: Zap,           color: 'emerald',title: 'Answer Now',        badge: null,           bc: '',                                                          kbd: ['⌘','5'],        desc: 'Records your mic + screen context and fires an immediate AI query.' },
-                                { Icon: Bug,           color: 'rose',   title: 'Bug Finder',        badge: null,           bc: '',                                                          kbd: ['⌘','N'],        desc: 'Analyzes your screen (and attached screenshots) for likely bugs and fixes — best used with Ctrl+N from anywhere.' },
-                                { Icon: LayoutGrid,    color: 'amber',  title: 'System Design',     badge: null,           bc: '',                                                          kbd: ['⌘','M'],        desc: 'FAANG-style system design from transcript — single committed architecture, FR/NFR + napkin math first.' },
-                                { Icon: Sparkles,      color: 'sky',    title: 'Code Hint',         badge: null,           bc: '',                                                          kbd: ['⌘','6'],        desc: 'Reads your screen and nudges you toward the correct code implementation.' },
-                                { Icon: Monitor,       color: 'indigo', title: 'Screenshot & Ask',  badge: null,           bc: '',                                                          kbd: ['⌘','⇧','H'],    desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
-                                { Icon: EyeOff,        color: 'slate',  title: 'Stealth Execute',   badge: null,           bc: '',                                                          kbd: ['⌘','↵'],        desc: 'Processes context in the background without ever revealing the interface.' },
-                            ] as Array<{ Icon: React.ElementType; color: 'blue'|'violet'|'teal'|'emerald'|'indigo'|'amber'|'sky'|'rose'|'slate'; title: string; badge: string|null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
-                                const isWindows = typeof navigator !== 'undefined' && /Win/i.test(navigator.platform);
-                                const resolvedKbd = kbd.map(k => k === '⌘' ? (isWindows ? 'Ctrl' : '⌘') : k);
+                                { Icon: Pencil, color: 'blue', title: 'What to Answer?', badge: null, bc: '', kbd: ['⌘', '1'], desc: 'Reads the active transcript and screen, then streams a precise response to read aloud.' },
+                                { Icon: Lightbulb, color: 'violet', title: 'Brainstorm', badge: 'Interview ON', bc: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', kbd: ['⌘', '3'], desc: 'Recap becomes Brainstorm when Interview Mode is ON — deep multi-step strategies.' },
+                                { Icon: HelpCircle, color: 'teal', title: 'Follow Up', badge: null, bc: '', kbd: ['⌘', '4'], desc: 'Suggests the next logical question to keep conversation flowing gracefully.' },
+                                { Icon: Zap, color: 'emerald', title: 'Answer Now', badge: null, bc: '', kbd: ['⌘', '5'], desc: 'Records your mic + screen context and fires an immediate AI query.' },
+                                { Icon: MessageSquare, color: 'indigo', title: 'Clarify', badge: null, bc: '', kbd: ['⌘', '2'], desc: 'Generates sharp probing questions from latent audio when a topic is unclear.' },
+                                { Icon: RefreshCw, color: 'amber', title: 'Recap', badge: 'Interview OFF', bc: 'bg-red-500/10 text-red-400 border-red-500/30', kbd: ['⌘', '3'], desc: 'Condenses the last 5 minutes into bullet points when you lose the thread.' },
+                                { Icon: Sparkles, color: 'sky', title: 'Code Hint', badge: null, bc: '', kbd: ['⌘', '6'], desc: 'Reads your screen and nudges you toward the correct code implementation.' },
+                                { Icon: Monitor, color: 'rose', title: 'Screenshot & Ask', badge: null, bc: '', kbd: ['⌘', '⇧', 'H'], desc: 'Forces a full-screen capture and immediately processes it through the LLM.' },
+                                { Icon: EyeOff, color: 'slate', title: 'Stealth Execute', badge: null, bc: '', kbd: ['⌘', '↵'], desc: 'Processes context in the background without ever revealing the interface.' },
+                            ] as Array<{ Icon: React.ElementType; color: 'blue' | 'violet' | 'teal' | 'emerald' | 'indigo' | 'amber' | 'sky' | 'rose' | 'slate'; title: string; badge: string | null; bc: string; kbd: string[]; desc: string }>).map(({ Icon, color, title, badge, bc, kbd, desc }) => {
+                                const resolvedKbd = kbd.map(k =>
+                                    k === '⌘' ? getModifierSymbol('cmd')
+                                  : k === '⇧' ? getModifierSymbol('shift')
+                                  : k === '⌥' ? getModifierSymbol('option')
+                                  : k
+                                );
                                 const t = {
-                                    blue:   { bg: 'bg-blue-500/10',    text: 'text-blue-400',    border: 'border-blue-500/20',    glow: 'group-hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_12px_rgba(59,130,246,0.07)]' },
-                                    violet: { bg: 'bg-violet-500/10',  text: 'text-violet-400',  border: 'border-violet-500/20',  glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
-                                    teal:   { bg: 'bg-teal-500/10',    text: 'text-teal-400',    border: 'border-teal-500/20',    glow: 'group-hover:shadow-[0_0_0_1px_rgba(20,184,166,0.2),0_4px_12px_rgba(20,184,166,0.07)]' },
-                                    emerald:{ bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_12px_rgba(16,185,129,0.07)]' },
-                                    indigo: { bg: 'bg-indigo-500/10',  text: 'text-indigo-400',  border: 'border-indigo-500/20',  glow: 'group-hover:shadow-[0_0_0_1px_rgba(99,102,241,0.2),0_4px_12px_rgba(99,102,241,0.07)]' },
-                                    amber:  { bg: 'bg-amber-500/10',   text: 'text-amber-400',   border: 'border-amber-500/20',   glow: 'group-hover:shadow-[0_0_0_1px_rgba(245,158,11,0.2),0_4px_12px_rgba(245,158,11,0.07)]' },
-                                    sky:    { bg: 'bg-sky-500/10',     text: 'text-sky-400',     border: 'border-sky-500/20',     glow: 'group-hover:shadow-[0_0_0_1px_rgba(14,165,233,0.2),0_4px_12px_rgba(14,165,233,0.07)]' },
-                                    rose:   { bg: 'bg-rose-500/10',    text: 'text-rose-400',    border: 'border-rose-500/20',    glow: 'group-hover:shadow-[0_0_0_1px_rgba(244,63,94,0.2),0_4px_12px_rgba(244,63,94,0.07)]' },
-                                    slate:  { bg: 'bg-slate-500/10',   text: 'text-slate-400',   border: 'border-slate-500/20',   glow: 'group-hover:shadow-[0_0_0_1px_rgba(100,116,139,0.2),0_4px_12px_rgba(100,116,139,0.07)]' },
+                                    blue: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_12px_rgba(59,130,246,0.07)]' },
+                                    violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2),0_4px_12px_rgba(139,92,246,0.07)]' },
+                                    teal: { bg: 'bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(20,184,166,0.2),0_4px_12px_rgba(20,184,166,0.07)]' },
+                                    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(16,185,129,0.2),0_4px_12px_rgba(16,185,129,0.07)]' },
+                                    indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(99,102,241,0.2),0_4px_12px_rgba(99,102,241,0.07)]' },
+                                    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(245,158,11,0.2),0_4px_12px_rgba(245,158,11,0.07)]' },
+                                    sky: { bg: 'bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(14,165,233,0.2),0_4px_12px_rgba(14,165,233,0.07)]' },
+                                    rose: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(244,63,94,0.2),0_4px_12px_rgba(244,63,94,0.07)]' },
+                                    slate: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', glow: 'group-hover:shadow-[0_0_0_1px_rgba(100,116,139,0.2),0_4px_12px_rgba(100,116,139,0.07)]' },
                                 }[color];
 
                                 return (
@@ -1290,15 +1297,15 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </AccordionSection>
 
                 <AccordionSection title="5. Meeting Intelligence" icon={<Calendar className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         <p className="text-[13px]">When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.</p>
-                        
+
                         <MockMeetingInterfaceAnim />
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="p-4 bg-bg-item-surface border border-border-subtle rounded-xl shadow-sm hover:border-border-muted transition-colors group">
                                 <h4 className="text-[14px] font-bold text-text-primary flex items-center gap-2 mb-2">
-                                    <FileText className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> Summary Execution
+                                    <FileText className="w-4 h-4 text-accent-primary group-hover:scale-110 transition-transform" /> Summary Execution
                                 </h4>
                                 <p className="text-[12px] text-text-secondary leading-relaxed">
                                     Natively fires a local background job as soon as the meeting finishes to compress the entire raw audio transcript into clean, formatted markdown representing structural overviews and explicit action items.
@@ -1329,7 +1336,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 <MessageSquare className="w-4 h-4 text-accent-primary" /> In-Meeting Semantic Search
                             </h4>
                             <p className="text-[13px] mb-6">Instead of re-reading the entire transcript to find what happened, use the attached RAG interface pinned to the bottom of the Meeting details window.</p>
-                            
+
                             <MockMeetingChatAnim />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-6">
@@ -1356,8 +1363,8 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 </AccordionSection>
 
                 <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
-                     <div className="space-y-6">
-                        <p className="text-[13px]">Hit <span className={kbdClass}>Cmd+K</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
+                    <div className="space-y-6">
+                        <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
 
                         <MockSearchPillAnim />
 
@@ -1384,65 +1391,65 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         <div className="border-t border-border-subtle pt-6">
                             <h4 className="font-bold text-sm text-text-primary border-b border-border-subtle pb-1">Global System Shortcuts</h4>
                             <p className="text-[11px] text-text-secondary mt-1 mb-3">These hotkeys work anywhere on your operating system, regardless of whether Natively is focused or completely hidden. Change them via <strong>Settings &gt; Hotkeys</strong>.</p>
-                            
+
                             <div className="grid gap-3">
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <Eye className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <Eye className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Show / Hide Interface</div>
                                             <div className="text-xs text-text-secondary mt-1">Quickly toggle the window visibility. Used as an immediate panic hide.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        {(shortcuts.toggleVisibility || ['⌘', 'B']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.toggleVisibility || [getModifierSymbol('cmd'), 'B']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
-                                
+
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <Image className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <Image className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Capture Contextual Screenshot</div>
                                             <div className="text-xs text-text-secondary mt-1">Takes a silent screenshot in the background, feeding the visual data to the LLM context flow.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                         {(shortcuts.takeScreenshot || ['⌘', 'H']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.takeScreenshot || [getModifierSymbol('cmd'), 'H']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
-                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <MessageSquare className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <MessageSquare className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Process Captured Context (Execute)</div>
                                             <div className="text-xs text-text-secondary mt-1">Triggers Natively to analyze the captured screenshots and text from the rolling buffer.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                         {(shortcuts.processScreenshots || ['⌘', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.processScreenshots || [getModifierSymbol('cmd'), 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
 
                                 <div className="flex items-center justify-between p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
                                     <div className="flex items-start gap-4">
-                                         <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
-                                             <Zap className="w-4 h-4 text-text-primary" />
-                                         </div>
+                                        <div className="w-8 h-8 rounded shrink-0 bg-bg-input border border-border-subtle flex items-center justify-center mt-0.5">
+                                            <Zap className="w-4 h-4 text-text-primary" />
+                                        </div>
                                         <div>
                                             <div className="font-semibold text-sm text-text-primary">Capture + Execute Instantly</div>
                                             <div className="text-xs text-text-secondary mt-1">Captures a screenshot AND processes it in one fluid action.</div>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                         {(shortcuts.captureAndProcess || ['⌘', '⇧', 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
+                                        {(shortcuts.captureAndProcess || [getModifierSymbol('cmd'), getModifierSymbol('shift'), 'Enter']).map((key: string, i: number) => <span key={i} className={kbdClass}>{key}</span>)}
                                     </div>
                                 </div>
                             </div>
@@ -1453,7 +1460,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
 
                 <AccordionSection title="7. Pro Intelligence" icon={<Star className="w-4 h-4" />}>
-                     <div className="space-y-6">
+                    <div className="space-y-6">
                         {/* Profile */}
                         <div>
                             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
@@ -1461,14 +1468,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     <User size={14} /> Profile Intelligence System
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
-                                    Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role. 
+                                    Instead of telling the AI who you are during every prompt, Profile Intelligence parses your background and universally injects it into all queries so it responds securely customized to your job role.
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
-                                        <Globe className="w-4 h-4 text-blue-500" /> Core Benefits
+                                        <Globe className="w-4 h-4 text-accent-primary" /> Core Benefits
                                     </h4>
                                     <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
                                         <li><strong>Zero Context Prep:</strong> Model inherits your coding stack, experience, etc.</li>
@@ -1477,12 +1484,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                     </ul>
                                 </div>
 
-                                <div className="p-4 rounded-xl border bg-accent-primary/5 border-border-subtle">
+                                <div className="p-4 rounded-xl border bg-accent-subtle border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
                                         <CreditCard className="w-4 h-4 text-accent-primary" /> Pro Requirement
                                     </h4>
                                     <p className="text-[11px] text-text-secondary mb-2">
-                                        This is a Natively Pro feature. 
+                                        This is a Natively Pro feature.
                                     </p>
                                     <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4 mb-0">
                                         <li>Get a License at <button onClick={() => { (window as any).electronAPI?.openExternal('https://natively.software/') }} className="text-accent-primary hover:underline font-semibold">natively.software</button></li>
@@ -1491,22 +1498,157 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </div>
                             </div>
                         </div>
-                     </div>
+
+                        <div className="border-t border-border-subtle pt-5 mt-2">
+                            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
+                                <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
+                                    <Briefcase size={14} /> Job Description Targeting
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                    Drop a target <strong>JD PDF</strong> alongside your resume. Natively extracts the role title, level, company, and required technologies, then biases every prompt to align your responses with that exact spec — perfect for staying on-message during a final loop.
+                                </p>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-3 mb-5">
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <Building2 className="w-4 h-4 text-purple-400" /> Company Intelligence
+                                    </h4>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">
+                                        After uploading a JD, hit <strong>Research Now</strong> to compile a live dossier on the company — recent news, product surface area, culture signals — cached and injected into every reply so you sound briefed without prep.
+                                    </p>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <DollarSign className="w-4 h-4 text-emerald-500" /> Negotiation Script
+                                    </h4>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">
+                                        Generate a <strong>tailored salary script</strong> calibrated against the active JD's level and your background. Live coaching shows up inline during compensation conversations.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
+                                <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
+                                    <FileText size={14} /> Custom Context Notes
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                    Free-form context — sales stats, product details, LeetCode solutions, personal preferences — now lives per-mode in <strong>Modes Manager</strong> instead of a single global field. Each mode's <strong>Real-time prompt</strong> is injected into every AI call while that mode is active, so different contexts stay scoped to the situations where they're relevant. See <strong>Modes Manager</strong> below.
+                                </p>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-3">
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <Upload className="w-4 h-4 text-emerald-500" /> How to Use
+                                    </h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Open <strong>Modes Manager</strong></li>
+                                        <li>Select or create a mode, then scroll to <strong>Real-time prompt</strong></li>
+                                        <li>Type anything — auto-saved as you go</li>
+                                        <li>Only active while that mode is selected</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-amber-500" /> What to Put Here
+                                    </h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Your company's product details or pricing</li>
+                                        <li>Candidate pipeline notes for recruiting</li>
+                                        <li>LeetCode / DSA patterns you prefer</li>
+                                        <li>Personal formatting or style preferences</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </AccordionSection>
 
-                <AccordionSection title="8. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
+                <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
+                    <div className="space-y-6">
+                        <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
+
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {([
+                                { name: 'Interview', desc: 'STAR-format answers, behavioral stories, step-by-step coding hints.' },
+                                { name: 'Sales', desc: 'Objection handling, discovery questions, product pitch frameworks.' },
+                                { name: 'Recruiting', desc: 'Candidate assessment, JD cross-referencing, structured evaluation.' },
+                                { name: 'Team Meet', desc: 'Action items, announcements, blockers, decisions — auto-extracted.' },
+                                { name: 'Lecture', desc: 'Concept breakdowns, intuition-first explanations, formula notes.' },
+                                { name: 'Technical', desc: 'DSA / system design reasoning, edge cases, complexity analysis.' },
+                            ] as Array<{ name: string; desc: string }>).map(({ name, desc }) => (
+                                <div key={name} className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h5 className="font-semibold text-sm text-text-primary mb-1">{name}</h5>
+                                    <p className="text-[11px] text-text-secondary leading-relaxed">{desc}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="space-y-3 pt-2 border-t border-border-subtle">
+                            <h4 className="font-bold text-sm text-text-primary pt-4">How to Use Modes</h4>
+                            <div className="grid md:grid-cols-2 gap-3">
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Opening the Manager</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Click the <strong>grid icon</strong> in the Launcher header</li>
+                                        <li>Or click the grid icon in the main interface toolbar</li>
+                                        <li>Requires a Natively Pro license</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Activating a Mode</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Select any mode in the left sidebar</li>
+                                        <li>Click <strong>Set active</strong> to apply it</li>
+                                        <li>The toolbar icon shows the active mode name live</li>
+                                        <li>Click <strong>Deactivate</strong> to return to General</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Reference Files</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Upload PDF, DOCX, or TXT files per mode</li>
+                                        <li>File contents are injected as real-time context</li>
+                                        <li>Great for: resumes, product sheets, job descriptions</li>
+                                        <li>Per-file cap: 12 k chars · total cap: 40 k chars</li>
+                                    </ul>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary">Custom Modes & Templates</h4>
+                                    <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                        <li>Click <strong>+ New Mode</strong> for a blank slate</li>
+                                        <li>Browse the <strong>Templates Gallery</strong> for ready-made personas</li>
+                                        <li>Edit the <strong>Real-time Prompt</strong> with the inline Save action</li>
+                                        <li>Define <strong>Note Section Templates</strong> per mode for capture format</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                            <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
+                                <Star size={14} /> Pro Feature
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Modes are locked behind Natively Pro. Free and trial users see only the General mode. Activate a license via <strong>Settings → Natively API</strong> to unlock all seven modes.
+                            </p>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="9. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Calendar */}
                         <div>
-                            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4">
-                                <h4 className="text-[13px] font-semibold text-blue-500 flex items-center gap-2 mb-1">
+                            <div className="p-3 bg-accent-subtle border border-accent-border rounded-xl mb-4">
+                                <h4 className="text-[13px] font-semibold text-accent-primary flex items-center gap-2 mb-1">
                                     <Calendar size={14} /> What is Calendar Intelligence?
                                 </h4>
                                 <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
                                     By connecting your Google Calendar directly to Natively, the AI automatically gains context on your upcoming meetings, syncs the event data, and reads attendee lists to hyper-personalize your interactions.
                                 </p>
                             </div>
-                            
+
                             <div className="grid md:grid-cols-2 gap-3">
                                 <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
                                     <h4 className="font-semibold text-sm mb-2 text-text-primary">How to Set it Up</h4>
@@ -1522,6 +1664,22 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         When tracking live meetings, Natively uses the connected calendar context to instantly figure out <strong>who you are talking to</strong>. This powers the Follow-Up Email system, letting you auto-draft post-meeting notes to confirmed attendees.
                                     </p>
                                 </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <LayoutGrid className="w-4 h-4 text-accent-primary" /> Launcher Peek Stack
+                                    </h4>
+                                    <p className="text-[11px] text-text-secondary">
+                                        The Launcher's Calendar card now displays your <strong>next real meeting</strong> with a stacked-card visual hinting at what comes after it — no need to switch tabs to see what's queued.
+                                    </p>
+                                </div>
+                                <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                    <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                        <ExternalLink className="w-4 h-4 text-emerald-500" /> One-Click Join
+                                    </h4>
+                                    <p className="text-[11px] text-text-secondary">
+                                        Each upcoming event shows a <strong>Join Now</strong> button that opens the meeting link in your <strong>system default browser</strong> (so it lands in the right Chrome/Safari profile), not an in-app webview.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
@@ -1529,24 +1687,64 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
                         {/* Fast Mode */}
                         <div className="space-y-4">
-                             <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
-                                 <Zap className="w-4 h-4 text-orange-500" /> Fast Mode (Hardware LPU)
-                             </h4>
-                             <MockFastModeAnim />
-                             <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
-                                 <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
-                                     <Zap className="w-4 h-4" /> How Fast Mode Works
-                                 </h4>
-                                 <p className="text-xs text-orange-400/80 m-0">
-                                     Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings &gt; General Settings popup overlay, and click the Lightning Icon.
-                                 </p>
-                             </div>
+                            <h4 className="font-bold text-sm text-text-primary flex items-center gap-2">
+                                <Zap className="w-4 h-4 text-orange-500" /> Fast Mode (Hardware LPU)
+                            </h4>
+                            <MockFastModeAnim />
+                            <div className="p-4 rounded-xl border bg-orange-500/10 border-orange-500/20">
+                                <h4 className="font-semibold text-sm mb-2 text-orange-500 flex items-center gap-2">
+                                    <Zap className="w-4 h-4" /> How Fast Mode Works
+                                </h4>
+                                <p className="text-xs text-orange-400/80 m-0">
+                                    Fast Mode activates highly efficient models (like Llama 3 8B) layered over Groq hardware LPUs instead of GPUs. This brings latency down from 2-3 seconds to less than 500ms. To enable Fast Mode, navigate to Settings &gt; General Settings popup overlay, and click the Lightning Icon.
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
-                     <div className="space-y-4">
+                <AccordionSection title="10. Phone Mirror" icon={<Smartphone className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
+                            <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
+                                <Smartphone size={14} /> Stream Natively to Your Phone
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Phone Mirror spins up a small local web server so you can watch Natively's live transcript and AI answers from your phone or tablet — handy when your screen is being shared and you don't want the overlay visible.
+                            </p>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Wifi className="w-4 h-4 text-sky-500" /> Enable & Connect
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-1 list-disc pl-4">
+                                    <li>Open <strong>Settings → Sync</strong></li>
+                                    <li>Toggle on, then scan the generated QR code from your phone</li>
+                                    <li>Loopback by default — flip <strong>Expose on LAN</strong> to reach it from another device on the same Wi-Fi</li>
+                                </ul>
+                            </div>
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Lock className="w-4 h-4 text-amber-500" /> Token-Gated Security
+                                </h4>
+                                <p className="text-[11px] text-text-secondary">
+                                    Every session is protected by a single-use bearer token baked into the QR. If a device leaves your trust circle, hit <strong>Rotate Token</strong> to invalidate every existing connection in one tap.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3 border border-orange-500/20 bg-orange-500/5 rounded-lg">
+                            <p className="text-[10px] text-orange-400 m-0">
+                                <strong>⚠️ LAN exposure:</strong> Only enable <em>Expose on LAN</em> on networks you trust. The token stops casual snoops, but anyone who captures the QR or copies the URL can read your live transcript until you rotate.
+                            </p>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="11. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
+                    <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
                                 <Ghost size={14} /> Process Disguise & Undetectability
@@ -1575,14 +1773,297 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                 </p>
                                 <div className="p-2 border border-orange-500/20 bg-orange-500/5 rounded-lg">
                                     <p className="text-[10px] text-orange-400 m-0">
-                                        <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>Cmd+Shift+Arrows</strong> to move, <strong>Cmd+B</strong> to hide, <strong>Cmd+1-7</strong> for actions) to control the application once this is active.
+                                        <strong>⚠️ Warning:</strong> This renders the Natively overlay completely unclickable. You MUST memorize the Global Hotkeys (e.g. <strong>{isMac ? 'Cmd' : 'Ctrl'}+Shift+Arrows</strong> to move, <strong>{isMac ? 'Cmd' : 'Ctrl'}+B</strong> to hide, <strong>{isMac ? 'Cmd' : 'Ctrl'}+1-7</strong> for actions) to control the application once this is active.
                                     </p>
                                 </div>
                             </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <EyeOff className="w-4 h-4 text-text-secondary" /> Zoom Screen Share (One Setting Required)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary mb-3">
+                                    Google Meet, Microsoft Teams, and QuickTime hide Natively automatically — nothing to configure. Zoom is the one exception: whether it respects Natively's "don't capture me" flag depends on a single setting.
+                                </p>
+                                <p className="text-[11px] text-text-secondary mb-3">
+                                    Go to <strong>Zoom → Settings → Share Screen → Advanced → Screen capture mode</strong> and choose <strong>"Advanced capture with window filtering."</strong>
+                                </p>
+                                <img
+                                    src={zoomCaptureModeScreenshot}
+                                    alt="Zoom Settings → Share Screen → Screen capture mode set to Advanced capture with window filtering"
+                                    className="w-full max-w-[480px] mx-auto rounded-lg border border-border-subtle shadow-sm block mb-3"
+                                />
+                                <p className="text-[11px] text-text-secondary mb-0">
+                                    The "...with window filtering" modes tell Zoom to leave out windows that mark themselves as private, which is exactly what Natively does. <strong>"Advanced capture without window filtering"</strong> grabs the raw screen and will show Natively, so avoid it.
+                                </p>
+                            </div>
                         </div>
-                     </div>
+                    </div>
                 </AccordionSection>
-                
+
+                <AccordionSection title="12. Hindsight Long-Term Memory (LTM) Setup" icon={<Brain className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
+                                <Brain size={14} /> Cross-Meeting Memory Infrastructure
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Hindsight is a local or cloud-based sidecar service that acts as Natively's vector database. It indexes past meeting transcript segments, custom profiles, and documents to make them queryable via semantic vector search.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            {/* Option 1: Managed Cloud */}
+                            <div className="p-4 rounded-xl border bg-accent-subtle border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Globe className="w-4 h-4 text-accent-primary" /> Option A: Hindsight Cloud (Recommended)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    A fully managed memory service hosted by Vectorize.io that handles all vector database indexing, LLM fact extraction, and observation consolidation.
+                                </p>
+                                <ol className="text-[11px] text-text-secondary space-y-2 list-decimal pl-4 mb-3">
+                                    <li>Sign up for an account at:
+                                        <button
+                                            onClick={() => { (window as any).electronAPI?.openExternal('https://ui.hindsight.vectorize.io/signup') }}
+                                            className="ml-1 text-accent-primary hover:underline font-semibold inline-flex items-center gap-0.5"
+                                        >
+                                            ui.hindsight.vectorize.io/signup <ExternalLink size={10} />
+                                        </button>
+                                    </li>
+                                    <li>Create a new <strong>Memory Bank</strong> in the Hindsight Dashboard to obtain your <strong>API Access Key</strong>.</li>
+                                    <li>In Natively desktop: open <strong>Settings → Intelligence</strong>.</li>
+                                    <li>Set the Base URL to: <code className="bg-bg-elevated px-1 font-mono text-[10px]">https://api.hindsight.vectorize.io/v1</code>.</li>
+                                    <li>Enter your Hindsight <strong>API Access Key</strong>, click <strong>Test Connection</strong>, and enable <strong>Long-term memory</strong>.</li>
+                                </ol>
+                            </div>
+
+                            {/* Option 2: Local Docker / Pip */}
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Cpu className="w-4 h-4 text-purple-500" /> Option B: Local Self-Hosted Daemon (Docker or Pip)
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Run Hindsight as a background daemon on your local computer using Docker or Python pip:
+                                </p>
+                                <div className="space-y-3 pl-1 text-[11px] text-text-secondary">
+                                    <div>
+                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">Via Docker (One command with local PostgreSQL):</p>
+                                        <code className="block bg-bg-elevated p-2 rounded font-mono text-[9.5px] border border-border-subtle overflow-x-auto whitespace-pre">
+                                            {`docker run -d --name hindsight -p 8888:8888 -p 9999:9999 \\
+  -e HINDSIGHT_API_LLM_API_KEY=$OPENAI_API_KEY \\
+  -v hindsight-data:/home/hindsight/.pg0 \\
+  ghcr.io/vectorize-io/hindsight:latest`}
+                                        </code>
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-[10.5px] text-text-primary mb-1">Via Pip (Bare metal Python service):</p>
+                                        <code className="block bg-bg-elevated p-2 rounded font-mono text-[9.5px] border border-border-subtle overflow-x-auto whitespace-pre">
+                                            {`pip install hindsight-api
+export HINDSIGHT_API_LLM_PROVIDER=openai
+export HINDSIGHT_API_LLM_API_KEY=sk-xxxx
+hindsight-api`}
+                                        </code>
+                                    </div>
+                                    <p className="text-[10px] text-text-muted mt-1 leading-relaxed">
+                                        Once running, access the local dashboard UI at <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:9999</code>. In Natively settings, set the Base URL to <code className="bg-bg-elevated px-1 font-mono text-[9px]">http://localhost:8888</code>.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Option 3: Local Dev Script */}
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-purple-400" /> Option C: Monorepo Developer Sidecar
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Quickly start a local developer instance using the scripts packaged with Natively:
+                                </p>
+                                <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
+                                    <li>Install the embedded server package (Python 3.11+): <code className="bg-bg-elevated px-1 font-mono text-[10px]">pip install hindsight-all</code> (Intel Macs: <code className="bg-bg-elevated px-1 font-mono text-[10px]">hindsight-all-slim</code>).</li>
+                                    <li>From the Natively project folder, run the bundled launcher: <code className="bg-bg-elevated px-1 font-mono text-[10px]">bash scripts/hindsight-start.sh</code>. It starts the embedded memory server (bundled Postgres + pgvector, no Docker) on port 8888 and wires your AI provider chain + fallback automatically.</li>
+                                    <li>Set Natively Base URL to <code className="bg-bg-elevated px-1 font-mono text-[10px]">http://localhost:8888</code> and toggle on memory.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="13. Sandboxed Code Verification & Corrector" icon={<Cpu className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
+                                <CheckCircle2 size={14} /> Execution-Based Answer Verification
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                When a coding question is answered, Natively extracts code blocks and executes them inside isolated local sandboxed processes to verify their logical correctness. Code blocks receive a "Verified ✓" badge once tested.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Settings className="w-4 h-4 text-emerald-500" /> Environment Requirements
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Because code is run locally, you must have the appropriate interpreters installed on your device and exposed in your system PATH:
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li>
+                                        <strong>Python Code Verification:</strong> Requires <code className="bg-bg-elevated px-1 font-mono text-[10px]">python3</code> or <code className="bg-bg-elevated px-1 font-mono text-[10px]">python</code> to be installed on your machine.
+                                    </li>
+                                    <li>
+                                        <strong>JS/TS Code Verification:</strong> Requires Node.js (<code className="bg-bg-elevated px-1 font-mono text-[10px]">node</code>) to be installed on your machine.
+                                    </li>
+                                    <li>
+                                        <strong>SQL Verification:</strong> Uses the system's local SQLite client (<code className="bg-bg-elevated px-1 font-mono text-[10px]">sqlite3</code>) with specialized safe/bail modes to verify queries in memory.
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-amber-500" /> One-Shot Code Corrector
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed">
+                                    If a sandboxed code block fails to compile or yields runtime errors, Natively initiates a background correction request to the reasoning model, supplying the execution error logs. The corrected code is streamed back to your interface automatically.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="14. Companion Browser Extension Setup" icon={<Smartphone className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
+                                <Smartphone size={14} /> Active Tab Context Capture
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                The Natively browser extension (Manifest V3) allows you to securely send the active browser tab's text content and source code to the Natively desktop app. It only communicates over your local loopback.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Cpu className="w-4 h-4 text-indigo-500" /> 1. Install the Extension
+                                </h4>
+                                <div className="space-y-3 text-[11px] text-text-secondary">
+                                    <div className="p-3 bg-accent-subtle border border-border-subtle rounded-lg">
+                                        <p className="font-semibold text-text-primary mb-1 flex items-center gap-1.5">
+                                            <ExternalLink className="w-3.5 h-3.5 text-accent-primary" /> Chrome Web Store (Recommended)
+                                        </p>
+                                        <p className="mb-2 leading-relaxed">Install the official companion extension in one click directly from the Web Store:</p>
+                                        <button
+                                            onClick={() => { (window as any).electronAPI?.openExternal('https://chromewebstore.google.com/detail/lmhgnkbjnelmciecjkleaomjpejcgaln?utm_source=item-share-cb') }}
+                                            className="px-2.5 py-1 bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg rounded text-[10px] font-semibold transition-colors flex items-center gap-1"
+                                        >
+                                            Install from Chrome Web Store <ExternalLink size={10} />
+                                        </button>
+                                    </div>
+                                    <div className="p-3 border border-border-subtle rounded-lg">
+                                        <p className="font-semibold text-text-primary mb-1">Local Developer Build (Alternative)</p>
+                                        <p className="mb-1 leading-relaxed">To build the extension from source and load it manually:</p>
+                                        <ol className="space-y-1 list-decimal pl-4">
+                                            <li>Open your terminal and run:
+                                                <code className="block bg-bg-elevated p-1.5 rounded font-mono text-[9px] my-1 border border-border-subtle overflow-x-auto whitespace-pre">
+                                                    cd natively-browser && npm install && npm run build
+                                                </code>
+                                            </li>
+                                            <li>Navigate to <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">chrome://extensions</code> and turn on <strong>Developer mode</strong>.</li>
+                                            <li>Click <strong>Load unpacked</strong> and select the <code className="bg-bg-elevated px-1 font-mono text-[9.5px]">natively-browser/dist</code> folder.</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Zap className="w-4 h-4 text-amber-500" /> 2. Pair with Natively Desktop
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Establish a secure paired loopback connection (done only once):
+                                </p>
+                                <ol className="text-[11px] text-text-secondary space-y-1 list-decimal pl-4">
+                                    <li>In Natively desktop: go to <strong>Settings → Sync</strong>, ensure Phone Mirror is running, and under the **Browser Extension** card click <strong>Connect browser extension</strong> (arms pairing for 60s).</li>
+                                    <li>In your browser: click the Natively extension toolbar icon, then click <strong>Connect to Natively</strong>.</li>
+                                    <li>Once paired, the connection status shows a green dot ("Connected — capture ready").</li>
+                                </ol>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Monitor className="w-4 h-4 text-emerald-500" /> 3. Triggering Tab Capture
+                                </h4>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li>
+                                        <strong>Global Hotkey (Recommended):</strong> Press <kbd className="bg-bg-elevated px-1.5 py-0.5 rounded border text-[10.5px] border-border-subtle font-sans">{isMac ? '⌘' : 'Ctrl'}+Shift+Y</kbd> anywhere on your system. Natively pulls DOM context automatically; if the browser isn't active/reachable, it defaults to a screenshot automatically.
+                                    </li>
+                                    <li>
+                                        <strong>Manual Capture:</strong> Open the extension toolbar popup and click <strong>Capture this page</strong>.
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
+                <AccordionSection title="15. Session Memory & Spoken Humanizer" icon={<Sparkles className="w-4 h-4" />}>
+                    <div className="space-y-4">
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
+                            <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
+                                <Sparkles size={14} /> Conversational Polish & Context Awareness
+                            </h4>
+                            <p className="text-[11px] text-text-secondary leading-relaxed mb-0">
+                                Natively implements real-time session tracking, entity extraction, and stylistic rewriting. This ensures responses refer correctly to prior chat context and sound completely natural when read aloud, without robotic or repetitive patterns.
+                            </p>
+                        </div>
+
+                        <div className="grid gap-3">
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Brain className="w-4 h-4 text-purple-500" /> Time-Aware Session Memory & Entity Resolver
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    As meetings progress, Natively monitors speaker turns and extracts key entities (such as projects, skills, and compensation):
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li><strong>Demonstrative Follow-ups:</strong> If you ask "Tell me more about <em>that project</em>", Natively resolves the pronoun to the specific project name discussed previously (e.g. "Natively").</li>
+                                    <li><strong>Time-Decayed Salience:</strong> Entities fade in priority based on a half-life recency calculation (measured in seconds), keeping the AI focused on the most active discussion topic.</li>
+                                    <li><strong>Mode-Aware Routing:</strong> Access is restricted based on mode boundaries (e.g., Coding Mode blocks resume/project history; Negotiation Mode is the only mode permitted to fetch compensation/salary details).</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-amber-500" /> Spoken Answer Humanizer
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    Raw LLM responses are automatically post-processed before they are returned to sound like natural human speech:
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li><strong>Corporate Cliché Stripping:</strong> Deterministically removes corporate filler words such as <em>"unique blend"</em>, <em>"leverage"</em>, <em>"streamline"</em>, and <em>"cutting-edge"</em>.</li>
+                                    <li><strong>First-Person Rewriting:</strong> Converts third-person candidate references (e.g. "the candidate worked on...") directly into first-person speech (<em>"I worked on..."</em>).</li>
+                                    <li><strong>Formatting Cleanup:</strong> Removes symbols and structures unfit for audio generation, such as em/en dashes and empty bullet points, while retaining markdown bold elements (`**bold**`).</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 rounded-xl border bg-bg-item-surface border-border-subtle group">
+                                <h4 className="font-semibold text-sm mb-2 text-text-primary flex items-center gap-2">
+                                    <RefreshCw className="w-4 h-4 text-emerald-500" /> Answer Diversity Guard & Polish
+                                </h4>
+                                <p className="text-[11px] text-text-secondary leading-relaxed mb-3">
+                                    To ensure responses remain fresh and varied across long meeting sessions:
+                                </p>
+                                <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
+                                    <li><strong>Similarity Prevention:</strong> Computes Jaccard similarity and sentence structure matches to block the AI from repeating recently used phrases or patterns.</li>
+                                    <li><strong>Boilerplate Compressing:</strong> Condenses repetitive prompt headers (e.g. <em>"Based on the code on your screen..."</em>, <em>"Sure, I can help with that..."</em>) directly into speakable, action-oriented answers.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </AccordionSection>
+
             </div>
         </div>
     );

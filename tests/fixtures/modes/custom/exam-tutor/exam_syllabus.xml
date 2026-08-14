@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<syllabus course="PDE 401 Partial Differential Equations" semester="Spring 2026">
+  <module number="1" title="First order equations" marks="15"/>
+  <module number="2" title="Classification of second order PDEs" marks="20"/>
+  <module number="3" title="Wave equation and method of characteristics" marks="20"/>
+  <module number="4" title="Laplace equation and harmonic functions">
+    <marks>20</marks>
+    <note>Module 4 covers Green function for the Laplacian, Poisson kernel, and maximum principle. Module 4 Green function carries 20 marks across two questions.</note>
+  </module>
+  <module number="5" title="Heat equation" marks="15"/>
+  <module number="6" title="Boundary value problems" marks="10"/>
+</syllabus>

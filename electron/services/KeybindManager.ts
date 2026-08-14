@@ -1,6 +1,13 @@
 import { app, globalShortcut, Menu, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import {
+    type KeybindRegistrationFailures,
+    NO_REGISTRATION_FAILURES,
+    recordRegistrationOutcome,
+    beginFullRegistrationPass,
+    listRegistrationFailures,
+} from './keybindRegistrationState';
 
 export interface KeybindConfig {
     id: string;
@@ -19,19 +26,39 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     { id: 'general:reset-cancel', label: 'Reset / Cancel', accelerator: 'CommandOrControl+R', isGlobal: true, defaultAccelerator: 'CommandOrControl+R' },
     { id: 'general:take-screenshot', label: 'Take Screenshot', accelerator: 'CommandOrControl+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+H' },
     { id: 'general:selective-screenshot', label: 'Selective Screenshot', accelerator: 'CommandOrControl+Shift+H', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+H' },
+    // Capture the active browser tab's page context via the companion extension;
+    // falls back to a screenshot when no extension/browser is reachable. Works
+    // from any focused app (including the Natively overlay), which the old
+    // Chrome-owned hotkey could not. See natively-browser/README.md.
+    { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Shift+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Y' },
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },
-    { id: 'chat:bugFinder', label: 'Bug Finder', accelerator: 'CommandOrControl+N', isGlobal: true, defaultAccelerator: 'CommandOrControl+N' },
-    { id: 'chat:dynamicAction4', label: 'System Design', accelerator: 'CommandOrControl+M', isGlobal: true, defaultAccelerator: 'CommandOrControl+M' },
-    { id: 'chat:codingBrainstorm', label: 'Coding Brainstorm (multi-approach)', accelerator: 'CommandOrControl+Shift+M', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+M' },
-    { id: 'chat:followUp', label: 'AI Design', accelerator: 'CommandOrControl+K', isGlobal: true, defaultAccelerator: 'CommandOrControl+K' },
+    { id: 'chat:clarify', label: 'Clarify', accelerator: 'CommandOrControl+2', isGlobal: true, defaultAccelerator: 'CommandOrControl+2' },
+    { id: 'chat:dynamicAction4', label: 'Recap / Brainstorm', accelerator: 'CommandOrControl+3', isGlobal: true, defaultAccelerator: 'CommandOrControl+3' },
+    { id: 'chat:followUp', label: 'Follow Up', accelerator: 'CommandOrControl+4', isGlobal: true, defaultAccelerator: 'CommandOrControl+4' },
     { id: 'chat:answer', label: 'Answer / Record', accelerator: 'CommandOrControl+5', isGlobal: true, defaultAccelerator: 'CommandOrControl+5' },
     { id: 'chat:codeHint', label: 'Get Code Hint', accelerator: 'CommandOrControl+6', isGlobal: true, defaultAccelerator: 'CommandOrControl+6' },
+    { id: 'chat:brainstorm', label: 'Brainstorm Approaches', accelerator: 'CommandOrControl+7', isGlobal: true, defaultAccelerator: 'CommandOrControl+7' },
+    // Scroll shortcuts are global so they work in stealth mode without the user
+    // having to click the Natively window first (regression fix for issue #233).
+    // Each press kicks an inertial scroll loop in the renderer: a single tap
+    // glides ~250ms then decelerates, rapid taps sustain motion. macOS Carbon
+    // HotKey API does not auto-repeat with Cmd held, so inertia is what gives
+    // the "hold to scroll" feel without a native key listener.
+    //
+    // Horizontal uses Cmd/Ctrl+Alt+Left/Right to avoid colliding with the macOS
+    // line-start/line-end caret-jump shortcut that would otherwise misfire in
+    // every text input system-wide while Natively is running.
     { id: 'chat:scrollUp', label: 'Scroll Up', accelerator: 'CommandOrControl+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Up' },
     { id: 'chat:scrollDown', label: 'Scroll Down', accelerator: 'CommandOrControl+Down', isGlobal: true, defaultAccelerator: 'CommandOrControl+Down' },
-    { id: 'chat:scrollCodeLeft', label: 'Scroll code left', accelerator: 'CommandOrControl+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Left' },
-    { id: 'chat:scrollCodeRight', label: 'Scroll code right', accelerator: 'CommandOrControl+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Right' },
+    { id: 'chat:scrollLeft', label: 'Scroll Left (code block)', accelerator: 'CommandOrControl+Alt+Left', isGlobal: true, defaultAccelerator: 'CommandOrControl+Alt+Left' },
+    { id: 'chat:scrollRight', label: 'Scroll Right (code block)', accelerator: 'CommandOrControl+Alt+Right', isGlobal: true, defaultAccelerator: 'CommandOrControl+Alt+Right' },
+    // CommandOrControl+Shift+Space because bare Cmd+Space is Spotlight on macOS
+    // and Ctrl+Space is the IME source switcher. The overlay is created with
+    // type:'panel' on macOS, so focusing it does not activate the Natively app —
+    // the user's foreground app keeps focus in the dock/menu bar/screen-share.
+    { id: 'chat:focusInput', label: 'Toggle Stealth Typing', accelerator: 'CommandOrControl+Shift+Space', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Space' },
 
     // Window Movement - Global shortcuts (stealth window positioning)
     { id: 'window:move-up', label: 'Move Window Up', accelerator: 'CommandOrControl+Shift+Up', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Up' },
@@ -49,6 +76,13 @@ export class KeybindManager {
     private onShortcutTriggeredCallbacks: ((actionId: string) => void)[] = [];
     private activeMode: 'launcher' | 'overlay' = 'launcher';
     private healthCheckTimer: NodeJS.Timeout | null = null;
+    // Ids whose globalShortcut.register() call did not take. Kept as state
+    // rather than fire-and-forget IPC because the first registration pass runs
+    // from the constructor — before any BrowserWindow exists — so every push at
+    // that point is sent to nobody. A renderer mounting later reads this via
+    // `keybinds:get-registration-failures` to seed its conflict UI. Rules live
+    // in keybindRegistrationState.ts so they can be tested without Electron.
+    private registrationFailures: KeybindRegistrationFailures = NO_REGISTRATION_FAILURES;
     // How often to poll that OS-registered shortcuts are still alive (ms).
     // 10 s is aggressive enough to recover within one poll cycle after a
     // passthrough toggle, sleep/wake, or workspace switch.
@@ -77,13 +111,9 @@ export class KeybindManager {
         if (actionId === 'general:take-screenshot') return true;
         if (actionId === 'general:selective-screenshot') return true;
         if (actionId === 'general:capture-and-process') return true;
-        // Bug finder must work globally (user relies on keybinds, not clicking the overlay).
-        if (actionId === 'chat:bugFinder') return true;
-        // System Design (⌘M), coding brainstorm (⌘⇧M), AI Design (⌘K): work from launcher / unfocused window.
-        if (actionId === 'chat:dynamicAction4') return true;
-        if (actionId === 'chat:codingBrainstorm') return true;
-        if (actionId === 'chat:followUp') return true;
-        if (actionId.startsWith('chat:custom:')) return true;
+        // Browser/page capture must work globally in both modes (same rationale
+        // as the screenshot shortcuts — it's a global capture trigger).
+        if (actionId === 'general:capture-dom') return true;
 
         return false;
     }
@@ -169,14 +199,6 @@ export class KeybindManager {
 
                         current.accelerator = fileKb.accelerator;
                         this.keybinds.set(fileKb.id, current);
-                    } else if (fileKb.id && String(fileKb.id).startsWith('chat:custom:')) {
-                        this.keybinds.set(fileKb.id, {
-                            id: fileKb.id,
-                            label: fileKb.label || 'Custom prompt',
-                            accelerator: fileKb.accelerator || '',
-                            isGlobal: true,
-                            defaultAccelerator: fileKb.accelerator || '',
-                        });
                     }
                 }
 
@@ -187,42 +209,6 @@ export class KeybindManager {
             }
         } catch (error) {
             console.error('[KeybindManager] Failed to load keybinds:', error);
-        }
-
-        // One-time migrations for default key changes
-        let migratedKeybinds = false;
-        const normK = this.normalizeAccelerator('CommandOrControl+K');
-        const normL = this.normalizeAccelerator('CommandOrControl+L');
-        const norm3 = this.normalizeAccelerator('CommandOrControl+3');
-        const scrollLeftKb = this.keybinds.get('chat:scrollCodeLeft');
-        if (scrollLeftKb?.accelerator && this.normalizeAccelerator(scrollLeftKb.accelerator) === normK) {
-            scrollLeftKb.accelerator = 'CommandOrControl+Left';
-            this.keybinds.set('chat:scrollCodeLeft', scrollLeftKb);
-            migratedKeybinds = true;
-        }
-        const scrollRightKb = this.keybinds.get('chat:scrollCodeRight');
-        if (scrollRightKb?.accelerator && this.normalizeAccelerator(scrollRightKb.accelerator) === normL) {
-            scrollRightKb.accelerator = 'CommandOrControl+Right';
-            this.keybinds.set('chat:scrollCodeRight', scrollRightKb);
-            migratedKeybinds = true;
-        }
-        const dynamicKb = this.keybinds.get('chat:dynamicAction4');
-        if (dynamicKb?.accelerator && this.normalizeAccelerator(dynamicKb.accelerator) === norm3) {
-            dynamicKb.accelerator = 'CommandOrControl+M';
-            this.keybinds.set('chat:dynamicAction4', dynamicKb);
-            migratedKeybinds = true;
-        }
-        const norm4 = this.normalizeAccelerator('CommandOrControl+4');
-        const followKb = this.keybinds.get('chat:followUp');
-        if (followKb?.accelerator && this.normalizeAccelerator(followKb.accelerator) === norm4) {
-            followKb.accelerator = 'CommandOrControl+K';
-            this.keybinds.set('chat:followUp', followKb);
-            migratedKeybinds = true;
-        }
-        if (migratedKeybinds) {
-            this.save();
-            this.registerGlobalShortcuts();
-            this.broadcastUpdate();
         }
     }
 
@@ -248,47 +234,8 @@ export class KeybindManager {
         return Array.from(this.keybinds.values());
     }
 
-    /**
-     * User-defined copilot prompts (Settings → Prompts → Custom).
-     * Rows are rebuilt from PromptRegistryStore on each sync.
-     */
-    public syncCustomPromptKeybinds(rows: { id: string; label: string; accelerator: string }[]): void {
-        const keep = new Set(rows.map((r) => r.id));
-        const toDelete: string[] = [];
-        this.keybinds.forEach((_, kid) => {
-            if (kid.startsWith('chat:custom:') && !keep.has(kid)) {
-                toDelete.push(kid);
-            }
-        });
-        toDelete.forEach((kid) => this.keybinds.delete(kid));
-
-        for (const row of rows) {
-            const acc = (row.accelerator || '').trim();
-            this.keybinds.set(row.id, {
-                id: row.id,
-                label: row.label,
-                accelerator: acc,
-                isGlobal: true,
-                defaultAccelerator: acc,
-            });
-        }
-
-        this.save();
-        this.registerGlobalShortcuts();
-        this.broadcastUpdate();
-    }
-
     public setKeybind(id: string, accelerator: string) {
-        if (!this.keybinds.has(id)) {
-            if (!id.startsWith('chat:custom:')) return;
-            this.keybinds.set(id, {
-                id,
-                label: 'Custom prompt',
-                accelerator,
-                isGlobal: true,
-                defaultAccelerator: accelerator,
-            });
-        }
+        if (!this.keybinds.has(id)) return;
 
         const currentKb = this.keybinds.get(id)!;
         const oldAccelerator = currentKb.accelerator || '';
@@ -325,16 +272,58 @@ export class KeybindManager {
         this.save();
         this.registerGlobalShortcuts();
         this.broadcastUpdate();
-        try {
-            const { PromptRegistryStore } = require('./PromptRegistryStore');
-            PromptRegistryStore.getInstance().syncKeybindsToManager();
-        } catch {
-            /* optional module timing */
-        }
+    }
+
+    /**
+     * Records the outcome of one register() attempt and tells every live
+     * renderer about it.
+     *
+     * Both halves matter. The push clears or raises a badge in a Settings
+     * window that is already open; the map is what a Settings window opened
+     * *later* reads back, since the boot-time registration pass has no
+     * renderer to talk to. Emitting without recording was the original bug:
+     * a conflict present at launch produced no badge until the user happened
+     * to edit some unrelated shortcut and trigger a full re-registration.
+     */
+    private markRegistration(id: string, accelerator: string, ok: boolean): void {
+        const before = this.registrationFailures;
+        this.registrationFailures = recordRegistrationOutcome(before, id, accelerator, ok);
+
+        // Broadcast ONLY on a real change. recordRegistrationOutcome returns the
+        // same object reference when the outcome is unchanged — deliberately, so
+        // repeated identical verdicts do not churn state — and this used to
+        // ignore that. The health check re-tests every registered shortcut every
+        // 10 s, so a shortcut permanently held by another app meant an IPC
+        // message to every open window every 10 s for the life of the process,
+        // all of them telling the renderer something it already knew.
+        if (this.registrationFailures === before) return;
+
+        const channel = ok ? 'keybinds:registration-succeeded' : 'keybinds:registration-failed';
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (!win.isDestroyed()) {
+                win.webContents.send(channel, { id, accelerator });
+            }
+        });
     }
 
     public registerGlobalShortcuts() {
         globalShortcut.unregisterAll();
+        // Drop verdicts this pass is about to re-derive; KEEP verdicts for ids
+        // it will not attempt. The predicate mirrors the filter in the loop
+        // below, so the two cannot drift: an id is re-tested only if it is
+        // global, has a non-empty accelerator, and shouldRegister() allows it in
+        // the current mode. In launcher mode that excludes all of chat:*, whose
+        // recorded conflicts must survive — Settings is opened from the
+        // launcher, so that is precisely when the renderer reads the snapshot.
+        this.registrationFailures = beginFullRegistrationPass(
+            this.registrationFailures,
+            (id) => {
+                const kb = this.keybinds.get(id);
+                if (!kb) return true; // unknown id: nothing to preserve it for
+                if (!kb.isGlobal || !kb.accelerator || kb.accelerator.trim() === '') return true;
+                return this.shouldRegister(id);
+            },
+        );
 
         this.keybinds.forEach(kb => {
             if (kb.isGlobal && kb.accelerator && kb.accelerator.trim() !== '') {
@@ -347,17 +336,22 @@ export class KeybindManager {
                     });
                     if (globalShortcut.isRegistered(acc)) {
                         console.log(`[KeybindManager] Registered global shortcut: ${acc} -> ${kb.id}`);
+                        // Let any stale "hotkey conflict" banner for this id clear itself
+                        // (e.g. after the user rebinds it in Settings) instead of lingering
+                        // until manually dismissed.
+                        this.markRegistration(kb.id, acc, true);
                     } else {
                         console.warn(`[KeybindManager] Failed to register global shortcut (likely in use by OS): ${acc}`);
                         // Notify renderer so the UI can surface a warning to the user (issue #136)
-                        BrowserWindow.getAllWindows().forEach(win => {
-                            if (!win.isDestroyed()) {
-                                win.webContents.send('keybinds:registration-failed', { id: kb.id, accelerator: acc });
-                            }
-                        });
+                        this.markRegistration(kb.id, acc, false);
                     }
                 } catch (e) {
                     console.error(`[KeybindManager] Exception while registering global shortcut ${acc}:`, e);
+                    // A throw here is usually a malformed accelerator rather than an
+                    // OS conflict, but the user-visible symptom is identical — a
+                    // hotkey that never fires — so it earns the same badge. Leaving
+                    // this branch silent meant an unparseable combo showed nothing.
+                    this.markRegistration(kb.id, acc, false);
                 }
             }
         });
@@ -396,11 +390,21 @@ export class KeybindManager {
                 if (globalShortcut.isRegistered(acc)) {
                     recovered++;
                     console.warn(`[KeybindManager] Recovered lost shortcut: ${acc} -> ${kb.id}`);
+                    // Drop any conflict badge this id is still wearing. The health
+                    // check is the only thing that notices when the app that stole
+                    // the combo quits, so without this the user is told to rebind a
+                    // shortcut that already works again.
+                    this.markRegistration(kb.id, acc, true);
                 } else {
                     console.error(`[KeybindManager] Could not recover shortcut ${acc} -> ${kb.id} (OS conflict?)`);
+                    // Conversely, a shortcut lost *after* startup never went through
+                    // registerGlobalShortcuts() again, so this is the only place it
+                    // can be flagged.
+                    this.markRegistration(kb.id, acc, false);
                 }
             } catch (e) {
                 console.error(`[KeybindManager] Exception re-registering shortcut ${acc}:`, e);
+                this.markRegistration(kb.id, acc, false);
             }
         });
 
@@ -544,6 +548,16 @@ export class KeybindManager {
         console.log('[KeybindManager] Application menu updated');
     }
 
+    /**
+     * The current set of global shortcuts the OS refused, as
+     * `{ id, accelerator }` pairs. Reflects the live registration state for
+     * the *current* mode — an id skipped by shouldRegister() is not a
+     * conflict, it simply is not registered right now.
+     */
+    public getRegistrationFailures(): { id: string; accelerator: string }[] {
+        return listRegistrationFailures(this.registrationFailures);
+    }
+
     private broadcastUpdate() {
         // Notify main process listeners
         this.onUpdateCallbacks.forEach(cb => cb());
@@ -566,6 +580,13 @@ export class KeybindManager {
             console.log(`[KeybindManager] Set ${id} -> ${accelerator}`);
             this.setKeybind(id, accelerator);
             return true;
+        });
+
+        // Snapshot companion to the keybinds:registration-failed push. A
+        // renderer cannot rely on the push alone: the first registration pass
+        // happens in the constructor, long before any window exists.
+        ipcMain.handle('keybinds:get-registration-failures', () => {
+            return this.getRegistrationFailures();
         });
 
         ipcMain.handle('keybinds:reset', () => {

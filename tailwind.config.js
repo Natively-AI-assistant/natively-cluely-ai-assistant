@@ -20,6 +20,47 @@ module.exports = {
           'item-surface': 'var(--bg-item-surface)',
           'item-active': 'var(--bg-item-active)',
         },
+        // Never chain a Tailwind /NN opacity modifier onto any accent-*, on-accent, or
+        // button-primary-* utility — these are bare var() references and Tailwind cannot
+        // parse them to recompute alpha; the utility silently compiles to nothing.
+        // Add a named token instead.
+        accent: {
+          primary: 'var(--accent-primary)',
+          secondary: 'var(--accent-muted)',
+          hover: 'var(--accent-hover)',
+          pressed: 'var(--accent-pressed)',
+          strong: 'var(--accent-strong)',
+          subtle: 'var(--accent-subtle)',
+          muted: 'var(--accent-muted)',
+          border: 'var(--accent-border)',
+          focus: 'var(--accent-focus)',
+        },
+        'on-accent': 'var(--on-accent)',
+        'on-accent-surface': 'var(--on-accent-surface)',
+        // Deliberately blue, immune to the Settings accent scope — for specific
+        // action buttons (Save, Fetch Models, Install, etc.) kept on the original
+        // color scheme rather than migrated to the brand accent.
+        'legacy-action': {
+          bg: 'var(--legacy-action-bg)',
+          hover: 'var(--legacy-action-hover)',
+          fg: 'var(--legacy-action-fg)',
+          subtle: 'var(--legacy-action-subtle)',
+          'subtle-hover': 'var(--legacy-action-subtle-hover)',
+          border: 'var(--legacy-action-border)',
+          'disabled-bg': 'var(--legacy-action-disabled-bg)',
+          'disabled-border': 'var(--legacy-action-disabled-border)',
+          'disabled-text': 'var(--legacy-action-disabled-text)',
+        },
+        button: {
+          primary: {
+            bg: 'var(--btn-primary-bg)',
+            hover: 'var(--btn-primary-hover)',
+            'disabled-bg': 'var(--btn-primary-disabled-bg)',
+            'disabled-border': 'var(--btn-primary-disabled-border)',
+            'disabled-text': 'var(--btn-primary-disabled-text)',
+            'shadow-color': 'var(--btn-primary-shadow-color)',
+          }
+        },
         text: {
           primary: 'var(--text-primary)',
           secondary: 'var(--text-secondary)',
@@ -29,10 +70,6 @@ module.exports = {
           subtle: 'var(--border-subtle)',
           muted: 'var(--border-muted)',
         },
-        accent: {
-          primary: 'var(--accent-primary)',
-          secondary: 'var(--accent-muted)', // Mapping "secondary" to muted for compatibility if needed, or stick to refined naming
-        }
       },
       fontFamily: {
         sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica", "Arial", "sans-serif"],
@@ -50,7 +87,7 @@ module.exports = {
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         shimmer: "shimmer 2s linear infinite",
         "text-gradient-wave": "textGradientWave 2s infinite ease-in-out",
-        "fade-in-up": "fadeInUp 0.3s cubic-bezier(0.25, 1, 0.5, 1) forwards",
+        "fade-in-up": "fadeInUp 0.26s cubic-bezier(0.23, 1, 0.32, 1) forwards",
         "scale-in": "scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
       },
       keyframes: {
@@ -83,8 +120,8 @@ module.exports = {
           }
         },
         fadeInUp: {
-          "0%": { opacity: 0, transform: "translateY(8px)" },
-          "100%": { opacity: 1, transform: "translateY(0)" }
+          "0%": { opacity: 0, transform: "translateY(8px)", filter: "blur(4px)" },
+          "100%": { opacity: 1, transform: "translateY(0)", filter: "blur(0px)" }
         },
         scaleIn: {
           "0%": { opacity: 0, transform: "scale(0.95)" },

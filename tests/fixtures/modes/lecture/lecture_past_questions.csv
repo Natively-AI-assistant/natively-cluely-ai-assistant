@@ -1,0 +1,4 @@
+id,year,topic,marks,prompt
+PYQ-2024-Q3,2024,greens-function,12,PYQ-2024-Q3: solve harmonic boundary problem using Green's function on a disk
+PYQ-2023-Q4,2023,separation-of-variables,10,Solve heat equation on a unit interval with mixed BCs
+PYQ-2022-Q2,2022,fourier-series,8,Find Fourier series of triangular wave

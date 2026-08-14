@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<topics>
+  <topic name="harmonic-functions" priority="high">Topic priority: harmonic functions=high, separation of variables=medium.</topic>
+  <topic name="separation-of-variables" priority="medium" />
+  <topic name="fourier-series" priority="medium" />
+  <topic name="sturm-liouville" priority="low" />
+</topics>

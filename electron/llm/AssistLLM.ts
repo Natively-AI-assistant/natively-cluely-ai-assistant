@@ -5,6 +5,8 @@
 
 import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_ASSIST_PROMPT } from "./prompts";
+import { TINY_ASSIST_PROMPT } from "./tinyPrompts";
+import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 
 export class AssistLLM {
     private llmHelper: LLMHelper;
@@ -18,7 +20,7 @@ export class AssistLLM {
      * @param context - Current conversation context
      * @returns Insight (no post-clamp; prompt enforces brevity)
      */
-    async generate(context: string): Promise<string> {
+    async generate(context: string, abortSignal?: AbortSignal, v3?: { system: string; user: string }): Promise<string> {
         try {
             if (!context.trim()) {
                 return "";
@@ -28,12 +30,36 @@ export class AssistLLM {
             // providing a specific instruction as message, using UNIVERSAL_ASSIST_PROMPT as system prompt
             const instruction = "Briefly summarize what is happening right now in 1-2 sentences. Do not give advice, just observation.";
 
-            return await this.llmHelper.chat(
-                instruction,
-                undefined, // no image
-                context,
-                UNIVERSAL_ASSIST_PROMPT
-            );
+            // CONTEXT INTELLIGENCE V3 (Phase 6): when the engine resolved a
+            // question from the transcript, the composed prompt drives verbatim
+            // — the V3 user prompt becomes the MESSAGE (this class's arg0 is an
+            // instruction, not the context) and the raw context blob is NOT
+            // sent at all. Absent → legacy unchanged.
+            // Prompt System v2 (flag promptSystemV2): one composed core+mode+action
+            // prompt replaces the legacy constant. V3 still wins when present;
+            // flag off → legacy constant, unchanged.
+            const promptOverride = v3?.system
+                ?? resolveV2SystemPrompt({ action: 'assist', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+                ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_ASSIST_PROMPT : UNIVERSAL_ASSIST_PROMPT);
+            const fittedContext = v3 ? undefined : this.llmHelper.fitContextForCurrentModel(context);
+            const message = v3?.user ?? instruction;
+            let result = "";
+            for await (const chunk of this.llmHelper.streamChat(
+                message,
+                undefined,
+                fittedContext,
+                promptOverride,
+                Boolean(v3),   // ignoreKnowledgeMode — a V3-owned prompt must not be re-classified
+                true,
+                [],
+                abortSignal,
+                undefined,
+                v3 ? { v3Owned: true } : undefined,
+            )) {
+                if (abortSignal?.aborted) return "";
+                result += chunk;
+            }
+            return result;
 
         } catch (error) {
             console.error("[AssistLLM] Generation failed:", error);

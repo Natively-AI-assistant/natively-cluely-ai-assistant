@@ -11,14 +11,72 @@ import { EmbeddingPipeline } from './EmbeddingPipeline';
 import { RAGRetriever } from './RAGRetriever';
 import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
+import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
+
+/**
+ * A bare `for await` over an LLM stream blocks forever if the provider hangs
+ * mid-stream (no token, no error, no close) — this is the exact mechanism
+ * behind the previously-fixed 134s manual-chat hang (see electron/llm/
+ * liveDeadlines.ts). That fix (raceStreamWithDeadline) was wired into manual
+ * chat and WhatToAnswer but never into RAGManager's queryMeeting/queryGlobal,
+ * so the meeting-search and global-search chat surfaces were still exposed to
+ * an unbounded hang. This mirrors the same Promise.race-per-next() mechanism,
+ * reshaped to fit an `async *` generator (yield per token) instead of the
+ * callback-based onToken() the shared helper uses.
+ */
+const RAG_STREAM_STALL_MS = 15_000;
+
+async function* raceGeneratorWithDeadline(
+    stream: AsyncGenerator<string, void, unknown>,
+    stallMs: number,
+): AsyncGenerator<string, void, unknown> {
+    const DEADLINE = Symbol('rag-stream-deadline');
+    try {
+        while (true) {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const deadline = new Promise<typeof DEADLINE>((resolve) => {
+                timer = setTimeout(() => resolve(DEADLINE), stallMs);
+            });
+            const nextP = stream.next();
+            // Defuse: if the deadline wins, nextP is still pending and unobserved —
+            // when the hung provider's request later settles it must not surface as
+            // an unhandledRejection (fatal in Electron main).
+            nextP.catch(() => { /* loser of the race — defused */ });
+            const res = await Promise.race([nextP, deadline]);
+            if (timer) clearTimeout(timer);
+            if (res === DEADLINE) {
+                console.warn(`[RAGManager] Stream stalled for ${stallMs}ms — aborting.`);
+                try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
+                return;
+            }
+            if (res.done) return;
+            // TS cannot discriminate the IteratorResult union through the
+            // Promise.race with the DEADLINE symbol, so `res.value` widens to
+            // `string | void` despite the `done` check above. The check makes
+            // the cast sound: a non-done result's value is the yielded string.
+            yield res.value as string;
+        }
+    } catch (e) {
+        try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
+        throw e;
+    }
+}
 
 export interface RAGManagerConfig {
     db: Database.Database;
-    dbPath: string;       // Passed to VectorStore so worker can open its own read-only connection
-    extPath: string;      // Resolved sqlite-vec extension path (no platform suffix)
+    // dbPath/extPath are unused by VectorStore now (it runs on `db` directly —
+    // see VectorStore.ts's header comment for why the worker-thread design
+    // that needed these was removed) but kept required here so every existing
+    // call site doesn't need to change, and so a future re-introduction of an
+    // out-of-process search path doesn't have to re-thread them.
+    dbPath: string;
+    extPath: string;
     openaiKey?: string;
     geminiKey?: string;
+    geminiKeys?: string[];   // optional pool for embedding key-rotation + 429 cooldown
     ollamaUrl?: string;
+    providerDataScopes?: ProviderDataScopePolicy;
+    explicitKeyManagement?: boolean;
 }
 
 /**
@@ -36,8 +94,22 @@ export class RAGManager {
     private retriever: RAGRetriever;
     private llmHelper: LLMHelper | null = null;
     private liveIndexer: LiveRAGIndexer;
-    /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
-    private _reprocessInFlight = new Set<string>();
+    /**
+     * Guards against concurrent reprocessMeeting()/reindex calls for the same
+     * target. Process-wide on globalThis, not per-instance: RAGManager is
+     * constructor-owned (not a getInstance singleton), so a harness that
+     * constructs two instances over ONE natively.db — or co-loads two esbuild
+     * bundles — would otherwise run duplicate embedding jobs for the same
+     * documents (duplicate spend; duplicate vectors if inserts aren't
+     * idempotent). Same bug class as the 2026-07-31 singleton sweep, LOW
+     * severity because the DB itself is shared truth.
+     */
+    private get _jobGuards(): { reprocess: Set<string>; reindexing: boolean } {
+        const g = globalThis as unknown as Record<string, { reprocess: Set<string>; reindexing: boolean } | undefined>;
+        if (!g.__nativelyRagJobGuardsV1__) g.__nativelyRagJobGuardsV1__ = { reprocess: new Set(), reindexing: false };
+        return g.__nativelyRagJobGuardsV1__;
+    }
+    private get _reprocessInFlight(): Set<string> { return this._jobGuards.reprocess; }
 
     constructor(config: RAGManagerConfig) {
         this.db = config.db;
@@ -49,11 +121,17 @@ export class RAGManager {
         this.embeddingPipeline.initialize({
             openaiKey: config.openaiKey,
             geminiKey: config.geminiKey,
-            ollamaUrl: config.ollamaUrl
+            geminiKeys: config.geminiKeys,
+            ollamaUrl: config.ollamaUrl,
+            providerDataScopes: config.providerDataScopes,
+            explicitKeyManagement: config.explicitKeyManagement,
         }).then(() => {
             // Backfill provider metadata for meetings that were embedded before the
             // embedding_provider column was written (or where the write failed silently).
             this._backfillEmbeddingProviderMetadata();
+            // Auto-reindex meetings left in an incompatible embedding space (e.g. after
+            // a Gemini embedding-model bump). No-op when everything already matches.
+            this.scheduleAutoReindex();
         }).catch(() => { /* non-critical, suppress */ });
     }
 
@@ -64,30 +142,49 @@ export class RAGManager {
         this.llmHelper = llmHelper;
     }
 
+    /**
+     * The retriever, for callers that need typed chunks rather than a formatted
+     * blob — specifically the Context Intelligence V3 meeting retrieval port,
+     * which builds its own evidence with per-meeting scope.
+     *
+     * Read-only accessor: retrieval itself stays owned by RAGRetriever, so this
+     * does not become a second query path with its own ranking rules.
+     */
+    getRetriever(): RAGRetriever {
+        return this.retriever;
+    }
+
     getEmbeddingPipeline(): EmbeddingPipeline {
         return this.embeddingPipeline;
     }
 
-    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, ollamaUrl?: string }): void {
-        const initPromise = this.embeddingPipeline.initialize(keys);
+    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, geminiKeys?: string[], ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy, explicitKeyManagement?: boolean }): void {
+        const initPromise = this.embeddingPipeline.initialize({
+            ...keys,
+            explicitKeyManagement: keys.explicitKeyManagement,
+        });
         // After init, backfill embedding_provider on meetings that have embedded chunks
         // but a NULL metadata column (common for meetings embedded before this metadata
         // write was introduced, or where the write silently failed).
         if (initPromise && typeof initPromise.then === 'function') {
             initPromise.then(() => {
                 this._backfillEmbeddingProviderMetadata();
+                this.scheduleAutoReindex();
             }).catch(() => { /* silent — backfill is non-critical */ });
         } else {
             // Synchronous path (shouldn't happen but be safe)
             this._backfillEmbeddingProviderMetadata();
+            this.scheduleAutoReindex();
         }
     }
 
     private _backfillEmbeddingProviderMetadata(): void {
         const providerName = this.embeddingPipeline.getActiveProviderName();
-        const provider = (this.embeddingPipeline as any).provider;
-        const dimensions = provider?.dimensions;
+        const dimensions = this.embeddingPipeline.getActiveDimensions();
         if (providerName && dimensions) {
+            // Stamps provider/dims only — NOT embedding_space. Space is owned by the
+            // re-index sweep so a NULL-space legacy row can't be mislabeled as the
+            // active space (which would skip re-index → silent garbage).
             this.vectorStore.backfillEmbeddingProviderMetadata(providerName, dimensions);
         }
     }
@@ -183,7 +280,7 @@ export class RAGManager {
         // Stream response
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
-        for await (const chunk of stream) {
+        for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
         }
@@ -214,7 +311,7 @@ export class RAGManager {
         // Stream response
         const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
 
-        for await (const chunk of stream) {
+        for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
         }
@@ -312,9 +409,47 @@ export class RAGManager {
     }
 
     /**
+     * Check if JIT indexing has produced at least one queryable (embedded) chunk.
+     * Prevents wasted queryMeeting() calls that immediately throw NO_MEETING_EMBEDDINGS.
+     */
+    hasLiveChunks(): boolean {
+        return this.liveIndexer.hasIndexedChunks();
+    }
+
+    /**
+     * Whether this instance's connection can still serve statements. Mirrors
+     * VectorStore.isDatabaseUsable() — see that method for the full rationale.
+     */
+    private isDatabaseUsable(): boolean {
+        try {
+            return (this.db as any)?.open === true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Delete RAG data for a meeting
      */
     deleteMeetingData(meetingId: string): void {
+        // Shutdown guard: RAGManager holds a RAW better-sqlite3 handle
+        // (`this.db = config.db`), so after the fatal path's
+        // closeWithoutCheckpoint() this reference is a closed connection and
+        // every prepare() below would throw out of the driver. This method is
+        // called from the background meeting-teardown block, where a throw is
+        // caught but aborts the remaining teardown steps. Return one controlled,
+        // logged result instead of three separate driver failures.
+        //
+        // Defense in depth for the shutdown window only — nothing here reopens
+        // the database.
+        if (!this.isDatabaseUsable()) {
+            console.warn(
+                `[RAGManager] deleteMeetingData(${meetingId}): database is closed — skipping RAG cleanup. ` +
+                'Expected during fatal shutdown.'
+            );
+            return;
+        }
+
         // 1. Delete from vector store (chunks and summaries)
         this.vectorStore.deleteChunksForMeeting(meetingId);
         
@@ -447,30 +582,165 @@ export class RAGManager {
     }
 
     /**
-     * Trigger bulk re-indexing of meetings with obsolete/incompatible embedding dimensions.
-     * Deletes their unreadable geometric BLOBs and requeues them via the active EmbeddingPipeline.
+     * Manual re-index entry point (settings button / IPC). Delegates to the same
+     * guarded routine as the automatic path so the two can't run concurrently and
+     * double-clear/double-queue.
      */
     async reindexIncompatibleMeetings(): Promise<void> {
-        const providerName = this.embeddingPipeline.getActiveProviderName();
-        if (!providerName) {
-            console.error('[RAGManager] Cannot re-index: No active embedding provider available.');
+        await this._runReindex();
+    }
+
+    /**
+     * Automatically re-index meetings whose embedding space differs from the
+     * active one (e.g. after the gemini-embedding-001 → gemini-embedding-2 bump).
+     *
+     * Design:
+     *  - Triggered off the incompatible COUNT (not lastSpace != activeSpace) so a
+     *    crash mid-reindex resumes next launch.
+     *  - Each meeting is cleared AND queued in ONE transaction (requeueMeetingForReindex)
+     *    so a crash can never orphan a meeting (cleared vectors but no queue rows).
+     *    The durable embedding_queue + the pipeline's startup queue-flush is the
+     *    resume mechanism.
+     *  - Deferred ~15s so it doesn't compete with cold-start UI/STT.
+     *  - Paused while a live meeting indexes (live > backfill), but the pause is
+     *    CAPPED so a back-to-back-meetings session can't strand the in-flight flag
+     *    or leave the progress toast spinning forever; it bails and retries next launch.
+     *  - Idempotent: a second call (auto or manual) while one is in flight is a no-op.
+     *  - Search during re-index is empty-not-wrong: a cleared, not-yet-re-embedded
+     *    meeting has NULL space and is excluded by the space-filtered search.
+     */
+    private get _reindexInFlight(): boolean { return this._jobGuards.reindexing; }
+    private set _reindexInFlight(v: boolean) { this._jobGuards.reindexing = v; }
+    private _autoReindexTimer: ReturnType<typeof setTimeout> | null = null;
+    private static readonly AUTO_REINDEX_DEFER_MS = 15_000;
+    private static readonly REINDEX_LIVE_RECHECK_MS = 30_000;
+    private static readonly REINDEX_MAX_LIVE_WAITS = 20; // ~10 min cap, then bail + retry next launch
+    private static readonly REINDEX_DRAIN_POLL_MS = 2_000;
+    private static readonly REINDEX_MAX_DRAIN_POLLS = 900; // ~30 min cap on progress polling
+
+    scheduleAutoReindex(): void {
+        const activeSpace = this.embeddingPipeline.getActiveSpaceKey();
+        if (!activeSpace) return;
+        if (this.vectorStore.getIncompatibleSpaceCount(activeSpace) === 0) return;
+        // Defer the kickoff so launch isn't slowed; _runReindex owns the in-flight guard.
+        // Track the timer so a re-init (settings change) doesn't stack duplicate timers
+        // and so it can be cancelled on teardown.
+        if (this._autoReindexTimer) clearTimeout(this._autoReindexTimer);
+        this._autoReindexTimer = setTimeout(() => {
+            this._autoReindexTimer = null;
+            this._runReindex().catch(err => {
+                console.error('[RAGManager] Auto-reindex failed (will retry next launch):', err);
+            });
+        }, RAGManager.AUTO_REINDEX_DEFER_MS);
+    }
+
+    /** Cancel any pending deferred auto-reindex (call on teardown/quit). */
+    cancelPendingReindex(): void {
+        if (this._autoReindexTimer) {
+            clearTimeout(this._autoReindexTimer);
+            this._autoReindexTimer = null;
+        }
+    }
+
+    /**
+     * Teardown hook for app shutdown: cancels the deferred auto-reindex timer (which
+     * could otherwise fire up to ~15s — or the ~30min drain poll — after quit) and
+     * terminates the VectorStore worker thread. Call from the before-quit handler.
+     */
+    async dispose(): Promise<void> {
+        this.cancelPendingReindex();
+        // Stop the embedding drain loop BEFORE the shared DB handle is closed
+        // (main.ts disposes RAG, then closes the DB): an in-flight embed that
+        // resumed after close used to throw into queueMeeting's catch, and on
+        // the emergency-close path its write raced an uncheckpointed database.
+        try { this.embeddingPipeline.stop(); } catch { /* non-fatal */ }
+        try { await this.vectorStore.destroy(); } catch (e) {
+            console.warn('[RAGManager] dispose: vectorStore.destroy failed (non-fatal):', e);
+        }
+    }
+
+    /** Shared guarded re-index routine for both the auto and manual paths. */
+    private async _runReindex(): Promise<void> {
+        if (this._reindexInFlight) {
+            console.log('[RAGManager] Re-index already in flight — skipping duplicate trigger.');
             return;
         }
-
-        const count = this.vectorStore.getIncompatibleMeetingsCount(providerName);
+        const activeSpace = this.embeddingPipeline.getActiveSpaceKey();
+        if (!activeSpace) {
+            console.error('[RAGManager] Cannot re-index: no active embedding provider.');
+            return;
+        }
+        const count = this.vectorStore.getIncompatibleSpaceCount(activeSpace);
         if (count === 0) {
-            console.log('[RAGManager] No incompatible meetings found to reindex.');
+            console.log('[RAGManager] No incompatible meetings to re-index.');
             return;
         }
 
-        console.log(`[RAGManager] Re-indexing ${count} incompatible meetings for ${providerName} pipeline...`);
-        const affectedMeetingIds = this.vectorStore.deleteEmbeddingsForMeetings(providerName);
-        
-        for (const meetingId of affectedMeetingIds) {
-            // Queue the re-embedding background jobs
-            await this.embeddingPipeline.queueMeeting(meetingId);
-        }
+        this._reindexInFlight = true;
+        this._emitReindex('embedding:reindex-started', { count, space: activeSpace });
+        console.log(`[RAGManager] Re-indexing ${count} meeting(s) into space ${activeSpace}...`);
 
-        console.log(`[RAGManager] Successfully requeued ${affectedMeetingIds.length} meetings for re-embedding.`);
+        try {
+            // ── Phase 1: requeue ── snapshot the worklist; clear+queue each meeting atomically.
+            const meetingIds = this.vectorStore.getMeetingIdsNeedingReindex(activeSpace);
+            const total = meetingIds.length;
+
+            for (const meetingId of meetingIds) {
+                // Pause (capped) if a live meeting is indexing — live work has priority.
+                let waits = 0;
+                while (this.liveIndexer.isRunning()) {
+                    if (waits >= RAGManager.REINDEX_MAX_LIVE_WAITS) {
+                        console.warn(`[RAGManager] Re-index pausing exceeded cap (${RAGManager.REINDEX_MAX_LIVE_WAITS} waits) due to continuous live meetings. Bailing; will resume next launch.`);
+                        // Bail cleanly so the toast resolves; the count-based trigger
+                        // re-fires next launch for whatever remains.
+                        this._emitReindex('embedding:reindex-complete', { total, space: activeSpace, partial: true });
+                        return;
+                    }
+                    waits++;
+                    await new Promise(r => setTimeout(r, RAGManager.REINDEX_LIVE_RECHECK_MS));
+                }
+                // Atomic clear + enqueue (crash-safe — see requeueMeetingForReindex).
+                await this.embeddingPipeline.requeueMeetingForReindex(meetingId);
+            }
+
+            console.log(`[RAGManager] Re-index: requeued ${total} meeting(s). Awaiting background embedding...`);
+
+            // ── Phase 2: await actual embedding ── the requeue above only QUEUED the work;
+            // the meetings have NULL embeddings (excluded from search) until the background
+            // processQueue drains. Report TRUE progress off the queue depth so the UI doesn't
+            // claim "complete" while past meetings are still unsearchable.
+            const initialPending = this.embeddingPipeline.getQueueStatus().pending;
+            let polls = 0;
+            while (polls < RAGManager.REINDEX_MAX_DRAIN_POLLS) {
+                const { pending } = this.embeddingPipeline.getQueueStatus();
+                const doneItems = Math.max(0, initialPending - pending);
+                this._emitReindex('embedding:reindex-progress', { done: doneItems, total: initialPending, space: activeSpace });
+                if (pending === 0) break;
+                polls++;
+                await new Promise(r => setTimeout(r, RAGManager.REINDEX_DRAIN_POLL_MS));
+            }
+
+            const stillPending = this.embeddingPipeline.getQueueStatus().pending;
+            // Complete = queue fully drained. If we hit the poll cap with work left
+            // (very large corpus / slow API), report partial — it keeps draining in the
+            // background and the count-based trigger re-verifies next launch.
+            this._emitReindex('embedding:reindex-complete', {
+                total,
+                space: activeSpace,
+                partial: stillPending > 0,
+            });
+            console.log(`[RAGManager] Re-index ${stillPending > 0 ? 'partially ' : ''}complete (${stillPending} queue item(s) still pending).`);
+        } finally {
+            this._reindexInFlight = false;
+        }
+    }
+
+    private _emitReindex(channel: string, payload: Record<string, unknown>): void {
+        try {
+            const { BrowserWindow } = require('electron');
+            BrowserWindow.getAllWindows().forEach((win: any) => {
+                if (!win.isDestroyed()) win.webContents.send(channel, payload);
+            });
+        } catch (_) { /* non-fatal — renderer may not be up yet */ }
     }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useT } from '../i18n';
 import { createPortal } from 'react-dom';
 import { Search, Sparkles, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -95,6 +96,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
     onExpansionChange
 }) => {
     const isLight = useResolvedTheme() === 'light';
+    const t = useT();
     const [state, setState] = useState<PillState>('idle');
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -197,7 +199,10 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                     setSelectedIndex(prev => Math.max(prev - 1, -1));
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    handleSelect(selectedIndex);
+                    // No item hovered/arrow-selected yet (selectedIndex is -1 right
+                    // after typing) — default Enter to the AI Query option (index 0),
+                    // which is the primary action and already shows the raw query.
+                    handleSelect(selectedIndex < 0 ? 0 : selectedIndex);
                 }
             }
         };
@@ -300,7 +305,7 @@ const TopSearchPill: React.FC<TopSearchPillProps> = ({
                                         focus:outline-none
                                         ${state === 'idle' ? 'cursor-default' : 'cursor-text'}
                                     `}
-                                        placeholder="Search or ask anything..."
+                                        placeholder={t("Search or ask anything...")}
                                     />
                                 </div>
 

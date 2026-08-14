@@ -1,0 +1,12 @@
+{
+  "period": "Q1 2026",
+  "arr_usd": 480000,
+  "mrr_usd": 40000,
+  "paid_users": 6200,
+  "monthly_churn_rate": 0.034,
+  "net_revenue_retention": 1.08,
+  "free_to_paid_conversion": 0.062,
+  "growth_rate_mom": 0.18,
+  "burn_multiple": 1.4,
+  "notes": "ARR $480k is the Q1 run-rate exit number. MRR snapshot taken on March 31 2026. Churn is rolling 90 day. Do not represent any of these numbers as audited."
+}

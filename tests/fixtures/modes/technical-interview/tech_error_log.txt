@@ -1,0 +1,5 @@
+[2026-05-15T06:30:11Z] uncaught exception
+TypeError at handlers.ts:114 — undefined modeSnapshot
+    at processAndSaveMeeting (MeetingPersistence.ts:212:18)
+    at stopMeeting (MeetingPersistence.ts:101:9)
+    at async ipcHandlers.ts:114:5

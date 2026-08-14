@@ -1,0 +1,5 @@
+Interview prep — STAR story rules
+
+Always anchor stories in measurable outcomes. The interviewer should remember a number, not an adjective. If you don't have a number, give a comparison (before/after) or a scope (size of team, customers, dollars).
+
+Avoid: "I worked on the team that improved performance." Prefer: "I rebuilt the index used by 2.1M daily queries; p95 dropped from 480ms to 180ms over six weeks."

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { ToggleLeft, ToggleRight, Search, Zap, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Check, Download, DownloadCloud, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useT } from '../i18n';
+import { ToggleLeft, ToggleRight, Search, Calendar, ArrowRight, ArrowLeft, MoreHorizontal, Globe, Clock, ChevronRight, Settings, LayoutGrid, RefreshCw, Eye, EyeOff, Ghost, Plus, Mail, Link as LinkIcon, ChevronDown, Trash2, Bell, Download, DownloadCloud, CheckCircle, AlertCircle, User, UserSearch, Sparkles, ArrowUpRight } from 'lucide-react';
 import { generateMeetingPDF } from '../utils/pdfGenerator';
 import icon from "./icon.png";
 import mainui from "../UI_comp/mainui.png";
-import calender from "../UI_comp/calender.png";
-import ConnectCalendarButton from './ui/ConnectCalendarButton';
+import UpcomingCalendarCard from './ui/UpcomingCalendarCard';
+import { useToggleInit } from './settings/useToggleInit';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
@@ -15,6 +16,7 @@ import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { isMac } from '../utils/platformUtils';
 import WindowControls from './WindowControls';
+import { emitOrchestratorEvent, setUserState as setOrchestratorUserState } from './onboarding/OrchestratedToasterHost';
 
 interface Meeting {
     id: string;
@@ -45,6 +47,8 @@ interface Meeting {
 interface LauncherProps {
     onStartMeeting: () => void;
     onOpenSettings: (tab?: string) => void;
+    onOpenProfile?: () => void;
+    onOpenModes?: () => void;
     onPageChange?: (isMain: boolean) => void;
     ollamaPullStatus?: 'idle' | 'downloading' | 'complete' | 'failed';
     ollamaPullPercent?: number;
@@ -76,14 +80,13 @@ const formatTime = (dateStr: string) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 };
 
-const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
+const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onOpenProfile, onOpenModes, onPageChange, ollamaPullStatus = 'idle', ollamaPullPercent = 0, ollamaPullMessage = '' }) => {
+    const t = useT();
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isDetectable, setIsDetectable] = useState(false);
     const [isMeetingActive, setIsMeetingActive] = useState(false);
     const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
     const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
-    const [isPrepared, setIsPrepared] = useState(false);
-    const [preparedEvent, setPreparedEvent] = useState<any>(null);
     const [isCalendarConnected, setIsCalendarConnected] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
@@ -91,6 +94,13 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     // Global search state (for AI chat overlay)
     const [isGlobalChatOpen, setIsGlobalChatOpen] = useState(false);
     const [submittedGlobalQuery, setSubmittedGlobalQuery] = useState('');
+
+    const [showModesOnboarding, setShowModesOnboarding] = useState(false);
+    const [showProfileOnboarding, setShowProfileOnboarding] = useState(false);
+    const [launchCount, setLaunchCount] = useState<number>(0);
+    // StrictMode-safe guard for mount-only side-effects: the dev build
+    // intentionally double-invokes effects to surface this class of bug.
+    const mountedOnceRef = useRef<boolean>(false);
 
     const fetchMeetings = () => {
         if (window.electronAPI && window.electronAPI.getRecentMeetings) {
@@ -130,13 +140,39 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     // Keybinds
     const { isShortcutPressed } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
-
     useEffect(() => {
         let mounted = true;
         console.log("Launcher mounted");
-        // Seed demo data if needed (safe to call always — runs ONCE on mount)
-        if (window.electronAPI && window.electronAPI.seedDemo) {
-            window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
+
+        // StrictMode guard: React 18 dev mode runs effects (mount→unmount→mount)
+        // so non-idempotent side-effects (localStorage writes, IPC round-trips,
+        // counters) must be gated. `mountedOnceRef` survives the second mount.
+        if (mountedOnceRef.current) {
+            // Second StrictMode mount — keep subscriptions fresh, skip writes.
+        } else {
+            mountedOnceRef.current = true;
+
+            // Track launch count for showing the "What's New" pill
+            const storedCount = localStorage.getItem('natively_launch_count_v2.7');
+            const currentCount = storedCount ? parseInt(storedCount, 10) : 0;
+            const newCount = currentCount + 1;
+            localStorage.setItem('natively_launch_count_v2.7', newCount.toString());
+            if (mounted) {
+                setLaunchCount(newCount);
+            }
+            // Seed demo data if needed (safe to call always — runs ONCE on mount)
+            if (window.electronAPI && window.electronAPI.seedDemo) {
+                window.electronAPI.seedDemo().catch(err => console.error("Failed to seed demo:", err));
+            }
+
+            // Onboarding state — push to orchestrator. The orchestrator handles
+            // sequencing and timing; Launcher no longer auto-shows popovers.
+            const hasSeenModesOnboarding = localStorage.getItem('natively_seen_modes_onboarding_v5');
+            const hasSeenProfileOnboarding = localStorage.getItem('natively_seen_profile_onboarding_v1');
+            setOrchestratorUserState({
+                seenModesOnboarding: hasSeenModesOnboarding === 'true',
+                seenProfileOnboarding: hasSeenProfileOnboarding === 'true',
+            });
         }
 
         // Sync initial undetectable state
@@ -169,6 +205,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         if (window.electronAPI?.onMeetingStateChanged) {
             removeMeetingStateListener = window.electronAPI.onMeetingStateChanged(({ isActive }) => {
                 setIsMeetingActive(isActive);
+                emitOrchestratorEvent({ type: 'meeting:state', isActive });
             });
         }
 
@@ -181,12 +218,31 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         // Simple polling for events every minute
         const interval = setInterval(fetchEvents, 60000);
 
+        // Orchestrator: foreground/background tracking via window blur/focus.
+        // On macOS Cmd+H and Cmd+Tab the BrowserWindow fires 'blur'/'focus'
+        // (mapped to window blur/focus in renderer).
+        const onFocus = () => emitOrchestratorEvent({ type: 'foreground:change', isForeground: true });
+        const onBlur  = () => emitOrchestratorEvent({ type: 'foreground:change', isForeground: false });
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
+
+        // Orchestrator: usage-time accumulator. Tick every 30s while launcher
+        // is mounted and the window is foregrounded.
+        const usageTimer = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                emitOrchestratorEvent({ type: 'usage:tick', deltaMs: 30_000 });
+            }
+        }, 30_000);
+
         return () => {
             mounted = false;
             if (removeMeetingsListener) removeMeetingsListener();
             if (removeUndetectableListener) removeUndetectableListener();
             if (removeMeetingStateListener) removeMeetingStateListener();
             clearInterval(interval);
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('blur', onBlur);
+            clearInterval(usageTimer);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Mount-only: stable setup that must run exactly once
@@ -217,35 +273,18 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         };
     }, [isShortcutPressed]);
 
-    // Filter next meeting (within 60 mins)
-    const nextMeeting = upcomingEvents.find(e => {
-        const diff = new Date(e.startTime).getTime() - Date.now();
-        return diff > -5 * 60000 && diff < 60 * 60000; // -5 min to +60 min
-    });
+    // Declared above the `!window.electronAPI` early return below — a hook after
+    // that guard would break the rules of hooks on the error path.
+    const detectableToggleInit = useToggleInit();
 
-    const handlePrepare = (event: any) => {
-        setPreparedEvent(event);
-        setIsPrepared(true);
-    };
-
-    const handleStartPreparedMeeting = async () => {
-        if (!preparedEvent) return;
-        analytics.trackCommandExecuted('start_prepared_meeting');
-        try {
-            const inputDeviceId = localStorage.getItem('preferredInputDeviceId');
-            const outputDeviceId = localStorage.getItem('preferredOutputDeviceId');
-
-            await window.electronAPI.startMeeting({
-                title: preparedEvent.title,
-                calendarEventId: preparedEvent.id,
-                source: 'calendar',
-                audio: { inputDeviceId, outputDeviceId }
-            });
-            setIsPrepared(false);
-        } catch (e) {
-            console.error("Failed to start prepared meeting", e);
-        }
-    };
+    // Upcoming meetings (in-progress up to 5 min ago, or any future event in the API's 7-day
+    // window), sorted soonest-first. Cap at 3 for the right-side calendar card peek stack.
+    const upcomingMeetings = upcomingEvents
+        .filter(e => new Date(e.startTime).getTime() - Date.now() > -5 * 60000)
+        .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    const visibleMeetings = upcomingMeetings.slice(0, 3);
+    const nextMeeting = visibleMeetings[0];
+    const moreMeetingsCount = Math.max(0, upcomingMeetings.length - visibleMeetings.length);
 
     if (!window.electronAPI) {
         return <div className="text-white p-10">Error: Electron API not initialized. Check preload script.</div>;
@@ -294,11 +333,18 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
         return () => window.removeEventListener('click', handleClickOutside);
     }, []);
 
-    // Notify parent if we are on the main launcher list view
+    // Notify parent if we are on the main launcher list view; also feed the
+    // orchestrator's homepage-mounted clock.
     useEffect(() => {
-        if (onPageChange) {
-            onPageChange(!selectedMeeting && !isGlobalChatOpen);
+        const isMain = !selectedMeeting && !isGlobalChatOpen;
+        if (onPageChange) onPageChange(isMain);
+        if (isMain) {
+            emitOrchestratorEvent({ type: 'launcher:mounted' });
+        } else {
+            emitOrchestratorEvent({ type: 'launcher:unmounted' });
         }
+        // Cleanup on unmount: ensure unmount is fired
+        return () => emitOrchestratorEvent({ type: 'launcher:unmounted' });
     }, [selectedMeeting, isGlobalChatOpen, onPageChange]);
 
     const handleOpenMeeting = async (meeting: Meeting) => {
@@ -365,7 +411,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
             {/* 1. Header (Static) */}
-            <header className="relative w-full h-[40px] shrink-0 flex items-center justify-between pl-0 drag-region select-none bg-bg-secondary border-b border-border-subtle z-[200]">
+            <header className={`relative w-full h-[40px] shrink-0 flex items-center justify-between pl-0 drag-region select-none ${isLight ? 'bg-bg-primary' : 'bg-bg-secondary'} border-b border-border-subtle z-[200]`}>
                 {/* Left: Spacing for Traffic Lights + Navigation Arrows */}
                 <div className="flex items-center gap-1 no-drag">
                     {isMac && <div className="w-[70px]" />} {/* Traffic Light Spacer (macOS only) */}
@@ -405,15 +451,39 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                     meetings={meetings}
                     onAIQuery={(query) => {
                         analytics.trackCommandExecuted('ai_query_search');
+                        emitOrchestratorEvent({ type: 'turn:done', surface: 'chat' });
                         setSubmittedGlobalQuery(query);
                         setIsGlobalChatOpen(true);
                     }}
                     onLiteralSearch={(query) => {
-                        // For now, also use AI query for literal search
-                        // Could be enhanced to do fuzzy filtering in the UI
                         analytics.trackCommandExecuted('literal_search');
-                        setSubmittedGlobalQuery(query);
-                        setIsGlobalChatOpen(true);
+                        emitOrchestratorEvent({ type: 'turn:done', surface: 'chat' });
+                        // GLOBAL SEARCH V2 (Phase 9): real local-DB literal search behind
+                        // global_search_v2_enabled. When enabled and there's a match, open
+                        // the top-ranked meeting directly. Otherwise fall back to the
+                        // existing AI-query behavior (preserved). The backend returns
+                        // { enabled:false } when the flag is off, so this is a pure no-op then.
+                        // The handler stays synchronous (prop is `(q) => void`); the await
+                        // runs in an inner IIFE so we never return a floating Promise to the
+                        // event-handler prop.
+                        const runFallback = () => {
+                            setSubmittedGlobalQuery(query);
+                            setIsGlobalChatOpen(true);
+                        };
+                        void (async () => {
+                            try {
+                                const resp = await window.electronAPI.searchGlobalMeetings?.(query);
+                                if (resp?.enabled && Array.isArray(resp.results) && resp.results.length > 0) {
+                                    const top = resp.results[0];
+                                    const meeting = meetings.find((m) => m.id === top.meetingId);
+                                    if (meeting) {
+                                        handleOpenMeeting(meeting);
+                                        return;
+                                    }
+                                }
+                            } catch (_) { /* fall through to AI query */ }
+                            runFallback();
+                        })();
                     }}
                     onOpenMeeting={(meetingId) => {
                         const meeting = meetings.find(m => m.id === meetingId);
@@ -425,12 +495,220 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                 />
 
                 {/* Right: Actions */}
-                <div className={`flex items-center gap-3 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
+                <div className={`flex items-center gap-1 no-drag shrink-0 ${isMac ? 'mr-1' : ''}`}>
+                    <div className="relative group/profile-btn select-none">
+                        <button
+                            data-testid="open-profile-intelligence"
+                            onClick={() => {
+                                setShowProfileOnboarding(false);
+                                localStorage.setItem('natively_seen_profile_onboarding_v1', 'true');
+                                window.electronAPI?.onboardingSetFlag?.('seenProfileOnboarding', true).catch(() => {});
+                                onOpenProfile?.();
+                            }}
+                            title={t("Profile Intelligence")}
+                            className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
+                        >
+                            <UserSearch size={18} />
+                        </button>
+                        
+                        <AnimatePresence>
+                            {showProfileOnboarding && (
+                                <motion.div
+                                    key="profile-onboarding-pill"
+                                    initial={{ opacity: 0, y: 6, scale: 0.96, filter: "blur(4px)" }}
+                                    animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                                    exit={{ opacity: 0, y: -2, scale: 0.98, filter: "blur(2px)", transition: { duration: 0.15, ease: "easeOut" } }}
+                                    transition={{ type: "spring", stiffness: 350, damping: 25, mass: 1 }}
+                                    className={`absolute top-[38px] right-2 w-[270px] rounded-[20px] p-4 z-[300] origin-top-right backdrop-blur-[40px] saturate-[180%] transform-gpu ${
+                                        isLight 
+                                        ? 'bg-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]' 
+                                        : 'bg-[#18181A]/70 shadow-[0_8px_30px_rgb(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)]'
+                                    }`}
+                                >
+                                    {/* Triangle Pointer */}
+                                    <div className={`absolute -top-[5px] right-[14px] w-2.5 h-2.5 rotate-45 rounded-tl-[3px] ${
+                                        isLight 
+                                        ? 'bg-white/70 border-t border-l border-black/5 backdrop-blur-[40px]' 
+                                        : 'bg-[#18181A]/70 border-t border-l border-white/5 backdrop-blur-[40px]'
+                                    }`} />
+                                    
+                                    <div className="relative flex gap-3">
+                                        <div className={`w-9 h-9 flex items-center justify-center shrink-0 rounded-full ${
+                                            isLight
+                                            ? 'bg-blue-500 bg-opacity-10 text-blue-500'
+                                            : 'bg-blue-500 bg-opacity-15 text-blue-400'
+                                        }`}>
+                                            <UserSearch size={18} />
+                                        </div>
+                                        <div className="flex-1 pt-[2px]">
+                                            <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
+                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Profile Intel')}</span>
+                                                <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
+                                                    isLight
+                                                    ? 'bg-blue-50 text-blue-600 border border-blue-100/50'
+                                                    : 'bg-blue-500/10 text-blue-400'
+                                                }`}>
+                                                    {t('Beta')}
+                                                </span>
+                                            </h3>
+                                            <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
+                                                isLight ? 'text-slate-500' : 'text-slate-400'
+                                            }`}>
+                                                {t('Manage your persona, career history, and active job description.')}
+                                            </p>
+                                            <div className="flex justify-end gap-1.5 isolate">
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        setShowProfileOnboarding(false); 
+                                                        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true'); 
+                                                        window.electronAPI?.onboardingSetFlag?.('seenProfileOnboarding', true).catch(() => {});
+                                                    }}
+                                                    className={`text-[12px] font-medium px-3.5 py-[6px] rounded-full transition-all active:scale-95 ${
+                                                        isLight
+                                                        ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/60'
+                                                        : 'text-slate-400 hover:text-slate-100 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    {t('Dismiss')}
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenProfile?.();
+                                                        setShowProfileOnboarding(false);
+                                                        localStorage.setItem('natively_seen_profile_onboarding_v1', 'true');
+                                                        window.electronAPI?.onboardingSetFlag?.('seenProfileOnboarding', true).catch(() => {});
+                                                    }}
+                                                    className={`text-[12px] font-medium px-4 py-[6px] rounded-full transition-all active:scale-95 shadow-sm ${
+                                                        isLight
+                                                        ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                                        : 'bg-slate-100 text-slate-900 hover:bg-white'
+                                                    }`}
+                                                >
+                                                    {t('Try it out')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+                    <div className="relative group/modes-btn select-none">
+                        <button
+                            data-testid="open-modes-manager"
+                            onClick={() => {
+                                setShowModesOnboarding(false);
+                                localStorage.setItem('natively_seen_modes_onboarding_v5', 'true');
+                                window.electronAPI?.onboardingSetFlag?.('seenModesOnboarding', true).catch(() => {});
+                                onOpenModes?.();
+                            }}
+                            title={t("Modes")}
+                            className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
+                        >
+                            <svg width={18} height={18} viewBox="0 0 14 14" fill="none">
+                                <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+                                <rect x="7.5" y="1" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+                                <rect x="1" y="7.5" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+                                <rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.35"/>
+                            </svg>
+                        </button>
+                        
+                        <AnimatePresence>
+                            {showModesOnboarding && (
+                                <motion.div
+                                    key="modes-onboarding-pill"
+                                    initial={{ opacity: 0, y: 6, scale: 0.96, filter: "blur(4px)" }}
+                                    animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                                    exit={{ opacity: 0, y: -2, scale: 0.98, filter: "blur(2px)", transition: { duration: 0.15, ease: "easeOut" } }}
+                                    transition={{ type: "spring", stiffness: 350, damping: 25, mass: 1 }}
+                                    className={`absolute top-[38px] right-2 w-[270px] rounded-[20px] p-4 z-[300] origin-top-right backdrop-blur-[40px] saturate-[180%] transform-gpu ${
+                                        isLight 
+                                        ? 'bg-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]' 
+                                        : 'bg-[#18181A]/70 shadow-[0_8px_30px_rgb(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)]'
+                                    }`}
+                                >
+                                    {/* Triangle Pointer */}
+                                    <div className={`absolute -top-[5px] right-[14px] w-2.5 h-2.5 rotate-45 rounded-tl-[3px] ${
+                                        isLight 
+                                        ? 'bg-white/70 border-t border-l border-black/5 backdrop-blur-[40px]' 
+                                        : 'bg-[#18181A]/70 border-t border-l border-white/5 backdrop-blur-[40px]'
+                                    }`} />
+                                    
+                                    <div className="relative flex gap-3">
+                                        <div className={`w-9 h-9 flex items-center justify-center shrink-0 rounded-full ${
+                                            isLight
+                                            ? 'bg-orange-500 bg-opacity-10 text-orange-500'
+                                            : 'bg-orange-500 bg-opacity-15 text-orange-400'
+                                        }`}>
+                                            <svg width="18" height="18" viewBox="0 0 14 14" fill="none">
+                                                <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+                                                <rect x="7.5" y="1" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+                                                <rect x="1" y="7.5" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+                                                <rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1.5" fill="currentColor" opacity="0.4"/>
+                                            </svg>
+                                        </div>
+                                        <div className="flex-1 pt-[2px]">
+                                            <h3 className="text-[14px] font-semibold tracking-[-0.015em] mb-1 flex items-center gap-2">
+                                                <span className={isLight ? 'text-slate-900' : 'text-slate-100'}>{t('Modes')}</span>
+                                                <span className={`text-[10px] font-medium px-1.5 py-[1px] rounded-[5px] ${
+                                                    isLight
+                                                    ? 'bg-orange-50 text-orange-600 border border-orange-100/50'
+                                                    : 'bg-orange-500/10 text-orange-400'
+                                                }`}>
+                                                    {t('Beta')}
+                                                </span>
+                                            </h3>
+                                            <p className={`text-[12px] leading-[1.35] mb-3.5 tracking-[-0.01em] ${
+                                                isLight ? 'text-slate-500' : 'text-slate-400'
+                                            }`}>
+                                                {t('Custom instructions and formulas designed for different meeting contexts.')}
+                                            </p>
+                                            <div className="flex justify-end gap-1.5 isolate">
+                                                <button 
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        setShowModesOnboarding(false); 
+                                                        localStorage.setItem('natively_seen_modes_onboarding_v5', 'true'); 
+                                                        window.electronAPI?.onboardingSetFlag?.('seenModesOnboarding', true).catch(() => {});
+                                                    }}
+                                                    className={`text-[12px] font-medium px-3.5 py-[6px] rounded-full transition-all active:scale-95 ${
+                                                        isLight
+                                                        ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/60'
+                                                        : 'text-slate-400 hover:text-slate-100 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    {t('Dismiss')}
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenModes?.();
+                                                        setShowModesOnboarding(false); 
+                                                        localStorage.setItem('natively_seen_modes_onboarding_v5', 'true'); 
+                                                        window.electronAPI?.onboardingSetFlag?.('seenModesOnboarding', true).catch(() => {});
+                                                    }}
+                                                    className={`text-[12px] font-medium px-4 py-[6px] rounded-full transition-all active:scale-95 shadow-sm ${
+                                                        isLight
+                                                        ? 'bg-slate-900 text-white hover:bg-slate-800'
+                                                        : 'bg-slate-100 text-slate-900 hover:bg-white'
+                                                    }`}
+                                                >
+                                                    {t('Try it out')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                     <button
                         onClick={() => {
                             onOpenSettings();
-                            // analytics.trackCommandExecuted('open_settings'); // Optional, high volume
                         }}
+                        title={t("Settings")}
                         className={`p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${isLight ? 'hover:drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : 'hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'}`}
                     >
                         <Settings size={18} />
@@ -473,30 +751,30 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                             {/* Top Section is now effectively static due to parent flex col */}
 
                             {/* TOP SECTION: Grey Background (Scrolls with content) */}
-                            <section className={`${isLight ? 'bg-bg-primary' : 'bg-bg-elevated'} px-8 pt-6 pb-8 border-b border-border-subtle shrink-0`}>
+                            <section className={`${isLight ? 'bg-bg-secondary' : 'bg-bg-elevated'} px-8 pt-6 pb-8 border-b border-border-subtle shrink-0`}>
                                 <div className="max-w-4xl mx-auto space-y-6">
                                     {/* 1.5. Hero Header (Title + Controls + CTA) */}
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
-                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">My Natively</h1>
+                                            <h1 className="text-3xl font-celeb-light font-medium text-text-primary tracking-wide drop-shadow-sm">{t('My Natively')}</h1>
 
                                             {/* Refresh Button */}
                                             <button
                                                 onClick={handleRefresh}
                                                 disabled={isRefreshing}
                                                 className={`p-2 text-text-secondary hover:text-text-primary rounded-full transition-colors ${isRefreshing ? 'animate-spin text-blue-400' : ''} ${isLight ? 'hover:bg-black/8' : 'hover:bg-white/10'}`}
-                                                title="Refresh State"
+                                                title={t("Refresh State")}
                                             >
                                                 <RefreshCw size={18} />
                                             </button>
 
                                             {/* Detectable Toggle Pill */}
-                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
+                                            <div className={`flex items-center gap-3 border rounded-full px-3 py-1.5 min-w-[140px] shrink-0 transition-colors ${isLight ? 'bg-bg-elevated border-border-muted shadow-sm' : 'bg-[#101011] border-border-muted'}`}>
                                                 {isDetectable ? (
                                                     <Ghost
                                                         size={14}
                                                         strokeWidth={2}
-                                                        className="text-text-secondary transition-colors"
+                                                        className="text-text-secondary transition-colors shrink-0"
                                                     />
                                                 ) : (
                                                     <svg
@@ -505,7 +783,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                         viewBox="0 0 24 24"
                                                         fill="none"
                                                         xmlns="http://www.w3.org/2000/svg"
-                                                        className="transition-colors"
+                                                        className="transition-colors shrink-0"
                                                     >
                                                         <path
                                                             d="M12 2C7.58172 2 4 5.58172 4 10V22L7 19L9.5 21.5L12 19L14.5 21.5L17 19L20 22V10C20 5.58172 16.4183 2 12 2Z"
@@ -516,22 +794,42 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     </svg>
                                                 )}
                                                 <span className="text-xs font-medium flex-1 transition-colors text-text-secondary">
-                                                    {isDetectable ? "Detectable" : "Undetectable"}
+                                                    {isDetectable ? t("Detectable") : t("Undetectable")}
                                                 </span>
-                                                <div
-                                                    className={`w-8 h-4 rounded-full relative transition-colors cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'}`}
-                                                    onClick={toggleDetectable}
+                                                <button
+                                                    type="button"
+                                                    role="switch"
+                                                    data-on={String(!isDetectable)}
+                                                    aria-checked={!isDetectable}
+                                                    aria-label={t("Undetectable")}
+                                                    onClick={() => { detectableToggleInit.arm(); toggleDetectable(); }}
+                                                    className={`t-toggle t-toggle-xs w-8 h-4 rounded-full p-0.5 flex items-center shrink-0 cursor-pointer ${!isDetectable ? 'bg-accent-primary' : 'bg-bg-toggle-switch'} ${detectableToggleInit.className}`}
                                                 >
-                                                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${!isDetectable ? 'left-[18px]' : 'left-0.5'}`} />
-                                                </div>
-                                            </div>
-                                        </div>
+                                                    <span className="t-toggle-thumb" aria-hidden="true" />
+                                                </button>
+                                             </div>
 
-                                        {/* Center: Ollama Pull Status Pill (flex-1 to center evenly) */}
+                                             {/* What's New Pill */}
+                                             {launchCount < 10 && (
+                                                 <button
+                                                     onClick={() => onOpenSettings('about')}
+                                                     className={`flex items-center gap-1 border rounded-full px-3 py-1.5 transition-all duration-200 cursor-pointer active:scale-95 text-xs font-semibold shrink-0 select-none group ${
+                                                         isLight 
+                                                             ? 'bg-emerald-500/5 hover:bg-emerald-500/10 border-emerald-500/20 text-emerald-600' 
+                                                             : 'bg-emerald-400/10 hover:bg-emerald-400/20 border-emerald-500/20 text-emerald-400'
+                                                     }`}
+                                                 >
+                                                     <span>{t("What's New in 2.8")}</span>
+                                                     <ArrowUpRight size={12} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                                 </button>
+                                             )}
+                                         </div>
+                                         {/* Center: Ollama Pull Status Pill (flex-1 to center evenly) */}
                                         <div className="flex-1 flex justify-center mx-4">
                                             <AnimatePresence>
                                                 {ollamaPullStatus !== 'idle' && (
                                                     <motion.div
+                                                        key="ollama-pull-pill"
                                                         initial={{ opacity: 0, scale: 0.9, y: 10 }}
                                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                                         exit={{ opacity: 0, scale: 0.9, y: 10 }}
@@ -547,7 +845,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                         )}
                                                         <div className="flex flex-col">
                                                             <span className="text-[11px] font-medium text-text-secondary whitespace-nowrap">
-                                                                {ollamaPullStatus === 'downloading' ? `Setting up AI memory... ${ollamaPullPercent}%` : ollamaPullMessage}
+                                                                {ollamaPullStatus === 'downloading' ? `${t('Setting up AI memory...')} ${ollamaPullPercent}%` : ollamaPullMessage}
                                                             </span>
                                                             {ollamaPullStatus === 'downloading' && (
                                                                 <div className="w-full h-[3px] bg-white/10 rounded-full mt-1 overflow-hidden">
@@ -563,8 +861,12 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                             </AnimatePresence>
                                         </div>
 
-                                        {/* Unified CTA pill — same jelly shape, morphs between idle and active-meeting state */}
-                                        <motion.button
+                                        {/* Unified CTA pill — plain <button> (no `layout`, no `initial`) so both
+                                            the pill AND its label appear in their final position on mount with
+                                            no fly-in or fade-up. The label swap (idle ↔ meeting-active) still
+                                            crossfades via AnimatePresence mode="wait" — exit 0.14s, enter 0.22s
+                                            with apple-ease — which reads as a soft label change, not a fly. */}
+                                        <button
                                             onClick={() => {
                                                 if (isMeetingActive) {
                                                     // inactive=true: overlay appears on top but doesn't activate
@@ -575,29 +877,27 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                     window.electronAPI?.setWindowMode?.('overlay', true);
                                                     analytics.trackCommandExecuted('resume_meeting_from_launcher');
                                                 } else {
+                                                    emitOrchestratorEvent({ type: 'turn:done', surface: 'meeting' });
                                                     onStartMeeting();
                                                     analytics.trackCommandExecuted('start_natively_cta');
                                                 }
                                             }}
-                                            whileHover={{ scale: 1.01, filter: 'brightness(1.1)' }}
-                                            whileTap={{ scale: 0.99 }}
-                                            transition={{ duration: 0.18, ease: 'easeOut' }}
-                                            className="group relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0"
+                                            className="group relative overflow-hidden text-white px-6 py-3 rounded-full font-celeb font-medium tracking-normal flex items-center justify-center gap-3 backdrop-blur-xl shrink-0 transition-transform duration-200 ease-out active:scale-[0.98] hover:scale-[1.01] hover:brightness-110"
                                             style={{
                                                 boxShadow: isMeetingActive
                                                     ? 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(16,185,129,0.45), 0 0 0 1px rgba(255,255,255,0.15)'
                                                     : 'inset 0 1px 1px rgba(255,255,255,0.7), inset 0 -1px 2px rgba(0,0,0,0.1), 0 2px 10px rgba(14,165,233,0.4), 0 0 0 1px rgba(255,255,255,0.15)',
-                                                transition: 'box-shadow 0.5s ease-out',
+                                                transition: 'box-shadow 0.36s cubic-bezier(0.25, 1, 0.5, 1)',
                                             }}
                                         >
                                             {/* Blue gradient layer (idle) */}
                                             <div
-                                                className="absolute inset-0 bg-gradient-to-b from-sky-400 via-sky-500 to-blue-600 transition-opacity duration-500 ease-out"
+                                                className="absolute inset-0 bg-gradient-to-b from-sky-400 via-sky-500 to-blue-600 transition-opacity duration-[360ms] ease-apple-ease"
                                                 style={{ opacity: isMeetingActive ? 0 : 1 }}
                                             />
                                             {/* Green gradient layer (meeting active) */}
                                             <div
-                                                className="absolute inset-0 bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-600 transition-opacity duration-500 ease-out"
+                                                className="absolute inset-0 bg-gradient-to-b from-emerald-400 via-emerald-500 to-green-600 transition-opacity duration-[360ms] ease-apple-ease"
                                                 style={{ opacity: isMeetingActive ? 1 : 0 }}
                                             />
 
@@ -606,16 +906,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                             {/* Internal suspended-light hover glow */}
                                             <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none z-10" />
 
-                                            {/* Button content — crossfade between idle and meeting states */}
+                                            {/* Button content — crossfade between idle and meeting states.
+                                                popLayout pops the exiting block out of flow the instant it starts
+                                                exiting, so the button's `layout` resize isn't blocked waiting on the
+                                                220ms exit fade to finish — shape and content move together instead
+                                                of resize-then-fade. `layout` on each variant div prevents the text
+                                                from visibly stretching/squishing while the parent's width tweens. */}
                                             <div className="relative z-20 flex items-center gap-3">
                                                 <AnimatePresence mode="wait" initial={false}>
                                                     {isMeetingActive ? (
                                                         <motion.div
                                                             key="meeting"
-                                                            initial={{ opacity: 0, y: 6 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -6 }}
-                                                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                                                            initial={{ opacity: 0 }}
+                                                            animate={{ opacity: 1 }}
+                                                            exit={{ opacity: 0, transition: { duration: 0.14, ease: [0.25, 1, 0.5, 1] } }}
+                                                            transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                                                             className="flex items-center gap-3"
                                                         >
                                                             {/* Ping live-indicator dot */}
@@ -623,154 +928,50 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-60" />
                                                                 <span className="relative inline-flex rounded-full h-[9px] w-[9px] bg-white" />
                                                             </span>
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">Meeting ongoing</span>
+                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">
+                                                                {t('Meeting ongoing')}
+                                                            </span>
                                                         </motion.div>
                                                     ) : (
                                                         <motion.div
                                                             key="start"
-                                                            initial={{ opacity: 0, y: 6 }}
-                                                            animate={{ opacity: 1, y: 0 }}
-                                                            exit={{ opacity: 0, y: -6 }}
-                                                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                                                            initial={{ opacity: 0 }}
+                                                            animate={{ opacity: 1 }}
+                                                            exit={{ opacity: 0, transition: { duration: 0.14, ease: [0.25, 1, 0.5, 1] } }}
+                                                            transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
                                                             className="flex items-center gap-3"
                                                         >
-                                                            <img src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90" />
-                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">Start Natively</span>
+                                                            <img
+                                                                src={icon} alt="Logo" className="w-[18px] h-[18px] object-contain brightness-0 invert drop-shadow-[0_1px_2px_rgba(0,0,0,0.1)] opacity-90"
+                                                            />
+                                                            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.1)] text-[20px] leading-none">
+                                                                {t('Start Natively')}
+                                                            </span>
                                                         </motion.div>
                                                     )}
                                                 </AnimatePresence>
                                             </div>
-                                        </motion.button>
+                                        </button>
                                     </div>
 
                                     {/* 2. Hero Section Cards */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 h-[198px]">
-                                        {/* PREPARED STATE CARD */}
-                                        {isPrepared && preparedEvent ? (
-                                            <div className={`md:col-span-3 relative group rounded-xl overflow-hidden border border-emerald-500/30 ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/40 ${isLight ? 'via-bg-elevated to-bg-elevated' : 'via-bg-secondary to-bg-secondary'}`}>
-
-                                                <div className="absolute top-4 right-4 text-emerald-400">
-                                                    <Zap size={16} className="text-yellow-400" />
-                                                </div>
-
-                                                <div className="text-center max-w-lg z-10">
-                                                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold tracking-wider mb-4 border border-emerald-500/20">
-                                                        READY TO JOIN
-                                                    </span>
-                                                    <h2 className="text-2xl font-bold text-text-primary mb-2">{preparedEvent.title}</h2>
-                                                    <p className="text-xs text-text-secondary mb-6 flex items-center justify-center gap-2">
-                                                        <Calendar size={12} />
-                                                        {new Date(preparedEvent.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {new Date(preparedEvent.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                                        {preparedEvent.link && " • Link Ready"}
-                                                    </p>
-
-                                                    <div className="flex items-center gap-3 justify-center">
-                                                        <button
-                                                            onClick={handleStartPreparedMeeting}
-                                                            className="bg-emerald-500 hover:bg-emerald-400 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-all shadow-lg hover:shadow-emerald-500/25 active:scale-95 flex items-center gap-2"
-                                                        >
-                                                            Start Meeting
-                                                            <ArrowRight size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setIsPrepared(false)}
-                                                            className="px-4 py-3 rounded-xl text-xs font-medium text-text-tertiary hover:text-white transition-colors"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Glows */}
-                                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-emerald-500/10 blur-[100px] pointer-events-none" />
-                                            </div>
-                                        ) : (
-                                            /* Dynamic Next Meeting OR Default Intro */
-                                            nextMeeting ? (
-                                                <div className={`md:col-span-2 relative group rounded-xl overflow-hidden ${isLight ? 'bg-bg-elevated' : 'bg-bg-secondary'} flex flex-col shadow-[0_1px_3px_rgba(0,0,0,0.07),0_1px_2px_rgba(0,0,0,0.04)]`}>
-                                                    {/* Header */}
-                                                    <div className="p-5 flex-1 relative z-10">
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">Up Next</span>
-                                                            <span className="text-[11px] text-text-tertiary">• Starts in {Math.max(0, Math.ceil((new Date(nextMeeting.startTime).getTime() - Date.now()) / 60000))} min</span>
-                                                        </div>
-
-                                                        <h2 className="text-xl font-bold text-text-primary leading-tight mb-1 line-clamp-2">
-                                                            {nextMeeting.title}
-                                                        </h2>
-
-                                                        <div className="flex items-center gap-2 text-text-secondary text-xs mt-2">
-                                                            <Calendar size={12} />
-                                                            <span>{new Date(nextMeeting.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} - {new Date(nextMeeting.endTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
-                                                            {nextMeeting.link && (
-                                                                <>
-                                                                    <span className="opacity-20">|</span>
-                                                                    <LinkIcon size={12} />
-                                                                    <span className="truncate max-w-[150px]">Meeting Link Found</span>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Actions */}
-                                                    <div className="p-4 bg-bg-elevated/50 border-t border-border-subtle flex items-center gap-3">
-                                                        <button
-                                                            onClick={() => handlePrepare(nextMeeting)}
-                                                            className={`flex-1 border px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 ${isLight ? 'bg-bg-item-surface hover:bg-bg-item-active border-border-muted text-text-primary' : 'bg-white/10 hover:bg-white/20 border-white/10 text-white'}`}
-                                                        >
-                                                            <Zap size={13} className="text-yellow-400" />
-                                                            Prepare
-                                                        </button>
-                                                        <button
-                                                            onClick={onStartMeeting}
-                                                            className={`px-4 py-2 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary transition-all ${isLight ? 'hover:bg-bg-item-surface' : 'hover:bg-white/5'}`}
-                                                        >
-                                                            Start now
-                                                        </button>
-                                                    </div>
-
-                                                    {/* Background Decoration */}
-                                                    <div className="absolute top-0 right-0 w-[150px] h-[150px] bg-emerald-500/10 blur-[60px] pointer-events-none" />
-                                                </div>
-                                            ) : (
-                                                <div className="md:col-span-2 h-full">
-                                                    <FeatureSpotlight />
-                                                </div>
-                                            )
-                                        )}
-
-
-
-                                        {/* Right Secondary Card */}
-                                        <div className="md:col-span-1 rounded-xl overflow-hidden bg-bg-elevated relative group flex flex-col items-center pt-6 text-center">
-                                            {/* Backdrop Image */}
-                                            <div className="absolute inset-0">
-                                                <img src={calender} alt="" className="w-full h-full object-cover opacity-100 transition-opacity duration-500 translate-x--1 translate-y-[1px] scale-105" />
-                                            </div>
-
-                                            {/* Content Layer */}
-                                            <div className="relative z-10 w-full flex flex-col items-center h-full">
-                                                <h3 className="text-[19px] leading-tight mb-4">
-                                                    {isCalendarConnected ? (
-                                                        <>
-                                                            <span className="block font-semibold text-white">Calendar linked</span>
-                                                            <span className="block font-medium text-white/60 text-[0.95em]">Events synced</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <span className="block font-semibold text-white">Link your calendar to</span>
-                                                            <span className="block font-medium text-white/60 text-[0.95em]">see upcoming events</span>
-                                                        </>
-                                                    )}
-                                                </h3>
-
-                                                <ConnectCalendarButton
-                                                    className="-translate-x-0.5"
-                                                    onConnect={() => setIsCalendarConnected(true)}
-                                                />
-                                            </div>
+                                        {/* Default Intro — natively support & upcoming features.
+                                            Calendar "Up Next" lives in Settings → Calendar, not here. */}
+                                        <div className="md:col-span-2 h-full">
+                                            <FeatureSpotlight />
                                         </div>
+
+
+
+                                        {/* Right Secondary Card — violet-tinted, "Calendar Connected" + peeking next meeting */}
+                                        <UpcomingCalendarCard
+                                            className="md:col-span-1"
+                                            isConnected={isCalendarConnected}
+                                            onConnect={() => setIsCalendarConnected(true)}
+                                            meetings={visibleMeetings}
+                                            totalCount={upcomingMeetings.length}
+                                        />
                                     </div>
                                 </div>
                             </section>
@@ -801,7 +1002,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                 {m.title === 'Processing...' ? (
                                                                     <div className="flex items-center gap-2 transition-all duration-200 ease-out group-hover:opacity-0 group-hover:translate-x-2 delayed-hover-exit">
                                                                         <RefreshCw size={12} className="animate-spin text-blue-500" />
-                                                                        <span className="text-xs text-blue-500 font-medium">Finalizing...</span>
+                                                                        <span className="text-xs text-blue-500 font-medium">{t('Finalizing...')}</span>
                                                                     </div>
                                                                 ) : (
                                                                     <>
@@ -834,6 +1035,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                             <AnimatePresence>
                                                                 {activeMenuId === m.id && (
                                                                     <motion.div
+                                                                        key={`meeting-menu-${m.id}`}
                                                                         initial={{ opacity: 0, scale: 0.95, y: 10 }}
                                                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                                                         exit={{ opacity: 0, scale: 0.95, y: 5 }}
@@ -870,7 +1072,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                                 }}
                                                                             >
                                                                                 <Download size={13} />
-                                                                                Export
+                                                                                {t('Export')}
                                                                             </button>
                                                                             <button
                                                                                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg transition-colors text-left"
@@ -886,7 +1088,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                                                                 }}
                                                                             >
                                                                                 <Trash2 size={13} />
-                                                                                Delete
+                                                                                {t('Delete')}
                                                                             </button>
                                                                         </div>
                                                                     </motion.div>
@@ -899,7 +1101,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
                                         ))}
 
                                         {meetings.length === 0 && (
-                                            <div className="p-4 text-text-tertiary text-sm">No recent meetings.</div>
+                                            <div className="p-4 text-text-tertiary text-sm">{t('No recent meetings.')}</div>
                                         )}
 
                                     </div>
@@ -916,6 +1118,7 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
             <AnimatePresence>
                 {showNotification && (
                     <motion.div
+                        key="refresh-toast"
                         initial={{ x: 300, opacity: 0, scale: 0.9 }}
                         animate={{ x: 0, opacity: 1, scale: 1 }}
                         exit={{ x: 300, opacity: 0, scale: 0.95 }}
@@ -930,8 +1133,8 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onP
 
                         {/* Text Content */}
                         <div className="flex flex-col gap-0.5">
-                            <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">Refreshed</span>
-                            <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">Synced with calendar</span>
+                            <span className="text-[14px] font-semibold text-text-primary leading-none tracking-tight">{t('Refreshed')}</span>
+                            <span className="text-[11px] text-text-tertiary font-medium leading-none tracking-wide">{t('Synced with calendar')}</span>
                         </div>
 
                         {/* Specular Highlight Overlay */}

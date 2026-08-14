@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<preferences>
+  <complexity>Interviewer prefers O(n log n) only if O(n) is impossible.</complexity>
+  <style>Talk through edge cases before code.</style>
+  <ban>Do not use external libraries that hide complexity.</ban>
+</preferences>

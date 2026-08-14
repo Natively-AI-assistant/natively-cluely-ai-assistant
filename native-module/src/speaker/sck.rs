@@ -3,7 +3,7 @@
 
 use anyhow::Result;
 use cidre::sc::StreamOutput;
-use cidre::{arc, cm, define_obj_type, dispatch, ns, objc, sc};
+use cidre::{api, arc, cm, define_obj_type, dispatch, ns, objc, sc};
 use ringbuf::{
     traits::{Producer, Split},
     HeapCons, HeapProd, HeapRb,
@@ -27,6 +27,18 @@ pub fn list_output_devices() -> Result<Vec<(String, String)>> {
         }
     }
     Ok(list)
+}
+
+/// Returns the UID of the current macOS default output device, or empty string
+/// if none can be resolved. Used by main.ts to detect mid-meeting output route
+/// changes (user plugs in headphones, switches to AirPods) — when the default
+/// changes, the JS side recreates SystemAudioCapture so the CoreAudio Tap
+/// follows the new route instead of capturing silence on the old device.
+pub fn default_output_device_uid() -> String {
+    match ca::System::default_output_device() {
+        Ok(dev) => dev.uid().map(|u| u.to_string()).unwrap_or_default(),
+        Err(_) => String::new(),
+    }
 }
 
 pub struct AudioHandlerInner {
@@ -94,68 +106,82 @@ pub struct SpeakerInput {
 }
 
 impl SpeakerInput {
-    pub fn new(_device_id: Option<String>) -> Result<Self> {
+    pub fn new(device_id: Option<String>) -> Result<Self> {
+        // Gate on macOS 13.0+. sc::StreamCfg.set_captures_audio (and the rest of the
+        // ScreenCaptureKit audio surface) was introduced in 13.0; on macOS 12 the
+        // selector dispatch would abort the process the same way #249 did for
+        // CoreAudio on 14.0-14.3. Fail clean so the JS layer can surface
+        // "unsupported macOS" instead of a process crash.
+        if !ns::ProcessInfo::current().is_os_at_least_version(api::OsVersion {
+            major: 13,
+            minor: 0,
+            patch: 0,
+        }) {
+            return Err(anyhow::anyhow!(
+                "ScreenCaptureKit audio capture requires macOS 13.0+ (current OS lacks SCStreamConfiguration.capturesAudio)"
+            ));
+        }
+
         println!("[SpeakerInput] Initializing ScreenCaptureKit audio capture...");
 
-        // NOTE: ScreenCaptureKit captures ALL system audio, not per-device
-        // The device_id parameter is ignored
+        // ScreenCaptureKit captures ALL system audio, not per-device. If the
+        // user picked a non-default output device they should be told that
+        // this fallback path silently ignores it.
+        if let Some(ref id) = device_id {
+            if !id.is_empty() && id != "default" && id != "sck" {
+                eprintln!(
+                    "[SpeakerInput] WARNING: ScreenCaptureKit fallback ignores device_id '{}' — will capture global system audio.",
+                    id
+                );
+            }
+        }
 
-        // Get available content - triggers permission check
-        // Use blocking wait since we're in a sync context
-        use std::sync::{Arc, Mutex};
+        // Get available content (triggers permission check) and wait for the
+        // callback on a Condvar instead of polling. Pre-fix this loop slept
+        // 100ms × 100 iterations; on a cold TCC dialog the user-perceived
+        // hang was up to 10s with no UI feedback. Condvar wakes the instant
+        // the callback fires.
+        use std::sync::{Arc, Condvar, Mutex};
 
-        let content_cell: Arc<Mutex<Option<arc::R<sc::ShareableContent>>>> =
-            Arc::new(Mutex::new(None));
-        let content_error: Arc<Mutex<Option<arc::R<ns::Error>>>> =
-            Arc::new(Mutex::new(None));
-
-        let cell_clone = content_cell.clone();
-        let error_clone = content_error.clone();
+        type WaitSlot = Mutex<Option<Result<arc::R<sc::ShareableContent>>>>;
+        let pair: Arc<(WaitSlot, Condvar)> = Arc::new((Mutex::new(None), Condvar::new()));
+        let pair_clone = pair.clone();
 
         sc::ShareableContent::current_with_ch(move |content_opt, error_opt| {
-            if let Some(e) = error_opt {
+            let result: Result<arc::R<sc::ShareableContent>> = if let Some(e) = error_opt {
                 println!(
                     "[SpeakerInput] ERROR: ScreenCaptureKit access denied: {:?}",
                     e
                 );
-                if let Ok(mut guard) = error_clone.lock() {
-                    *guard = Some(e.retained());
-                }
+                Err(anyhow::anyhow!("ScreenCaptureKit access denied: {:?}", e))
             } else if let Some(c) = content_opt {
-                if let Ok(mut guard) = cell_clone.lock() {
-                    *guard = Some(c.retained());
-                }
+                Ok(c.retained())
+            } else {
+                Err(anyhow::anyhow!("SCK callback fired with neither content nor error"))
+            };
+            let (lock, cvar) = &*pair_clone;
+            if let Ok(mut slot) = lock.lock() {
+                *slot = Some(result);
+                cvar.notify_all();
             }
         });
 
-        // Wait for shareable content (max 10 seconds).
-        // Permission is pre-checked by the TS layer before calling startMeeting(),
-        // so this timeout is a safety net for SCK initialization, not permission waiting.
-        let start = std::time::Instant::now();
-        loop {
-            if start.elapsed() > std::time::Duration::from_secs(10) {
-                println!("[SpeakerInput] Timed out waiting for ScreenCaptureKit content (10s)");
-                break;
+        let (lock, cvar) = &*pair;
+        let mut slot = lock.lock().map_err(|_| anyhow::anyhow!("SCK content lock poisoned"))?;
+        let timeout = std::time::Duration::from_secs(10);
+        while slot.is_none() {
+            let (s, wait_res) = cvar
+                .wait_timeout(slot, timeout)
+                .map_err(|_| anyhow::anyhow!("SCK wait poisoned"))?;
+            slot = s;
+            if wait_res.timed_out() {
+                println!("[SpeakerInput] Please grant Screen Recording permission in System Settings > Privacy & Security");
+                return Err(anyhow::anyhow!(
+                    "ScreenCaptureKit content callback never fired (10s) — likely Screen Recording permission denied"
+                ));
             }
-            if content_error.lock().unwrap().is_some() {
-                break;
-            }
-            if content_cell.lock().unwrap().is_some() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(100));
         }
-
-        if let Some(e) = content_error.lock().unwrap().as_ref() {
-            println!("[SpeakerInput] Please grant Screen Recording permission in System Settings > Privacy & Security");
-            return Err(anyhow::anyhow!("ScreenCaptureKit access denied: {:?}", e));
-        }
-
-        let content = content_cell
-            .lock()
-            .unwrap()
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get shareable content (timeout)"))?;
+        let content = slot.take().unwrap()?;
 
         let displays = content.displays();
         if displays.is_empty() {
@@ -196,7 +222,7 @@ impl SpeakerInput {
         self.cfg.sample_rate() as f64
     }
 
-    pub fn stream(self) -> SpeakerStream {
+    pub fn stream(self) -> Result<SpeakerStream> {
         let buffer_size = 1024 * 128;
         let rb = HeapRb::<f32>::new(buffer_size);
         let (producer, consumer) = rb.split();
@@ -214,59 +240,60 @@ impl SpeakerInput {
             sc::stream::OutputType::Audio,
             Some(&queue),
         ) {
-            println!("[SpeakerInput] ERROR: Failed to add audio output: {:?}", e);
+            return Err(anyhow::anyhow!(
+                "ScreenCaptureKit add_stream_output failed: {:?}",
+                e
+            ));
         }
 
-        // Start with completion handler to detect errors
         println!("[SpeakerInput] Starting ScreenCaptureKit stream...");
 
-        use std::sync::{
-            atomic::{AtomicBool, AtomicU8, Ordering},
-            Arc,
-        };
+        use std::sync::{Condvar, Mutex};
 
-        let start_complete = Arc::new(AtomicBool::new(false));
-        let start_error = Arc::new(AtomicU8::new(0)); // 0 = pending, 1 = success, 2 = error
-
-        let complete_clone = start_complete.clone();
-        let error_clone = start_error.clone();
+        // Wait on a Condvar instead of polling so we wake the instant the
+        // start callback fires (was: 100 × 10ms polls + a stale "2s" log).
+        let pair = std::sync::Arc::new((Mutex::new(None::<Result<()>>), Condvar::new()));
+        let pair_clone = pair.clone();
 
         stream.start_with_ch(move |err| {
-            if let Some(e) = err {
+            let result = if let Some(e) = err {
                 println!("[SpeakerInput] ERROR: Stream start FAILED: {:?}", e);
                 println!("[SpeakerInput] Check Screen Recording permission in System Settings!");
-                error_clone.store(2, Ordering::SeqCst);
+                Err(anyhow::anyhow!("SCK start failed: {:?}", e))
             } else {
                 println!("[SpeakerInput] ✅ Stream started successfully!");
-                error_clone.store(1, Ordering::SeqCst);
+                Ok(())
+            };
+            let (lock, cvar) = &*pair_clone;
+            if let Ok(mut slot) = lock.lock() {
+                *slot = Some(result);
+                cvar.notify_all();
             }
-            complete_clone.store(true, Ordering::SeqCst);
         });
 
-        // Wait for start completion (max 3 seconds).
-        // Permission is already confirmed by the TS layer, so the callback
-        // should arrive almost instantly. This is a safety net for SCK bugs.
-        for _ in 0..300 {
-            if start_complete.load(Ordering::SeqCst) {
-                break;
+        let (lock, cvar) = &*pair;
+        let mut slot = lock.lock().map_err(|_| anyhow::anyhow!("SCK lock poisoned"))?;
+        let timeout = std::time::Duration::from_secs(3);
+        while slot.is_none() {
+            let (s, wait_res) = cvar
+                .wait_timeout(slot, timeout)
+                .map_err(|_| anyhow::anyhow!("SCK wait poisoned"))?;
+            slot = s;
+            if wait_res.timed_out() {
+                return Err(anyhow::anyhow!(
+                    "SCK start callback never fired (3s) — likely Screen Recording permission denied or revoked"
+                ));
             }
-            std::thread::sleep(std::time::Duration::from_millis(10));
         }
+        slot.take().unwrap()?;
 
-        let status = start_error.load(Ordering::SeqCst);
-        if status == 0 {
-            println!("[SpeakerInput] WARNING: Start callback not received after 2s");
-        } else if status == 2 {
-            println!("[SpeakerInput] WARNING: Stream started with error - audio may not work");
-        }
-
-        SpeakerStream {
+        Ok(SpeakerStream {
             consumer: Some(consumer),
             stream,
             _handler: handler,
             _filter: self.filter,
             _cfg: self.cfg,
-        }
+        })
     }
 }
 
@@ -317,5 +344,62 @@ impl Drop for SpeakerStream {
                 println!("[SpeakerStream] WARNING: Stop callback not received after 2s");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for the macOS 13.0 gate on SCK audio capture. Pins the contract so
+    /// a future cidre refactor that breaks `OsVersion::at_least` doesn't silently let the
+    /// fallback crash on macOS 12 hosts (where SCStreamConfiguration.capturesAudio doesn't exist).
+    #[test]
+    fn os_version_gate_resolves_macos_13_on_modern_hosts() {
+        assert!(
+            api::OsVersion {
+                major: 13,
+                minor: 0,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 13.0 should report at_least() == true on a >=13.0 host"
+        );
+    }
+
+    #[test]
+    fn os_version_gate_rejects_future_version_sck() {
+        assert!(
+            !api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }
+            .at_least(),
+            "macOS 99.0 must not report at_least() == true"
+        );
+    }
+
+    /// Same contract via ProcessInfo — this is the exact API called from
+    /// `SpeakerInput::new` on the SCK side.
+    #[test]
+    fn process_info_is_os_at_least_13_on_modern_hosts() {
+        let pi = ns::ProcessInfo::current();
+        assert!(
+            pi.is_os_at_least_version(api::OsVersion {
+                major: 13,
+                minor: 0,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(13.0) must be true on a >=13.0 host"
+        );
+        assert!(
+            !pi.is_os_at_least_version(api::OsVersion {
+                major: 99,
+                minor: 0,
+                patch: 0
+            }),
+            "ProcessInfo.isOperatingSystemAtLeastVersion(99.0) must be false"
+        );
     }
 }

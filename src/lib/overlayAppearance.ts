@@ -1,4 +1,5 @@
 import type React from 'react';
+import { VIVID_DARK_CODE_BG_RGB } from './codeTheme';
 
 export type OverlayTheme = 'light' | 'dark';
 
@@ -49,14 +50,14 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
             shellStyle: {
                 backgroundColor: `rgba(214, 228, 247, ${scale(0.085, 1, surfaceStrength)})`,
                 borderColor: `rgba(37, 99, 235, ${scale(0.08, 0.16, surfaceStrength)})`,
-                boxShadow: `0 24px 48px rgba(37, 99, 235, ${scale(0.03, 0.12, surfaceStrength)})`,
+                boxShadow: 'none',
                 backdropFilter: `blur(${scale(4, 18, blurStrength)}px) saturate(145%)`,
                 WebkitBackdropFilter: `blur(${scale(4, 18, blurStrength)}px) saturate(145%)`,
             },
             pillStyle: {
                 backgroundColor: `rgba(221, 234, 250, ${scale(0.075, 0.98, surfaceStrength)})`,
                 borderColor: `rgba(37, 99, 235, ${scale(0.08, 0.16, surfaceStrength)})`,
-                boxShadow: `0 12px 28px rgba(37, 99, 235, ${scale(0.02, 0.09, surfaceStrength)})`,
+                boxShadow: 'none',
                 backdropFilter: `blur(${scale(3, 11, blurStrength)}px) saturate(140%)`,
                 WebkitBackdropFilter: `blur(${scale(3, 11, blurStrength)}px) saturate(140%)`,
             },
@@ -86,12 +87,12 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
                 backgroundColor: `rgba(248, 251, 255, ${scale(0.055, 0.88, surfaceStrength)})`,
             },
             codeBlockStyle: {
-                backgroundColor: `rgba(245, 249, 255, ${scale(0.06, 0.94, surfaceStrength)})`,
-                borderColor: `rgba(30, 64, 175, ${scale(0.07, 0.15, surfaceStrength)})`,
+                backgroundColor: `rgba(249, 250, 251, ${scale(0.06, 0.94, surfaceStrength)})`,
+                borderColor: `rgba(0, 0, 0, ${scale(0.07, 0.15, surfaceStrength)})`,
             },
             codeHeaderStyle: {
-                backgroundColor: `rgba(236, 244, 255, ${scale(0.08, 0.96, surfaceStrength)})`,
-                borderBottomColor: `rgba(30, 64, 175, ${scale(0.08, 0.16, surfaceStrength)})`,
+                backgroundColor: `rgba(243, 244, 246, ${scale(0.08, 0.96, surfaceStrength)})`,
+                borderBottomColor: `rgba(0, 0, 0, ${scale(0.08, 0.16, surfaceStrength)})`,
             },
             dividerStyle: {
                 backgroundColor: `rgba(30, 64, 175, ${scale(0.08, 0.16, surfaceStrength)})`,
@@ -103,14 +104,14 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
         shellStyle: {
             backgroundColor: `rgba(24, 26, 32, ${scale(0.12, 1, surfaceStrength)})`,
             borderColor: `rgba(255, 255, 255, ${scale(0.08, 0.14, surfaceStrength)})`,
-            boxShadow: `0 24px 48px rgba(0, 0, 0, ${scale(0.05, 0.24, surfaceStrength)})`,
+            boxShadow: 'none',
             backdropFilter: `blur(${scale(6, 20, blurStrength)}px) saturate(140%)`,
             WebkitBackdropFilter: `blur(${scale(6, 20, blurStrength)}px) saturate(140%)`,
         },
         pillStyle: {
             backgroundColor: `rgba(24, 26, 32, ${scale(0.1, 0.98, surfaceStrength)})`,
             borderColor: `rgba(255, 255, 255, ${scale(0.08, 0.14, surfaceStrength)})`,
-            boxShadow: `0 12px 28px rgba(0, 0, 0, ${scale(0.035, 0.16, surfaceStrength)})`,
+            boxShadow: 'none',
             backdropFilter: `blur(${scale(4, 13, blurStrength)}px) saturate(136%)`,
             WebkitBackdropFilter: `blur(${scale(4, 13, blurStrength)}px) saturate(136%)`,
         },
@@ -140,11 +141,11 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
             backgroundColor: `rgba(54, 59, 71, ${scale(0.2, 0.92, surfaceStrength)})`,
         },
         codeBlockStyle: {
-            backgroundColor: `rgba(35, 40, 50, ${scale(0.24, 0.96, surfaceStrength)})`,
+            backgroundColor: `rgba(${VIVID_DARK_CODE_BG_RGB}, ${scale(0.30, 0.97, surfaceStrength)})`,
             borderColor: `rgba(255, 255, 255, ${scale(0.05, 0.1, surfaceStrength)})`,
         },
         codeHeaderStyle: {
-            backgroundColor: `rgba(48, 53, 64, ${scale(0.22, 0.94, surfaceStrength)})`,
+            backgroundColor: `rgba(45, 45, 45, ${scale(0.22, 0.94, surfaceStrength)})`,
             borderBottomColor: `rgba(255, 255, 255, ${scale(0.05, 0.1, surfaceStrength)})`,
         },
         dividerStyle: {
@@ -152,3 +153,19 @@ export const getOverlayAppearance = (opacity: number, theme: OverlayTheme): Over
         },
     };
 };
+
+// Returns empty inline-style objects for the liquid-glass theme — CSS variable
+// overrides via [data-interface-theme="liquid-glass"] handle all visual styling.
+export const getGlassOverlayAppearance = (): OverlayAppearance => ({
+    shellStyle: {},
+    pillStyle: {},
+    transcriptStyle: {},
+    subtleStyle: {},
+    chipStyle: {},
+    inputStyle: {},
+    controlStyle: {},
+    iconStyle: {},
+    codeBlockStyle: {},
+    codeHeaderStyle: {},
+    dividerStyle: {},
+});

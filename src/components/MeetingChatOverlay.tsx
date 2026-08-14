@@ -2,15 +2,22 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStreamBuffer } from '../hooks/useStreamBuffer';
 import { X, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { genMessageId } from '../utils/messageId';
+import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
+import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import nativelyIcon from './icon.png';
+import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { splitGistLineStreaming } from '../lib/displayMarkup';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+registerPrismLanguages();
 
 // ============================================
 // Types 
@@ -46,25 +53,27 @@ type ChatState = 'idle' | 'opening' | 'waiting_for_llm' | 'streaming_response' |
 // Typing Indicator Component
 // ============================================
 
-const TypingIndicator: React.FC = () => (
-    <div className="flex items-center gap-1 py-4">
-        <div className="flex items-center gap-1">
-            {[0, 1, 2].map((i) => (
-                <motion.div
-                    key={i}
-                    className="w-2 h-2 rounded-full bg-text-tertiary"
-                    animate={{ opacity: [0.4, 1, 0.4] }}
-                    transition={{
-                        duration: 0.6,
-                        repeat: Infinity,
-                        delay: i * 0.15,
-                        ease: "easeInOut"
-                    }}
-                />
-            ))}
+const TypingIndicator: React.FC = () => {
+    return (
+        <div className="flex items-center gap-1 py-4">
+            <div className="flex items-center gap-1">
+                {[0, 1, 2].map((i) => (
+                    <motion.div
+                        key={i}
+                        className="w-2 h-2 rounded-full bg-text-tertiary"
+                        animate={{ opacity: [0.4, 1, 0.4] }}
+                        transition={{
+                            duration: 0.6,
+                            repeat: Infinity,
+                            delay: i * 0.15,
+                            ease: "easeInOut"
+                        }}
+                    />
+                ))}
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 // ============================================
 // Message Components
@@ -85,10 +94,13 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
 
 const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
     const [copied, setCopied] = useState(false);
+    // Teleprompter gist: persisted answers can end with a [[GIST]] line —
+    // split it into a bottom summary chip instead of showing the marker.
+    const { body: gistBody, gist: gistLine } = splitGistLineStreaming(content);
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(content);
+            await navigator.clipboard.writeText(gistBody);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
@@ -104,42 +116,63 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
             className="flex flex-col items-start mb-6"
         >
             <div className="text-text-primary text-[15px] leading-relaxed max-w-[85%]">
+                {/* Minimal Copy Button (no AI response header) */}
+                {!isStreaming && content && (
+                    <div className="flex justify-end mb-2 select-none w-full">
+                        <button
+                            onClick={handleCopy}
+                            className="flex items-center gap-1.5 text-[11px] text-text-tertiary hover:text-text-secondary transition-colors"
+                        >
+                            {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                            {copied ? 'Copied' : 'Copy'}
+                        </button>
+                    </div>
+                )}
+
+                {/* Markdown Content with tight line height and spacing */}
                 <div className="markdown-content">
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[rehypeKatex]}
+                        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]]}
                         components={{
-                            p: ({ node, ...props }: any) => <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />,
-                            a: ({ node, ...props }: any) => <a className="text-blue-500 hover:underline" {...props} />,
-                            pre: ({ children }: any) => <div className="not-prose mb-4">{children}</div>,
-                            code: ({ node, inline, className, children, ...props }: any) => {
-                                const match = /language-(\w+)/.exec(className || '');
-                                const isInline = inline ?? false;
+                            p: ({ node, ...props }: any) => <p className="mb-[6px] last:mb-0 leading-relaxed whitespace-pre-wrap text-[13.5px]" {...props} />,
+                            a: ({ node, ...props }: any) => <a className="text-accent-primary hover:underline" {...props} />,
+                            h1: ({ node, ...props }: any) => <h1 className="text-sm font-bold mt-2 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
+                            h2: ({ node, ...props }: any) => <h2 className="text-xs font-bold mt-1.5 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
+                            h3: ({ node, ...props }: any) => <h3 className="text-xs font-semibold mt-1.5 mb-[4.5px] leading-relaxed" {...props} />,
+                            ul: ({ node, ...props }: any) => <ul className="list-disc pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
+                            ol: ({ node, ...props }: any) => <ol className="list-decimal pl-4 mt-[4.5px] mb-[4.5px] space-y-0 leading-relaxed text-[13.5px]" {...props} />,
+                            li: ({ node, ...props }: any) => <li className="pl-1 mb-[4.5px] last:mb-0 leading-relaxed text-[13.5px]" {...props} />,
+                            pre: ({ children }: any) => <div className="not-prose mb-3 mt-1.5">{children}</div>,
+                            code: ({ node, className, children, ...props }: any) => {
+                                const match = /language-([\w+#-]+)/.exec(className || '');
+                                const isBlock = isBlockCode(className, String(children));
                                 const lang = match ? match[1] : '';
+                                const resolved = mapLanguageForPrism(lang, String(children));
 
-                                return !isInline ? (
-                                    <div className="my-3 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
-                                        <div className="bg-white/[0.04] px-3 py-1.5 border-b border-white/[0.08]">
-                                            <span className="text-[10px] uppercase tracking-widest font-semibold text-white/40 font-mono">
-                                                {lang || 'CODE'}
+                                return isBlock ? (
+                                    <div className="my-2 rounded-xl overflow-hidden border border-white/[0.08] shadow-lg bg-zinc-800/60 backdrop-blur-md">
+                                        <div className="bg-white/[0.04] px-3 py-1 border-b border-white/[0.08]">
+                                            <span className="text-[9px] uppercase tracking-widest font-semibold text-white/40 font-mono">
+                                                {resolved || 'CODE'}
                                             </span>
                                         </div>
                                         <div className="bg-transparent">
                                             <SyntaxHighlighter
-                                                language={lang || 'text'}
+                                                language={resolved}
                                                 style={vscDarkPlus}
                                                 customStyle={{
                                                     margin: 0,
                                                     borderRadius: 0,
-                                                    fontSize: '13px',
-                                                    lineHeight: '1.6',
+                                                    fontSize: '12px',
+                                                    lineHeight: '1.45',
                                                     background: 'transparent',
-                                                    padding: '16px',
+                                                    padding: '12px',
                                                     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
                                                 }}
                                                 wrapLongLines={true}
                                                 showLineNumbers={true}
-                                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '11px' }}
+                                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1.2em', color: 'rgba(255,255,255,0.2)', textAlign: 'right', fontSize: '10px' }}
                                                 {...props}
                                             >
                                                 {String(children).replace(/\n$/, '')}
@@ -147,33 +180,18 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                                         </div>
                                     </div>
                                 ) : (
-                                    <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[13px] font-mono text-text-primary border border-border-subtle whitespace-pre-wrap" {...props}>
+                                    <code className="bg-bg-tertiary px-1.5 py-0.5 rounded text-[12px] font-mono text-text-primary border border-border-subtle whitespace-pre-wrap" {...props}>
                                         {children}
                                     </code>
                                 );
                             },
                         }}
                     >
-                        {content}
+                        {gistBody}
                     </ReactMarkdown>
+                    {gistLine && <div className="overlay-gist-chip">{gistLine}</div>}
                 </div>
-                {isStreaming && (
-                    <motion.span
-                        className="inline-block w-0.5 h-4 bg-text-secondary ml-0.5 align-middle"
-                        animate={{ opacity: [1, 0] }}
-                        transition={{ duration: 0.5, repeat: Infinity }}
-                    />
-                )}
             </div>
-            {!isStreaming && content && (
-                <button
-                    onClick={handleCopy}
-                    className="flex items-center gap-2 mt-3 text-[13px] text-text-tertiary hover:text-text-secondary transition-colors"
-                >
-                    {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    {copied ? 'Copied' : 'Copy message'}
-                </button>
-            )}
         </motion.div>
     );
 };
@@ -196,6 +214,10 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatWindowRef = useRef<HTMLDivElement>(null);
     const streamBuffer = useStreamBuffer();
+    // Match the modes manager's `--mm-bg` exactly so the expanded chat
+    // card looks like the same dark grey surface.
+    const isLightTheme = useResolvedTheme() === 'light';
+    const chatWindowBg = isLightTheme ? '#f9f9f9' : '#111111';
 
     // Submit initial query when overlay opens
     useEffect(() => {
@@ -280,7 +302,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
         if (!question.trim() || chatState === 'waiting_for_llm' || chatState === 'streaming_response') return;
 
         const userMessage: Message = {
-            id: `user-${Date.now()}`,
+            id: genMessageId(),
             role: 'user',
             content: question
         };
@@ -293,7 +315,15 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
 
-        const assistantMessageId = `assistant-${Date.now()}`;
+        const assistantMessageId = genMessageId();
+
+        // Track active listener cleanups so the finally block can always
+        // remove them — even if the IPC done/error events never arrive.
+        // Without this, a hung stream leaves `chatState` stuck at
+        // 'waiting_for_llm' / 'streaming_response' and the guard at the
+        // top of submitQuestion silently drops every subsequent message
+        // (no user-message push, no response).
+        let activeCleanups: Array<() => void> = [];
 
         try {
             // Add typing indicator delay (200ms) - makes the AI feel "thoughtful"
@@ -346,6 +376,10 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 errorCleanup?.();
             });
 
+            if (tokenCleanup) activeCleanups.push(tokenCleanup);
+            if (doneCleanup) activeCleanups.push(doneCleanup);
+            if (errorCleanup) activeCleanups.push(errorCleanup);
+
             // Get meeting ID from context for RAG queries
             const meetingId = meetingContext.id;
 
@@ -360,6 +394,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                     tokenCleanup?.();
                     doneCleanup?.();
                     errorCleanup?.();
+                    activeCleanups = [];
 
                     // FALLBACK LOGIC
                     const contextString = buildContextString();
@@ -368,7 +403,17 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 ${contextString}`;
 
                     streamBuffer.reset();
-                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                    // Stream-id guard (2026-07-31) — see GlobalChatOverlay: drop
+                    // tokens/done/error belonging to an older abandoned stream.
+                    let adoptedStreamId: number | null = null;
+                    const acceptsMeta = (meta?: { streamId?: number }) => {
+                        const id = meta?.streamId;
+                        if (typeof id !== 'number') return true;
+                        if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                        return id === adoptedStreamId;
+                    };
+                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                        if (!acceptsMeta(meta)) return;
                         setChatState('streaming_response');
                         streamBuffer.appendToken(token, (content) => {
                             setMessages(prev => prev.map(msg =>
@@ -379,20 +424,24 @@ ${contextString}`;
                         });
                     });
 
-                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                        if (!acceptsMeta(payload)) return;
                         const finalContent = streamBuffer.getBufferedContent();
                         setMessages(prev => prev.map(msg =>
                             msg.id === assistantMessageId
                                 ? { ...msg, content: finalContent, isStreaming: false }
                                 : msg
                         ));
+                        setChatState('idle');
                         streamBuffer.reset();
                         oldTokenCleanup?.();
                         oldDoneCleanup?.();
                         oldErrorCleanup?.();
                     });
 
-                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                        if (meta?.source === 'phone-mirror') return;
+                        if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                         console.error('[MeetingChat] Gemini stream error (fallback):', error);
                         setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                         setErrorMessage("Couldn't get a response. Please check your settings.");
@@ -403,11 +452,15 @@ ${contextString}`;
                         oldErrorCleanup?.();
                     });
 
+                    if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
+                    if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
+                    if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
+
                     await window.electronAPI?.streamGeminiChat(
                         question,
                         undefined,
                         systemPrompt,
-                        { skipSystemPrompt: true, ignoreKnowledgeMode: true }
+                        { skipSystemPrompt: true }
                     );
                 }
             } else {
@@ -419,7 +472,15 @@ ${contextString}`;
 
                 // Switch to Gemini streaming (RAF-batched)
                 streamBuffer.reset();
-                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                let adoptedStreamId: number | null = null;
+                const acceptsMeta = (meta?: { streamId?: number }) => {
+                    const id = meta?.streamId;
+                    if (typeof id !== 'number') return true;
+                    if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                    return id === adoptedStreamId;
+                };
+                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                    if (!acceptsMeta(meta)) return;
                     setChatState('streaming_response');
                     streamBuffer.appendToken(token, (content) => {
                         setMessages(prev => prev.map(msg =>
@@ -430,7 +491,8 @@ ${contextString}`;
                     });
                 });
 
-                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                    if (!acceptsMeta(payload)) return;
                     const finalContent = streamBuffer.getBufferedContent();
                     setMessages(prev => prev.map(msg =>
                         msg.id === assistantMessageId
@@ -444,7 +506,9 @@ ${contextString}`;
                     oldErrorCleanup?.();
                 });
 
-                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                    if (meta?.source === 'phone-mirror') return;
+                    if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                     console.error('[MeetingChat] Gemini stream error:', error);
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                     setErrorMessage("Couldn't get a response. Please check your settings.");
@@ -455,11 +519,15 @@ ${contextString}`;
                     oldErrorCleanup?.();
                 });
 
+                if (oldTokenCleanup) activeCleanups.push(oldTokenCleanup);
+                if (oldDoneCleanup) activeCleanups.push(oldDoneCleanup);
+                if (oldErrorCleanup) activeCleanups.push(oldErrorCleanup);
+
                 await window.electronAPI?.streamGeminiChat(
                     question,
                     undefined,
                     systemPrompt,
-                    { skipSystemPrompt: true, ignoreKnowledgeMode: true }
+                    { skipSystemPrompt: true }
                 );
             }
 
@@ -468,6 +536,17 @@ ${contextString}`;
             setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
             setErrorMessage("Something went wrong. Please try again.");
             setChatState('error');
+        } finally {
+            // Always remove listeners and reset chatState — even if the
+            // IPC done/error callbacks never fired. Without this, a single
+            // hung stream leaves chatState stuck and silently drops every
+            // subsequent submitQuestion (no user-message push, no response).
+            activeCleanups.forEach(fn => fn());
+            activeCleanups = [];
+            // Preserve an explicit 'error' state if one was set; otherwise
+            // fall back to 'idle' so the next submit can proceed.
+            setChatState(prev => (prev === 'error' ? prev : 'idle'));
+            streamBuffer.reset();
         }
     }, [chatState, buildContextString, meetingContext]);
 
@@ -475,6 +554,7 @@ ${contextString}`;
         <AnimatePresence>
             {isOpen && (
                 <motion.div
+                    key="meeting-chat-modal"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -501,7 +581,8 @@ ${contextString}`;
                             height: { type: "spring", stiffness: 300, damping: 30, mass: 0.8 },
                             opacity: { duration: 0.2 }
                         }}
-                        className="relative mx-auto w-full max-w-[680px] mb-0 bg-bg-secondary rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        className="relative mx-auto w-full max-w-[680px] mb-0 rounded-t-[24px] border-t border-x border-border-subtle shadow-2xl overflow-hidden flex flex-col"
+                        style={{ backgroundColor: chatWindowBg }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header with close button */}

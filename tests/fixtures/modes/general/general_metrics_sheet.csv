@@ -1,0 +1,6 @@
+metric,value,period,note
+arr_run_rate_usd,480000,2026-Q1,Q1 ARR run-rate $480k for Natively pilot accounts
+weekly_active_users,2150,2026-Q1,Includes pilot customer team seats
+churn_pct,3.4,2026-Q1,Annualized monthly churn
+gross_margin_pct,82,2026-Q1,Post-infra, pre-COGS
+mrr_growth_pct,11,2026-Q1-Mar,Month-over-month

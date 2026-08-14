@@ -1,0 +1,13 @@
+YC application draft v3
+
+Founder background
+Founder previously shipped PriceX, a consumer price comparison tool that reached 80k monthly active users before being deprecated when the underlying scraper terms of service changed. Built two B2B SaaS products before Natively; first one acquired by a private buyer in 2023 (sale terms confidential), second one wound down after failing to find a wedge.
+
+Why now
+Voice plus screen context plus retrieval has crossed the latency threshold where a live copilot is actually usable in a real conversation. Local Whisper has matured enough to support privacy-sensitive customers. The category is moving from novelty to daily-driver in the next 12 months.
+
+What we have already shipped
+Seven production modes with per-mode reference files, hybrid lexical plus vector retrieval, screen context with OCR fallback, post-call action item extraction, and a custom provider scope toggle for privacy.
+
+12 month plan
+First class custom modes, Playwright E2E gating, SOC2 Type 1, calendar integration for action items, and a pro tier price increase to $24 per user per month.

@@ -86,7 +86,7 @@ interface PersistedState {
 /** Hardcoded baseline models for vision Tier 1 (initial pinned stable) */
 const BASELINE_MODELS: Record<ModelFamily, string> = {
   [ModelFamily.OPENAI]: 'gpt-5.4',
-  [ModelFamily.GEMINI_FLASH]: 'gemini-3.1-flash-lite-preview',
+  [ModelFamily.GEMINI_FLASH]: 'gemini-3.6-flash',
   [ModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [ModelFamily.CLAUDE]: 'claude-sonnet-4-6',
   [ModelFamily.GROQ_LLAMA]: 'meta-llama/llama-4-scout-17b-16e-instruct',
@@ -95,7 +95,7 @@ const BASELINE_MODELS: Record<ModelFamily, string> = {
 /** Hardcoded baseline models for text Tier 1 */
 const TEXT_BASELINE_MODELS: Record<TextModelFamily, string> = {
   [TextModelFamily.OPENAI]: 'gpt-5.4',
-  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.1-flash-lite-preview',
+  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.6-flash',
   [TextModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [TextModelFamily.CLAUDE]: 'claude-sonnet-4-6',
   [TextModelFamily.GROQ]: 'llama-3.3-70b-versatile',
@@ -119,7 +119,7 @@ export const TEXT_PROVIDER_ORDER: TextModelFamily[] = [
   TextModelFamily.GEMINI_PRO,
 ];
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const DISCOVERY_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 const PERSISTENCE_FILENAME = 'model_versions.json';
 const MAX_DISCOVERY_FAILURES_BEFORE_BACKOFF = 3;
@@ -136,7 +136,7 @@ const EVENT_DISCOVERY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
  * Handles diverse and irregular naming conventions:
  *   "gpt-5.4"                                  → { major:5, minor:4, patch:0 }
  *   "gpt-5.4"                                  → { major:5, minor:4, patch:0 }
- *   "gemini-3.1-flash-lite-preview"            → { major:3, minor:1, patch:0 }
+ *   "gemini-3.6-flash"                         → { major:3, minor:6, patch:0 }
  *   "gemini-3.1-pro-preview"                   → { major:3, minor:1, patch:0 }
  *   "claude-sonnet-4-6"                        → { major:4, minor:6, patch:0 }
  *   "claude-opus-4-6"                          → { major:4, minor:6, patch:0 }
@@ -150,6 +150,7 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
   // Normalize: strip vendor prefixes and non-version suffixes
   let cleaned = modelId
     .replace(/^meta-llama\//, '')                // vendor prefix
+    .replace(/^anthropic\./, '')                 // Bedrock prefix: anthropic.claude-opus-5
     .replace(/-chat-latest$/, '')                // OpenAI suffix
     .replace(/-lite-preview$/, '')               // Gemini suffix
     .replace(/-preview$/, '')                    // Gemini suffix
@@ -157,6 +158,18 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
     .replace(/-instruct$/, '')                   // instruction-tuned tag
     .replace(/-\d+b(-\d+e)?$/, '')              // hardware specs like -17b-16e
     .replace(/-\d+b$/, '');                      // hardware specs like -70b
+
+  // Claude release-date snapshots are NOT versions. Strip the YYYYMMDD suffix
+  // before any strategy runs, or "claude-3-5-sonnet-20241022" parses as version
+  // 20241022.0 and a RETIRED 3.5 model outranks every current model — including
+  // Opus 5 — in findLatestInFamily(). Both id shapes carry the suffix:
+  //   claude-3-5-sonnet-20241022  (pre-4.6, dated)
+  //   claude-haiku-4-5-20251001   (pre-4.6, dated)
+  // Anthropic documents this as claude-{name}-{major}-{minor}-{YYYYMMDD};
+  // 4.6-generation ids are dateless, so this is a no-op for them.
+  if (/^claude[-.]/.test(cleaned)) {
+    cleaned = cleaned.replace(/-\d{8}$/, '');
+  }
 
   // Strategy 1: Dotted version (X.Y or X.Y.Z) — most OpenAI & Gemini models
   const dotVersion = cleaned.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
@@ -169,14 +182,27 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
     };
   }
 
-  // Strategy 2: Claude-style hyphenated version (claude-TYPE-MAJOR-MINOR)
-  //   "claude-sonnet-4-6" → major:4, minor:6
-  //   "claude-opus-5-2"   → major:5, minor:2
-  const claudePattern = cleaned.match(/claude-(?:sonnet|opus|haiku)-(\d+)-(\d+)/);
-  if (claudePattern) {
+  // Strategy 2: Claude-style hyphenated version. Both documented id shapes:
+  //   current  claude-{family}-{major}[-{minor}]   "claude-sonnet-4-6" → 4.6
+  //                                                "claude-opus-5"     → 5.0
+  //   legacy   claude-{major}-{minor}-{family}     "claude-3-5-sonnet" → 3.5
+  // The family segment is matched as [a-z]+ rather than a fixed sonnet|opus|haiku
+  // list so new families (fable, mythos, ...) parse without a code change.
+  const claudeModern = cleaned.match(/^claude-[a-z]+-(\d+)(?:-(\d+))?(?:$|-)/);
+  if (claudeModern) {
     return {
-      major: parseInt(claudePattern[1], 10),
-      minor: parseInt(claudePattern[2], 10),
+      major: parseInt(claudeModern[1], 10),
+      minor: claudeModern[2] ? parseInt(claudeModern[2], 10) : 0,
+      patch: 0,
+      raw: modelId,
+    };
+  }
+
+  const claudeLegacy = cleaned.match(/^claude-(\d+)(?:-(\d+))?-[a-z]/);
+  if (claudeLegacy) {
+    return {
+      major: parseInt(claudeLegacy[1], 10),
+      minor: claudeLegacy[2] ? parseInt(claudeLegacy[2], 10) : 0,
       patch: 0,
       raw: modelId,
     };
@@ -245,6 +271,23 @@ export function versionDistance(older: ModelVersion, newer: ModelVersion): numbe
 // ─── Model Family Classification ────────────────────────────────────────
 
 /**
+ * Is this an Anthropic Claude model id?
+ *
+ * Deliberately NOT an allow-list of family names. The previous
+ * `sonnet|opus|haiku` check classified claude-fable-5 and claude-mythos-5 as
+ * null, so discovery could not see them at all and would never promote them.
+ * Anthropic's own id grammar is `claude-{name}-...`, so the prefix is the
+ * reliable signal and new family names work without a code change.
+ *
+ * Accepts the Bedrock `anthropic.`-prefixed form too, since ids from that
+ * platform reach the same ranking code. Excludes any non-Anthropic id that
+ * merely contains the substring "claude" (e.g. a third-party `my-claude-clone`).
+ */
+function isClaudeModelId(lowerModelId: string): boolean {
+  return lowerModelId.startsWith('claude-') || lowerModelId.startsWith('anthropic.claude-');
+}
+
+/**
  * Determine which vision ModelFamily a discovered model ID belongs to.
  * Returns null if it doesn't match any known vision-capable family.
  */
@@ -266,8 +309,12 @@ export function classifyModel(modelId: string): ModelFamily | null {
     return ModelFamily.GEMINI_PRO;
   }
 
-  // Claude vision-capable models (sonnet, opus, haiku)
-  if (lower.startsWith('claude-') && (lower.includes('sonnet') || lower.includes('opus') || lower.includes('haiku'))) {
+  // Claude vision-capable models. Every current Claude model accepts image
+  // input, so this matches the `claude-` prefix rather than an allow-list of
+  // sonnet|opus|haiku — that list silently returned null for claude-fable-5 and
+  // claude-mythos-5, making them invisible to discovery. A new family name would
+  // have failed the same way.
+  if (isClaudeModelId(lower)) {
     return ModelFamily.CLAUDE;
   }
 
@@ -301,8 +348,9 @@ export function classifyTextModel(modelId: string): TextModelFamily | null {
     return TextModelFamily.GEMINI_PRO;
   }
 
-  // Claude text models (sonnet, opus, haiku — all text-capable)
-  if (lower.startsWith('claude-') && (lower.includes('sonnet') || lower.includes('opus') || lower.includes('haiku'))) {
+  // Claude text models — all Claude models are text-capable. See the note in
+  // classifyModel(): matching the prefix, not a family allow-list.
+  if (isClaudeModelId(lower)) {
     return TextModelFamily.CLAUDE;
   }
 
@@ -969,6 +1017,15 @@ export class ModelVersionManager {
 
         if (parsed.schemaVersion === SCHEMA_VERSION) {
           console.log('[ModelVersionManager] Loaded persisted state from disk');
+          this.reconcileBaselines(parsed);
+          return parsed;
+        }
+
+        // Schema migration: v3 → v4 (forces baseline reconciliation for stale Gemini 1.5 entries)
+        if (parsed.schemaVersion === 3) {
+          console.log('[ModelVersionManager] Migrating v3 → v4 state (reconciling stale baselines)');
+          this.reconcileBaselines(parsed);
+          parsed.schemaVersion = SCHEMA_VERSION;
           return parsed;
         }
 
@@ -1018,6 +1075,54 @@ export class ModelVersionManager {
     }
 
     return this.createDefaultState();
+  }
+
+  /**
+   * Reset any family whose persisted baseline diverges from the current
+   * hardcoded baseline. This handles the case where a dev bumps a baseline
+   * in code (e.g. retired Gemini 1.5 → Gemini 3.1) — without this, loaders
+   * would keep promoting the stale baseline as Tier 1 indefinitely.
+   *
+   * Also resets families whose tier1 is older than the current baseline
+   * (defensive — catches any other source of drift).
+   */
+  private reconcileBaselines(state: PersistedState): void {
+    const expected: Record<string, string> = {
+      ...BASELINE_MODELS,
+      ...TEXT_BASELINE_MODELS,
+    };
+
+    for (const [family, currentBaseline] of Object.entries(expected)) {
+      const entry = state.families[family];
+      if (!entry) continue;
+
+      const baselineVersion = parseModelVersion(currentBaseline);
+      const baselineMismatch = entry.baseline !== currentBaseline;
+      const tier1OlderThanBaseline =
+        baselineVersion &&
+        entry.tier1Version &&
+        compareVersions(entry.tier1Version, baselineVersion) < 0;
+
+      if (baselineMismatch || tier1OlderThanBaseline) {
+        console.log(
+          `[ModelVersionManager] 🔄 Reconciling stale family "${family}": ` +
+          `baseline ${entry.baseline} → ${currentBaseline}, tier1 ${entry.tier1} → ${currentBaseline}`
+        );
+        entry.baseline = currentBaseline;
+        entry.tier1 = currentBaseline;
+        entry.tier1Version = baselineVersion;
+        entry.previousTier1 = null;
+        const latestStillValid =
+          baselineVersion &&
+          entry.latestVersion &&
+          compareVersions(entry.latestVersion, baselineVersion) >= 0;
+        if (!latestStillValid) {
+          entry.latest = currentBaseline;
+          entry.latestVersion = baselineVersion;
+        }
+        entry.previousLatest = null;
+      }
+    }
   }
 
   private persistState() {
@@ -1121,13 +1226,13 @@ export class ModelVersionManager {
     lines.push('  --- Vision ---');
     for (const family of VISION_PROVIDER_ORDER) {
       const tiers = this.getTieredModels(family);
-      lines.push(`  ${family}: T1=${tiers.tier1} | T2/T3=${tiers.tier2}`);
+      lines.push(`  ${family}: T1=${tiers.tier1} | T2=${tiers.tier2} | T3=${tiers.tier3}`);
     }
 
     lines.push('  --- Text ---');
     for (const family of TEXT_PROVIDER_ORDER) {
       const tiers = this.getTextTieredModels(family);
-      lines.push(`  ${family}: T1=${tiers.tier1} | T2/T3=${tiers.tier2}`);
+      lines.push(`  ${family}: T1=${tiers.tier1} | T2=${tiers.tier2} | T3=${tiers.tier3}`);
     }
 
     // Show rollback availability (both vision and text)

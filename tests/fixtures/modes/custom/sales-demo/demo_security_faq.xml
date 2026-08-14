@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<security_faq>
+  <q name="API key storage">
+    API keys are stored locally on the user device via Electron safeStorage backed by the OS keychain. Keys are not transmitted to Natively servers when the user is on a non-Natively provider.
+  </q>
+  <q name="Data residency">
+    When using Local Whisper for STT and Ollama for LLM the entire pipeline runs on device with zero outbound network traffic for content. Cloud providers may be enabled per scope from Settings.
+  </q>
+  <q name="SOC2 status">
+    Natively does not currently hold SOC2 Type 2. SOC2 Type 1 audit is targeted for Q3 2026. Customers requiring formal compliance attestation today should evaluate the local-only configuration in the interim.
+  </q>
+  <q name="Encryption at rest">
+    The local SQLite database is not currently encrypted at rest. Encryption at rest using SQLCipher is on the roadmap. Customers requiring this today should use full disk encryption at the OS level.
+  </q>
+</security_faq>

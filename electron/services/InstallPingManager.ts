@@ -5,7 +5,7 @@
  *
  * PURPOSE:
  * This module sends a ONE-TIME anonymous ping when the app is first installed.
- * It exists solely to estimate total install counts for the open-source project.
+ * It exists solely to estimate total install counts for the source-available project.
  *
  * WHAT IS SENT (exactly):
  * - "app": "natively" (hardcoded app identifier)

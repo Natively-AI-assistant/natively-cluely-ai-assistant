@@ -1,6 +1,7 @@
 {
     "name": "natively-audio",
     "version": "0.1.0",
+    "license": "SEE LICENSE IN LICENSE",
     "main": "index.js",
     "types": "index.d.ts",
     "napi": {

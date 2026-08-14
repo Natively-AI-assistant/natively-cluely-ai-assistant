@@ -3,7 +3,7 @@
  *
  * Premium features are gated on the backend via electronAPI IPC calls.
  * This file provides an optional compile-time switch to completely
- * hide premium UI elements from the open-source build.
+ * hide premium UI elements from the source-available build.
  *
  * All premium components already degrade gracefully when the backend
  * returns `false` for license checks, so this flag is primarily

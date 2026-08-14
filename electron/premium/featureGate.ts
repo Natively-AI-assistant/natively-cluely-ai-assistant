@@ -3,7 +3,7 @@
  * 
  * Determines at runtime whether premium modules (LicenseManager, 
  * KnowledgeOrchestrator, etc.) are available. This allows the
- * open-source version to compile and run without premium code.
+ * source-available version to compile and run without premium code.
  */
 
 let _premiumAvailable: boolean | null = null;
@@ -22,7 +22,7 @@ export function isPremiumAvailable(): boolean {
         _premiumAvailable = true;
     } catch {
         _premiumAvailable = false;
-        console.log('[FeatureGate] Premium modules not available — running in open-source mode.');
+        console.log('[FeatureGate] Premium modules not available — running in source-available mode.');
     }
 
     return _premiumAvailable;

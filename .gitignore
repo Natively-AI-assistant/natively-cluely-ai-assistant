@@ -1,13 +1,27 @@
 # Logs
 logs
 .env
+STATUS.md
+left.md
+.audit
+performance-audit-report.md
+FIXES.md
 /.env
+python-installer.pkg
 Sales20260405-60-494j8t.csv
 /Sales20260405-60-494j8t.csv
-
+natively-api
+/natively-api
+/natively
+natively/
+.natively
+settings.json
+natively/pro_licenses.json
 env
 /env
 *.log
+/Users/evin/natively-cluely-ai-assistant/natively
+natively
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -25,10 +39,14 @@ change.md
 /nativelyapi
 
 # Local premium dev copy — never commit to public repo
-/premiudm
+/premium
 
 # Generated migration patches — private, not for public repo
 *.patch
+# Exception: the patches/ directory holds patch-package commits that MUST
+# be checked in (they re-apply automatically in postinstall). This line
+# keeps them tracked.
+!/patches/*.patch
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -66,6 +84,10 @@ node_modules/
 jspm_packages/
 dist-electron/
 dist/
+
+# husky auto-generated machinery — only the user-facing hook files
+# (e.g. .husky/pre-commit) are committed.
+.husky/_
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -184,6 +206,10 @@ release/
 target/
 native-module/target/
 native-module/*.node
+# Windows locks a loaded .node against overwrite, so build-native.js moves the
+# previous artifact aside before rebuilding (see the win32 branch there). The
+# leftover is deleted once nothing holds it — usually on the next build.
+native-module/*.node.stale-*
 
 .github/RepoGuide.md
 
@@ -192,6 +218,9 @@ native-module/*.node
 .opencode/
 .planning/
 opencode.json
+.superpowers/
+.superbrains/
+docs/superpowers/
 
 # Agent documentation patterns
 **/AGENTS.md
@@ -204,3 +233,254 @@ planning/live-negotiation/temp/
 
 # IDE
 /.idea/
+
+# Local test and temporary files
+*-test.js
+test-*.js
+test_*.js
+test_*.py
+qa-report.json
+templog*.txt
+dodollm.txt
+temp_code_expansion/
+cluelyprompts/
+# Added by code-review-graph
+.code-review-graph/
+pitch-deck.html
+/pitch-deck.html
+Pitch Deck.html
+Cluely.html
+/Cluely.html
+scratch_clean.js
+scratch_clean2.js
+scratch_extract.js
+scratch_svg.html
+.agent
+.agents
+.claude
+.codex
+diff_settings.txt
+PERF_AUDIT.md
+refactor_profile.py
+refactor.js
+skills-lock.json
+windowswork.md
+scratch/
+
+# Scratch, prompt, and temporary files moved to foxinthehole/
+foxinthehole/
+# Merge-conflict / backup artifacts (e.g. LLMHelper.ts.orig — never commit)
+*.orig
+
+# Report and documentation files (dev-only)
+SESSION_MEMORY_ROLLOUT_REPORT.md
+AUTOPILOT_PROFILE_INTELLIGENCE_RELEASE_REPORT.md
+BEST_IN_CLASS_PROFILE_INTELLIGENCE_FINAL_REPORT.md
+BEST_IN_CLASS_PROFILE_INTELLIGENCE_PLAN.md
+COMPETITOR_PARITY_AND_SUPERIORITY_REPORT.md
+CONTEXT_ARCHITECTURE_DESIGN.md
+CONTINUOUS_BENCHMARKING_CI_REPORT.md
+ELECTRON_RUNTIME_TEST_REPORT.md
+FINAL_LIVE_SESSION_MEMORY_INTEGRATION_REPORT.md
+FINAL_MANUAL_PATH_POLISH_REPORT.md
+FINAL_RELEASE_HARDENING_REPORT.md
+LIVE_MANUAL_SESSION_MEMORY_REPORT.md
+LIVE_SESSION_REPLAY_REPORT.md
+LIVE_WTA_SESSION_MEMORY_REPORT.md
+MANUAL_APP_RETEST_SCRIPT.md
+MANUAL_PROFILE_INTELLIGENCE_BUG_REPORT.md
+MANUAL_UI_TRUTH_TEST_REPORT.md
+OBSERVABILITY_RELEASE_REPORT.md
+PROFILE_INTELLIGENCE_BENCHMARKING.md
+PROFILE_INTELLIGENCE_FIX_PLAN.md
+PROFILE_INTELLIGENCE_FIX_REPORT.md
+PROFILE_INTELLIGENCE_IMPROVEMENT_REPORT.md
+PROFILE_INTELLIGENCE_LATENCY_TRACE.md
+PROFILE_INTELLIGENCE_MANUAL_TESTS.md
+PROPOSED_ARCHITECTURE.md
+PROVIDER_RESILIENCE_FINAL_REPORT.md
+PROVIDER_RESILIENCE_REPORT.md
+PROVIDER_TTFT_RACE_REPORT.md
+THINKING_BUDGET_BENCHMARK.md
+TRANSCRIPT_AWARE_INTENT_ROUTING.md
+WHAT_TO_ANSWER_FIX_REPORT.md
+reportforai.md
+REPORT_TO_CHATGPT.md
+REAL_WORLD_E2E_TEST_REPORT.md
+REAL_UI_TESTING_APPROACH.md
+REAL_UI_EVAL_REPORT.md
+REAL_MANUAL_PATH_REGRESSION_REPORT.md
+REAL_API_EVAL_REPORT.md
+LATENCY_ROOT_CAUSE_REPORT.md
+INTELLIGENCE_CONTEXT_ARCHITECTURE.md
+INTELLIGENCE_COST_REPORT.md
+INTELLIGENCE_MANUAL_TESTS.md
+dodopayments.llm
+ANSWER_QUALITY_FINAL_REPORT.md
+ANSWER_QUALITY_EVAL_REPORT.md
+profile.md
+# NOT ignored: electron-builder.signed.cjs is the production build config that
+# `npm run dist:signed` loads. It was swept into this block of scratch reports and
+# then deleted by the "remove tracked files per updated .gitignore" cleanup, which
+# broke every signed build with ENOENT. It holds NO secrets — the notarytool
+# credential lives in the macOS keychain; only the profile NAME and the (public)
+# Team ID appear in the file, and the signing identity is auto-discovered.
+REMAINING_ISSUES_FIX_REPORT.md
+LONG_SESSION_MEMORY_TEST_REPORT.md
+MANUAL_CHAT_PROFILE_FIX_REPORT.md
+MULTIMODE_1000_EVAL_REPORT.md
+FINAL_FOLLOWUP_STABILITY_RELEASE_REPORT.md
+FINAL_RELEASE_REGRESSION_REPORT.md
+FOLLOW_UP_RESOLVER_FIX_REPORT.md
+WHAT_TO_ANSWER_RELEASE_REPORT.md
+FINAL_PROFILE_INTELLIGENCE_RELEASE_REPORT.md
+_verify_backend_architect.md
+_verify_code_review.md
+_verify_test_engineer.md
+\# Natively Intelligence OS — Phase-by-Ph.md
+ANSWER_DIVERSITY_REPORT.md
+BACKGROUND_JOB_ISOLATION_REPORT.md
+FINAL_PROFILE_INTELLIGENCE_PRODUCT_QUALITY_REPORT.md
+LATENCY_DEGRADATION_REPORT.md
+MANUAL_SEQUENTIAL_STRESS_REPORT.md
+NATIVELY_EXTERNAL_RESEARCH_NOTES.md
+NATIVELY_INTELLIGENCE_OS_E2E_VERIFICATION_REPORT.md
+NATIVELY_INTELLIGENCE_OS_FINAL_REPORT.md
+NATIVELY_INTELLIGENCE_OS_IMPLEMENTATION_PLAN.md
+NATIVELY_INTELLIGENCE_OS_LIVE_VERIFICATION.md
+NATIVELY_INTELLIGENCE_OS_OBSERVABILITY.md
+NATIVELY_INTELLIGENCE_OS_ROLLOUT.md
+NATIVELY_INTELLIGENCE_OS_WIRING_FINAL_REPORT.md
+NATIVELY_INTELLIGENCE_OS_WIRING_STATUS.md
+natively-intelligence-e2e-results.json
+natively-intelligence-e2e-verdict.json
+REAL_LONG_SESSION_MANUAL_TEST_REPORT.md
+Untitled-1.md
+
+# Eval, benchmark, and test directories
+intelligence-eval*/results/
+intelligence-eval/
+intelligence-eval-answer-quality/
+intelligence-eval-real-api/
+intelligence-eval-real-ui/
+intelligence-eval-results/
+intelligence-eval-routing-200/
+tempp/
+test-results/
+profileresume/
+playwright-report/
+negotiation-routing-eval/
+benchmarks/
+.playwright-mcp/
+
+
+# External research clones (not vendored)
+_external_research/
+
+# Filled-in credentials intake (never commit real values)
+CREDENTIALS-INTAKE.local.md
+
+# Local sprint reports / scratch notes / leaked-prompt reference (not vendored)
+NATIVELY_*_REPORT.md
+CORE_PIPELINE_AUDIT_REPORT.md
+reportforgpt.md
+PHASE_STATUS.md
+meetily.md
+testengineer.prompt
+cluely/
+docs/
+
+# Large model binary files
+*.onnx
+*.onnx_data
+
+# Round-7 cleanup (2026-07-01, hardened after senior review): large
+# reference PDFs and debug artifacts should NEVER be committed. Keep
+# patterns narrow — broad patterns like `Sample*.pdf` and `*thesis*.pdf`
+# would silently ignore legitimate PDFs (invoices, resumes, etc.). Use
+# the exact filename + the debug-artifacts directory + a single specific
+# pattern for the `Sample thesis for testing.pdf` filename family.
+debug-artifacts/
+Sample thesis for testing.pdf
+"Sample thesis for testing.pdf"
+
+# Live-smoke harness scratch dir (created at runtime by scripts/smoke-document-grounded.js)
+/.smoke-sandbox/
+
+# User-submitted crash reports / debug logs (device + session diagnostics — never commit)
+user log/
+*.ips
+
+# --- branch-integration safety hardening (2026-07-23) ---
+# Third-party dispute / billing evidence dirs — never push
+/dispute-evidence-*/
+/dispute-evidence-*
+/dispute_evidence/
+scripts/*evidence*.py
+scripts/combine_*_single_file.py
+# Autopilot campaign prompts — internal docs, not source
+/HANDOFF*.md
+/NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Generated Vite build output that mirrors src/**/*.{tsx,ts}
+/src/**/*.js
+
+# --- User requested exclusions (2026-07-23) ---
+PRODUCTION_HARDENING_FINAL_REPORT.md
+loop.md
+loop2.md
+AUDIT_AI_CONTEXT_OWNERSHIP.md
+AUDIT_ARCHITECTURE_MAP.md
+AUDIT_AUDIO_REALTIME_PIPELINE.md
+AUDIT_BACKEND_SECURITY_STABILITY.md
+AUDIT_DEPENDENCIES_PACKAGING.md
+AUDIT_ELECTRON_SECURITY.md
+AUDIT_ERROR_OBSERVABILITY.md
+AUDIT_FRONTEND_STATE_REACT.md
+AUDIT_MEMORY_AND_LOOPS.md
+AUDIT_PRIVACY_SECRETS_LOGGING.md
+AUDIT_VERIFICATION_REPORT.md
+campaign-log.md
+campaign2-log.md
+campaign3-log.md
+contextauthresearchdoc.md
+test/
+test-fixtures/
+traces/
+traces2/
+traces3/
+--help/
+.remember/
+fixtures/
+# ...but NOT test fixtures that suites import. The blanket `fixtures/` above swept up
+# electron/**/__tests__/fixtures/*, which the "remove tracked files per updated
+# .gitignore" cleanup then deleted — leaving 4 test files importing modules that no
+# longer existed. Both lines are required and must stay in this order: git will not
+# descend into an excluded directory, so the directory itself has to be re-included
+# before its contents can be.
+!electron/**/__tests__/fixtures/
+!electron/**/__tests__/fixtures/**
+# Same sweep deleted tests/fixtures/modes/* (73 files) in 6f8e3329 — the mode
+# reference-file corpus that CustomModes / ModePersonaScenarios / Seminar /
+# ModeFixtureIntegrity / ModeBleedingMatrix import. That turned ~120 suite
+# cases into unconditional ENOENT failures on every fresh checkout. Restored
+# from 6f8e3329~1 (2026-08-11) and re-included here so the cleanup cannot
+# recur. Same two-line pattern as above: re-include the directory first, then
+# its contents.
+!tests/fixtures/
+!tests/fixtures/**
+tools/
+
+# Vision benchmark source documentation + generated reports
+!docs/
+docs/*
+!docs/VISION_MODEL_BENCHMARK.md
+benchmark-results/
+
+
+# Role Insight visual harness — generated artifacts (regenerate with
+# `electron scripts/dump-role-insight-fixture.mjs` + `node scripts/role-insight-harness/build.mjs`)
+/scripts/.role-insight-fixture.json
+/scripts/role-insight-harness/dist/
+
+# Unbuilt feature PRDs — planning documents, never shipped to the public repo
+/upcoming/

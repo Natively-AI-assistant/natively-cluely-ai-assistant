@@ -1,0 +1,5 @@
+{
+  "gemini-3.6-flash": { "modelId": "gemini-3.6-flash", "enabled": true },
+  "gemini-3.1-flash-lite": { "modelId": "gemini-3.1-flash-lite", "enabled": true },
+  "gemini-3.5-flash-lite": { "modelId": "gemini-3.5-flash-lite", "enabled": true }
+}

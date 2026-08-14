@@ -3,7 +3,7 @@
  *
  * Uses Vite's import.meta.glob to optionally load premium components
  * from the premium/ directory. If the premium/ folder is removed
- * (open-source build), the globs return empty objects and no-op
+ * (source-available build), the globs return empty objects and no-op
  * fallbacks are used instead. No build errors.
  */
 import React from 'react';
@@ -18,7 +18,8 @@ const nullAdCampaigns = (
   _appStartTime?: number,
   _lastMeetingEndTime?: number | null,
   _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean
+  _hasNativelyApi?: boolean,
+  _enabled?: boolean,
 ) => ({
   activeAd: null as string | null,
   dismissAd: (_campaignId?: string) => {},
@@ -66,6 +67,14 @@ const _maxUltraUpgradeToaster = import.meta.glob<any>(
   '../../premium/src/MaxUltraUpgradeToaster.tsx',
   { eager: true }
 );
+const _modesSettings = import.meta.glob<any>(
+  '../../premium/src/ModesSettings.tsx',
+  { eager: true }
+);
+const _roleInsight = import.meta.glob<any>(
+  '../../premium/src/RoleInsightPanel.tsx',
+  { eager: true }
+);
 
 // ─── Helper ──────────────────────────────────────────────────────────
 function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
@@ -103,3 +112,9 @@ export const NativelyApiPromoToaster: React.FC<any> =
 
 export const MaxUltraUpgradeToaster: React.FC<any> =
   get(_maxUltraUpgradeToaster, 'MaxUltraUpgradeToaster', NullComponent);
+
+export const ModesSettings: React.FC<any> =
+  get(_modesSettings, 'default', NullComponent);
+
+export const RoleInsightPanel: React.FC<any> =
+  get(_roleInsight, 'RoleInsightPanel', NullComponent);

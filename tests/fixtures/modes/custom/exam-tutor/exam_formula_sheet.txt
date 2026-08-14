@@ -1,0 +1,15 @@
+Formula sheet PDE 401
+
+Laplace operator
+The Laplace operator del squared phi equals the sum of second partial derivatives. A function satisfying del squared phi equals zero is called harmonic.
+
+Green function for Laplacian
+On a domain Omega with boundary, the Green function G of x y satisfies
+del squared G of x y equals minus delta of x minus y inside Omega
+G of x y equals zero on the boundary of Omega
+
+Poisson kernel on the disk
+P r theta minus phi equals one minus r squared over two pi times one minus two r cos of theta minus phi plus r squared
+
+Wave equation general solution one dimension
+u of x t equals f of x minus c t plus g of x plus c t

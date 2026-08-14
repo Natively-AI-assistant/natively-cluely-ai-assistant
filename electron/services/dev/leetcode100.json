@@ -1,0 +1,4388 @@
+[
+  {
+    "id": "two-sum",
+    "difficulty": "easy",
+    "entry": "two_sum",
+    "prompt": "Write a Python function `two_sum(nums, target)` that takes a list of integers `nums` and an integer `target`. Exactly one pair of distinct indices sums to `target`. Return the pair of indices as a list `[i, j]` with `i < j` (the two indices in increasing order). For example, `two_sum([2, 7, 11, 15], 9)` returns `[0, 1]`.",
+    "reference": "def two_sum(nums, target):\n    seen = {}\n    for i, x in enumerate(nums):\n        need = target - x\n        if need in seen:\n            return [seen[need], i]\n        seen[x] = i\n    return []",
+    "inputs": [
+      [
+        [
+          2,
+          7,
+          11,
+          15
+        ],
+        9
+      ],
+      [
+        [
+          3,
+          2,
+          4
+        ],
+        6
+      ],
+      [
+        [
+          3,
+          3
+        ],
+        6
+      ],
+      [
+        [
+          -1,
+          -2,
+          -3,
+          -4,
+          -5
+        ],
+        -8
+      ],
+      [
+        [
+          0,
+          4,
+          3,
+          0
+        ],
+        0
+      ]
+    ]
+  },
+  {
+    "id": "valid-parentheses",
+    "difficulty": "easy",
+    "entry": "is_valid",
+    "prompt": "Write a Python function `is_valid(s)` that takes a string `s` containing only the characters '(', ')', '{', '}', '[' and ']'. Return True if the brackets are validly matched and properly nested, otherwise return False. An empty string is valid.",
+    "reference": "def is_valid(s):\n    pairs = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for ch in s:\n        if ch in '([{':\n            stack.append(ch)\n        elif ch in pairs:\n            if not stack or stack.pop() != pairs[ch]:\n                return False\n        else:\n            return False\n    return not stack",
+    "inputs": [
+      [
+        "()"
+      ],
+      [
+        "()[]{}"
+      ],
+      [
+        "(]"
+      ],
+      [
+        "([)]"
+      ],
+      [
+        "{[]}"
+      ],
+      [
+        ""
+      ]
+    ]
+  },
+  {
+    "id": "merge-two-sorted-arrays",
+    "difficulty": "easy",
+    "entry": "merge_sorted",
+    "prompt": "Write a Python function `merge_sorted(a, b)` that takes two lists of integers `a` and `b`, each already sorted in non-decreasing order, and returns a single new list containing all elements from both, sorted in non-decreasing order. Do not modify the inputs.",
+    "reference": "def merge_sorted(a, b):\n    i = j = 0\n    out = []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i])\n            i += 1\n        else:\n            out.append(b[j])\n            j += 1\n    out.extend(a[i:])\n    out.extend(b[j:])\n    return out",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          4
+        ],
+        [
+          1,
+          3,
+          4
+        ]
+      ],
+      [
+        [],
+        []
+      ],
+      [
+        [],
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          5
+        ],
+        [
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "best-time-to-buy-sell-stock",
+    "difficulty": "easy",
+    "entry": "max_profit",
+    "prompt": "Write a Python function `max_profit(prices)` that takes a list of integers `prices` where `prices[i]` is the price of a stock on day `i`. Return the maximum profit achievable from buying on one day and selling on a later day. If no profit is possible, return 0.",
+    "reference": "def max_profit(prices):\n    best = 0\n    lowest = None\n    for p in prices:\n        if lowest is None or p < lowest:\n            lowest = p\n        elif p - lowest > best:\n            best = p - lowest\n    return best",
+    "inputs": [
+      [
+        [
+          7,
+          1,
+          5,
+          3,
+          6,
+          4
+        ]
+      ],
+      [
+        [
+          7,
+          6,
+          4,
+          3,
+          1
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          2,
+          4,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "valid-palindrome",
+    "difficulty": "easy",
+    "entry": "is_palindrome_string",
+    "prompt": "Write a Python function `is_palindrome_string(s)` that takes a string `s`. Considering only alphanumeric characters and ignoring case, return True if `s` reads the same forward and backward, otherwise return False. An empty string (or one with no alphanumeric characters) is considered a palindrome.",
+    "reference": "def is_palindrome_string(s):\n    filtered = [c.lower() for c in s if c.isalnum()]\n    return filtered == filtered[::-1]",
+    "inputs": [
+      [
+        "A man, a plan, a canal: Panama"
+      ],
+      [
+        "race a car"
+      ],
+      [
+        " "
+      ],
+      [
+        ""
+      ],
+      [
+        "0P"
+      ],
+      [
+        "Was it a car or a cat I saw?"
+      ]
+    ]
+  },
+  {
+    "id": "contains-duplicate",
+    "difficulty": "easy",
+    "entry": "contains_duplicate",
+    "prompt": "Write a Python function `contains_duplicate(nums)` that takes a list of integers `nums`. Return True if any value appears at least twice in the list, and False if every element is distinct.",
+    "reference": "def contains_duplicate(nums):\n    return len(set(nums)) != len(nums)",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      [
+        [
+          1,
+          1,
+          1,
+          3,
+          3,
+          4,
+          3,
+          2,
+          4,
+          2
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          7
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "maximum-subarray",
+    "difficulty": "easy",
+    "entry": "max_sub_array",
+    "prompt": "Write a Python function `max_sub_array(nums)` that takes a non-empty list of integers `nums` and returns the largest sum obtainable from a contiguous (non-empty) subarray. Use Kadane's algorithm.",
+    "reference": "def max_sub_array(nums):\n    best = nums[0]\n    cur = nums[0]\n    for x in nums[1:]:\n        cur = max(x, cur + x)\n        best = max(best, cur)\n    return best",
+    "inputs": [
+      [
+        [
+          -2,
+          1,
+          -3,
+          4,
+          -1,
+          2,
+          1,
+          -5,
+          4
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          5,
+          4,
+          -1,
+          7,
+          8
+        ]
+      ],
+      [
+        [
+          -1,
+          -2,
+          -3
+        ]
+      ],
+      [
+        [
+          -5
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "climbing-stairs",
+    "difficulty": "easy",
+    "entry": "climb_stairs",
+    "prompt": "Write a Python function `climb_stairs(n)` that takes a non-negative integer `n` representing the number of steps in a staircase. Each time you can climb either 1 or 2 steps. Return the number of distinct ways to climb to the top. Define `climb_stairs(0)` to be 1.",
+    "reference": "def climb_stairs(n):\n    a, b = 1, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a",
+    "inputs": [
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        1
+      ],
+      [
+        0
+      ],
+      [
+        10
+      ]
+    ]
+  },
+  {
+    "id": "plus-minus",
+    "difficulty": "easy",
+    "entry": "plus_minus",
+    "prompt": "Write a Python function `plus_minus(arr)` that takes a non-empty list of integers `arr`. Compute the fractions of elements that are positive, negative, and zero. Return a list of three strings `[positive_fraction, negative_fraction, zero_fraction]`, where each fraction is `count / len(arr)` formatted to exactly 6 decimal places (e.g. \"0.500000\"). Zero is neither positive nor negative.",
+    "reference": "def plus_minus(arr):\n    n = len(arr)\n    pos = sum(1 for x in arr if x > 0)\n    neg = sum(1 for x in arr if x < 0)\n    zero = sum(1 for x in arr if x == 0)\n    return [\"{:.6f}\".format(pos / n), \"{:.6f}\".format(neg / n), \"{:.6f}\".format(zero / n)]",
+    "inputs": [
+      [
+        [
+          -4,
+          3,
+          -9,
+          0,
+          4,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          -1,
+          -2,
+          -3
+        ]
+      ],
+      [
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      [
+        [
+          5
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "single-number",
+    "difficulty": "easy",
+    "entry": "single_number",
+    "prompt": "Write a Python function `single_number(nums)` that takes a non-empty list of integers `nums` in which every element appears exactly twice except for one element which appears exactly once. Return that single element.",
+    "reference": "def single_number(nums):\n    result = 0\n    for x in nums:\n        result ^= x\n    return result",
+    "inputs": [
+      [
+        [
+          2,
+          2,
+          1
+        ]
+      ],
+      [
+        [
+          4,
+          1,
+          2,
+          1,
+          2
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          -1,
+          -2
+        ]
+      ],
+      [
+        [
+          7,
+          3,
+          5,
+          3,
+          7
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "reverse-string",
+    "difficulty": "easy",
+    "entry": "reverse_string",
+    "prompt": "Write a Python function `reverse_string(s)` that takes a string `s` and returns a new string with the characters in reverse order. For example, `reverse_string(\"hello\")` returns \"olleh\".",
+    "reference": "def reverse_string(s):\n    return s[::-1]",
+    "inputs": [
+      [
+        "hello"
+      ],
+      [
+        "Hannah"
+      ],
+      [
+        ""
+      ],
+      [
+        "a"
+      ],
+      [
+        "12345"
+      ]
+    ]
+  },
+  {
+    "id": "fizzbuzz",
+    "difficulty": "easy",
+    "entry": "fizz_buzz",
+    "prompt": "Write a Python function `fizz_buzz(n)` that takes a non-negative integer `n` and returns a list of strings of length `n`. For each integer `i` from 1 to `n` (inclusive), the element at index `i-1` is: \"FizzBuzz\" if `i` is divisible by both 3 and 5, \"Fizz\" if divisible by 3 only, \"Buzz\" if divisible by 5 only, otherwise the decimal string representation of `i` (e.g. \"1\"). If `n` is 0 return an empty list.",
+    "reference": "def fizz_buzz(n):\n    out = []\n    for i in range(1, n + 1):\n        if i % 15 == 0:\n            out.append(\"FizzBuzz\")\n        elif i % 3 == 0:\n            out.append(\"Fizz\")\n        elif i % 5 == 0:\n            out.append(\"Buzz\")\n        else:\n            out.append(str(i))\n    return out",
+    "inputs": [
+      [
+        3
+      ],
+      [
+        5
+      ],
+      [
+        15
+      ],
+      [
+        0
+      ],
+      [
+        1
+      ]
+    ]
+  },
+  {
+    "id": "roman-to-integer",
+    "difficulty": "easy",
+    "entry": "roman_to_int",
+    "prompt": "Write a Python function `roman_to_int(s)` that takes a valid Roman numeral string `s` (using the symbols I, V, X, L, C, D, M) and returns its integer value. Use the standard subtractive rule: when a smaller value precedes a larger one (e.g. IV, IX, XL, XC, CD, CM), it is subtracted.",
+    "reference": "def roman_to_int(s):\n    values = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}\n    total = 0\n    prev = 0\n    for ch in reversed(s):\n        v = values[ch]\n        if v < prev:\n            total -= v\n        else:\n            total += v\n            prev = v\n    return total",
+    "inputs": [
+      [
+        "III"
+      ],
+      [
+        "LVIII"
+      ],
+      [
+        "MCMXCIV"
+      ],
+      [
+        "IV"
+      ],
+      [
+        "IX"
+      ],
+      [
+        "MMMCMXCIX"
+      ]
+    ]
+  },
+  {
+    "id": "longest-common-prefix",
+    "difficulty": "easy",
+    "entry": "longest_common_prefix",
+    "prompt": "Write a Python function `longest_common_prefix(strs)` that takes a list of strings `strs` and returns the longest string that is a prefix of every string in the list. If there is no common prefix or the list is empty, return the empty string \"\".",
+    "reference": "def longest_common_prefix(strs):\n    if not strs:\n        return \"\"\n    shortest = min(strs, key=len)\n    for i, ch in enumerate(shortest):\n        for other in strs:\n            if other[i] != ch:\n                return shortest[:i]\n    return shortest",
+    "inputs": [
+      [
+        [
+          "flower",
+          "flow",
+          "flight"
+        ]
+      ],
+      [
+        [
+          "dog",
+          "racecar",
+          "car"
+        ]
+      ],
+      [
+        [
+          "interspecies",
+          "interstellar",
+          "interstate"
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          "alone"
+        ]
+      ],
+      [
+        [
+          "",
+          "abc"
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "palindrome-number",
+    "difficulty": "easy",
+    "entry": "is_palindrome_number",
+    "prompt": "Write a Python function `is_palindrome_number(x)` that takes an integer `x` and returns True if `x` reads the same backward as forward when written in base 10, otherwise False. Negative numbers are never palindromes (because of the leading minus sign).",
+    "reference": "def is_palindrome_number(x):\n    if x < 0:\n        return False\n    s = str(x)\n    return s == s[::-1]",
+    "inputs": [
+      [
+        121
+      ],
+      [
+        -121
+      ],
+      [
+        10
+      ],
+      [
+        0
+      ],
+      [
+        12321
+      ],
+      [
+        1000021
+      ]
+    ]
+  },
+  {
+    "id": "move-zeroes",
+    "difficulty": "easy",
+    "entry": "move_zeroes",
+    "prompt": "Write a Python function `move_zeroes(nums)` that takes a list of integers `nums` and returns a new list in which all zeroes are moved to the end while the relative order of the non-zero elements is preserved. For example, `move_zeroes([0, 1, 0, 3, 12])` returns `[1, 3, 12, 0, 0]`.",
+    "reference": "def move_zeroes(nums):\n    nonzero = [x for x in nums if x != 0]\n    zeros = [x for x in nums if x == 0]\n    return nonzero + zeros",
+    "inputs": [
+      [
+        [
+          0,
+          1,
+          0,
+          3,
+          12
+        ]
+      ],
+      [
+        [
+          0
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          1,
+          0,
+          2,
+          0,
+          0,
+          3
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "majority-element",
+    "difficulty": "easy",
+    "entry": "majority_element",
+    "prompt": "Write a Python function `majority_element(nums)` that takes a non-empty list of integers `nums` in which one element appears more than `len(nums) // 2` times (the majority element). Return that majority element. You may use the Boyer-Moore voting algorithm.",
+    "reference": "def majority_element(nums):\n    count = 0\n    candidate = None\n    for x in nums:\n        if count == 0:\n            candidate = x\n        count += 1 if x == candidate else -1\n    return candidate",
+    "inputs": [
+      [
+        [
+          3,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          2,
+          2,
+          1,
+          1,
+          1,
+          2,
+          2
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          5,
+          5,
+          5,
+          5
+        ]
+      ],
+      [
+        [
+          -1,
+          -1,
+          -1,
+          2,
+          2
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "intersection-two-arrays",
+    "difficulty": "easy",
+    "entry": "intersection",
+    "prompt": "Write a Python function `intersection(nums1, nums2)` that takes two integer lists and returns a list of their unique common elements (the set intersection). Each element in the result must be unique. Return the result as a list sorted in ascending order.",
+    "reference": "def intersection(nums1, nums2):\n    return sorted(set(nums1) & set(nums2))",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      [
+        [
+          4,
+          9,
+          5
+        ],
+        [
+          9,
+          4,
+          9,
+          8,
+          4
+        ]
+      ],
+      [
+        [],
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3
+        ],
+        []
+      ],
+      [
+        [
+          5,
+          5,
+          5
+        ],
+        [
+          5,
+          5
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3
+        ],
+        [
+          4,
+          5,
+          6
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "missing-number",
+    "difficulty": "easy",
+    "entry": "missing_number",
+    "prompt": "Write a Python function `missing_number(nums)` that takes a list containing n distinct numbers in the range [0, n] and returns the single number in that range that is missing from the list.",
+    "reference": "def missing_number(nums):\n    n = len(nums)\n    return n * (n + 1) // 2 - sum(nums)",
+    "inputs": [
+      [
+        [
+          3,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          9,
+          6,
+          4,
+          2,
+          3,
+          5,
+          7,
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "first-unique-char",
+    "difficulty": "easy",
+    "entry": "first_uniq_char",
+    "prompt": "Write a Python function `first_uniq_char(s)` that takes a string `s` and returns the index of the first non-repeating character in it. If there is no such character, return -1.",
+    "reference": "def first_uniq_char(s):\n    from collections import Counter\n    counts = Counter(s)\n    for i, ch in enumerate(s):\n        if counts[ch] == 1:\n            return i\n    return -1",
+    "inputs": [
+      [
+        "leetcode"
+      ],
+      [
+        "loveleetcode"
+      ],
+      [
+        "aabb"
+      ],
+      [
+        ""
+      ],
+      [
+        "z"
+      ],
+      [
+        "aabbccddeef"
+      ]
+    ]
+  },
+  {
+    "id": "is-anagram",
+    "difficulty": "easy",
+    "entry": "is_anagram",
+    "prompt": "Write a Python function `is_anagram(s, t)` that returns True if string `t` is an anagram of string `s`, and False otherwise. An anagram uses all the original letters exactly once. Return a boolean.",
+    "reference": "def is_anagram(s, t):\n    from collections import Counter\n    return Counter(s) == Counter(t)",
+    "inputs": [
+      [
+        "anagram",
+        "nagaram"
+      ],
+      [
+        "rat",
+        "car"
+      ],
+      [
+        "",
+        ""
+      ],
+      [
+        "a",
+        "ab"
+      ],
+      [
+        "aacc",
+        "ccac"
+      ],
+      [
+        "listen",
+        "silent"
+      ]
+    ]
+  },
+  {
+    "id": "sqrt-integer",
+    "difficulty": "easy",
+    "entry": "my_sqrt",
+    "prompt": "Write a Python function `my_sqrt(x)` that takes a non-negative integer `x` and returns the integer square root of `x` (the largest integer whose square is less than or equal to `x`, i.e. floor of the true square root). Return an integer.",
+    "reference": "def my_sqrt(x):\n    if x < 2:\n        return x\n    lo, hi = 1, x // 2\n    ans = 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if mid * mid <= x:\n            ans = mid\n            lo = mid + 1\n        else:\n            hi = mid - 1\n    return ans",
+    "inputs": [
+      [
+        4
+      ],
+      [
+        8
+      ],
+      [
+        0
+      ],
+      [
+        1
+      ],
+      [
+        2147483647
+      ],
+      [
+        16
+      ]
+    ]
+  },
+  {
+    "id": "pascals-triangle-row",
+    "difficulty": "easy",
+    "entry": "get_row",
+    "prompt": "Write a Python function `get_row(rowIndex)` that takes a non-negative integer `rowIndex` and returns the `rowIndex`-th (0-indexed) row of Pascal's triangle as a list of integers. Row 0 is [1].",
+    "reference": "def get_row(rowIndex):\n    row = [1]\n    for _ in range(rowIndex):\n        row = [a + b for a, b in zip([0] + row, row + [0])]\n    return row",
+    "inputs": [
+      [
+        0
+      ],
+      [
+        1
+      ],
+      [
+        3
+      ],
+      [
+        4
+      ],
+      [
+        5
+      ],
+      [
+        10
+      ]
+    ]
+  },
+  {
+    "id": "add-binary",
+    "difficulty": "easy",
+    "entry": "add_binary",
+    "prompt": "Write a Python function `add_binary(a, b)` that takes two binary strings `a` and `b` (each consisting only of the characters '0' and '1') and returns their sum as a binary string. The result must not have leading zeros (except the string \"0\" itself).",
+    "reference": "def add_binary(a, b):\n    return bin(int(a, 2) + int(b, 2))[2:]",
+    "inputs": [
+      [
+        "11",
+        "1"
+      ],
+      [
+        "1010",
+        "1011"
+      ],
+      [
+        "0",
+        "0"
+      ],
+      [
+        "1",
+        "111"
+      ],
+      [
+        "100",
+        "110010"
+      ],
+      [
+        "0",
+        "1"
+      ]
+    ]
+  },
+  {
+    "id": "count-primes",
+    "difficulty": "easy",
+    "entry": "count_primes",
+    "prompt": "Write a Python function `count_primes(n)` that takes an integer `n` and returns the number of prime numbers strictly less than `n`. Return an integer.",
+    "reference": "def count_primes(n):\n    if n < 3:\n        return 0\n    sieve = [True] * n\n    sieve[0] = sieve[1] = False\n    for i in range(2, int(n ** 0.5) + 1):\n        if sieve[i]:\n            for j in range(i * i, n, i):\n                sieve[j] = False\n    return sum(sieve)",
+    "inputs": [
+      [
+        10
+      ],
+      [
+        0
+      ],
+      [
+        1
+      ],
+      [
+        2
+      ],
+      [
+        3
+      ],
+      [
+        100
+      ]
+    ]
+  },
+  {
+    "id": "power-of-two",
+    "difficulty": "easy",
+    "entry": "is_power_of_two",
+    "prompt": "Write a Python function `is_power_of_two(n)` that takes an integer `n` and returns True if `n` is a power of two (i.e. there exists an integer x such that n == 2**x), and False otherwise. Return a boolean.",
+    "reference": "def is_power_of_two(n):\n    return n > 0 and (n & (n - 1)) == 0",
+    "inputs": [
+      [
+        1
+      ],
+      [
+        16
+      ],
+      [
+        3
+      ],
+      [
+        0
+      ],
+      [
+        -16
+      ],
+      [
+        1024
+      ]
+    ]
+  },
+  {
+    "id": "fibonacci-number",
+    "difficulty": "easy",
+    "entry": "fib",
+    "prompt": "Write a Python function `fib(n)` that takes a non-negative integer `n` and returns the n-th Fibonacci number, where fib(0) = 0, fib(1) = 1, and fib(n) = fib(n-1) + fib(n-2) for n > 1. Return an integer.",
+    "reference": "def fib(n):\n    if n < 2:\n        return n\n    a, b = 0, 1\n    for _ in range(2, n + 1):\n        a, b = b, a + b\n    return b",
+    "inputs": [
+      [
+        0
+      ],
+      [
+        1
+      ],
+      [
+        2
+      ],
+      [
+        10
+      ],
+      [
+        20
+      ],
+      [
+        30
+      ]
+    ]
+  },
+  {
+    "id": "factorial-number",
+    "difficulty": "easy",
+    "entry": "factorial",
+    "prompt": "Write a Python function `factorial(n)` that takes a non-negative integer `n` and returns n! (the product of all positive integers up to n). By definition, factorial(0) = 1. Return an integer.",
+    "reference": "def factorial(n):\n    result = 1\n    for i in range(2, n + 1):\n        result *= i\n    return result",
+    "inputs": [
+      [
+        0
+      ],
+      [
+        1
+      ],
+      [
+        5
+      ],
+      [
+        10
+      ],
+      [
+        3
+      ],
+      [
+        12
+      ]
+    ]
+  },
+  {
+    "id": "sum-of-digits",
+    "difficulty": "easy",
+    "entry": "sum_of_digits",
+    "prompt": "Write a Python function `sum_of_digits(n)` that takes a non-negative integer `n` and returns the sum of its decimal digits. For example, sum_of_digits(123) returns 6. Return an integer.",
+    "reference": "def sum_of_digits(n):\n    total = 0\n    while n > 0:\n        total += n % 10\n        n //= 10\n    return total",
+    "inputs": [
+      [
+        123
+      ],
+      [
+        0
+      ],
+      [
+        9
+      ],
+      [
+        99999
+      ],
+      [
+        1000000
+      ],
+      [
+        4567
+      ]
+    ]
+  },
+  {
+    "id": "greatest-common-divisor",
+    "difficulty": "easy",
+    "entry": "gcd",
+    "prompt": "Write a Python function `gcd(a, b)` that takes two positive integers `a` and `b` and returns their greatest common divisor using the Euclidean algorithm. Return an integer.",
+    "reference": "def gcd(a, b):\n    while b:\n        a, b = b, a % b\n    return a",
+    "inputs": [
+      [
+        12,
+        18
+      ],
+      [
+        48,
+        36
+      ],
+      [
+        7,
+        1
+      ],
+      [
+        100,
+        25
+      ],
+      [
+        17,
+        13
+      ],
+      [
+        1071,
+        462
+      ]
+    ]
+  },
+  {
+    "id": "reverse-integer-32bit",
+    "difficulty": "easy",
+    "entry": "reverse",
+    "prompt": "Write a Python function `reverse(x)` that takes a signed 32-bit integer `x` and returns `x` with its digits reversed. If reversing `x` causes the value to go outside the signed 32-bit integer range [-2**31, 2**31 - 1], return 0 instead. The sign must be preserved. Return an integer.",
+    "reference": "def reverse(x):\n    sign = -1 if x < 0 else 1\n    rev = int(str(abs(x))[::-1])\n    rev *= sign\n    if rev < -2**31 or rev > 2**31 - 1:\n        return 0\n    return rev",
+    "inputs": [
+      [
+        123
+      ],
+      [
+        -123
+      ],
+      [
+        120
+      ],
+      [
+        0
+      ],
+      [
+        1534236469
+      ],
+      [
+        -2147483648
+      ]
+    ]
+  },
+  {
+    "id": "excel-column-number",
+    "difficulty": "easy",
+    "entry": "title_to_number",
+    "prompt": "Write a Python function `title_to_number(columnTitle)` that takes a string `columnTitle` representing a column title as it appears in an Excel spreadsheet (e.g. \"A\", \"B\", ..., \"Z\", \"AA\", \"AB\", ...) and returns its corresponding column number. \"A\" -> 1, \"Z\" -> 26, \"AA\" -> 27. The input consists of uppercase English letters only. Return an integer.",
+    "reference": "def title_to_number(columnTitle):\n    result = 0\n    for ch in columnTitle:\n        result = result * 26 + (ord(ch) - ord('A') + 1)\n    return result",
+    "inputs": [
+      [
+        "A"
+      ],
+      [
+        "Z"
+      ],
+      [
+        "AA"
+      ],
+      [
+        "AB"
+      ],
+      [
+        "ZY"
+      ],
+      [
+        "FXSHRXW"
+      ]
+    ]
+  },
+  {
+    "id": "length-of-last-word",
+    "difficulty": "easy",
+    "entry": "length_of_last_word",
+    "prompt": "Write a Python function `length_of_last_word(s)` that takes a string `s` consisting of words and spaces and returns the length of the last word in the string. A word is a maximal substring consisting of non-space characters. If there is no word, return 0. Return an integer.",
+    "reference": "def length_of_last_word(s):\n    parts = s.split()\n    if not parts:\n        return 0\n    return len(parts[-1])",
+    "inputs": [
+      [
+        "Hello World"
+      ],
+      [
+        "   fly me   to   the moon  "
+      ],
+      [
+        "luffy is still joyboy"
+      ],
+      [
+        ""
+      ],
+      [
+        "   "
+      ],
+      [
+        "a"
+      ]
+    ]
+  },
+  {
+    "id": "isomorphic-strings",
+    "difficulty": "easy",
+    "entry": "is_isomorphic",
+    "prompt": "Write a Python function `is_isomorphic(s, t)` that returns True if strings `s` and `t` are isomorphic, and False otherwise. Two strings are isomorphic if the characters in `s` can be replaced to get `t`, where each character maps to exactly one character and no two characters map to the same character (a bijection between occurring characters that preserves order). Return a boolean.",
+    "reference": "def is_isomorphic(s, t):\n    if len(s) != len(t):\n        return False\n    s_to_t = {}\n    t_to_s = {}\n    for a, b in zip(s, t):\n        if a in s_to_t:\n            if s_to_t[a] != b:\n                return False\n        else:\n            s_to_t[a] = b\n        if b in t_to_s:\n            if t_to_s[b] != a:\n                return False\n        else:\n            t_to_s[b] = a\n    return True",
+    "inputs": [
+      [
+        "egg",
+        "add"
+      ],
+      [
+        "foo",
+        "bar"
+      ],
+      [
+        "paper",
+        "title"
+      ],
+      [
+        "badc",
+        "baba"
+      ],
+      [
+        "",
+        ""
+      ],
+      [
+        "ab",
+        "aa"
+      ]
+    ]
+  },
+  {
+    "id": "longest-substring-without-repeating",
+    "difficulty": "medium",
+    "entry": "length_of_longest_substring",
+    "prompt": "Write a Python function `length_of_longest_substring(s)` that takes a string `s` and returns an integer: the length of the longest substring of `s` that contains no repeating characters. A substring is a contiguous sequence of characters. For example, for \"abcabcbb\" the answer is 3 (\"abc\"). Return 0 for an empty string.",
+    "reference": "def length_of_longest_substring(s):\n    seen = {}\n    start = 0\n    best = 0\n    for i, ch in enumerate(s):\n        if ch in seen and seen[ch] >= start:\n            start = seen[ch] + 1\n        seen[ch] = i\n        best = max(best, i - start + 1)\n    return best",
+    "inputs": [
+      [
+        "abcabcbb"
+      ],
+      [
+        "bbbbb"
+      ],
+      [
+        "pwwkew"
+      ],
+      [
+        ""
+      ],
+      [
+        "dvdf"
+      ]
+    ]
+  },
+  {
+    "id": "group-anagrams",
+    "difficulty": "medium",
+    "entry": "group_anagrams",
+    "prompt": "Write a Python function `group_anagrams(strs)` that takes a list of strings `strs` and groups together the strings that are anagrams of one another (two strings are anagrams if one can be formed by rearranging the letters of the other). Return the groups in a deterministic canonical form: sort the strings within each group in ascending (lexicographic) order, then sort the list of groups in ascending order. Return a list of lists of strings.",
+    "reference": "def group_anagrams(strs):\n    groups = {}\n    for w in strs:\n        key = ''.join(sorted(w))\n        groups.setdefault(key, []).append(w)\n    result = [sorted(g) for g in groups.values()]\n    result.sort()\n    return result",
+    "inputs": [
+      [
+        [
+          "eat",
+          "tea",
+          "tan",
+          "ate",
+          "nat",
+          "bat"
+        ]
+      ],
+      [
+        [
+          ""
+        ]
+      ],
+      [
+        [
+          "a"
+        ]
+      ],
+      [
+        [
+          "abc",
+          "bca",
+          "xyz"
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "coin-change",
+    "difficulty": "medium",
+    "entry": "coin_change",
+    "prompt": "Write a Python function `coin_change(coins, amount)` where `coins` is a list of distinct positive integer coin denominations and `amount` is a non-negative integer. Return the fewest number of coins needed to make up exactly `amount` (you may use each coin denomination an unlimited number of times). If the amount cannot be made up by any combination of the coins, return -1. Note that `coin_change([1], 0)` returns 0.",
+    "reference": "def coin_change(coins, amount):\n    INF = amount + 1\n    dp = [0] + [INF] * amount\n    for a in range(1, amount + 1):\n        for c in coins:\n            if c <= a:\n                dp[a] = min(dp[a], dp[a - c] + 1)\n    return dp[amount] if dp[amount] != INF else -1",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          5
+        ],
+        11
+      ],
+      [
+        [
+          2
+        ],
+        3
+      ],
+      [
+        [
+          1
+        ],
+        0
+      ],
+      [
+        [
+          2,
+          5,
+          10,
+          1
+        ],
+        27
+      ],
+      [
+        [
+          186,
+          419,
+          83,
+          408
+        ],
+        6249
+      ]
+    ]
+  },
+  {
+    "id": "product-of-array-except-self",
+    "difficulty": "medium",
+    "entry": "product_except_self",
+    "prompt": "Write a Python function `product_except_self(nums)` that takes a list of integers `nums` and returns a list `res` of the same length where `res[i]` equals the product of all elements of `nums` except `nums[i]`. Solve it without using the division operation. For example, `product_except_self([1,2,3,4])` returns `[24,12,8,6]`. Return a list of integers.",
+    "reference": "def product_except_self(nums):\n    n = len(nums)\n    res = [1] * n\n    prefix = 1\n    for i in range(n):\n        res[i] = prefix\n        prefix *= nums[i]\n    suffix = 1\n    for i in range(n - 1, -1, -1):\n        res[i] *= suffix\n        suffix *= nums[i]\n    return res",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ],
+      [
+        [
+          -1,
+          1,
+          0,
+          -3,
+          3
+        ]
+      ],
+      [
+        [
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          5
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "three-sum",
+    "difficulty": "medium",
+    "entry": "three_sum",
+    "prompt": "Write a Python function `three_sum(nums)` that takes a list of integers `nums` and returns all unique triplets `[a, b, c]` such that `a + b + c == 0`. The solution set must not contain duplicate triplets. Return the result in a deterministic canonical form: each triplet must be sorted in ascending order, and the list of triplets must itself be sorted in ascending order. Return a list of lists of integers (an empty list if there are no such triplets).",
+    "reference": "def three_sum(nums):\n    nums = sorted(nums)\n    n = len(nums)\n    res = []\n    for i in range(n):\n        if i > 0 and nums[i] == nums[i - 1]:\n            continue\n        lo, hi = i + 1, n - 1\n        while lo < hi:\n            s = nums[i] + nums[lo] + nums[hi]\n            if s < 0:\n                lo += 1\n            elif s > 0:\n                hi -= 1\n            else:\n                res.append([nums[i], nums[lo], nums[hi]])\n                lo += 1\n                hi -= 1\n                while lo < hi and nums[lo] == nums[lo - 1]:\n                    lo += 1\n                while lo < hi and nums[hi] == nums[hi + 1]:\n                    hi -= 1\n    res.sort()\n    return res",
+    "inputs": [
+      [
+        [
+          -1,
+          0,
+          1,
+          2,
+          -1,
+          -4
+        ]
+      ],
+      [
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      [
+        [
+          0,
+          1,
+          1
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          -2,
+          0,
+          1,
+          1,
+          2
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "longest-palindromic-substring",
+    "difficulty": "medium",
+    "entry": "longest_palindrome",
+    "prompt": "Write a Python function `longest_palindrome(s)` that takes a string `s` and returns the longest contiguous substring of `s` that is a palindrome (reads the same forwards and backwards). If there are multiple longest palindromic substrings of equal maximal length, return the one that begins at the earliest starting index. Return the empty string for an empty input. For example, `longest_palindrome(\"babad\")` returns \"bab\".",
+    "reference": "def longest_palindrome(s):\n    if not s:\n        return \"\"\n    start, end = 0, 0\n    def expand(l, r):\n        while l >= 0 and r < len(s) and s[l] == s[r]:\n            l -= 1\n            r += 1\n        return l + 1, r - 1\n    for i in range(len(s)):\n        l1, r1 = expand(i, i)\n        if r1 - l1 > end - start:\n            start, end = l1, r1\n        l2, r2 = expand(i, i + 1)\n        if r2 - l2 > end - start:\n            start, end = l2, r2\n    return s[start:end + 1]",
+    "inputs": [
+      [
+        "babad"
+      ],
+      [
+        "cbbd"
+      ],
+      [
+        "a"
+      ],
+      [
+        ""
+      ],
+      [
+        "forgeeksskeegfor"
+      ]
+    ]
+  },
+  {
+    "id": "container-with-most-water",
+    "difficulty": "medium",
+    "entry": "max_area",
+    "prompt": "Write a Python function `max_area(height)` where `height` is a list of non-negative integers, each representing the height of a vertical line drawn at that index (the i-th line goes from (i, 0) to (i, height[i])). Find two lines that, together with the x-axis, form a container holding the most water, and return that maximum area as an integer. The area between lines at indices i and j (i < j) is (j - i) * min(height[i], height[j]). You may not slant the container.",
+    "reference": "def max_area(height):\n    lo, hi = 0, len(height) - 1\n    best = 0\n    while lo < hi:\n        best = max(best, (hi - lo) * min(height[lo], height[hi]))\n        if height[lo] < height[hi]:\n            lo += 1\n        else:\n            hi -= 1\n    return best",
+    "inputs": [
+      [
+        [
+          1,
+          8,
+          6,
+          2,
+          5,
+          4,
+          8,
+          3,
+          7
+        ]
+      ],
+      [
+        [
+          1,
+          1
+        ]
+      ],
+      [
+        [
+          4,
+          3,
+          2,
+          1,
+          4
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "set-matrix-zeroes",
+    "difficulty": "medium",
+    "entry": "set_zeroes",
+    "prompt": "Write a Python function `set_zeroes(matrix)` where `matrix` is a 2D list of integers (a list of rows). If an element is 0, set its entire row and its entire column to 0. The zeroing must be based on the positions of zeros in the ORIGINAL matrix (do not let newly-set zeros cascade). Modify and return the matrix (a list of lists of integers).",
+    "reference": "def set_zeroes(matrix):\n    if not matrix or not matrix[0]:\n        return matrix\n    rows = len(matrix)\n    cols = len(matrix[0])\n    zero_rows = set()\n    zero_cols = set()\n    for r in range(rows):\n        for c in range(cols):\n            if matrix[r][c] == 0:\n                zero_rows.add(r)\n                zero_cols.add(c)\n    for r in range(rows):\n        for c in range(cols):\n            if r in zero_rows or c in zero_cols:\n                matrix[r][c] = 0\n    return matrix",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            1,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0,
+            1,
+            2,
+            0
+          ],
+          [
+            3,
+            4,
+            5,
+            2
+          ],
+          [
+            1,
+            3,
+            1,
+            5
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "number-of-islands",
+    "difficulty": "medium",
+    "entry": "num_islands",
+    "prompt": "Write a Python function `num_islands(grid)` where `grid` is a 2D list of integers consisting of 1s (land) and 0s (water). Return the number of islands as an integer. An island is a group of 1s connected horizontally or vertically (not diagonally). Assume all four edges of the grid are surrounded by water.",
+    "reference": "def num_islands(grid):\n    if not grid or not grid[0]:\n        return 0\n    rows = len(grid)\n    cols = len(grid[0])\n    visited = [[False] * cols for _ in range(rows)]\n    count = 0\n    def dfs(sr, sc):\n        stack = [(sr, sc)]\n        while stack:\n            r, c = stack.pop()\n            if r < 0 or r >= rows or c < 0 or c >= cols:\n                continue\n            if visited[r][c] or grid[r][c] != 1:\n                continue\n            visited[r][c] = True\n            stack.extend([(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)])\n    for r in range(rows):\n        for c in range(cols):\n            if grid[r][c] == 1 and not visited[r][c]:\n                count += 1\n                dfs(r, c)\n    return count",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0,
+            0,
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "course-schedule-can-finish",
+    "difficulty": "medium",
+    "entry": "can_finish",
+    "prompt": "Write a Python function `can_finish(num_courses, prerequisites)` where `num_courses` is the number of courses labeled 0 to num_courses-1, and `prerequisites` is a list of pairs `[a, b]` meaning you must take course b before course a. Return a boolean: True if it is possible to finish all courses (i.e. the prerequisite graph has no cycle), False otherwise.",
+    "reference": "def can_finish(num_courses, prerequisites):\n    from collections import deque\n    adj = [[] for _ in range(num_courses)]\n    indeg = [0] * num_courses\n    for a, b in prerequisites:\n        adj[b].append(a)\n        indeg[a] += 1\n    q = deque(i for i in range(num_courses) if indeg[i] == 0)\n    seen = 0\n    while q:\n        node = q.popleft()\n        seen += 1\n        for nxt in adj[node]:\n            indeg[nxt] -= 1\n            if indeg[nxt] == 0:\n                q.append(nxt)\n    return seen == num_courses",
+    "inputs": [
+      [
+        2,
+        [
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      [
+        2,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ],
+      [
+        1,
+        []
+      ],
+      [
+        4,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            1
+          ],
+          [
+            3,
+            2
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "top-k-frequent-elements",
+    "difficulty": "medium",
+    "entry": "top_k_frequent",
+    "prompt": "Write a Python function `top_k_frequent(nums, k)` that takes a list of integers `nums` and an integer `k`, and returns the `k` most frequently occurring elements. When two elements have the same frequency, prefer the smaller element. Return the resulting `k` elements as a list sorted in ascending order (the canonical form). It is guaranteed that the answer is unique.",
+    "reference": "def top_k_frequent(nums, k):\n    from collections import Counter\n    counts = Counter(nums)\n    items = sorted(counts.items(), key=lambda x: (-x[1], x[0]))\n    return sorted(num for num, _ in items[:k])",
+    "inputs": [
+      [
+        [
+          1,
+          1,
+          1,
+          2,
+          2,
+          3
+        ],
+        2
+      ],
+      [
+        [
+          1
+        ],
+        1
+      ],
+      [
+        [
+          4,
+          4,
+          4,
+          5,
+          5,
+          6
+        ],
+        2
+      ],
+      [
+        [
+          3,
+          0,
+          1,
+          0
+        ],
+        2
+      ]
+    ]
+  },
+  {
+    "id": "kth-largest-element-in-an-array",
+    "difficulty": "medium",
+    "entry": "find_kth_largest",
+    "prompt": "Write a Python function `find_kth_largest(nums, k)` that takes a list of integers `nums` and an integer `k`, and returns the k-th largest element in the array (in sorted order, not the k-th distinct element). For example, `find_kth_largest([3,2,1,5,6,4], 2)` returns 5. Return an integer.",
+    "reference": "def find_kth_largest(nums, k):\n    return sorted(nums, reverse=True)[k - 1]",
+    "inputs": [
+      [
+        [
+          3,
+          2,
+          1,
+          5,
+          6,
+          4
+        ],
+        2
+      ],
+      [
+        [
+          3,
+          2,
+          3,
+          1,
+          2,
+          4,
+          5,
+          5,
+          6
+        ],
+        4
+      ],
+      [
+        [
+          1
+        ],
+        1
+      ],
+      [
+        [
+          7,
+          7,
+          7
+        ],
+        2
+      ]
+    ]
+  },
+  {
+    "id": "search-in-rotated-sorted-array",
+    "difficulty": "medium",
+    "entry": "search_rotated",
+    "prompt": "Write a Python function `search_rotated(nums, target)` where `nums` is a list of distinct integers that was originally sorted in ascending order and then possibly rotated at an unknown pivot, and `target` is an integer. Return the index of `target` in `nums`, or -1 if it is not present. Aim for O(log n) time.",
+    "reference": "def search_rotated(nums, target):\n    lo, hi = 0, len(nums) - 1\n    while lo <= hi:\n        mid = (lo + hi) // 2\n        if nums[mid] == target:\n            return mid\n        if nums[lo] <= nums[mid]:\n            if nums[lo] <= target < nums[mid]:\n                hi = mid - 1\n            else:\n                lo = mid + 1\n        else:\n            if nums[mid] < target <= nums[hi]:\n                lo = mid + 1\n            else:\n                hi = mid - 1\n    return -1",
+    "inputs": [
+      [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ],
+        0
+      ],
+      [
+        [
+          4,
+          5,
+          6,
+          7,
+          0,
+          1,
+          2
+        ],
+        3
+      ],
+      [
+        [
+          1
+        ],
+        0
+      ],
+      [
+        [
+          1
+        ],
+        1
+      ],
+      [
+        [
+          5,
+          1,
+          3
+        ],
+        5
+      ]
+    ]
+  },
+  {
+    "id": "find-peak-element",
+    "difficulty": "medium",
+    "entry": "find_peak_element",
+    "prompt": "Write a Python function `find_peak_element(nums)` where `nums` is a non-empty list of integers. A peak element is one that is strictly greater than its neighbors; elements outside the array are considered negative infinity, so a peak always exists. Return the INDEX of any one peak element. This reference uses binary search and always returns the index found by repeatedly moving toward the larger neighbor (so its output is deterministic for the given inputs). Aim for O(log n) time.",
+    "reference": "def find_peak_element(nums):\n    lo, hi = 0, len(nums) - 1\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if nums[mid] < nums[mid + 1]:\n            lo = mid + 1\n        else:\n            hi = mid\n    return lo",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          1,
+          3,
+          5,
+          6,
+          4
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          2
+        ]
+      ],
+      [
+        [
+          3,
+          2,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "decode-ways",
+    "difficulty": "medium",
+    "entry": "num_decodings",
+    "prompt": "Write a Python function `num_decodings(s)` where `s` is a string of digits. Letters are encoded as 'A'->\"1\", 'B'->\"2\", ..., 'Z'->\"26\". Return the number of distinct ways `s` can be decoded into letters. A single digit can map to a letter only if it is '1'-'9' (not '0'), and a two-digit group can map to a letter only if it is between \"10\" and \"26\" inclusive. Return 0 if the string cannot be decoded at all. For example, `num_decodings(\"226\")` returns 3.",
+    "reference": "def num_decodings(s):\n    if not s or s[0] == '0':\n        return 0\n    n = len(s)\n    prev2, prev1 = 1, 1\n    for i in range(1, n):\n        cur = 0\n        if s[i] != '0':\n            cur += prev1\n        two = int(s[i - 1:i + 1])\n        if 10 <= two <= 26:\n            cur += prev2\n        prev2, prev1 = prev1, cur\n    return prev1",
+    "inputs": [
+      [
+        "12"
+      ],
+      [
+        "226"
+      ],
+      [
+        "06"
+      ],
+      [
+        "10"
+      ],
+      [
+        "2101"
+      ]
+    ]
+  },
+  {
+    "id": "unique-paths",
+    "difficulty": "medium",
+    "entry": "unique_paths",
+    "prompt": "Write a Python function `unique_paths(m, n)` that takes two positive integers `m` (number of rows) and `n` (number of columns). A robot starts at the top-left cell of an m x n grid and wants to reach the bottom-right cell. At each step it can move only either one cell to the right or one cell down. Return the number of distinct paths the robot can take, as an integer.",
+    "reference": "def unique_paths(m, n):\n    dp = [[1] * n for _ in range(m)]\n    for r in range(1, m):\n        for c in range(1, n):\n            dp[r][c] = dp[r - 1][c] + dp[r][c - 1]\n    return dp[m - 1][n - 1]",
+    "inputs": [
+      [
+        3,
+        7
+      ],
+      [
+        3,
+        2
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        7,
+        3
+      ]
+    ]
+  },
+  {
+    "id": "house-robber",
+    "difficulty": "medium",
+    "entry": "rob",
+    "prompt": "Write a Python function `rob(nums)` where `nums` is a list of non-negative integers representing the amount of money in each house arranged in a line. You cannot rob two adjacent houses. Return the maximum total amount of money you can rob without alerting the police (i.e. without robbing two adjacent houses). Return 0 for an empty list.",
+    "reference": "def rob(nums):\n    prev2, prev1 = 0, 0\n    for x in nums:\n        prev2, prev1 = prev1, max(prev1, prev2 + x)\n    return prev1",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          3,
+          1
+        ]
+      ],
+      [
+        [
+          2,
+          7,
+          9,
+          3,
+          1
+        ]
+      ],
+      [
+        [
+          5
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          2,
+          1,
+          1,
+          2
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "combination-sum-sorted",
+    "difficulty": "medium",
+    "entry": "combination_sum",
+    "prompt": "Write a Python function `combination_sum(candidates, target)` that, given a list of distinct positive integers `candidates` and an integer `target`, returns all unique combinations of `candidates` where the chosen numbers sum to `target`. The same number may be chosen from `candidates` an unlimited number of times. Each combination must be returned as a list of integers sorted in ascending order, and the overall list of combinations must be sorted in ascending lexicographic order. Return an empty list if no combination sums to `target`.",
+    "reference": "def combination_sum(candidates, target):\n    res = []\n    cand = sorted(candidates)\n    def bt(start, remain, path):\n        if remain == 0:\n            res.append(path[:])\n            return\n        for i in range(start, len(cand)):\n            if cand[i] > remain:\n                break\n            path.append(cand[i])\n            bt(i, remain - cand[i], path)\n            path.pop()\n    bt(0, target, [])\n    res.sort()\n    return res",
+    "inputs": [
+      [
+        [
+          2,
+          3,
+          6,
+          7
+        ],
+        7
+      ],
+      [
+        [
+          2,
+          3,
+          5
+        ],
+        8
+      ],
+      [
+        [
+          2
+        ],
+        1
+      ],
+      [
+        [
+          3,
+          5,
+          8
+        ],
+        11
+      ],
+      [
+        [
+          7
+        ],
+        7
+      ]
+    ]
+  },
+  {
+    "id": "permutations-sorted",
+    "difficulty": "medium",
+    "entry": "permute",
+    "prompt": "Write a Python function `permute(nums)` that, given a list of distinct integers `nums`, returns all possible permutations. Each permutation is a list of integers. Return the full list of permutations sorted in ascending lexicographic order.",
+    "reference": "def permute(nums):\n    res = []\n    n = len(nums)\n    used = [False]*n\n    def bt(path):\n        if len(path) == n:\n            res.append(path[:])\n            return\n        for i in range(n):\n            if used[i]:\n                continue\n            used[i] = True\n            path.append(nums[i])\n            bt(path)\n            path.pop()\n            used[i] = False\n    bt([])\n    res.sort()\n    return res",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          2,
+          4,
+          6
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "subsets-sorted",
+    "difficulty": "medium",
+    "entry": "subsets",
+    "prompt": "Write a Python function `subsets(nums)` that, given a list of distinct integers `nums`, returns all possible subsets (the power set). Each subset must be a list of integers sorted in ascending order. Return the full list of subsets sorted first by length (ascending) and then in ascending lexicographic order for subsets of equal length. The empty subset must be included.",
+    "reference": "def subsets(nums):\n    res = []\n    arr = sorted(nums)\n    n = len(arr)\n    def bt(start, path):\n        res.append(path[:])\n        for i in range(start, n):\n            path.append(arr[i])\n            bt(i+1, path)\n            path.pop()\n    bt(0, [])\n    res.sort(key=lambda x: (len(x), x))\n    return res",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          0
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          3,
+          1,
+          2
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "word-search-grid",
+    "difficulty": "medium",
+    "entry": "exist",
+    "prompt": "Write a Python function `exist(board, word)` that, given an m x n grid of single-character strings `board` and a string `word`, returns True if `word` can be constructed from letters of sequentially adjacent cells, where adjacent cells are horizontally or vertically neighboring. The same cell may not be used more than once in a single match. Return a boolean.",
+    "reference": "def exist(board, word):\n    if not board or not board[0]:\n        return False\n    rows, cols = len(board), len(board[0])\n    def dfs(r, c, idx):\n        if idx == len(word):\n            return True\n        if r < 0 or r >= rows or c < 0 or c >= cols or board[r][c] != word[idx]:\n            return False\n        tmp = board[r][c]\n        board[r][c] = '#'\n        found = (dfs(r+1, c, idx+1) or dfs(r-1, c, idx+1) or\n                 dfs(r, c+1, idx+1) or dfs(r, c-1, idx+1))\n        board[r][c] = tmp\n        return found\n    for r in range(rows):\n        for c in range(cols):\n            if dfs(r, c, 0):\n                return True\n    return False",
+    "inputs": [
+      [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "ABCCED"
+      ],
+      [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "SEE"
+      ],
+      [
+        [
+          [
+            "A",
+            "B",
+            "C",
+            "E"
+          ],
+          [
+            "S",
+            "F",
+            "C",
+            "S"
+          ],
+          [
+            "A",
+            "D",
+            "E",
+            "E"
+          ]
+        ],
+        "ABCB"
+      ],
+      [
+        [
+          [
+            "A"
+          ]
+        ],
+        "A"
+      ]
+    ]
+  },
+  {
+    "id": "jump-game-reachable",
+    "difficulty": "medium",
+    "entry": "can_jump",
+    "prompt": "Write a Python function `can_jump(nums)` where `nums` is a list of non-negative integers and you start at the first index. Each element `nums[i]` represents the maximum jump length from position i. Return True if you can reach the last index, otherwise False. Return a boolean.",
+    "reference": "def can_jump(nums):\n    reach = 0\n    for i, n in enumerate(nums):\n        if i > reach:\n            return False\n        reach = max(reach, i + n)\n    return True",
+    "inputs": [
+      [
+        [
+          2,
+          3,
+          1,
+          1,
+          4
+        ]
+      ],
+      [
+        [
+          3,
+          2,
+          1,
+          0,
+          4
+        ]
+      ],
+      [
+        [
+          0
+        ]
+      ],
+      [
+        [
+          2,
+          0,
+          0
+        ]
+      ],
+      [
+        [
+          1,
+          0,
+          1,
+          0
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "merge-intervals",
+    "difficulty": "medium",
+    "entry": "merge",
+    "prompt": "Write a Python function `merge(intervals)` where `intervals` is a list of `[start, end]` pairs. Merge all overlapping intervals (intervals are considered overlapping if they touch, i.e. one starts at or before the other ends) and return a list of the non-overlapping intervals that cover all the input intervals. Return the result as a list of `[start, end]` lists sorted in ascending order by start.",
+    "reference": "def merge(intervals):\n    if not intervals:\n        return []\n    arr = sorted(intervals, key=lambda x: x[0])\n    res = [arr[0][:]]\n    for s, e in arr[1:]:\n        if s <= res[-1][1]:\n            res[-1][1] = max(res[-1][1], e)\n        else:\n            res.append([s, e])\n    return res",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            8,
+            10
+          ],
+          [
+            15,
+            18
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            4
+          ],
+          [
+            4,
+            5
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            4
+          ]
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          [
+            5,
+            6
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            4
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "insert-interval",
+    "difficulty": "medium",
+    "entry": "insert",
+    "prompt": "Write a Python function `insert(intervals, new_interval)` where `intervals` is a list of non-overlapping `[start, end]` pairs sorted in ascending order by start, and `new_interval` is a `[start, end]` pair. Insert `new_interval` into `intervals`, merging where necessary so the result remains sorted and non-overlapping (touching intervals merge). Return the result as a list of `[start, end]` lists.",
+    "reference": "def insert(intervals, new_interval):\n    res = []\n    i, n = 0, len(intervals)\n    ns, ne = new_interval\n    while i < n and intervals[i][1] < ns:\n        res.append(intervals[i][:])\n        i += 1\n    while i < n and intervals[i][0] <= ne:\n        ns = min(ns, intervals[i][0])\n        ne = max(ne, intervals[i][1])\n        i += 1\n    res.append([ns, ne])\n    while i < n:\n        res.append(intervals[i][:])\n        i += 1\n    return res",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            3
+          ],
+          [
+            6,
+            9
+          ]
+        ],
+        [
+          2,
+          5
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            5
+          ],
+          [
+            6,
+            7
+          ],
+          [
+            8,
+            10
+          ],
+          [
+            12,
+            16
+          ]
+        ],
+        [
+          4,
+          8
+        ]
+      ],
+      [
+        [],
+        [
+          5,
+          7
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            5
+          ]
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            5
+          ]
+        ],
+        [
+          6,
+          8
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "spiral-matrix-order",
+    "difficulty": "medium",
+    "entry": "spiral_order",
+    "prompt": "Write a Python function `spiral_order(matrix)` that, given an m x n integer matrix (a list of rows), returns all elements of the matrix in spiral order: start at the top-left, go right across the top row, then down the right column, then left across the bottom row, then up the left column, spiraling inward. Return the elements as a flat list of integers.",
+    "reference": "def spiral_order(matrix):\n    if not matrix or not matrix[0]:\n        return []\n    res = []\n    top, bottom = 0, len(matrix)-1\n    left, right = 0, len(matrix[0])-1\n    while top <= bottom and left <= right:\n        for c in range(left, right+1):\n            res.append(matrix[top][c])\n        top += 1\n        for r in range(top, bottom+1):\n            res.append(matrix[r][right])\n        right -= 1\n        if top <= bottom:\n            for c in range(right, left-1, -1):\n                res.append(matrix[bottom][c])\n            bottom -= 1\n        if left <= right:\n            for r in range(bottom, top-1, -1):\n                res.append(matrix[r][left])\n            left += 1\n    return res",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            7,
+            8,
+            9
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2,
+            3,
+            4
+          ],
+          [
+            5,
+            6,
+            7,
+            8
+          ],
+          [
+            9,
+            10,
+            11,
+            12
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "rotate-image-90",
+    "difficulty": "medium",
+    "entry": "rotate",
+    "prompt": "Write a Python function `rotate(matrix)` that, given an n x n 2D integer matrix (a list of rows), rotates the matrix 90 degrees clockwise and returns the resulting matrix (a list of rows). You may modify the input in place; the function must return the rotated matrix.",
+    "reference": "def rotate(matrix):\n    n = len(matrix)\n    for i in range(n):\n        for j in range(i+1, n):\n            matrix[i][j], matrix[j][i] = matrix[j][i], matrix[i][j]\n    for row in matrix:\n        row.reverse()\n    return matrix",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            4,
+            5,
+            6
+          ],
+          [
+            7,
+            8,
+            9
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            5,
+            1,
+            9,
+            11
+          ],
+          [
+            2,
+            4,
+            8,
+            10
+          ],
+          [
+            13,
+            3,
+            6,
+            7
+          ],
+          [
+            15,
+            14,
+            12,
+            16
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "letter-combinations-phone",
+    "difficulty": "medium",
+    "entry": "letter_combinations",
+    "prompt": "Write a Python function `letter_combinations(digits)` that, given a string `digits` containing digits from 2-9, returns all possible letter combinations that the number could spell on a classic phone keypad: 2->abc, 3->def, 4->ghi, 5->jkl, 6->mno, 7->pqrs, 8->tuv, 9->wxyz. Return the combinations as a list of strings sorted in ascending lexicographic order. If `digits` is empty, return an empty list.",
+    "reference": "def letter_combinations(digits):\n    if not digits:\n        return []\n    m = {'2':'abc','3':'def','4':'ghi','5':'jkl','6':'mno','7':'pqrs','8':'tuv','9':'wxyz'}\n    res = []\n    def bt(idx, path):\n        if idx == len(digits):\n            res.append(''.join(path))\n            return\n        for ch in m[digits[idx]]:\n            path.append(ch)\n            bt(idx+1, path)\n            path.pop()\n    bt(0, [])\n    res.sort()\n    return res",
+    "inputs": [
+      [
+        "23"
+      ],
+      [
+        ""
+      ],
+      [
+        "2"
+      ],
+      [
+        "79"
+      ]
+    ]
+  },
+  {
+    "id": "generate-parentheses",
+    "difficulty": "medium",
+    "entry": "generate_parenthesis",
+    "prompt": "Write a Python function `generate_parenthesis(n)` that, given an integer `n`, returns all combinations of `n` pairs of well-formed (balanced) parentheses. Return the combinations as a list of strings sorted in ascending lexicographic order.",
+    "reference": "def generate_parenthesis(n):\n    res = []\n    def bt(s, open_c, close_c):\n        if len(s) == 2*n:\n            res.append(s)\n            return\n        if open_c < n:\n            bt(s+'(', open_c+1, close_c)\n        if close_c < open_c:\n            bt(s+')', open_c, close_c+1)\n    bt('', 0, 0)\n    res.sort()\n    return res",
+    "inputs": [
+      [
+        3
+      ],
+      [
+        1
+      ],
+      [
+        2
+      ],
+      [
+        4
+      ]
+    ]
+  },
+  {
+    "id": "maximal-square",
+    "difficulty": "medium",
+    "entry": "maximal_square",
+    "prompt": "Write a Python function `maximal_square(matrix)` that, given an m x n binary matrix filled with the integers 0 and 1 (a list of rows), finds the largest square that contains only 1s and returns its area (an integer). Return 0 if there is no 1.",
+    "reference": "def maximal_square(matrix):\n    if not matrix or not matrix[0]:\n        return 0\n    rows, cols = len(matrix), len(matrix[0])\n    dp = [[0]*(cols+1) for _ in range(rows+1)]\n    best = 0\n    for i in range(1, rows+1):\n        for j in range(1, cols+1):\n            if matrix[i-1][j-1] == 1:\n                dp[i][j] = min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]) + 1\n                best = max(best, dp[i][j])\n    return best * best",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            0,
+            1,
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "longest-increasing-subsequence-length",
+    "difficulty": "medium",
+    "entry": "length_of_lis",
+    "prompt": "Write a Python function `length_of_lis(nums)` that, given a list of integers `nums`, returns the length of the longest strictly increasing subsequence. A subsequence is derived by deleting zero or more elements without changing the order of the remaining elements. Return an integer.",
+    "reference": "import bisect\n\ndef length_of_lis(nums):\n    tails = []\n    for x in nums:\n        i = bisect.bisect_left(tails, x)\n        if i == len(tails):\n            tails.append(x)\n        else:\n            tails[i] = x\n    return len(tails)",
+    "inputs": [
+      [
+        [
+          10,
+          9,
+          2,
+          5,
+          3,
+          7,
+          101,
+          18
+        ]
+      ],
+      [
+        [
+          0,
+          1,
+          0,
+          3,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          7,
+          7,
+          7,
+          7
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          5
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "partition-equal-subset-sum",
+    "difficulty": "medium",
+    "entry": "can_partition",
+    "prompt": "Write a Python function `can_partition(nums)` that, given a list of positive integers `nums`, returns True if the list can be partitioned into two subsets whose sums are equal, otherwise False. Return a boolean.",
+    "reference": "def can_partition(nums):\n    total = sum(nums)\n    if total % 2 != 0:\n        return False\n    target = total // 2\n    dp = [False]*(target+1)\n    dp[0] = True\n    for num in nums:\n        for j in range(target, num-1, -1):\n            if dp[j-num]:\n                dp[j] = True\n    return dp[target]",
+    "inputs": [
+      [
+        [
+          1,
+          5,
+          11,
+          5
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3,
+          5
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          2,
+          2
+        ]
+      ],
+      [
+        [
+          3,
+          3,
+          3,
+          4,
+          5
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "daily-temperatures",
+    "difficulty": "medium",
+    "entry": "daily_temperatures",
+    "prompt": "Write a Python function `daily_temperatures(temperatures)` that, given a list of integers `temperatures` representing daily temperatures, returns a list `answer` such that `answer[i]` is the number of days you have to wait after day i to get a warmer temperature. If there is no future day with a warmer temperature, `answer[i]` is 0. Return a list of integers.",
+    "reference": "def daily_temperatures(temperatures):\n    n = len(temperatures)\n    res = [0]*n\n    stack = []\n    for i, t in enumerate(temperatures):\n        while stack and temperatures[stack[-1]] < t:\n            j = stack.pop()\n            res[j] = i - j\n        stack.append(i)\n    return res",
+    "inputs": [
+      [
+        [
+          73,
+          74,
+          75,
+          71,
+          69,
+          72,
+          76,
+          73
+        ]
+      ],
+      [
+        [
+          30,
+          40,
+          50,
+          60
+        ]
+      ],
+      [
+        [
+          30,
+          60,
+          90
+        ]
+      ],
+      [
+        [
+          50
+        ]
+      ],
+      [
+        [
+          90,
+          80,
+          70
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "minimum-path-sum",
+    "difficulty": "medium",
+    "entry": "min_path_sum",
+    "prompt": "Write a Python function `min_path_sum(grid)` that, given an m x n grid of non-negative integers (a list of rows), finds a path from the top-left to the bottom-right cell that minimizes the sum of all numbers along its path, moving only either down or right at any step. Return the minimum sum as an integer.",
+    "reference": "def min_path_sum(grid):\n    if not grid or not grid[0]:\n        return 0\n    rows, cols = len(grid), len(grid[0])\n    dp = [[0]*cols for _ in range(rows)]\n    dp[0][0] = grid[0][0]\n    for j in range(1, cols):\n        dp[0][j] = dp[0][j-1] + grid[0][j]\n    for i in range(1, rows):\n        dp[i][0] = dp[i-1][0] + grid[i][0]\n    for i in range(1, rows):\n        for j in range(1, cols):\n            dp[i][j] = min(dp[i-1][j], dp[i][j-1]) + grid[i][j]\n    return dp[rows-1][cols-1]",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            3,
+            1
+          ],
+          [
+            1,
+            5,
+            1
+          ],
+          [
+            4,
+            2,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2,
+            3
+          ],
+          [
+            4,
+            5,
+            6
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            5
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "edit-distance",
+    "difficulty": "medium",
+    "entry": "min_distance",
+    "prompt": "Write a Python function `min_distance(word1, word2)` that, given two strings `word1` and `word2`, returns the minimum number of single-character operations (insert a character, delete a character, or replace a character) required to convert `word1` into `word2`. Return an integer.",
+    "reference": "def min_distance(word1, word2):\n    m, n = len(word1), len(word2)\n    dp = [[0]*(n+1) for _ in range(m+1)]\n    for i in range(m+1):\n        dp[i][0] = i\n    for j in range(n+1):\n        dp[0][j] = j\n    for i in range(1, m+1):\n        for j in range(1, n+1):\n            if word1[i-1] == word2[j-1]:\n                dp[i][j] = dp[i-1][j-1]\n            else:\n                dp[i][j] = 1 + min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])\n    return dp[m][n]",
+    "inputs": [
+      [
+        "horse",
+        "ros"
+      ],
+      [
+        "intention",
+        "execution"
+      ],
+      [
+        "",
+        ""
+      ],
+      [
+        "abc",
+        ""
+      ],
+      [
+        "",
+        ""
+      ]
+    ]
+  },
+  {
+    "id": "median-of-two-sorted-arrays",
+    "difficulty": "hard",
+    "entry": "find_median_sorted_arrays",
+    "prompt": "Write a Python function `find_median_sorted_arrays(nums1, nums2)` that takes two sorted (ascending) lists of integers and returns the median of the combined sorted sequence as a float. If the total number of elements is odd, return the middle element as a float; if even, return the average of the two middle elements. Always return a float (e.g. 2.0, not 2). At least one of the lists is non-empty.",
+    "reference": "def find_median_sorted_arrays(nums1, nums2):\n    A, B = nums1, nums2\n    if len(A) > len(B):\n        A, B = B, A\n    m, n = len(A), len(B)\n    total = m + n\n    half = (total + 1) // 2\n    lo, hi = 0, m\n    while lo <= hi:\n        i = (lo + hi) // 2\n        j = half - i\n        Aleft = A[i-1] if i > 0 else float('-inf')\n        Aright = A[i] if i < m else float('inf')\n        Bleft = B[j-1] if j > 0 else float('-inf')\n        Bright = B[j] if j < n else float('inf')\n        if Aleft <= Bright and Bleft <= Aright:\n            if total % 2 == 1:\n                return float(max(Aleft, Bleft))\n            return (max(Aleft, Bleft) + min(Aright, Bright)) / 2.0\n        elif Aleft > Bright:\n            hi = i - 1\n        else:\n            lo = i + 1\n    return 0.0",
+    "inputs": [
+      [
+        [
+          1,
+          3
+        ],
+        [
+          2
+        ]
+      ],
+      [
+        [
+          1,
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ],
+      [
+        [],
+        [
+          1
+        ]
+      ],
+      [
+        [
+          2
+        ],
+        []
+      ],
+      [
+        [
+          1,
+          3,
+          5,
+          7
+        ],
+        [
+          2,
+          4,
+          6
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "trapping-rain-water",
+    "difficulty": "hard",
+    "entry": "trap",
+    "prompt": "Write a Python function `trap(height)` that takes a list of non-negative integers representing an elevation map where the width of each bar is 1, and returns an integer: the total amount of water that can be trapped after raining.",
+    "reference": "def trap(height):\n    if not height:\n        return 0\n    l, r = 0, len(height) - 1\n    lmax, rmax = height[l], height[r]\n    total = 0\n    while l < r:\n        if lmax < rmax:\n            l += 1\n            lmax = max(lmax, height[l])\n            total += lmax - height[l]\n        else:\n            r -= 1\n            rmax = max(rmax, height[r])\n            total += rmax - height[r]\n    return total",
+    "inputs": [
+      [
+        [
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          3,
+          2,
+          1,
+          2,
+          1
+        ]
+      ],
+      [
+        [
+          4,
+          2,
+          0,
+          3,
+          2,
+          5
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          5
+        ]
+      ],
+      [
+        [
+          3,
+          2,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "word-break",
+    "difficulty": "hard",
+    "entry": "word_break",
+    "prompt": "Write a Python function `word_break(s, word_dict)` where `s` is a string and `word_dict` is a list of strings (the dictionary). Return a boolean: True if `s` can be segmented into a space-separated sequence of one or more dictionary words (each word may be reused any number of times), otherwise False. An empty string `s` is considered segmentable (return True).",
+    "reference": "def word_break(s, word_dict):\n    words = set(word_dict)\n    n = len(s)\n    dp = [False] * (n + 1)\n    dp[0] = True\n    for i in range(1, n + 1):\n        for j in range(i):\n            if dp[j] and s[j:i] in words:\n                dp[i] = True\n                break\n    return dp[n]",
+    "inputs": [
+      [
+        "leetcode",
+        [
+          "leet",
+          "code"
+        ]
+      ],
+      [
+        "applepenapple",
+        [
+          "apple",
+          "pen"
+        ]
+      ],
+      [
+        "catsandog",
+        [
+          "cats",
+          "dog",
+          "sand",
+          "and",
+          "cat"
+        ]
+      ],
+      [
+        "",
+        [
+          "a"
+        ]
+      ],
+      [
+        "a",
+        [
+          "a"
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "lru-cache-run-ops",
+    "difficulty": "hard",
+    "entry": "run_ops",
+    "prompt": "Implement an LRU (Least Recently Used) cache and expose it through a Python function `run_ops(capacity, ops)`. `capacity` is a positive integer. `ops` is a list of operations, each a list. A put operation is [\"put\", key, value] and inserts or updates the key (updating its value and marking it most-recently-used); if the cache exceeds capacity, evict the least-recently-used key. A get operation is [\"get\", key] and returns the value if present (marking the key most-recently-used) or -1 if absent. Return a list containing, in order, the result of every \"get\" operation (the integers returned, including -1 for misses). \"put\" operations contribute nothing to the returned list.",
+    "reference": "def run_ops(capacity, ops):\n    from collections import OrderedDict\n    cache = OrderedDict()\n    results = []\n    for op in ops:\n        if op[0] == \"put\":\n            key, val = op[1], op[2]\n            if key in cache:\n                cache.move_to_end(key)\n            cache[key] = val\n            if len(cache) > capacity:\n                cache.popitem(last=False)\n        elif op[0] == \"get\":\n            key = op[1]\n            if key in cache:\n                cache.move_to_end(key)\n                results.append(cache[key])\n            else:\n                results.append(-1)\n    return results",
+    "inputs": [
+      [
+        2,
+        [
+          [
+            "put",
+            1,
+            1
+          ],
+          [
+            "put",
+            2,
+            2
+          ],
+          [
+            "get",
+            1
+          ],
+          [
+            "put",
+            3,
+            3
+          ],
+          [
+            "get",
+            2
+          ],
+          [
+            "put",
+            4,
+            4
+          ],
+          [
+            "get",
+            1
+          ],
+          [
+            "get",
+            3
+          ],
+          [
+            "get",
+            4
+          ]
+        ]
+      ],
+      [
+        1,
+        [
+          [
+            "put",
+            2,
+            1
+          ],
+          [
+            "get",
+            2
+          ],
+          [
+            "put",
+            3,
+            2
+          ],
+          [
+            "get",
+            2
+          ],
+          [
+            "get",
+            3
+          ]
+        ]
+      ],
+      [
+        2,
+        [
+          [
+            "get",
+            0
+          ]
+        ]
+      ],
+      [
+        3,
+        [
+          [
+            "put",
+            1,
+            10
+          ],
+          [
+            "put",
+            2,
+            20
+          ],
+          [
+            "put",
+            3,
+            30
+          ],
+          [
+            "get",
+            1
+          ],
+          [
+            "get",
+            2
+          ],
+          [
+            "get",
+            3
+          ]
+        ]
+      ],
+      [
+        2,
+        [
+          [
+            "put",
+            1,
+            1
+          ],
+          [
+            "put",
+            1,
+            2
+          ],
+          [
+            "get",
+            1
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "regular-expression-matching",
+    "difficulty": "hard",
+    "entry": "is_match",
+    "prompt": "Write a Python function `is_match(s, p)` that implements regular expression matching of the entire string `s` against pattern `p`, supporting '.' (matches any single character) and '*' (matches zero or more of the preceding element). The match must cover the entire input string (not partial). Return a boolean.",
+    "reference": "def is_match(s, p):\n    m, n = len(s), len(p)\n    dp = [[False] * (n + 1) for _ in range(m + 1)]\n    dp[0][0] = True\n    for j in range(1, n + 1):\n        if p[j-1] == '*':\n            dp[0][j] = dp[0][j-2]\n    for i in range(1, m + 1):\n        for j in range(1, n + 1):\n            if p[j-1] == '*':\n                dp[i][j] = dp[i][j-2]\n                if p[j-2] == '.' or p[j-2] == s[i-1]:\n                    dp[i][j] = dp[i][j] or dp[i-1][j]\n            elif p[j-1] == '.' or p[j-1] == s[i-1]:\n                dp[i][j] = dp[i-1][j-1]\n    return dp[m][n]",
+    "inputs": [
+      [
+        "aa",
+        "a"
+      ],
+      [
+        "aa",
+        "a*"
+      ],
+      [
+        "ab",
+        ".*"
+      ],
+      [
+        "mississippi",
+        "mis*is*p*."
+      ],
+      [
+        "",
+        "c*"
+      ]
+    ]
+  },
+  {
+    "id": "merge-k-sorted-lists",
+    "difficulty": "hard",
+    "entry": "merge_k_lists",
+    "prompt": "Write a Python function `merge_k_lists(lists)` where `lists` is a list of ascending-sorted integer lists. Merge all of them into one ascending-sorted list and return it. Some inner lists may be empty, and `lists` itself may be empty (in which case return []).",
+    "reference": "def merge_k_lists(lists):\n    import heapq\n    heap = []\n    for i, lst in enumerate(lists):\n        if lst:\n            heapq.heappush(heap, (lst[0], i, 0))\n    result = []\n    while heap:\n        val, li, ei = heapq.heappop(heap)\n        result.append(val)\n        if ei + 1 < len(lists[li]):\n            heapq.heappush(heap, (lists[li][ei+1], li, ei+1))\n    return result",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            4,
+            5
+          ],
+          [
+            1,
+            3,
+            4
+          ],
+          [
+            2,
+            6
+          ]
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          []
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            5
+          ],
+          [
+            1,
+            2,
+            3
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "largest-rectangle-in-histogram",
+    "difficulty": "hard",
+    "entry": "largest_rectangle_area",
+    "prompt": "Write a Python function `largest_rectangle_area(heights)` that takes a list of non-negative integers representing the heights of bars in a histogram (each bar has width 1) and returns an integer: the area of the largest rectangle that can be formed within the histogram. Return 0 for an empty list.",
+    "reference": "def largest_rectangle_area(heights):\n    stack = []\n    max_area = 0\n    for i, h in enumerate(heights + [0]):\n        while stack and heights[stack[-1]] >= h:\n            height = heights[stack.pop()]\n            width = i if not stack else i - stack[-1] - 1\n            max_area = max(max_area, height * width)\n        stack.append(i)\n    return max_area",
+    "inputs": [
+      [
+        [
+          2,
+          1,
+          5,
+          6,
+          2,
+          3
+        ]
+      ],
+      [
+        [
+          2,
+          4
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          5
+        ]
+      ],
+      [
+        [
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "sliding-window-maximum",
+    "difficulty": "hard",
+    "entry": "max_sliding_window",
+    "prompt": "Write a Python function `max_sliding_window(nums, k)` where `nums` is a list of integers and `k` is a positive integer (1 <= k <= len(nums)). Return a list of the maximum value in each contiguous window of size `k` as the window slides from left to right.",
+    "reference": "def max_sliding_window(nums, k):\n    from collections import deque\n    dq = deque()\n    result = []\n    for i, n in enumerate(nums):\n        while dq and nums[dq[-1]] <= n:\n            dq.pop()\n        dq.append(i)\n        if dq[0] <= i - k:\n            dq.popleft()\n        if i >= k - 1:\n            result.append(nums[dq[0]])\n    return result",
+    "inputs": [
+      [
+        [
+          1,
+          3,
+          -1,
+          -3,
+          5,
+          3,
+          6,
+          7
+        ],
+        3
+      ],
+      [
+        [
+          1
+        ],
+        1
+      ],
+      [
+        [
+          1,
+          -1
+        ],
+        1
+      ],
+      [
+        [
+          9,
+          8,
+          7,
+          6
+        ],
+        2
+      ],
+      [
+        [
+          1,
+          3,
+          1,
+          2,
+          0,
+          5
+        ],
+        3
+      ]
+    ]
+  },
+  {
+    "id": "minimum-window-substring",
+    "difficulty": "hard",
+    "entry": "min_window",
+    "prompt": "Write a Python function `min_window(s, t)` that returns the smallest contiguous substring of `s` that contains every character of `t` (including duplicates, respecting multiplicity). If there is no such window, return the empty string \"\". If multiple minimal windows exist, the standard left-to-right scan yields the leftmost one of minimal length; return that window.",
+    "reference": "def min_window(s, t):\n    from collections import Counter\n    if not t or not s:\n        return \"\"\n    need = Counter(t)\n    missing = len(t)\n    left = 0\n    start, end = 0, 0\n    for right, ch in enumerate(s, 1):\n        if need[ch] > 0:\n            missing -= 1\n        need[ch] -= 1\n        if missing == 0:\n            while left < right and need[s[left]] < 0:\n                need[s[left]] += 1\n                left += 1\n            if end == 0 or right - left < end - start:\n                start, end = left, right\n    return s[start:end]",
+    "inputs": [
+      [
+        "ADOBECODEBANC",
+        "ABC"
+      ],
+      [
+        "a",
+        "a"
+      ],
+      [
+        "a",
+        "aa"
+      ],
+      [
+        "aa",
+        "aa"
+      ],
+      [
+        "ab",
+        "b"
+      ]
+    ]
+  },
+  {
+    "id": "longest-valid-parentheses",
+    "difficulty": "hard",
+    "entry": "longest_valid_parentheses",
+    "prompt": "Write a Python function `longest_valid_parentheses(s)` that takes a string `s` containing only the characters '(' and ')' and returns an integer: the length of the longest contiguous substring that is a well-formed (valid) parentheses sequence.",
+    "reference": "def longest_valid_parentheses(s):\n    stack = [-1]\n    max_len = 0\n    for i, ch in enumerate(s):\n        if ch == '(':\n            stack.append(i)\n        else:\n            stack.pop()\n            if not stack:\n                stack.append(i)\n            else:\n                max_len = max(max_len, i - stack[-1])\n    return max_len",
+    "inputs": [
+      [
+        "(()"
+      ],
+      [
+        ")()())"
+      ],
+      [
+        ""
+      ],
+      [
+        "()(()"
+      ],
+      [
+        "()(())"
+      ]
+    ]
+  },
+  {
+    "id": "n-queens-count",
+    "difficulty": "hard",
+    "entry": "total_n_queens",
+    "prompt": "Write a Python function `total_n_queens(n)` that takes a positive integer `n` and returns an integer: the number of distinct ways to place `n` non-attacking queens on an n x n chessboard (no two queens share a row, column, or diagonal).",
+    "reference": "def total_n_queens(n):\n    count = 0\n    cols = set()\n    diag1 = set()\n    diag2 = set()\n    def backtrack(row):\n        nonlocal count\n        if row == n:\n            count += 1\n            return\n        for col in range(n):\n            if col in cols or (row-col) in diag1 or (row+col) in diag2:\n                continue\n            cols.add(col); diag1.add(row-col); diag2.add(row+col)\n            backtrack(row+1)\n            cols.remove(col); diag1.remove(row-col); diag2.remove(row+col)\n    backtrack(0)\n    return count",
+    "inputs": [
+      [
+        1
+      ],
+      [
+        4
+      ],
+      [
+        5
+      ],
+      [
+        6
+      ],
+      [
+        8
+      ]
+    ]
+  },
+  {
+    "id": "word-ladder-length",
+    "difficulty": "hard",
+    "entry": "ladder_length",
+    "prompt": "Write a Python function `ladder_length(begin_word, end_word, word_list)` that returns an integer: the number of words in the shortest transformation sequence from `begin_word` to `end_word`, where each step changes exactly one letter and every intermediate word must exist in `word_list`. The sequence length counts both endpoints (so begin_word counts as 1). If `end_word` is not in `word_list` or no sequence exists, return 0. All words have the same length and consist of lowercase letters; `begin_word` need not be in `word_list`.",
+    "reference": "def ladder_length(begin_word, end_word, word_list):\n    from collections import deque\n    words = set(word_list)\n    if end_word not in words:\n        return 0\n    queue = deque([(begin_word, 1)])\n    visited = {begin_word}\n    while queue:\n        word, steps = queue.popleft()\n        if word == end_word:\n            return steps\n        for i in range(len(word)):\n            for c in \"abcdefghijklmnopqrstuvwxyz\":\n                nxt = word[:i] + c + word[i+1:]\n                if nxt in words and nxt not in visited:\n                    visited.add(nxt)\n                    queue.append((nxt, steps+1))\n    return 0",
+    "inputs": [
+      [
+        "hit",
+        "cog",
+        [
+          "hot",
+          "dot",
+          "dog",
+          "lot",
+          "log",
+          "cog"
+        ]
+      ],
+      [
+        "hit",
+        "cog",
+        [
+          "hot",
+          "dot",
+          "dog",
+          "lot",
+          "log"
+        ]
+      ],
+      [
+        "a",
+        "c",
+        [
+          "a",
+          "b",
+          "c"
+        ]
+      ],
+      [
+        "hot",
+        "dog",
+        [
+          "hot",
+          "dog",
+          "dot"
+        ]
+      ],
+      [
+        "hit",
+        "hit",
+        [
+          "hit"
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "jump-game-ii",
+    "difficulty": "hard",
+    "entry": "jump",
+    "prompt": "Write a Python function `jump(nums)` where `nums` is a list of non-negative integers and you start at index 0. Each element nums[i] is the maximum forward jump length from index i. It is guaranteed you can always reach the last index. Return an integer: the minimum number of jumps required to reach the last index. If the list has a single element, return 0.",
+    "reference": "def jump(nums):\n    n = len(nums)\n    jumps = 0\n    cur_end = 0\n    farthest = 0\n    for i in range(n - 1):\n        farthest = max(farthest, i + nums[i])\n        if i == cur_end:\n            jumps += 1\n            cur_end = farthest\n    return jumps",
+    "inputs": [
+      [
+        [
+          2,
+          3,
+          1,
+          1,
+          4
+        ]
+      ],
+      [
+        [
+          2,
+          3,
+          0,
+          1,
+          4
+        ]
+      ],
+      [
+        [
+          0
+        ]
+      ],
+      [
+        [
+          1,
+          2
+        ]
+      ],
+      [
+        [
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "candy",
+    "difficulty": "hard",
+    "entry": "candy",
+    "prompt": "Write a Python function `candy(ratings)` where `ratings` is a list of integers giving each child's rating in a line. You must give each child at least one candy, and any child with a strictly higher rating than an adjacent neighbor must receive strictly more candies than that neighbor. Return an integer: the minimum total number of candies needed. Return 0 for an empty list.",
+    "reference": "def candy(ratings):\n    n = len(ratings)\n    if n == 0:\n        return 0\n    candies = [1]*n\n    for i in range(1, n):\n        if ratings[i] > ratings[i-1]:\n            candies[i] = candies[i-1] + 1\n    for i in range(n-2, -1, -1):\n        if ratings[i] > ratings[i+1]:\n            candies[i] = max(candies[i], candies[i+1] + 1)\n    return sum(candies)",
+    "inputs": [
+      [
+        [
+          1,
+          0,
+          2
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          2
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ],
+      [
+        [
+          5,
+          4,
+          3,
+          2,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "first-missing-positive",
+    "difficulty": "hard",
+    "entry": "first_missing_positive",
+    "prompt": "Write a Python function `first_missing_positive(nums)` that takes a list of integers (which may include negatives, zeros, and duplicates) and returns an integer: the smallest positive integer (>= 1) that does not appear in the list. For an empty list, return 1.",
+    "reference": "def first_missing_positive(nums):\n    n = len(nums)\n    nums = list(nums)\n    for i in range(n):\n        while 1 <= nums[i] <= n and nums[nums[i]-1] != nums[i]:\n            nums[nums[i]-1], nums[i] = nums[i], nums[nums[i]-1]\n    for i in range(n):\n        if nums[i] != i + 1:\n            return i + 1\n    return n + 1",
+    "inputs": [
+      [
+        [
+          1,
+          2,
+          0
+        ]
+      ],
+      [
+        [
+          3,
+          4,
+          -1,
+          1
+        ]
+      ],
+      [
+        [
+          7,
+          8,
+          9,
+          11,
+          12
+        ]
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        []
+      ]
+    ]
+  },
+  {
+    "id": "maximal-rectangle-grid",
+    "difficulty": "hard",
+    "entry": "maximal_rectangle",
+    "prompt": "Write a Python function `maximal_rectangle(matrix)` where `matrix` is a list of rows, each row a list of integers that are either 0 or 1. Return an integer: the area of the largest rectangle containing only 1s. If the matrix is empty or has no columns, return 0.",
+    "reference": "def maximal_rectangle(matrix):\n    if not matrix or not matrix[0]:\n        return 0\n    n = len(matrix[0])\n    heights = [0] * (n + 1)\n    best = 0\n    for row in matrix:\n        for i in range(n):\n            heights[i] = heights[i] + 1 if row[i] == 1 else 0\n        stack = [-1]\n        for i in range(n + 1):\n            while stack[-1] != -1 and heights[stack[-1]] >= heights[i]:\n                h = heights[stack.pop()]\n                w = i - stack[-1] - 1\n                best = max(best, h * w)\n            stack.append(i)\n    return best",
+    "inputs": [
+      [
+        [
+          [
+            1,
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          [
+            1,
+            0,
+            0,
+            1,
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "burst-balloons",
+    "difficulty": "hard",
+    "entry": "burst_balloons",
+    "prompt": "Write a Python function `burst_balloons(nums)` where `nums` is a list of integers. Each balloon `i` has a value `nums[i]`. You burst all balloons one by one; bursting balloon `i` yields `nums[left] * nums[i] * nums[right]` coins, where `left` and `right` are the balloons adjacent to `i` at that moment (treat out-of-range neighbors as having value 1). Return the maximum total coins you can collect. If `nums` is empty, return 0.",
+    "reference": "def burst_balloons(nums):\n    vals = [1] + nums + [1]\n    n = len(vals)\n    dp = [[0] * n for _ in range(n)]\n    for length in range(2, n):\n        for left in range(0, n - length):\n            right = left + length\n            best = 0\n            for k in range(left + 1, right):\n                cur = vals[left] * vals[k] * vals[right] + dp[left][k] + dp[k][right]\n                if cur > best:\n                    best = cur\n            dp[left][right] = best\n    return dp[0][n - 1]",
+    "inputs": [
+      [
+        [
+          3,
+          1,
+          5,
+          8
+        ]
+      ],
+      [
+        [
+          1,
+          5
+        ]
+      ],
+      [
+        [
+          7
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "decode-nested-string",
+    "difficulty": "hard",
+    "entry": "decode_string",
+    "prompt": "Write a Python function `decode_string(s)` where `s` is an encoded string using the rule `k[encoded_string]`, meaning the `encoded_string` inside the brackets is repeated exactly `k` times. `k` is a positive integer and brackets may be nested. The input contains only lowercase letters, digits, and brackets and is always well-formed. Return the decoded string.",
+    "reference": "def decode_string(s):\n    num_stack = []\n    str_stack = []\n    cur = \"\"\n    num = 0\n    for ch in s:\n        if ch.isdigit():\n            num = num * 10 + int(ch)\n        elif ch == '[':\n            num_stack.append(num)\n            str_stack.append(cur)\n            num = 0\n            cur = \"\"\n        elif ch == ']':\n            k = num_stack.pop()\n            prev = str_stack.pop()\n            cur = prev + cur * k\n        else:\n            cur += ch\n    return cur",
+    "inputs": [
+      [
+        "3[a]2[bc]"
+      ],
+      [
+        "3[a2[c]]"
+      ],
+      [
+        "2[abc]3[cd]ef"
+      ],
+      [
+        "abc"
+      ],
+      [
+        "10[a]"
+      ]
+    ]
+  },
+  {
+    "id": "basic-calculator-parens",
+    "difficulty": "hard",
+    "entry": "basic_calculator",
+    "prompt": "Write a Python function `basic_calculator(s)` where `s` is a string representing a valid arithmetic expression containing non-negative integers, the binary operators `+` and `-`, parentheses `(` and `)`, and spaces. There is no `*` or `/`. A leading unary minus (e.g. `-(3+2)`) may appear. Evaluate the expression and return the integer result.",
+    "reference": "def basic_calculator(s):\n    result = 0\n    sign = 1\n    num = 0\n    stack = []\n    for ch in s:\n        if ch.isdigit():\n            num = num * 10 + int(ch)\n        elif ch == '+':\n            result += sign * num\n            num = 0\n            sign = 1\n        elif ch == '-':\n            result += sign * num\n            num = 0\n            sign = -1\n        elif ch == '(':\n            stack.append(result)\n            stack.append(sign)\n            result = 0\n            sign = 1\n        elif ch == ')':\n            result += sign * num\n            num = 0\n            result *= stack.pop()\n            result += stack.pop()\n    result += sign * num\n    return result",
+    "inputs": [
+      [
+        "1 + 1"
+      ],
+      [
+        " 2-1 + 2 "
+      ],
+      [
+        "(1+(4+5+2)-3)+(6+8)"
+      ],
+      [
+        "-(3+2)"
+      ],
+      [
+        "100"
+      ]
+    ]
+  },
+  {
+    "id": "longest-consecutive-sequence",
+    "difficulty": "hard",
+    "entry": "longest_consecutive",
+    "prompt": "Write a Python function `longest_consecutive(nums)` where `nums` is a list of integers (possibly with duplicates, possibly empty). Return the length of the longest run of consecutive integers (each differing by 1) that can be formed from values present in `nums`. The values need not be adjacent in the array. Return 0 for an empty list. The algorithm should run in O(n) time.",
+    "reference": "def longest_consecutive(nums):\n    s = set(nums)\n    best = 0\n    for x in s:\n        if x - 1 not in s:\n            length = 1\n            cur = x\n            while cur + 1 in s:\n                cur += 1\n                length += 1\n            best = max(best, length)\n    return best",
+    "inputs": [
+      [
+        [
+          100,
+          4,
+          200,
+          1,
+          3,
+          2
+        ]
+      ],
+      [
+        [
+          0,
+          3,
+          7,
+          2,
+          5,
+          8,
+          4,
+          6,
+          0,
+          1
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          1,
+          2,
+          0,
+          1
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "course-schedule-ii-order",
+    "difficulty": "hard",
+    "entry": "find_order",
+    "prompt": "Write a Python function `find_order(num_courses, prerequisites)` where `num_courses` is an integer (courses are labeled 0..num_courses-1) and `prerequisites` is a list of pairs `[a, b]` meaning you must take course `b` before course `a`. Return a valid order in which to take all courses as a list of integers. To make the answer deterministic, always pick the smallest-numbered course among those currently available (all prerequisites satisfied). If no valid ordering exists (a cycle), return an empty list `[]`.",
+    "reference": "def find_order(num_courses, prerequisites):\n    import heapq\n    adj = [[] for _ in range(num_courses)]\n    indeg = [0] * num_courses\n    for a, b in prerequisites:\n        adj[b].append(a)\n        indeg[a] += 1\n    heap = [i for i in range(num_courses) if indeg[i] == 0]\n    heapq.heapify(heap)\n    order = []\n    while heap:\n        node = heapq.heappop(heap)\n        order.append(node)\n        for nxt in adj[node]:\n            indeg[nxt] -= 1\n            if indeg[nxt] == 0:\n                heapq.heappush(heap, nxt)\n    if len(order) != num_courses:\n        return []\n    return order",
+    "inputs": [
+      [
+        2,
+        [
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      [
+        4,
+        [
+          [
+            1,
+            0
+          ],
+          [
+            2,
+            0
+          ],
+          [
+            3,
+            1
+          ],
+          [
+            3,
+            2
+          ]
+        ]
+      ],
+      [
+        2,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            0
+          ]
+        ]
+      ],
+      [
+        1,
+        []
+      ],
+      [
+        3,
+        [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "median-from-data-stream-ops",
+    "difficulty": "hard",
+    "entry": "run_ops",
+    "prompt": "Write a Python function `run_ops(ops, args)` that simulates a streaming-median data structure. `ops` is a list of operation names and `args` is a list of the same length giving each operation's argument. Operations: `\"addNum\"` with an integer argument adds that number to the data structure and contributes `None` to the output; `\"findMedian\"` with argument `None` appends the current median of all numbers added so far. The median of an even count is the average of the two middle values. Return a list, one entry per operation: `None` for each `addNum`, and a float median for each `findMedian` (always return the median as a float, e.g. `5.0`). `findMedian` is never called before any `addNum`.",
+    "reference": "def run_ops(ops, args):\n    import heapq\n    small = []\n    large = []\n    out = []\n    for op, arg in zip(ops, args):\n        if op == \"addNum\":\n            x = arg\n            heapq.heappush(small, -x)\n            heapq.heappush(large, -heapq.heappop(small))\n            if len(large) > len(small):\n                heapq.heappush(small, -heapq.heappop(large))\n            out.append(None)\n        elif op == \"findMedian\":\n            if len(small) > len(large):\n                out.append(float(-small[0]))\n            else:\n                out.append((-small[0] + large[0]) / 2.0)\n    return out",
+    "inputs": [
+      [
+        [
+          "addNum",
+          "addNum",
+          "findMedian",
+          "addNum",
+          "findMedian"
+        ],
+        [
+          1,
+          2,
+          null,
+          3,
+          null
+        ]
+      ],
+      [
+        [
+          "addNum",
+          "findMedian"
+        ],
+        [
+          5,
+          null
+        ]
+      ],
+      [
+        [
+          "addNum",
+          "addNum",
+          "addNum",
+          "addNum",
+          "findMedian"
+        ],
+        [
+          4,
+          3,
+          2,
+          1,
+          null
+        ]
+      ],
+      [
+        [
+          "addNum",
+          "findMedian",
+          "addNum",
+          "findMedian"
+        ],
+        [
+          10,
+          null,
+          20,
+          null
+        ]
+      ],
+      [
+        [
+          "addNum",
+          "addNum",
+          "findMedian"
+        ],
+        [
+          -1,
+          -2,
+          null
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "dungeon-game-min-health",
+    "difficulty": "hard",
+    "entry": "calculate_minimum_hp",
+    "prompt": "Write a Python function `calculate_minimum_hp(dungeon)` where `dungeon` is an m x n grid of integers. A knight starts at the top-left cell and must reach the bottom-right cell, moving only right or down. Each cell adds its value to the knight's health (negative values are damage, positive values heal). The knight's health must stay strictly positive (at least 1) at every cell, including the start and end. Return the minimum positive integer initial health needed to guarantee the knight reaches the bottom-right cell alive.",
+    "reference": "def calculate_minimum_hp(dungeon):\n    m = len(dungeon)\n    n = len(dungeon[0])\n    INF = float('inf')\n    dp = [[INF] * (n + 1) for _ in range(m + 1)]\n    dp[m][n - 1] = 1\n    dp[m - 1][n] = 1\n    for i in range(m - 1, -1, -1):\n        for j in range(n - 1, -1, -1):\n            need = min(dp[i + 1][j], dp[i][j + 1]) - dungeon[i][j]\n            dp[i][j] = max(1, need)\n    return dp[0][0]",
+    "inputs": [
+      [
+        [
+          [
+            -2,
+            -3,
+            3
+          ],
+          [
+            -5,
+            -10,
+            1
+          ],
+          [
+            10,
+            30,
+            -5
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            0
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            100
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            -200
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            -3,
+            3
+          ],
+          [
+            0,
+            -2,
+            0
+          ],
+          [
+            -3,
+            -3,
+            -3
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "russian-doll-envelopes-count",
+    "difficulty": "hard",
+    "entry": "max_envelopes",
+    "prompt": "Write a Python function `max_envelopes(envelopes)` where `envelopes` is a list of `[width, height]` integer pairs. One envelope can fit inside another only if both its width and its height are strictly greater than the other envelope's width and height (no rotation). Return the maximum number of envelopes you can nest (Russian-doll) inside one another.",
+    "reference": "def max_envelopes(envelopes):\n    import bisect\n    envelopes.sort(key=lambda e: (e[0], -e[1]))\n    tails = []\n    for _, h in envelopes:\n        idx = bisect.bisect_left(tails, h)\n        if idx == len(tails):\n            tails.append(h)\n        else:\n            tails[idx] = h\n    return len(tails)",
+    "inputs": [
+      [
+        [
+          [
+            5,
+            4
+          ],
+          [
+            6,
+            4
+          ],
+          [
+            6,
+            7
+          ],
+          [
+            2,
+            3
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            4,
+            5
+          ],
+          [
+            4,
+            6
+          ],
+          [
+            6,
+            7
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            30,
+            50
+          ],
+          [
+            12,
+            2
+          ],
+          [
+            3,
+            4
+          ],
+          [
+            12,
+            15
+          ]
+        ]
+      ]
+    ]
+  },
+  {
+    "id": "palindrome-partitioning-ii-mincuts",
+    "difficulty": "hard",
+    "entry": "min_cut",
+    "prompt": "Write a Python function `min_cut(s)` where `s` is a string of lowercase letters. Return the minimum number of cuts needed to partition `s` so that every resulting substring is a palindrome. If `s` is already a palindrome (including the empty string or a single character), return 0.",
+    "reference": "def min_cut(s):\n    n = len(s)\n    if n == 0:\n        return 0\n    pal = [[False] * n for _ in range(n)]\n    cuts = [0] * n\n    for i in range(n):\n        min_c = i\n        for j in range(i + 1):\n            if s[j] == s[i] and (i - j < 2 or pal[j + 1][i - 1]):\n                pal[j][i] = True\n                min_c = 0 if j == 0 else min(min_c, cuts[j - 1] + 1)\n        cuts[i] = min_c\n    return cuts[n - 1]",
+    "inputs": [
+      [
+        "aab"
+      ],
+      [
+        "a"
+      ],
+      [
+        "ab"
+      ],
+      [
+        "aabaa"
+      ],
+      [
+        "abccba"
+      ]
+    ]
+  },
+  {
+    "id": "distinct-subsequences-count",
+    "difficulty": "hard",
+    "entry": "num_distinct",
+    "prompt": "Write a Python function `num_distinct(s, t)` where `s` and `t` are strings. Return the number of distinct subsequences of `s` that equal `t`. A subsequence is formed by deleting zero or more characters without changing the order of the remaining characters. The empty string is a subsequence of any string exactly once.",
+    "reference": "def num_distinct(s, t):\n    m, n = len(s), len(t)\n    dp = [0] * (n + 1)\n    dp[0] = 1\n    for i in range(1, m + 1):\n        for j in range(n, 0, -1):\n            if s[i - 1] == t[j - 1]:\n                dp[j] += dp[j - 1]\n    return dp[n]",
+    "inputs": [
+      [
+        "rabbbit",
+        "rabbit"
+      ],
+      [
+        "babgbag",
+        "bag"
+      ],
+      [
+        "abc",
+        ""
+      ],
+      [
+        "",
+        "a"
+      ],
+      [
+        "aaa",
+        "aa"
+      ]
+    ]
+  },
+  {
+    "id": "interleaving-string-bool",
+    "difficulty": "hard",
+    "entry": "is_interleave",
+    "prompt": "Write a Python function `is_interleave(s1, s2, s3)` taking three strings. Return `True` if `s3` is formed by interleaving `s1` and `s2`, otherwise `False`. An interleaving keeps the relative order of characters within `s1` and within `s2`. Concretely, `s3` must be a merge of `s1` and `s2` such that the subsequence of `s3` taken from `s1` equals `s1` and from `s2` equals `s2`, using all characters of both. Return a boolean.",
+    "reference": "def is_interleave(s1, s2, s3):\n    m, n = len(s1), len(s2)\n    if m + n != len(s3):\n        return False\n    dp = [[False] * (n + 1) for _ in range(m + 1)]\n    dp[0][0] = True\n    for i in range(m + 1):\n        for j in range(n + 1):\n            if i > 0 and s1[i - 1] == s3[i + j - 1] and dp[i - 1][j]:\n                dp[i][j] = True\n            if j > 0 and s2[j - 1] == s3[i + j - 1] and dp[i][j - 1]:\n                dp[i][j] = True\n    return dp[m][n]",
+    "inputs": [
+      [
+        "aabcc",
+        "dbbca",
+        "aadbbcbcac"
+      ],
+      [
+        "aabcc",
+        "dbbca",
+        "aadbbbaccc"
+      ],
+      [
+        "",
+        "",
+        ""
+      ],
+      [
+        "a",
+        "",
+        "a"
+      ],
+      [
+        "abc",
+        "def",
+        "adbcef"
+      ]
+    ]
+  },
+  {
+    "id": "scramble-string-bool",
+    "difficulty": "hard",
+    "entry": "is_scramble",
+    "prompt": "Write a Python function `is_scramble(s1, s2)` taking two strings. A scramble of a string is defined recursively: a string of length 1 is a scramble of itself; for a longer string, split it at some index into two non-empty parts, optionally swap the two parts, then recursively scramble each part. Return `True` if `s2` is a scramble of `s1`, otherwise `False`. If the lengths differ, return `False`.",
+    "reference": "def is_scramble(s1, s2):\n    from functools import lru_cache\n    if len(s1) != len(s2):\n        return False\n    @lru_cache(maxsize=None)\n    def solve(a, b):\n        if a == b:\n            return True\n        if sorted(a) != sorted(b):\n            return False\n        n = len(a)\n        for i in range(1, n):\n            if solve(a[:i], b[:i]) and solve(a[i:], b[i:]):\n                return True\n            if solve(a[:i], b[n - i:]) and solve(a[i:], b[:n - i]):\n                return True\n        return False\n    return solve(s1, s2)",
+    "inputs": [
+      [
+        "great",
+        "rgeat"
+      ],
+      [
+        "abcde",
+        "caebd"
+      ],
+      [
+        "a",
+        "a"
+      ],
+      [
+        "abc",
+        "bca"
+      ],
+      [
+        "abb",
+        "bba"
+      ]
+    ]
+  },
+  {
+    "id": "longest-increasing-path-matrix",
+    "difficulty": "hard",
+    "entry": "longest_increasing_path",
+    "prompt": "Write a Python function `longest_increasing_path(matrix)` where `matrix` is a list of rows of integers. Return the length of the longest strictly increasing path. From a cell you may move up, down, left, or right (no diagonals) to an adjacent cell whose value is strictly greater. The path length counts the number of cells visited. Return 0 if the matrix is empty or has no columns.",
+    "reference": "def longest_increasing_path(matrix):\n    if not matrix or not matrix[0]:\n        return 0\n    m, n = len(matrix), len(matrix[0])\n    memo = [[0] * n for _ in range(m)]\n    def dfs(i, j):\n        if memo[i][j]:\n            return memo[i][j]\n        best = 1\n        for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):\n            ni, nj = i + di, j + dj\n            if 0 <= ni < m and 0 <= nj < n and matrix[ni][nj] > matrix[i][j]:\n                best = max(best, 1 + dfs(ni, nj))\n        memo[i][j] = best\n        return best\n    return max(dfs(i, j) for i in range(m) for j in range(n))",
+    "inputs": [
+      [
+        [
+          [
+            9,
+            9,
+            4
+          ],
+          [
+            6,
+            6,
+            8
+          ],
+          [
+            2,
+            1,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            3,
+            4,
+            5
+          ],
+          [
+            3,
+            2,
+            6
+          ],
+          [
+            2,
+            2,
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1
+          ]
+        ]
+      ],
+      [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            4,
+            3
+          ]
+        ]
+      ],
+      [
+        []
+      ]
+    ]
+  },
+  {
+    "id": "split-array-largest-sum",
+    "difficulty": "hard",
+    "entry": "split_array",
+    "prompt": "Write a Python function `split_array(nums, k)` where `nums` is a list of non-negative integers and `k` is a positive integer. Split `nums` into exactly `k` non-empty contiguous subarrays. Return the minimized value of the largest subarray sum across the best such split.",
+    "reference": "def split_array(nums, k):\n    def can(limit):\n        count = 1\n        cur = 0\n        for x in nums:\n            if cur + x > limit:\n                count += 1\n                cur = x\n                if count > k:\n                    return False\n            else:\n                cur += x\n        return True\n    lo, hi = max(nums), sum(nums)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if can(mid):\n            hi = mid\n        else:\n            lo = mid + 1\n    return lo",
+    "inputs": [
+      [
+        [
+          7,
+          2,
+          5,
+          10,
+          8
+        ],
+        2
+      ],
+      [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        2
+      ],
+      [
+        [
+          1,
+          4,
+          4
+        ],
+        3
+      ],
+      [
+        [
+          5
+        ],
+        1
+      ],
+      [
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        5
+      ]
+    ]
+  },
+  {
+    "id": "count-smaller-after-self",
+    "difficulty": "hard",
+    "entry": "count_smaller",
+    "prompt": "Write a Python function `count_smaller(nums)` where `nums` is a list of integers. Return a list `counts` of the same length where `counts[i]` is the number of elements to the right of `nums[i]` (indices greater than `i`) that are strictly smaller than `nums[i]`. Return an empty list for an empty input.",
+    "reference": "def count_smaller(nums):\n    n = len(nums)\n    result = [0] * n\n    indices = list(range(n))\n    def merge_sort(lo, hi):\n        if hi - lo <= 1:\n            return\n        mid = (lo + hi) // 2\n        merge_sort(lo, mid)\n        merge_sort(mid, hi)\n        merged = []\n        i, j = lo, mid\n        right_count = 0\n        while i < mid and j < hi:\n            if nums[indices[j]] < nums[indices[i]]:\n                right_count += 1\n                merged.append(indices[j])\n                j += 1\n            else:\n                result[indices[i]] += right_count\n                merged.append(indices[i])\n                i += 1\n        while i < mid:\n            result[indices[i]] += right_count\n            merged.append(indices[i])\n            i += 1\n        while j < hi:\n            merged.append(indices[j])\n            j += 1\n        indices[lo:hi] = merged\n    merge_sort(0, n)\n    return result",
+    "inputs": [
+      [
+        [
+          5,
+          2,
+          6,
+          1
+        ]
+      ],
+      [
+        [
+          -1,
+          -1
+        ]
+      ],
+      [
+        []
+      ],
+      [
+        [
+          1
+        ]
+      ],
+      [
+        [
+          2,
+          0,
+          1
+        ]
+      ]
+    ]
+  }
+]

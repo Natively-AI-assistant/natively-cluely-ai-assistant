@@ -1,0 +1,14 @@
+Case study Halo Labs (beta cohort)
+
+Halo Labs is a six person consultancy that runs roughly twelve client discovery calls and four hiring interviews per week. They were the third beta customer for Natively and have used it as their daily driver for nine weeks at time of writing.
+
+Quoted outcome
+"Beta user Halo Labs reported a 40 percent faster interview prep cycle after switching to Natively, primarily because the per mode reference files meant the founder did not have to manually re-paste the JD into a chat window before every screen."
+
+Quantified outcome (self reported, not audited)
+- Interview prep time per role dropped from 90 minutes to 55 minutes on average
+- Sales discovery call follow up notes shipped same-day rate moved from 30 percent to 88 percent
+- Two angry customer churn events de-escalated using the Customer Support custom mode draft of empathetic templates
+
+Caveats
+This is a single customer story and is not a controlled measurement. Do not represent the 40 percent number as a general guarantee. Other customer reports in the beta cohort range from 15 percent to 50 percent prep time savings.

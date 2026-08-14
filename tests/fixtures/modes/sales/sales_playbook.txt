@@ -1,0 +1,13 @@
+Sales playbook — buying signals
+
+Buying signal: ask about annual seats. When a prospect references team rollout, headcount, or annual budget, treat it as a buying signal and propose the next concrete step (procurement intro, annual proposal, security questionnaire).
+
+Discovery questions to repeat:
+- Where do most of your live calls happen?
+- Which calls are you most worried about — sales, hiring, customer success?
+- Do you currently use a notetaker or copilot?
+
+Objection handling:
+- Price → anchor to ROI (one closed deal pays for the year).
+- Security → defer to security FAQ.
+- Vendor consolidation → highlight per-mode reference files as the differentiator.

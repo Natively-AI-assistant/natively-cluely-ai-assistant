@@ -3,6 +3,7 @@
 name = "natively-audio"
 version = "0.1.0"
 edition = "2021"
+license-file = "../LICENSE"
 
 [lib]
 crate-type = ["cdylib"]
@@ -21,11 +22,53 @@ machine-uid = "0.5"
 reqwest = { version = "0.12", features = ["blocking"] }
 serde_json = "1.0"
 webrtc-vad = "0.4"
+# Zero-copy reinterpret of &[i16] as &[u8] for napi Buffer hand-off.
+# Replaces a per-chunk per-sample to_le_bytes loop in the DSP hot path.
+bytemuck = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cidre = { version = "0.11.10", features = ["ca", "cm", "av", "cat", "dispatch", "ns", "sc", "cf", "blocks", "objc"] }
+# Used by stealth_window to access NSWindow APIs Electron doesn't expose
+# (becomesKeyOnlyIfNeeded, hidesOnDeactivate, collectionBehavior). objc2 is
+# the actively-maintained Rust↔Objective-C bridge; objc2-app-kit gives strongly
+# typed AppKit bindings so we can avoid raw msg_send! ergonomics.
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSWindow", "NSResponder"] }
+objc2-foundation = "0.2"
+# CGEventTap: session-wide keyboard interception for true Cluely-grade
+# stealth input. The tap captures keystrokes BEFORE they reach the
+# foreground app, so the user can type into Natively while Zoom/browser
+# stays as the OS-level frontmost+key application throughout. core-graphics
+# wraps CGEventTapCreate/CGEventGetFlags/CGEventKeyboardGetUnicodeString;
+# core-foundation gives us the CFRunLoop the tap must attach to.
+core-graphics = "0.24"
+core-foundation = "0.10"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = "0.13.0"
-windows = { version = "0.52.0", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Threading"] }
+# Win32 features:
+#   Win32_Media_Audio / Win32_System_Com  — WASAPI system-audio capture (existing).
+#   Win32_System_Threading                — GetCurrentThreadId (existing) + PostThreadMessageW.
+#   Win32_UI_WindowsAndMessaging          — SetWindowsHookExW / CallNextHookEx /
+#                                           UnhookWindowsHookEx / GetMessageW / the WH_*
+#                                           + WM_* constants + KBDLLHOOKSTRUCT. This is the
+#                                           Windows analogue of the macOS CGEventTap used by
+#                                           keyboard_tap.rs for stealth typing (type into the
+#                                           overlay without the window taking OS focus).
+#   Win32_UI_Input_KeyboardAndMouse       — ToUnicodeEx / GetKeyState (VK→char translation).
+#   Win32_System_LibraryLoader            — GetModuleHandleW (hmod for the LL hook).
+windows = { version = "0.52.0", features = [
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_TextServices",
+    #   Win32_UI_Accessibility            — SetWinEventHook/UnhookWinEvent, used to notice
+    #                                       the foreground app changing (Alt+Tab) so stealth
+    #                                       typing stops, matching macOS panel key-resign.
+    "Win32_UI_Accessibility",
+    "Win32_System_LibraryLoader",
+    "Win32_Foundation",
+] }
 tracing = "0.1.44"

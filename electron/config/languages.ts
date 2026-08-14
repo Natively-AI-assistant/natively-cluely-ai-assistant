@@ -5,6 +5,7 @@ export type LanguageOption = {
     bcp47: string; // For Google, Azure (e.g. 'ru-RU')
     iso639: string; // For OpenAI, Groq (e.g. 'ru')
     group: string; // For UI grouping
+    alternates?: string[];
 };
 
 export type EnglishVariant = LanguageOption & {
@@ -60,8 +61,45 @@ export const ENGLISH_VARIANTS: Record<string, EnglishVariant> = {
     },
 };
 
+export const AUTO_DETECT_ALTERNATES = [
+    'en-US',
+    'en-GB',
+    'en-IN',
+    'en-AU',
+    'en-CA',
+    'id-ID',
+    'ru-RU',
+    'es-ES',
+    'fr-FR',
+    'de-DE',
+    'it-IT',
+    'pt-PT',
+    'ja-JP',
+    'ko-KR',
+    'zh-CN',
+    'tr-TR',
+    'uk-UA',
+    'ro-RO',
+    'pl-PL',
+    'nl-NL',
+    'ar-SA',
+    'hi-IN',
+    'sv-SE',
+    'nb-NO',
+    'da-DK',
+    'cs-CZ',
+    'hu-HU',
+    'vi-VN',
+    'th-TH',
+    'el-GR',
+    'bg-BG',
+    'he-IL',
+    'ms-MY',
+    'fi-FI',
+];
+
 export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
-    'auto': { label: 'Auto Detect', code: 'auto', bcp47: 'auto', iso639: 'auto', group: 'Auto' },
+    'auto': { label: 'Auto Detect', code: 'auto', bcp47: 'auto', iso639: 'auto', group: 'Auto', alternates: AUTO_DETECT_ALTERNATES },
     ...ENGLISH_VARIANTS,
     'indonesian': { label: 'Indonesian', code: 'indonesian', bcp47: 'id-ID', iso639: 'id', group: 'Indonesian' },
     'russian': { label: 'Russian', code: 'russian', bcp47: 'ru-RU', iso639: 'ru', group: 'Russian' },
@@ -75,6 +113,23 @@ export const RECOGNITION_LANGUAGES: Record<string, LanguageOption> = {
     'chinese': { label: 'Chinese (Simplified)', code: 'chinese', bcp47: 'zh-CN', iso639: 'zh', group: 'Chinese' },
     'turkish': { label: 'Turkish', code: 'turkish', bcp47: 'tr-TR', iso639: 'tr', group: 'Turkish' },
     'ukrainian': { label: 'Ukrainian', code: 'ukrainian', bcp47: 'uk-UA', iso639: 'uk', group: 'Ukrainian' },
+    'romanian': { label: 'Romanian', code: 'romanian', bcp47: 'ro-RO', iso639: 'ro', group: 'Romanian' },
+    'polish': { label: 'Polish', code: 'polish', bcp47: 'pl-PL', iso639: 'pl', group: 'Polish' },
+    'dutch': { label: 'Dutch', code: 'dutch', bcp47: 'nl-NL', iso639: 'nl', group: 'Dutch' },
+    'arabic': { label: 'Arabic', code: 'arabic', bcp47: 'ar-SA', iso639: 'ar', group: 'Arabic' },
+    'hindi': { label: 'Hindi', code: 'hindi', bcp47: 'hi-IN', iso639: 'hi', group: 'Hindi' },
+    'swedish': { label: 'Swedish', code: 'swedish', bcp47: 'sv-SE', iso639: 'sv', group: 'Swedish' },
+    'norwegian': { label: 'Norwegian', code: 'norwegian', bcp47: 'nb-NO', iso639: 'no', group: 'Norwegian' },
+    'danish': { label: 'Danish', code: 'danish', bcp47: 'da-DK', iso639: 'da', group: 'Danish' },
+    'czech': { label: 'Czech', code: 'czech', bcp47: 'cs-CZ', iso639: 'cs', group: 'Czech' },
+    'hungarian': { label: 'Hungarian', code: 'hungarian', bcp47: 'hu-HU', iso639: 'hu', group: 'Hungarian' },
+    'vietnamese': { label: 'Vietnamese', code: 'vietnamese', bcp47: 'vi-VN', iso639: 'vi', group: 'Vietnamese' },
+    'thai': { label: 'Thai', code: 'thai', bcp47: 'th-TH', iso639: 'th', group: 'Thai' },
+    'greek': { label: 'Greek', code: 'greek', bcp47: 'el-GR', iso639: 'el', group: 'Greek' },
+    'bulgarian': { label: 'Bulgarian', code: 'bulgarian', bcp47: 'bg-BG', iso639: 'bg', group: 'Bulgarian' },
+    'hebrew': { label: 'Hebrew', code: 'hebrew', bcp47: 'he-IL', iso639: 'he', group: 'Hebrew' },
+    'malay': { label: 'Malay', code: 'malay', bcp47: 'ms-MY', iso639: 'ms', group: 'Malay' },
+    'finnish': { label: 'Finnish', code: 'finnish', bcp47: 'fi-FI', iso639: 'fi', group: 'Finnish' },
 };
 
 export const AI_RESPONSE_LANGUAGES = [
@@ -92,4 +147,21 @@ export const AI_RESPONSE_LANGUAGES = [
     { label: 'Chinese', code: 'Chinese' },
     { label: 'Turkish', code: 'Turkish' },
     { label: 'Ukrainian', code: 'Ukrainian' },
+    { label: 'Romanian', code: 'Romanian' },
+    { label: 'Polish', code: 'Polish' },
+    { label: 'Dutch', code: 'Dutch' },
+    { label: 'Arabic', code: 'Arabic' },
+    { label: 'Hindi', code: 'Hindi' },
+    { label: 'Swedish', code: 'Swedish' },
+    { label: 'Norwegian', code: 'Norwegian' },
+    { label: 'Danish', code: 'Danish' },
+    { label: 'Czech', code: 'Czech' },
+    { label: 'Hungarian', code: 'Hungarian' },
+    { label: 'Vietnamese', code: 'Vietnamese' },
+    { label: 'Thai', code: 'Thai' },
+    { label: 'Greek', code: 'Greek' },
+    { label: 'Bulgarian', code: 'Bulgarian' },
+    { label: 'Hebrew', code: 'Hebrew' },
+    { label: 'Malay', code: 'Malay' },
+    { label: 'Finnish', code: 'Finnish' },
 ];

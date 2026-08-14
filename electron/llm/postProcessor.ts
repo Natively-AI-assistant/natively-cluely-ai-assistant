@@ -32,6 +32,123 @@ const PREFIXES = [
 ];
 
 /**
+ * Reduce dash usage that betrays AI authorship. The prompt rules ban em/en
+ * dashes in spoken passages but Llama / Gemini / GPT all generate them
+ * anyway because their training distribution is saturated with them. This is
+ * the deterministic backstop that strips them before the user ever sees them.
+ *
+ * Rules (in order):
+ * - Em dash (—) with any surrounding whitespace → ", "
+ * - En dash (–) with any surrounding whitespace → ", "
+ * - ASCII hyphen used as a sentence connector ("text - more text") → ", "
+ *   (Negative lookahead/lookbehind preserves compound words like "well-known",
+ *   numeric ranges like "10-15", and line-start bullets like "- item".)
+ * - Cleanup: double commas, comma-then-period, lowercase-after-comma fixes.
+ *
+ * Preserves:
+ * - Anything inside fenced code blocks (```...```)
+ * - Anything inside inline code (`...`)
+ * - Bullet markers at line start
+ * - Compound words ("real-time"), numeric ranges ("3-5"), command flags ("--flag")
+ *
+ * Safe to call on already-clean text (idempotent).
+ */
+export function reduceDashes(text: string): string {
+    if (!text || typeof text !== "string") return "";
+
+    // Stash code so we don't touch dashes inside it
+    const codeBlocks: string[] = [];
+    let result = text.replace(/```[\s\S]*?```/g, (m) => {
+        codeBlocks.push(m);
+        return `CODE${codeBlocks.length - 1}`;
+    });
+    const inlineCodes: string[] = [];
+    result = result.replace(/`[^`\n]+`/g, (m) => {
+        inlineCodes.push(m);
+        return `INL${inlineCodes.length - 1}`;
+    });
+
+    // Em + en dash → comma. Eat any surrounding whitespace.
+    result = result.replace(/\s*[—–]\s*/g, ", ");
+
+    // ASCII hyphen as a sentence connector: space-hyphen-space mid-line,
+    // not at line start (which is bullet), not as a command-line flag prefix.
+    result = result.replace(/(?<=[A-Za-z]) - (?=[A-Za-z])/g, ", ");
+
+    // Tidy up artifacts
+    result = result.replace(/,\s*,+/g, ",");      // double commas
+    result = result.replace(/,\s*([.!?])/g, "$1"); // comma-then-terminator
+    result = result.replace(/^,\s*/gm, "");        // line-start orphan comma
+
+    // Restore code
+    inlineCodes.forEach((c, i) => {
+        result = result.replace(`INL${i}`, () => c);
+    });
+    codeBlocks.forEach((c, i) => {
+        result = result.replace(`CODE${i}`, () => c);
+    });
+
+    return result;
+}
+
+/**
+ * Stateful, streaming-safe dash reducer. The old stateless chunk reducer
+ * corrupted CODE and MATH because it ran `(?<=\S) - (?=\S)` -> ", " on every
+ * chunk with no fence awareness — turning streamed `nums[nums[i] - 1]` into
+ * `nums[nums[i], 1]` and `$x - 1$` into `$x, 1$`. This tracks fenced-code state
+ * ACROSS chunks (a ``` toggles it), skips everything inside a code block, and
+ * within prose only rewrites a hyphen that is unambiguously a PROSE connector
+ * (letter - letter — never a digit/bracket/operator neighbour, never inside
+ * inline code or inline math). Correctness of code/math beats the cosmetic
+ * anti-dash rule. Use ONE instance per stream.
+ */
+export class StreamingDashReducer {
+    private inFence = false;
+
+    reduce(chunk: string): string {
+        if (!chunk) return chunk;
+        // Split on ``` fences (kept as tokens) so we can flip fence state and
+        // skip dash reduction for anything inside a fenced code block.
+        const parts = chunk.split(/(```)/);
+        let out = "";
+        for (const part of parts) {
+            if (part === "```") { this.inFence = !this.inFence; out += part; continue; }
+            out += this.inFence ? part : reduceProseDashes(part);
+        }
+        return out;
+    }
+}
+
+// Reduce dashes in a NON-fenced prose segment, protecting inline code (`...`)
+// and inline math ($...$), and only converting a letter-space-hyphen-space-
+// letter prose connector (never a code/math/numeric minus).
+function reduceProseDashes(segment: string): string {
+    const inline: string[] = [];
+    let s = segment.replace(/`[^`\n]+`/g, (m) => { inline.push(m); return ` INL${inline.length - 1} `; });
+    const math: string[] = [];
+    s = s.replace(/\$[^$\n]+\$/g, (m) => { math.push(m); return ` MATH${math.length - 1} `; });
+    s = s
+        .replace(/\s*[—–]\s*/g, ", ")
+        .replace(/(?<=[A-Za-z]) - (?=[A-Za-z])/g, ", ");
+    math.forEach((m, i) => { s = s.replace(` MATH${i} `, () => m); });
+    inline.forEach((c, i) => { s = s.replace(` INL${i} `, () => c); });
+    return s;
+}
+
+/**
+ * Stateless streaming-safe variant (backwards-compatible signature). Cannot see
+ * fenced-code state across chunk boundaries, so it conservatively protects
+ * inline code/math within the chunk and only converts an unambiguous PROSE
+ * connector (letter - letter). A code/math/numeric minus ("nums[i] - 1",
+ * "x - 1") is NEVER rewritten. Prefer `StreamingDashReducer` for full fence
+ * safety across multi-chunk code blocks.
+ */
+export function reduceDashesInChunk(chunk: string): string {
+    if (!chunk) return chunk;
+    return reduceProseDashes(chunk);
+}
+
+/**
  * Clamp response to strict interview copilot constraints
  * @param text - Raw LLM response
  * @param maxSentences - Maximum sentences allowed (default 3)
@@ -41,13 +158,17 @@ const PREFIXES = [
 export function clampResponse(
     text: string,
     maxSentences: number = 3,
-    maxWords: number = 60
+    maxWords: number = 45
 ): string {
     if (!text || typeof text !== "string") {
         return "";
     }
 
     let result = text.trim();
+
+    // Step 0: Reduce dashes (em/en/connector hyphen → comma). Backstop for
+    // the prompt-level anti-tell rule that providers don't fully respect.
+    result = reduceDashes(result);
 
     // Step 1: Strip markdown
     result = stripMarkdown(result);
@@ -89,7 +210,7 @@ function stripMarkdown(text: string): string {
     // Extract code blocks to protect them
     result = result.replace(/```[\s\S]*?```/g, (match) => {
         codeBlocks.push(match);
-        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        return `CODEBLOCK${codeBlocks.length - 1}`;
     });
 
     // Remove headers (# ## ### etc.)
@@ -106,6 +227,10 @@ function stripMarkdown(text: string): string {
     // Remove inline code (`text`) - keep content
     result = result.replace(/`([^`]+)`/g, "$1");
 
+    // Remove EMPTY bullet lines first ("*", "* ", "-", "•" with no content) —
+    // the old regex required trailing whitespace+content so a lone "*" survived
+    // to the UI as an orphan bullet (manual regression 2026-06-12).
+    result = result.replace(/^[\s]*[-*•]+[\s]*$/gm, "");
     // Remove bullet points (-, *, •)
     result = result.replace(/^[\s]*[-*•]\s+/gm, "");
 
@@ -131,7 +256,7 @@ function stripMarkdown(text: string): string {
     // Restore code blocks
     // Add newlines around them for better formatting
     codeBlocks.forEach((block, index) => {
-        result = result.replace(`__CODE_BLOCK_${index}__`, `\n${block}\n`);
+        result = result.replace(`CODEBLOCK${index}`, () => `\n${block}\n`);
     });
 
     return result.trim();

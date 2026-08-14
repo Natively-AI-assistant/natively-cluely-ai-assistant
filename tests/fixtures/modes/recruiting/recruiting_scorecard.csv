@@ -1,0 +1,6 @@
+competency,weight,score_range,note
+systems_design,0.30,1-4,Score thresholds: 4=strong yes 3=lean yes 2=lean no 1=no
+coding,0.25,1-4,
+ownership_incident_response,0.20,1-4,
+collaboration,0.15,1-4,
+culture_addition,0.10,1-4,

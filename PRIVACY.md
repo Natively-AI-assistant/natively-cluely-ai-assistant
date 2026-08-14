@@ -1,68 +1,240 @@
 # Privacy Policy
 
-## Overview
+_Last updated: April 25th 2026_
 
-This privacy policy describes how this open-source application ("Natively") handles your data. Our philosophy is privacy-first: we believe your meeting data belongs to you. We do not operate a central server to store your personal meeting recordings or transcripts.
+This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
-## Data Collection
+If anything's unclear, email **natively.contact@gmail.com**. We aim to reply within 24–72 hours on weekdays.
 
-**We do not collect, store, or transmit your personal data to our own servers.**
+---
 
-The application functions as a local tool on your device.
-*   **Audio & Video:** The application captures audio and screen content only when you explicitly start a recording or session.
-*   **Transcripts & Notes:** All generated transcripts, summaries, and meeting notes are stored locally on your device.
-*   **Telemetry:** This application does not include third-party analytics or tracking SDKs (such as Google Analytics or Mixpanel).
+## 1. Who we are
 
-## Local Processing
+Natively is built and operated by a single developer based in **Kochi, Kerala, India**. For the purposes of applicable data-protection law (including India's Digital Personal Data Protection Act, 2023, and the EU General Data Protection Regulation where it applies):
 
-The majority of the application's logic runs locally on your machine.
-*   **Database:** Meeting history and notes are stored in a local SQLite database file on your computer.
-*   **Settings:** Configuration preferences are stored locally using `electron-store`.
+- **Data fiduciary / controller:** Evin John, the developer of Natively.
+- **Contact:** natively.contact@gmail.com
+- **Grievance Officer (India IT Rules 2021):** Evin John — natively.contact@gmail.com — we acknowledge complaints within 72 hours on weekdays and aim to resolve them within 30 days.
 
-## Network Communication
+If you're using Natively on behalf of an organisation (under a bulk or team licence), that organisation is a separate data controller for the data of its own users, and you should also consult its own privacy policy.
 
-The application communicates over the internet only for specific, user-initiated features:
+---
 
-### 1. Artificial Intelligence Services
-To generate summaries and action items, the application sends text (transcripts) to the AI provider you have configured (e.g., OpenAI, Anthropic, Google Gemini, Groq).
-*   **Data Transmitted:** Anonymized text transcripts and prompts.
-*   **Privacy:** This data is subject to the privacy policy of the respective AI provider you have chosen. We encourage using providers that do not train on API data.
-*   **Keys:** Your API keys are stored locally on your device and are never sent to us.
+## 2. The short version
 
-### 2. Software Updates
-The application periodically checks GitHub's servers to see if a new version of the software is available.
-*   **Data Transmitted:** Basic application version information and your operating system type (e.g., macOS, Windows).
+We've designed Natively to keep as much of your data on your device as possible. In practice that means:
 
-## Permissions
+- **Audio you capture, screen content, transcripts, notes, and meeting history are stored locally on your device** in a SQLite database. They are **not** uploaded to a Natively-operated server.
+- When you use AI or speech-to-text features, **the relevant text or audio leaves your device only to be processed by the provider you've chosen** (e.g., OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, Azure, IBM, Soniox, Tavily). The result comes back to your device.
+- For **paid products** (Natively Pro, Natively API), we **do** store a small amount of operational data on our servers — your license key, hardware identifier, plan, billing email, and quota counters. We need this to make billing and licensing actually work. We do not store the content you generate.
+- For the **Free Trial**, we additionally store anti-abuse signals (rate-limited IP, trial tokens, basic usage counters).
+- We **do not sell** your data. We **do not use your content to train AI models**. We don't use third-party analytics or marketing trackers inside the desktop app.
 
-To function correctly, the application requires the following permissions on your device:
-*   **Microphone:** Required to record meeting audio for transcription.
-*   **Screen Recording / Accessibility:** Required to capture screen content or system audio if enabled.
-*   **Notifications:** Used to alert you when a summary is ready.
+The rest of this document explains those flows in detail.
 
-You may revoke these permissions at any time through your operating system settings, though this will limit the application's functionality.
+---
 
-## Third-Party Services
+## 3. What we collect, store, and process
 
-This project allows integration with third-party Large Language Model (LLM) providers. We do not control how these third parties handle your data once it is sent to them explicitly by the application.
-*   OpenAI
-*   Anthropic
-*   Google (Gemini)
-*   Groq
+Different categories of data are handled in different places. This section is the source of truth for what goes where.
 
-**This project does not use third-party tracking or marketing cookies.**
+### 3.1 Stays on your device — never sent to us
 
-## Data Retention
+These never leave your device unless you choose a feature that sends a specific portion to a third-party provider (see §4):
 
-Since data is stored locally:
-*   **You are in control:** You can delete meeting logs, transcripts, and the application database at any time from your local file system.
-*   **No Remote Retention:** We cannot delete your data for you because we do not have access to it.
+- **Audio captures** (microphone and system audio).
+- **Screen captures** (when you take or trigger one).
+- **Transcripts** generated by speech-to-text.
+- **Meeting notes, summaries, exports**, and anything you generate inside the app.
+- **Settings &amp; preferences** (stored via `electron-store` in the standard OS application-support directory).
+- **Your custom context files** (resumes, notes, JDs, knowledge base).
+- **Local SQLite database** containing meeting history.
+- **Your bring-your-own-key (BYOK) provider API keys** when you use the desktop app outside the Natively API. These are stored locally on your device. We do not transmit them to our servers, and we strongly recommend keeping your computer protected by full-disk encryption — `electron-store` itself stores its data as readable JSON, so anyone with file-system access to your device could otherwise read those keys.
 
-## Open Source Transparency
+### 3.2 What we store on our servers — only for paid products and the Free Trial
 
-This project is open-source. The full source code is available for inspection on our GitHub repository. You can verify the claims in this policy by auditing the code directly.
+For Natively Pro, the Natively API, and the Free Trial we maintain a small operational record. Specifically:
 
-## Contact
+| Data | Purpose | Retained for |
+|---|---|---|
+| License key | Activate &amp; validate your Pro license | Duration of the licence + tax-record retention period (typically 7 years under Indian GST &amp; income-tax rules) |
+| Hardware identifier (device fingerprint) | Bind a Pro licence to your device(s); enforce per-licence device limit | Same as license key |
+| Plan / product / order ID | Operate billing, refunds, and support | Same as above |
+| Billing email | Send order confirmations, renewal notices, security &amp; terms updates, and support | Until you ask us to delete the account, plus any period required by tax law |
+| Quota counters (AI / STT / search) | Enforce plan limits and bill correctly | Rolling — counters reset per cycle; aggregate history kept for accounting |
+| Free Trial token, started_at / expires_at | Provide and time-limit the trial | Until 90 days after trial expiry |
+| Anti-abuse signals (rate-limited IP, multi-account heuristics) | Prevent trial farming, refund-rebuy abuse, license sharing | Up to 12 months from last signal |
+| Support correspondence | Answer your questions and keep a record of what we agreed | Up to 3 years from the last message in the thread |
 
-If you have any questions or concerns about this privacy policy, please contact us at:
-**natively.contact@gmail.com**
+We do **not** store the audio you capture, the screen content you capture, your transcripts, your prompts, or your generated outputs on our servers.
+
+### 3.3 What payment processors handle
+
+Payments are processed by **Dodo Payments**. Card details, bank details, and similar payment-instrument data are handled by Dodo and are subject to Dodo's privacy policy. We receive transaction metadata from Dodo (order ID, amount, currency, status, billing email) but we do **not** receive or store full card or bank details on our servers.
+
+### 3.4 What software updates send
+
+The desktop application periodically checks for updates. Update checks reach **GitHub's release infrastructure** and transmit:
+
+- The application's current version;
+- Your operating-system family and architecture (e.g., macOS arm64, Windows x64, Linux x64).
+
+This is the standard data sent by any GitHub-hosted update check and is governed by GitHub's privacy policy. No personal identifiers are sent.
+
+### 3.5 Phone Mirror (Beta)
+
+When you pair the desktop app with a phone via the Phone Mirror beta feature, a short-lived pairing token is generated and used to establish the connection. The session content (the mirrored screen and notifications) is **not** stored on our servers. You are responsible for the security of any device you pair and for the network on which the pairing happens.
+
+---
+
+## 4. Where your data goes when you use AI / STT / search features
+
+This is the most important section of the policy, so it's spelled out in detail.
+
+When you use a feature that calls a third-party provider, the relevant input — usually a transcript, a prompt, or an audio chunk — is sent **directly from your device to that provider** to be processed, and the provider's response is sent back to your device. We do not relay this content through our servers (with one exception: the Natively API, where we relay through our infrastructure to provide a single managed endpoint).
+
+The data sent to a provider is **not anonymised** — transcripts and prompts contain whatever you spoke or typed, including names, places, employer details, and the content of conversations. Please be mindful of what you send to a provider, just as you would be with any cloud service.
+
+### 4.1 Speech-to-text providers
+
+Depending on your settings, audio chunks may be sent to one of:
+
+- **Natively STT** (operated by us, billed via the Natively API)
+- **Google Cloud Speech-to-Text**
+- **Groq** (Whisper via Groq)
+- **OpenAI** (Whisper)
+- **Deepgram**
+- **ElevenLabs Speech-to-Text**
+- **Azure Speech Services** (Microsoft)
+- **IBM Watson Speech-to-Text**
+- **Soniox**
+
+Each of these providers has its own privacy policy and data-retention behaviour. We encourage you to review the policy of any provider whose key you configure. By default, most of these providers do **not** use API audio for model training, but check the current terms before sending sensitive content.
+
+### 4.2 AI / language-model providers
+
+Depending on your settings, prompts and transcripts may be sent to one of:
+
+- **Natively AI** (operated by us, billed via the Natively API; routes to one or more underlying models)
+- **OpenAI** (GPT family) — does not train on API data by default
+- **Anthropic** (Claude family) — does not train on API data by default
+- **Google** (Gemini family) — different defaults for free-tier vs paid; see Google's terms
+- **Groq** (open-weights models hosted by Groq) — does not train on API data by default
+- **Ollama** (local model running on your own machine — no data leaves your device)
+
+By default, OpenAI, Anthropic, and Groq do not use API content to train their models. Google's behaviour depends on the tier. We encourage you to review the current terms of any provider whose key you configure.
+
+### 4.3 Search providers
+
+The search feature (where enabled) calls **Tavily** or, where you've configured it, another search provider. The query you've entered is sent to the search provider; the results are returned to your device.
+
+### 4.4 Natively-managed services
+
+When you use the **Natively API** (instead of BYOK), your inputs flow through our infrastructure to one or more of the providers listed above, and the response flows back. We do **not** persist the content of these requests. We do log request metadata (timestamp, plan, quota usage, status) for billing, abuse prevention, and quality monitoring; that metadata is retained for up to 90 days.
+
+---
+
+## 5. International transfers
+
+The third-party providers listed above operate globally. Depending on the provider and your location, your data may be processed in jurisdictions outside your country of residence — most commonly in the **United States** (OpenAI, Anthropic, Google, Groq, Deepgram, ElevenLabs, IBM, Tavily), the **European Economic Area** (Azure where you've selected an EU region), and **India** (Natively-operated services).
+
+By using the Service you acknowledge that your data may be transferred to and processed in these jurisdictions. Where a transfer is from the EEA / UK to a country without an adequacy decision, the receiving provider's standard contractual safeguards apply.
+
+---
+
+## 6. Cookies and the website
+
+The Natively desktop application does **not** use cookies (it isn't a web app). The marketing website at **natively.software** may use:
+
+- **Essential cookies** required for the site to function (e.g., session, CSRF, language).
+- **Analytics cookies** to understand which pages are visited (the specific tool, if any, is documented on the website's cookie banner).
+
+We do not run third-party advertising trackers or remarketing pixels.
+
+---
+
+## 7. Permissions the desktop app requests
+
+To function, the desktop app needs the following operating-system permissions. You can revoke any of them at any time in your OS settings — though the corresponding feature will stop working.
+
+- **Microphone** — to capture audio from microphone-input meetings.
+- **Screen Recording / Screen Capture** — to capture system audio (on macOS, this is bundled into the same permission) and to capture screen content for Vision features.
+- **Accessibility** — required on macOS for global hotkeys, window-management, and certain capture paths.
+- **Notifications** — to alert you when summaries are ready, when a session ends, etc.
+- **Network** — to call AI / STT / search providers and to verify your licence.
+
+We request the minimum necessary set for the features you've enabled.
+
+---
+
+## 8. Security measures
+
+We follow industry-standard practices for the limited data we do hold:
+
+- **In transit:** all communication with our license server, the Natively API, and any third-party provider is over **HTTPS / TLS**. The desktop app rejects unencrypted endpoints for these services.
+- **At rest (on our servers):** the metadata we store (license keys, hardware IDs, billing email, quota counters) sits behind authentication on managed infrastructure. Backups are encrypted at rest.
+- **At rest (on your device):** local data (the SQLite meeting database, transcripts, settings via `electron-store`) is **not** encrypted by Natively at the application layer. Please use full-disk encryption (FileVault on macOS, BitLocker on Windows, LUKS on Linux) to protect your local data.
+- **Secrets in code:** API keys and secrets are never embedded in shipped builds.
+- **Access:** as a single-developer project, server-side data is accessible only to the developer, and only for legitimate operational purposes (handling support requests, debugging billing issues, fraud prevention).
+
+For information on how to report a security vulnerability, see our [Security Policy](https://github.com/evinjohnn/natively-cluely-ai-assistant/blob/main/SECURITY.md).
+
+---
+
+## 9. Your rights
+
+You have the following rights in respect of personal data we hold about you:
+
+- **Access** — you can ask what data we hold about you and receive a copy.
+- **Correction** — you can ask us to correct data that's inaccurate or incomplete.
+- **Erasure** — you can ask us to delete your account and the data associated with it, subject to retention required by law (e.g., tax records).
+- **Portability** — you can ask for a copy of your data in a machine-readable format.
+- **Withdraw consent** — where processing relies on your consent, you can withdraw it at any time. (Note that this may require us to terminate paid services that depend on the data.)
+- **Object** — you can object to processing that relies on legitimate interest (e.g., anti-abuse).
+- **Complain** — you can lodge a complaint with the relevant data-protection authority (in India, the Data Protection Board under the DPDP Act 2023; in the EU/UK, your local supervisory authority).
+
+To exercise any of these rights, email **natively.contact@gmail.com** with your order ID and a description of your request. We aim to respond within **30 days**.
+
+If you're in California, you may have additional rights under the California Consumer Privacy Act (CCPA) — including the right to know, the right to delete, and the right to opt out of "sale" of personal information. **We do not sell personal information.** You can exercise CCPA rights by emailing the same address.
+
+---
+
+## 10. Children's privacy
+
+The Service is **not directed at children under 18** and we do not knowingly collect personal data from anyone under 18. Use of paid products requires you to be at least 18 (see Terms &amp; Conditions §2.1). If you believe a child has provided us with personal data, please email us and we'll delete it.
+
+---
+
+## 11. Communications from us
+
+By using paid products you'll receive **operational emails** related to your purchases, licence, security incidents, terms changes, and billing. These emails are part of the Service and you cannot opt out of them while the relevant relationship is active.
+
+**Marketing emails** (product updates, feature announcements, promotions) are optional and you can opt out at any time using the unsubscribe link, or by replying to the email.
+
+---
+
+## 12. Source transparency
+
+The desktop application source is available on GitHub at <https://github.com/evinjohnn/natively-cluely-ai-assistant> under the Natively Personal Use Source License v1.0. You are welcome to audit the code to verify the claims in this policy.
+
+A small caveat: source availability does **not** by itself guarantee that the binaries we distribute are byte-for-byte produced from that source — reproducible builds are a separate effort we don't currently provide. If you require reproducible binaries, build from source.
+
+---
+
+## 13. Changes to this policy
+
+We may update this policy from time to time. Material changes will be announced in-app, on the website, or by email, with a revised "Last updated" date at the top of this page. Continuing to use the Service after a change means you accept the updated policy.
+
+We don't make adverse changes (e.g., expanding what we collect or share) without giving you prior notice and a chance to opt out by stopping use of the Service.
+
+---
+
+## 14. Contact
+
+For privacy questions, data-rights requests, complaints, or anything else covered by this policy:
+
+**Email:** natively.contact@gmail.com
+
+**Grievance Officer:** Evin John — natively.contact@gmail.com — acknowledgements within 72 hours on weekdays, resolution targets of 30 days.
+
+We may not respond on weekends or Indian public holidays — if you write in over a weekend, please expect a reply early the following week.

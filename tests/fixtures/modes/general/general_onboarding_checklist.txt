@@ -1,0 +1,8 @@
+Natively customer onboarding checklist
+
+Step 1: Install desktop app and grant screen-recording permission.
+Step 2: Grant microphone permission.
+Step 3: Add at least one model provider API key (Gemini, OpenAI, or Claude).
+Step 4: Step 4 requires audio device approval — pick your mic and system-audio source under Settings → Audio.
+Step 5: Optionally upload a resume to enable Profile Intelligence (Pro).
+Step 6: Start your first meeting to verify capture and live answers.

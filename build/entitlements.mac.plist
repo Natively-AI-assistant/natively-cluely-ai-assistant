@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Natively — TOP-LEVEL app entitlements (Hardened Runtime, Developer ID, notarized).
+      Non-sandboxed (no com.apple.security.app-sandbox). Every entitlement below is
+      individually justified; nothing speculative is included.
+
+      Privacy access (Microphone, Screen Recording, Accessibility, System Audio) is
+      governed by TCC + the NS*UsageDescription strings in Info.plist (set via
+      package.json build.mac.extendInfo) and user consent — NOT by entitlements,
+      except the one hardened-runtime mic capability below.
+    -->
+
+    <!-- V8 JavaScript engine JIT. REQUIRED for Electron/Chromium under Hardened Runtime. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- V8 writes executable memory. Electron <12 required this; kept for V8/Chromium
+         compatibility on the versions/native paths we ship. Low-risk, standard for Electron. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- REQUIRED: Natively loads third-party native libraries not signed by our Team ID
+         (e.g. onnxruntime's libonnxruntime.dylib, better-sqlite3, sqlite-vec, sharp, and
+         our Rust native module). Hardened Runtime would otherwise refuse to load them. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+
+    <!-- Microphone capture (Rust cpal / MicrophoneCapture). Hardened-runtime capability;
+         paired with NSMicrophoneUsageDescription (Info.plist) which TCC shows to the user. -->
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+
+    <!--
+      INTENTIONALLY OMITTED (verified against Apple docs + codebase audit, 2026-05-29):
+        * com.apple.security.screen-capture        — NOT a real Apple entitlement.
+          ScreenCaptureKit + the CoreAudio process tap are pure-TCC (Screen & System
+          Audio Recording) gated by NSScreenCaptureUsageDescription + user consent.
+        * com.apple.security.automation.apple-events — no AppleScript/osascript usage
+          anywhere in the codebase.
+        * com.apple.security.cs.allow-dyld-environment-variables — no DYLD_* env usage
+          in app or native code; not part of the Electron hardened-runtime baseline.
+      Accessibility (global keyboard tap) is pure TCC via AXIsProcessTrusted — no
+      entitlement and no usage string.
+    -->
+</dict>
+</plist>

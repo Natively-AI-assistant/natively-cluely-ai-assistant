@@ -1,0 +1,5 @@
+severity,owner,initial_response_sla,resolution_sla,notes
+P0,founder,within 15 minutes,within 4 hours,Data loss or active customer churn risk
+P1,founder,within 30 minutes,within 1 business day,Chargeback threats or payment disputes
+P2,support_lead,within 4 hours,within 3 business days,Functional bug with workaround available
+P3,support_lead,within 1 business day,within 7 business days,Cosmetic or UX feedback

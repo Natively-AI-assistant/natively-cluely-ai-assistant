@@ -1,0 +1,10 @@
+<!doctype html>
+<html><body>
+<h1>Design spec — embeddings storage</h1>
+<p>Decision: use SQLite with sqlite-vec for embeddings.</p>
+<ul>
+  <li>Rationale: zero ops cost on the desktop, native vec0 virtual tables already shipped.</li>
+  <li>Alternatives considered: Chroma (extra process), Postgres + pgvector (network hop).</li>
+  <li>Open questions: replication for team workspaces is deferred to FY27.</li>
+</ul>
+</body></html>

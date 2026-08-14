@@ -19,10 +19,16 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { streamingStttWsOptions } from './dnsHelpers';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
+// Cap reconnect attempts so a flapping network can't drive an indefinite WS
+// open-loop against Soniox (storm risk + per-key rate-limit risk). After the
+// cap, emit 'error' so the orchestrator can surface a UI prompt; a
+// user-triggered restart via stop()/start() resets the counter to 0.
+const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 5000;
 
 export class SonioxStreamingSTT extends EventEmitter {
@@ -38,6 +44,14 @@ export class SonioxStreamingSTT extends EventEmitter {
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private keepAliveTimer: NodeJS.Timeout | null = null;
+    // 250ms debounced restart driven by setSampleRate / setRecognitionLanguage.
+    // Previously these methods called `stop(); start();` synchronously, which
+    // produced two WebSocket handshakes in flight whenever the methods fired
+    // back-to-back (common pattern: device route change emits both new sample
+    // rate AND new language in the same tick). The second WS handshake races
+    // the first; one of them loses with code 1006 and triggers a reconnect
+    // storm. Same shape as the NativelyProSTT 250ms reconnect pattern.
+    private pendingRestartTimer: NodeJS.Timeout | null = null;
 
     private buffer: Buffer[] = [];
     private isConnecting = false;
@@ -57,15 +71,8 @@ export class SonioxStreamingSTT extends EventEmitter {
         console.log(`[SonioxStreaming] Sample rate set to ${rate}`);
 
         if (this.isActive) {
-            console.log('[SonioxStreaming] Sample rate changed while active. Restarting...');
-            // Save in-flight buffer so chunks captured between stop() and the new
-            // WebSocket connect() are not silently discarded (matches Deepgram pattern)
-            const savedBuffer = [...this.buffer];
-            this.stop();
-            this.start();
-            if (savedBuffer.length > 0) {
-                this.buffer = [...savedBuffer, ...this.buffer];
-            }
+            console.log('[SonioxStreaming] Sample rate changed while active. Scheduling debounced restart...');
+            this.scheduleRestart();
         }
     }
 
@@ -84,14 +91,43 @@ export class SonioxStreamingSTT extends EventEmitter {
             console.log(`[SonioxStreaming] Language hint set to ${this.languageCode}`);
 
             if (this.isActive) {
-                console.log('[SonioxStreaming] Language changed while active. Restarting...');
-                this.stop();
-                this.start();
+                console.log('[SonioxStreaming] Language changed while active. Scheduling debounced restart...');
+                this.scheduleRestart();
             }
         } else if (key === 'auto') {
             this.languageCode = undefined;
             console.log(`[SonioxStreaming] Language hint set to auto`);
         }
+    }
+
+    /**
+     * Debounced restart: collapses rapid setSampleRate / setRecognitionLanguage
+     * calls into a single stop()+start() sequence ~250ms later. Without this,
+     * the previous sync stop()+start() pattern allowed two WebSocket
+     * handshakes to be in flight simultaneously (device route changes can
+     * emit both new sample rate AND new language in the same JS tick), and
+     * one would lose with code 1006 → reconnect storm.
+     *
+     * Buffer preservation: chunks that arrive between the synchronous stop()
+     * (which sets isActive=false and clears the buffer) and the start() are
+     * silently dropped by write()'s `if (!this.isActive) return`. We capture
+     * the live buffer BEFORE stop() and re-prepend it on start so trailing
+     * audio survives the restart.
+     */
+    private scheduleRestart(): void {
+        if (this.pendingRestartTimer) {
+            clearTimeout(this.pendingRestartTimer);
+        }
+        this.pendingRestartTimer = setTimeout(() => {
+            this.pendingRestartTimer = null;
+            if (!this.isActive) return;  // a real stop() ran in the window — abort the restart
+            const savedBuffer = [...this.buffer];
+            this.stop();
+            this.start();
+            if (savedBuffer.length > 0) {
+                this.buffer = [...savedBuffer, ...this.buffer];
+            }
+        }, 250);
     }
 
     /** No-op — no Google credentials needed */
@@ -109,6 +145,15 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     public start(): void {
         if (this.isActive) return;
+        // Cancel any leftover debounced restart from a prior session — it
+        // would otherwise fire ~250ms into the new session and trigger a
+        // gratuitous stop+start cycle. stop() also clears this via
+        // clearTimers(), but the user can call start() without a prior
+        // stop() in edge cases (recovery flow), so be defensive here too.
+        if (this.pendingRestartTimer) {
+            clearTimeout(this.pendingRestartTimer);
+            this.pendingRestartTimer = null;
+        }
         this.isActive = true;        // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
@@ -184,7 +229,10 @@ export class SonioxStreamingSTT extends EventEmitter {
         console.log(`[SonioxStreaming] Connecting (rate=${this.sampleRate}, ch=${this.numChannels})...`);
 
         this.configSent = false;
-        this.ws = new WebSocket(SONIOX_WEBSOCKET_URL);
+        // streamingStttWsOptions: forces IPv4-only DNS lookup (sidesteps Node's
+        // macOS dual-stack ENOTFOUND on IPv4-only CNAME chains) and caps the
+        // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
+        this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions() as any);
 
         this.ws.on('open', () => {
             // Guard: stop() may have been called while the WS handshake was in flight.
@@ -203,7 +251,7 @@ export class SonioxStreamingSTT extends EventEmitter {
             // Send initial configuration as first message
             const config: any = {
                 api_key: this.apiKey,
-                model: 'stt-rt-v4',
+                model: 'stt-rt-v5',
                 audio_format: 'pcm_s16le',
                 sample_rate: this.sampleRate,
                 num_channels: this.numChannels,
@@ -340,13 +388,23 @@ export class SonioxStreamingSTT extends EventEmitter {
     private scheduleReconnect(): void {
         if (!this.shouldReconnect) return;
 
+        if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+            console.error(`[SonioxStreaming] Max reconnect attempts (${RECONNECT_MAX_ATTEMPTS}) reached — giving up`);
+            // Latch off the reconnect path so write()'s lazy-connect (line 159)
+            // cannot resurrect the storm on the next audio chunk. start() resets
+            // shouldReconnect=true so a user-triggered restart still works.
+            this.shouldReconnect = false;
+            this.emit('error', new Error('SonioxStreamingSTT: max reconnect attempts exceeded'));
+            return;
+        }
+
         const delay = Math.min(
             RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts),
             RECONNECT_MAX_DELAY_MS
         );
         this.reconnectAttempts++;
 
-        console.log(`[SonioxStreaming] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})...`);
+        console.log(`[SonioxStreaming] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${RECONNECT_MAX_ATTEMPTS})...`);
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
@@ -385,6 +443,14 @@ export class SonioxStreamingSTT extends EventEmitter {
         if (this.reconnectTimer) {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
+        }
+        // pendingRestartTimer must also be cleared here so a Stop / fatal
+        // error / clearTimers-triggering path cannot leave a queued restart
+        // that fires into the next session and triggers a wasteful
+        // stop()+start() cycle.
+        if (this.pendingRestartTimer) {
+            clearTimeout(this.pendingRestartTimer);
+            this.pendingRestartTimer = null;
         }
     }
 }

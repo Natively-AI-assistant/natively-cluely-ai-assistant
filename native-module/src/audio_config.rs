@@ -37,3 +37,13 @@ pub const DSP_POLL_MS: u64 = 5;
 /// 128KB worth of f32 samples = 32768 samples
 /// At 48kHz = ~680ms buffer (plenty of headroom)
 pub const RING_BUFFER_SAMPLES: usize = 32768;
+
+/// Number of 20ms DSP frames coalesced into a single tsfn (V8 boundary)
+/// callback. Each tsfn.call traverses the JS bridge, allocates a Buffer
+/// wrapper, and routes through the napi event loop — non-trivial overhead
+/// for a 1.9KB chunk. Batching 3 chunks (=60ms of audio) cuts boundary
+/// crossings 3x with no perceptible latency cost (STT providers all accept
+/// 60-100ms framing). The CHUNK_BATCH_TIMEOUT_MS guard flushes a partial
+/// batch when audio is silent so trailing speech is not held up.
+pub const CHUNK_BATCH_COUNT: usize = 3;
+pub const CHUNK_BATCH_TIMEOUT_MS: u128 = 100;

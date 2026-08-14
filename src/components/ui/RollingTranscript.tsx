@@ -1,51 +1,67 @@
 import React, { useEffect, useRef } from 'react';
 
+interface ChannelStatus {
+    status: 'connected' | 'reconnecting' | 'failed' | 'awaiting-audio';
+    error?: string;
+    provider?: string;
+}
+
 interface RollingTranscriptProps {
     text: string;
     isActive?: boolean;
     surfaceStyle?: React.CSSProperties;
+    interviewerChannel?: ChannelStatus;
+    microphoneChannel?: ChannelStatus;
 }
 
-/**
- * RollingTranscript - A single-line horizontally scrolling transcript bar
- *
- * Displays real-time speech transcription as a smooth left-scrolling text track.
- * Features:
- * - Fixed height, single line only
- * - Text flows from right to left as new words arrive
- * - Edge fade gradients for visual polish
- */
-const RollingTranscript: React.FC<RollingTranscriptProps> = ({ text, isActive = true, surfaceStyle }) => {
+const RollingTranscript: React.FC<RollingTranscriptProps> = ({
+    text, isActive = true, surfaceStyle,
+    interviewerChannel, microphoneChannel,
+}) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Auto-scroll to the end when text updates
+    const intStatus = interviewerChannel?.status ?? 'connected';
+    const micStatus = microphoneChannel?.status ?? 'connected';
+    const anyAwaitingAudio = intStatus === 'awaiting-audio' || micStatus === 'awaiting-audio';
+    const isNormal = intStatus === 'connected' && micStatus === 'connected' && !anyAwaitingAudio;
+    const showTranscriptText = intStatus !== 'failed' && micStatus !== 'failed';
+
     useEffect(() => {
-        if (containerRef.current) {
+        if (containerRef.current && showTranscriptText && text) {
             containerRef.current.scrollLeft = containerRef.current.scrollWidth;
         }
-    }, [text]);
-
-    if (!text) return null;
+    }, [text, showTranscriptText]);
 
     return (
-        <div className="relative w-[90%] mx-auto pt-2">
-            {/* Scrolling Container */}
+        <div className="relative w-full">
             <div
-                ref={containerRef}
-                className="overflow-hidden whitespace-nowrap text-right scroll-smooth overlay-transcript-surface"
+                className="relative w-full overflow-hidden"
                 style={{
-                    ...surfaceStyle,
-                    maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)'
+                    maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
                 }}
             >
-                <span className="overlay-text-secondary inline-flex items-center text-[13px] italic leading-7 transition-all duration-300">
-                    {text}
-                    {isActive && (
-                        <span className="inline-flex items-center ml-2">
-                            <span className="w-1 h-1 bg-green-500/60 rounded-full animate-pulse" />
-                        </span>
-                    )}
-                </span>
+                <div className="w-[90%] mx-auto pt-2">
+                    <div
+                        ref={containerRef}
+                        className="overflow-hidden whitespace-nowrap scroll-smooth overlay-transcript-surface transition-all duration-500 text-right"
+                        style={{
+                            ...surfaceStyle,
+                            maskImage: 'linear-gradient(to right, transparent, black 10%, black 90%, transparent)',
+                        }}
+                    >
+                        {showTranscriptText && (
+                            <span className="inline-flex items-center text-[13px] italic leading-7 text-[var(--overlay-text-muted)] transition-all duration-300">
+                                {text || 'Listening…'}
+                                {isActive && isNormal && (
+                                    <span className="inline-flex items-center ml-2">
+                                        <span className="w-[3px] h-[3px] bg-emerald-400/70 rounded-full animate-pulse" />
+                                    </span>
+                                )}
+                            </span>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

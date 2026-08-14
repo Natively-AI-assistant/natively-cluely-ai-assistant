@@ -1,5 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isMac } from '../utils/platformUtils';
+import { useT } from '../i18n';
 
 interface ReleaseNoteSection {
     title: string;
@@ -24,9 +26,11 @@ interface UpdateModalProps {
     status: 'idle' | 'downloading' | 'ready' | 'error' | 'instructions';
     errorMessage?: string | null;
     instructionsArch?: 'arm64' | 'x64' | null;
+    canAutoUpdate?: boolean;
 }
 
 const CopyBlock = ({ command }: { command: string }) => {
+    const t = useT();
     const [copied, setCopied] = React.useState(false);
     const handleCopy = () => {
         navigator.clipboard.writeText(command);
@@ -41,12 +45,12 @@ const CopyBlock = ({ command }: { command: string }) => {
             <button
                 onClick={handleCopy}
                 className="h-6 px-2.5 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 flex items-center justify-center transition-colors border border-white/5 flex-shrink-0"
-                title="Copy to clipboard"
+                title={t("Copy to clipboard")}
             >
                 {copied ? (
-                    <span className="text-[10px] font-semibold text-green-400">Copied</span>
+                    <span className="text-[10px] font-semibold text-green-400">{t('Copied')}</span>
                 ) : (
-                    <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">Copy</span>
+                    <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">{t('Copy')}</span>
                 )}
             </button>
         </div>
@@ -64,11 +68,12 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     errorMessage,
     instructionsArch
 }) => {
+    const t = useT();
     // Helper to format version string
     const formatVersion = (v: string) => {
-        if (!v) return 'Unknown';
-        if (v === 'latest') return 'Latest';
-        if (v === 'vlatest') return 'Latest';
+        if (!v) return t('Unknown');
+        if (v === 'latest') return t('Latest');
+        if (v === 'vlatest') return t('Latest');
         return v.startsWith('v') ? v : `v${v}`;
     };
 
@@ -92,7 +97,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
     // Auto-scroll logic
     const scrollContainerRef = React.useRef<HTMLDivElement>(null);
     const isUserInteractionRef = React.useRef(false);
-    const animationFrameRef = React.useRef<number>();
+    const animationFrameRef = React.useRef<number>(null!);
 
     React.useEffect(() => {
         // Only run if not downloading/error and we have notes
@@ -160,7 +165,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                             <div className="p-8 flex flex-col items-center justify-center h-full text-center">
                                 <div className="space-y-2 mb-6">
                                     <h2 className="text-[17px] font-semibold text-white tracking-tight">
-                                        Update Failed
+                                        {t('Update Failed')}
                                     </h2>
                                     {errorMessage && (
                                         <p className="text-[13px] text-red-400 font-medium">
@@ -168,45 +173,53 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         </p>
                                     )}
                                     <p className="text-[13px] text-white/40">
-                                        Check your internet connection or download the update manually from GitHub.
+                                        {t('Check your internet connection or download the update manually from GitHub.')}
                                     </p>
                                 </div>
                                 <button
                                     onClick={onDismiss}
                                     className="px-5 py-[6px] bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
                                 >
-                                    Close
+                                    {t('Close')}
                                 </button>
                             </div>
                         ) : status === 'instructions' ? (
                             <div className="p-8 flex flex-col h-full relative text-left w-full max-w-full">
                                 <div className="space-y-1.5 mb-5 text-center mt-2">
                                     <h2 className="text-[17px] font-semibold text-white tracking-tight">
-                                        Manual Update Required
+                                        {t('Manual Update Required')}
                                     </h2>
                                     <p className="text-[13px] text-white/40 font-medium leading-relaxed">
-                                        The download has started in your browser. Follow these steps to install the update:
+                                        {t('The download has started in your browser. Follow these steps to install the update:')}
                                     </p>
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-4 space-y-2 w-full">
-                                    <div className="space-y-1 w-full">
-                                        <p className="text-[12px] font-medium text-white/80">1. Clear quarantine on the downloaded file:</p>
-                                        <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
-                                    </div>
-                                    <div className="space-y-1 mt-1 pl-0.5">
-                                        <p className="text-[12px] font-medium text-white/80">2. Open the file and install Natively.</p>
-                                    </div>
-                                    <div className="space-y-1 mt-3 w-full">
-                                        <p className="text-[12px] font-medium text-white/80">3. Clear quarantine on the installed app:</p>
-                                        <CopyBlock command="xattr -cr /Applications/Natively.app" />
-                                    </div>
+                                    {isMac ? (
+                                        <>
+                                            <div className="space-y-1 w-full">
+                                                <p className="text-[12px] font-medium text-white/80">{t('1. Clear quarantine on the downloaded file:')}</p>
+                                                <CopyBlock command={`xattr -cr ~/Downloads/Natively-${displayVersion.replace('v', '')}-${instructionsArch || 'arm64'}.dmg`} />
+                                            </div>
+                                            <div className="space-y-1 mt-1 pl-0.5">
+                                                <p className="text-[12px] font-medium text-white/80">{t('2. Open the file and install Natively.')}</p>
+                                            </div>
+                                            <div className="space-y-1 mt-3 w-full">
+                                                <p className="text-[12px] font-medium text-white/80">{t('3. Clear quarantine on the installed app:')}</p>
+                                                <CopyBlock command="xattr -cr /Applications/Natively.app" />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="space-y-1 w-full">
+                                            <p className="text-[12px] font-medium text-white/80">{t('Run the downloaded installer (.exe) and follow the prompts. Natively will restart when finished.')}</p>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex items-center justify-center mt-auto w-full">
                                     <button
                                         onClick={onDismiss}
                                         className="px-6 py-[6px] bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors w-[200px]"
                                     >
-                                        Done
+                                        {t('Done')}
                                     </button>
                                 </div>
                             </div>
@@ -216,14 +229,19 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 {/* 1. Header Text */}
                                 <div className="space-y-1.5 mb-8">
                                     <h2 className="text-[17px] font-semibold text-white tracking-tight">
-                                        Downloading Update...
+                                        {t('Downloading Update...')}
                                     </h2>
                                     <p className="text-[13px] text-white/40 font-medium">
-                                        {downloadProgress < 100 ? 'Please wait while we prepare the update.' : 'Finalizing package...'}
+                                        {downloadProgress < 100 ? t('Please wait while we prepare the update.') : t('Finalizing package...')}
                                     </p>
                                 </div>
 
-                                {/* 2. Premium Troubleshooting Card */}
+                                {/* 2. Premium Troubleshooting Card — macOS-only.
+                                    The xattr quarantine bypass is meaningless on
+                                    Windows (NSIS installer has no Gatekeeper
+                                    equivalent), and the /Applications/Natively.app
+                                    path doesn't exist there. */}
+                                {isMac && (
                                 <div
                                     tabIndex={-1}
                                     className="w-full max-w-[360px] bg-white/[0.03] rounded-xl border border-white/[0.06] p-3.5 flex flex-col gap-2.5 text-left mb-8 outline-none focus:outline-none focus:ring-0"
@@ -234,10 +252,10 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         </div>
                                         <div className="space-y-0.5">
                                             <p className="text-[12px] font-medium text-white/80 leading-tight">
-                                                If macOS says "App is damaged"
+                                                {t('If macOS says "App is damaged"')}
                                             </p>
                                             <p className="text-[11px] text-white/40 leading-snug">
-                                                Move app to Applications folder, then run:
+                                                {t('Move app to Applications folder, then run:')}
                                             </p>
                                         </div>
                                     </div>
@@ -250,16 +268,17 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         <button
                                             onClick={handleCopyCommand}
                                             className="h-6 px-2.5 rounded-md bg-white/5 hover:bg-white/10 active:bg-white/15 flex items-center justify-center transition-colors border border-white/5"
-                                            title="Copy to clipboard"
+                                            title={t("Copy to clipboard")}
                                         >
                                             {copied ? (
-                                                <span className="text-[10px] font-semibold text-green-400">Copied</span>
+                                                <span className="text-[10px] font-semibold text-green-400">{t('Copied')}</span>
                                             ) : (
-                                                <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">Copy</span>
+                                                <span className="text-[10px] font-medium text-white/50 group-hover:text-white/80">{t('Copy')}</span>
                                             )}
                                         </button>
                                     </div>
                                 </div>
+                                )}
 
                                 {/* 3. Progress Bar */}
                                 <div className="w-full max-w-[260px] space-y-2.5 mb-2">
@@ -272,7 +291,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         />
                                     </div>
                                     <p className="text-[11px] font-medium text-white/30 tabular-nums">
-                                        {Math.round(downloadProgress)}% Complete
+                                        {Math.round(downloadProgress)}% {t('Complete')}
                                     </p>
                                 </div>
 
@@ -280,7 +299,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                     onClick={onDismiss}
                                     className="text-[13px] font-medium text-white/30 hover:text-white/60 transition-colors mt-auto mb-1"
                                 >
-                                    Hide
+                                    {t('Hide')}
                                 </button>
                             </div>
                         ) : (
@@ -288,10 +307,10 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 {/* Header Group */}
                                 <div className="flex flex-col gap-0.5 text-center relative flex-shrink-0 pt-1">
                                     <h2 className="text-[19px] font-semibold text-white tracking-tight">
-                                        Update Available
+                                        {t('Update Available')}
                                     </h2>
                                     <p className="text-[13px] text-white/50 font-medium tracking-wide">
-                                        Version {displayVersion} is ready to install.
+                                        {t('Version')} {displayVersion} {t('is ready to install.')}
                                     </p>
                                 </div>
 
@@ -305,7 +324,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                 >
                                     {showFallback ? (
                                         <p className="text-[13px] text-white/60 text-center leading-relaxed mt-8">
-                                            Includes performance improvements and bug fixes.
+                                            {t('Includes performance improvements and bug fixes.')}
                                         </p>
                                     ) : (
                                         <div className="space-y-5 px-1">
@@ -343,7 +362,7 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                         onClick={onDismiss}
                                         className="text-[13px] font-medium text-white/40 hover:text-white/70 transition-colors"
                                     >
-                                        Not Now
+                                        {t('Not Now')}
                                     </button>
 
                                     {/* Primary Action - Right Aligned, System Blue */}
@@ -352,14 +371,14 @@ const UpdateModal: React.FC<UpdateModalProps> = ({
                                             onClick={() => window.electronAPI.restartAndInstall()}
                                             className="px-5 py-[6px] bg-[#007AFF] hover:bg-[#0062CC] text-white text-[13px] font-medium rounded-lg shadow-sm transition-colors"
                                         >
-                                            Restart & Install
+                                            {t('Restart & Install')}
                                         </button>
                                     ) : (
                                         <button
                                             onClick={handleUpdateClick}
                                             className="px-5 py-[6px] bg-[#007AFF] hover:bg-[#0062CC] text-white text-[13px] font-medium rounded-lg shadow-sm transition-colors"
                                         >
-                                            Update Now
+                                            {t('Update Now')}
                                         </button>
                                     )}
                                 </div>

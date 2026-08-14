@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+# husky pre-commit — runs at every commit, before the change is recorded.
+#
+# Order matters:
+#   1. Native-arch gate (FAIL CLOSED) — catches Rosetta-poisoned binaries.
+#   2. react-doctor scan (advisory) — flags staged-file regressions.
+#   3. code-review-graph detect-changes (advisory) — context for the reviewer.
+#
+# Husky 9 sets core.hooksPath to .husky/_, which BYPASSES the legacy
+# .git/hooks/pre-commit (which used to run steps 2+3). We replicate
+# them here so the toolchain still runs.
+set -e
+
+# 1. Native-arch gate. Exit non-zero on arch mismatch.
+#    Skipped on non-macOS — verify script no-ops there.
+node scripts/verify-native-arch.js
+
+# 2. react-doctor staged-file scan. Non-fatal: prints findings to stderr
+#    but does not block the commit.
+if [ -x "./node_modules/.bin/react-doctor" ]; then
+  ./node_modules/.bin/react-doctor --staged --fail-on warning || true
+elif command -v react-doctor >/dev/null 2>&1; then
+  react-doctor --staged --fail-on warning || true
+elif command -v pnpm >/dev/null 2>&1; then
+  pnpm dlx react-doctor@latest --staged --fail-on warning || true
+elif command -v npx >/dev/null 2>&1; then
+  npx --yes react-doctor@latest --staged --fail-on warning || true
+fi
+
+# 3. code-review-graph — non-fatal context for the reviewer.
+if command -v code-review-graph >/dev/null 2>&1; then
+  code-review-graph detect-changes --brief || true
+fi

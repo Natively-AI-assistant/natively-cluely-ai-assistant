@@ -4,8 +4,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { streamingStttWsOptions } from './dnsHelpers';
 
 const ELEVENLABS_WS_URL = 'wss://api.elevenlabs.io/v1/speech-to-text/realtime';
+// Cap reconnect attempts so a flapping network can't drive an indefinite WS
+// open-loop against ElevenLabs (storm risk + per-key rate-limit risk). After
+// the cap, emit 'error' so the orchestrator can surface a UI prompt; a
+// user-triggered restart via stop()/start() resets the counter to 0.
+const RECONNECT_MAX_ATTEMPTS = 10;
 
 export class ElevenLabsStreamingSTT extends EventEmitter {
     private apiKey: string;
@@ -106,6 +112,30 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         console.log('[ElevenLabsStreaming] Stopped');
     }
 
+    public finalize(): void {
+        if (!this.isActive || !this.ws || this.ws.readyState !== WebSocket.OPEN || !this.isSessionReady) return;
+
+        if (this.pcmAccumulatorLen > 0) {
+            const combined = new Int16Array(this.pcmAccumulatorLen);
+            let offset = 0;
+            for (const arr of this.pcmAccumulator) {
+                combined.set(arr, offset);
+                offset += arr.length;
+            }
+            this.pcmAccumulator = [];
+            this.pcmAccumulatorLen = 0;
+            try {
+                this.ws.send(JSON.stringify({
+                    message_type: 'input_audio_chunk',
+                    audio_base_64: Buffer.from(combined.buffer, combined.byteOffset, combined.byteLength).toString('base64'),
+                }));
+                console.log('[ElevenLabsStreaming] Finalize — flushed pending accumulator');
+            } catch (err) {
+                console.error('[ElevenLabsStreaming] Finalize flush failed:', err);
+            }
+        }
+    }
+
     /**
      * Write raw PCM audio data.
      * ElevenLabs WebSocket expects "input_audio_chunk" in base64 16-bit PCM.
@@ -196,7 +226,7 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         this.isConnecting = true;
         this.isSessionReady = false;
         
-        console.log(`[ElevenLabsStreaming] Connecting... key=${this.apiKey?.slice(0, 8)}...`);
+        console.log(`[ElevenLabsStreaming] Connecting`, { hasApiKey: Boolean(this.apiKey) });
 
         // raw WebSocket URL with parameters
         let url = `${ELEVENLABS_WS_URL}?model_id=scribe_v2_realtime&include_timestamps=true&sample_rate=${this.targetSampleRate}`;
@@ -209,11 +239,12 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
         
         console.log(`[ElevenLabsStreaming] Connecting with URL: ${url.replace(this.apiKey, '***')}`);
 
-        this.ws = new WebSocket(url, {
+        // streamingStttWsOptions: IPv4-only DNS + 15s handshake cap (dnsHelpers.ts).
+        this.ws = new WebSocket(url, streamingStttWsOptions({
             headers: {
                 'xi-api-key': this.apiKey,
-            }
-        });
+            },
+        }) as any);
 
         this.ws.on('open', () => {
             // Guard: stop() calls removeAllListeners() before closing, so this handler
@@ -282,8 +313,15 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
                     case 'auth_error':
                         console.error('[ElevenLabsStreaming] Auth error — check key scope/permissions in ElevenLabs dashboard:', msg);
                         this.emit('error', msg);
-                        // Stop reconnection loops for auth failures to save API credits
+                        // Stop reconnection loops for auth failures to save API credits.
+                        // Also clear any queued reconnect timer (write()'s lazy-connect or
+                        // a prior close-handler enqueue) so we don't get a stray connect()
+                        // attempt after the latch flips.
                         this.shouldReconnect = false;
+                        if (this.reconnectTimer) {
+                            clearTimeout(this.reconnectTimer);
+                            this.reconnectTimer = null;
+                        }
                         if (this.ws) {
                             this.ws.close();
                         }
@@ -325,11 +363,22 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
 
     private scheduleReconnect(): void {
         if (!this.shouldReconnect) return;
-        
+
+        if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+            console.error(`[ElevenLabsStreaming] Max reconnect attempts (${RECONNECT_MAX_ATTEMPTS}) reached — giving up`);
+            // Latch off the reconnect path so write()'s lazy-connect (line 154)
+            // cannot resurrect the storm on the next audio chunk. start() resets
+            // shouldReconnect=true so a user-triggered restart still works.
+            // Mirrors the auth_error pattern at line ~317.
+            this.shouldReconnect = false;
+            this.emit('error', new Error('ElevenLabsStreamingSTT: max reconnect attempts exceeded'));
+            return;
+        }
+
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
         this.reconnectAttempts++;
-        
-        console.log(`[ElevenLabsStreaming] Reconnecting in ${delay}ms...`);
+
+        console.log(`[ElevenLabsStreaming] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${RECONNECT_MAX_ATTEMPTS})...`);
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
             if (this.shouldReconnect) {

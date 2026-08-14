@@ -1,0 +1,11 @@
+INC-119 postmortem
+
+Date: 2026-04-10
+Severity: SEV-2
+Root cause INC-119: bad migration on 2026-04-10. The migration to add a NOT NULL column to `mode_reference_files` ran without a default and locked writes for 27 minutes during peak hour.
+
+Detection: pager fired off Grafana p95 latency alert.
+Mitigation: rolled back migration; backfilled in chunked transactions.
+Action items:
+- All migrations adding NOT NULL must include a default or two-phase rollout.
+- Add a pre-flight `lock_timeout = 5s` to migrations.
