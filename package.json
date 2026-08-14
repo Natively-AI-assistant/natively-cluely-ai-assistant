@@ -6,9 +6,11 @@
   "scripts": {
     "clean": "rimraf dist dist-electron",
     "dev": "vite",
-    "build": "npm run clean && tsc && vite build",
+    "build": "npm run clean && node node_modules/typescript7/bin/tsc -p tsconfig.json && vite build",
     "build:electron": "node scripts/build-electron.js",
-    "typecheck:electron": "tsc -p electron/tsconfig.json --noEmit",
+    "typecheck:electron": "node node_modules/typescript7/bin/tsc -p electron/tsconfig.json --noEmit",
+    "typecheck:ts5": "tsc -p tsconfig.json --noEmit",
+    "typecheck:ts5:electron": "tsc -p electron/tsconfig.json --noEmit",
     "typecheck:ts7": "node node_modules/typescript7/bin/tsc -p tsconfig.json --noEmit",
     "typecheck:ts7:electron": "node node_modules/typescript7/bin/tsc -p electron/tsconfig.json --noEmit",
     "preview": "vite preview",
