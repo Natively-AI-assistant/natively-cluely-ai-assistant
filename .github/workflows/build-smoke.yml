@@ -134,6 +134,36 @@ jobs:
       - name: Typecheck Electron main process
         run: npm run typecheck:electron
 
+      # --- TypeScript 7 side-by-side (NON-BLOCKING) ------------------------
+      # `typescript7` is an npm alias for typescript@7 installed ALONGSIDE the
+      # real `typescript` 5.x. The 5.x entry must stay: react-doctor (which runs
+      # in .husky/pre-commit for every commit by everyone), typescript-eslint
+      # and tap all declare a TypeScript range that caps below 7.
+      #
+      # Both steps run on BOTH legs on purpose. TS 7 is a native Go binary
+      # shipped as per-platform optional dependencies
+      # (@typescript/typescript-darwin-arm64, -win32-x64, ...), so the Windows
+      # leg is the ONLY thing that proves the win32 binary resolves and runs —
+      # a macOS-only check would say nothing about it.
+      #
+      # continue-on-error until Phase 3 promotes TS 7 to the primary checker.
+      # Split into two steps rather than one multi-line `run:` so a failure is
+      # attributable per project: the Windows leg's default shell is PowerShell,
+      # which does not stop on a non-zero exit, so a combined step would report
+      # only the LAST command's status and silently hide the first.
+      - name: Typecheck renderer with TypeScript 7 (non-blocking)
+        continue-on-error: true
+        run: npm run typecheck:ts7
+
+      # EXPECTED RED until the two deferred findings are resolved
+      # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
+      # EvidenceResolver's DI port, and ModeHybridRetriever's possibly-null
+      # reranker. Both are deliberate deferrals, not TS 7 incompatibilities —
+      # TS 5.9.3 and TS 7.0.2 report byte-identical error lists here.
+      - name: Typecheck Electron main process with TypeScript 7 (non-blocking)
+        continue-on-error: true
+        run: npm run typecheck:ts7:electron
+
       - name: Build renderer
         run: npm run build
 
