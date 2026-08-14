@@ -151,7 +151,11 @@ export class LifecycleTracker {
       );
     });
 
-    app.on('gpu-process-crashed', (event, killed: boolean) => {
+    // TODO(electron43): dead event on Electron 43; remove after verifying child-process-gone covers GPU crashes on macOS+Windows
+    // The `as any` is type-only: Electron 43 dropped 'gpu-process-crashed' from its
+    // typings, so no overload matches. The listener is deliberately KEPT registered
+    // (removing it would be a behaviour change) — see docs/ts7-upgrade-audit.md §4.4.
+    app.on('gpu-process-crashed' as any, (event: Electron.Event, killed: boolean) => {
       record('gpu-process-crashed', 'gpu-process-crashed', { killed });
     });
 

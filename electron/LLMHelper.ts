@@ -109,7 +109,7 @@ interface OllamaResponse {
 }
 
 // Model constants for Gemini (priority: flash-lite → flash → pro)
-const GEMINI_FLASH_MODEL = "gemini-3.6-flash"
+const GEMINI_FLASH_MODEL = "gemini-3.7-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
@@ -213,17 +213,46 @@ export const CODING_THINKING_BUDGET = 0;
 // `thinkingBudget` is DEPRECATED in favor of the `thinkingLevel` enum
 // (minimal|low|medium|high), and gemini-3.1-pro CANNOT disable thinking — it
 // rejects budget:0 / 'minimal' with a 400, so Pro gets 'low' (its floor).
-// A budget of 0 (or negative) maps to 'minimal' (verified to drive
-// thoughtsTokenCount→0 on flash/flash-lite); a positive budget is preserved
-// verbatim for callers that explicitly want a bounded token budget.
-// Keep the Pro→LOW / flash→MINIMAL policy in sync with the server's
-// thinkingConfigForModel() in natively-api/lib/flashModelPicker.js.
+// A budget of 0 (or negative) maps to 'minimal' ONLY on models that accept it;
+// a positive budget is preserved verbatim for callers that explicitly want a
+// bounded token budget.
+// Keep this policy in sync with the server's thinkingConfigForModel() in
+// natively-api/lib/flashModelPicker.js.
 // Match "pro" as a SEGMENT (not a loose substring) so only real Pro ids hit the
 // floor — Pro rejects MINIMAL/budget:0 with a 400.
 const PRO_MODEL_RE = /(?:^|[-/])pro(?:[-/]|$)/i;
+
+// `minimal` IS NOT UNIFORMLY SUPPORTED ACROSS THE FLASH TIER. Probed live
+// against the Gemini API on 2026-08-14:
+//
+//   gemini-3.1-flash-lite   minimal → 200    low → 200
+//   gemini-3.6-flash        minimal → 200    low → 200
+//   gemini-3.7-flash        minimal → 400    low → 200
+//                           ("Thinking level MINIMAL is not supported for this
+//                            model. Please retry with other thinking level.")
+//
+// So `minimal` is opt-in PER MODEL ID and `low` — accepted by every flash tier
+// and by Pro — is the floor for any other model. The direction matters: sending
+// MINIMAL to a model that rejects it is a hard 400 on the interactive stream,
+// not a slower answer. This is the client mirror of MINIMAL_THINKING_MODELS in
+// natively-api/lib/flashModelPicker.js — add an id only after probing it live.
+// Safe as an allow-list because buildThinkingConfig's only call site is the
+// Gemini-only streaming path, so it never sees an OpenAI/Claude model id.
+const MINIMAL_THINKING_MODELS = new Set<string>([
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
+]);
+
 export function buildThinkingConfig(model: string | undefined, budget: number): { thinkingLevel: ThinkingLevel } | { thinkingBudget: number } {
   if (typeof model === 'string' && PRO_MODEL_RE.test(model)) return { thinkingLevel: ThinkingLevel.LOW };
-  if (budget <= 0) return { thinkingLevel: ThinkingLevel.MINIMAL };
+  if (budget <= 0) {
+    // Unknown/unlisted model → LOW, the universally accepted floor. Falling
+    // through to MINIMAL here is what 400s gemini-3.7-flash.
+    if (typeof model === 'string' && !MINIMAL_THINKING_MODELS.has(model)) {
+      return { thinkingLevel: ThinkingLevel.LOW };
+    }
+    return { thinkingLevel: ThinkingLevel.MINIMAL };
+  }
   return { thinkingBudget: budget };
 }
 
@@ -2738,7 +2767,9 @@ let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
 try {
   const { ModesManager } = require('./services/ModesManager');
   modesMgrForInjection = ModesManager.getInstance();
-  activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.();
+  // `?? null` normalises the optional-call's `undefined` to the declared `| null`
+  // sentinel; every downstream read uses `?.`, so both behave identically.
+  activeModeGroundingInfo = modesMgrForInjection?.getActiveModeDocumentGroundingInfo?.() ?? null;
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
 const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
@@ -3233,19 +3264,19 @@ let isMultimodal = !!(imagePaths?.length);
    */
   public async generateContentStructured(
     message: string,
-    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.6-flash.
+    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.7-flash.
     // `preferFast` no longer changes ordering (flash-lite is already first); it is
     // retained for API compatibility with latency-critical callers (live coaching).
     //
     // STRUCTURED-EXTRACTION ROUTING (resume/JD/other document ingestion): the
-    // Gemini chain here is intentionally flash-lite → 3.6-flash ONLY. A real
+    // Gemini chain here is intentionally flash-lite → 3.7-flash ONLY. A real
     // head-to-head on the actual extraction code showed flash-lite fully extracts
-    // (18 nodes) fastest; 3.6-flash is the correct single fallback; Gemini Pro
+    // (18 nodes) fastest; 3.7-flash is the correct single fallback; Gemini Pro
     // gives NO quality gain at ~4× latency; MiniMax-M3 severely UNDER-extracts. So
     // Pro/MiniMax/Groq are deliberately excluded from this path. Own-provider keys
     // (OpenAI/Claude/own-Gemini) are still tried first when present; the Natively
     // fallback carries `purpose:'extraction'` so the server runs its own
-    // flash-lite→3.6-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
+    // flash-lite→3.7-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
     opts?: { preferFast?: boolean },
   ): Promise<string> {
@@ -3275,14 +3306,14 @@ let isMultimodal = !!(imagePaths?.length);
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini cascade — flash-lite → 3.6-flash ONLY (cheapest/fastest
+    // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
     // first). Each model is a distinct provider so the rotation falls through
     // lite → flash on failure, and each carries its OWN circuit key so a saturated
     // tier (repeated 429s) trips independently without burning the other's backoff.
     // Gemini PRO is intentionally EXCLUDED from structured extraction: benchmarked
     // on the real extraction code it gave no quality gain over flash-lite at ~4×
     // latency. MiniMax is likewise excluded (it under-extracts). This is the
-    // flash-lite→3.6-flash extraction pattern.
+    // flash-lite→3.7-flash extraction pattern.
     if (this.client) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
@@ -3369,7 +3400,7 @@ let isMultimodal = !!(imagePaths?.length);
       providers.push({
         name: 'Natively API',
         // Structured extraction: tell the server this is an extraction request so
-        // it runs its dedicated flash-lite→3.6-flash-only loop (3 cycles then
+        // it runs its dedicated flash-lite→3.7-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
         execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
@@ -3511,7 +3542,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
-    // (resume/JD). The server routes it through a dedicated flash-lite→3.6-flash
+    // (resume/JD). The server routes it through a dedicated flash-lite→3.7-flash
     // loop (3 cycles, then hard-fail) and NEVER escalates to MiniMax/Pro/Scout.
     // Advisory + backward-compatible: older servers drop the unknown field and use
     // their normal flash-first chain. Never combined with fast_mode (opposite intents).
@@ -4357,7 +4388,7 @@ let isMultimodal = !!(imagePaths?.length);
     // Each provider gets MAX_RETRIES_PER_PROVIDER attempts before moving on.
     // Providers are re-ordered dynamically when a provider is unavailable.
     // NOTE: ModelVersionManager folds flash-lite into the GEMINI_FLASH family
-    // (its baseline is 3.6-flash), so flash-lite never surfaces via tiers. We
+    // (its baseline is 3.7-flash), so flash-lite never surfaces via tiers. We
     // inject it explicitly ahead of the flash tier attempt below so the Gemini
     // cascade leads with the cheapest model.
     // ──────────────────────────────────────────────────────────────────
@@ -4879,7 +4910,7 @@ let isMultimodal = !!(imagePaths?.length);
     const commit = { emitted: false };
     // Total-output budget, shared across every rotation so a looping provider
     // cannot get a fresh 16k on each retry. See capOutput.
-    const outputBudget = { chars: 0 };
+    const outputBudget: { chars: number; truncated?: boolean } = { chars: 0 };
 
     for (let rotation = 0; rotation < MAX_FULL_ROTATIONS; rotation++) {
       if (abortSignal?.aborted) return;
@@ -4896,8 +4927,15 @@ let isMultimodal = !!(imagePaths?.length);
         try {
           console.log(`[LLMHelper] ${rotation === 0 ? '🚀' : '🔁'} Attempting ${provider.name}...`);
           yield* this.capOutput(this.trackCommit(provider.execute() as any, commit), outputBudget, provider.name);
-          console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
-          return; // SUCCESS — exit immediately
+          if (outputBudget.truncated) {
+            // A capped stream is NOT a success. Logging it as one is how a
+            // mid-sentence RAG/doc-grounded answer reached the operator log,
+            // and the caller, looking exactly like a finished one.
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} stream ended INCOMPLETE (output cap reached)`);
+          } else {
+            console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
+          }
+          return; // exit immediately — the turn is over either way
         } catch (err: any) {
           if (commit.emitted) {
             console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
@@ -5113,7 +5151,19 @@ let isMultimodal = !!(imagePaths?.length);
     // Callers that need to know whether the turn completed use
     // streamChatWithOutcome; this overload discards the outcome so the nine
     // existing call sites are untouched.
-    yield* this._streamChatTracked({ truncated: false }, ...args);
+    yield* this._streamChatTracked({ truncated: false }, undefined, ...args);
+  }
+
+  /**
+   * streamChat for BATCH generations that are legitimately longer than a live
+   * answer. Identical except for the runaway ceiling — see
+   * MAX_SUMMARY_OUTPUT_CHARS for why the live cap must not apply here.
+   */
+  public streamChatLongForm(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, 'long_form', ...args), outcome };
   }
 
   /**
@@ -5137,11 +5187,12 @@ let isMultimodal = !!(imagePaths?.length);
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
     const outcome: StreamOutcome = { truncated: false };
-    return { stream: this._streamChatTracked(outcome, ...args), outcome };
+    return { stream: this._streamChatTracked(outcome, undefined, ...args), outcome };
   }
 
   private async * _streamChatTracked(
     outcome: StreamOutcome,
+    profile: 'long_form' | undefined,
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
@@ -5163,7 +5214,11 @@ let isMultimodal = !!(imagePaths?.length);
     // return unconditionally (Ollama, OpenAI, Claude, DeepSeek, LiteLLM) alike.
     // See MAX_STREAM_OUTPUT_CHARS for why this is a character cap and not a
     // wall-clock one, and why it is defence in depth rather than the real fix.
-    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    // The ceiling is per-SURFACE: the live cap is calibrated from what_to_answer
+    // answers and is far too tight for a whole-meeting summary, which the batch
+    // callers reach through streamChatLongForm.
+    const { MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    const outputCeiling = profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS;
     let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
@@ -5176,14 +5231,14 @@ let isMultimodal = !!(imagePaths?.length);
       }
       yield dashReducer.reduce(chunk);
       emittedChars += typeof chunk === 'string' ? chunk.length : 0;
-      if (emittedChars > MAX_STREAM_OUTPUT_CHARS) {
+      if (emittedChars > outputCeiling) {
         outcome.truncated = true;
         outcome.reason = 'output_cap_reached';
         // End the stream the same way a post-commit provider failure now does —
         // return, never throw — so the consumer sees one consistent shape for
         // "this stream stopped early".
         console.warn(
-          `[LLMHelper] Stream exceeded MAX_STREAM_OUTPUT_CHARS (${emittedChars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
+          `[LLMHelper] Stream exceeded the ${profile === 'long_form' ? 'long-form' : 'live'} output cap (${emittedChars} > ${outputCeiling}) — ending the turn. The model is not converging.`,
         );
         return;
       }
@@ -5255,7 +5310,7 @@ let isMultimodal = !!(imagePaths?.length);
    */
   private async * capOutput(
     inner: AsyncGenerator<string, void, unknown>,
-    state: { chars: number },
+    state: { chars: number; truncated?: boolean },
     label: string,
   ): AsyncGenerator<string, void, unknown> {
     const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
@@ -5266,6 +5321,12 @@ let isMultimodal = !!(imagePaths?.length);
         console.warn(
           `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
         );
+        // Ending by RETURN is indistinguishable from a normal completion to the
+        // delegating `yield*`, so the caller logged a capped stream as a
+        // success. Record it on the caller-owned state instead (a sentinel
+        // cannot be used here: this generator is consumed directly by
+        // RAGManager, not via streamChat, so it would leak into the output).
+        state.truncated = true;
         return;
       }
     }
@@ -5625,7 +5686,9 @@ let isMultimodal = !!(imagePaths?.length);
       // mid-request switch. When no pin is supplied the methods fall back to
       // their existing live-singleton semantics (the pin field is optional).
       const _pinnedModeId = routeOptions?.pinnedModeId ?? undefined;
-      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
+      // `?? null` normalises the optional-call's `undefined` to the declared `| null`
+      // sentinel; every downstream read uses `?.`, so both behave identically.
+      activeModeGroundingInfo = modesMgrForInjection?.getActiveModeDocumentGroundingInfo?.(_pinnedModeId) ?? null;
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
     // `!v3OwnedTurn`: a V3-owned turn must not enter ANY of the doc-grounded
@@ -6863,7 +6926,24 @@ let isMultimodal = !!(imagePaths?.length);
         }
         return;
       } catch (e: any) {
-        if (geminiYielded || abortSignal?.aborted) throw e; // mid-stream: cannot switch (would duplicate)
+        // Mid-stream: cannot switch providers (would append a second full
+        // answer onto the partial one the user is already reading).
+        //
+        // Code-review 2026-08-13: this was the last post-commit site still
+        // THROWING while the other eight yield TRUNCATION_SENTINEL and return.
+        // A throw bypasses _streamChatTracked's sentinel branch entirely, so
+        // outcome.truncated stayed false, `gemini-stream-done` was never sent,
+        // and ipcHandlers ran its generation-FAILURE path — an error banner
+        // over an answer the user had already partly read. Since the Gemini
+        // cascade is the primary text path, the branch's whole `incomplete`
+        // signal was dead exactly where it mattered most. A caller abort still
+        // throws: that is a cancellation, not a truncated answer.
+        if (abortSignal?.aborted) throw e;
+        if (geminiYielded) {
+          console.warn('[LLMHelper] Gemini cascade failed AFTER first token — ending stream rather than appending a second answer:', e?.message || e);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn('[LLMHelper] Gemini cascade failed pre-commit — falling through to next provider:', e?.message || e);
         // fall through to the Natively last-resort below
       }
@@ -7027,7 +7107,9 @@ let isMultimodal = !!(imagePaths?.length);
       if (!trialToken) throw new Error('Trial token not found');
       streamHeaders['x-trial-token'] = trialToken;
     } else {
-      streamHeaders['x-natively-key'] = nativelyKey;
+      // Non-null: this `else` implies `e2eLocalToken` is falsy, and the guard above
+      // (`if (!nativelyKey && !e2eLocalToken) throw`) already threw for a null key.
+      streamHeaders['x-natively-key'] = nativelyKey!;
     }
 
     // Early-bail if the caller has already aborted (e.g., user superseded
@@ -7057,7 +7139,17 @@ let isMultimodal = !!(imagePaths?.length);
     };
     abortSignal?.addEventListener('abort', onCallerAbort, { once: true });
 
-    let response: Response;
+    // Definite-assignment: `response` is always assigned before the `response.ok`
+    // read below, via an invariant tsc cannot see.
+    //   - attempt 0 cannot take the `signal.aborted` break: the caller-abort
+    //     early-bail above returns, and there is no `await` between it and the
+    //     loop, so the connect-timeout `setTimeout` cannot have fired yet.
+    //   - attempts 1-2 are only reached from the DNS-retry path, which always
+    //     leaves `lastErr` set, so `if (lastErr) throw lastErr` fires first.
+    // NOTE: this invariant is fragile — introducing an `await` before the loop
+    // would make the abort break reachable and `response.ok` would throw a
+    // TypeError. See docs/ts7-upgrade-report.md (fragile invariants).
+    let response!: Response;
     try {
       // Retry on transient DNS failures (ENOTFOUND / EAI_AGAIN).
       // Railway's 1s TTL means the OS resolver can return ENOTFOUND for 2-3s
@@ -8867,15 +8959,26 @@ let isMultimodal = !!(imagePaths?.length);
         // Collect the async generator into a Promise so withTimeout works.
         // ignoreKnowledgeMode=true: meeting summaries must never go through the
         // profile/knowledge intercept — it would corrupt the output.
+        // streamChatLongForm, not streamChat: the live output cap is sized for
+        // what_to_answer answers (p100 2530 chars) and silently truncated long
+        // summaries, which then passed the length check below and were
+        // persisted as complete. `outcome` also lets that be DETECTED rather
+        // than inferred from the text.
+        const { stream, outcome } = this.streamChatLongForm(`Context:\n${context}`, undefined, undefined, systemPrompt, true);
         const collectChunks = async (): Promise<string> => {
           let result = '';
-          for await (const chunk of this.streamChat(`Context:\n${context}`, undefined, undefined, systemPrompt, true)) {
+          for await (const chunk of stream) {
             result += chunk;
           }
           return result;
         };
         const text = await this.withTimeout(collectChunks(), 60000, 'Custom Provider Summary');
-        if (text.trim().length > 0) {
+        if (outcome.truncated) {
+          // Do not persist an incomplete summary as the meeting's summary, and
+          // do not silently swap the user's chosen provider either — fall to
+          // the next ATTEMPT the same way any other failure here does.
+          console.warn(`[LLMHelper] ⚠️ Custom provider summary stopped early (${outcome.reason}) — falling back rather than saving a partial summary.`);
+        } else if (text.trim().length > 0) {
           console.log(`[LLMHelper] ✅ Custom provider summary generated successfully.`);
           return this.processResponse(text);
         }

@@ -6597,7 +6597,7 @@ export class AppState {
     // win.focus() can cause macOS to re-activate the app. Re-hide the dock
     // if we are in undetectable mode.
     if (process.platform === 'darwin' && this.isUndetectable) {
-      app.dock.hide();
+      app.dock!.hide();  // app.dock is macOS-only (undefined elsewhere); darwin+isUndetectable gated at 6599
     }
     const mainWindow = this.getMainWindow();
     this.sendToWindow(mainWindow, 'capture-and-process', {
@@ -6611,7 +6611,10 @@ export class AppState {
       let captureArea: Electron.Rectangle | undefined;
 
       if (process.platform === 'win32' || process.platform === 'darwin') {
-        captureArea = await this.cropperWindowHelper.showCropper();
+        // showCropper() reports "cancelled" as null; captureArea is declared
+        // `| undefined`. Both are falsy, so the `if (!captureArea)` throw below
+        // behaves identically — this only reconciles the two sentinels.
+        captureArea = (await this.cropperWindowHelper.showCropper()) ?? undefined;
 
         if (!captureArea) {
           throw new Error("Selection cancelled");
@@ -6939,7 +6942,7 @@ export class AppState {
     // app.dock.isVisible() is the OS ground truth. decideDockTransition tells us
     // whether the dock needs changing given the desired state and what's
     // currently applied (currentlyHidden = !visible).
-    const currentlyHidden = !app.dock.isVisible();
+    const currentlyHidden = !app.dock!.isVisible();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
     const { shouldApply } = decideDockTransition(wantUndetectable, currentlyHidden);
 
     if (shouldApply) {
@@ -6950,7 +6953,7 @@ export class AppState {
           targetFocusWindow.isFocused();
 
         console.log(`[Stealth] app.dock.hide() (enforce attempt ${attempt})`);
-        app.dock.hide();
+        app.dock!.hide();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
         this.hideTray();
 
         // Re-assert content protection: the activation-policy flip can reset
@@ -6964,7 +6967,7 @@ export class AppState {
         }
       } else {
         console.log(`[Stealth] app.dock.show() (enforce attempt ${attempt})`);
-        app.dock.show();
+        app.dock!.show();  // app.dock is macOS-only (undefined elsewhere); non-darwin early-returns at 6933
         this.showTray();
         // Do NOT call focus() — let the user's current app retain focus.
       }
@@ -7244,7 +7247,7 @@ export class AppState {
       if (isMac) {
         // Skip dock icon update when dock is hidden to avoid potential flicker
         if (!this.isUndetectable) {
-          app.dock.setIcon(image);
+          app.dock!.setIcon(image);  // app.dock is macOS-only (undefined elsewhere); isMac gated at 7244
         }
       } else {
         // Windows/Linux: Update all window icons
@@ -7446,7 +7449,7 @@ async function initializeApp() {
     // SettingsManager is already statically imported — no require() needed.
     const isUndetectableOnStartup = SettingsManager.getInstance().get('isUndetectable') ?? false;
     if (isUndetectableOnStartup) {
-      app.dock.hide();
+      app.dock!.hide();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 7445
     } else {
       // Non-stealth: clamp to accessory (dock-tile-less) until the disguised
       // name/icon is painted and the window exists. Do NOT promote to 'regular'
@@ -7616,6 +7619,23 @@ async function initializeApp() {
   const { sendAnonymousInstallPing } = require('./services/InstallPingManager');
   sendAnonymousInstallPing();
 
+  // Usage outbox — durable delivery of client-reported (BYOK) usage events.
+  //
+  // Started AFTER credentials are loaded, but the key is passed as a GETTER
+  // rather than a value: a user who pastes their Natively key ten minutes from
+  // now must not need a restart before their queued events can drain. Inert
+  // unless NATIVELY_USAGE_OUTBOX_ENABLED is set, so shipping this changes
+  // nothing until the flag is switched on.
+  try {
+    const { usageOutbox } = require('./services/UsageOutbox');
+    usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
+    // Drain anything queued while the app was closed, without waiting a full
+    // dispatch interval. Deliberately not awaited — startup must not block on it.
+    setTimeout(() => { void usageOutbox.dispatchOnce(); }, 5000);
+  } catch (err: any) {
+    console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
+  }
+
   // Load the Google Service Account key for Speech-to-Text: the persisted path
   // first, then GOOGLE_APPLICATION_CREDENTIALS (set in a terminal but not for a
   // Spotlight launch).
@@ -7710,7 +7730,7 @@ async function initializeApp() {
   }
 
   // DEV-ONLY: thinking MATRIX (budgets × levels) on a focused problem subset.
-  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.6-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
+  //   THINKING_MATRIX=1 THINKING_BENCH_MODEL=gemini-3.7-flash THINKING_BENCH_DATASET=$(pwd)/electron/services/dev/cf10.json npm run electron:build
 if (process.env.THINKING_MATRIX === '1') {
     (async () => {
       try {
@@ -8064,7 +8084,7 @@ if (process.env.THINKING_MATRIX === '1') {
       // Do NOT call dock.show() while a meeting is running — the dock icon
       // appearing mid-meeting is a critical stealth failure.
       if (!appState.getUndetectable() && !appState.getIsMeetingActive()) {
-        app.dock.show();
+        app.dock!.show();  // app.dock is macOS-only (undefined elsewhere); darwin gated at 8080
       }
     }
 
@@ -8234,7 +8254,11 @@ if (process.env.THINKING_MATRIX === '1') {
     }
   });
 
-  app.on('gpu-process-crashed', (_event, killed: boolean) => {
+  // TODO(electron43): dead event on Electron 43; remove after verifying child-process-gone covers GPU crashes on macOS+Windows
+  // The `as any` is type-only: Electron 43 dropped 'gpu-process-crashed' from its
+  // typings, so no overload matches. The listener is deliberately KEPT registered
+  // (removing it would be a behaviour change) — see docs/ts7-upgrade-audit.md §4.4.
+  app.on('gpu-process-crashed' as any, (_event: Electron.Event, killed: boolean) => {
     logCrashConsole('gpu-process-crashed', { killed });
     // Deprecated alias of child-process-gone {type:'GPU'} — same policy:
     // a GPU restart is recoverable; never destroy the DB for it.
