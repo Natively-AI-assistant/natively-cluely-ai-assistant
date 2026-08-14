@@ -243,6 +243,12 @@ describe('feature instrumentation', () => {
     // A user can rename any mode. Only BUILT-INS map to named features (§31).
     assert.equal(featureForMode({ templateType: 'technical-interview', is_builtin: 0 }), FEATURE.MODE_EXECUTION);
     assert.equal(featureForMode({ templateType: 'technical-interview', is_builtin: 1 }), FEATURE.TECHNICAL_INTERVIEW);
+    // F6 (code-review 2026-08-14): the LIVE call site passes
+    // ModesManager.getActiveMode() output, whose Mode type carries CAMELCASE
+    // `isBuiltin` — raw-row fixtures alone masked that builtin detection was
+    // always false in production. Pin the Mode-shaped input too.
+    assert.equal(featureForMode({ templateType: 'technical-interview', isBuiltin: true }), FEATURE.TECHNICAL_INTERVIEW);
+    assert.equal(featureForMode({ templateType: 'technical-interview', isBuiltin: false }), FEATURE.MODE_EXECUTION);
     assert.equal(featureForMode(null), FEATURE.MODE_EXECUTION);
     assert.equal(featureForMode({ templateType: 'something-invented', is_builtin: 1 }), FEATURE.MODE_EXECUTION);
   });

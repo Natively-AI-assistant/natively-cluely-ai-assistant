@@ -9467,6 +9467,15 @@ export function initializeIpcHandlers(appState: AppState): void {
               'What to Answer',
             );
           } catch (_) {}
+        } else {
+          // F8 (code-review 2026-08-14): runWhatShouldISay returns null on its
+          // superseded / non-answer / empty-answer paths — the user got
+          // NOTHING, so the finally's `completed()` must not stamp this run as
+          // delivered service (§6: a dispute report must never imply service
+          // was delivered when it was not). `cancelled` is the honest terminal:
+          // no service, no fabricated error. First terminal wins, so the
+          // finally below becomes a no-op.
+          try { _usage?.cancelled({ metadata: { no_answer: true } }); } catch { /* ignore */ }
         }
         return {
           answer,

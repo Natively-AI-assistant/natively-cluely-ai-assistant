@@ -28,31 +28,57 @@ const REQUIRED_MARKDOWN_HEADINGS = CODING_SECTIONS.map(section => `## ${section}
 const sectionHeader = (label: string): RegExp =>
   new RegExp(`^\\s*#{0,3}\\s*(?:\\*\\*)?\\s*(?:${label})\\s*(?:\\*\\*)?\\s*(?::|[-–—])?\\s*$`, 'im');
 
-const SECTION_ALIASES: Record<string, RegExp[]> = {
-  Approach: [sectionHeader('Approach')],
-  'Technique / Data Structure / Algorithm Used': [
-    sectionHeader('Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used'),
-  ],
-  Code: [sectionHeader('Code')],
-  'Dry Run': [sectionHeader('Dry Run')],
-  Complexity: [sectionHeader('Complexity')],
-  'Interviewer Follow-up Points': [
-    sectionHeader('Interviewer Follow-up Points|Follow-up Points|Follow-ups'),
-  ],
+// The SAME label alternations as `sectionHeader`, but requiring a real markdown
+// heading (`#`..`###`) and refusing the bold form. Kept beside the aliases so
+// the two cannot drift apart.
+const markdownSectionHeader = (label: string): RegExp =>
+  new RegExp(`^\\s*#{1,3}\\s+(?:${label})\\s*(?::|[-–—])?\\s*$`, 'im');
+
+const SECTION_LABELS: Record<string, string> = {
+  Approach: 'Approach',
+  'Technique / Data Structure / Algorithm Used':
+    'Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used',
+  Code: 'Code',
+  'Dry Run': 'Dry Run',
+  Complexity: 'Complexity',
+  'Interviewer Follow-up Points': 'Interviewer Follow-up Points|Follow-up Points|Follow-ups',
 };
+
+const SECTION_ALIASES: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(SECTION_LABELS).map(([section, label]) => [section, [sectionHeader(label)]]),
+);
+
+const SECTION_MARKDOWN_HEADERS: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(SECTION_LABELS).map(([section, label]) => [section, [markdownSectionHeader(label)]]),
+);
 
 const hasSection = (answer: string, section: string): boolean =>
   SECTION_ALIASES[section]?.some(pattern => pattern.test(answer)) ?? false;
 
-// `sectionHeader` accepts zero hashes on purpose, so `hasSection` recognizes a
-// model's own `**Approach**` as the Approach section for completeness checks.
-// That makes it useless for asking "did the model use OUR heading style?" —
-// which is a different question with a different consumer (the non-destructive
-// exemption). This is the markdown-heading-only test.
-const CANONICAL_HEADING_RE = /^[ \t]*#{1,3}[ \t]+\S/m;
-const stripFencedCode = (answer: string): string => answer.replace(/```[\s\S]*?```/g, ' ');
-const usesCanonicalMarkdownHeadings = (answer: string): boolean =>
-  CANONICAL_HEADING_RE.test(stripFencedCode(answer));
+// Strips CLOSED fences, then any UNTERMINATED trailing fence.
+//
+// Code-review 2026-08-13: the non-greedy `[\s\S]*?` needs a closing ``` to
+// match, so an answer cut off inside its code block kept the whole block. That
+// is not an edge case on this branch — MAX_STREAM_OUTPUT_CHARS (client) and
+// AI_STREAM_MAX_OUTPUT_TOKENS (server) both cut mid-token, and a coding answer
+// is usually inside a fence at that point. Every caller here treats the result
+// as PROSE (complexity extraction, canonical-heading detection), so leaking
+// code into it published a Big-O from a discarded approach — "# brute force is
+// O(n^2), too slow" — as the shipped answer's official Complexity section.
+const stripFencedCode = (answer: string): string =>
+  answer.replace(/```[\s\S]*?```/g, ' ').replace(/```[\s\S]*$/, ' ');
+// "Did the model start OUR canonical scaffold?" — a canonical section LABEL
+// written as a real markdown heading. Both halves must hold on the SAME
+// heading, which is what the previous two-term conjunction (any canonical label
+// anywhere, in any style) AND (any `##` heading anywhere) could not express:
+// a model writing `## Solution` in its own words plus a bold `**Complexity**`
+// satisfied both terms separately and was fed back into the lossy repair.
+const usesCanonicalSectionHeadings = (answer: string): boolean => {
+  const prose = stripFencedCode(answer);
+  return CODING_SECTIONS.some(section =>
+    SECTION_MARKDOWN_HEADERS[section]?.some(pattern => pattern.test(prose)) ?? false,
+  );
+};
 
 const hasCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]*\n[\s\S]+?```/.test(answer);
 const hasLanguageTaggedCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]+\n[\s\S]+?```/.test(answer);
@@ -516,10 +542,16 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
   // bold-heading answers back into the lossy repair, re-opening the 2026-08-10
   // regression this exemption exists to close. Both halves are required: the
   // answer must carry a real `##` markdown heading AND at least one heading we
-  // recognize as canonical. A model using `## Solution` (its own words, our
-  // syntax) recognizes as neither and stays exempt when complete.
-  const usesCanonicalHeadings = missingSections.length < CODING_SECTIONS.length
-    && usesCanonicalMarkdownHeadings(answer);
+  // recognize as canonical.
+  //
+  // Code-review 2026-08-13: expressing that as two INDEPENDENT terms still
+  // failed, because they could be satisfied by two DIFFERENT lines. Verified:
+  // `## Solution` + `**Complexity**` on its own line makes term 1 true (via the
+  // bold form) and term 2 true (via `## Solution`), so a complete, correctly
+  // formatted answer was sent to `repairCodingMarkdown`, which keeps only the
+  // FIRST fenced block and dropped the user's second code block. Both halves
+  // must hold on the SAME heading — that is `usesCanonicalSectionHeadings`.
+  const usesCanonicalHeadings = usesCanonicalSectionHeadings(answer);
   const substantivelyComplete = codeBlock
     && hasTaggedBlock
     && statesComplexity

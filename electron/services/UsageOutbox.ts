@@ -75,7 +75,16 @@ const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.
 const DISPATCH_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 100;
 const REQUEST_TIMEOUT_MS = 10_000;
-const MAX_ATTEMPTS = 12;
+// F5 (code-review 2026-08-14): 12 attempts × the 1h-capped backoff exhausted
+// an event in ~6.1 hours of continuous failure — deleting "the entire record
+// of that session" (this header's own words) faster than a weekend outage or
+// a lapsed licence could plausibly resolve, and directly contradicting the
+// 401 comment below ("the user may paste a valid key later"). 360 attempts at
+// the 1h cap ≈ 15 days of retrying while the app is open, matching the
+// durability window the header promises. Unbounded growth is NOT the cost:
+// the 10k row cap + delivered-first eviction in enqueueUsageEvent is the real
+// storage bound; attempt exhaustion only needs to stop infinite retry churn.
+const MAX_ATTEMPTS = 360;
 const COMPACT_EVERY_MS = 6 * 60 * 60 * 1000;
 
 /** Exponential backoff with jitter, capped at 1h. Index is attempt_count. */

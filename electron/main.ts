@@ -3400,6 +3400,36 @@ export class AppState {
       if (decision.type === 'log') {
         const logger = decision.level === 'info' ? console.log : console.warn;
         logger(`${prefix}${decision.message}`);
+        // F10 (code-review 2026-08-14): sustained zero-fill is the signature
+        // of a mid-meeting Screen Recording revocation on macOS — the tap
+        // keeps "running" but every IO callback yields zero frames. The
+        // 'mac-screen-recording-revoked-rebuild' diagnostic existed in the
+        // PermissionReason machinery but NOTHING emitted it, so revoked users
+        // were told to change devices (or nothing) instead of re-granting the
+        // TCC permission. Probe the actual grant (bypassCache — the revocation
+        // just happened, a cached 'granted' would defeat the check) and emit
+        // the correct banner when the silence is explained by a lost grant.
+        // Probe failure or a healthy grant keeps the log-only behavior.
+        if (decision.reason === 'sustained-zero-valued-silence' && process.platform === 'darwin') {
+          void resolveMacScreenCaptureCapability('sustained zero-fill diagnosis', { bypassCache: true })
+            .then((cap) => {
+              if (!cap.effectiveDenied) return;
+              if (this.systemAudioCapture !== capture) return; // capture replaced mid-probe
+              if (!this.isMeetingActive) return;
+              const msg = formatPermissionMessage('mac-screen-recording-revoked-rebuild');
+              console.warn(`${prefix}SystemAudioCapture ${msg}`);
+              this.sendAudioCaptureFailed({
+                channel: 'system',
+                message: msg,
+                titleKey: permissionTitleKey('mac-screen-recording-revoked-rebuild'),
+                attempt: 0,
+                maxAttempts: 3,
+                terminal: false,
+                stuck: true,
+              });
+            })
+            .catch(() => { /* probe failed — keep log-only behavior */ });
+        }
         return;
       }
       if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
@@ -4819,6 +4849,12 @@ export class AppState {
    */
   private _defaultOutputWatcherInterval: NodeJS.Timeout | null = null;
   private _lastObservedDefaultOutputId: string | null = null;
+  // F2 (code-review 2026-08-14): rebuild-failure budget for the route-change
+  // handler. A throw mid-rebuild rolls back the observation so the next tick
+  // retries — but a DETERMINISTIC failure (e.g. native module missing, F-107)
+  // must not retry-log every 4s forever, so retries are capped like the
+  // recovery flow's 3-attempt budget. Reset on any successful rebuild.
+  private _routeChangeRebuildFailures = 0;
   private _defaultOutputSwitchInProgress = false;
 
   private startDefaultOutputWatcher(): void {
@@ -4988,6 +5024,32 @@ export class AppState {
         reason: 'output-route-changed',
       });
       console.log('[DefaultOutputWatcher] CoreAudio Tap rebound to new default output.');
+      this._routeChangeRebuildFailures = 0;
+    } catch (err) {
+      // F2 (code-review 2026-08-14): the observation was committed BEFORE the
+      // fallible span (destroy → capability probe → construct → start), so a
+      // throw here used to leave the new id committed with no capture built —
+      // every subsequent tick saw currentId === committed and the route change
+      // was permanently re-swallowed (the exact F-103 failure, back on the
+      // error path). Roll the observation back so the next 4s tick retries,
+      // bounded so a deterministic throw cannot retry-log forever.
+      this._routeChangeRebuildFailures += 1;
+      if (this._routeChangeRebuildFailures <= 3) {
+        this._lastObservedDefaultOutputId = previousObservedOutputId;
+        console.error(`[DefaultOutputWatcher] Route-change rebuild failed (attempt ${this._routeChangeRebuildFailures}/3) — will retry on next tick:`, err);
+      } else {
+        // Budget exhausted: keep the commit (stop retrying) and tell the
+        // renderer the tap is not following the route, mirroring the
+        // permission-denied broadcast shape so banners can react.
+        console.error('[DefaultOutputWatcher] Route-change rebuild failed after 3 attempts — giving up until the next route change:', err);
+        this.broadcastDeviceSelection({
+          kind: 'output',
+          requested: null,
+          actual: null,
+          fellBack: true,
+          reason: 'output-route-rebuild-failed',
+        });
+      }
     } finally {
       this._defaultOutputSwitchInProgress = false;
     }

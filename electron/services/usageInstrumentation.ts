@@ -65,9 +65,15 @@ const BUILTIN_TEMPLATE_TO_FEATURE: Record<string, FeatureName> = {
  * it as one would attribute a named feature to a row the user could have shaped
  * arbitrarily.
  */
-export function featureForMode(mode: { templateType?: string; is_builtin?: number | boolean } | null | undefined): FeatureName {
+export function featureForMode(mode: { templateType?: string; is_builtin?: number | boolean; isBuiltin?: boolean } | null | undefined): FeatureName {
     if (!mode) return FEATURE.MODE_EXECUTION;
-    const isBuiltin = mode.is_builtin === 1 || mode.is_builtin === true;
+    // F6 (code-review 2026-08-14): the live call site passes
+    // ModesManager.getActiveMode() output, whose Mode type carries CAMELCASE
+    // `isBuiltin` (rowToMode maps `is_builtin === 1` → isBuiltin). Reading only
+    // the snake_case raw-row field meant builtin detection was ALWAYS false in
+    // production and every execution ledgered as generic mode_execution — the
+    // shipped test used raw-row fixtures, masking it. Accept both shapes.
+    const isBuiltin = mode.is_builtin === 1 || mode.is_builtin === true || mode.isBuiltin === true;
     if (!isBuiltin) return FEATURE.MODE_EXECUTION;
     return BUILTIN_TEMPLATE_TO_FEATURE[String(mode.templateType ?? '')] ?? FEATURE.MODE_EXECUTION;
 }

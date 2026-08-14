@@ -2337,15 +2337,25 @@ ANSWER DIRECTLY:`;
       if (this.useOllama) {
         return await this.callOllama(promptMessage, undefined, systemPrompt);
       } else if (this.customProvider || this.activeCurlProvider) {
+        // F3 (code-review 2026-08-14): buffered caller — a truncated stream
+        // must fail loudly, not return a mid-sentence suggestion (see chat()).
+        const { stream, outcome } = this.streamChatWithOutcome(promptMessage, undefined, suggestionContext, basePrompt, true);
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of stream) {
           fullResponse += chunk;
+        }
+        if (outcome.truncated) {
+          throw new Error('Suggestion generation truncated mid-stream — discarding partial output.');
         }
         return this.processResponse(fullResponse);
       } else if (this.client) {
+        const { stream, outcome } = this.streamChatWithOutcome(promptMessage, undefined, suggestionContext, basePrompt, true);
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of stream) {
           fullResponse += chunk;
+        }
+        if (outcome.truncated) {
+          throw new Error('Suggestion generation truncated mid-stream — discarding partial output.');
         }
         return this.processResponse(fullResponse);
       } else {
@@ -4665,7 +4675,13 @@ let isMultimodal = !!(imagePaths?.length);
    *
    * MULTIMODAL: Gemini-only (existing logic)
    */
-  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  // F7 (code-review 2026-08-14): `outcome` is the RAG path's equivalent of
+  // streamChatWithOutcome. This generator is consumed DIRECTLY by RAGManager
+  // (not via streamChat), so the truncation sentinel cannot be used here — it
+  // would leak into the rendered answer. Callers that persist or finalize the
+  // buffered result must pass an object and read `outcome.incomplete` after
+  // the stream ends; the cap and post-commit-failure branches below set it.
+  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal, outcome?: { incomplete?: boolean; reason?: 'output_cap' | 'provider_died_post_commit' }): AsyncGenerator<string, void, unknown> {
     console.log(`[LLMHelper] streamChatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) });
 
     let isMultimodal = !!(imagePaths?.length);
@@ -4941,6 +4957,7 @@ let isMultimodal = !!(imagePaths?.length);
             // mid-sentence RAG/doc-grounded answer reached the operator log,
             // and the caller, looking exactly like a finished one.
             console.warn(`[LLMHelper] ⚠️ ${provider.name} stream ended INCOMPLETE (output cap reached)`);
+            if (outcome) { outcome.incomplete = true; outcome.reason = 'output_cap'; }
           } else {
             console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
           }
@@ -4950,7 +4967,8 @@ let isMultimodal = !!(imagePaths?.length);
             console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
             // NOTE: no truncation sentinel here. This generator is consumed directly by
             // RAGManager (not via streamChat), so a sentinel would leak into its output.
-            // Truncation signalling is scoped to the streamChat path.
+            // Truncation signalling for this path is the `outcome` out-param (F7).
+            if (outcome) { outcome.incomplete = true; outcome.reason = 'provider_died_post_commit'; }
             return;
           }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
@@ -9298,9 +9316,20 @@ let isMultimodal = !!(imagePaths?.length);
    * Universal Chat (Non-streaming)
    */
   public async chat(message: string, imagePaths?: string[], context?: string, systemPromptOverride?: string, skipModeInjection: boolean = false): Promise<string> {
+    // F3 (code-review 2026-08-14): this is a BUFFERED caller — nothing is
+    // shown to a user mid-stream, so the streaming path's "end by returning,
+    // never throw" contract does not apply here. When the post-commit
+    // truncation sentinel fires (provider died after first token, runaway
+    // cap), a partial buffer must surface as an ERROR — callers like
+    // modes:generate-from-brief persist this return value as a completed
+    // generation, which is exactly how mid-sentence artifacts were saved.
+    const { stream, outcome } = this.streamChatWithOutcome(message, imagePaths, context, systemPromptOverride, false, skipModeInjection);
     let fullResponse = "";
-    for await (const chunk of this.streamChat(message, imagePaths, context, systemPromptOverride, false, skipModeInjection)) {
+    for await (const chunk of stream) {
       fullResponse += chunk;
+    }
+    if (outcome.truncated) {
+      throw new Error('Generation ended before completion (provider stream truncated) — partial output discarded rather than saved as complete.');
     }
     return fullResponse;
   }

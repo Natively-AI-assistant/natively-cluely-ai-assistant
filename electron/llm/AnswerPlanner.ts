@@ -199,6 +199,17 @@ export interface AnswerPlan {
    * not exist.
    */
   documentGroundedFilesPresent?: boolean;
+  /**
+   * The same mode where the user's source policy is EXPLICITLY strict —
+   * `reference_files_only`, or a reference-files-first authority the user chose
+   * deliberately (origin !== 'default_new_mode') with a file present. This, not
+   * `documentGroundedFilesPresent`, gates the "refuse if it isn't in the
+   * uploaded material" instruction, because it is the same predicate that
+   * decides whether retrieval is FORCED. Telling the model to refuse on absence
+   * while retrieval is unforced produces false denials about the user's own
+   * uploaded files (code-review 2026-08-13).
+   */
+  documentGroundedStrict?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -1496,6 +1507,23 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
   const documentGroundedFilesPresent = documentGroundedCustomModeActive
     && input.activeMode?.documentGrounded === true;
+  //  KNOWLEDGE SUPPRESSION — "may the model fall back to general knowledge, or
+  //  must it refuse when the uploaded files don't cover the question?" That is
+  //  the STRICT question, and it must key on the same predicate that decides
+  //  whether retrieval is FORCED (WhatToAnswerLLM:281, IntelligenceEngine:1133,
+  //  LLMHelper:5625 all read strictDocumentGroundedActive).
+  //
+  //  Code-review 2026-08-13: the refusal policy line below keyed on
+  //  documentGroundedFilesPresent, which is TRUE for a template-seeded mode
+  //  (origin 'default_new_mode') the moment any file is attached — but
+  //  strictDocumentGroundedFromContract deliberately returns FALSE for exactly
+  //  that case, so forced retrieval never ran. The model was told "refuse if it
+  //  isn't in the uploaded material" while the retrieval that would have
+  //  supplied the material was not forced, which is how a user asking about
+  //  their own uploaded thesis got "that information is not in the uploaded
+  //  material". Routing still uses the files-present flag (a doc-shaped answer
+  //  is harmless); only the knowledge-suppression instruction is strict.
+  const documentGroundedStrict = input.activeMode?.strictDocumentGroundedActive === true;
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 
@@ -2085,6 +2113,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerStyleTargetSeconds: detectAnswerStyle(question).targetSeconds,
     documentGroundedCustomModeActive,
     documentGroundedFilesPresent,
+    documentGroundedStrict,
   };
 };
 
@@ -2178,8 +2207,44 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
         : 'Answer in a neutral, explanatory voice. Do not roleplay as the candidate.';
   // Files-present, not authority-only: with nothing uploaded this line told the
   // model to refuse against material the user never provided (Bug 001).
-  const policyLine = plan.documentGroundedFilesPresent
+  //
+  // Code-review 2026-08-13: the line bundles TWO instructions with different
+  // preconditions, and only the first is safe at files-present.
+  //   GROUNDING ("prefer the uploaded files")  — correct whenever a file
+  //     exists. Attaching a thesis to a stock Lecture mode should absolutely
+  //     make the model use it.
+  //   SUPPRESSION ("refuse if absent, never use general knowledge") — only
+  //     correct when retrieval was FORCED to go and fetch that material, which
+  //     is the STRICT predicate (strictDocumentGroundedFromContract returns
+  //     false for a template-seeded mode, so forced retrieval never ran).
+  // Emitting suppression at files-present is how a user asking about their own
+  // uploaded thesis in a template-seeded mode got "that information is not in
+  // the uploaded material". Split the line rather than dropping it: the
+  // non-strict branch keeps the grounding half and explicitly CANCELS the
+  // refusal, because the bare grounding instruction was itself read as a
+  // licence to deny.
+  // BOTH conditions, not strict alone (code-review 2026-08-14). `strictDocument-
+  // GroundedFromContract` returns true for `reference_files_only` on the
+  // AUTHORITY ALONE — its `hasReferenceFiles` check guards only the
+  // `reference_files_primary`/`_plus_transcript` branch. So a "reference files
+  // only" mode with nothing uploaded yet (or whose last file was deleted) has
+  // strict=true and filesPresent=false, and gating on strict alone put the
+  // refusal instruction back in front of a user who had provided no material —
+  // Bug 001 verbatim, re-opened by the first version of this fix.
+  const policyLine = plan.documentGroundedStrict && plan.documentGroundedFilesPresent
     ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
+    : plan.documentGroundedFilesPresent
+    // F9 (code-review 2026-08-14): the previous wording ("answer normally from
+    // general knowledge — do NOT tell the user the information is missing")
+    // banned honesty OUTRIGHT — so for a question asking specifically what the
+    // uploaded document says (e.g. "what does section 5 of my thesis
+    // conclude?") whose evidence retrieval missed, the only remaining
+    // instruction pushed the model to fabricate document contents with the
+    // escape hatch removed. The split below keeps the anti-refusal intent for
+    // GENERAL questions (Bug 001 stays fixed) while restoring honesty for
+    // document-content questions: general knowledge may answer the topic, but
+    // must never be PRESENTED as what the document says.
+    ? 'Prefer the uploaded/reference files for this custom mode wherever they cover the question, and ground concrete claims in them. If the question is a general one the files simply do not cover, answer normally from general knowledge — do not refuse or apologize about the files. But never present general knowledge or inference AS the document\'s contents: when the question asks specifically what the uploaded material says, states, or concludes and the provided evidence does not show it, say briefly that the retrieved material does not show it (you may still answer the underlying topic from general knowledge, clearly framed as such).'
     : plan.profileContextPolicy === 'required'
       ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
       : plan.profileContextPolicy === 'forbidden'
