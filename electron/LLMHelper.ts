@@ -5221,7 +5221,11 @@ let isMultimodal = !!(imagePaths?.length);
     // answers and is far too tight for a whole-meeting summary, which the batch
     // callers reach through streamChatLongForm.
     const { MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
-    const outputCeiling = profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS;
+    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    // Test switch (dev-only, opt-in) lets the cap be provoked without waiting
+    // for a model to actually loop. Null in any packaged build.
+    const outputCeiling = testOutputCharCeiling()
+      ?? (profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS);
     let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
@@ -5317,12 +5321,14 @@ let isMultimodal = !!(imagePaths?.length);
     label: string,
   ): AsyncGenerator<string, void, unknown> {
     const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    const ceiling = testOutputCharCeiling() ?? MAX_STREAM_OUTPUT_CHARS;
     for await (const chunk of inner) {
       yield chunk;
       state.chars += typeof chunk === 'string' ? chunk.length : 0;
-      if (state.chars > MAX_STREAM_OUTPUT_CHARS) {
+      if (state.chars > ceiling) {
         console.warn(
-          `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${MAX_STREAM_OUTPUT_CHARS}) — ending the turn. The model is not converging.`,
+          `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${ceiling}) — ending the turn. The model is not converging.`,
         );
         // Ending by RETURN is indistinguishable from a normal completion to the
         // delegating `yield*`, so the caller logged a capped stream as a
@@ -5339,11 +5345,27 @@ let isMultimodal = !!(imagePaths?.length);
     inner: AsyncGenerator<string, void, unknown>,
     state: { emitted: boolean },
   ): AsyncGenerator<string, void, unknown> {
+    // Test-only fault, three-gated and off unless explicitly requested; a
+    // packaged build ignores it entirely. See streamFaultInjection.ts.
+    const { failStreamAfterChars, InjectedStreamFault } = await import('./llm/streamFaultInjection');
+    const failAfter = failStreamAfterChars();
+    let seen = 0;
+
     for await (const tok of inner) {
       if (!state.emitted && typeof tok === 'string' && tok.trim().length > 0) {
         state.emitted = true;
       }
       yield tok;
+      if (failAfter !== null) {
+        seen += typeof tok === 'string' ? tok.length : 0;
+        if (seen >= failAfter) {
+          // Thrown AFTER the yield on purpose: the point is a provider that
+          // dies once output is already on screen, which is precisely the case
+          // the fall-through guard exists for.
+          console.warn(`[LLMHelper] INJECTING mid-stream fault after ${seen} chars (test switch)`);
+          throw new InjectedStreamFault(seen);
+        }
+      }
     }
   }
 
