@@ -557,7 +557,7 @@ export class DatabaseManager {
                 // Only log on ACTUAL failure, not on the historic "vec0
                 // constructor error: At least one vector column is
                 // required" which we now explicitly do NOT raise.
-                console.error('[DatabaseManager] v3 migration failed unexpectedly (non-fatal, will be retried at v8/v9):', e?.message || e);
+                console.error('[DatabaseManager] v3 migration failed unexpectedly (non-fatal, will be retried at v8/v9):', (e as { message?: string })?.message || e);
             }
             this.db.pragma('user_version = 3');
         }
@@ -576,7 +576,7 @@ export class DatabaseManager {
                     this._lastLegacyCleanup = 0;
                 }
             } catch (e) {
-                console.error('[DatabaseManager] v4 migration failed (non-fatal):', e?.message || e);
+                console.error('[DatabaseManager] v4 migration failed (non-fatal):', (e as { message?: string })?.message || e);
             }
             this.db.pragma('user_version = 4');
         }
@@ -2276,7 +2276,7 @@ export class DatabaseManager {
                             insert.run(row.id, row.embedding);
                         } catch (err) {
                             // On mismatch (e.g. mixed 768 and 3072 dims), nullify to re-embed later
-                            this.db.prepare('UPDATE chunks SET embedding = NULL WHERE id = ?').run(row.id);
+                            this.db!.prepare('UPDATE chunks SET embedding = NULL WHERE id = ?').run(row.id);  // guarded at method entry; narrowing lost in catch
                         }
                     }
                 });
@@ -2302,7 +2302,7 @@ export class DatabaseManager {
                         try {
                             insert.run(row.id, row.embedding);
                         } catch (err) {
-                            this.db.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE id = ?').run(row.id);
+                            this.db!.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE id = ?').run(row.id);  // guarded at method entry; narrowing lost in catch
                         }
                     }
                 });

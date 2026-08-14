@@ -1587,7 +1587,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
                   { streamId: myStreamId },
                 );
-                return;
+                return null;  // sibling error paths return null; handler is typed `| null`
               }
               skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
               const strippedQuery = skillPrefixMatch[2].trim();
@@ -1603,12 +1603,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                 `Skill "/${candidateId}" not found. Available: ${available}`,
                 { streamId: myStreamId },
               );
-              return;
+              return null;  // sibling error paths return null; handler is typed `| null`
             }
           } catch (skillErr: any) {
             console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
             event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
-            return;
+            return null;  // sibling error paths return null; handler is typed `| null`
           }
         }
 
@@ -1756,13 +1756,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             turnSourceDecision: manualTurnSourceDecision,
           });
-          if (isIntelligenceFlagEnabled('trace')) {
+          if (isIntelligenceFlagEnabled('trace')) {  // manualOwnership! below: assigned unconditionally at 1790-1797
             console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
-              owner: manualOwnership.owner,
-              profileAllowed: manualOwnership.profileAllowed,
-              explicitProfileAsk: manualOwnership.explicitProfileAsk,
-              shouldClarifyInsteadOfProfile: manualOwnership.shouldClarifyInsteadOfProfile,
-              reason: manualOwnership.reason,
+              owner: manualOwnership!.owner,
+              profileAllowed: manualOwnership!.profileAllowed,
+              explicitProfileAsk: manualOwnership!.explicitProfileAsk,
+              shouldClarifyInsteadOfProfile: manualOwnership!.shouldClarifyInsteadOfProfile,
+              reason: manualOwnership!.reason,
               answerType: answerPlan.answerType,
             }));
           }
@@ -11795,7 +11795,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
       const file = await ingestModeReferenceFile({
         modeId,
-        filePath: selectedPath,
+        filePath: selectedPath!,  // guarded + assigned on the straight line above
         onIndexStatus: (status, fileId) => {
           BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase: status });
@@ -12286,7 +12286,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
         const win = appState.getMainWindow() ?? undefined;
-        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
           type: 'warning',
           message: 'Allow LAN access?',
           detail:
@@ -12294,7 +12294,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           buttons: ['Cancel', 'Allow LAN access'],
           defaultId: 0,
           cancelId: 0,
-        });
+        };
+        // Electron types (options) and (parent, options) but not (undefined, options);
+        // picking the overload by parent presence leaves the runtime call unchanged.
+        const response = win
+          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+          : dialog.showMessageBoxSync(lanBindDialogOptions);
         if (response !== 1) {
           return { ok: false, declined: true };
         }
