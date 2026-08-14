@@ -1524,13 +1524,27 @@ export function ProfileIntelligenceSettings({
         }
     };
 
+    // The Pro gate lives HERE, not only on the buttons. FileUploadEmpty already
+    // checks `hasAccess` before calling onBrowse, so the empty-state path was
+    // covered — but the "Re-upload" button in the heuristic-extraction notice
+    // wires `onClick={browseResume}` directly, with no check. That button renders
+    // whenever `hasProfile && extractionMode === 'heuristic'`, which a user whose
+    // Pro/trial has LAPSED still satisfies (the stored profile outlives the
+    // entitlement), so it was a live bypass straight to the file picker.
+    //
+    // Gating at the shared entry point instead of at each call site makes the
+    // invariant hold for every present and future button. The check in
+    // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
+    // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
+        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
+        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
