@@ -278,7 +278,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     // (LLMHelper:5448); this surface was not, so WTA ran the
                     // strict doc pipeline for every template-seeded mode with
                     // zero files — the root of the 2026-08-11 denial reports.
-                    const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true;
+                    const strictDocGroundedActive = activeModeGroundingInfo?.strictDocumentGroundedActive === true;
+                    // R1 (2026-08-12): enforcement = explicit strict contract OR a
+                    // doc-grounded mode with at least one real file. Strict-only
+                    // here dropped forced doc retrieval for template-seeded modes
+                    // the user actually uploaded documents into.
+                    const forceDocumentGrounding = strictDocGroundedActive
+                        || (documentGroundedCustomModeActive && activeModeGroundingInfo?.hasReferenceFiles === true);
                     const retrievalOptions = forceDocumentGrounding
                         ? { forceDocumentGrounding: true, followUpReferentHint: temporalContext?.previousResponses?.slice(-1)?.[0] }
                         : undefined;
@@ -309,10 +315,17 @@ ANSWER SHAPE: ${intentResult.answerShape}
                     if (answerPlan && !isLayerAllowed(answerPlan, 'reference_files')) {
                         referenceFilesAllowed = false;
                     }
-                    if (documentGroundedCustomModeActive) {
+                    // R2 (2026-08-12, review finding): this override used the BROAD
+                    // flag, so a template-seeded mode silently overrode the user's
+                    // EXPLICIT providerDataScopes reference_files=false denial and
+                    // shipped file chunks to the cloud provider. The retrievalRequired
+                    // rationale only holds when the mode's contract is genuinely
+                    // strict ("answer only from the files") — everywhere else the
+                    // user's denial wins and the reference layer is simply omitted.
+                    if (strictDocGroundedActive) {
                         if (!referenceFilesAllowed) {
-                            console.warn('[WhatToAnswerLLM] Generic/reference layer exclusion overridden: document-grounded custom mode active', {
-                                genericBypassDisabledReason: 'document_grounded_custom_mode',
+                            console.warn('[WhatToAnswerLLM] Generic/reference layer exclusion overridden: strict document-grounded mode active', {
+                                genericBypassDisabledReason: 'strict_document_grounded_mode',
                                 retrievalRequired: true,
                             });
                         }
@@ -848,13 +861,18 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // throwing. Production always takes the first branch — pinned by a
             // test asserting the real LLMHelper exposes the method, so this
             // fallback can never quietly become the live path.
-            // Explicitly annotated. Without it TS7005: the inferred tuple type
-            // references `_wtaRoute`, whose own type is resolved through the
-            // same expression, and TS gives up on the circularity rather than
-            // widening. Both consumers below call through `as any`, so the
-            // precise tuple shape buys nothing at the call site — only the
-            // circular inference, which is what breaks the build.
-            const _wtaArgs: readonly unknown[] = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
+            //
+            // The annotation is load-bearing, not decoration. electron/tsconfig.json
+            // runs with `noImplicitAny` but WITHOUT `strictNullChecks`, so a bare
+            // `undefined` in an unannotated array literal widens to an IMPLICIT any
+            // and tsc rejects the whole declaration:
+            //   TS7005: Variable '_wtaArgs' implicitly has an 'readonly [any, ...]' type
+            // At the previous direct call site the same `undefined` was contextually
+            // typed by the parameter, so extracting the arguments into a variable is
+            // what exposed it. Typing the tuple as the callee's own parameter list
+            // fixes that and additionally checks arity and order against the real
+            // signature — which an `as const` tuple silently did not.
+            const _wtaArgs: Parameters<LLMHelper['streamChat']> = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
             const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
                 ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
                 : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };

@@ -113,6 +113,29 @@ export function clarificationIsActionable(input: {
   hasReferenceFiles: boolean;
 }): boolean {
   if (typeof input.sourceAuthority !== 'string') return true;
-  if (!REFERENCE_BOUND_AUTHORITIES.has(input.sourceAuthority)) return true;
-  return input.hasReferenceFiles;
+  // R8 (2026-08-12, review finding): the docblock promised "unknown
+  // authorities fail toward answering the user", but the fall-through
+  // returned TRUE — letting the clarify short-circuit gag a turn on an
+  // authority we cannot even classify (a 'legacy' or future value). The
+  // known non-reference-bound authorities keep clarify available (they
+  // disambiguate between REAL universes); the reference-bound trio needs
+  // files; anything else is unclassifiable and must answer instead.
+  if (REFERENCE_BOUND_AUTHORITIES.has(input.sourceAuthority)) {
+    return input.hasReferenceFiles;
+  }
+  return KNOWN_SOURCE_AUTHORITIES.has(input.sourceAuthority);
 }
+
+/** Every authority modeSourceContract can produce (hand-mirror of
+ *  ModeSourceAuthority — same layering constraint as
+ *  BOUNDED_UNIVERSE_AUTHORITIES; the drift-guard test asserts agreement). */
+const KNOWN_SOURCE_AUTHORITIES: ReadonlySet<string> = new Set([
+  'reference_files_only',
+  'reference_files_primary',
+  'reference_files_plus_transcript',
+  'profile_only',
+  'profile_plus_transcript',
+  'transcript_only',
+  'general_mixed',
+  'ask_if_ambiguous',
+]);

@@ -2275,7 +2275,14 @@ ${IMAGE_TRUST_TRAILER}`;
       // uploaded material.
       const groundingInfo = modesMgr.getActiveModeDocumentGroundingInfo?.();
       documentGroundedCustomModeActive = groundingInfo?.documentGroundedCustomModeActive === true;
-      const retrieveAnswerType = documentGroundedCustomModeActive
+      // R6 (2026-08-12, review finding): the broad flag alone forced
+      // doc-grounded suggestion retrieval over an EMPTY corpus for every
+      // template-seeded fileless mode — the same class the 2026-08-11 WTA
+      // fixes closed. Enforcement = explicit strict contract, or a doc mode
+      // with at least one real file.
+      const docGroundedEnforcementActive = groundingInfo?.strictDocumentGroundedActive === true
+        || (documentGroundedCustomModeActive && groundingInfo?.hasReferenceFiles === true);
+      const retrieveAnswerType = docGroundedEnforcementActive
         ? 'document_grounded_suggestion'
         : 'general_meeting_answer';
       // buildRetrievedActiveModeContextBlock signature:
@@ -2289,7 +2296,7 @@ ${IMAGE_TRUST_TRAILER}`;
         retrieveAnswerType,
         false, // excludeCustomContext: false — let the manager handle scoping per answer type
         undefined, // pinnedModeId
-        { forceDocumentGrounding: documentGroundedCustomModeActive },
+        { forceDocumentGrounding: docGroundedEnforcementActive },
       ) || '';
     } catch (_modeErr: any) {
       console.warn('[LLMHelper] ModesManager load failed in generateSuggestion (non-fatal):', _modeErr?.message);
@@ -2639,22 +2646,25 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // If knowledge mode is active, check for intro questions and
       // inject system prompt + relevant context
       // ============================================================
-      const documentGroundedCustomModeActive = (() => {
+      // R6 (2026-08-12): read the grounding info ONCE — this block previously
+      // called the getter three separate times — and derive both flags from it.
+      const _chatGroundingInfo = (() => {
         try {
           const { ModesManager } = require('./services/ModesManager');
-          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
-        } catch { return false; }
+          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.() ?? null;
+        } catch { return null; }
       })();
+      const documentGroundedCustomModeActive = _chatGroundingInfo?.documentGroundedCustomModeActive === true;
+      // Enforcement = explicit strict contract, or a doc mode with real files.
+      // The bare broad flag is true for every template-seeded mode and made
+      // this path force doc grounding over an empty corpus (review R6).
+      const docGroundedEnforcementActive = _chatGroundingInfo?.strictDocumentGroundedActive === true
+        || (documentGroundedCustomModeActive && _chatGroundingInfo?.hasReferenceFiles === true);
       // Defect C (2026-08-01): log the EXPLICIT strictness flag — the broad
       // flag is true for every default non-interview mode via the template
       // seed, so this line falsely announced strictness on stock Team Meet
       // and Lecture sessions.
-      if ((() => {
-        try {
-          const { ModesManager } = require('./services/ModesManager');
-          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().strictDocumentGroundedActive === true;
-        } catch { return false; }
-      })()) {
+      if (_chatGroundingInfo?.strictDocumentGroundedActive === true) {
         console.log('[LLMHelper] Generic bypass disabled: strict document-grounded mode active', {
           genericBypassDisabledReason: 'strict_document_grounded_mode',
           retrievalRequired: true,
@@ -2666,10 +2676,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // "please upload your document" because it literally has no context. Pull the
       // grounded context block directly from the ModesManager's hybrid retriever
       // (same call the WTA live path uses) and fold it into the user-facing context.
-      if (documentGroundedCustomModeActive) {
+      if (docGroundedEnforcementActive) {
         try {
           const { ModesManager } = require('./services/ModesManager');
-          const groundingInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.();
+          const groundingInfo = _chatGroundingInfo;
           const groundedContext = await ModesManager.getInstance()
             .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true);
           if (groundedContext && groundedContext.trim()) {
@@ -2682,7 +2692,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           console.warn('[LLMHelper] Document-grounded manual retrieval failed, proceeding without:', groundedErr.message);
         }
       }
-      if (this.knowledgeOrchestrator?.isKnowledgeMode() && !documentGroundedCustomModeActive) {
+      // R6: knowledge suppression reads the STRICT flag (Defect C doctrine —
+      // same as the manual streaming path at ~5448 and the WTA engine). The
+      // broad flag silently dropped resume/knowledge injection for every
+      // template-seeded mode on this non-streaming path (follow-up-email flow).
+      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true) {
         try {
           // Feed only to the depth scorer — NOT feedInterviewerUtterance, which also routes to the
           // negotiation tracker and would misclassify the user's typed question as a recruiter utterance.
@@ -2785,7 +2799,11 @@ try {
   activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.() ?? null;
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
-const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+// R6 (2026-08-12): files-aware — the bare broad flag forced doc grounding
+// for fileless template-seeded modes (review finding; same class as WTA).
+const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true
+  || (activeModeGroundingInfo?.documentGroundedCustomModeActive === true
+    && activeModeGroundingInfo?.hasReferenceFiles === true);
 // Prompt System v2 (flag promptSystemV2): default the base prompt to the
 // composed v2 'answer' prompt when the caller passed no override, and record
 // whether the base is v2-composed so the legacy MODE_* template suffix is not
@@ -6028,7 +6046,7 @@ let isMultimodal = !!(imagePaths?.length);
             hasCustomPrompt: activeModeGroundingInfo?.hasCustomPrompt === true,
             hasReferenceFiles: activeModeGroundingInfo?.hasReferenceFiles === true,
             documentGrounded: activeModeGroundingInfo?.documentGrounded === true,
-            documentGroundedCustomModeActive: forceDocumentGrounding,
+            documentGroundedCustomModeActive: activeModeGroundingInfo?.documentGroundedCustomModeActive === true,
             answerType: routeOptions?.answerType,
             modeLock: true,
             modeLockReason: 'user_created_custom_mode',
@@ -6251,7 +6269,7 @@ let isMultimodal = !!(imagePaths?.length);
         telemetryService.track({
           name: 'pi_doc_grounded_retrieval_summary',
           properties: {
-            documentGroundedCustomModeActive: forceDocumentGrounding,
+            documentGroundedCustomModeActive: activeModeGroundingInfo?.documentGroundedCustomModeActive === true,
             forceDocumentGrounding,
             retrievalSourceUsed: usedRerankPath ? 'hybrid' : 'lexical',
             hybridAttempted: forceDocumentGrounding,
