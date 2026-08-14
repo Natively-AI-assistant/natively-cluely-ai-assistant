@@ -474,6 +474,10 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# TypeScript 7 upgrade — audit + report are deliverables, not scratch notes,
+# so they are allowlisted out of the blanket `docs/*` ignore above.
+!docs/ts7-upgrade-audit.md
+!docs/ts7-upgrade-report.md
 benchmark-results/
 
 
