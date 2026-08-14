@@ -91,7 +91,9 @@ async function updatePromptCache(promptText: string): Promise<void> {
       return v;
     });
     cachedPromptText = trimmed;
-    if (cachedPromptIds.length === 0) {
+    // Non-null: assigned unconditionally just above; tsc drops the narrowing of a
+    // module-level `let` across the intervening .map() callback.
+    if (cachedPromptIds!.length === 0) {
       console.debug('[WhisperWorker] Prompt tokenized to 0 ids — biasing disabled');
     }
   } catch (e: any) {

@@ -56,6 +56,12 @@ import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { applyAnswerContract } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
+// Type-only (fully erased at runtime, adds no require()). `getKnowledgeOrchestrator()`
+// is declared `: any`, so the orchestrator's real result type is invisible here and
+// tsc collapsed the grounding result to `{}`. Naming it restores genuine checking on
+// the seven property reads below instead of masking them with a cast.
+// Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
+import type { PromptAssemblyResult } from '../premium/electron/knowledge/ContextAssembler';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
@@ -68,7 +74,13 @@ export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' |
  * time. Used to cap profile grounding on the latency-critical WTA path so a
  * slow `processQuestion` can never stall first-token (REPORT §21, hypothesis L2).
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<{ value: T; timedOut: boolean }> {
+// `F` is separate from `T` on purpose: a timeout fallback is generally NOT the
+// same type as the resolved value (here it is `null` standing in for "no
+// knowledge"). Sharing one parameter made inference collapse T onto the
+// fallback's type, so callers saw `null` — and after a truthiness check,
+// `never`. Type-level only; no runtime change. `F = T` keeps existing callers
+// that do pass a same-typed fallback inferring exactly as before.
+function withTimeout<T, F = T>(promise: Promise<T>, ms: number, fallback: F): Promise<{ value: T | F; timedOut: boolean }> {
     return new Promise((resolve) => {
         let settled = false;
         const timer = setTimeout(() => {
@@ -1598,7 +1610,7 @@ export class IntelligenceEngine extends EventEmitter {
                         const GROUNDING_BUDGET_MS = 2000;
                         const groundStart = Date.now();
                         const { value: knowledge, timedOut: groundingTimedOut } =
-                            await withTimeout(orchestrator.processQuestion(lookupQ), GROUNDING_BUDGET_MS, null);
+                            await withTimeout<PromptAssemblyResult | null>(orchestrator.processQuestion(lookupQ), GROUNDING_BUDGET_MS, null);
                         if (groundingTimedOut) {
                             trace.mark('degraded_context', { reason: 'grounding_timeout', budgetMs: GROUNDING_BUDGET_MS });
                             console.warn(`[IntelligenceEngine] Profile grounding exceeded ${GROUNDING_BUDGET_MS}ms — proceeding without it`);
@@ -1711,8 +1723,14 @@ export class IntelligenceEngine extends EventEmitter {
                 // already fixed once (also originally `const`, causing an
                 // identical silent-catch failure) — applying the same `var`
                 // fix (function-scoped, survives past this try block) here.
-                var _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
-                var _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
+                // Explicit `| undefined`: these are `var`s read from a later, more
+                // deeply nested block that may execute without this line having run
+                // (the readers already wrap the access in try/catch for exactly that
+                // reason). Hoisted `var` yields `undefined` there, not a TDZ throw,
+                // and every consumer treats it as falsy — so this annotation states
+                // the existing runtime contract. Type-level only; no runtime change.
+                var _wtaHasProfile: boolean | undefined = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
+                var _wtaHasJd: boolean | undefined = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
                 // Campaign-3 (2026-07-19): declared with `var` so the reference survives the
                 // try/catch scope (my JIT block at line ~1635 consults _wtaPlan.answerType
                 // to widen the manual-evidence gate to jd_summary / jd_fact / etc. — the
@@ -1893,8 +1911,11 @@ export class IntelligenceEngine extends EventEmitter {
                     // suffix-renaming issue when inner try-block vars are
                     // referenced from a different inner-block than their
                     // declaration. Same data, fresh computation, no scope-leak.
-                    const _c3HasProfile = (() => { try { return _wtaHasProfile; } catch { return false; } })();
-                    const _c3HasJd = (() => { try { return _wtaHasJd; } catch { return false; } })();
+                    // `?? false` mirrors the `catch { return false }` fallback: an
+                    // unrun declaration leaves the hoisted `var` undefined, and every
+                    // consumer already treats that as "not available".
+                    const _c3HasProfile = (() => { try { return _wtaHasProfile ?? false; } catch { return false; } })();
+                    const _c3HasJd = (() => { try { return _wtaHasJd ?? false; } catch { return false; } })();
                     const _c3HasRefFiles = (() => { try { return Boolean((snapshotModeInfo as any)?.hasReferenceFiles); } catch { return false; } })();
                     // Grounding-campaign2 fix (2026-07-20): was `let` — block-
                     // scoped to this try block — but the SourceBadge emit site
@@ -1934,13 +1955,13 @@ export class IntelligenceEngine extends EventEmitter {
                     if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({
-                            question: extractedQuestion.latestQuestion || lastInterviewerTurn,
+                            question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
                             profile: resume, jobDescription: jd, source: 'what_to_answer',
                             answerType: jitAnswerType,
                         });
                         if (evidence) {
                             const jit = buildProfileJitPrompt({
-                                question: extractedQuestion.latestQuestion || lastInterviewerTurn,
+                                question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
                                 answerType: evidence.answerType,
                                 answerShape: evidence.answerShape,
                                 sourceOwner: evidence.sourceOwner,
