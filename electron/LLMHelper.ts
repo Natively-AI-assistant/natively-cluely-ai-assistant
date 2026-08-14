@@ -2765,11 +2765,14 @@ let modesMgrForInjection: {
 } | null = null;
 let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
 try {
-  const { ModesManager } = require('./services/ModesManager');
+  // Typed require: without it getInstance() is `any`, the assignment below cannot
+  // narrow `| null` away, and the read would need `?.` on the object — which
+  // WhatToAnswerSnapshotWiring.test.mjs asserts against (it matches the plain-dot
+  // spelling). `?? null` normalises the optional-call's `undefined` to the declared
+  // `| null` sentinel; every downstream read uses `?.`, so both behave identically.
+  const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
   modesMgrForInjection = ModesManager.getInstance();
-  // `?? null` normalises the optional-call's `undefined` to the declared `| null`
-  // sentinel; every downstream read uses `?.`, so both behave identically.
-  activeModeGroundingInfo = modesMgrForInjection?.getActiveModeDocumentGroundingInfo?.() ?? null;
+  activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.() ?? null;
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
 const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
@@ -5679,16 +5682,15 @@ let isMultimodal = !!(imagePaths?.length);
     } | null = null;
     let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
     try {
-      const { ModesManager } = require('./services/ModesManager');
+      // Typed require — see the note at the sibling injection site above.
+      const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
       modesMgrForInjection = ModesManager.getInstance();
       // Grounding-campaign3 (2026-07-23): thread the t0 mode pin through every
       // active-mode read below so the always-on injection cannot borrow a
       // mid-request switch. When no pin is supplied the methods fall back to
       // their existing live-singleton semantics (the pin field is optional).
       const _pinnedModeId = routeOptions?.pinnedModeId ?? undefined;
-      // `?? null` normalises the optional-call's `undefined` to the declared `| null`
-      // sentinel; every downstream read uses `?.`, so both behave identically.
-      activeModeGroundingInfo = modesMgrForInjection?.getActiveModeDocumentGroundingInfo?.(_pinnedModeId) ?? null;
+      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId) ?? null;
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
     // `!v3OwnedTurn`: a V3-owned turn must not enter ANY of the doc-grounded
