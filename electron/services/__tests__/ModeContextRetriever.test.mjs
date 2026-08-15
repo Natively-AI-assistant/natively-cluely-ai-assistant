@@ -101,7 +101,20 @@ test('ModeContextRetriever includes reference grounding guard with retrieved sni
   // actually cares about is unchanged: forbid invention + instruct the
   // model to say so when the requested item is genuinely absent.
   assert.match(result.formattedContext, /never invent/);
-  assert.match(result.formattedContext, /genuinely absent from all snippets, say so/);
+  // The rule still exists; it gained qualifying clauses mid-sentence:
+  //   "genuinely absent from all snippets AFTER considering section-tagged
+  //    matches under rule (3a) AND retrieved-chunk presence under rule (3b),
+  //    say so"
+  // Those additions narrow when a refusal is legitimate — they make the model
+  // check section tags and retrieved chunks BEFORE claiming absence, which is
+  // the opposite of weakening the guard. Matching the two ends with the clauses
+  // between them keeps the invariant (an absent item must be admitted, not
+  // invented) without re-breaking every time the qualifiers are tuned.
+  assert.match(
+    result.formattedContext,
+    /genuinely absent from all snippets[\s\S]{0,400}say so/,
+    'the retrieved-context block must still instruct the model to admit an absent item rather than invent one',
+  );
   assert.match(result.formattedContext, /formula-sheet\.md/);
 });
 
