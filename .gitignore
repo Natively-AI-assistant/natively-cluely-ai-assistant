@@ -474,6 +474,14 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# Usage ledger — the progress file is the mandated handoff contract across three
+# campaigns (16 architectural decisions, 5 open findings, the full forensics
+# record), the architecture doc is the system's specification, and the privacy
+# diff is a release gate. Untracked, none of it survives a fresh clone or a
+# worktree — which is exactly where the next person picks this up.
+!docs/usage-ledger-architecture.md
+!docs/usage-ledger-progress.md
+!docs/usage-ledger-privacy-diff.md
 # TypeScript 7 upgrade — audit + report are deliverables, not scratch notes,
 # so they are allowlisted out of the blanket `docs/*` ignore above.
 !docs/ts7-upgrade-audit.md
