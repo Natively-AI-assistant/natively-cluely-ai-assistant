@@ -81,6 +81,7 @@ jobs:
       - name: Setup Rust (native module)
         uses: dtolnay/rust-toolchain@v1
         with:
+          toolchain: stable
           targets: x86_64-unknown-linux-gnu
 
       - name: Install Linux build dependencies
