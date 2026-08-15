@@ -47,7 +47,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -77,10 +77,11 @@ const distDir = (() => {
     process.platform === 'win32' ? 'junction' : 'dir',
   );
   try {
-    execSync(`node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir "${target}"`, {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    });
+    execFileSync(process.execPath, [
+      path.join('node_modules', 'typescript7', 'bin', 'tsc'),
+      '-p', path.join('electron', 'tsconfig.emit.json'),
+      '--outDir', target,
+    ], { cwd: repoRoot, stdio: 'pipe' });
   } catch (_tscErr) {
     // expected — tsc returns 1 on type errors in unrelated files; we only
     // need LLMHelper.js + its direct deps to have emitted cleanly.

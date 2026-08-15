@@ -227,7 +227,9 @@ emit with bundler resolution and needs no `Node16`/extension migration at all.
 }
 ```
 
-The four `execSync` lines now point at it. `moduleResolution: "node"` (node10) is removed in TS 7 —
+The four emit harnesses now point at it. (They call `execFileSync` with an args array rather than
+`execSync` with a shell string — see `a74641ba` on `main`: an interpolated mkdtemp path is a
+Windows-only breakage, and quoting it is not sufficient.) `moduleResolution: "node"` (node10) is removed in TS 7 —
 acceptable here *and only here*, because this config is never type-checked and the tests invoke it
 through the TS 5.x `typescript` package that Phase 2/3 keeps installed anyway. **When the emit path
 moves to TS 7, change that one word to `"bundler"`** (legal per the probe above).
