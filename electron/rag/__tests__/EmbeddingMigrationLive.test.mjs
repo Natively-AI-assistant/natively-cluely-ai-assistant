@@ -146,7 +146,15 @@ describe('REAL v0→v16 migration on a persisted file DB (mandate #2)', () => {
 
   test('RE-RUN (simulated relaunch) is idempotent: no double-application, no clobber', () => {
     const dm = newDM(db);
-    dm.runMigrations(); // first apply → 16
+    dm.runMigrations(); // first apply → current schema version
+    // Capture rather than hardcode. This asserted `24` literally, and the schema
+    // has since reached 26 (migrations 25 and 26 landed after this was written),
+    // so every future migration re-breaks a test that is not about the version
+    // NUMBER at all. What it verifies is IDEMPOTENCE: a second run over the same
+    // file must leave the version — and every row — exactly where the first run
+    // left them.
+    const versionAfterFirst = db.pragma('user_version', { simple: true });
+    assert.ok(versionAfterFirst >= 16, 'first apply must reach at least the v16 chain');
     // Snapshot every meeting's space after first run.
     const snapAfterFirst = db.prepare('SELECT id, embedding_space FROM meetings ORDER BY id').all();
     // Simulate a meeting being re-embedded in the active v2 space between launches.
@@ -157,7 +165,11 @@ describe('REAL v0→v16 migration on a persisted file DB (mandate #2)', () => {
     // is gated on `embedding_space IS NULL` so it cannot clobber the v2 stamp.
     const dm2 = newDM(db);
     dm2.runMigrations();
-    assert.equal(db.pragma('user_version', { simple: true }), 24, 'version stays 24');
+    assert.equal(
+      db.pragma('user_version', { simple: true }),
+      versionAfterFirst,
+      're-running migrations must not advance user_version — that would mean a migration re-fired',
+    );
     assert.equal(
       db.prepare("SELECT embedding_space FROM meetings WHERE id='gem768'").get().embedding_space,
       SPACE_V2,
@@ -190,11 +202,18 @@ describe('REAL v0→v16 migration on a persisted file DB (mandate #2)', () => {
 
   test('data persists across a CLOSE+REOPEN of the file (not :memory:)', () => {
     newDM(db).runMigrations();
+    const versionBeforeClose = db.pragma('user_version', { simple: true });
     db.close();
     // Reopen the SAME file — proves the ALTER + backfill were durably committed.
     const db2 = new Database(file);
     try {
-      assert.equal(db2.pragma('user_version', { simple: true }), 24);
+      // Same reason as above: the point is that the migrated version SURVIVES a
+      // close+reopen of a real file DB, not that it equals a particular number.
+      assert.equal(
+        db2.pragma('user_version', { simple: true }),
+        versionBeforeClose,
+        'the migrated user_version must persist across a close+reopen of the file',
+      );
       assert.equal(db2.prepare("SELECT embedding_space FROM meetings WHERE id='gem768'").get().embedding_space, 'gemini:gemini-embedding-001:768');
     } finally {
       db2.close();
