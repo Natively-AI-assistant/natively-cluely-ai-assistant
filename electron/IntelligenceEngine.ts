@@ -924,6 +924,18 @@ export class IntelligenceEngine extends EventEmitter {
         // broad flag. WTA was never migrated when manual chat was
         // (LLMHelper:5448) — the root asymmetry behind the 2026-08-11 reports.
         const strictDocumentGroundedActive = (snapshotModeInfo as any)?.strictDocumentGroundedActive === true;
+        // Review follow-up R1 (2026-08-12): the strict-only migration
+        // over-corrected for modes that HAVE files. A template-seeded mode
+        // (origin default_new_mode => strict=false even with files) that a
+        // user uploaded a document into was losing forced doc retrieval AND
+        // the post-stream zero-fabrication validator, while manual chat kept
+        // both via its broad-flag gate (ipcHandlers ~4056). Enforcement is
+        // honest exactly when the bounded universe EXISTS: an explicit strict
+        // contract, or any doc-grounded mode with at least one real file —
+        // the same line packGovernsGeneration draws.
+        const docGroundedEnforcementActive = strictDocumentGroundedActive
+            || (snapshotModeInfo?.documentGroundedCustomModeActive === true
+                && Boolean((snapshotModeInfo as any)?.hasReferenceFiles));
         const snapshotModeId = this.getActiveModeId();
         // The narrow ActiveModeInfo snapshot is enough for planning, but a
         // multi-family typed reference pack also needs the full mode row and its
@@ -1142,7 +1154,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || strictDocumentGroundedActive
+            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive
                 ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
@@ -1164,7 +1176,7 @@ export class IntelligenceEngine extends EventEmitter {
                             } catch { /* flag module unavailable → no rerank */ }
                             return await mm.buildRetrievedActiveModeContextBlockHybrid(
                                 preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo?.id, allowRerank,
-                                strictDocumentGroundedActive ? { forceDocumentGrounding: true } : undefined,
+                                docGroundedEnforcementActive ? { forceDocumentGrounding: true } : undefined,
                             );
                         }
                         return '';
@@ -2375,11 +2387,14 @@ export class IntelligenceEngine extends EventEmitter {
                 && wtaTurnContract.sourceOwner === 'clarify'
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
                 && !isSpeculative
-                // Image turns bypass clarification — the manual-chat twin has
+                // Visual turns bypass clarification — the manual-chat twin has
                 // had this since its escape hatches; WTA never did (2026-08-11:
                 // a screenshot turn with an EMPTY question was asked "which
-                // source do you mean").
-                && !imagePaths?.length
+                // source do you mean"). R4 (2026-08-12): images were only one of
+                // WTA's THREE visual channels — screen-OCR and DOM context took
+                // the same dead-end — so the bypass now uses the engine's own
+                // visual-context predicate rather than re-deriving a subset.
+                && !_wtaHasVisualContext
                 // And a clarify born of a reference-bound mode with ZERO files
                 // is not actionable — there is no universe to disambiguate
                 // into. See clarificationIsActionable (refusalPolicy.ts).
@@ -2415,7 +2430,15 @@ export class IntelligenceEngine extends EventEmitter {
                     if (isIntelligenceFlagEnabled('trace')) {
                         logContextOsTrace(buildContextOsTrace({
                             contract: wtaTurnContract,
-                            sourceAuthority: wtaTurnContract.reason,
+                            // R7 (2026-08-12, review finding): this stored
+                            // contract.reason — a diagnostic SENTENCE — as the
+                            // sourceAuthority, corrupting the trace field. Same
+                            // reason-vs-surface class as the 2026-08-11 fix.
+                            // Merge seam (2026-08-15): 'legacy' fallback, not
+                            // null — buildContextOsTrace types the field as
+                            // string, and 'legacy' is main's own convention at
+                            // the equivalent governed-turn sites.
+                            sourceAuthority: canonicalTurn.sourceAuthority ?? 'legacy',
                             question: String(extractedQuestion.latestQuestion || question || ''),
                             usedSources: [],
                             finalAction: 'clarify',
@@ -2489,7 +2512,7 @@ export class IntelligenceEngine extends EventEmitter {
             // block (no double retrieval) and governs the factual prompt.
             if (!wtaContextOsGeneration
                 && wtaTurnContract
-                && strictDocumentGroundedActive
+                && docGroundedEnforcementActive
                 // Live proof 2026-08-11: documentGroundedCustomModeActive can be
                 // TRUE with hasReferenceFiles FALSE (custom mode, contract seeded
                 // reference_files_primary, zero files). Governing that turn
@@ -2506,7 +2529,12 @@ export class IntelligenceEngine extends EventEmitter {
                     modeSnapshot: {
                         modeId: snapshotModeId ?? null,
                         modeName: snapshotModeInfo?.name ?? null,
-                        sourceAuthority: wtaTurnContract.reason,
+                        // R7 (2026-08-12): was contract.reason — a diagnostic
+                        // sentence — which then flowed into every benchmark
+                        // audit row for site-2-governed turns. Merge seam
+                        // (2026-08-15): 'legacy', not null — the snapshot field
+                        // is string-typed and 'legacy' is the convention.
+                        sourceAuthority: canonicalTurn.sourceAuthority ?? 'legacy',
                     },
                     turnSourceDecision: canonicalTurn.turnSourceDecision,
                     govern: true,
@@ -3248,9 +3276,11 @@ export class IntelligenceEngine extends EventEmitter {
                 // an empty retrievedBlock, and OVERWROTE a correct streamed
                 // answer with "I could not find that in the retrieved sections
                 // of the document." — one typed question away from the fixed
-                // turn. Strict + files + doc-shaped answer (the manual twin's
-                // parity term, ipcHandlers ~4086) are all required now.
-                if (!isCoding && strictDocumentGroundedActive
+                // turn. Enforcement (strict OR broad-with-files, = the manual
+                // twin's gate) + files + doc-shaped answer are all required —
+                // R1 (2026-08-12): strict-only here dropped the
+                // zero-fabrication validator for seeded modes WITH files.
+                if (!isCoding && docGroundedEnforcementActive
                     && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
                     && isDocGroundedAnswerType(answerPlan.answerType)
                     && this.currentGenerationId === generationId) {
@@ -5019,7 +5049,16 @@ export class IntelligenceEngine extends EventEmitter {
                 // and the raw context blob are both bypassed.
                 answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system);
             } else {
-                const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
+                // R5 (2026-08-12, review finding): the broad flag stripped the
+                // live transcript from this fallback for template-seeded modes
+                // that get NO doc-grounding benefit in exchange (the plan is not
+                // doc-shaped, no doc retrieval or validation runs) — a visibly
+                // context-blind answer. Strip only under real doc enforcement:
+                // an explicit strict contract, or a doc mode with actual files.
+                const _docEnforced = (activeModeInfo as any)?.strictDocumentGroundedActive === true
+                    || (activeModeInfo?.documentGroundedCustomModeActive === true
+                        && Boolean((activeModeInfo as any)?.hasReferenceFiles));
+                const context = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
                     : this.session.getFormattedContext(120);
                 answer = await this.answerLLM.generate(question, context, answerPlan);

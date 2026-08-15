@@ -57,7 +57,7 @@ test('microphone recovery handler aborts when the meeting generation has changed
 });
 
 test('startMeeting resets system + mic recovery counters so a stale meeting cannot consume the new budget', () => {
-  const startMeetingBody = extractMethod(/public\s+async\s+startMeeting\s*\([^)]*\)[^{]*\{/, 'startMeeting');
+  const startMeetingBody = extractMethod(/private\s+async\s+startMeetingTransition\s*\([^)]*\)[^{]*\{/, 'startMeetingTransition');
   for (const counter of ['_systemAudioRecoveryAttempts', '_systemAudioConsecutiveFailures', '_micRecoveryAttempts']) {
     assert.ok(
       new RegExp(`this\\.${counter}\\s*=\\s*0`).test(startMeetingBody),

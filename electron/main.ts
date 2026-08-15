@@ -15,6 +15,8 @@ import fs from "fs"
 import os from "os"
 import dns from "dns"
 import { SystemAudioHealthClassifier } from "./audio/systemAudioHealthClassifier.mjs"
+import { FatalMainProcessCoordinator } from "./utils/fatalMainProcess"
+import { MeetingLifecycleQueue, type MeetingLifecycleState } from "./audio/meetingLifecycleQueue"
 import { autoUpdater } from "electron-updater"
 
 import {
@@ -221,6 +223,12 @@ process.on('uncaughtException', (err) => {
     return;
   }
   logToFile('[CRITICAL] Uncaught Exception: ' + redactArgsForLog([err]));
+
+  // The database handle was destroyed above and cannot be reopened. Staying
+  // alive here is the worst outcome: the window keeps working, the user keeps
+  // holding meetings, and every one of them is silently discarded. End the
+  // process so the next launch comes back with a working database.
+  terminateAfterFatalError('uncaughtException', 1);
 });
 
 // Crash-loop guard for unhandledRejection, mirroring the render-process-gone
@@ -274,7 +282,7 @@ process.on('unhandledRejection', (reason, promise) => {
       rejectionsInWindow: unhandledRejectionHistory.length,
       windowMs: UNHANDLED_REJECTION_WINDOW_MS,
     });
-    emergencyCloseDatabase('unhandledRejection-loop-giveup');
+    terminateAfterFatalError('unhandledRejection-loop-giveup', 1);
   }
 });
 
@@ -317,11 +325,16 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 process.on('SIGHUP', () => {
   try {
     logToFile('[SIGNAL] received SIGHUP');
-    emergencyCloseDatabase('SIGHUP');
   } catch {
     /* never throw from a signal handler */
   }
-  // No exit on SIGHUP — terminal disconnect shouldn't kill a desktop app.
+  // No exit on SIGHUP — a terminal disconnect shouldn't kill a desktop app.
+  //
+  // REGRESSION FIX (2026-08-07): and therefore no emergencyCloseDatabase()
+  // either. Because this handler deliberately keeps the process alive, closing
+  // the database here left the app running against a permanently dead handle
+  // for the rest of the session — silently discarding every meeting saved
+  // afterwards. A process that survives the event must keep its database.
 });
 
 // CQ-04 fix: do NOT call app.getPath() at module load time.
@@ -461,15 +474,25 @@ function logCrashConsole(label: string, payload: Record<string, unknown>): void 
   }
 }
 
-// Module-scope emergency DB close. Called from EVERY crash path
-// (uncaughtException, unhandledRejection, SIGTERM/SIGINT/SIGHUP,
-// render-process-gone, child-process-gone, gpu-process-crashed) so a
-// hard kill still leaves a clean WAL and releases the OS-level file lock.
-// The next launch's `new Database(dbPath)` then never sees a stale WAL
-// holding a kernel lock from the dead writer (the documented launch-hang
-// class of bug). Idempotent: safe to call from multiple paths in the same
-// process. No-ops if the DB manager isn't initialized yet (early-boot
-// handler fires before DatabaseManager.getInstance() exists).
+// Module-scope emergency DB close. Called from every TERMINAL crash path
+// (uncaughtException, unhandledRejection give-up, SIGTERM/SIGINT,
+// render-process-gone terminal/give-up, initializeApp-failed) so a hard kill
+// still leaves a clean WAL and releases the OS-level file lock. The next
+// launch's `new Database(dbPath)` then never sees a stale WAL holding a kernel
+// lock from the dead writer (the documented launch-hang class of bug).
+// Idempotent: safe to call from multiple paths in the same process. No-ops if
+// the DB manager isn't initialized yet (early-boot handler fires before
+// DatabaseManager.getInstance() exists).
+//
+// REGRESSION FIX (2026-08-07): this must ONLY be reached from a path that then
+// ends the process. Closing the handle is irreversible — it nulls the
+// DatabaseManager singleton with no reopen path — so a path that closes and
+// then keeps serving IPC leaves the app looking healthy while every write
+// silently no-ops (saveMeeting() hits `if (!this.db)` and returns undefined
+// without telling the caller). Recoverable events — SIGHUP, gpu-process-crashed,
+// child-process-gone — therefore no longer call this at all. Terminal events go
+// through terminateAfterFatalError(), which makes the close and the exit one
+// atomic decision.
 //
 // The single-shot flag is set INSIDE the success branch — if checkpoint
 // or close throws (transient disk error, half-initialized DB), a later
@@ -515,6 +538,33 @@ function emergencyCloseDatabase(reason: string): void {
     // the flag — a later crash path may run after the manager bootstraps.
     try { logToFile(`[DB-EMERGENCY] failed during ${reason}: ${e?.message || e}`); } catch { /* ignored */ }
   }
+}
+
+// Terminal-failure gate. Closing the database and ending the process are one
+// atomic decision (see FatalMainProcessCoordinator for the full rationale):
+// once the handle is destroyed there is no reopen path, so continuing would
+// leave an interactive app whose every write silently no-ops. Reentrancy-safe
+// — fatal signals routinely arrive in pairs (e.g. the mic and system STT
+// sockets failing in the same tick) and only the first may act.
+let _fatalMainProcess: FatalMainProcessCoordinator | null = null;
+function terminateAfterFatalError(reason: string, exitCode: number): void {
+  if (!_fatalMainProcess) {
+    _fatalMainProcess = new FatalMainProcessCoordinator({
+      closeDatabase: (why) => emergencyCloseDatabase(why),
+      exit: (code) => {
+        // Lazy-require: `app` may not exist pre-whenReady or under
+        // ELECTRON_RUN_AS_NODE in a test harness.
+        try {
+          const { app: electronApp } = require('electron');
+          electronApp.exit(code);
+        } catch {
+          process.exit(code);
+        }
+      },
+      log: (message) => { try { logToFile(message); } catch { /* best-effort */ } },
+    });
+  }
+  _fatalMainProcess.terminate(reason, exitCode);
 }
 
 // Returns true if this exception message looks like the routine native-arch
@@ -1331,6 +1381,13 @@ export class AppState {
   private hasDebugged: boolean = false
   private isMeetingActive: boolean = false; // Guard for session state leaks
   private _meetingGeneration = 0;
+  // Serializes start/stop so two transitions can never interleave. This is the
+  // ONLY mutual-exclusion layer: _meetingGeneration, the _audioInitPromise
+  // abort-and-await and _pendingTeardown each guard a hazard INSIDE a
+  // transition, not between two of them.
+  private readonly _meetingLifecycle = new MeetingLifecycleQueue(
+    (state) => this.logMeetingLifecycleState(state),
+  );
   private _audioInitPromise: Promise<void> | null = null;
   // AbortController handle for the in-flight startMeeting() audio init, so endMeeting()
   // can cancel it (signal.aborted short-circuits the init's isCurrentMeeting() guards)
@@ -5514,7 +5571,39 @@ export class AppState {
     return started;
   }
 
-  public async startMeeting(metadata?: any): Promise<void> {
+  /**
+   * Public meeting-start entry point. Reachable concurrently from renderer IPC,
+   * calendar auto-start, global shortcuts and the tray, so every request goes
+   * through the transition queue: duplicate starts coalesce, and a start
+   * requested while a stop is in flight queues behind it instead of
+   * interleaving. The ordered body below is unchanged — see
+   * MeetingLifecycleQueue for why this wrapper is the only thing added.
+   */
+  public startMeeting(metadata?: any): Promise<void> {
+    return this._meetingLifecycle.start(() => this.startMeetingTransition(metadata));
+  }
+
+  /**
+   * One structured line per lifecycle boundary. Database availability is
+   * included because a closed singleton is invisible at the call site —
+   * saveMeeting() silently no-ops rather than throwing — so this is the signal
+   * that distinguishes "meeting failed" from "meeting saved into a dead DB".
+   */
+  private logMeetingLifecycleState(state: MeetingLifecycleState): void {
+    let dbAvailable: boolean | 'unknown' = 'unknown';
+    try {
+      const { DatabaseManager } = require('./db/DatabaseManager');
+      dbAvailable = DatabaseManager.getInstance().isAvailable();
+    } catch {
+      // Diagnostics must never be able to block a start or stop.
+    }
+    console.log(
+      `[MeetingLifecycle] state=${state} generation=${this._meetingGeneration} ` +
+      `dbAvailable=${dbAvailable} platform=${process.platform}`,
+    );
+  }
+
+  private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
 
     // If a previous endMeeting() is still draining STT in the background, wait
@@ -5808,7 +5897,17 @@ export class AppState {
     })(); // Defer to next event loop tick — ensures IPC response reaches renderer before audio init
   }
 
-  public async endMeeting(): Promise<void> {
+  /**
+   * Public meeting-stop entry point. Same rationale as startMeeting(): all
+   * requests are serialized through the transition queue. The existing
+   * `_endMeetingInFlight` guard below is retained — it protects the
+   * synchronous teardown block specifically, which the queue does not replace.
+   */
+  public endMeeting(): Promise<void> {
+    return this._meetingLifecycle.stop(() => this.endMeetingTransition());
+  }
+
+  private async endMeetingTransition(): Promise<void> {
     // Idempotency guard: a double-click on Stop, or a Stop racing with a
     // global-shortcut reset, can deliver two endMeeting() calls within ms of
     // each other. Without this, both invocations would run the synchronous
@@ -8237,10 +8336,20 @@ if (process.env.THINKING_MATRIX === '1') {
     const isCrash = reason === 'crashed' || reason === 'abnormal-exit';
 
     // Never fight an intentional teardown, and don't reload a clean/intentional
-    // exit or an intentional kill — treat those as terminal (preserve the
-    // original crash-path behavior so the WAL lock is released cleanly).
+    // exit or an intentional kill.
     if (!isCrash || appState.isQuitting?.()) {
-      emergencyCloseDatabase('render-process-gone');
+      // Only release the handle when the APP itself is going away — that is the
+      // case the WAL-lock cleanup was written for.
+      //
+      // REGRESSION FIX (2026-08-07): a single renderer exiting cleanly while the
+      // app keeps running (reason 'killed' / 'clean-exit', not quitting) used to
+      // land here and close the database anyway, leaving the surviving app on a
+      // dead handle for the rest of the session.
+      if (appState.isQuitting?.()) {
+        emergencyCloseDatabase('render-process-gone');
+      } else {
+        logToFile(`[main] render-process-gone: non-crash reason=${reason} — not reloading, DB left open`);
+      }
       return;
     }
 
@@ -8285,7 +8394,6 @@ if (process.env.THINKING_MATRIX === '1') {
         reloadsInWindow: history.length,
         windowMs: RENDERER_RELOAD_WINDOW_MS,
       });
-      emergencyCloseDatabase('render-process-gone-loop-giveup');
       try {
         // dialog is not imported at module top — require it lazily (matches
         // the native-arch gate handler's pattern above).
@@ -8296,6 +8404,11 @@ if (process.env.THINKING_MATRIX === '1') {
           'If this continues, update to the latest version.'
         );
       } catch { /* dialog best-effort */ }
+      // showErrorBox is modal and blocks until the user clicks OK, so the
+      // terminal sequence runs AFTER they have seen the message. We told them
+      // to restart, so actually end the process — leaving it alive here meant
+      // the app kept running on a closed database if they ignored the dialog.
+      terminateAfterFatalError('render-process-gone-loop-giveup', 1);
       return;
     }
 
@@ -8551,13 +8664,10 @@ initializeApp().catch((err) => {
     skippedReport: isNativeArchGateCrash(err) ? 'native-arch-gate' : undefined,
   });
   console.error(err);
-  // F-110: a half-initialized process must not keep running. It holds the
-  // single-instance lock with no user-visible window (and on macOS may still
-  // be an 'accessory' app with no dock tile), so every relaunch signals the
-  // zombie and shows nothing — the app looks unlaunchable until the PID is
-  // killed. Mirror assertVerificationFlagsOrThrow's explicit exit; app.exit
-  // (not app.quit) is deliberate: the DB is already closed above, and
-  // half-initialized before-quit handlers must not run against missing
-  // singletons. Live-reproduced in scripts/audit/F-110-repro.mjs.
-  app.exit(1);
+  // Startup never completed and the database handle is gone. The native-arch
+  // gate renders its own dialog and exits from its dedicated handler, so skip
+  // it here and let that path own the user-facing message.
+  if (!isNativeArchGateCrash(err)) {
+    terminateAfterFatalError('initializeApp-failed', 1);
+  }
 })

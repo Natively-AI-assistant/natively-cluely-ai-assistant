@@ -315,7 +315,7 @@ import {
 } from '../lib/overlayAppearance';
 import { NegotiationCoachingCard } from '../premium';
 import type { DynamicActionPayload } from '../types/electron';
-import { getCodexCliModelDisplayName } from '../utils/modelUtils';
+import { getCodexCliModelDisplayName, litellmModelLabel } from '../utils/modelUtils';
 import { getModifierSymbol, isMac, isWindows } from '../utils/platformUtils';
 import { DynamicActionBar } from './dynamic-actions/DynamicActionBar';
 import GlassEffectLayer from './ui/GlassEffectLayer';
@@ -8622,6 +8622,13 @@ Provide only the answer, nothing else.`;
                           const codexCliName = getCodexCliModelDisplayName(m);
                           if (codexCliName) return codexCliName;
                           if (m.startsWith('ollama-')) return m.replace('ollama-', '');
+                          // LiteLLM ids carry two prefixes — ours and the proxy's
+                          // upstream — so the raw id reads `litellm/openai/gpt-4o`.
+                          // This MUST sit above the displayName branch below:
+                          // getCurrentModelDisplayName() returns currentModelId
+                          // verbatim for LiteLLM, so that path would render the
+                          // full id and this chip is a 140px truncating control.
+                          if (m.startsWith('litellm/')) return litellmModelLabel(m);
                           // For everything else, prefer the authoritative
                           // displayName from `getCurrentLlmConfig` (handles
                           // custom-provider UUIDs and any future model aliases

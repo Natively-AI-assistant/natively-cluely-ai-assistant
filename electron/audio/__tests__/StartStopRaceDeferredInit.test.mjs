@@ -9,7 +9,10 @@ const mainPath = path.resolve(__dirname, '../../../electron/main.ts');
 const mainSource = readFileSync(mainPath, 'utf8');
 
 function extractMethodBody(methodName) {
-  const methodRe = new RegExp(`public\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)[^{]*\\{`);
+  // Accepts any access modifier: the ordered start/stop bodies are `private
+  // async *Transition` methods, wrapped by thin public startMeeting/endMeeting
+  // entry points that delegate to the serialization queue.
+  const methodRe = new RegExp(`(?:public|private|protected)\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)[^{]*\\{`);
   const match = methodRe.exec(mainSource);
   assert.ok(match, `could not locate ${methodName}`);
   let i = match.index + match[0].length;
@@ -25,8 +28,8 @@ function extractMethodBody(methodName) {
   return mainSource.slice(start, i - 1);
 }
 
-const startMeetingBody = extractMethodBody('startMeeting');
-const endMeetingBody = extractMethodBody('endMeeting');
+const startMeetingBody = extractMethodBody('startMeetingTransition');
+const endMeetingBody = extractMethodBody('endMeetingTransition');
 
 test('meeting start captures a generation token and endMeeting invalidates it', () => {
   assert.ok(

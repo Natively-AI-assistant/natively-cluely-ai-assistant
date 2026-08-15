@@ -39,6 +39,14 @@ export interface CurlProvider {
     responsePath: string; // e.g. "choices[0].message.content"
 }
 
+/**
+ * Providers that carry a per-provider default model. Every member must have a
+ * matching `<provider>PreferredModel` field on StoredCredentials — the getter
+ * and setter build the key by concatenation, so adding a name here without the
+ * field would silently read and write `undefined`.
+ */
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm';
+
 export interface StoredCredentials {
     geminiApiKey?: string;
     groqApiKey?: string;
@@ -80,6 +88,17 @@ export interface StoredCredentials {
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
     /**
+     * The LiteLLM model the user promoted to this provider's default, stored
+     * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
+     * allow-list and modelAvailable() all compare against — an unprefixed name
+     * here would make those surfaces disagree.
+     *
+     * Cleared whenever the proxy is removed or repointed: a default naming a
+     * model on the old host is worse than none, because routing would fall back
+     * to something that no longer exists.
+     */
+    litellmPreferredModel?: string;
+    /**
      * Provider ids the user switched off in Settings → AI Providers. A disabled
      * provider keeps its stored credential but contributes no models to the
      * picker and is never chosen as a routing fallback.
@@ -91,6 +110,17 @@ export interface StoredCredentials {
      * provider offers stays selectable. There is deliberately no "none" value:
      * hiding a provider entirely is what `disabledProviders` is for, so no
      * sentinel model id ever reaches persisted state.
+     *
+     * EXCEPTION — OPT-IN providers (currently LiteLLM only): there an empty list
+     * means NOTHING is selected. Those providers front an upstream's entire
+     * catalogue (300+ models is normal for a gateway), so defaulting to "all"
+     * floods the picker with models nobody chose. The selection is explicit, and
+     * a full selection is stored as the full explicit id list — never folded back
+     * to [], which would read as "none" and silently deselect everything.
+     *
+     * Still no sentinel: "none" is the natural empty list, not a magic id. The
+     * rule lives in isModelAllowed() (src/utils/modelUtils.ts) and is mirrored by
+     * modelAvailable() in ipcHandlers.ts.
      */
     cloudEnabledModels?: Record<string, string[]>;
     /**
@@ -599,13 +629,22 @@ export class CredentialsManager {
         if (this.refuseWriteWhileDegraded('set litellm config')) return;
         const trimmedURL = (baseURL || '').trim();
         const trimmedKey = (apiKey || '').trim();
+        const previousURL = (this.credentials.litellmBaseURL || '').trim();
         if (!trimmedURL) {
             this.credentials.litellmApiKey = undefined;
             this.credentials.litellmBaseURL = undefined;
             this.credentials.litellmMaxTokens = undefined;
+            this.credentials.litellmPreferredModel = undefined;
             this.saveCredentials();
             console.log('[CredentialsManager] LiteLLM config cleared');
             return;
+        }
+        // Repointing at a different proxy invalidates the default the same way it
+        // invalidates the discovered-model cache (dropped by the IPC handler): the
+        // model it names belongs to the old host. A same-URL re-save — the common
+        // case, e.g. changing only max-tokens — keeps it.
+        if (previousURL && previousURL !== trimmedURL) {
+            this.credentials.litellmPreferredModel = undefined;
         }
         // Empty key + existing stored key = keep it (the Settings field is masked
         // and left blank when re-saving e.g. just the max-tokens). Clearing the
@@ -840,12 +879,12 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Natively API Key updated');
     }
 
-    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek'): string | undefined {
+    public getPreferredModel(provider: PreferredModelProvider): string | undefined {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         return this.credentials[key] as string | undefined;
     }
 
-    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string): void {
+    public setPreferredModel(provider: PreferredModelProvider, modelId: string): void {
         if (this.refuseWriteWhileDegraded('set preferred model')) return;
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         (this.credentials as any)[key] = modelId;
