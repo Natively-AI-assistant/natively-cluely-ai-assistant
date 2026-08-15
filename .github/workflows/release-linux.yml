@@ -1,0 +1,137 @@
+name: Release (Linux)
+
+# Builds Linux release artifacts (AppImage + deb, x64) on tag builds and
+# uploads them to the Actions run.
+#
+# Mirrors release-macos.yml minus signing/notarization: Linux has no signing
+# identity, so electron-builder emits AppImage + deb directly and generates
+# latest-linux.yml (electron-updater needs it for auto-updates on Linux).
+#
+# ── PREMIUM SUBMODULE ─────────────────────────────────────────────────────
+# The build needs the private `premium` submodule (electron/tsconfig.json
+# includes ../premium/electron/**/*.ts and esbuild bundles require('../premium/…')
+# calls), so unlike release-macos.yml this job does NOT use
+# `submodules: recursive` on checkout: the tree carries an undescribed
+# `natively-api` gitlink that aborts recursive init before `premium` is ever
+# cloned (see build-smoke.yml). `premium` is fetched explicitly and
+# path-limited below, with the repo token. Runs triggered in this repo have
+# the SUBMODULE_TOKEN / GH_APP_TOKEN secret; fork runs will skip the premium
+# checkout and the typecheck step would fail on TS2307 (issue #460).
+#
+# ── REQUIRED REPOSITORY SECRETS ───────────────────────────────────────────
+#   SUBMODULE_TOKEN or GH_APP_TOKEN   token with read access to the private
+#                                     Natively-AI-assistant/natively-premium repo
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {} # manual trigger uses the branch/tag selected in the Actions UI
+
+permissions:
+  contents: write # needed to upload release assets
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # NOT `submodules: recursive` — the undescribed `natively-api` gitlink
+          # aborts recursive init before `premium` is cloned. `premium` is
+          # fetched explicitly below (path-limited), same as build-smoke.yml.
+          # persist-credentials keeps the checkout token in .git/config so the
+          # submodule clone can reuse the header rewrite configured below.
+          persist-credentials: true
+
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No SUBMODULE_TOKEN/GH_APP_TOKEN; the private premium submodule cannot be fetched and the build will fail."
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `git -c`, NOT `git config --local`: the rewrite must reach the
+          # submodule clone subprocess (see build-smoke.yml for the full note).
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust (native module)
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 pkg-config libasound2-dev libpulse-dev libsecret-1-dev xvfb
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Explicit stages (NOT `npm run dist`): the dist chain re-runs
+      # `npm run build` (rimraf dist dist-electron) which can race electron-builder's
+      # native rebuild and ENOENT on dist-electron at package time. Building the stages
+      # first, then invoking electron-builder directly, is the reliable path —
+      # same reasoning as release-macos.yml.
+      - name: Build, package (AppImage + deb)
+        run: |
+          set -euo pipefail
+          npm run build
+          npm run build:electron
+          npm run build:native
+          node scripts/ensure-sqlite-vec.js
+          ./node_modules/.bin/electron-builder --linux --publish never
+
+      # Source-mode verify (NOT `--app`): verify-packaged-local-assets.mjs's
+      # packaged-mode REQUIRED_UNPACKED_NATIVE list is macOS-specific, so it
+      # cannot gate a Linux pack. Source mode asserts the asarUnpack config, the
+      # bundled models and the built workers — the parts that are platform
+      # independent — and is exactly what build-smoke runs on every leg.
+      - name: Verify packaged local fallback assets (source mode)
+        run: npm run verify:packaged-local-assets
+
+      # Runtime gate: actually launch the packaged binary under Xvfb (no X
+      # display on the runner) and assert the local fallback preflight passes.
+      # The smoke script is cross-platform (accepts a plain executable); the
+      # app must work on a clean machine with no Ollama and no API keys.
+      - name: Packaged no-Ollama no-keys smoke (x64)
+        run: |
+          set -euo pipefail
+          test -x release/linux-unpacked/natively
+          mkdir -p "$HOME/Documents" # the smoke script inspects ~/Documents/natively_debug.log
+          ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a \
+            node scripts/smoke-packaged-local-fallback.mjs \
+            --app release/linux-unpacked/natively --no-ollama --no-keys
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: natively-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/latest-linux.yml
+          if-no-files-found: error
