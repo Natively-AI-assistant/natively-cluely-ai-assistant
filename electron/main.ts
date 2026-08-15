@@ -6081,7 +6081,25 @@ export class AppState {
     type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions';
     const tokenBatches = new Map<BatchKind, any[]>();
     let batchFlushScheduled = false;
+    // The queued flush must be CANCELLABLE, and a manual flush must re-open the
+    // gate. Without the handle, a token that arrives between a final-answer
+    // handler's flushBatchesNow() and its own send is swallowed by the stale
+    // immediate: queueBatch calls scheduleBatchFlush, which early-returns
+    // because batchFlushScheduled is still true, and the already-queued
+    // immediate then delivers that token AFTER the final answer. That is exactly
+    // the "(…, final answer, trailing tokens)" ordering the comment below this
+    // block says must never reach the renderer — it clobbers the just-finalized
+    // bubble.
+    let pendingFlushHandle: NodeJS.Immediate | null = null;
     const flushBatchesNow = () => {
+      if (pendingFlushHandle) {
+        clearImmediate(pendingFlushHandle);
+        pendingFlushHandle = null;
+      }
+      // Reset here, not only in the immediate's callback: a manual flush has
+      // done the work the queued one was going to do, so the next queueBatch
+      // must be able to arm a fresh immediate rather than be dropped.
+      batchFlushScheduled = false;
       const win = mainWindow();
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
@@ -6094,7 +6112,8 @@ export class AppState {
     const scheduleBatchFlush = () => {
       if (batchFlushScheduled) return;
       batchFlushScheduled = true;
-      setImmediate(() => {
+      pendingFlushHandle = setImmediate(() => {
+        pendingFlushHandle = null;
         batchFlushScheduled = false;
         flushBatchesNow();
       });
