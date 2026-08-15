@@ -88,7 +88,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential python3 pkg-config libasound2-dev libpulse-dev libsecret-1-dev xvfb
 
+      # onnxruntime-node@1.22.0 ships broken install metadata for linux/x64
+      # (its default cuda12 manifest references runtimes/win-x64/*.so paths that
+      # don't exist in the Gpu.Linux nupkg), which makes plain `npm ci` fail on
+      # Linux. The package is excluded from the packaged app
+      # (package.json build.files) and loaded lazily, so skipping the download
+      # is safe. `''` (non-Linux) is falsy → default behavior preserved.
       - name: Install dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: ${{ runner.os == 'Linux' && 'skip' || '' }}
         run: npm ci
 
       # Explicit stages (NOT `npm run dist`): the dist chain re-runs
