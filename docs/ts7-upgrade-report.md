@@ -4,7 +4,7 @@
 **Branch:** `chore/ts7-upgrade`
 **Status:** **Migration complete to the limit TypeScript 7.0 allows.** Check, build and emit all run
 TS 7.0.2. `typescript` 5.x remains installed for API-consuming tooling only — an external blocker
-proven in §16, not a choice. One gate deliberately not executed: `npm run dist` — see §14.
+proven in §16, not a choice. All gates green, including `npm run dist` (§14).
 **Companion:** `docs/ts7-upgrade-audit.md` (Phase 0)
 
 ---
@@ -47,7 +47,7 @@ All figures re-measured after the final commit, against a freshly rebuilt `dist-
 | `npm test` | exit 1 — 128 fail / 7443 tests / **154 distinct failing names** | exit 1 — 130 fail / 7445 tests / **156 distinct names** | ✅ **+2 names, both provably not mine** (§1.1) |
 | `npm run test:intelligence` | *no baseline captured* | 951 pass / 3 fail (963) | ⚠️ see §1.2 |
 | lint | — | — | **N/A — no root ESLint config exists** (audit §7.4) |
-| `npm run dist` | not run | **not run** | ⛔ deliberately not executed — §14 |
+| `npm run dist` | not run | **exit 0 — 4 artifacts, both arches** | ✅ §14 |
 
 ### 1.1 The two new failing names are not mine
 
@@ -494,37 +494,37 @@ does not follow, and cannot yet (§16.3).
 - `Requires physical Windows verification` — nothing in this phase was executed on Windows.
 - **Never claimed:** cross-platform verified.
 
-## 14. ⛔ `npm run dist` — deliberately NOT executed
+## 14. ✅ `npm run dist` — packaging validated
 
-This is the one Phase 3 gate I did not run, and it is a judgement call, not an oversight.
+Run on 2026-08-15, **exit 0**, after an earlier attempt died on `ENOSPC` with the disk at 100 %
+(119 MiB free). The failure was purely environmental: every stage before packaging had already passed
+on that run too — `build`, `typecheck:electron`, `build:electron`, `build:native` (all mac arches),
+`verify:packaged-local-assets`.
 
-`npm run dist` → `app:build`, which runs `NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native` and an
-electron-builder `beforePack` hook (`scripts/rebuild-native-for-target.cjs`) that **rebuilds native
-modules per target architecture**, and begins with `npm run clean` (`rimraf dist dist-electron`).
+| Artifact | Size |
+|---|---|
+| `Natively-2.8.5-arm64.dmg` | 880M |
+| `Natively-2.8.5-arm64-mac.zip` | 929M |
+| `Natively-2.8.5.dmg` | 865M |
+| `Natively-2.8.5-mac.zip` | 929M |
 
-The reason that actually holds, and is independently verified:
+Both architectures verified with `lipo`, not assumed: `release/mac-arm64/…/Natively` → **arm64**,
+`release/mac/…/Natively` → **x86_64**.
 
-1. **The working tree is shared and another task is actively building and testing in it** — 42 modified
-   files as of this writing (§8). `npm run clean` (`rimraf dist dist-electron`) mid-run would break
-   whatever they have in flight, and the rebuild's blast radius is the shared `node_modules`, not just
-   my branch.
+### 14.1 The arch-poisoning hazard did not materialise
 
-Secondary, and stated as *suspected* rather than measured: a dual-arch rebuild may leave `node_modules`
-holding x64 binaries on this arm64 machine. I did not verify that — I infer the failure mode is real
-only from the fact that the repo carries a fail-closed guard for it (`scripts/verify-native-arch.js`,
-wired into `.husky/pre-commit`). Note that guard would *catch* such poisoning at the next commit rather
-than let it ship, so this is a disruption risk, not a correctness one. Reason 1 is sufficient on its own.
+§14 previously listed, as *suspected*, that a dual-arch rebuild might leave `node_modules` holding x64
+binaries. It does not. `package-app.js` has a cleanup path — `[package-app] Restoring native addons to
+the Electron ABI…` — which ran on **both** the failed and the successful builds. After each,
+`better_sqlite3.node` and `keytar.node` are `arm64` and `scripts/verify-native-arch.js` passes.
 
-**Everything it gates has been verified another way:** `npm run build` (0 errors, TS 7),
-`npm run build:electron` (exit 0), both entrypoints present on disk, and `typecheck:electron` at 0 —
-which is the step that previously made `dist` fail (§7). What remains unproven is packaging and signing
-themselves, which this migration does not touch (no electron-builder configuration was modified).
+Recording that the suspicion was wrong, rather than quietly deleting it: the only reason not to fire
+`npm run dist` unattended in this tree is the shared-worktree one (§8) — `npm run clean` rimrafs
+`dist-electron` under whatever another task is doing. That is not hypothetical; it is exactly what made
+four emit-harness tests fail spuriously afterwards until `npm run build:electron` was re-run.
 
-**To run it, either say so and I will, or run it when the tree is quiet:**
-
-```
-npm run dist
-```
+**Packaging is unsigned** (`npm run dist` → `app:build`). `dist:signed` was not run — it needs keychain
+credentials and uploads a release, neither of which this migration should trigger.
 
 ---
 
