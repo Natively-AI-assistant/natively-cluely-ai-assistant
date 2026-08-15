@@ -37,9 +37,33 @@ const main = fs.readFileSync(mainPath, 'utf8');
 function extractFunctionBody(source, signatureRe) {
   const m = signatureRe.exec(source);
   if (!m) return null;
-  // Find the first `{` at or after the match end.
+  // Skip the PARAMETER LIST before looking for the body brace.
+  //
+  // Every signature regex here ends at or inside the parameter list, and this
+  // used to take the first `{` after the match. That worked until a parameter
+  // gained an inline object TYPE — `resolveMacScreenCaptureCapability(context:
+  // string, options?: { bypassCache?: boolean })` — at which point the first
+  // `{` is inside the annotation and the extracted "body" was
+  // `bypassCache?: boolean`. The test then reported that the function no longer
+  // calls isDevTccBypassEnabled() when the call is right there in the real body.
+  //
+  // The regexes are not uniform: some stop at `(`, others include `()`. So the
+  // starting depth is DERIVED from the matched text rather than assumed — count
+  // the parens the match already consumed, then take the first `{` that appears
+  // at depth 0.
   let i = m.index + m[0].length;
-  while (i < source.length && source[i] !== '{') i++;
+  let parenDepth = 0;
+  for (const ch of m[0]) {
+    if (ch === '(') parenDepth++;
+    else if (ch === ')') parenDepth--;
+  }
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === '(') parenDepth++;
+    else if (ch === ')') parenDepth--;
+    else if (ch === '{' && parenDepth <= 0) break;
+    i++;
+  }
   if (i >= source.length) return null;
   const start = i + 1;
   let depth = 1;
