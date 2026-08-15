@@ -57,16 +57,29 @@ function extractMethodBody(methodName) {
 
 const endMeetingBody = extractMethodBody('endMeetingTransition');
 
+// Accept EITHER send form. The clear moved from a raw
+//   getOverlayWindow()?.webContents.send('session-reset')
+// to the guarded helper
+//   this.sendToWindow(this.getWindowHelper().getOverlayWindow(), 'session-reset')
+// which is strictly safer: sendToWindow() returns early on a null/destroyed
+// window, records the outbound IPC for the native-OOM trace, and swallows a
+// throw — where a raw webContents.send on a destroyed window throws. Pinning the
+// raw form meant this test demanded the LESS safe call. What must never regress
+// is that the overlay is cleared, and only after it is hidden, so both forms
+// count and the ordering assertion below is unchanged.
+const SESSION_RESET_TO_OVERLAY =
+  /(?:sendToWindow\(\s*[^,]*getOverlayWindow\(\)[^,]*,\s*['"]session-reset['"]|getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\))/;
+
 test('endMeeting sends session-reset to the overlay so its hidden tree is cleared before the next meeting', () => {
   assert.ok(
-    /getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\)/.test(endMeetingBody),
+    SESSION_RESET_TO_OVERLAY.test(endMeetingBody),
     'BUG: endMeeting() must send `session-reset` to the overlay window. The overlay is persistent (never destroyed) and only hidden/shown, so without clearing it on stop the previous meeting\'s messages + expanded width survive into the next meeting\'s first visible frame.',
   );
 });
 
 test('endMeeting clears the overlay AFTER hiding it (setWindowMode(launcher)), so the clear is off-screen', () => {
   const hideIdx = endMeetingBody.search(/setWindowMode\(\s*['"]launcher['"]\s*\)/);
-  const resetIdx = endMeetingBody.search(/getOverlayWindow\(\)\?\.\s*webContents\.send\(\s*['"]session-reset['"]\s*\)/);
+  const resetIdx = endMeetingBody.search(SESSION_RESET_TO_OVERLAY);
 
   assert.ok(hideIdx >= 0, 'sanity: endMeeting() must switch to launcher (hides the overlay).');
   assert.ok(resetIdx >= 0, 'sanity: endMeeting() must send session-reset to the overlay.');

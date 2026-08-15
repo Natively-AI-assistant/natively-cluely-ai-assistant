@@ -1303,6 +1303,7 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -7354,23 +7355,42 @@ export class AppState {
 
 // Application initialization
 
+// ─── SINGLE-INSTANCE LOCK, THEN NATIVE ABI GUARD — BOTH AT MODULE SCOPE ─────
+//
+// Order is the whole point. `ensureNativeModuleAbi()` REBUILDS native modules
+// (better-sqlite3, keytar) in dev when they were compiled against the system
+// Node ABI instead of Electron's — the NODE_MODULE_VERSION crash you get after
+// `npm rebuild`, `npm install --ignore-scripts`, or a system Node upgrade.
+// Two instances running that rebuild concurrently corrupt each other's output;
+// that has already broken a build here once. Taking the lock FIRST means the
+// duplicate is gone before any rebuild can start.
+//
+// Both moved out of initializeApp() and above it: the lock has to be the first
+// thing startup does, and the guard has to be able to abort startup before the
+// app touches a native module. Nothing here may be async — a duplicate that
+// yields to the event loop lives long enough to register a second tray icon on
+// macOS Tahoe + Spotlight launches.
+//
+// The guard is cheap and self-limiting on the happy path: it require()s the two
+// modules, returns immediately when the ABI matches, and NEVER rebuilds in a
+// packaged build — there it logs and exits, because a packaged mismatch means
+// the release pipeline shipped the wrong .node binaries and no runtime fix is
+// honest.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+logStartupPhase('single-instance-lock', { gotLock: gotSingleInstanceLock });
+if (!gotSingleInstanceLock) {
+  console.log('[Main] Another instance is already running. Exiting this instance.');
+  // process.exit(0), not app.quit() and not app.exit(0). app.quit() before
+  // whenReady can be deferred or no-op'd (it tries to close all windows first,
+  // and none exist yet). This path must terminate synchronously and
+  // unconditionally, before the ABI guard below can run in a second process.
+  process.exit(0);
+}
+
+ensureNativeModuleAbi();
+
 async function initializeApp() {
   logStartupPhase('initializeApp:start');
-  // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
-  // In development mode with hot-reload this is still safe because electron is restarted
-  // by the build step, not re-launched by concurrently while the old process is alive.
-  const gotLock = app.requestSingleInstanceLock();
-  logStartupPhase('single-instance-lock', { gotLock });
-  if (!gotLock) {
-    console.log('[Main] Another instance is already running. Exiting this instance.');
-    // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
-    // (it tries to close all windows first, but none exist yet), leaving the
-    // duplicate process alive long enough to register a second tray icon on
-    // macOS Tahoe + Spotlight launches. exit() terminates immediately and
-    // cannot be intercepted by before-quit handlers.
-    app.exit(0);
-    return;
-  }
 
   // When a duplicate launch is attempted (e.g. user invokes Spotlight again
   // while Natively is running), focus and recenter the existing window so the
