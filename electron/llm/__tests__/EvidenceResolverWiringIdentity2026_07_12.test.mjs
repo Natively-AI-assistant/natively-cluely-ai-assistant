@@ -77,7 +77,7 @@ const distDir = (() => {
     process.platform === 'win32' ? 'junction' : 'dir',
   );
   try {
-    execSync(`node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir ${target}`, {
+    execSync(`node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir "${target}"`, {
       cwd: repoRoot,
       stdio: 'pipe',
     });
