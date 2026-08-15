@@ -5147,7 +5147,18 @@ let isMultimodal = !!(imagePaths?.length);
       ordered,
       { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
       this.visionHealth,
-      { log: (m) => console.log(m), warn: (m) => console.warn(m) },
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        // Mirrors the non-streaming vision path's 404 handling (see the
+        // onModelError call in generateWithVisionFallback). Without this the
+        // LIVE vision path — the one users actually hit — could never tell the
+        // version manager its pinned model had been retired, so a decommissioned
+        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
+        onModelGone: (_id, name) => {
+          this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+      },
       abortSignal,
     );
   }
