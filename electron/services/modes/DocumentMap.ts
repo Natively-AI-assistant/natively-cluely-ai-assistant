@@ -452,13 +452,28 @@ export function sentenceAwareWindows(text: string, targetWords: number, overlapW
     // worth protecting. Below the ceiling we keep it whole and accept one
     // oversized chunk; above it we window by words.
     //
-    // 3x is chosen to sit clearly above any plausible sentence (the pinned
-    // over-long case is ~1.4x) and far below the unpunctuated-transcript case
-    // (~40x), so neither contract is decided by a near-miss.
-    const MAX_UNSPLIT_SENTENCE_WORDS = targetWords * 3;
+    // The discriminator is STRUCTURE first, length only as a backstop.
+    //
+    // A piece is windowed when it is over-long AND either
+    //   (a) it contains no sentence-terminal punctuation at all — then it is not
+    //       a sentence in any meaningful sense, it is an unpunctuated transcript
+    //       or an OCR/table dump, and there is no clause to protect; or
+    //   (b) it is longer than a generous absolute ceiling — the backstop for a
+    //       structureless run that happens to carry one trailing period, which
+    //       would otherwise slip past (a) and reproduce the original bug.
+    //
+    // Length alone was NOT enough, and picking `3x` first was a mistake worth
+    // recording: a `3 * 140 = 420` ceiling exactly swallowed a 420-word
+    // three-paragraph fixture (ModeLocalRerank's), collapsing three chunks into
+    // one. Any single number is arbitrary at its boundary; whether the text has
+    // sentences at all is not.
+    const HAS_SENTENCE_PUNCTUATION = /[.!?]/;
+    const ABSOLUTE_CEILING_WORDS = targetWords * 3;
     const wordWindows = (s: string): string[] => {
         const w = s.match(/\S+/g) || [];
-        if (w.length <= MAX_UNSPLIT_SENTENCE_WORDS) return [s];
+        if (w.length <= targetWords) return [s];
+        const structureless = !HAS_SENTENCE_PUNCTUATION.test(s);
+        if (!structureless && w.length <= ABSOLUTE_CEILING_WORDS) return [s];
         const step = Math.max(1, targetWords - overlapWords);
         const out: string[] = [];
         for (let i = 0; i < w.length; i += step) {
