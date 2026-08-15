@@ -888,7 +888,7 @@ scope and passing it looks like an easy win, but `usage_events` has no session c
 that appears to correlate sessions while doing nothing of the kind is worse than one that
 plainly does not. A test asserts the argument is absent.
 
-## O2 — entitlement state on metered rows → `migrations/011_usage_events_entitlement_state.sql`
+## O2 — entitlement state on metered rows → `migrations/012_usage_events_entitlement_state.sql`
 
 **NOT YET APPLIED — run it in the Supabase SQL editor.**
 
