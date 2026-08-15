@@ -185,6 +185,63 @@ export function trackFeature(feature: FeatureName, opts?: { sessionId?: string; 
     };
 }
 
+/**
+ * Wrap one feature execution. This is how handlers should be instrumented.
+ *
+ * WHY A WRAPPER RATHER THAN THREE LINES PER HANDLER
+ *
+ * The answer handlers in ipcHandlers.ts end in three different ways, and the
+ * distinction is exactly the one §42 says must not be blurred:
+ *
+ *   • throwing            `catch (e) { throw e }`      — clearly a failure
+ *   • error-object        `return { error, hint: null }` — a failure that LOOKS
+ *                          like a normal return, and a naive `finally` records
+ *                          it as a completed execution
+ *   • null-result         `return { clarification: null }` — nothing was
+ *                          produced, but no error was raised either
+ *
+ * Instrumenting each by hand means getting that judgement right eight separate
+ * times. It was already got wrong once (the early returns in
+ * `generate-what-to-say` were recorded as successes until a review caught it),
+ * which is the argument for one code path with tests rather than eight without.
+ *
+ * `failedIf` decides what counts as failure for a given handler. The default
+ * catches the error-object shape; handlers whose emptiness is meaningful pass
+ * their own predicate.
+ */
+export async function runTracked<T>(
+  feature: FeatureName,
+  fn: () => Promise<T>,
+  opts?: {
+    failedIf?: (result: T) => boolean;
+    sessionId?: string;
+    metadata?: Record<string, string | number | boolean>;
+  },
+): Promise<T> {
+  const tracker = trackFeature(feature, { sessionId: opts?.sessionId, metadata: opts?.metadata });
+  try {
+    const result = await fn();
+    // Default: a truthy `error` field means the handler failed while returning
+    // normally. Recording that as a completion would imply delivered service.
+    const failed = opts?.failedIf
+      ? safeBool(() => opts.failedIf!(result))
+      : safeBool(() => !!(result as any)?.error);
+    if (failed) tracker.failed(new Error('handler_reported_failure'));
+    else tracker.completed();
+    return result;
+  } catch (err) {
+    tracker.failed(err);
+    // Rethrow unchanged. Instrumentation observes; it never alters control flow,
+    // and a handler's contract with the renderer must not depend on it.
+    throw err;
+  }
+}
+
+/** A predicate that throws must not decide the outcome — treat it as "not failed". */
+function safeBool(fn: () => boolean): boolean {
+  try { return !!fn(); } catch { return false; }
+}
+
 /** Application lifecycle (§5). Emitted once per launch. */
 export function recordAppStarted(metadata?: Record<string, string | number | boolean>): void {
     try {

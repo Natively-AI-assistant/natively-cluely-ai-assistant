@@ -270,3 +270,133 @@ describe('feature instrumentation', () => {
     assert.equal(JSON.stringify(secret).includes('alice'), false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// runTracked — the ONE code path all nine instrumented handlers share (§42)
+//
+// Asserted against the REAL outbox and a REAL SQLite file, not a stubbed
+// recorder. Two reasons: a stub restored in a `finally` misses everything the
+// awaited work emits, and esbuild inlines modules PER ENTRY BUNDLE — so the
+// `usageOutbox` reachable from usageInstrumentation.js is not necessarily the
+// same object a test can monkey-patch through UsageOutbox.js. Reading the rows
+// back out of the queue sidesteps both and proves the stronger claim: that
+// instrumentation actually reaches durable storage.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('runTracked outcome classification', () => {
+  const INSTR_PATH = path.join(REPO, 'dist-electron/electron/services/usageInstrumentation.js');
+  const have = fs.existsSync(INSTR_PATH);
+  let tdir;
+  let tdb;
+
+  before(() => {
+    if (!have) return;
+    tdir = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-tracked-test-'));
+    process.env.NATIVELY_TEST_USERDATA = tdir;
+    process.env.NATIVELY_USAGE_OUTBOX_ENABLED = '1';
+    const { DatabaseManager } = require(DBM_PATH);
+    DatabaseManager.instance = null;
+    tdb = DatabaseManager.getInstance();
+  });
+
+  after(() => {
+    delete process.env.NATIVELY_USAGE_OUTBOX_ENABLED;
+    try { tdb?.close?.(); } catch { /* ignore */ }
+    try { fs.rmSync(tdir, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+
+  /** Every event emitted since the last drain, oldest first. */
+  function drain() {
+    const rows = tdb.claimUsageOutboxBatch(1000, Date.now() + 10 ** 12);
+    if (rows.length) tdb.dropUsageEvents(rows.map((r) => r.event_id));
+    return rows.map((r) => r.payload);
+  }
+
+  test('a normal return is one started + one completed', { skip: have ? false : 'needs build' }, async () => {
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    const out = await runTracked('mode_execution', async () => ({ answer: 'ok' }));
+    assert.deepEqual(out, { answer: 'ok' });
+    const ev = drain();
+    assert.deepEqual(ev.map((e) => e.event_type), ['feature_started', 'feature_completed']);
+    assert.equal(ev[1].event_status, 'completed');
+    assert.equal(ev[0].feature_session_id, ev[1].feature_session_id, 'both events share one feature session');
+  });
+
+  test('an error-object return is FAILED, not completed', { skip: have ? false : 'needs build' }, async () => {
+    // The bug a review caught in generate-what-to-say: a handler that returns
+    // `{ answer: null, error }` instead of throwing looked like a success.
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    await runTracked('technical_interview', async () => ({ answer: null, error: 'Invalid image path' }));
+    const ev = drain();
+    assert.deepEqual(ev.map((e) => e.event_type), ['feature_started', 'feature_failed']);
+    assert.equal(ev[1].event_status, 'failed');
+    // And the raw message never leaves the machine.
+    assert.equal(JSON.stringify(ev[1]).includes('Invalid image path'), false);
+  });
+
+  test('a throw is FAILED and the error still reaches the caller', { skip: have ? false : 'needs build' }, async () => {
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    const boom = new Error('upstream 429 rate limit');
+    let caught = null;
+    await runTracked('meeting_copilot', async () => { throw boom; }).catch((e) => { caught = e; });
+    assert.equal(caught, boom, 'instrumentation must never alter control flow');
+    const ev = drain();
+    assert.equal(ev[1].event_type, 'feature_failed');
+    assert.equal(ev[1].failure_code, 'PROVIDER_RATE_LIMIT');
+    assert.equal(JSON.stringify(ev[1]).includes('upstream 429'), false, 'raw messages are never shipped');
+  });
+
+  test('a null primary result is FAILED when the handler says so', { skip: have ? false : 'needs build' }, async () => {
+    // generate-clarify returns { clarification: null } without throwing when it
+    // could not produce anything. That is a non-delivery, not a completion.
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    await runTracked('mode_execution', async () => ({ clarification: null }),
+      { failedIf: (r) => !r || r.clarification === null });
+    const ev = drain();
+    assert.equal(ev[1].event_type, 'feature_failed');
+  });
+
+  test('exactly ONE terminal event is emitted per execution', { skip: have ? false : 'needs build' }, async () => {
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    await runTracked('mode_execution', async () => ({ ok: true }));
+    const terminals = drain().filter((e) => e.event_type !== 'feature_started');
+    assert.equal(terminals.length, 1, 'a double terminal would inflate every count derived from it');
+  });
+
+  test('a throwing failedIf predicate cannot decide the outcome', { skip: have ? false : 'needs build' }, async () => {
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    const result = await runTracked('mode_execution', async () => ({ ok: true }),
+      { failedIf: () => { throw new Error('bad predicate'); } });
+    assert.deepEqual(result, { ok: true }, 'the handler result is returned regardless');
+    assert.equal(drain()[1].event_type, 'feature_completed');
+  });
+
+  test('a duration is recorded on the terminal event', { skip: have ? false : 'needs build' }, async () => {
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    await runTracked('jd_analysis', async () => { await new Promise((r) => setTimeout(r, 15)); return { ok: true }; });
+    const ev = drain();
+    assert.ok(Number.isInteger(ev[1].reported_duration_ms));
+    assert.ok(ev[1].reported_duration_ms >= 10, `expected >=10ms, got ${ev[1].reported_duration_ms}`);
+  });
+
+  test('events carry pseudonymous context and no content', { skip: have ? false : 'needs build' }, async () => {
+    const { runTracked } = require(INSTR_PATH);
+    drain();
+    await runTracked('technical_interview', async () => ({ ok: true }));
+    const ev = drain();
+    assert.equal(ev[1].feature, 'technical_interview');
+    assert.equal(ev[1].platform, process.platform);
+    assert.ok(ev[1].app_session_id, 'app session id present (§16)');
+    assert.ok(ev[1].client_event_ts, 'client claim present; the server still stamps its own time');
+    for (const banned of ['prompt', 'answer', 'transcript', 'resume', 'content', 'license_id', 'email']) {
+      assert.equal(Object.keys(ev[1]).includes(banned), false, `${banned} must never be emitted`);
+    }
+  });
+});

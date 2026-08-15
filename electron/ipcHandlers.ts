@@ -9271,7 +9271,39 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   // MODE 1: Assist (Passive observation)
+  // ── Usage-ledger feature instrumentation (phase 4) ─────────────────────────
+  //
+  // `runTracked` emits feature_started and exactly one terminal event. The
+  // feature name comes from the ACTIVE MODE and is only a NAMED feature when
+  // that mode is a built-in — a custom mode a user renamed "Technical
+  // Interview" reports the honest `mode_execution` instead (§31).
+  //
+  // Everything is wrapped: instrumentation must never be able to fail the answer
+  // it measures, so a failure to resolve the mode degrades to `mode_execution`
+  // rather than throwing into the handler.
+  const _usageFeature = (): any => {
+    try {
+      const { featureForMode } = require('./services/usageInstrumentation');
+      const { ModesManager: _MMUsage } = require('./services/ModesManager');
+      return featureForMode(_MMUsage.getInstance().getActiveMode());
+    } catch {
+      return 'mode_execution';
+    }
+  };
+  const _tracked = async <T>(fn: () => Promise<T>, failedIf?: (r: T) => boolean): Promise<T> => {
+    try {
+      const { runTracked } = require('./services/usageInstrumentation');
+      return await runTracked(_usageFeature(), fn, failedIf ? { failedIf } : undefined);
+    } catch (e: any) {
+      // Only a require()/wiring failure lands here; runTracked rethrows the
+      // handler's own error untouched, so this cannot swallow a real one.
+      if (e && e.__usageWrapperFailure) return fn();
+      throw e;
+    }
+  };
+
   safeHandle('generate-assist', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
@@ -9288,6 +9320,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.insight === null || r.insight === undefined);
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
@@ -9306,19 +9339,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       imagePaths?: string[],
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
-      // Usage ledger (phase 4). The feature is resolved from the ACTIVE MODE and
-      // only named when that mode is a built-in — a custom mode a user renamed
-      // "Technical Interview" reports the honest `mode_execution` instead (§31).
-      // Wrapped because instrumentation must never fail the answer it measures.
-      let _usage: import('./services/usageInstrumentation').FeatureTracker | null = null;
-      try {
-        const { trackFeature, featureForMode } = require('./services/usageInstrumentation');
-        // ModesManager is require()d locally, matching every other call site in
-        // this file — it is deliberately not a top-level import here.
-        const { ModesManager: _MMUsage } = require('./services/ModesManager');
-        _usage = trackFeature(featureForMode(_MMUsage.getInstance().getActiveMode()));
-      } catch { /* instrumentation is never load-bearing */ }
-
+      return _tracked(async () => {
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -9339,9 +9360,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             )
           ) {
             console.warn('[IPC] generate-what-to-say: malformed image path payload rejected');
-            // An early return with answer:null is a FAILED execution. Left to the
-            // `finally` below it would be recorded as completed.
-            try { _usage?.failed(new Error('invalid image path payload')); } catch { /* ignore */ }
             return {
               answer: null,
               question: question || 'unknown',
@@ -9360,7 +9378,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               console.warn(
                 `[IPC] generate-what-to-say: invalid image path rejected: ${validation.reason}`,
               );
-              try { _usage?.failed(new Error('invalid image path')); } catch { /* ignore */ }
               return {
                 answer: null,
                 question: question || 'unknown',
@@ -9501,15 +9518,6 @@ export function initializeIpcHandlers(appState: AppState): void {
               'What to Answer',
             );
           } catch (_) {}
-        } else {
-          // F8 (code-review 2026-08-14): runWhatShouldISay returns null on its
-          // superseded / non-answer / empty-answer paths — the user got
-          // NOTHING, so the finally's `completed()` must not stamp this run as
-          // delivered service (§6: a dispute report must never imply service
-          // was delivered when it was not). `cancelled` is the honest terminal:
-          // no service, no fabricated error. First terminal wins, so the
-          // finally below becomes a no-op.
-          try { _usage?.cancelled({ metadata: { no_answer: true } }); } catch { /* ignore */ }
         }
         return {
           answer,
@@ -9524,26 +9532,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
-        // `failed`, not `completed`. This handler RETURNS an error object rather
-        // than throwing, so without this the execution would look successful to
-        // the ledger — and a dispute report must never imply service was
-        // delivered when it was not (§6).
-        try { _usage?.failed(error); } catch { /* ignore */ }
+        // Returns an error object rather than throwing. runTracked's default
+        // predicate reads the truthy `error` field and records this as FAILED —
+        // a dispute report must never imply service was delivered when it was
+        // not (§6). The two early returns above use the same shape and are
+        // classified the same way, which is the point of the shared wrapper.
         return {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
         };
-      } finally {
-        // Idempotent inside the tracker: if the catch above already emitted
-        // `failed`, this is a no-op. Otherwise the execution reached its return
-        // statement and genuinely completed.
-        try { _usage?.completed(); } catch { /* ignore */ }
       }
+      });
     },
   );
 
   safeHandle('generate-clarify', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const clarification = await intelligenceManager.runClarify();
@@ -9569,6 +9574,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.clarification === null || r.clarification === undefined);
   });
 
   // Shared helper: validate, then run images through the vision-first ImageOptimizer
@@ -9604,6 +9610,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   }
 
   safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -9658,9 +9665,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   safeHandle('generate-brainstorm', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -9714,6 +9723,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
@@ -9739,6 +9749,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // MODE 3: Follow-Up (Refinement)
   safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
@@ -9755,10 +9766,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.refined === null || r.refined === undefined);
   });
 
   // MODE 4: Recap (Summary)
   safeHandle('generate-recap', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
@@ -9775,10 +9788,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.summary === null || r.summary === undefined);
   });
 
   // MODE 6: Follow-Up Questions
   safeHandle('generate-follow-up-questions', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
@@ -9795,6 +9810,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.questions === null || r.questions === undefined);
   });
 
   // MODE 5: Manual Answer (Fallback)
@@ -10046,6 +10062,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   safeHandle('generate-followup-email', async (_, input: any) => {
+    return _tracked(async () => {
     try {
       const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
       const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
@@ -10083,6 +10100,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error generating follow-up email:', error);
       throw error;
     }
+    });
   });
 
   safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {

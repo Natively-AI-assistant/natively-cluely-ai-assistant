@@ -474,6 +474,14 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# Usage ledger — the progress file is the mandated handoff contract across three
+# campaigns (16 architectural decisions, 5 open findings, the full forensics
+# record), the architecture doc is the system's specification, and the privacy
+# diff is a release gate. Untracked, none of it survives a fresh clone or a
+# worktree — which is exactly where the next person picks this up.
+!docs/usage-ledger-architecture.md
+!docs/usage-ledger-progress.md
+!docs/usage-ledger-privacy-diff.md
 # TypeScript 7 upgrade — audit + report are deliverables, not scratch notes,
 # so they are allowlisted out of the blanket `docs/*` ignore above.
 !docs/ts7-upgrade-audit.md
@@ -488,3 +496,15 @@ benchmark-results/
 
 # Unbuilt feature PRDs — planning documents, never shipped to the public repo
 /upcoming/
+
+# Working-directory artifacts that are NOT part of this application.
+# These accumulated as untracked noise; none of them belong in the app repo.
+#   natively-control/    a separate 1.8 GB / 41k-file project checkout
+#   chargeback_evidence/ payment-dispute documents (business records, not code)
+#   undefined/           written by a bug that resolved a path to the literal
+#                        string "undefined" — if this reappears, fix the caller
+#   natively_debug.size* one-off debug dumps
+/natively-control/
+/chargeback_evidence/
+/undefined/
+/natively_debug.size*
