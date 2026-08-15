@@ -144,7 +144,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential python3 pkg-config libasound2-dev libpulse-dev libsecret-1-dev
 
+      # onnxruntime-node@1.22.0 ships a broken install metadata for linux/x64:
+      # its default requirement is the cuda12 manifest, whose file entries
+      # point at 'runtimes/win-x64/native/*.so' paths that don't exist inside
+      # the Microsoft.ML.OnnxRuntime.Gpu.Linux nupkg, so every plain `npm ci`
+      # on Linux dies with "Failed to find ... in NuGet package". The package
+      # is excluded from the packaged app (package.json build.files) and the
+      # model workers resolve the runtime lazily, so skipping the binary
+      # download here is safe for CI. `ONNXRUNTIME_NODE_INSTALL=''` (non-Linux)
+      # is falsy, so macOS/Windows keep their default install behavior.
       - name: Install dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: ${{ runner.os == 'Linux' && 'skip' || '' }}
         run: npm ci
 
       # Belt-and-suspenders: confirm postinstall produced correct-arch
