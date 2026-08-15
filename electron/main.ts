@@ -3490,7 +3490,23 @@ export class AppState {
         logger(`${prefix}${decision.message}`);
         return;
       }
-      if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
+      // darwin-only. SystemAudioHealthClassifier is platform-agnostic — it raises
+      // `same-device-input-output` from the route alone — but the limitation is
+      // not: the CoreAudio Process Tap cannot tap a device that is also the
+      // active mic, while Windows WASAPI loopback handles that case fine (the
+      // same reasoning already written on the `mac-same-device-input-output`
+      // branch of formatPermissionMessage).
+      //
+      // Without this gate a Windows user is warned about a condition that is not
+      // a problem for them, and told to change devices for no reason. The
+      // helper's own !isMac fallback keeps the COPY correct — they would see the
+      // generic "No System Audio for 8s" text rather than macOS instructions —
+      // but the right fix is not to raise the warning at all off darwin.
+      if (
+        process.platform === 'darwin'
+        && decision.type === 'warn-user'
+        && decision.reason === 'same-device-input-output'
+      ) {
         const msg = formatPermissionMessage('mac-same-device-input-output', { device: decision.device });
         console.warn(`${prefix}SystemAudioCapture ${msg}`);
         this.sendAudioCaptureFailed( {
