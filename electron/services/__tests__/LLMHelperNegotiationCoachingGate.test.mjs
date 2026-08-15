@@ -31,7 +31,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -63,10 +63,11 @@ const distDir = (() => {
   // but still emits JS for files that compile cleanly. We swallow the
   // non-zero status and verify post-hoc that LLMHelper.js was produced.
   try {
-    execSync(`node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir ${target}`, {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    });
+    execFileSync(process.execPath, [
+      path.join('node_modules', 'typescript7', 'bin', 'tsc'),
+      '-p', path.join('electron', 'tsconfig.emit.json'),
+      '--outDir', target,
+    ], { cwd: repoRoot, stdio: 'pipe' });
   } catch (_tscErr) {
     // expected — tsc returns 1 on type errors elsewhere
   }

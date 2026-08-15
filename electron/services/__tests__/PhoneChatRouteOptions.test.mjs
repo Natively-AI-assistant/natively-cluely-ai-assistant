@@ -17,7 +17,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -30,8 +30,12 @@ const distDir = (() => {
   const isBundled = fs.existsSync(bundled) && fs.readFileSync(bundled, 'utf8').includes('init_ModesManager');
   if (!isBundled) return path.resolve(repoRoot, 'dist-electron');
   const target = fs.mkdtempSync(path.join(os.tmpdir(), 'phonechat-ro-dist-'));
-  fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(target, 'node_modules'), 'dir');
-  try { execSync(`node node_modules/typescript7/bin/tsc -p electron/tsconfig.emit.json --outDir ${target}`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected */ }
+  fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(target, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  try { execFileSync(process.execPath, [
+    path.join('node_modules', 'typescript7', 'bin', 'tsc'),
+    '-p', path.join('electron', 'tsconfig.emit.json'),
+    '--outDir', target,
+  ], { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected */ }
   if (!fs.existsSync(path.join(target, 'electron/llm/index.js'))) {
     throw new Error('tsc emission failed — LLMHelper.js missing from isolated tree');
   }
