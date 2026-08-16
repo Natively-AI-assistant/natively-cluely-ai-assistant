@@ -80,6 +80,12 @@ bower_components
 build/Release
 
 # Dependency directories
+# Both spellings on purpose: the trailing slash matches only a DIRECTORY, so in
+# a git worktree — where node_modules is usually a symlink to the shared
+# install — `git add -A` happily stages it as a 120000 symlink entry pointing at
+# an absolute local path, which breaks every other checkout. The slash-less
+# pattern also matches the symlink.
+node_modules
 node_modules/
 jspm_packages/
 dist-electron/
