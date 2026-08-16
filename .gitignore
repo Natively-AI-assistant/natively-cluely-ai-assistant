@@ -418,6 +418,12 @@ user log/
 /dispute_evidence/
 scripts/*evidence*.py
 scripts/combine_*_single_file.py
+# The dispute handover docs are ALSO written to the repo root, outside every
+# directory rule above — byte-identical strays that a `git add -A` would sweep
+# in. This repo is PUBLIC and those files carry a named customer's email, phone
+# number and home address, so the root copies need their own rule.
+/*_DISPUTE_HANDOVER.md
+/*_DISPUTE_*.md
 # Autopilot campaign prompts — internal docs, not source
 /HANDOFF*.md
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
