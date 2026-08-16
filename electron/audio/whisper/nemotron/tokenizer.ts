@@ -83,11 +83,14 @@ export async function loadNemotronTokenizer(modelDir: string): Promise<NemotronT
     // fallback while still using the library's own real
     // convert_ids_to_tokens()/special_tokens for the id->piece mapping and
     // special-token filtering (skip_special_tokens's own real behavior).
+    // Hoisted out of decode(): `tok` is fixed for this tokenizer's lifetime, so
+    // the special-token set is built once per load rather than rebuilt (and
+    // linearly scanned, once per token) on every decode call.
+    const special = new Set<string>(tok.special_tokens ?? []);
     return {
       decode: (ids: number[]) => {
         const tokens = tok.model.convert_ids_to_tokens(ids) as string[];
-        const special: string[] = tok.special_tokens ?? [];
-        return joinPieces(tokens.filter((t) => !special.includes(t)));
+        return joinPieces(tokens.filter((t) => !special.has(t)));
       },
     };
   } catch (e) {

@@ -4,7 +4,7 @@ import path from 'path';
 import { getBoundedOnnxSessionOptions } from '../../../utils/onnxThreadConfig';
 import { computeMelFrame, CHUNK_SAMPLES, N_MELS, N_FRAMES, LOOKBACK_SAMPLES } from './melFrontend';
 import { createZeroCacheState, nextCacheState, type NemotronCacheState } from './cacheState';
-import { greedyDecodeFrame, BLANK_ID, MAX_SYMBOLS_PER_STEP, type DecoderState } from './rnntDecoder';
+import { greedyDecodeFrame, BLANK_ID, MAX_SYMBOLS_PER_STEP, type DecoderState, type DecoderJointFn } from './rnntDecoder';
 import { loadNemotronTokenizer, type NemotronTokenizer } from './tokenizer';
 
 // Task 11 fix1 round: DEFAULT_LANG_ID = 0, empirically verified against real
@@ -146,9 +146,12 @@ export class NemotronEngine {
    *
    * Every existing caller that doesn't pass `shared` (integration.test.mjs,
    * every other *.test.mjs in this directory, and whisperWorker.ts's own
-   * first-channel-of-a-worker path) keeps hitting the exact original
-   * fresh-load Promise.all(...) path below, byte-for-byte unchanged — zero
-   * blast radius on the already-verified single-channel accuracy fix.
+   * first-channel-of-a-worker path) keeps hitting the fresh-load Promise.all(...)
+   * path below — zero blast radius on the already-verified single-channel
+   * accuracy fix. The tokenizer load joined that Promise.all rather than
+   * trailing it: it reads its own files and touches no session, so overlapping
+   * it with session creation changes cold-start latency only, not results or
+   * ordering. Nothing else about the load path changed.
    */
   static async create(
     modelDir: string,
@@ -158,12 +161,12 @@ export class NemotronEngine {
     if (shared) {
       return new NemotronEngine(shared.encoderSession, shared.decoderSession, shared.jointSession, shared.tokenizer);
     }
-    const [encoderSession, decoderSession, jointSession] = await Promise.all([
+    const [encoderSession, decoderSession, jointSession, tokenizer] = await Promise.all([
       createSessionWithFallback(path.join(modelDir, 'encoder.onnx'), executionProviders),
       createSessionWithFallback(path.join(modelDir, 'decoder.onnx'), executionProviders),
       createSessionWithFallback(path.join(modelDir, 'joint.onnx'), executionProviders),
+      loadNemotronTokenizer(modelDir),
     ]);
-    const tokenizer = await loadNemotronTokenizer(modelDir);
     return new NemotronEngine(encoderSession, decoderSession, jointSession, tokenizer);
   }
 
@@ -271,7 +274,14 @@ export class NemotronEngine {
     const encoderOutputs = await this.runEncoder(chunk);
     this.cacheState = nextCacheState(encoderOutputs);
 
-    const runDecoderJoint = async (encoderFrame: Tensor, prevTokenId: number, state: DecoderState) => {
+    // Annotated as DecoderJointFn rather than inferred. greedyDecodeFrame's
+    // parameter is typed `EncoderFrame` (= unknown) so rnntDecoder.ts stays
+    // pure logic with no onnxruntime-node dependency; under strictFunctionTypes
+    // a lambda declaring `encoderFrame: Tensor` is NOT assignable to one
+    // declaring `unknown` (parameters are contravariant), which is TS2345 at
+    // the greedyDecodeFrame call below. Taking the callback's own type and
+    // narrowing at the single use site keeps that boundary intact.
+    const runDecoderJoint: DecoderJointFn = async (encoderFrame, prevTokenId, state) => {
       // targets: [batch, target_len] = [1, 1] — one token per call (greedy).
       const targets = new Tensor('int64', new BigInt64Array([BigInt(prevTokenId)]), [1, 1]);
       // h_in/c_in: [num_layers, batch, hidden] = [2, 1, 640] — verified via
@@ -298,7 +308,9 @@ export class NemotronEngine {
       );
 
       const jointOut = await this.jointSession.run({
-        encoder_output: encoderFrame, // [1, 1, 1024] — see per-frame slice below
+        // Narrowed from EncoderFrame (unknown) — the outer loop below always
+        // passes a [1, 1, 1024] Tensor it constructs itself; see the slice there.
+        encoder_output: encoderFrame as Tensor,
         decoder_output: decoderOutForJoint,
       });
       // joint_output: [batch, time, target_len, vocab] = [1, 1, 1, 13088] for
