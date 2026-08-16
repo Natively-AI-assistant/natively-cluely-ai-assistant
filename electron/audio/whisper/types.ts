@@ -25,7 +25,14 @@ export type WhisperModelId =
   // CTC has no autoregressive decoder, so the repo ships one `onnx/model.onnx`
   // instead of the encoder/decoder pair every other id here uses. See
   // `sessionLayout` on WhisperModelInfo.
-  | 'onnx-community/parakeet-ctc-0.6b-ONNX';
+  | 'onnx-community/parakeet-ctc-0.6b-ONNX'
+  // Nemotron 3.5 ASR Streaming — NVIDIA's cache-aware FastConformer-RNNT,
+  // multilingual, genuinely chunked/streaming (not simulated like every other
+  // entry above). Int4 ONNX export via onnx-community. Bypasses
+  // @huggingface/transformers' pipeline() entirely — see
+  // electron/audio/whisper/nemotron/ for the raw onnxruntime-node engine that
+  // drives its three graphs (encoder/decoder/joint) directly.
+  | 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
 
 export type WhisperModelStatus = 'available' | 'missing' | 'downloading' | 'error';
 
@@ -68,7 +75,22 @@ export interface WhisperModelInfo {
    * for an encoder/decoder pair that will never exist and reports the model
    * missing forever, so it re-downloads on every launch and never runs.
    */
-  sessionLayout?: 'encoder-decoder' | 'single';
+  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
+  /**
+   * Set when this catalog entry is not yet functional and must not be
+   * surfaced in any user-facing model picker. Everything else about the
+   * entry (download provider, worker routing, streaming plumbing) stays
+   * intact — this only controls visibility in getAvailableModels()'s
+   * output. Set for Nemotron 3.5 ASR Streaming pending a real-model go/no-go
+   * fix: it currently transcribes real speech as an empty string (see
+   * .superpowers/sdd/2026-08-10-nemotron-local-stt/task-11-report.md
+   * and task-11-debug1-report.md for the full diagnostic). Remove this flag
+   * only once that same integration test
+   * (electron/audio/whisper/nemotron/__tests__/integration.test.mjs)
+   * produces a real, materially correct, non-empty transcription against a
+   * real downloaded model.
+   */
+  hidden?: boolean;
 }
 
 export interface WorkerInitMessage {
@@ -87,6 +109,20 @@ export interface WorkerInitMessage {
   // sibling `*.onnx_data` weight files of external-data checkpoints get fetched.
   // See WhisperModelInfo.externalDataFormat for the full rationale.
   useExternalDataFormat?: boolean | Record<string, boolean>;
+  // Routes the worker between the transformers.js pipeline() path (undefined /
+  // 'encoder-decoder' / 'single') and the raw-ONNX Nemotron engine
+  // ('nemotron-rnnt'). See WhisperModelInfo.sessionLayout for the source of truth.
+  sessionLayout?: 'encoder-decoder' | 'single' | 'nemotron-rnnt';
+  // Dual-channel Nemotron only (sessionLayout === 'nemotron-rnnt'; ignored by
+  // every other model): identifies which channel (mic/system, or whatever
+  // LocalWhisperSTT.channelLabel resolves to) this init is for. Two channels
+  // can now share ONE worker + one set of loaded ONNX sessions — see
+  // ./nemotron/sharedWorkerRegistry.ts. The worker keeps a per-channelId
+  // NemotronEngine instance (see whisperWorker.ts's nemotronChannels map),
+  // each with fully isolated decode state, so this field is required (not
+  // optional) whenever sessionLayout is 'nemotron-rnnt' — the worker rejects
+  // an init with sessionLayout: 'nemotron-rnnt' and no channelId.
+  channelId?: string;
 }
 export interface WorkerTranscribeMessage {
   type: 'transcribe';
@@ -97,6 +133,18 @@ export interface WorkerTranscribeMessage {
   //                  with deterministic params (no condition_on_previous_text).
   // streaming=false (default) → final pass, emits 'result'.
   streaming?: boolean;
+  // nemotron-rnnt session layout only (silently ignored by every other
+  // model): true on the FIRST chunk dispatched for a segment. Tells the
+  // worker to call NemotronEngine.reset() before pushAudio() so encoder/
+  // decoder cache state never leaks across a VAD segment boundary — or
+  // across a warm-preloaded worker's PREVIOUS recording session, since a
+  // fresh LocalWhisperSTT instance's sent-sample cursor always starts at 0,
+  // so its first chunk always sets this true.
+  nemotronReset?: boolean;
+  // Dual-channel Nemotron only — see WorkerInitMessage.channelId. Selects
+  // which channel's NemotronEngine instance (and serialization chain) this
+  // transcribe message belongs to. Absent/ignored for every other model.
+  channelId?: string;
 }
 /**
  * Out-of-band prompt update. Sent only when the host's context string
@@ -110,13 +158,49 @@ export interface WorkerSetPromptMessage {
   type: 'setPrompt';
   prompt: string;
 }
-export type WorkerInMessage = WorkerInitMessage | WorkerTranscribeMessage | WorkerSetPromptMessage;
+/**
+ * Out-of-band language update — nemotron-rnnt session layout only (silently
+ * ignored by every other model, same convention as `nemotronReset` on
+ * WorkerTranscribeMessage). Sent only when the host's resolved `lang_id`
+ * actually changes (see LocalWhisperSTT's `maybePushNemotronLangToWorker`),
+ * mirroring WorkerSetPromptMessage's "only on change" convention. `langId`
+ * is a small (0-127) NVIDIA PROMPT_DICTIONARY index — see
+ * ./nemotron/languageTable.ts — already resolved and fail-closed-checked by
+ * the host; the worker trusts it as-is and forwards it straight to
+ * NemotronEngine.setLanguage().
+ */
+export interface WorkerSetLanguageMessage {
+  type: 'setLanguage';
+  langId: number;
+  // Dual-channel Nemotron only — see WorkerInitMessage.channelId.
+  channelId?: string;
+}
+/**
+ * Dual-channel Nemotron only. Sent when one channel's LocalWhisperSTT
+ * instance is done with the shared worker (stop() / worker teardown) — the
+ * worker drops that channelId's NemotronEngine instance + serialization
+ * chain from its per-channel maps without affecting the other channel or
+ * the shared ONNX sessions. Whether the underlying worker process itself
+ * terminates is decided main-side by sharedWorkerRegistry.ts's refcount,
+ * not by this message — the worker just cleans up its own bookkeeping for
+ * one channel when told to.
+ */
+export interface WorkerCloseChannelMessage {
+  type: 'closeChannel';
+  channelId: string;
+}
+export type WorkerInMessage =
+  | WorkerInitMessage
+  | WorkerTranscribeMessage
+  | WorkerSetPromptMessage
+  | WorkerSetLanguageMessage
+  | WorkerCloseChannelMessage;
 
-export interface WorkerReadyResponse { type: 'ready'; }
-export interface WorkerResultResponse { type: 'result'; taskId: string; text: string; }
-export interface WorkerPartialResponse { type: 'partial'; taskId: string; text: string; }
-export interface WorkerErrorResponse { type: 'error'; taskId?: string; message: string; }
-export interface WorkerProgressResponse { type: 'progress'; modelId: string; progress: number; }
+export interface WorkerReadyResponse { type: 'ready'; channelId?: string; }
+export interface WorkerResultResponse { type: 'result'; taskId: string; text: string; channelId?: string; }
+export interface WorkerPartialResponse { type: 'partial'; taskId: string; text: string; channelId?: string; }
+export interface WorkerErrorResponse { type: 'error'; taskId?: string; message: string; channelId?: string; }
+export interface WorkerProgressResponse { type: 'progress'; modelId: string; progress: number; channelId?: string; }
 export type WorkerOutMessage =
   | WorkerReadyResponse
   | WorkerResultResponse

@@ -8323,8 +8323,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Settings overlay severed the event channel is no longer possible.
   safeHandle('local-whisper-start-download', async (_event, modelId: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      const r = LocalModelDownloadService.getInstance().start('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      const r = LocalModelDownloadService.getInstance().start(resolveLocalModelProviderName(modelId), modelId);
       // Preserve the original return shape: the panel treats 'already-downloading'
       // as a non-error success.
       if (r.alreadyDownloading) return { success: false, error: 'already-downloading' };
@@ -8336,8 +8336,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('local-whisper-cancel-download', async (_event, modelId: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      return LocalModelDownloadService.getInstance().cancel('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      return LocalModelDownloadService.getInstance().cancel(resolveLocalModelProviderName(modelId), modelId);
     } catch (e: any) {
       return { success: false, error: e?.message ?? String(e) };
     }
@@ -8349,8 +8349,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   // mid-download.
   safeHandle('local-whisper-get-download-state', async (_event, modelId?: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      return LocalModelDownloadService.getInstance().getState('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      // With a modelId, resolve its real provider (whisper vs nemotron) for
+      // the single-entry lookup. Without one (querying every in-flight
+      // download for the panel's initial mount), pass no providerName at
+      // all — getState() then returns entries across every registered
+      // provider; hardcoding 'whisper' here previously meant the panel
+      // could never see a Nemotron entry on remount.
+      return LocalModelDownloadService.getInstance().getState(
+        modelId ? resolveLocalModelProviderName(modelId) : undefined,
+        modelId,
+      );
     } catch {
       return modelId ? null : [];
     }
