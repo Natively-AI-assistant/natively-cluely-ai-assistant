@@ -108,6 +108,12 @@ test('resolveCodexReasoningEffort: honours exact-match valid picks', () => {
   assert.equal(resolveCodexReasoningEffort('gpt-5.4', 'none'), 'none');
 });
 
+test('resolveCodexReasoningEffort: gpt-5.6-sol replaces stale minimal with low', () => {
+  assert.equal(resolveCodexReasoningEffort('gpt-5.6-sol', 'minimal'), 'low');
+  assert.equal(resolveCodexReasoningEffort('gpt-5.6-sol', 'none'), 'none');
+  assert.equal(resolveCodexReasoningEffort('gpt-5.6-sol', 'xhigh'), 'xhigh');
+});
+
 test('resolveCodexReasoningEffort: longest-match wins (gpt-5.4-codex vs gpt-5)', () => {
   // gpt-5.4-codex accepts xhigh; generic gpt-5 does not. The 5.4-codex
   // entry must win the lookup.
@@ -769,4 +775,3 @@ test('stream(): source uses resetDeadline() on each yielded delta — idle-timer
   assert.match(loopBody, /resetDeadline\(\)/,
     'resetDeadline() must be called inside the for-await loop body — not outside it');
 });
-

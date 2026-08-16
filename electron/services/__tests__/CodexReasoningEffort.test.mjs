@@ -18,7 +18,7 @@
 // binary that proxies the underlying API):
 //   gpt-5 / -mini / -nano (-2025-08-07)  low, medium, high
 //   gpt-5.1                              none, low, medium, high
-//   gpt-5.2 / 5.4 / 5.5                  none, low, medium, high, xhigh
+//   gpt-5.2 / 5.4 / 5.5 / 5.6            none, low, medium, high, xhigh
 //   gpt-5-codex / 5.1-codex              low, medium, high
 //   gpt-5.2-codex / 5.4-codex / 5.5-codex low, medium, high, xhigh
 //   gpt-5.3-codex / 5.3-codex-spark      low, medium, high
@@ -41,6 +41,8 @@ const VALID = {
     'gpt-5.2':             ['none', 'low', 'medium', 'high', 'xhigh'],
     'gpt-5.4':             ['none', 'low', 'medium', 'high', 'xhigh'],
     'gpt-5.5':             ['none', 'low', 'medium', 'high', 'xhigh'],
+    'gpt-5.6':             ['none', 'low', 'medium', 'high', 'xhigh'],
+    'gpt-5.6-sol':         ['none', 'low', 'medium', 'high', 'xhigh'],
     'gpt-5-codex':         ['low', 'medium', 'high'],
     'gpt-5.1-codex':       ['low', 'medium', 'high'],
     'gpt-5.2-codex':       ['low', 'medium', 'high', 'xhigh'],
@@ -141,5 +143,11 @@ describe('resolveCodexReasoningEffort — picks a VALID effort per family (no 40
     test('5.5 series uses xhigh when valid (gpt-5.5)', () => {
         assert.equal(resolveCodexReasoningEffort('gpt-5.5', 'xhigh'), 'xhigh');
         assert.equal(resolveCodexReasoningEffort('gpt-5.5-codex', 'xhigh'), 'xhigh');
+    });
+
+    test('gpt-5.6-sol never emits the removed minimal value', () => {
+        assert.equal(resolveCodexReasoningEffort('gpt-5.6-sol', 'minimal'), 'low');
+        assert.equal(resolveCodexReasoningEffort('gpt-5.6-sol', 'none'), 'none');
+        assert.equal(resolveCodexReasoningEffort('gpt-5.6-sol', 'xhigh'), 'xhigh');
     });
 });

@@ -33,6 +33,8 @@ const VALID = {
   'gpt-5.2': ['none', 'low', 'medium', 'high', 'xhigh'],
   'gpt-5.4': ['none', 'low', 'medium', 'high', 'xhigh'],
   'gpt-5.5': ['none', 'low', 'medium', 'high', 'xhigh'],
+  'gpt-5.6': ['none', 'low', 'medium', 'high', 'xhigh'],
+  'gpt-5.6-sol': ['none', 'low', 'medium', 'high', 'xhigh'],
   'gpt-5-codex': ['low', 'medium', 'high'],
   'gpt-5.1-codex': ['low', 'medium', 'high'],
   'gpt-5.2-codex': ['low', 'medium', 'high', 'xhigh'],
@@ -60,10 +62,12 @@ describe('getOpenAiReasoningEffort — picks a VALID effort per family', () => {
     assert.equal(getOpenAiReasoningEffort('gpt-5.4'), 'low');
   });
 
-  test("gpt-5.1 / 5.2 / 5.5 use 'low'", () => {
+  test("gpt-5.1 / 5.2 / 5.5 / 5.6 use 'low'", () => {
     assert.equal(getOpenAiReasoningEffort('gpt-5.1'), 'low');
     assert.equal(getOpenAiReasoningEffort('gpt-5.2'), 'low');
     assert.equal(getOpenAiReasoningEffort('gpt-5.5'), 'low');
+    assert.equal(getOpenAiReasoningEffort('gpt-5.6'), 'low');
+    assert.equal(getOpenAiReasoningEffort('gpt-5.6-sol'), 'low');
   });
 
   test("original gpt-5 line keeps 'minimal' (the only family that supports it)", () => {

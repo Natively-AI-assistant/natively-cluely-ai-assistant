@@ -1679,6 +1679,8 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6-sol',      ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-5.6',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
