@@ -125,20 +125,39 @@ describe('catalog invariants', () => {
     assert.equal(MODEL_CATALOG_IDS.has('Xenova/whisper-tiny.enX'), false);
   });
 
-  test('distil-medium.en declares externalDataFormat (defensive audit fix)', () => {
-    // Per the fix spec: distil-medium.en may or may not self-declare in its
-    // own config.json — recording the layout in the catalog forces
-    // isModelCached to require the encoder_model.onnx_data companion,
-    // avoiding the "stub downloads, ORT aborts at file_size" failure mode
-    // that bit large-v3-turbo.
-    const ext = getModelExternalDataFormat('distil-whisper/distil-medium.en');
-    assert.ok(
-      ext && typeof ext === 'object',
-      'distil-whisper/distil-medium.en must declare externalDataFormat (object form)',
-    );
-    assert.ok(
-      ext['encoder_model.onnx'] === true,
-      'distil-medium.en externalDataFormat must include encoder_model.onnx: true',
+  // This assertion previously required distil-medium.en to declare
+  // externalDataFormat: { 'encoder_model.onnx': true }. It had never actually
+  // executed — `npm test`'s glob covered electron/audio/__tests__/ but not
+  // electron/audio/whisper/__tests__/, so this whole file was collected by no
+  // run until that gap was closed. When it finally ran, it failed, and the
+  // premise turned out to be wrong rather than the catalog.
+  //
+  // Verified against the HF repo file listings:
+  //   distil-whisper/distil-medium.en  → ships NO *.onnx_data at all
+  //   distil-whisper/distil-large-v3   → onnx/encoder_model.onnx_data
+  //   onnx-community/whisper-large-v3-turbo-ONNX → onnx/encoder_model.onnx_data
+  //
+  // externalDataFormat makes isModelCached REQUIRE the companion file. Declaring
+  // it for a checkpoint that ships none means the check can never be satisfied:
+  // the model reports "missing" forever and re-downloads on every launch — the
+  // exact bug the Parakeet entry's sessionLayout comment documents. So the
+  // correct invariant is the conditional one, not a blanket requirement.
+  test('externalDataFormat is declared iff the checkpoint ships a companion', () => {
+    // Ships encoder external data — must declare it, else an aborted download
+    // leaves a stub-without-data that falsely reports "available" and then
+    // crashes ORT at load ("filesystem error: file_size encoder_model.onnx_data").
+    for (const id of ['distil-whisper/distil-large-v3', 'onnx-community/whisper-large-v3-turbo-ONNX']) {
+      const ext = getModelExternalDataFormat(id);
+      assert.ok(ext && typeof ext === 'object', `${id} must declare externalDataFormat (object form)`);
+      assert.equal(ext['encoder_model.onnx'], true, `${id} must declare encoder_model.onnx: true`);
+    }
+
+    // Ships no companion — must NOT declare one, or isModelCached would demand
+    // a file that does not exist in the repo and re-download the model forever.
+    assert.equal(
+      getModelExternalDataFormat('distil-whisper/distil-medium.en'),
+      undefined,
+      'distil-medium.en ships no *.onnx_data; declaring externalDataFormat would make it permanently uncacheable',
     );
   });
 });
