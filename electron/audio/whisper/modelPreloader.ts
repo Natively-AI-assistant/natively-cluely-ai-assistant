@@ -116,6 +116,22 @@ class ModelPreloader {
      * Cancels an in-progress load if a different model is requested.
      */
     preload(modelId: string): void {
+        // Dual-channel Nemotron (2026-08-13): Nemotron routes worker
+        // acquisition entirely through sharedWorkerRegistry.ts instead of
+        // this class's single-warm-worker model. Layering this preloader's
+        // "one warm worker, hand it to whichever channel asks first" scheme
+        // on top of the registry's own refcounted cold-start/join lifecycle
+        // would create a second, competing concept of "who owns this
+        // worker" — not worth the complexity for what was already found to
+        // be a barely-exercised optimization path for Nemotron specifically
+        // (the local-whisper-preload IPC channel has zero real renderer call
+        // sites; this is only reached via the one-time app-launch preload
+        // call). LocalWhisperSTT.spawnWorker's Nemotron branch pays its own
+        // real cold-start cost on first use instead — see that method.
+        if (modelId.toLowerCase().includes('nemotron')) {
+            console.log(`[ModelPreloader] Skipping preload for ${modelId} — Nemotron routes through sharedWorkerRegistry.ts instead`);
+            return;
+        }
         if (this.warmModelId === modelId && this.warmWorker) return;
         if (this.pendingModelId === modelId && this.loading) return;
 
@@ -172,11 +188,18 @@ class ModelPreloader {
         }
         // Acquire the shared ONNX slot BEFORE spawning the worker. The release
         // function is wired into the worker's error/exit handlers below — the
-        // slot stays held for the lifetime of the worker's session.
+        // slot stays held for the lifetime of the worker's session. Always
+        // weight 1: Nemotron never reaches this line (the early-return guard
+        // at the top of preload() routes it through sharedWorkerRegistry.ts
+        // instead), and every other model is one worker = one gate unit —
+        // the previous `includes('nemotron') ? 3 : 1` here was dead code.
+        // A weight-1 acquisition never rejects (only weight > cap does, per
+        // acquireOnnxSlot's contract), so the empty .catch() is genuinely
+        // unreachable, kept purely as a chain guard.
         let slotRelease: (() => void) | null = null;
-        acquireOnnxSlot('high').then((release) => {
+        acquireOnnxSlot('high', 1).then((release) => {
             slotRelease = release;
-        }).catch(() => { /* should never reject */ });
+        }).catch(() => { /* unreachable for weight 1 — chain guard only */ });
 
         writeLoadSentinel(modelId);
         const w = new Worker(workerPath);

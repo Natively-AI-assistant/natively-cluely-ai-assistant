@@ -211,17 +211,44 @@ test('behavioral: instance constructs without throwing when worker is dead', () 
  * Walk a worker event handler body in the source (e.g. `this.worker.on('exit', ...)`)
  * with a balanced-brace counter. Returns the body of the arrow function, or null
  * if not found. Tolerates nested blocks (e.g. `if (hadInFlight) { emit(...) }`).
+ *
+ * Handles TWO shapes for the second argument to `.on(...)`:
+ *   1. An inline arrow function attached directly:
+ *      `this.worker.on('exit', (code) => { ...body... })`
+ *   2. A bare identifier referring to a NAMED const declared earlier
+ *      (the shape LocalWhisperSTT.attachWorkerListeners() now uses for all
+ *      three worker events, so beginWorkerTermination() can later remove
+ *      that EXACT function reference via `worker.off()` for the shared
+ *      Nemotron worker — see dual-channel-fix2-brief.md):
+ *      `const exitHandler = (code) => { ...body... }; this.worker.on('exit', exitHandler);`
+ *      Without this case, searching for "the next `{` after the .on(...)
+ *      call" finds the WRONG block (whatever code happens to follow the
+ *      attach call), silently mis-locating the handler body.
  */
 function extractHandlerBody(source, eventName) {
-  const re = new RegExp(
-    `this\\.worker\\.on\\(\\s*['"]${eventName}['"]\\s*,`,
-  );
-  const match = re.exec(source);
-  if (!match) return null;
-  // Find the next `{` — that's the start of the arrow function body.
-  let i = source.indexOf('{', match.index + match[0].length);
+  const attachRe = new RegExp(`this\\.worker\\.on\\(\\s*['"]${eventName}['"]\\s*,`);
+  const attachMatch = attachRe.exec(source);
+  if (!attachMatch) return null;
+  const afterComma = source.slice(attachMatch.index + attachMatch[0].length);
+
+  const identMatch = afterComma.match(/^\s*([A-Za-z_$][\w$]*)\s*\)/);
+  if (identMatch) {
+    const identifier = identMatch[1];
+    const declRe = new RegExp(`const\\s+${identifier}\\s*=\\s*(?:async\\s*)?\\([^)]*\\)[^{]*\\{`);
+    const declMatch = declRe.exec(source);
+    if (!declMatch) return null;
+    return extractBalancedBrace(source, declMatch.index + declMatch[0].length - 1);
+  }
+
+  // Inline arrow function passed directly — find the next `{` after the
+  // attach call as the start of its body.
+  const i = source.indexOf('{', attachMatch.index + attachMatch[0].length);
   if (i < 0) return null;
-  i++; // step past `{`
+  return extractBalancedBrace(source, i);
+}
+
+function extractBalancedBrace(source, openBraceIdx) {
+  let i = openBraceIdx + 1;
   let depth = 1;
   const start = i;
   while (i < source.length && depth > 0) {

@@ -489,7 +489,19 @@ export class LocalModelDownloadService {
         // subscribe to the old per-modelId channel. Emit BOTH so the legacy
         // UI keeps working during migration AND any new generic listener
         // gets the unified shape.
-        if (entry.provider === 'whisper') {
+        //
+        // LocalWhisperModelPanel.tsx renders the WHOLE local-whisper-family
+        // catalog (getAvailableModels()), which includes the Nemotron entry
+        // — so the legacy channel must fire for 'nemotron' too, not just
+        // 'whisper'. This was hardcoded to 'whisper' only, meaning even
+        // after fixing which provider a Nemotron download routes through
+        // (resolveLocalModelProviderName), the panel would see zero
+        // progress/complete/error events for it — the download would
+        // succeed in the backend while the UI showed nothing happening.
+        // Providers with their own dedicated UI (e.g. 'reranker') correctly
+        // do NOT need this legacy channel — they only ever use the unified
+        // `local-model:${provider}:download-state` channel below.
+        if (entry.provider === 'whisper' || entry.provider === 'nemotron') {
           if (entry.status === 'complete') {
             try { wc.send('local-whisper-download-complete', { modelId: entry.modelId }); } catch { /* ignore */ }
           } else if (entry.status === 'error') {
@@ -570,6 +582,28 @@ export class LocalModelDownloadService {
     if (!parsed || parsed.v !== 1 || !Array.isArray(parsed.entries)) return;
     for (const e of parsed.entries) {
       if (!e || !e.provider || !e.modelId) continue;
+      // MIGRATION (2026-08-14): drop entries persisted under the WRONG
+      // provider for their modelId. Before resolveLocalModelProviderName()
+      // existed, every download call site hardcoded 'whisper' — so a failed
+      // Nemotron attempt persisted as `whisper:<nemotron-id>` with a stale
+      // "init.channelId is required" error. Left in place, that ghost entry
+      // re-marks the Nemotron catalog row as errored in the Settings panel
+      // on EVERY app launch (the panel merges download-state entries onto
+      // models by modelId alone, ignoring provider) — even after the real
+      // routing bug was fixed and even when the model is fully installed.
+      // Manual state-file surgery doesn't stick either: the running app
+      // re-persists its in-memory copy over any external edit. Dropping the
+      // mis-keyed entry here, at rehydrate, is the only durable fix. Scoped
+      // narrowly to the whisper/nemotron pair (both resolve through
+      // resolveLocalModelProviderName); other providers ('reranker', …) have
+      // their own id spaces this helper knows nothing about.
+      if (
+        (e.provider === 'whisper' || e.provider === 'nemotron') &&
+        resolveLocalModelProviderName(e.modelId) !== e.provider
+      ) {
+        console.log(`[LocalModelDownloadService] rehydrate: dropping stale wrong-provider entry ${e.provider}:${e.modelId} (real provider: ${resolveLocalModelProviderName(e.modelId)})`);
+        continue;
+      }
       const key = this.keyOf(e.provider, e.modelId);
       // A previously-'downloading' or 'verifying' entry has no live worker
       // (process restarted). Flip to 'interrupted' so the UI can show a
@@ -603,6 +637,33 @@ export class LocalModelDownloadService {
       });
     }
   }
+}
+
+/**
+ * Resolves which registered provider ('whisper' or 'nemotron') owns a given
+ * local-whisper-catalog modelId, by its real `sessionLayout` in
+ * MODEL_CATALOG — not a naive string check, so this stays correct even if
+ * catalog entries change.
+ *
+ * BUG THIS FIXES (2026-08-13): every call site that starts/cancels a local
+ * model download (`ipcHandlers.ts`'s `local-whisper-start-download` /
+ * `local-whisper-cancel-download` handlers, and `main.ts`'s background
+ * auto-download loop) hardcoded the provider name as `'whisper'` — even
+ * though `createNemotronDownloadProvider()` was registered back in Task 9
+ * specifically to handle the Nemotron catalog entry. Nemotron downloads
+ * were therefore ALWAYS routed through the whisper provider's
+ * `buildInitMessage()` (which never learned about the dual-channel fix's
+ * new `channelId` requirement), producing "Failed to load model:
+ * init.channelId is required for sessionLayout \"nemotron-rnnt\"" on every
+ * single attempt — the nemotron provider I'd separately fixed for this
+ * exact error was registered but never actually invoked. This helper
+ * makes the routing correct; both call sites now use it instead of a
+ * literal `'whisper'`.
+ */
+export function resolveLocalModelProviderName(modelId: string): string {
+  const { MODEL_CATALOG } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+  const entry = MODEL_CATALOG.find((m) => m.id === modelId);
+  return entry?.sessionLayout === 'nemotron-rnnt' ? 'nemotron' : 'whisper';
 }
 
 /**
@@ -650,6 +711,64 @@ export function createWhisperDownloadProvider(): LocalModelDownloadProvider {
     buildInitMessage(modelId: string): unknown {
       const { buildWorkerInitMessage } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
       return buildWorkerInitMessage(modelId);
+    },
+  };
+}
+
+/**
+ * Nemotron 3.5 ASR Streaming provider — reuses whisperWorker.ts as the
+ * download-and-load worker (its `nemotron-rnnt` init branch fetches the
+ * required files via downloadFiles.ts before constructing ONNX sessions),
+ * so "download" and "load" stay a single worker lifecycle exactly like
+ * every other model family.
+ *
+ * This worker is entirely one-shot and never shared (spawnWorker() above
+ * makes a fresh dedicated Worker per download, torn down on completion/error
+ * by terminateWorker()) — it never joins sharedWorkerRegistry.ts's
+ * multi-channel lifecycle, so its channelId never needs to coordinate with
+ * anything else. It exists purely to satisfy whisperWorker.ts's
+ * nemotron-rnnt init branch, which (as of the dual-channel fix) requires a
+ * channelId on every init for that sessionLayout — omitting it here made
+ * every Nemotron "Download"/"Install" click in Settings fail immediately
+ * with "init.channelId is required", since this provider predates that
+ * requirement and was never updated for it.
+ */
+export function createNemotronDownloadProvider(): LocalModelDownloadProvider {
+  return {
+    name: 'nemotron',
+    isModelCached(modelId: string): boolean {
+      const { isModelCached } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      return isModelCached(modelId as any);
+    },
+    deletePartial(modelId: string): void {
+      const { getModelsDir } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      const { deletePartialNemotronFiles } = require('../audio/whisper/nemotron/downloadFiles') as typeof import('../audio/whisper/nemotron/downloadFiles');
+      const path = require('path') as typeof import('path');
+      deletePartialNemotronFiles(path.join(getModelsDir(), ...modelId.split('/')));
+    },
+    preflightCheck(): string | null {
+      // Same macOS-13-floor gate every other local model uses. Interface takes
+      // no modelId — getAvailableModels() applies the gate uniformly across
+      // the whole catalog (see modelManager.ts:297-308 / getAvailableModels),
+      // so any entry's errorMessage reflects the same platform-level check.
+      const { getAvailableModels } = require('../audio/whisper/modelManager') as typeof import('../audio/whisper/modelManager');
+      const models = getAvailableModels();
+      return models.find((m) => m.errorMessage)?.errorMessage ?? null;
+    },
+    spawnWorker(): Worker {
+      const { Worker } = require('worker_threads');
+      const { resolveWhisperWorkerPath } = require('../audio/whisper/workerPathResolver') as typeof import('../audio/whisper/workerPathResolver');
+      return new Worker(resolveWhisperWorkerPath());
+    },
+    buildInitMessage(modelId: string): unknown {
+      const { buildWorkerInitMessage } = require('../audio/whisper/inferenceConfig') as typeof import('../audio/whisper/inferenceConfig');
+      // channelId: this worker is a dedicated, one-shot download/verify
+      // instance (never shared — see the class doc comment above), so a
+      // fixed synthetic id is correct, not a real per-session channel.
+      // whisperWorker.ts's nemotron-rnnt init branch requires SOME channelId
+      // to be present; onWorkerMessage() above doesn't inspect it at all, so
+      // any stable string is fine.
+      return { ...(buildWorkerInitMessage(modelId) as object), channelId: 'download' };
     },
   };
 }
