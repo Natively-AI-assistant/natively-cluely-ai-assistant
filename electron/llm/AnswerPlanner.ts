@@ -202,6 +202,17 @@ export interface AnswerPlan {
    *  prompt, the routing, the forced retrieval and the post-stream validator
    *  cannot disagree about whether a turn is document-grounded. */
   docGroundedEnforcementActive?: boolean;
+  /** STRICT on the AUTHORITY ALONE — `activeMode.strictDocumentGroundedActive`
+   *  verbatim, with no files check folded in. Deliberately separate from
+   *  `strictDocumentGroundedActive` above (which falls back to the broad flag
+   *  for legacy callers) because the refusal gate needs the un-fallen-back
+   *  value: strictDocumentGroundedFromContract returns true for
+   *  `reference_files_only` before anything is uploaded. */
+  documentGroundedStrict?: boolean;
+  /** Whether the active mode actually has at least one reference file. Paired
+   *  with `documentGroundedStrict` so the prompt can distinguish "bounded
+   *  universe exists" from "authority says documents, but there are none". */
+  documentGroundedFilesPresent?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -2104,6 +2115,14 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     documentGroundedCustomModeActive: broadDocumentGroundedActive,
     strictDocumentGroundedActive: documentGroundedCustomModeActive,
     docGroundedEnforcementActive,
+    // Kept as two separate facts rather than one pre-combined boolean. The
+    // refusal gate needs BOTH, and the two previous attempts at this each
+    // failed by collapsing them: keying on strict alone let a fileless
+    // `reference_files_only` mode refuse against material the user never
+    // provided; keying on enforcement alone made a template-seeded mode refuse
+    // even though its retrieval was never forced.
+    documentGroundedStrict: input.activeMode?.strictDocumentGroundedActive === true,
+    documentGroundedFilesPresent: input.activeMode?.hasReferenceFiles === true,
   };
 };
 
@@ -2202,9 +2221,46 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // 2026-08-13: keyed on ENFORCEMENT, so the instruction the model receives
   // matches the retrieval and validation it is actually subject to. Older
   // plans that predate the field fall back to the previous behaviour.
-  const policyLine = (plan.docGroundedEnforcementActive
-    ?? plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive)
+  // 2026-08-16: the grounding instruction and the REFUSAL instruction are two
+  // separate decisions and were previously emitted as one string.
+  //
+  //   GROUND IN THE FILES  — honest whenever files actually exist. The user
+  //     attached them precisely so they would be used.
+  //   REFUSE ON ABSENCE    — honest only when a bounded universe exists AND
+  //     retrieval is actually forced over it. Telling the model "say it is not
+  //     in the uploaded material" while forced retrieval never ran produced
+  //     denials about documents the user had uploaded.
+  //
+  // Refusal therefore needs strict AND files, as two independent facts. Both
+  // prior attempts collapsed them and each broke a different case: gating on
+  // strict alone let a fileless `reference_files_only` mode refuse against
+  // nothing (strictDocumentGroundedFromContract is true on the authority
+  // alone); gating on enforcement alone made a template-seeded, files-present,
+  // NOT-strict mode refuse even though its retrieval was never forced.
+  //
+  // Plans predating these fields fall back to the old combined predicate.
+  const _docStrict = plan.documentGroundedStrict;
+  const _docFiles = plan.documentGroundedFilesPresent;
+  const _legacyDocPredicate = (plan.docGroundedEnforcementActive
+    ?? plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive) === true;
+  const _docFieldsPresent = _docStrict !== undefined && _docFiles !== undefined;
+  // Refuse only over a bounded universe that retrieval is actually forced over.
+  const _docRefusalActive = _docFieldsPresent
+    ? (_docStrict === true && _docFiles === true)
+    : _legacyDocPredicate;
+  // Ground whenever this is a doc-grounded mode that HAS files.
+  const _docGroundingActive = _docFieldsPresent
+    ? (_docFiles === true && (_docStrict === true || plan.documentGroundedCustomModeActive === true))
+    : _legacyDocPredicate;
+
+  const policyLine = _docRefusalActive
     ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
+    : _docGroundingActive
+    // Grounding WITHOUT suppression. The general-knowledge permission is
+    // explicit on purpose: a bare "ground every claim in the files" reads to the
+    // model as a licence to deny anything the files miss, which is the exact
+    // denial this branch exists to prevent.
+    ? 'Ground every concrete claim in the uploaded/reference files for this custom mode wherever they cover the question. Retrieval is NOT forced for this mode, so when the files do not cover it, answer normally from general knowledge and make clear which parts the files did not cover.'
     : plan.profileContextPolicy === 'required'
       ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
       : plan.profileContextPolicy === 'forbidden'
