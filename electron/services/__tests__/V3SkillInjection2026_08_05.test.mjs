@@ -14,38 +14,25 @@
 //     leaked to the model as literal text and the skill instructions were
 //     never injected anywhere.
 //
-// ─── STATUS 2026-08-16 ───────────────────────────────────────────────────────
-// Surface 1 (WTA) is FIXED: composeWtaSystemPrompt now appends the skill to
-// whichever base rides the turn. It is inert on non-skill turns (V3 prompt with
-// no skill returns byte-identically), which is why it was safe to land.
+// ─── RESOLVED 2026-08-16 ─────────────────────────────────────────────────────
+// Both surfaces are fixed.
 //
-// Surface 2 (manual chat) is STILL OPEN and its three tests below still fail.
-// Facts, so whoever picks it up does not have to re-derive them:
+// WTA: composeWtaSystemPrompt appends the skill to whichever base rides the
+// turn, instead of `_v3p?.system ?? finalPromptOverride` discarding it. Inert on
+// non-skill turns.
 //
-//   * Both sites are in the same `gemini-chat` handler (registered ~offset
-//     41456). The V3 short-circuit is at ~50356; `skillPrefixMatch` is parsed
-//     at ~85936 — i.e. ~35k characters AFTER the branch that already returned.
-//   * Under V3 (default ON since 2026-07-30) a "/humanize rewrite this" turn
-//     therefore sends the literal "/humanize " text to the model and injects no
-//     skill instructions at all.
-//   * The dependencies of the 3,148-char skill block (`message`, `context`,
-//     `SkillsManager`, `event`, `myStreamId` @48288) are ALL available before
-//     the V3 branch, so the relocation is mechanically possible. This is a
-//     scoping call, not a blocker.
+// Manual chat: the /skill parse was hoisted above the V3 short-circuit — but
+// only the PARSE. `message` is still mutated at the ORIGINAL boundary, so every
+// reader in between (identity probe, source-switch resolution, error logs)
+// still sees the user's literal input exactly as before; the hoisted block
+// assigns to `skillStrippedMessage` and the V3 branch reads that. The identity
+// probe additionally gates on !skillPromptBlock, making an immunity that was
+// previously incidental (its anchored regexes could not match a "/skill ..."
+// prefix) explicit, so it survives a future regex relaxation.
 //
-// Deliberately NOT auto-fixed. Hoisting the parse changes what EVERY read of
-// `message` between offsets 48288 and 85936 sees — raw today, stripped after.
-// One consequence is already known and written up below (the legacy identity
-// probe must gate on !skillPromptBlock, or "/humanize who are you" answers with
-// the canned identity reply and drops the skill). The rest are not enumerable
-// by grep — `message` is a parameter name used throughout the handler — and the
-// failures would be behavioural on the primary user surface, which a
-// source-scanning suite does not catch.
-//
-// Note also that `skillParseIdx < v3EntryIdx` below pins SOURCE OFFSETS. Any
-// occurrence of the string `skillPrefixMatch` earlier in the file satisfies it,
-// including one that fixes nothing. Make the behaviour right and verify it by
-// exercising manual chat; do not let this assertion define "done".
+// Note the `skillParseIdx < v3EntryIdx` assertion below still pins SOURCE
+// OFFSETS and is satisfiable by an occurrence that fixes nothing. It is not
+// what makes this correct — the deferred-mutation split is.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';

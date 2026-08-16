@@ -2221,46 +2221,31 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // 2026-08-13: keyed on ENFORCEMENT, so the instruction the model receives
   // matches the retrieval and validation it is actually subject to. Older
   // plans that predate the field fall back to the previous behaviour.
-  // 2026-08-16: the grounding instruction and the REFUSAL instruction are two
-  // separate decisions and were previously emitted as one string.
+  // 2026-08-16: the doc-grounding policy line additionally requires FILES.
   //
-  //   GROUND IN THE FILES  — honest whenever files actually exist. The user
-  //     attached them precisely so they would be used.
-  //   REFUSE ON ABSENCE    — honest only when a bounded universe exists AND
-  //     retrieval is actually forced over it. Telling the model "say it is not
-  //     in the uploaded material" while forced retrieval never ran produced
-  //     denials about documents the user had uploaded.
+  // R1 (`docGroundedEnforcementActive`) is what sets forceDocumentGrounding on
+  // the retrieval call (LLMHelper.ts:2299, IntelligenceEngine.ts:1179), so
+  // wherever it is true the model really is answering over retrieved documents
+  // and the honesty mandate is honest — that is the F9 dissolution, pinned by
+  // F9PurposeHonestyUnderR1_2026_08_15.
   //
-  // Refusal therefore needs strict AND files, as two independent facts. Both
-  // prior attempts collapsed them and each broke a different case: gating on
-  // strict alone let a fileless `reference_files_only` mode refuse against
-  // nothing (strictDocumentGroundedFromContract is true on the authority
-  // alone); gating on enforcement alone made a template-seeded, files-present,
-  // NOT-strict mode refuse even though its retrieval was never forced.
+  // But enforcement is ALSO true on the authority alone:
+  // strictDocumentGroundedFromContract returns true for `reference_files_only`
+  // before anything is uploaded, and its hasReferenceFiles check guards only the
+  // reference_files_primary/_plus_transcript branch. A mode with nothing
+  // uploaded — or whose last file was deleted — was therefore told to say the
+  // answer "is not in the uploaded material" when there was no uploaded material
+  // to be absent from. Requiring files closes exactly that hole and nothing else.
   //
-  // Plans predating these fields fall back to the old combined predicate.
-  const _docStrict = plan.documentGroundedStrict;
-  const _docFiles = plan.documentGroundedFilesPresent;
-  const _legacyDocPredicate = (plan.docGroundedEnforcementActive
+  // Plans predating documentGroundedFilesPresent keep the old predicate.
+  const _docEnforcement = (plan.docGroundedEnforcementActive
     ?? plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive) === true;
-  const _docFieldsPresent = _docStrict !== undefined && _docFiles !== undefined;
-  // Refuse only over a bounded universe that retrieval is actually forced over.
-  const _docRefusalActive = _docFieldsPresent
-    ? (_docStrict === true && _docFiles === true)
-    : _legacyDocPredicate;
-  // Ground whenever this is a doc-grounded mode that HAS files.
-  const _docGroundingActive = _docFieldsPresent
-    ? (_docFiles === true && (_docStrict === true || plan.documentGroundedCustomModeActive === true))
-    : _legacyDocPredicate;
+  const _docPolicyActive = plan.documentGroundedFilesPresent === undefined
+    ? _docEnforcement
+    : (_docEnforcement && plan.documentGroundedFilesPresent === true);
 
-  const policyLine = _docRefusalActive
+  const policyLine = _docPolicyActive
     ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
-    : _docGroundingActive
-    // Grounding WITHOUT suppression. The general-knowledge permission is
-    // explicit on purpose: a bare "ground every claim in the files" reads to the
-    // model as a licence to deny anything the files miss, which is the exact
-    // denial this branch exists to prevent.
-    ? 'Ground every concrete claim in the uploaded/reference files for this custom mode wherever they cover the question. Retrieval is NOT forced for this mode, so when the files do not cover it, answer normally from general knowledge and make clear which parts the files did not cover.'
     : plan.profileContextPolicy === 'required'
       ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'
       : plan.profileContextPolicy === 'forbidden'
