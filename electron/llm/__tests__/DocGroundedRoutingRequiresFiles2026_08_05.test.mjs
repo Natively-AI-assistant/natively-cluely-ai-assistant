@@ -19,6 +19,34 @@
 //    still propagates authority-only, so contextRoute's resume/JD suppression
 //    and the Hindsight/OKF gates keep engaging before any upload.
 
+// ─── STATUS 2026-08-16 ───────────────────────────────────────────────────────
+// Bug 001 itself is FIXED: 9 of the 12 tests here pass, including
+// "doc-shape routing requires reference files".
+//
+// The 3 still failing are all in the LAST describe — the third axis, where the
+// mode is files-present but NOT strict. Current gap, so it need not be
+// re-derived: AnswerPlanner.ts ~2206 composes one policyLine from
+//   plan.docGroundedEnforcementActive ?? plan.strictDocumentGroundedActive
+//     ?? plan.documentGroundedCustomModeActive
+// and that single branch emits BOTH "ground in the uploaded/reference files"
+// AND "say plainly that the requested information is not in the uploaded
+// material ... do not reconstruct it from general knowledge". The tests below
+// want those separated: a files-present, non-strict turn should keep the
+// grounding half, drop the refusal half, and explicitly say general knowledge
+// is permitted. Plus the refusal must additionally require files, because
+// strictDocumentGroundedFromContract returns true for `reference_files_only` on
+// the AUTHORITY ALONE.
+//
+// Deliberately NOT auto-fixed, despite being a small edit to one expression.
+// This is the answer-REFUSAL policy — it decides whether a user asking about
+// their own uploaded thesis gets an answer or a denial — and the comments in
+// this file record TWO previous attempts at exactly this gating that were each
+// wrong in a different direction (2026-08-13 keyed it on enforcement;
+// 2026-08-14 found that gating on strict alone re-opened Bug 001 through the
+// reference_files_only door). A third free-hand attempt without exercising the
+// real surfaces would be guessing, and the suite cannot catch a wrong refusal
+// policy — only a user can. Scope it with the owner.
+
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { planAnswer, buildContextRoute, formatAnswerPlanForPrompt } from '../../../dist-electron/electron/llm/index.js';
