@@ -13,6 +13,39 @@
 //     parsing lived ~500 lines later on the legacy path. Under V3 the prefix
 //     leaked to the model as literal text and the skill instructions were
 //     never injected anywhere.
+//
+// ─── STATUS 2026-08-16 ───────────────────────────────────────────────────────
+// Surface 1 (WTA) is FIXED: composeWtaSystemPrompt now appends the skill to
+// whichever base rides the turn. It is inert on non-skill turns (V3 prompt with
+// no skill returns byte-identically), which is why it was safe to land.
+//
+// Surface 2 (manual chat) is STILL OPEN and its three tests below still fail.
+// Facts, so whoever picks it up does not have to re-derive them:
+//
+//   * Both sites are in the same `gemini-chat` handler (registered ~offset
+//     41456). The V3 short-circuit is at ~50356; `skillPrefixMatch` is parsed
+//     at ~85936 — i.e. ~35k characters AFTER the branch that already returned.
+//   * Under V3 (default ON since 2026-07-30) a "/humanize rewrite this" turn
+//     therefore sends the literal "/humanize " text to the model and injects no
+//     skill instructions at all.
+//   * The dependencies of the 3,148-char skill block (`message`, `context`,
+//     `SkillsManager`, `event`, `myStreamId` @48288) are ALL available before
+//     the V3 branch, so the relocation is mechanically possible. This is a
+//     scoping call, not a blocker.
+//
+// Deliberately NOT auto-fixed. Hoisting the parse changes what EVERY read of
+// `message` between offsets 48288 and 85936 sees — raw today, stripped after.
+// One consequence is already known and written up below (the legacy identity
+// probe must gate on !skillPromptBlock, or "/humanize who are you" answers with
+// the canned identity reply and drops the skill). The rest are not enumerable
+// by grep — `message` is a parameter name used throughout the handler — and the
+// failures would be behavioural on the primary user surface, which a
+// source-scanning suite does not catch.
+//
+// Note also that `skillParseIdx < v3EntryIdx` below pins SOURCE OFFSETS. Any
+// occurrence of the string `skillPrefixMatch` earlier in the file satisfies it,
+// including one that fixes nothing. Make the behaviour right and verify it by
+// exercising manual chat; do not let this assertion define "done".
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';

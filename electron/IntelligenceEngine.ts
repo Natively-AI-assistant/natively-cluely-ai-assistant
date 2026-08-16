@@ -2589,7 +2589,16 @@ export class IntelligenceEngine extends EventEmitter {
                         // threaded through, leaving usePreviousSourceContinuity
                         // dead for every live meeting turn.
                         isFollowUp: extractedQuestion.isFollowUp,
-                        hasScreenContext: Boolean(options?.screenContext),
+                        // PR #429 Bug 002: options.screenContext is the PERIODIC-CAPTURE
+                        // OCR object. A screenshot the user attaches by hand rides in
+                        // imagePaths with screenContext null, so this read was always
+                        // false for exactly the turns where the screen is most clearly
+                        // the subject — the V3 classifier then never added
+                        // SCREEN_SPECIFIC / SCREEN_FACT and the image was not treated as
+                        // authoritative evidence ("screenshot attached but code not
+                        // generated"). Same predicate the legacy path already uses for
+                        // _wtaHasVisualContext (line ~1228).
+                        hasScreenContext: Boolean(options?.screenContext) || (imagePaths?.length ?? 0) > 0,
                         // The live meeting's own recent words, into the composer's
                         // labelled untrusted section. Without this, a live meeting
                         // question under V3 composed a no-evidence disclosure even

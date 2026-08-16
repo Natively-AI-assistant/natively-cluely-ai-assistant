@@ -1162,6 +1162,12 @@ export function initializeIpcHandlers(appState: AppState): void {
               surface: 'manual-chat',
               pathTag: 'ipc',
               question: String(message || ''),
+              // PR #429 Bug 002: omitted entirely, so it defaulted to false even
+              // when the user attached screenshots — the V3 classifier then never
+              // added SCREEN_SPECIFIC / SCREEN_FACT and the image was not treated
+              // as authoritative evidence. Manual chat has no periodic-capture OCR
+              // object at all, so imagePaths is the only screen signal here.
+              hasScreenContext: (imagePaths?.length ?? 0) > 0,
               // Routed coding verdict, same as the WTA path (see
               // BridgeInput.codingTask). Without it the bridge falls back to its
               // keyword regex, which misses ordinary phrasings like "Write a BFS
