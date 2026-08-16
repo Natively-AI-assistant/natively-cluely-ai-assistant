@@ -35,10 +35,35 @@ describe('Phase 4 — Hybrid RAG default in WhatToAnswerLLM', () => {
     // Type slot for the new method (so callers can detect it).
     assert.match(src, /buildRetrievedActiveModeContextBlockHybrid\?:/, 'type alias must declare optional hybrid method');
     // Runtime branch: prefer hybrid, await it.
-    assert.match(src, /typeof this\.modesManager\.buildRetrievedActiveModeContextBlockHybrid\s*===\s*['"]function['"]/);
-    assert.match(src, /await this\.modesManager\.buildRetrievedActiveModeContextBlockHybrid\(/);
+    // `this.modesManager` OR a local `modesManager` — the call site now reads the
+    // manager into a local before the feature-detect. The invariant is the
+    // DETECT-then-fall-back itself: the hybrid method is optional on the type
+    // (asserted above), so calling it unguarded would throw on any manager that
+    // predates it.
+    assert.match(
+      src,
+      /typeof (?:this\.)?modesManager\.buildRetrievedActiveModeContextBlockHybrid\s*===\s*['"]function['"]/,
+      'the async hybrid path must be feature-detected before use',
+    );
+    // Awaited DIRECTLY or through the deadline race. The call is now
+    // `await raceWithBudget(modesManager.buildRetrievedActiveModeContextBlockHybrid(…), budget, '')`
+    // so a cold embedder cannot stall the turn past the first-useful deadline —
+    // the same guard LLMHelper's hybrid path carries. It is still awaited and its
+    // value still feeds modeContextBlock, which is what this pins.
+    assert.match(
+      src,
+      /await[\s\S]{0,120}(?:this\.)?modesManager\.buildRetrievedActiveModeContextBlockHybrid\(/,
+      'the hybrid retrieval result must be awaited (directly or via the budget race)',
+    );
     // Lexical fallback path remains.
-    assert.match(src, /this\.modesManager\.buildRetrievedActiveModeContextBlock\(/);
+    // Same receiver relaxation as above — the lexical fallback is still there
+    // (two call sites: the post-hybrid `!modeContextBlock` retry and the
+    // no-hybrid-method branch), just reached through the local reference.
+    assert.match(
+      src,
+      /(?:this\.)?modesManager\.buildRetrievedActiveModeContextBlock\(/,
+      'the synchronous lexical fallback must remain reachable',
+    );
   });
 });
 

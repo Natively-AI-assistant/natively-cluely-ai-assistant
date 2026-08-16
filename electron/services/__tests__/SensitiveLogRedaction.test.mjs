@@ -15,7 +15,17 @@ test('SessionTracker logs transcript and assistant message metadata without text
   const source = read('electron/SessionTracker.ts');
 
   assert.match(source, /Coding question stored`, \{ source, length: trimmed\.length \}/);
-  assert.match(source, /addAssistantMessage called`, \{ length: text\.length \}/);
+  // Assert the INVARIANT (a length, never the text), not an exact field list.
+  // This call has since gained `policy` and `surface` — both metadata — and the
+  // exact-shape pin failed on their presence while the privacy property was
+  // never at risk. A pin that breaks when safe metadata is added trains people
+  // to loosen it; one that breaks only on a leak keeps its meaning.
+  const addAssistantLog = source.match(/addAssistantMessage called`[^;]*;/);
+  assert.ok(addAssistantLog, 'the addAssistantMessage entry log must still exist');
+  assert.match(addAssistantLog[0], /length:\s*text\.length/,
+    'must log the assistant text LENGTH');
+  assert.doesNotMatch(addAssistantLog[0], /text\.(?:substring|slice)\(|\$\{\s*text\s*\}|[,{]\s*text\s*[,}]/,
+    'must never log the assistant text itself — only its length');
   assert.match(source, /RX User Segment`, \{ final: segment\.final, length: segment\.text\.length \}/);
   assert.match(source, /RX Interviewer Segment`, \{ final: segment\.final, length: segment\.text\.length \}/);
   assert.match(source, /Force-saving pending interim transcript', \{ length: this\.lastInterimInterviewer\.text\.length \}/);
@@ -81,6 +91,14 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   assert.doesNotMatch(persistence, /Raw LLM summary response/);
   assert.doesNotMatch(persistence, /Raw response:', jsonStr\.substring/);
 
-  assert.match(intent, /SLM classified`, \{ intent, confidence: topScore, textLength: text\.length \}/);
+  // Same treatment, and this site is now STRUCTURALLY safer than the pin assumed:
+  // the log moved into `mapWorkerResult(result, textLength: number)`, so the raw
+  // text is not even in scope there — it cannot be logged by accident. The pin
+  // still demanded the literal `textLength: text.length` from the old call site.
+  const slmLog = intent.match(/SLM classified`[^;]*;/);
+  assert.ok(slmLog, 'the SLM classification log must still exist');
+  assert.match(slmLog[0], /textLength/, 'must log the classified text LENGTH');
+  assert.doesNotMatch(slmLog[0], /text\.(?:substring|slice)\(|\$\{\s*text\s*\}|[,{]\s*text\s*[,}]/,
+    'must never log the classified text itself — only its length');
   assert.doesNotMatch(intent, /text\.substring\(/);
 });

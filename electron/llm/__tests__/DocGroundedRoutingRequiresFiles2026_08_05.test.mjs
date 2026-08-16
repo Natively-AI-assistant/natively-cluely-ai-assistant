@@ -19,6 +19,17 @@
 //    still propagates authority-only, so contextRoute's resume/JD suppression
 //    and the Hindsight/OKF gates keep engaging before any upload.
 
+// ─── RESOLVED 2026-08-16 ─────────────────────────────────────────────────────
+// Bug 001 is fixed, and so is the second hole this file found: the policy line
+// now additionally requires FILES, so a `reference_files_only` mode with nothing
+// uploaded is no longer told to refuse against material that does not exist.
+//
+// The third axis originally asserted here — "suppression requires STRICT" — was
+// NOT implemented, because it is false under R1. See the block comment above the
+// second describe: it contradicted F9PurposeHonestyUnderR1_2026_08_15 on an
+// identical plan, and R1 enforcement is what actually forces retrieval. Those
+// two assertions were rewritten rather than satisfied.
+
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { planAnswer, buildContextRoute, formatAnswerPlanForPrompt } from '../../../dist-electron/electron/llm/index.js';
@@ -106,17 +117,32 @@ describe('Bug 001: doc-shape routing requires reference files', () => {
   });
 });
 
-// Code-review 2026-08-13. Bug 001 split the policy line on files-present, which
-// left a THIRD state unpinned: a TEMPLATE-SEEDED mode (the seed stamps
-// reference_files_primary with origin 'default_new_mode' on every non-interview
-// template) that the user then attaches a file to. That mode is files-present
-// but NOT strict, so strictDocumentGroundedFromContract returns false and forced
-// retrieval never runs — yet it was still handed the "say plainly that the
-// requested information is not in the uploaded material" instruction. The model
-// was told to refuse on absence while the retrieval that would have supplied the
-// material was not forced: a user asking about their own uploaded thesis got a
-// denial about it.
-describe('doc-grounding SUPPRESSION requires strict, not merely files-present', () => {
+// Code-review 2026-08-13, REVISED 2026-08-16.
+//
+// This block was originally titled "SUPPRESSION requires strict", on the premise
+// that a template-seeded (files-present, NOT strict) mode never forces retrieval
+// and so must not be told to refuse on absence. That premise was superseded by
+// the PR #466 adoption of main's R1 enforcement predicate, and these assertions
+// were the last place still encoding it.
+//
+// Under R1, `docGroundedEnforcementActive` is what sets forceDocumentGrounding on
+// the retrieval call (LLMHelper.ts:2299, IntelligenceEngine.ts:1179), and it IS
+// true for a seeded, files-present, non-strict mode. Retrieval really is forced
+// there, so the honesty mandate is honest — which is precisely what
+// F9PurposeHonestyUnderR1_2026_08_15 pins, using this identical mode shape and
+// asserting the OPPOSITE of what this block used to. Two tests demanding
+// contradictory output from one plan cannot both stand, and the plans are in fact
+// identical (same answerType, same enforcement/strict/files), so there is no
+// discriminator to split them on. The newer, architecture-aligned one wins.
+//
+// The REAL hole this block found does survive, and is what it now pins:
+// enforcement is ALSO true on the AUTHORITY ALONE — strictDocumentGroundedFromContract
+// returns true for `reference_files_only` before anything is uploaded (its
+// hasReferenceFiles check guards only the reference_files_primary/_plus_transcript
+// branch). Such a mode was told to say the answer was "not in the uploaded
+// material" when no uploaded material existed at all. Requiring FILES closes that
+// and nothing else.
+describe('doc-grounding SUPPRESSION requires FILES, not authority alone', () => {
   const templateSeededWithFiles = {
     ...modeWithFiles,
     strictDocumentGroundedActive: false, // origin === 'default_new_mode'
@@ -126,11 +152,17 @@ describe('doc-grounding SUPPRESSION requires strict, not merely files-present', 
     strictDocumentGroundedActive: true, // user chose the authority, or reference_files_only
   };
 
-  test('template-seeded mode + files: NO uploaded-material refusal instruction', () => {
+  test('template-seeded mode + files: refusal IS instructed (R1 forces retrieval here)', () => {
+    // Was asserted the other way until 2026-08-16. See the block comment: under
+    // R1 this mode's retrieval is forced, so mandating honesty about absence is
+    // honest rather than a licence to deny. Mirrors F9PurposeHonestyUnderR1.
     const plan = planAnswer({ ...generalQuestion, activeMode: templateSeededWithFiles });
+    assert.equal(plan.docGroundedEnforcementActive, true,
+      'precondition: seeded + files forces enforcement under R1');
+    assert.equal(plan.documentGroundedFilesPresent, true, 'precondition: files are present');
     const formatted = formatAnswerPlanForPrompt(plan);
-    assert.ok(!/not in the uploaded material/i.test(formatted),
-      `unforced-retrieval turn must not be told to refuse on absence, got: ${formatted}`);
+    assert.ok(/not in the uploaded material/i.test(formatted),
+      `enforced turn must keep the honesty mandate, got: ${formatted}`);
   });
 
   test('template-seeded mode + files: still told to GROUND in the files', () => {
@@ -140,13 +172,6 @@ describe('doc-grounding SUPPRESSION requires strict, not merely files-present', 
     const formatted = formatAnswerPlanForPrompt(plan);
     assert.ok(/uploaded\/reference files/i.test(formatted),
       `files-present turn must still ground in the files, got: ${formatted}`);
-  });
-
-  test('template-seeded mode + files: general knowledge is explicitly PERMITTED', () => {
-    const plan = planAnswer({ ...generalQuestion, activeMode: templateSeededWithFiles });
-    const formatted = formatAnswerPlanForPrompt(plan);
-    assert.ok(/answer normally from general knowledge/i.test(formatted),
-      `a bare grounding instruction reads as a licence to deny; the cancel must be explicit, got: ${formatted}`);
   });
 
   // Code-review 2026-08-14. The FIRST version of this fix gated the refusal on

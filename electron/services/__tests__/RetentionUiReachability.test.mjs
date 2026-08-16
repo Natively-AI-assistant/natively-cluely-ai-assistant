@@ -35,7 +35,18 @@ test('SettingsOverlay renders a real do-not-save meetings control', () => {
   assert.match(source, /getMeetingRetention\?\.\(\)\.then\(setMeetingRetention\)/);
   assert.match(source, /setMeetingRetention\?\.\(nextRetention\)/);
   assert.match(source, /Do not save meetings/);
-  assert.match(source, /transcripts, summaries, and history are discarded/);
+  // The explanatory copy was shortened to "Nothing is saved after the meeting
+  // ends"; the longer "transcripts, summaries, and history are discarded…"
+  // string still sits in i18n.tsx as an now-unused key. The control itself is
+  // unchanged and the four assertions above already pin its wiring
+  // (state → getMeetingRetention → setMeetingRetention). What this line is for
+  // is that the toggle SAYS what it does, so accept either wording rather than
+  // re-breaking on the next copy edit.
+  assert.match(
+    source,
+    /transcripts, summaries, and history are discarded|Nothing is saved after the meeting ends/,
+    'the do-not-save toggle must carry copy explaining that nothing is retained',
+  );
 });
 
 test('launcher startMeeting metadata carries doNotPersist when retention is never', () => {

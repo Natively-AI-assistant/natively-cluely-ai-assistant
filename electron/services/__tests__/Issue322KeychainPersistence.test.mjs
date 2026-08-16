@@ -82,6 +82,17 @@ function freshManager(env) {
   delete require.cache[require.resolve(COMPILED)];
   const mod = require(COMPILED);
   if (mod.CredentialsManager.instance) mod.CredentialsManager.instance = undefined;
+  // getInstance() anchors the singleton on globalThis, NOT on the static field
+  // — 22 dist bundles each carry a copy of the class, and per-bundle instances
+  // meant a revoked key kept being served from a stale copy. Clearing only the
+  // static field therefore does NOT give a fresh manager: getInstance() returns
+  // the globalThis one, which still holds the FIRST env's CREDENTIALS_PATH /
+  // FALLBACK_PATH (module constants captured at its own require time) and the
+  // first env's safeStorage mock. Every test after the first then read and wrote
+  // the first test's userData directory, so `keyringAvailable = false` appeared
+  // to have no effect and the fallback file was never written where the test
+  // looked for it. Must be cleared in lockstep with the static field.
+  delete globalThis.__nativelyCredentialsManagerV1__;
   const cm = mod.CredentialsManager.getInstance();
   cm.init();
   return cm;

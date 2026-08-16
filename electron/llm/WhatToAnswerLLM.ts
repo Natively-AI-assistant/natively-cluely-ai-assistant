@@ -2,6 +2,7 @@ import { LLMHelper } from "../LLMHelper";
 import { UNIVERSAL_WHAT_TO_ANSWER_PROMPT } from "./prompts";
 import { TINY_WHAT_TO_ANSWER_PROMPT } from "./tinyPrompts";
 import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
+import { composeWtaSystemPrompt } from "./wtaSystemPrompt";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
 import { IntentResult } from "./IntentClassifier";
@@ -846,7 +847,10 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 _v2TurnUser = null;
             }
             const _wtaUserMessage = _v3p?.user ?? _v2TurnUser ?? packet.userMessage;
-            const _wtaSystemPrompt = _v3p?.system ?? finalPromptOverride;
+            // PR #429 Bug 003: `_v3p?.system ?? finalPromptOverride` discarded the
+            // ACTIVE SKILL block on every V3 turn — finalPromptOverride is its only
+            // carrier and V3 is default ON, so `??` never fell through.
+            const _wtaSystemPrompt = composeWtaSystemPrompt(_v3p?.system, finalPromptOverride, activeSkill);
             if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
             // v3Owned: when the V3 prompt is in effect, the Context OS govern
             // block in LLMHelper must NOT substitute its EvidencePack for the

@@ -1303,6 +1303,7 @@ import { ProviderStatusRegistry } from './services/ProviderStatusRegistry'
 import { decideToggle, decideDockTransition } from './services/toggleStateReducer'
 import { NativeOomTrace } from './utils/NativeOomTrace'
 import { setStealthHookAvailabilityProvider } from './utils/windowsFocusPolicy'
+import { ensureNativeModuleAbi } from './utils/nativeModuleGuard'
 
 // Opt-in only: this trace writes allowlisted process metadata and IPC byte estimates
 // for a copied-profile native OOM investigation. It is inert unless explicitly enabled.
@@ -2286,6 +2287,36 @@ export class AppState {
     BrowserWindow.getAllWindows().forEach(win => {
       this.sendToWindow(win, channel, ...args);
     });
+  }
+
+  /**
+   * Send `model-changed` to the windows that actually listen for it.
+   *
+   * Two of them: the overlay (NativelyInterface renders the active model) and
+   * the model selector (it highlights the current row before it closes).
+   * Everything else on screen ignores the channel, and `broadcast()` reached all
+   * of them — the revert path's own comment calls this out, that the
+   * "'model-changed' broadcast re-renders all open windows" and had to be pushed
+   * into the background so it would not stutter the Stop click. Addressing the
+   * two real listeners removes the cost instead of hiding it.
+   *
+   * Deduped by window id: the overlay and the model selector are distinct
+   * windows today, but the helpers are free to return the same one (or the same
+   * window twice through different accessors), and a double send makes the
+   * renderer re-render twice for one change.
+   */
+  public sendModelChanged(modelId: string): void {
+    const targets = [
+      this.getWindowHelper().getOverlayWindow(),
+      this.modelSelectorWindowHelper.getWindow(),
+    ];
+    const seen = new Set<number>();
+    for (const win of targets) {
+      if (!win || win.isDestroyed()) continue;
+      if (seen.has(win.id)) continue;
+      seen.add(win.id);
+      this.sendToWindow(win, 'model-changed', modelId);
+    }
   }
 
   public getIsMeetingActive(): boolean {
@@ -3489,7 +3520,23 @@ export class AppState {
         }
         return;
       }
-      if (decision.type === 'warn-user' && decision.reason === 'same-device-input-output') {
+      // darwin-only. SystemAudioHealthClassifier is platform-agnostic — it raises
+      // `same-device-input-output` from the route alone — but the limitation is
+      // not: the CoreAudio Process Tap cannot tap a device that is also the
+      // active mic, while Windows WASAPI loopback handles that case fine (the
+      // same reasoning already written on the `mac-same-device-input-output`
+      // branch of formatPermissionMessage).
+      //
+      // Without this gate a Windows user is warned about a condition that is not
+      // a problem for them, and told to change devices for no reason. The
+      // helper's own !isMac fallback keeps the COPY correct — they would see the
+      // generic "No System Audio for 8s" text rather than macOS instructions —
+      // but the right fix is not to raise the warning at all off darwin.
+      if (
+        process.platform === 'darwin'
+        && decision.type === 'warn-user'
+        && decision.reason === 'same-device-input-output'
+      ) {
         const msg = formatPermissionMessage('mac-same-device-input-output', { device: decision.device });
         console.warn(`${prefix}SystemAudioCapture ${msg}`);
         this.sendAudioCaptureFailed( {
@@ -6096,9 +6143,7 @@ export class AppState {
           const all = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
           console.log(`[Main] Reverting model to default: ${defaultModel}`);
           this.processingHelper.getLLMHelper().setModel(defaultModel, all);
-          BrowserWindow.getAllWindows().forEach(win => {
-            this.sendToWindow(win, 'model-changed', defaultModel);
-          });
+          this.sendModelChanged(defaultModel);
         } catch (e) {
           console.error('[Main] Failed to revert model:', e);
         }
@@ -6224,7 +6269,25 @@ export class AppState {
     type BatchKind = 'suggested_answer' | 'refined_answer' | 'recap' | 'clarify' | 'follow_up_questions';
     const tokenBatches = new Map<BatchKind, any[]>();
     let batchFlushScheduled = false;
+    // The queued flush must be CANCELLABLE, and a manual flush must re-open the
+    // gate. Without the handle, a token that arrives between a final-answer
+    // handler's flushBatchesNow() and its own send is swallowed by the stale
+    // immediate: queueBatch calls scheduleBatchFlush, which early-returns
+    // because batchFlushScheduled is still true, and the already-queued
+    // immediate then delivers that token AFTER the final answer. That is exactly
+    // the "(…, final answer, trailing tokens)" ordering the comment below this
+    // block says must never reach the renderer — it clobbers the just-finalized
+    // bubble.
+    let pendingFlushHandle: NodeJS.Immediate | null = null;
     const flushBatchesNow = () => {
+      if (pendingFlushHandle) {
+        clearImmediate(pendingFlushHandle);
+        pendingFlushHandle = null;
+      }
+      // Reset here, not only in the immediate's callback: a manual flush has
+      // done the work the queued one was going to do, so the next queueBatch
+      // must be able to arm a fresh immediate rather than be dropped.
+      batchFlushScheduled = false;
       const win = mainWindow();
       if (!win) { tokenBatches.clear(); return; }
       for (const [kind, items] of tokenBatches.entries()) {
@@ -6237,7 +6300,8 @@ export class AppState {
     const scheduleBatchFlush = () => {
       if (batchFlushScheduled) return;
       batchFlushScheduled = true;
-      setImmediate(() => {
+      pendingFlushHandle = setImmediate(() => {
+        pendingFlushHandle = null;
         batchFlushScheduled = false;
         flushBatchesNow();
       });
@@ -7501,23 +7565,42 @@ export class AppState {
 
 // Application initialization
 
+// ─── SINGLE-INSTANCE LOCK, THEN NATIVE ABI GUARD — BOTH AT MODULE SCOPE ─────
+//
+// Order is the whole point. `ensureNativeModuleAbi()` REBUILDS native modules
+// (better-sqlite3, keytar) in dev when they were compiled against the system
+// Node ABI instead of Electron's — the NODE_MODULE_VERSION crash you get after
+// `npm rebuild`, `npm install --ignore-scripts`, or a system Node upgrade.
+// Two instances running that rebuild concurrently corrupt each other's output;
+// that has already broken a build here once. Taking the lock FIRST means the
+// duplicate is gone before any rebuild can start.
+//
+// Both moved out of initializeApp() and above it: the lock has to be the first
+// thing startup does, and the guard has to be able to abort startup before the
+// app touches a native module. Nothing here may be async — a duplicate that
+// yields to the event loop lives long enough to register a second tray icon on
+// macOS Tahoe + Spotlight launches.
+//
+// The guard is cheap and self-limiting on the happy path: it require()s the two
+// modules, returns immediately when the ABI matches, and NEVER rebuilds in a
+// packaged build — there it logs and exits, because a packaged mismatch means
+// the release pipeline shipped the wrong .node binaries and no runtime fix is
+// honest.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+logStartupPhase('single-instance-lock', { gotLock: gotSingleInstanceLock });
+if (!gotSingleInstanceLock) {
+  console.log('[Main] Another instance is already running. Exiting this instance.');
+  // process.exit(0), not app.quit() and not app.exit(0). app.quit() before
+  // whenReady can be deferred or no-op'd (it tries to close all windows first,
+  // and none exist yet). This path must terminate synchronously and
+  // unconditionally, before the ABI guard below can run in a second process.
+  process.exit(0);
+}
+
+ensureNativeModuleAbi();
+
 async function initializeApp() {
   logStartupPhase('initializeApp:start');
-  // 1. Enforce single instance — prevent duplicate dock icons from leftover processes.
-  // In development mode with hot-reload this is still safe because electron is restarted
-  // by the build step, not re-launched by concurrently while the old process is alive.
-  const gotLock = app.requestSingleInstanceLock();
-  logStartupPhase('single-instance-lock', { gotLock });
-  if (!gotLock) {
-    console.log('[Main] Another instance is already running. Exiting this instance.');
-    // Use app.exit(0) — app.quit() before whenReady can be deferred or no-op'd
-    // (it tries to close all windows first, but none exist yet), leaving the
-    // duplicate process alive long enough to register a second tray icon on
-    // macOS Tahoe + Spotlight launches. exit() terminates immediately and
-    // cannot be intercepted by before-quit handlers.
-    app.exit(0);
-    return;
-  }
 
   // When a duplicate launch is attempted (e.g. user invokes Spotlight again
   // while Natively is running), focus and recenter the existing window so the

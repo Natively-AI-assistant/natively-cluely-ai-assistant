@@ -106,12 +106,20 @@ test('a genuinely empty transcript keeps the legitimate "nothing captured" claim
 
   const answer = await engine.runWhatShouldISay(undefined, 0.9, undefined, { skipCooldown: true });
 
-  // Falls through to isNonAnswerSentinel's own honest-fallback substitution
-  // (a DIFFERENT phrase never matches the literal sentinel, so without a real
-  // extracted question this exact string just passes through as a real,
-  // if unhelpful, model answer — proving the guard did not fire).
-  assert.equal(answer, "There's nothing captured to summarize yet.");
-  assert.deepEqual(finals, ["There's nothing captured to summarize yet."]);
+  // The engine now SHORT-CIRCUITS this case before the model is consulted at
+  // all: with no question, no extracted question, no last interviewer turn, no
+  // transcript and no visual context, it answers instantly and deterministically
+  // rather than paying a round-trip to be told there is nothing to say.
+  //
+  // That satisfies this test's purpose more strongly than the old assertion did.
+  // The point was that the false-claim guard must NOT fire when the "nothing
+  // captured" claim is TRUE — and here the guard cannot fire, because the
+  // stubbed model answer never reaches it. Asserting the old pass-through would
+  // now be asserting that the early return does not exist.
+  const NO_CONTEXT_MSG = "I don't have anything to answer yet — no conversation, screen capture, or question has come in. Ask something or start the meeting audio, then press again.";
+  assert.equal(answer, NO_CONTEXT_MSG);
+  assert.deepEqual(finals, [NO_CONTEXT_MSG]);
+  assert.notEqual(answer, HONEST_FALLBACK, 'the empty case must NOT be routed through the false-claim repair fallback');
 });
 
 test('a real, substantive answer is never touched by the false-claim guard', async () => {

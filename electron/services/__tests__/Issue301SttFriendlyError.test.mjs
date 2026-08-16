@@ -103,12 +103,36 @@ function extractHandlerBody(source, handlerName) {
   return source.slice(idx, nextHandler === -1 ? source.length : nextHandler);
 }
 
-test('local-whisper-start-download IPC blocks download on macOS 12', () => {
+test('local-whisper-start-download blocks download on macOS 12', () => {
+  // The gate must be ENFORCED for this channel; where it lives is not the
+  // invariant. `local-whisper-preload` still checks inline (asserted below),
+  // while `local-whisper-start-download` was refactored to delegate to
+  // LocalModelDownloadService — which carries the same check, under a comment
+  // saying so verbatim: "Preserve the existing macOS 13 Ventura gate from the
+  // IPC handler." Pinning the check to the handler body reported a lost gate
+  // that had merely moved one layer down.
   const source = read('electron/ipcHandlers.ts');
   const handler = extractHandlerBody(source, 'local-whisper-start-download');
-  assert.match(handler, /darwin/, 'handler must check process.platform === darwin');
-  assert.match(handler, /22/, 'handler must check Darwin major version 22');
-  assert.match(handler, /macOS 13|Ventura|Monterey|macOS 12/, 'handler must surface a user-friendly macOS version error');
+
+  const inlineGate = /darwin/.test(handler) && /22/.test(handler);
+  if (inlineGate) {
+    assert.match(handler, /macOS 13|Ventura|Monterey|macOS 12/, 'handler must surface a user-friendly macOS version error');
+    return;
+  }
+
+  assert.match(
+    handler,
+    /LocalModelDownloadService/,
+    'handler must either gate inline or delegate to LocalModelDownloadService',
+  );
+  const service = read('electron/services/LocalModelDownloadService.ts');
+  assert.match(service, /process\.platform === 'darwin'/, 'the download service must check for darwin');
+  assert.match(service, /darwinMajor\s*<\s*22/, 'the download service must check Darwin major version 22');
+  assert.match(
+    service,
+    /macOS 13|Ventura|Monterey|macOS 12/,
+    'the download service must surface a user-friendly macOS version error',
+  );
 });
 
 test('local-whisper-preload IPC blocks preload on macOS 12', () => {

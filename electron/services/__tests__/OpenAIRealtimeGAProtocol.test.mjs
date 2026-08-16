@@ -99,14 +99,30 @@ describe('wire format', () => {
         assert.doesNotMatch(source, /OpenAI-Beta/);
     });
 
-    test('sends transcription_session.update not session.update', () => {
-        assert.match(source, /type: 'transcription_session\.update'/);
-        assert.doesNotMatch(source, /type: 'session\.update'/);
+    // PROTOCOL REVISION NOTE. This file was written when OpenAI's "GA" realtime
+    // transcription API used `transcription_session.update` with a flat
+    // `input_audio_format: 'pcm16'`. That shape has since been superseded: a
+    // transcription session is now configured through the SAME `session.update`
+    // client event as any other realtime session, discriminated by
+    // `session.type: 'transcription'`, and the audio format moved into a
+    // structured `audio.input.format` object. Verified against the current
+    // OpenAI realtime-transcription reference, not assumed — the implementation
+    // was already on the new shape and these three assertions were pinning the
+    // retired one.
+    test('configures the transcription session via session.update with session.type transcription', () => {
+        assert.match(source, /type: 'session\.update'/);
+        assert.match(source, /type: 'transcription'/,
+            "the session must declare type 'transcription' — without it the server " +
+            'creates a general realtime session and never emits transcription events');
+        assert.doesNotMatch(source, /type: 'transcription_session\.update'/,
+            'the retired client event must not come back');
     });
 
-    test('uses GA input_audio_format field not beta audio.input.format', () => {
-        assert.match(source, /input_audio_format: 'pcm16'/);
-        assert.doesNotMatch(source, /audio\.input\.format/);
+    test('sends the structured audio.input.format object, not the retired flat field', () => {
+        assert.match(source, /format:\s*\{[\s\S]{0,120}?type:\s*'audio\/pcm'/,
+            'audio.input.format must be the structured { type: audio/pcm, rate } object');
+        assert.doesNotMatch(source, /input_audio_format:\s*'pcm16'/,
+            'the retired flat input_audio_format field must not come back');
     });
 
     test('handles GA transcript delta event name', () => {
@@ -128,18 +144,27 @@ describe('wire format', () => {
         );
     });
 
-    test('does not fall through session.created to transcription_session.created handler', () => {
-        // The fallthrough has been replaced with a logged-and-ignored warning.
-        // Require the case to exist (so a future rename/removal doesn't make
-        // this assertion trivially pass) and require its body to NOT set
-        // isSessionReady. Behavioral coverage of the same invariant lives in
-        // the 'race / late-arrival safety' suite below.
-        const block = source.match(
-            /case 'session\.created':[\s\S]*?break;/
-        );
-        assert.ok(block, "expected case 'session.created': to still exist with a warning body");
-        assert.doesNotMatch(block[0], /this\.isSessionReady\s*=\s*true/);
-        assert.doesNotMatch(block[0], /_startKeepAlive|_flushRingBuffer/);
+    test('session.created marks the transcription session ready', () => {
+        // INVERTED, deliberately. Under the retired protocol a transcription
+        // session was created by `transcription_session.update` and answered with
+        // `transcription_session.created`, so an inbound `session.created` was a
+        // DIFFERENT (general-intent) session's event and treating it as readiness
+        // flushed the ring buffer into a session that could not transcribe.
+        //
+        // The current protocol has no separate general-intent session here: the
+        // transcription session is opened with `session.update` and the server
+        // confirms it with `session.created`. Ignoring that event would leave the
+        // session permanently un-ready and buffered audio never flushed — so the
+        // fall-through is now the CORRECT behaviour, and this pins it that way.
+        // `transcription_session.created` is kept as a legacy alias.
+        const block = source.match(/case 'session\.created':[\s\S]*?break;/);
+        assert.ok(block, "expected case 'session.created': to still exist");
+        assert.match(block[0], /case 'transcription_session\.created':/,
+            'the legacy event name must stay handled as an alias');
+        assert.match(block[0], /this\.isSessionReady\s*=\s*true/,
+            'session.created is the current readiness signal and must set isSessionReady');
+        assert.match(block[0], /_flushRingBuffer/,
+            'audio buffered before the session opened must be flushed on readiness');
     });
 });
 
@@ -224,29 +249,33 @@ describe('lifecycle — unconditional commit', () => {
 // ──────────────────────────────────────────────────────────────────────────
 
 describe('race / late-arrival safety', () => {
-    test('inbound session.created (general-intent event) is inert on transcription session', () => {
-        // HIGH 1 behavioral coverage: _handleWsMessage({type:'session.created'})
-        // must NOT set isSessionReady, must NOT start a keep-alive, must NOT
-        // flush the ring buffer. The session.created case body should be a
-        // pure warn-and-ignore.
+    test('inbound session.created opens the transcription session and flushes buffered audio', () => {
+        // INVERTED alongside its source-level twin above. This asserted that
+        // session.created was a foreign general-intent event and had to be inert.
+        // That was true when the session was opened with
+        // `transcription_session.update`; under the current protocol the session
+        // is opened with `session.update` and `session.created` IS the server's
+        // confirmation for it. Staying inert would mean isSessionReady never
+        // flips, no keep-alive runs, and every byte captured before the socket
+        // settled sits in the ring buffer unsent — silent, total transcription
+        // loss. The positive control below (transcription_session.created, the
+        // legacy alias) still proves the handler is reachable by both names.
         const stt = trackStt(new OpenAIStreamingSTT('sk-test-key'));
         stt.isActive = true;
         stt.mode = 'ws';
         stt.isSessionReady = false;
-        // Seed the ring buffer with a known marker so we can verify no flush.
+        // Seed the ring buffer with a known marker so we can verify it IS flushed.
         const marker = Buffer.alloc(1024);
         stt.ringBuffer = [marker];
         stt.ringBufferBytes = marker.length;
 
         stt._handleWsMessage({ type: 'session.created' });
 
-        assert.strictEqual(stt.isSessionReady, false,
-            'session.created on intent=transcription must not flip isSessionReady');
-        assert.strictEqual(stt.keepAliveTimer, null,
-            'session.created must not start keep-alive');
-        assert.strictEqual(stt.ringBufferBytes, marker.length,
-            'session.created must not flush the ring buffer');
-        assert.strictEqual(stt.ringBuffer.length, 1);
+        assert.strictEqual(stt.isSessionReady, true,
+            'session.created is the current readiness signal for a transcription session');
+        assert.strictEqual(stt.ringBufferBytes, 0,
+            'audio buffered before the session opened must be flushed on readiness');
+        assert.strictEqual(stt.ringBuffer.length, 0);
     });
 
     test('inbound transcription_session.created DOES set isSessionReady (positive control)', () => {

@@ -34,6 +34,7 @@ import Module from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_LINK_TYPE, removeIsolatedDistTree } from './isolatedDistTree.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -57,7 +58,7 @@ const distDir = (() => {
   fs.symlinkSync(
     path.join(repoRoot, 'node_modules'),
     path.join(target, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
+    NODE_MODULES_LINK_TYPE,
   );
   // tsc exits non-zero on pre-existing type errors in unrelated test files,
   // but still emits JS for files that compile cleanly. We swallow the
@@ -173,7 +174,16 @@ function installCustomDocumentMode({ documentGrounded = true } = {}) {
   manager.buildRetrievedActiveModeContextBlock = (_query, _ctx, _budget, _answerType, _exclude, _pinned, options) => {
     return options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '';
   };
-  manager.buildRetrievedActiveModeContextBlockHybrid = async () => '';
+  // Must mirror the sync retriever above. A doc-grounded turn PREFERS the hybrid
+  // path (`wantHybrid = isRagLocalRerankEnabled() || forceDocumentGrounding`) and
+  // only falls back to the sync lexical retriever on TIMEOUT — never on an empty
+  // result, which production reads as "retrieval found nothing". So a stub that
+  // always returned '' here modelled a mode with no matching content, and the
+  // reference block could never reach dispatch once doc-grounded retrieval
+  // started routing through hybrid. Options is the 8th argument on this call.
+  manager.buildRetrievedActiveModeContextBlockHybrid = async (
+    _query, _ctx, _budget, _answerType, _exclude, _pinned, _allowRerank, options,
+  ) => (options?.forceDocumentGrounding ? 'REFERENCE_FILE_CONTEXT_SENTINEL' : '');
   manager.buildActiveModeContextBlock = () => '';
 }
 
@@ -221,7 +231,10 @@ async function callChat(helper, message) {
 
 after(() => {
   if (isolatedDistDir) {
-    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+    // NOT a bare rmSync: this tree contains a link to the REAL node_modules,
+    // and on Windows that link is a junction a recursive delete can traverse.
+    // See isolatedDistTree.mjs for the CI timeline that caught it.
+    removeIsolatedDistTree(isolatedDistDir);
   }
 });
 
@@ -376,51 +389,96 @@ function buildInjectionOrchestratorStub() {
   };
 }
 
-test('streamChat: intro shortcut FIRES in looking-for-work mode (regression guard)', async () => {
+// ─── Identity recall under the FULL-JIT LAW ─────────────────────────────────
+//
+// These three asserted that the AOT-precomputed intro was emitted VERBATIM as
+// the answer (`chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL')`). That is no
+// longer how it works, by design: `jitFinalAnswerEnforced` (default TRUE)
+// demotes the precomputed intro from ANSWER to EVIDENCE — it is wrapped in a
+// <candidate_identity_fact> block, prepended to the prompt, and the provider
+// writes the answer just-in-time. The precompute still saves the retrieval
+// round-trip; only the verbatim emit was removed.
+//
+// So the invariant worth pinning is unchanged in spirit — identity recall must
+// reach the answer regardless of mode — but its observable moved from the
+// output stream to the dispatched prompt. Verified against the real compiled
+// LLMHelper before rewriting: the spy receives the identity-fact block with the
+// sentinel inside it, and the stream carries the provider's text instead.
+//
+// Asserting on the dispatch is also STRICTER than the old form: emitting the
+// canned string verbatim would now be a regression (it bypasses the JIT law),
+// and these tests would catch it, whereas the old ones required it.
+
+const introDispatchSpy = (helper) => {
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  const calls = [];
+  helper.streamWithCustom = async function* (message, context) {
+    calls.push({ message: String(message ?? ''), context: String(context ?? '') });
+    yield 'PROVIDER_GENERATED';
+  };
+  return calls;
+};
+
+const assertIdentityFactReachedProvider = (calls, where) => {
+  assert.equal(calls.length, 1, `expected exactly one provider dispatch (${where})`);
+  const seen = `${calls[0].message}\n${calls[0].context}`;
+  assert.match(
+    seen,
+    /<candidate_identity_fact source="aot_precomputed_intro"/,
+    `identity recall must reach the provider as a grounded evidence block (${where})`,
+  );
+  assert.ok(
+    seen.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
+    `the precomputed identity text must be inside that block (${where})`,
+  );
+};
+
+test('streamChat: identity recall reaches the provider as evidence in looking-for-work mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = introDispatchSpy(helper);
 
   installActiveMode('looking-for-work');
   const chunks = await drainStream(helper.streamChat('Tell me about yourself.'));
 
-  assert.ok(
-    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'intro shortcut must still fire in modes where it is appropriate',
-  );
+  assert.deepEqual(chunks, ['PROVIDER_GENERATED'],
+    'under the full-JIT law the provider writes the answer — the canned intro must NOT be emitted verbatim');
+  assertIdentityFactReachedProvider(calls, 'looking-for-work');
 });
 
-// NOTE: These tests previously checked that the intro shortcut was SUPPRESSED in
+// NOTE: these previously checked that the intro shortcut was SUPPRESSED in
 // technical-interview / lecture modes (issue #272). That behaviour was revised:
-// identity recall (isIntroQuestion + introResponse) now always passes through
-// regardless of mode compatibility, because it is factual retrieval (candidate name,
-// current role, years of experience), NOT persona injection. Suppressing it in any
-// mode meant the user could never ask "what is my name?" in a technical interview.
-// The mode gate still blocks negotiation coaching and premium context/prompt injection.
-test('streamChat: intro shortcut PASSES THROUGH even in technical-interview mode', async () => {
+// identity recall is factual retrieval (candidate name, current role, years of
+// experience), NOT persona injection, so suppressing it by mode meant the user
+// could never ask "what is my name?" in a technical interview. The mode gate
+// still blocks negotiation coaching and premium context/prompt injection.
+test('streamChat: identity recall is not mode-suppressed in technical-interview mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = introDispatchSpy(helper);
 
   installActiveMode('technical-interview');
-  const chunks = await drainStream(helper.streamChat('What is my name?'));
+  await drainStream(helper.streamChat('What is my name?'));
 
-  assert.ok(
-    chunks.includes('CANNED_INTRO_RESPONSE_SENTINEL'),
-    'identity recall (intro shortcut) must fire even in technical-interview mode',
-  );
+  assertIdentityFactReachedProvider(calls, 'technical-interview');
 });
 
-test('chatWithGemini: intro shortcut PASSES THROUGH even in lecture mode', async () => {
+test('chatWithGemini: identity recall is not mode-suppressed in lecture mode', async () => {
   const helper = buildHelper();
   helper.setKnowledgeOrchestrator(buildIntroOrchestratorStub());
+  const calls = [];
+  helper.customProvider = { id: 'spy-provider', name: 'spy', curlCommand: 'noop' };
+  helper.executeCustomProvider = async (message, context) => {
+    calls.push({ message: String(message ?? ''), context: String(context ?? '') });
+    return 'PROVIDER_GENERATED';
+  };
 
   installActiveMode('lecture');
   const result = await callChat(helper, 'What is my name?');
 
-  assert.strictEqual(
-    result,
-    'CANNED_INTRO_RESPONSE_SENTINEL',
-    'identity recall (intro shortcut) must fire even in lecture mode',
-  );
+  assert.strictEqual(result, 'PROVIDER_GENERATED',
+    'the non-streaming path must also let the provider write the answer, not return the canned intro');
+  assertIdentityFactReachedProvider(calls, 'lecture (non-streaming)');
 });
 
 // Helper to wire a fake customProvider + spy on the dispatch so we can read
@@ -543,6 +601,14 @@ test('WhatToAnswerLLM: document-grounded custom mode fails closed when reference
         modeId: 'custom-doc-mode',
         modeName: 'Custom doc mode',
         hasCustomPrompt: true,
+        // Same partial-payload gap the sibling stub above already documents, missed
+        // on this inline one. `documentGroundedCustomModeActive` is DERIVED
+        // (custom && hasCustomPrompt && documentGrounded && hasReferenceFiles) — all
+        // four of which this stub sets — so omitting it described a mode that cannot
+        // exist. Without it `forceDocumentGrounding` is false, and the fail-closed
+        // refusal at WhatToAnswerLLM.ts:446 is gated on exactly that, so the turn
+        // dispatched to the provider instead of refusing.
+        documentGroundedCustomModeActive: true,
       }),
       buildRetrievedActiveModeContextBlock: () => 'REFERENCE_FILE_CONTEXT_SENTINEL',
       getActiveModePinnedInstructions: () => '',

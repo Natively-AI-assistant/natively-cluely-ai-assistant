@@ -566,11 +566,18 @@ describe('Context OS — multi-family coordinator admission predicate (2026-07-1
 
     assert.equal(threw, null, 'a thrown retriever must be contained, not propagated (allSettled contract)');
     assert.ok(result, 'resolve() must still return a pack');
-    const pack = result.evidencePack ?? result.pack ?? result;
+    // Address `result.pack` directly rather than `result.evidencePack ?? result.pack ?? result`:
+    // a fallback chain keeps passing if the return shape drifts, which is the
+    // failure mode a shape-sensitive test exists to catch.
     assert.equal(
-      pack.answerPolicy,
+      result.pack.answerPolicy,
       'refuse_insufficient_evidence',
       'a required family that failed to retrieve must refuse the turn, not answer on what is left',
+    );
+    assert.equal(result.pack.items.length, 0, 'no partial evidence may survive a failed retrieval');
+    assert.ok(
+      result.failures.some((f) => f.family === 'reference_files'),
+      'the failing family must be reported so the caller can fall back to the legacy path',
     );
   });
 });

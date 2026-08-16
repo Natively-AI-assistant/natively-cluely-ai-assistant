@@ -10,6 +10,8 @@ export { FollowUpLLM } from "./FollowUpLLM";
 export { FollowUpQuestionsLLM } from "./FollowUpQuestionsLLM";
 export { RecapLLM } from "./RecapLLM";
 export { WhatToAnswerLLM } from "./WhatToAnswerLLM";
+export { composeWtaSystemPrompt, ACTIVE_SKILL_HEADING } from "./wtaSystemPrompt";
+export type { ActiveSkillLike } from "./wtaSystemPrompt";
 export { shouldThrottleTrigger } from "./triggerGate";
 export type { TriggerGateInput } from "./triggerGate";
 export { clampResponse, validateResponse, reduceDashes, reduceDashesInChunk, StreamingDashReducer } from "./postProcessor";

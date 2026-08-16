@@ -72,7 +72,20 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
-const tscBin = path.join(repoRoot, 'node_modules/.bin/tsc');
+// TypeScript 5 EXPLICITLY, not node_modules/.bin/tsc.
+//
+// Both `typescript` (5.x) and the `typescript7` alias (7.x) publish a `tsc`
+// bin, so whichever npm links last owns .bin/tsc — it is 5.9.3 on a clean
+// `npm ci` and 7.0.2 in a dev tree where the alias was installed after. The
+// tsconfig compileWorker() writes below uses `baseUrl` and
+// `moduleResolution: 'node'`, BOTH REMOVED in TS 7 (TS5102 / TS5108), so under
+// the 7.x binary this suite dies with "Command failed: .../tsc" and an exit
+// status that says nothing about the worker it is supposed to be testing.
+//
+// The repo already made this choice deliberate everywhere else: package.json
+// scripts and the isolated-tree suites all spell out
+// node_modules/typescript7/bin/tsc when they want 7. This wants 5, so it says so.
+const tscBin = path.join(repoRoot, 'node_modules/typescript/bin/tsc');
 const workerSrc = path.join(repoRoot, 'electron/audio/whisper/whisperWorker.ts');
 
 /**
@@ -104,7 +117,7 @@ function compileWorker(outDir) {
       files: [workerSrc],
     }),
   );
-  execFileSync(tscBin, ['-p', tsconfigPath], { cwd: repoRoot, stdio: 'pipe' });
+  execFileSync(process.execPath, [tscBin, '-p', tsconfigPath], { cwd: repoRoot, stdio: 'pipe' });
   return path.join(outDir, 'electron/audio/whisper/whisperWorker.js');
 }
 

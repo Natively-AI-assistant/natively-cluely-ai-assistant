@@ -202,6 +202,17 @@ export interface AnswerPlan {
    *  prompt, the routing, the forced retrieval and the post-stream validator
    *  cannot disagree about whether a turn is document-grounded. */
   docGroundedEnforcementActive?: boolean;
+  /** STRICT on the AUTHORITY ALONE — `activeMode.strictDocumentGroundedActive`
+   *  verbatim, with no files check folded in. Deliberately separate from
+   *  `strictDocumentGroundedActive` above (which falls back to the broad flag
+   *  for legacy callers) because the refusal gate needs the un-fallen-back
+   *  value: strictDocumentGroundedFromContract returns true for
+   *  `reference_files_only` before anything is uploaded. */
+  documentGroundedStrict?: boolean;
+  /** Whether the active mode actually has at least one reference file. Paired
+   *  with `documentGroundedStrict` so the prompt can distinguish "bounded
+   *  universe exists" from "authority says documents, but there are none". */
+  documentGroundedFilesPresent?: boolean;
 }
 
 export interface PlanAnswerInput {
@@ -2104,6 +2115,14 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     documentGroundedCustomModeActive: broadDocumentGroundedActive,
     strictDocumentGroundedActive: documentGroundedCustomModeActive,
     docGroundedEnforcementActive,
+    // Kept as two separate facts rather than one pre-combined boolean. The
+    // refusal gate needs BOTH, and the two previous attempts at this each
+    // failed by collapsing them: keying on strict alone let a fileless
+    // `reference_files_only` mode refuse against material the user never
+    // provided; keying on enforcement alone made a template-seeded mode refuse
+    // even though its retrieval was never forced.
+    documentGroundedStrict: input.activeMode?.strictDocumentGroundedActive === true,
+    documentGroundedFilesPresent: input.activeMode?.hasReferenceFiles === true,
   };
 };
 
@@ -2202,8 +2221,30 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // 2026-08-13: keyed on ENFORCEMENT, so the instruction the model receives
   // matches the retrieval and validation it is actually subject to. Older
   // plans that predate the field fall back to the previous behaviour.
-  const policyLine = (plan.docGroundedEnforcementActive
-    ?? plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive)
+  // 2026-08-16: the doc-grounding policy line additionally requires FILES.
+  //
+  // R1 (`docGroundedEnforcementActive`) is what sets forceDocumentGrounding on
+  // the retrieval call (LLMHelper.ts:2299, IntelligenceEngine.ts:1179), so
+  // wherever it is true the model really is answering over retrieved documents
+  // and the honesty mandate is honest — that is the F9 dissolution, pinned by
+  // F9PurposeHonestyUnderR1_2026_08_15.
+  //
+  // But enforcement is ALSO true on the authority alone:
+  // strictDocumentGroundedFromContract returns true for `reference_files_only`
+  // before anything is uploaded, and its hasReferenceFiles check guards only the
+  // reference_files_primary/_plus_transcript branch. A mode with nothing
+  // uploaded — or whose last file was deleted — was therefore told to say the
+  // answer "is not in the uploaded material" when there was no uploaded material
+  // to be absent from. Requiring files closes exactly that hole and nothing else.
+  //
+  // Plans predating documentGroundedFilesPresent keep the old predicate.
+  const _docEnforcement = (plan.docGroundedEnforcementActive
+    ?? plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive) === true;
+  const _docPolicyActive = plan.documentGroundedFilesPresent === undefined
+    ? _docEnforcement
+    : (_docEnforcement && plan.documentGroundedFilesPresent === true);
+
+  const policyLine = _docPolicyActive
     ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
     : plan.profileContextPolicy === 'required'
       ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'

@@ -273,7 +273,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
-      appState.broadcast('model-changed', next);
+      // Same two listeners as every other model change. Converted alongside the
+      // rest rather than left as the one surviving broadcast — an untargeted
+      // straggler is how this class of fix keeps coming back.
+      appState.sendModelChanged(next);
       return next;
     } catch (error: any) {
       console.warn('[IPC] default model availability refresh failed:', error?.message || error);
@@ -993,6 +996,75 @@ export function initializeIpcHandlers(appState: AppState): void {
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
 
+        // Skill invocation parsed EARLY (PR #429 Bug 003). It used to live ~35k
+        // characters below, after the Context Intelligence V3 short-circuit had
+        // already returned — so under V3 (default ON since 2026-07-30) the
+        // `/skill-name` prefix reached the model as literal text and the skill
+        // instructions were never injected anywhere.
+        //
+        // Only the PARSE moved. `message` itself is still mutated at the original
+        // boundary below, so every existing reader in between is untouched.
+        let skillStrippedMessage: string | null = null;
+        // Skill invocation: /skill-name or $skill-name prefix (issue #303).
+        // Strip the prefix from message before planAnswer so routing sees the
+        // bare user query, then inject the skill's instructions into context
+        // right before streamChat so the model follows them for this turn only.
+        let skillPromptBlock = '';
+        const skillPrefixMatch = typeof message === 'string'
+          ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
+          : null;
+        // Defensive: strip any embedded <answer_contract>...</answer_contract>
+        // block from the user-visible message. See stripEmbeddedAnswerContract
+        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
+        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
+        // (skill dispatch, identity probe, source-switch resolution) sees the
+        // user's literal input — error logs and unmatched-skill fallbacks
+        // report the original message, not a stripped variant.
+        if (skillPrefixMatch) {
+          try {
+            const candidateId = skillPrefixMatch[1];
+            const skill = SkillsManager.getInstance().getSkill(candidateId);
+            if (skill) {
+              // Disabled skills still resolve by name but must NOT inject their
+              // instructions into the prompt — the user turned them off in
+              // Settings → Skills. Surface a clear error rather than silently
+              // proceeding (which would invoke the skill anyway).
+              if (skill.enabled === false) {
+                event.sender.send(
+                  'gemini-stream-error',
+                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
+                  { streamId: myStreamId },
+                );
+                return null;  // sibling error paths return null; handler is typed `| null`
+              }
+              skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
+              const strippedQuery = skillPrefixMatch[2].trim();
+              // Parsed here, APPLIED later (see the deferred assignment at the
+              // original site). Mutating `message` now would change what every
+              // reader between here and there sees — the identity probe, the
+              // source-switch resolution and the error logs all expect the
+              // user's literal input.
+              skillStrippedMessage = strippedQuery || `Please help me with the ${skill.name} skill.`;
+              console.log(`[IPC] Skill activated: ${skill.id}`);
+            } else {
+              const allSkills = SkillsManager.getInstance().listSkills();
+              const available = allSkills.length
+                ? allSkills.map(s => `/${s.id}`).join(', ')
+                : 'none registered';
+              event.sender.send(
+                'gemini-stream-error',
+                `Skill "/${candidateId}" not found. Available: ${available}`,
+                { streamId: myStreamId },
+              );
+              return null;  // sibling error paths return null; handler is typed `| null`
+            }
+          } catch (skillErr: any) {
+            console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
+            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
+            return null;  // sibling error paths return null; handler is typed `| null`
+          }
+        }
+
         // ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface ──────────────
         //
         // Deliberately a SHORT-CIRCUIT, not an interleave. The legacy assembly
@@ -1155,10 +1227,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             // block previously carried its own copy of all of that — two copies
             // of a security-relevant construction is how the tokenizer copies
             // drifted (§2 of the architecture review).
+            // The skill prefix is stripped for V3 too — otherwise the model reads
+            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
+            const v3Question = String((skillStrippedMessage ?? message) || '');
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
-              question: String(message || ''),
+              question: v3Question,
+              // PR #429 Bug 002: omitted entirely, so it defaulted to false even
+              // when the user attached screenshots — the V3 classifier then never
+              // added SCREEN_SPECIFIC / SCREEN_FACT and the image was not treated
+              // as authoritative evidence. Manual chat has no periodic-capture OCR
+              // object at all, so imagePaths is the only screen signal here.
+              hasScreenContext: (imagePaths?.length ?? 0) > 0,
               // Routed coding verdict, same as the WTA path (see
               // BridgeInput.codingTask). Without it the bridge falls back to its
               // keyword regex, which misses ordinary phrasings like "Write a BFS
@@ -1170,7 +1251,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               codingTask: (() => {
                 try {
                   return isCodingAnswerType(planAnswer({
-                    question: String(message || ''),
+                    question: v3Question,
                     source: 'manual_input',
                     speakerPerspective: 'user',
                     activeMode: modeInfo ?? undefined,
@@ -1254,11 +1335,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             // ends by returning, so the loop below cannot tell a truncated answer
             // from a complete one. Storing a truncated answer as history makes it
             // the antecedent for the NEXT turn's referent resolution.
+            // Bug 003: V3 owns this turn end to end, so if the skill block is not
+            // appended here it is injected nowhere at all.
+            const v3SystemPrompt = skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system;
             const v3Stream = llmHelper.streamChatWithOutcome(
               composed.user,
               imagePaths,
               undefined,
-              composed.system,
+              v3SystemPrompt,
               true,   // ignoreKnowledgeMode — V3 owns evidence; legacy injection must not re-enter
               true,   // skipModeInjection — same reason
               // Declared outbound data scopes. Was `[]`, which told the
@@ -1503,7 +1587,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // loaded — are interview-rehearsal questions about the CANDIDATE and must
         // reach the deterministic profile fast path instead of leaking
         // "I'm Natively, an AI assistant".
-        if (!imagePaths?.length && typeof message === 'string') {
+        // !skillPromptBlock: a skill turn must never be hijacked by the canned
+        // identity reply. This was previously incidental — the probe ran on the raw
+        // "/humanize who are you", which its fully-anchored regexes could not match.
+        // Made explicit so the immunity does not depend on regex anchoring.
+        if (!skillPromptBlock && !imagePaths?.length && typeof message === 'string') {
           const { resolveIdentityProbe } = require('./llm/manualIdentityRouting') as typeof import('./llm/manualIdentityRouting');
           let probeProfileReady = false;
           try {
@@ -1615,59 +1703,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Released in the handler's finally below.
         _manualFgToken = ForegroundGate.begin('manual');
 
-        // Skill invocation: /skill-name or $skill-name prefix (issue #303).
-        // Strip the prefix from message before planAnswer so routing sees the
-        // bare user query, then inject the skill's instructions into context
-        // right before streamChat so the model follows them for this turn only.
-        let skillPromptBlock = '';
-        const skillPrefixMatch = typeof message === 'string'
-          ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
-          : null;
-        // Defensive: strip any embedded <answer_contract>...</answer_contract>
-        // block from the user-visible message. See stripEmbeddedAnswerContract
-        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
-        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
-        // (skill dispatch, identity probe, source-switch resolution) sees the
-        // user's literal input — error logs and unmatched-skill fallbacks
-        // report the original message, not a stripped variant.
-        if (skillPrefixMatch) {
-          try {
-            const candidateId = skillPrefixMatch[1];
-            const skill = SkillsManager.getInstance().getSkill(candidateId);
-            if (skill) {
-              // Disabled skills still resolve by name but must NOT inject their
-              // instructions into the prompt — the user turned them off in
-              // Settings → Skills. Surface a clear error rather than silently
-              // proceeding (which would invoke the skill anyway).
-              if (skill.enabled === false) {
-                event.sender.send(
-                  'gemini-stream-error',
-                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
-                  { streamId: myStreamId },
-                );
-                return null;  // sibling error paths return null; handler is typed `| null`
-              }
-              skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
-              const strippedQuery = skillPrefixMatch[2].trim();
-              message = strippedQuery || `Please help me with the ${skill.name} skill.`;
-              console.log(`[IPC] Skill activated: ${skill.id}`);
-            } else {
-              const allSkills = SkillsManager.getInstance().listSkills();
-              const available = allSkills.length
-                ? allSkills.map(s => `/${s.id}`).join(', ')
-                : 'none registered';
-              event.sender.send(
-                'gemini-stream-error',
-                `Skill "/${candidateId}" not found. Available: ${available}`,
-                { streamId: myStreamId },
-              );
-              return null;  // sibling error paths return null; handler is typed `| null`
-            }
-          } catch (skillErr: any) {
-            console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
-            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
-            return null;  // sibling error paths return null; handler is typed `| null`
-          }
+        // Skill stripping APPLIED here, at the original boundary, so upstream
+        // routing (identity probe, source-switch resolution) and error logs keep
+        // seeing the user's literal input exactly as before the parse was hoisted.
+        if (skillStrippedMessage !== null) {
+          message = skillStrippedMessage;
         }
 
         // Active mode as a routing PRIOR (PI v3, W1): an ambiguous manual
@@ -6637,7 +6677,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      appState.broadcast('model-changed', defaultModel);
+      appState.sendModelChanged(defaultModel);
 
       // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
       // the audio pipeline immediately — without this, the in-memory pipeline still uses
@@ -8718,7 +8758,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -8750,7 +8790,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -10609,7 +10649,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.RESUME);
+      // Both tiers in ONE transaction. Deleting only Tier 1 here left Tier 2's
+      // PII-bearing knowledge_cards orphaned — the user asked for their résumé
+      // to be removed and half of it stayed on disk. Tier 1 (premium
+      // KnowledgeDatabaseManager) and Tier 2 (this repo's DatabaseManager) wrap
+      // the SAME better-sqlite3 connection, so runInTransaction() is a genuine
+      // cross-tier rollback rather than call sequencing.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.RESUME, 'resume');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -10735,7 +10782,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.JD);
+      // Same cross-tier transaction as profile:delete above — see the comment
+      // there for why a Tier-1-only delete is a partial delete.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.JD, 'jd');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

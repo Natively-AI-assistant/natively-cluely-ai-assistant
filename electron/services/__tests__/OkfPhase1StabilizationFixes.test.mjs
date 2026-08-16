@@ -126,7 +126,13 @@ test('LLMHelper: retrieval-miss path under strict isolation does NOT ship combin
 test('ipcHandlers: Hindsight live recall is gated off for document-grounded turns under docGroundedStrictIsolation', () => {
   assert.match(ipcHandlersSrc, /const _isDocGroundedTurn = manualActiveMode\?\.documentGroundedCustomModeActive === true;/);
   const idx = ipcHandlersSrc.indexOf('const _isDocGroundedTurn');
-  const slice = ipcHandlersSrc.slice(idx, idx + 600);
+  // 1800, not 600. The guard now sits 1061 chars past the anchor — the
+  // "Full-JIT source-owner law (§8)" comment explaining WHY Hindsight is
+  // blocked for reference-file/profile owners was written between them — so the
+  // window closed before reaching the code it was checking. Sized with headroom;
+  // the assertion below is anchored enough that a wider window cannot match it
+  // by accident.
+  const slice = ipcHandlersSrc.slice(idx, idx + 1800);
   assert.match(slice, /!\(_isDocGroundedTurn && isIntelligenceFlagEnabled\('docGroundedStrictIsolation'\)\)/);
 });
 

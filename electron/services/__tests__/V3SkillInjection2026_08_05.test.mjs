@@ -13,6 +13,26 @@
 //     parsing lived ~500 lines later on the legacy path. Under V3 the prefix
 //     leaked to the model as literal text and the skill instructions were
 //     never injected anywhere.
+//
+// ─── RESOLVED 2026-08-16 ─────────────────────────────────────────────────────
+// Both surfaces are fixed.
+//
+// WTA: composeWtaSystemPrompt appends the skill to whichever base rides the
+// turn, instead of `_v3p?.system ?? finalPromptOverride` discarding it. Inert on
+// non-skill turns.
+//
+// Manual chat: the /skill parse was hoisted above the V3 short-circuit — but
+// only the PARSE. `message` is still mutated at the ORIGINAL boundary, so every
+// reader in between (identity probe, source-switch resolution, error logs)
+// still sees the user's literal input exactly as before; the hoisted block
+// assigns to `skillStrippedMessage` and the V3 branch reads that. The identity
+// probe additionally gates on !skillPromptBlock, making an immunity that was
+// previously incidental (its anchored regexes could not match a "/skill ..."
+// prefix) explicit, so it survives a future regex relaxation.
+//
+// Note the `skillParseIdx < v3EntryIdx` assertion below still pins SOURCE
+// OFFSETS and is satisfiable by an occurrence that fixes nothing. It is not
+// what makes this correct — the deferred-mutation split is.
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
