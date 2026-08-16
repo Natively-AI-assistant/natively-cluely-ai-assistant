@@ -31,27 +31,31 @@ on:
 
 jobs:
   electron-entry-smoke:
-    # Natively ships on macOS AND Windows, so shared build/test behavior must be
-    # proven on both. A macOS-only job cannot catch Windows-specific breakage in
-    # package scripts: npm runs them through cmd.exe there, which has no POSIX
-    # subshells, no `VAR=value cmd` prefixes, no `${VAR:-default}`, and does not
-    # strip single quotes (so single-quoted globs reach Node literally and match
-    # nothing). Every such break shipped green on the macOS-only matrix.
+    # Natively ships on macOS, Windows AND Linux, so shared build/test behavior
+    # must be proven on all three. A macOS-only job cannot catch Windows-specific
+    # breakage in package scripts: npm runs them through cmd.exe there, which has
+    # no POSIX subshells, no `VAR=value cmd` prefixes, no `${VAR:-default}`, and
+    # does not strip single quotes (so single-quoted globs reach Node literally
+    # and match nothing). The ubuntu leg catches Linux-specific breakage in the
+    # native postinstall rebuilds (better-sqlite3/keytar need build-essential,
+    # libsecret-1-dev) and in the Rust native-module build (cpal links libasound,
+    # so libasound2-dev is required).
     name: Electron entry smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
 
     strategy:
-      # Keep both legs running: knowing whether a failure is shared or
+      # Keep all legs running: knowing whether a failure is shared or
       # platform-specific is the whole point of the matrix.
       fail-fast: false
       matrix:
         os:
           - macos-latest
           - windows-latest
+          - ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
           # `natively-api` — but .gitmodules only describes `premium`.
@@ -123,12 +127,35 @@ jobs:
           test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
+      # The npm postinstall chain rebuilds better-sqlite3 and keytar for
+      # Electron's ABI (`scripts/rebuild-native-electron.js`); keytar needs
+      # libsecret headers, and the Rust native-module build (`npm run
+      # build:native`) links libasound via cpal. GitHub's ubuntu images ship
+      # build-essential/python3 but not these headers, so install them before
+      # `npm ci` on the Linux leg.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3 pkg-config libasound2-dev libpulse-dev libsecret-1-dev
+
+      # onnxruntime-node@1.22.0 ships a broken install metadata for linux/x64:
+      # its default requirement is the cuda12 manifest, whose file entries
+      # point at 'runtimes/win-x64/native/*.so' paths that don't exist inside
+      # the Microsoft.ML.OnnxRuntime.Gpu.Linux nupkg, so every plain `npm ci`
+      # on Linux dies with "Failed to find ... in NuGet package". The package
+      # is excluded from the packaged app (package.json build.files) and the
+      # model workers resolve the runtime lazily, so skipping the binary
+      # download here is safe for CI. `ONNXRUNTIME_NODE_INSTALL=''` (non-Linux)
+      # is falsy, so macOS/Windows keep their default install behavior.
       - name: Install dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: ${{ runner.os == 'Linux' && 'skip' || '' }}
         run: npm ci
 
       # Belt-and-suspenders: confirm postinstall produced correct-arch
@@ -145,11 +172,14 @@ jobs:
       # answers a vector query (2026-08-15). The Windows leg is the ONLY
       # automated Windows this repo has, and vec0.dll had never been executed
       # anywhere — the Windows pin (sqlite-vec-windows-x64) was verified from
-      # macOS as fetch + loader-name mapping only. BLOCKING on BOTH legs by
+      # macOS as fetch + loader-name mapping only. BLOCKING on ALL legs by
       # design: VectorStore degrades to a JS-cosine fallback when the native
       # extension is missing, which is exactly how a broken platform binary
-      # would otherwise ship green. Runs under Electron's ABI because
-      # postinstall builds better-sqlite3 for Electron, not system Node.
+      # would otherwise ship green. The Linux leg is the first automated
+      # execution of vec0.so (sqlite-vec-linux-x64 is pulled in automatically
+      # as an optionalDependency of `sqlite-vec`, not pinned in package.json).
+      # Runs under Electron's ABI because postinstall builds better-sqlite3 for
+      # Electron, not system Node.
       - name: Verify sqlite-vec native extension loads (vec0)
         env:
           ELECTRON_RUN_AS_NODE: "1"
@@ -159,11 +189,12 @@ jobs:
       # node_modules/typescript7/bin/tsc. Emit is untouched — esbuild owns
       # dist-electron and vite owns dist; TS 7 only checks.
       #
-      # This runs on BOTH legs on purpose. TS 7 is a native Go binary shipped as
+      # This runs on ALL legs on purpose. TS 7 is a native Go binary shipped as
       # per-platform optional dependencies (@typescript/typescript-darwin-arm64,
-      # -win32-x64, ...), so the Windows leg is the ONLY thing that proves the
-      # win32 binary resolves and runs — a macOS-only check would say nothing
-      # about it.
+      # -win32-x64, -linux-x64, ...), so the Windows leg is the ONLY thing that
+      # proves the win32 binary resolves and runs, and the ubuntu leg is the
+      # ONLY thing that proves the linux x64 binary does — a macOS-only check
+      # would say nothing about either.
       #
       # ⚠️ EXPECTED RED until the two deferred findings are resolved
       # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
@@ -173,6 +204,12 @@ jobs:
       # exactly the loosening this migration is not allowed to do. TS 5.9.3 and
       # TS 7.0.2 report byte-identical error lists here, so this is a deferral
       # backlog, NOT a TS 7 incompatibility.
+      #
+      # On fork pull requests this step fails on ALL legs with TS2307: the
+      # private `premium` submodule is unavailable to forks (see the premium
+      # checkout steps above), which is the pre-existing condition documented in
+      # issue #460. Runs triggered on main / on schedule have the token and go
+      # green. The ubuntu leg behaves exactly like the other two here.
       - name: Typecheck Electron main process (TypeScript 7)
         run: npm run typecheck:electron
 
@@ -228,8 +265,14 @@ jobs:
       # of plain node, #442) and is therefore stale — the first advisory run
       # re-measures it.
       #
+      # The Linux leg is ENFORCING like macOS: the suites run under Electron via
+      # ELECTRON_RUN_AS_NODE=1 (`scripts/run-with-env.mjs`), so no X display or
+      # Chromium sandbox is involved. A Linux-specific break in a package script
+      # or suite would otherwise ship green forever, exactly as Windows breakage
+      # did before it became advisory.
+      #
       # TODO: fix the Windows failures, then drop `continue-on-error` so the leg
-      # is enforcing on both platforms.
+      # is enforcing on all platforms.
       - name: Run Electron unit tests
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
@@ -263,12 +306,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run test:lib
 
-      # Runs on BOTH legs by design. scripts/package-app.js and
+      # Runs on ALL legs by design. scripts/package-app.js and
       # scripts/run-with-env.mjs exist solely to reconcile /bin/sh and cmd.exe
       # behavior for `npm run dist` and `test:electron`; verifying them on one
       # OS would defeat their purpose. The helpers are pure and take tmpdir /
       # resolver / signal-table as parameters, so each leg exercises both
-      # platform shapes rather than only its own.
+      # platform shapes rather than only its own. The ubuntu leg additionally
+      # proves the /bin/sh (dash) path, the closest thing to a shared baseline
+      # between macOS and Windows shells.
       - name: Run build-script unit tests
         if: ${{ !cancelled() }}
         run: npm run test:scripts
@@ -284,7 +329,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
           # `natively-api` — but .gitmodules only describes `premium`.
@@ -356,7 +401,7 @@ jobs:
           test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
