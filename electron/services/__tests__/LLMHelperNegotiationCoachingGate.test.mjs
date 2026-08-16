@@ -34,6 +34,7 @@ import Module from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_LINK_TYPE, removeIsolatedDistTree } from './isolatedDistTree.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -57,7 +58,7 @@ const distDir = (() => {
   fs.symlinkSync(
     path.join(repoRoot, 'node_modules'),
     path.join(target, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
+    NODE_MODULES_LINK_TYPE,
   );
   // tsc exits non-zero on pre-existing type errors in unrelated test files,
   // but still emits JS for files that compile cleanly. We swallow the
@@ -230,7 +231,10 @@ async function callChat(helper, message) {
 
 after(() => {
   if (isolatedDistDir) {
-    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+    // NOT a bare rmSync: this tree contains a link to the REAL node_modules,
+    // and on Windows that link is a junction a recursive delete can traverse.
+    // See isolatedDistTree.mjs for the CI timeline that caught it.
+    removeIsolatedDistTree(isolatedDistDir);
   }
 });
 

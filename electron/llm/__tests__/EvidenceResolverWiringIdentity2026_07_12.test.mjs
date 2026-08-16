@@ -50,6 +50,7 @@ import Module from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_LINK_TYPE, removeIsolatedDistTree } from '../../services/__tests__/isolatedDistTree.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -74,7 +75,7 @@ const distDir = (() => {
   fs.symlinkSync(
     path.join(repoRoot, 'node_modules'),
     path.join(target, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
+    NODE_MODULES_LINK_TYPE,
   );
   try {
     execFileSync(process.execPath, [
@@ -309,7 +310,10 @@ async function drainStream(generator) {
 
 after(() => {
   if (isolatedDistDir) {
-    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+    // NOT a bare rmSync: this tree links the REAL node_modules, and on Windows
+    // that link is a junction a recursive delete can traverse. See
+    // ../../services/__tests__/isolatedDistTree.mjs for the CI timeline.
+    removeIsolatedDistTree(isolatedDistDir);
   }
 });
 
