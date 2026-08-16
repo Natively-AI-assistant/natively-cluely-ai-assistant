@@ -12,21 +12,26 @@
 //     (permissions while macTCCBlocked === true)
 //
 // To avoid drift, this test loads the REAL TypeScript class rather than a
-// hand-copied twin: esbuild transpiles orchestrator.ts (with its type-only
-// deps) into a temp ESM module at test time. Minimal DOM globals the class
-// touches (localStorage, requestAnimationFrame, performance) are polyfilled so
-// it runs under plain `node --test`, matching the runner the other onboarding
-// .mjs tests use.
+// hand-copied twin: Node imports orchestrator.ts directly under
+// --experimental-strip-types (which `npm run test:lib` already passes), so the
+// class under test is the shipped source, not a transpiled copy. Minimal DOM
+// globals the class touches (localStorage, requestAnimationFrame, performance)
+// are polyfilled so it runs under plain `node --test`, matching the runner the
+// other onboarding .mjs tests use.
+//
+// This used to bundle through esbuild at test time, which made the suite depend
+// on esbuild's platform-specific optional binary. That is a Windows-only
+// landmine: `npm ci` succeeds, every other step passes, and then all 9 tests die
+// in the before() hook with `The package "@esbuild/win32-x64" could not be
+// found` — a hookFailed, not an assertion, so the failure text says nothing
+// about onboarding. Type stripping needs no native binary and no temp file.
 //
 // Run: node --test src/lib/onboarding/__tests__/orchestratorClass.test.mjs
 
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { build } from 'esbuild';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ORCH_TS = join(__dirname, '..', 'orchestrator.ts');
@@ -101,26 +106,18 @@ function drainIsIdle() {
   return timerQueue.length === 0;
 }
 
-// ── Load the REAL class via esbuild (no twin, no drift) ────────────────────
+// ── Load the REAL class (no twin, no drift, no bundler) ────────────────────
 let OnboardingOrchestrator;
 let STAGES;
 
-async function loadModule(entryTs) {
-  const result = await build({
-    entryPoints: [entryTs],
-    bundle: true,
-    format: 'esm',
-    platform: 'node',
-    write: false,
-    logLevel: 'silent',
-    // orchestrator.ts imports './persistence.ts' and stageCatalog imports
-    // orchestrator type-only — all in-tree, so a full bundle is self-contained.
-  });
-  const code = result.outputFiles[0].text;
-  const dir = mkdtempSync(join(tmpdir(), 'orch-class-'));
-  const outFile = join(dir, 'bundle.mjs');
-  writeFileSync(outFile, code);
-  return import(pathToFileURL(outFile).href);
+// orchestrator.ts imports './persistence.ts' with an explicit .ts extension and
+// stageCatalog imports orchestrator type-only — both are exactly what Node's
+// type stripping resolves natively, so no bundling step is required.
+// pathToFileURL, not a bare path: on Windows an absolute path like
+// `D:\...\orchestrator.ts` is not a valid ESM specifier and import() rejects it
+// with ERR_UNSUPPORTED_ESM_URL_SCHEME.
+function loadModule(entryTs) {
+  return import(pathToFileURL(entryTs).href);
 }
 
 let ALL_STAGES; // [...STAGES, QUIET_WINDOW_STAGE] — matches App.tsx's start() call
