@@ -88,6 +88,10 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
+        if (model === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
+        // Legacy: users who selected 3.6-flash before the 3.7 bump still have it
+        // persisted. It remains a valid, working model, so name it rather than
+        // rendering the raw slug.
         if (model === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
         if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';

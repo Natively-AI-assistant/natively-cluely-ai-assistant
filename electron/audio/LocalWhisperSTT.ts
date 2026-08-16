@@ -205,6 +205,9 @@ export class LocalWhisperSTT extends EventEmitter {
     private lastEmittedText = '';
     private streamingTaskInFlight = false;
     private streamingTaskId: string | null = null;
+    /** Log-throttle state for a deterministic worker error repeating per audio window. */
+    private lastWorkerErrorMessage: string | null = null;
+    private repeatedWorkerErrorCount = 0;
 
     constructor(modelId: string) {
         super();
@@ -1020,7 +1023,29 @@ export class LocalWhisperSTT extends EventEmitter {
                     }
                 }
             } else if (msg.type === 'error') {
-                console.error('[LocalWhisperSTT] Worker error:', msg.message);
+                // Deduplicate an identical, repeating failure. The streaming loop
+                // re-dispatches once per audio window, so a DETERMINISTIC worker
+                // error (a bad decoder option, a corrupt model file) is re-raised
+                // every ~1.5s: the 2026-08-12 log carried 10,183 byte-identical
+                // ERROR lines in one day, which buries every other diagnostic in
+                // the file. Log the first few verbatim, then only every 100th
+                // with a running count. Behaviour is unchanged — this throttles
+                // the LOG, never the transcription.
+                if (msg.message === this.lastWorkerErrorMessage) {
+                    this.repeatedWorkerErrorCount++;
+                    if (this.repeatedWorkerErrorCount <= 3) {
+                        console.error('[LocalWhisperSTT] Worker error:', msg.message);
+                    } else if (this.repeatedWorkerErrorCount % 100 === 0) {
+                        console.error(
+                            `[LocalWhisperSTT] Worker error (repeated ${this.repeatedWorkerErrorCount}× — identical, likely deterministic):`,
+                            msg.message,
+                        );
+                    }
+                } else {
+                    this.lastWorkerErrorMessage = msg.message;
+                    this.repeatedWorkerErrorCount = 1;
+                    console.error('[LocalWhisperSTT] Worker error:', msg.message);
+                }
                 if (this.isDrainingFinals && msg.taskId?.startsWith('t')) {
                     this.drainingFinalsInFlight = Math.max(0, this.drainingFinalsInFlight - 1);
                     if (this.drainingFinalsInFlight === 0 && this.worker) {

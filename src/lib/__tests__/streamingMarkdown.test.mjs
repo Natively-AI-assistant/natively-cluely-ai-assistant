@@ -348,3 +348,125 @@ describe('normalizeFinalizedMarkdownMath — remarkMath semantics', () => {
     assert.ok(out.includes('$$\nE=mc^2\n$$'), out);
   });
 });
+
+describe('normalizeFinalizedMarkdownMath — fenced code is never spliced into math', () => {
+  // Code review 2026-08-12: the standalone `\[…\]` block scan ran outside the
+  // fence state machine, so a lone `\]` line inside a fenced code block could
+  // close a display-math opener that started before it — wrapping the fence
+  // delimiters and the code between them into `$$…$$`.
+  test('a lone \\] inside a code fence does not close an earlier \\[', () => {
+    const src = 'Formula:\n\n\\[\n\n```python\nx = 1\n\\]\n```\n\nAfter.';
+    const out = normalizeFinalizedMarkdownMath(src);
+    assert.ok(out.includes('```python\nx = 1'), `the code fence was corrupted:\n${out}`);
+    assert.ok(!/\$\$\n```/.test(out), `math delimiters were spliced into the fence:\n${out}`);
+  });
+
+  test('a genuine multiline \\[…\\] before any fence still normalizes', () => {
+    const src = 'Formula:\n\n\\[\nE=mc^2\n\\]\n\nAfter.';
+    const out = normalizeFinalizedMarkdownMath(src);
+    assert.ok(/\$\$\nE=mc\^2\n\$\$/.test(out), `expected block math, got:\n${out}`);
+  });
+});
+
+describe('shell and Make variables are prose, not inline math', () => {
+  // Live report 2026-08-12. The user asked "Show a Makefile rule using $@ and
+  // $<." and the question echo rendered as KaTeX: `$@ and $` was accepted as
+  // inline math because isInlineMathBody only rejected bodies that START with
+  // a digit, and `@ and ` starts with `@`.
+  //
+  // The fix is the standard pandoc/remark-math adjacency rule: no whitespace
+  // immediately inside either delimiter. These pin the shapes that actually
+  // occur in interview answers about build systems and shells.
+  const mathish = (s) => /katex/.test(renderStreamingMarkdown(s));
+
+  const PROSE = [
+    ['Make automatic variables', 'Show a Makefile rule using $@ and $<.'],
+    ['Make vars in a sentence', 'The $@ expands to the target and $< to the prereq.'],
+    ['awk fields', 'Use $1 and $2 to select fields.'],
+    ['shell exit status', 'Check $? and $# after the call.'],
+    ['ANSI-C quoting', "a bash line using IFS=$'\\n' here"],
+    ['currency pair', 'It costs $100 for $200 total.'],
+  ];
+  for (const [name, input] of PROSE) {
+    test(`${name} stays literal text`, () => {
+      assert.equal(mathish(input), false, `rendered as math: ${input}`);
+    });
+  }
+
+  // Guard against over-correction: real inline math must still render. If the
+  // adjacency rule ever tightens into "reject anything with a space", these
+  // fail rather than silently disabling inline math.
+  const MATH = [
+    ['simple assignment', 'Let $x = 5$ be given.'],
+    ['single symbol', 'The constant $c$ is the speed of light.'],
+    ['expression with spaces inside', 'We know $a + b = c$ holds.'],
+  ];
+  for (const [name, input] of MATH) {
+    test(`${name} still renders as math`, () => {
+      assert.equal(mathish(input), true, `did NOT render as math: ${input}`);
+    });
+  }
+});
+
+describe('the FINALIZED path must survive remark-math, not just this module', () => {
+  // Live report 2026-08-12, second round. The first fix taught the STREAMING
+  // tokenizer the adjacency rule, and this suite went green — while the UI was
+  // still broken. The user's question echo renders through
+  //   normalizeFinalizedMarkdownMath -> ReactMarkdown(remark-math, rehype-katex)
+  // (NativelyInterface.tsx, "Standard Text Messages"), and remark-math does its
+  // OWN `$…$` pairing. Deciding "not math" here was not enough: the old code
+  // emitted a BARE `$`, handing the decision straight back to the plugin.
+  //
+  // So these assertions drive the real unified pipeline. Asserting on this
+  // module's return value alone is what let the bug ship twice.
+  const build = async () => {
+    const { unified } = await import('unified');
+    const remarkParse = (await import('remark-parse')).default;
+    const remarkMath = (await import('remark-math')).default;
+    const remarkRehype = (await import('remark-rehype')).default;
+    const rehypeKatex = (await import('rehype-katex')).default;
+    return unified().use(remarkParse).use(remarkMath).use(remarkRehype)
+      .use(rehypeKatex, { throwOnError: false, strict: false });
+  };
+  const rendersMath = async (input) => {
+    const proc = await build();
+    const tree = await proc.run(proc.parse(normalizeFinalizedMarkdownMath(input)));
+    return JSON.stringify(tree).includes('katex');
+  };
+
+  const PROSE = [
+    ['Make automatic variables (reported)', 'Show a Makefile rule using $@ and $<.'],
+    ['shell specials (reported)', "In bash, explain $?, $#, and IFS=$'\\n' with a one-line example each."],
+    ['make var mid-sentence', 'Use $@ in a rule and $? for the exit code.'],
+    ['other sigils', 'The variables $! and $* are special.'],
+    ['awk fields', 'Use $1 and $2 to select fields.'],
+    ['currency', 'It costs $100 for $200 total.'],
+    // Odd/multiple dollar counts. Only the OPENING dollar of a rejected pair is
+    // escaped, which leaves a lone `$` behind — these prove that leftover can
+    // never pair with a later dollar and resurrect the math.
+    ['three sigils on one line', 'Use $@ and $< and $# in one line.'],
+    ['sigils far apart', 'Rule uses $@ then prose then $? at the end.'],
+    ['sigils mixed with ANSI-C quoting', "Mix: $@ and $< plus IFS=$'\\n' and $# too."],
+  ];
+  for (const [name, input] of PROSE) {
+    test(`${name} does not reach KaTeX`, async () => {
+      assert.equal(await rendersMath(input), false, `rendered as math: ${input}`);
+    });
+  }
+
+  const MATH = [
+    ['inline assignment', 'Let $x = 5$ be given.'],
+    ['single symbol', 'The constant $c$ is the speed of light.'],
+    ['spaces inside the expression', 'We know $a + b = c$ holds.'],
+    ['single digit', 'Given $5$ apples.'],
+    ['display math', 'Put the formula on its own line as $$E=mc^2$$.'],
+    // Both kinds in one line: the sigil must be neutralised without taking the
+    // real expression with it.
+    ['real math alongside a shell sigil', 'Vars $@ are prose but $x$ is math.'],
+  ];
+  for (const [name, input] of MATH) {
+    test(`${name} still reaches KaTeX`, async () => {
+      assert.equal(await rendersMath(input), true, `did NOT render as math: ${input}`);
+    });
+  }
+});

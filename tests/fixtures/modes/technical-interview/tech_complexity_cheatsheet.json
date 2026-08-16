@@ -1,0 +1,6 @@
+{
+  "two_pointer_scan": {"time": "O(n)", "space": "O(1)", "note": "Two-pointer scan: O(n), O(1) space."},
+  "binary_search": {"time": "O(log n)", "space": "O(1)"},
+  "hashmap_lookup": {"time": "O(n) avg", "space": "O(n)"},
+  "merge_sort": {"time": "O(n log n)", "space": "O(n)"}
+}

@@ -109,7 +109,7 @@ interface OllamaResponse {
 }
 
 // Model constants for Gemini (priority: flash-lite → flash → pro)
-const GEMINI_FLASH_MODEL = "gemini-3.6-flash"
+const GEMINI_FLASH_MODEL = "gemini-3.7-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
@@ -213,17 +213,46 @@ export const CODING_THINKING_BUDGET = 0;
 // `thinkingBudget` is DEPRECATED in favor of the `thinkingLevel` enum
 // (minimal|low|medium|high), and gemini-3.1-pro CANNOT disable thinking — it
 // rejects budget:0 / 'minimal' with a 400, so Pro gets 'low' (its floor).
-// A budget of 0 (or negative) maps to 'minimal' (verified to drive
-// thoughtsTokenCount→0 on flash/flash-lite); a positive budget is preserved
-// verbatim for callers that explicitly want a bounded token budget.
-// Keep the Pro→LOW / flash→MINIMAL policy in sync with the server's
-// thinkingConfigForModel() in natively-api/lib/flashModelPicker.js.
+// A budget of 0 (or negative) maps to 'minimal' ONLY on models that accept it;
+// a positive budget is preserved verbatim for callers that explicitly want a
+// bounded token budget.
+// Keep this policy in sync with the server's thinkingConfigForModel() in
+// natively-api/lib/flashModelPicker.js.
 // Match "pro" as a SEGMENT (not a loose substring) so only real Pro ids hit the
 // floor — Pro rejects MINIMAL/budget:0 with a 400.
 const PRO_MODEL_RE = /(?:^|[-/])pro(?:[-/]|$)/i;
+
+// `minimal` IS NOT UNIFORMLY SUPPORTED ACROSS THE FLASH TIER. Probed live
+// against the Gemini API on 2026-08-14:
+//
+//   gemini-3.1-flash-lite   minimal → 200    low → 200
+//   gemini-3.6-flash        minimal → 200    low → 200
+//   gemini-3.7-flash        minimal → 400    low → 200
+//                           ("Thinking level MINIMAL is not supported for this
+//                            model. Please retry with other thinking level.")
+//
+// So `minimal` is opt-in PER MODEL ID and `low` — accepted by every flash tier
+// and by Pro — is the floor for any other model. The direction matters: sending
+// MINIMAL to a model that rejects it is a hard 400 on the interactive stream,
+// not a slower answer. This is the client mirror of MINIMAL_THINKING_MODELS in
+// natively-api/lib/flashModelPicker.js — add an id only after probing it live.
+// Safe as an allow-list because buildThinkingConfig's only call site is the
+// Gemini-only streaming path, so it never sees an OpenAI/Claude model id.
+const MINIMAL_THINKING_MODELS = new Set<string>([
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
+]);
+
 export function buildThinkingConfig(model: string | undefined, budget: number): { thinkingLevel: ThinkingLevel } | { thinkingBudget: number } {
   if (typeof model === 'string' && PRO_MODEL_RE.test(model)) return { thinkingLevel: ThinkingLevel.LOW };
-  if (budget <= 0) return { thinkingLevel: ThinkingLevel.MINIMAL };
+  if (budget <= 0) {
+    // Unknown/unlisted model → LOW, the universally accepted floor. Falling
+    // through to MINIMAL here is what 400s gemini-3.7-flash.
+    if (typeof model === 'string' && !MINIMAL_THINKING_MODELS.has(model)) {
+      return { thinkingLevel: ThinkingLevel.LOW };
+    }
+    return { thinkingLevel: ThinkingLevel.MINIMAL };
+  }
   return { thinkingBudget: budget };
 }
 
@@ -263,6 +292,14 @@ function openaiReasoningParam(model: string): { reasoning_effort: OpenAiReasonin
 const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.
 
 ${IMAGE_TRUST_TRAILER}`
+
+/** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
+export interface StreamOutcome {
+  /** True when the turn stopped early and the text is INCOMPLETE. */
+  truncated: boolean;
+  /** Which guard ended it — telemetry and log wording only. */
+  reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+}
 
 export class LLMHelper {
   // ── Provider clients ────────────────────────────────────────────────────
@@ -2238,7 +2275,14 @@ ${IMAGE_TRUST_TRAILER}`;
       // uploaded material.
       const groundingInfo = modesMgr.getActiveModeDocumentGroundingInfo?.();
       documentGroundedCustomModeActive = groundingInfo?.documentGroundedCustomModeActive === true;
-      const retrieveAnswerType = documentGroundedCustomModeActive
+      // R6 (2026-08-12, review finding): the broad flag alone forced
+      // doc-grounded suggestion retrieval over an EMPTY corpus for every
+      // template-seeded fileless mode — the same class the 2026-08-11 WTA
+      // fixes closed. Enforcement = explicit strict contract, or a doc mode
+      // with at least one real file.
+      const docGroundedEnforcementActive = groundingInfo?.strictDocumentGroundedActive === true
+        || (documentGroundedCustomModeActive && groundingInfo?.hasReferenceFiles === true);
+      const retrieveAnswerType = docGroundedEnforcementActive
         ? 'document_grounded_suggestion'
         : 'general_meeting_answer';
       // buildRetrievedActiveModeContextBlock signature:
@@ -2252,7 +2296,7 @@ ${IMAGE_TRUST_TRAILER}`;
         retrieveAnswerType,
         false, // excludeCustomContext: false — let the manager handle scoping per answer type
         undefined, // pinnedModeId
-        { forceDocumentGrounding: documentGroundedCustomModeActive },
+        { forceDocumentGrounding: docGroundedEnforcementActive },
       ) || '';
     } catch (_modeErr: any) {
       console.warn('[LLMHelper] ModesManager load failed in generateSuggestion (non-fatal):', _modeErr?.message);
@@ -2300,15 +2344,25 @@ ANSWER DIRECTLY:`;
       if (this.useOllama) {
         return await this.callOllama(promptMessage, undefined, systemPrompt);
       } else if (this.customProvider || this.activeCurlProvider) {
+        // F3 (code-review 2026-08-14): buffered caller — a truncated stream
+        // must fail loudly, not return a mid-sentence suggestion (see chat()).
+        const { stream, outcome } = this.streamChatWithOutcome(promptMessage, undefined, suggestionContext, basePrompt, true);
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of stream) {
           fullResponse += chunk;
+        }
+        if (outcome.truncated) {
+          throw new Error('Suggestion generation truncated mid-stream — discarding partial output.');
         }
         return this.processResponse(fullResponse);
       } else if (this.client) {
+        const { stream, outcome } = this.streamChatWithOutcome(promptMessage, undefined, suggestionContext, basePrompt, true);
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of stream) {
           fullResponse += chunk;
+        }
+        if (outcome.truncated) {
+          throw new Error('Suggestion generation truncated mid-stream — discarding partial output.');
         }
         return this.processResponse(fullResponse);
       } else {
@@ -2592,22 +2646,25 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // If knowledge mode is active, check for intro questions and
       // inject system prompt + relevant context
       // ============================================================
-      const documentGroundedCustomModeActive = (() => {
+      // R6 (2026-08-12): read the grounding info ONCE — this block previously
+      // called the getter three separate times — and derive both flags from it.
+      const _chatGroundingInfo = (() => {
         try {
           const { ModesManager } = require('./services/ModesManager');
-          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
-        } catch { return false; }
+          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.() ?? null;
+        } catch { return null; }
       })();
+      const documentGroundedCustomModeActive = _chatGroundingInfo?.documentGroundedCustomModeActive === true;
+      // Enforcement = explicit strict contract, or a doc mode with real files.
+      // The bare broad flag is true for every template-seeded mode and made
+      // this path force doc grounding over an empty corpus (review R6).
+      const docGroundedEnforcementActive = _chatGroundingInfo?.strictDocumentGroundedActive === true
+        || (documentGroundedCustomModeActive && _chatGroundingInfo?.hasReferenceFiles === true);
       // Defect C (2026-08-01): log the EXPLICIT strictness flag — the broad
       // flag is true for every default non-interview mode via the template
       // seed, so this line falsely announced strictness on stock Team Meet
       // and Lecture sessions.
-      if ((() => {
-        try {
-          const { ModesManager } = require('./services/ModesManager');
-          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().strictDocumentGroundedActive === true;
-        } catch { return false; }
-      })()) {
+      if (_chatGroundingInfo?.strictDocumentGroundedActive === true) {
         console.log('[LLMHelper] Generic bypass disabled: strict document-grounded mode active', {
           genericBypassDisabledReason: 'strict_document_grounded_mode',
           retrievalRequired: true,
@@ -2619,10 +2676,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // "please upload your document" because it literally has no context. Pull the
       // grounded context block directly from the ModesManager's hybrid retriever
       // (same call the WTA live path uses) and fold it into the user-facing context.
-      if (documentGroundedCustomModeActive) {
+      if (docGroundedEnforcementActive) {
         try {
           const { ModesManager } = require('./services/ModesManager');
-          const groundingInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.();
+          const groundingInfo = _chatGroundingInfo;
           const groundedContext = await ModesManager.getInstance()
             .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true);
           if (groundedContext && groundedContext.trim()) {
@@ -2635,7 +2692,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           console.warn('[LLMHelper] Document-grounded manual retrieval failed, proceeding without:', groundedErr.message);
         }
       }
-      if (this.knowledgeOrchestrator?.isKnowledgeMode() && !documentGroundedCustomModeActive) {
+      // R6: knowledge suppression reads the STRICT flag (Defect C doctrine —
+      // same as the manual streaming path at ~5448 and the WTA engine). The
+      // broad flag silently dropped resume/knowledge injection for every
+      // template-seeded mode on this non-streaming path (follow-up-email flow).
+      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true) {
         try {
           // Feed only to the depth scorer — NOT feedInterviewerUtterance, which also routes to the
           // negotiation tracker and would misclassify the user's typed question as a recruiter utterance.
@@ -2728,12 +2789,21 @@ let modesMgrForInjection: {
 } | null = null;
 let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
 try {
-  const { ModesManager } = require('./services/ModesManager');
+  // Typed require: without it getInstance() is `any`, the assignment below cannot
+  // narrow `| null` away, and the read would need `?.` on the object — which
+  // WhatToAnswerSnapshotWiring.test.mjs asserts against (it matches the plain-dot
+  // spelling). `?? null` normalises the optional-call's `undefined` to the declared
+  // `| null` sentinel; every downstream read uses `?.`, so both behave identically.
+  const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
   modesMgrForInjection = ModesManager.getInstance();
-  activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.();
+  activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.() ?? null;
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
-const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+// R6 (2026-08-12): files-aware — the bare broad flag forced doc grounding
+// for fileless template-seeded modes (review finding; same class as WTA).
+const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true
+  || (activeModeGroundingInfo?.documentGroundedCustomModeActive === true
+    && activeModeGroundingInfo?.hasReferenceFiles === true);
 // Prompt System v2 (flag promptSystemV2): default the base prompt to the
 // composed v2 'answer' prompt when the caller passed no override, and record
 // whether the base is v2-composed so the legacy MODE_* template suffix is not
@@ -2789,17 +2859,43 @@ if (!shouldSkipModeInjection) {
         docRetrievalQuery = expandQueryWithHints(message);
       } catch { docRetrievalQuery = message; }
     }
-    if (forceDocumentGrounding && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-      try {
-        const groundedContext = await modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-          docRetrievalQuery, context, undefined, modeAnswerType(routeOptions), true,
-        );
-        if (groundedContext && groundedContext.trim()) {
-          modeContextBlock = groundedContext;
-          usedRerankPath = true;
+    // Phase 2 (semantic-retrieval repair, 2026-08-13): eligibility + argument
+    // mapping unified with streamChat via modeHybridEligibility. Two fixes over
+    // the previous inline call: (1) eligibility now includes the ragLocalRerank
+    // rollout flag (prod behavior unchanged — the flag defaults OFF there);
+    // (2) retrievalOptions.forceDocumentGrounding is finally threaded, so the
+    // wrapper's doc-grounded hybrid branch (fine chunking + identity-block
+    // merge) actually fires here — the old 5-arg call left retrievalOptions
+    // undefined and silently ran the generic path.
+    //
+    // BUDGET: doc-grounded keeps budgetMs: null — this site is not on the
+    // streaming deadline and the answer depends on the documents the user
+    // uploaded. The RERANK-ONLY path, newly reachable here since eligibility
+    // widened to include the ragLocalRerank flag, is an optional quality boost
+    // and must not be able to block a manual answer on a cold embedder +
+    // cross-encoder load, so it gets a generous ceiling instead of no race at
+    // all. See the module doc for the race-budget asymmetry with streamChat.
+    {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { shouldUseHybridRetrieval, runHybridModeRetrieval, MANUAL_HYBRID_RERANK_BUDGET_MS } = require('./llm/modeHybridEligibility');
+      if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
+        try {
+          const { block } = await runHybridModeRetrieval(modesMgr, {
+            query: docRetrievalQuery,
+            context,
+            answerType: modeAnswerType(routeOptions),
+            forceDocumentGrounding,
+            pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
+            followUpReferentHint: routeOptions?.followUpReferentHint,
+            budgetMs: forceDocumentGrounding ? null : MANUAL_HYBRID_RERANK_BUDGET_MS,
+          });
+          if (block && block.trim()) {
+            modeContextBlock = block;
+            usedRerankPath = true;
+          }
+        } catch (groundedErr: any) {
+          console.warn('[LLMHelper.chatWithGemini] Doc-grounded hybrid retrieval failed, using sync lexical:', groundedErr?.message);
         }
-      } catch (groundedErr: any) {
-        console.warn('[LLMHelper.chatWithGemini] Doc-grounded hybrid retrieval failed, using sync lexical:', groundedErr?.message);
       }
     }
     if (!usedRerankPath) {
@@ -3205,19 +3301,19 @@ let isMultimodal = !!(imagePaths?.length);
    */
   public async generateContentStructured(
     message: string,
-    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.6-flash.
+    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.7-flash.
     // `preferFast` no longer changes ordering (flash-lite is already first); it is
     // retained for API compatibility with latency-critical callers (live coaching).
     //
     // STRUCTURED-EXTRACTION ROUTING (resume/JD/other document ingestion): the
-    // Gemini chain here is intentionally flash-lite → 3.6-flash ONLY. A real
+    // Gemini chain here is intentionally flash-lite → 3.7-flash ONLY. A real
     // head-to-head on the actual extraction code showed flash-lite fully extracts
-    // (18 nodes) fastest; 3.6-flash is the correct single fallback; Gemini Pro
+    // (18 nodes) fastest; 3.7-flash is the correct single fallback; Gemini Pro
     // gives NO quality gain at ~4× latency; MiniMax-M3 severely UNDER-extracts. So
     // Pro/MiniMax/Groq are deliberately excluded from this path. Own-provider keys
     // (OpenAI/Claude/own-Gemini) are still tried first when present; the Natively
     // fallback carries `purpose:'extraction'` so the server runs its own
-    // flash-lite→3.6-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
+    // flash-lite→3.7-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
     opts?: { preferFast?: boolean },
   ): Promise<string> {
@@ -3247,14 +3343,14 @@ let isMultimodal = !!(imagePaths?.length);
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini cascade — flash-lite → 3.6-flash ONLY (cheapest/fastest
+    // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
     // first). Each model is a distinct provider so the rotation falls through
     // lite → flash on failure, and each carries its OWN circuit key so a saturated
     // tier (repeated 429s) trips independently without burning the other's backoff.
     // Gemini PRO is intentionally EXCLUDED from structured extraction: benchmarked
     // on the real extraction code it gave no quality gain over flash-lite at ~4×
     // latency. MiniMax is likewise excluded (it under-extracts). This is the
-    // flash-lite→3.6-flash extraction pattern.
+    // flash-lite→3.7-flash extraction pattern.
     if (this.client) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
@@ -3341,7 +3437,7 @@ let isMultimodal = !!(imagePaths?.length);
       providers.push({
         name: 'Natively API',
         // Structured extraction: tell the server this is an extraction request so
-        // it runs its dedicated flash-lite→3.6-flash-only loop (3 cycles then
+        // it runs its dedicated flash-lite→3.7-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
         execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
@@ -3483,7 +3579,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
-    // (resume/JD). The server routes it through a dedicated flash-lite→3.6-flash
+    // (resume/JD). The server routes it through a dedicated flash-lite→3.7-flash
     // loop (3 cycles, then hard-fail) and NEVER escalates to MiniMax/Pro/Scout.
     // Advisory + backward-compatible: older servers drop the unknown field and use
     // their normal flash-first chain. Never combined with fast_mode (opposite intents).
@@ -4329,7 +4425,7 @@ let isMultimodal = !!(imagePaths?.length);
     // Each provider gets MAX_RETRIES_PER_PROVIDER attempts before moving on.
     // Providers are re-ordered dynamically when a provider is unavailable.
     // NOTE: ModelVersionManager folds flash-lite into the GEMINI_FLASH family
-    // (its baseline is 3.6-flash), so flash-lite never surfaces via tiers. We
+    // (its baseline is 3.7-flash), so flash-lite never surfaces via tiers. We
     // inject it explicitly ahead of the flash tier attempt below so the Gemini
     // cascade leads with the cheapest model.
     // ──────────────────────────────────────────────────────────────────
@@ -4597,7 +4693,13 @@ let isMultimodal = !!(imagePaths?.length);
    *
    * MULTIMODAL: Gemini-only (existing logic)
    */
-  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  // F7 (code-review 2026-08-14): `outcome` is the RAG path's equivalent of
+  // streamChatWithOutcome. This generator is consumed DIRECTLY by RAGManager
+  // (not via streamChat), so the truncation sentinel cannot be used here — it
+  // would leak into the rendered answer. Callers that persist or finalize the
+  // buffered result must pass an object and read `outcome.incomplete` after
+  // the stream ends; the cap and post-commit-failure branches below set it.
+  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal, outcome?: { incomplete?: boolean; reason?: 'output_cap' | 'provider_died_post_commit' }): AsyncGenerator<string, void, unknown> {
     console.log(`[LLMHelper] streamChatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) });
 
     let isMultimodal = !!(imagePaths?.length);
@@ -4844,6 +4946,15 @@ let isMultimodal = !!(imagePaths?.length);
       abortSignal?.addEventListener('abort', onAbort, { once: true });
     });
 
+    // Commit tracking: identical rule to _streamChatInner and the vision path.
+    // The rotation loop below retries the WHOLE provider list up to 3 times, so
+    // without this an error after the first token could append as many as
+    // 3 x providers.length complete answers to the partial the user already saw.
+    const commit = { emitted: false };
+    // Total-output budget, shared across every rotation so a looping provider
+    // cannot get a fresh 16k on each retry. See capOutput.
+    const outputBudget: { chars: number; truncated?: boolean } = { chars: 0 };
+
     for (let rotation = 0; rotation < MAX_FULL_ROTATIONS; rotation++) {
       if (abortSignal?.aborted) return;
       if (rotation > 0) {
@@ -4858,10 +4969,26 @@ let isMultimodal = !!(imagePaths?.length);
         const provider = providers[i];
         try {
           console.log(`[LLMHelper] ${rotation === 0 ? '🚀' : '🔁'} Attempting ${provider.name}...`);
-          yield* (provider.execute() as any);
-          console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
-          return; // SUCCESS — exit immediately
+          yield* this.capOutput(this.trackCommit(provider.execute() as any, commit), outputBudget, provider.name);
+          if (outputBudget.truncated) {
+            // A capped stream is NOT a success. Logging it as one is how a
+            // mid-sentence RAG/doc-grounded answer reached the operator log,
+            // and the caller, looking exactly like a finished one.
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} stream ended INCOMPLETE (output cap reached)`);
+            if (outcome) { outcome.incomplete = true; outcome.reason = 'output_cap'; }
+          } else {
+            console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
+          }
+          return; // exit immediately — the turn is over either way
         } catch (err: any) {
+          if (commit.emitted) {
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
+            // NOTE: no truncation sentinel here. This generator is consumed directly by
+            // RAGManager (not via streamChat), so a sentinel would leak into its output.
+            // Truncation signalling for this path is the `outcome` out-param (F7).
+            if (outcome) { outcome.incomplete = true; outcome.reason = 'provider_died_post_commit'; }
+            return;
+          }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
           // Continue to next provider
         }
@@ -5038,7 +5165,18 @@ let isMultimodal = !!(imagePaths?.length);
       ordered,
       { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
       this.visionHealth,
-      { log: (m) => console.log(m), warn: (m) => console.warn(m) },
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        // Mirrors the non-streaming vision path's 404 handling (see the
+        // onModelError call in generateWithVisionFallback). Without this the
+        // LIVE vision path — the one users actually hit — could never tell the
+        // version manager its pinned model had been retired, so a decommissioned
+        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
+        onModelGone: (_id, name) => {
+          this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+      },
       abortSignal,
     );
   }
@@ -5066,6 +5204,53 @@ let isMultimodal = !!(imagePaths?.length);
   public async * streamChat(
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
+    // Callers that need to know whether the turn completed use
+    // streamChatWithOutcome; this overload discards the outcome so the nine
+    // existing call sites are untouched.
+    yield* this._streamChatTracked({ truncated: false }, undefined, ...args);
+  }
+
+  /**
+   * streamChat for BATCH generations that are legitimately longer than a live
+   * answer. Identical except for the runaway ceiling — see
+   * MAX_SUMMARY_OUTPUT_CHARS for why the live cap must not apply here.
+   */
+  public streamChatLongForm(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, 'long_form', ...args), outcome };
+  }
+
+  /**
+   * streamChat plus an out-of-band completion outcome.
+   *
+   * A stream that stops early (a provider failing after its first token, or the
+   * runaway output cap) ends by RETURNING, so `for await` sees an ordinary
+   * completion — deliberately, because throwing would make every consumer's
+   * existing catch reclassify a partial answer as a failed generation.
+   *
+   * The cost of that choice was silent: the 2026-08-12 fix left a truncated
+   * answer indistinguishable from a complete one, so consumers stored it as
+   * conversation history. It then became the antecedent for the NEXT turn's
+   * referent resolution and went into the memory/summary sinks — the same class
+   * of bug as "(referring to: Makefile)", bad state poisoning a later turn.
+   *
+   * Read `outcome.truncated` AFTER the stream finishes. It is populated by the
+   * time the generator completes, never before.
+   */
+  public streamChatWithOutcome(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, undefined, ...args), outcome };
+  }
+
+  private async * _streamChatTracked(
+    outcome: StreamOutcome,
+    profile: 'long_form' | undefined,
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
@@ -5080,9 +5265,160 @@ let isMultimodal = !!(imagePaths?.length);
     // Find the AbortSignal anywhere in args (position-independent) so adding a
     // trailing `thinkingBudget` arg below doesn't hide it from the abort check.
     const abortSignal = args.find((a): a is AbortSignal => a instanceof AbortSignal);
+    // Runaway bound. Applied HERE, at the single public entry point, so it
+    // covers every provider — the wrapped fall-through sites and the ones that
+    // return unconditionally (Ollama, OpenAI, Claude, DeepSeek, LiteLLM) alike.
+    // See MAX_STREAM_OUTPUT_CHARS for why this is a character cap and not a
+    // wall-clock one, and why it is defence in depth rather than the real fix.
+    // The ceiling is per-SURFACE: the live cap is calibrated from what_to_answer
+    // answers and is far too tight for a whole-meeting summary, which the batch
+    // callers reach through streamChatLongForm.
+    const { MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    // Test switch (dev-only, opt-in) lets the cap be provoked without waiting
+    // for a model to actually loop. Null in any packaged build.
+    const outputCeiling = testOutputCharCeiling()
+      ?? (profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS);
+    let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
+      // Strip the internal truncation marker before anything downstream sees
+      // it. This is the ONLY place it is consumed; see TRUNCATION_SENTINEL.
+      if (chunk === LLMHelper.TRUNCATION_SENTINEL) {
+        outcome.truncated = true;
+        outcome.reason = 'provider_failed_after_first_token';
+        return;
+      }
       yield dashReducer.reduce(chunk);
+      emittedChars += typeof chunk === 'string' ? chunk.length : 0;
+      if (emittedChars > outputCeiling) {
+        outcome.truncated = true;
+        outcome.reason = 'output_cap_reached';
+        // End the stream the same way a post-commit provider failure now does —
+        // return, never throw — so the consumer sees one consistent shape for
+        // "this stream stopped early".
+        console.warn(
+          `[LLMHelper] Stream exceeded the ${profile === 'long_form' ? 'long-form' : 'live'} output cap (${emittedChars} > ${outputCeiling}) — ending the turn. The model is not converging.`,
+        );
+        return;
+      }
+    }
+  }
+
+  /**
+   * Internal end-of-stream marker meaning "this turn stopped early".
+   *
+   * `_streamChatInner` has EIGHT places where a post-commit provider failure
+   * ends the turn by returning (see trackCommit). From outside, an early return
+   * and a normal completion are indistinguishable — which is exactly the hole
+   * the 2026-08-12 fix left: the consumer stored a truncated answer as
+   * conversation history with no idea it was incomplete, and that answer then
+   * became the antecedent for the NEXT turn's referent resolution.
+   *
+   * A sentinel chunk is used rather than a signature change because
+   * `_streamChatInner` has exactly ONE caller — `streamChat`, below — which
+   * strips it. It can never reach a consumer. The alternatives were worse:
+   * threading an outcome object needs `Parameters<_streamChatInner>` surgery
+   * across every call site, an instance field races between concurrent streams
+   * (WTA and manual chat run together), and switching back to throwing would
+   * make all nine consumers' existing catch blocks reclassify a partial answer
+   * as a failed generation.
+   *
+   * U+E010/U+E011 are private-use codepoints: no provider emits them, and the
+   * placeholder system already relies on this property (U+E002/U+E003).
+   */
+  private static readonly TRUNCATION_SENTINEL = '\uE010__NATIVELY_STREAM_TRUNCATED__\uE011';
+
+  /**
+   * Commit-point tracking for provider fall-through.
+   *
+   * `yield*` cannot be undone. Once a delegated provider stream has yielded a
+   * non-empty chunk, the consumer has already painted it, so a LATER failure in
+   * that same provider must NOT fall through to another provider — the next one
+   * starts from scratch and its answer is appended to the partial, producing one
+   * truncated answer immediately followed by a second, different, complete one.
+   *
+   * Live capture 2026-08-12 (what_to_answer, Natively fast-mode):
+   *   stream 1  tokens 8047  chars 22871  -> ai_unavailable during_stream
+   *   stream 2                chars  2342  (fell through, fresh answer)
+   *   stored assistant message           25210  ≈ 22871 + 2342 − trim
+   *
+   * The vision path already documents and implements this rule (see the
+   * "commit point" note above streamVisionWithFallback and `committedProvider`):
+   * a failure after commit ends the stream gracefully rather than switching.
+   * The text path had the rule written down but never applied at its
+   * catch-and-continue sites. This helper is how those sites observe it.
+   *
+   * The emptiness predicate is deliberately identical to the vision path's
+   * (`typeof tok === 'string' && tok.trim().length > 0`) so the two cannot drift:
+   * whitespace-only preamble does not commit, real text does.
+   */
+  /**
+   * Total-output bound, shared by every public streaming entry point.
+   *
+   * Code review 2026-08-12: the original cap lived inline in `streamChat` and
+   * its comment claimed "streamChat is the single point every chunk passes
+   * through". That was FALSE — `streamChatWithGemini` is a second public
+   * generator that never touches `streamChat`, and RAGManager consumes it
+   * directly (RAGManager.ts:281,312) guarded only by RAG_STREAM_STALL_MS. Like
+   * every other time-based guard, a stall deadline cannot catch a runaway,
+   * which is fast by definition — so the doc-grounded/RAG generation path was
+   * completely unbounded by the very fix meant to bound it.
+   *
+   * `state` is caller-owned so a retry loop accumulates across attempts rather
+   * than resetting the budget on every rung.
+   */
+  private async * capOutput(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { chars: number; truncated?: boolean },
+    label: string,
+  ): AsyncGenerator<string, void, unknown> {
+    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    const ceiling = testOutputCharCeiling() ?? MAX_STREAM_OUTPUT_CHARS;
+    for await (const chunk of inner) {
+      yield chunk;
+      state.chars += typeof chunk === 'string' ? chunk.length : 0;
+      if (state.chars > ceiling) {
+        console.warn(
+          `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${ceiling}) — ending the turn. The model is not converging.`,
+        );
+        // Ending by RETURN is indistinguishable from a normal completion to the
+        // delegating `yield*`, so the caller logged a capped stream as a
+        // success. Record it on the caller-owned state instead (a sentinel
+        // cannot be used here: this generator is consumed directly by
+        // RAGManager, not via streamChat, so it would leak into the output).
+        state.truncated = true;
+        return;
+      }
+    }
+  }
+
+  private async * trackCommit(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { emitted: boolean },
+  ): AsyncGenerator<string, void, unknown> {
+    // Test-only fault, three-gated and off unless explicitly requested; a
+    // packaged build ignores it entirely. See streamFaultInjection.ts.
+    const { failStreamAfterChars, InjectedStreamFault } = await import('./llm/streamFaultInjection');
+    const failAfter = failStreamAfterChars();
+    let seen = 0;
+
+    for await (const tok of inner) {
+      if (!state.emitted && typeof tok === 'string' && tok.trim().length > 0) {
+        state.emitted = true;
+      }
+      yield tok;
+      if (failAfter !== null) {
+        seen += typeof tok === 'string' ? tok.length : 0;
+        if (seen >= failAfter) {
+          // Thrown AFTER the yield on purpose: the point is a provider that
+          // dies once output is already on screen, which is precisely the case
+          // the fall-through guard exists for.
+          console.warn(`[LLMHelper] INJECTING mid-stream fault after ${seen} chars (test switch)`);
+          throw new InjectedStreamFault(seen);
+        }
+      }
     }
   }
 
@@ -5421,14 +5757,15 @@ let isMultimodal = !!(imagePaths?.length);
     } | null = null;
     let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
     try {
-      const { ModesManager } = require('./services/ModesManager');
+      // Typed require — see the note at the sibling injection site above.
+      const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
       modesMgrForInjection = ModesManager.getInstance();
       // Grounding-campaign3 (2026-07-23): thread the t0 mode pin through every
       // active-mode read below so the always-on injection cannot borrow a
       // mid-request switch. When no pin is supplied the methods fall back to
       // their existing live-singleton semantics (the pin field is optional).
       const _pinnedModeId = routeOptions?.pinnedModeId ?? undefined;
-      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
+      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId) ?? null;
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
     // `!v3OwnedTurn`: a V3-owned turn must not enter ANY of the doc-grounded
@@ -5630,58 +5967,41 @@ let isMultimodal = !!(imagePaths?.length);
           // this turn's evidence above, skip the entire legacy hybrid/lexical
           // retrieval block — modeContextBlock + usedRerankPath are already set.
           if (resolvedViaEvidenceResolver) { /* no-op: fall through to pinned instructions below */ } else {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { isRagLocalRerankEnabled } = require('./intelligence/intelligenceFlags');
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
           // previously the `!forceDocumentGrounding` term SKIPPED the hybrid
           // (semantic + cross-encoder) retriever for document-grounded modes,
-          // forcing the sync lexical path — so the round-3 hybrid-first +
-          // identity-block logic in buildRetrievedActiveModeContextBlockHybrid
-          // was dead on the live manual stream, and a weak model got imprecise
-          // lexical-only context (the observed "facts missed" failure). Now
-          // document-grounded modes ALSO use the hybrid path. To avoid a
-          // cold/slow embedder stalling the hot path past the first-useful
-          // deadline (which would abort to the canned fallback), the hybrid
-          // call is raced against a budget; on timeout we fall through to the
-          // sync lexical retriever — same fallback the manual flow always had.
-          const wantHybrid = isRagLocalRerankEnabled() || forceDocumentGrounding;
-          if (wantHybrid && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-            // For doc-grounded modes with large PDFs (50-200 pages) we need
-            // more time to embed + rank. Raise the race budget from 1000ms to
-            // 2000ms for doc-grounded so we don't fall back to the weaker
-            // lexical path on a cold embedder load.
-            const HYBRID_BUDGET_MS = forceDocumentGrounding ? 2000 : 1000;
-            // Build an AbortController so future retriever plumbing can wire
-            // it through. Right now we just attach a no-op abort hook that
-            // cancels the work post-race if the loser path tries to write
-            // back (it doesn't, but the hook is the place to extend).
-            const hybridAbort = new AbortController();
-            // Pass undefined for tokenBudget when doc-grounded — the retriever
-            // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
-            const hybridPromise = modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, /* allowRerank */ true,
-              { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint },
-            );
-            const raced = await Promise.race([
-              hybridPromise.then((value: string) => ({ value, timedOut: false })),
-              new Promise<{ value: string; timedOut: boolean }>((resolve) =>
-                setTimeout(() => {
-                  hybridAbort.abort();
-                  resolve({ value: '', timedOut: true });
-                }, HYBRID_BUDGET_MS),
-              ),
-            ]);
-            if (!raced.timedOut) {
-              modeContextBlock = raced.value;
+          // forcing the sync lexical path. Now document-grounded modes ALSO
+          // use the hybrid path. To avoid a cold/slow embedder stalling the
+          // hot path past the first-useful deadline (which would abort to the
+          // canned fallback), the hybrid call is raced against a budget; on
+          // timeout we fall through to the sync lexical retriever — same
+          // fallback the manual flow always had.
+          //
+          // Phase 2 (semantic-retrieval repair, 2026-08-13): eligibility,
+          // argument mapping, and the race live in modeHybridEligibility —
+          // SHARED with chatWithGemini so the two entry points can no longer
+          // drift (this site's semantics were adopted as canonical). This is
+          // the streaming site, so it passes the race budget; see the module
+          // doc for the documented budget asymmetry.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { shouldUseHybridRetrieval, runHybridModeRetrieval, hybridRetrievalBudgetMs } = require('./llm/modeHybridEligibility');
+          if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
+            const budgetMs = hybridRetrievalBudgetMs(forceDocumentGrounding);
+            const { block, timedOut } = await runHybridModeRetrieval(modesMgr, {
+              query: message,
+              context,
+              answerType: modeAnswerType(routeOptions),
+              forceDocumentGrounding,
+              pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
+              followUpReferentHint: routeOptions?.followUpReferentHint,
+              budgetMs,
+            });
+            if (!timedOut && block != null) {
+              modeContextBlock = block;
               usedRerankPath = true;
-            } else {
-              console.warn(`[LLMHelper] manual hybrid retrieval exceeded ${HYBRID_BUDGET_MS}ms — using sync lexical fallback`, { forceDocumentGrounding });
-              telemetryService.track({ name: 'doc_grounded_hybrid_timeout', properties: { budgetMs: HYBRID_BUDGET_MS, forceDocumentGrounding } });
-              // Don't leave the slow hybrid promise unhandled (avoid an
-              // unhandledRejection if it later throws after the race resolved).
-              // .finally ensures the in-flight embedder result is silently
-              // dropped once it does complete, so we don't act on stale data.
-              hybridPromise.finally(() => { /* raced timed out — drop result */ }).catch(() => {});
+            } else if (timedOut) {
+              console.warn(`[LLMHelper] manual hybrid retrieval exceeded ${budgetMs}ms — using sync lexical fallback`, { forceDocumentGrounding });
+              telemetryService.track({ name: 'doc_grounded_hybrid_timeout', properties: { budgetMs, forceDocumentGrounding } });
             }
           }
           }
@@ -5737,7 +6057,7 @@ let isMultimodal = !!(imagePaths?.length);
             hasCustomPrompt: activeModeGroundingInfo?.hasCustomPrompt === true,
             hasReferenceFiles: activeModeGroundingInfo?.hasReferenceFiles === true,
             documentGrounded: activeModeGroundingInfo?.documentGrounded === true,
-            documentGroundedCustomModeActive: forceDocumentGrounding,
+            documentGroundedCustomModeActive: activeModeGroundingInfo?.documentGroundedCustomModeActive === true,
             answerType: routeOptions?.answerType,
             modeLock: true,
             modeLockReason: 'user_created_custom_mode',
@@ -5960,7 +6280,7 @@ let isMultimodal = !!(imagePaths?.length);
         telemetryService.track({
           name: 'pi_doc_grounded_retrieval_summary',
           properties: {
-            documentGroundedCustomModeActive: forceDocumentGrounding,
+            documentGroundedCustomModeActive: activeModeGroundingInfo?.documentGroundedCustomModeActive === true,
             forceDocumentGrounding,
             retrievalSourceUsed: usedRerankPath ? 'hybrid' : 'lexical',
             hybridAttempted: forceDocumentGrounding,
@@ -6034,7 +6354,11 @@ let isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'clarify',
           });
-          yield _cog.contract.reason || 'Which source should I use for that answer?';
+          // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
+          // reference_files_primary; requestedProperty=unknown") and was
+          // yielded VERBATIM to a live user (2026-08-11). Reasons are for
+          // logs; users get the human question.
+          yield 'Which source should I use for that answer?';
           return;
         }
         if (pack.answerPolicy === 'refuse_insufficient_evidence') {
@@ -6046,7 +6370,7 @@ let isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'refuse',
           });
-          yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+          yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty, sourceOwner: pack.sourceOwner });
           return;
         }
         const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
@@ -6200,7 +6524,7 @@ let isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'refuse',
           });
-          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty });
+          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty, sourceOwner: contextOsGovernedPack.sourceOwner });
           return;
         }
       }
@@ -6306,6 +6630,11 @@ let isMultimodal = !!(imagePaths?.length);
     // Gate: only short-circuit to fast paths when the user's picked model is one of
     // the providers fast-mode actually routes to. Otherwise picking Gemini/Claude/OpenAI
     // in the UI is silently ignored because fast-mode returns before model routing runs.
+    // Tracks whether ANY provider below has already yielded real text to the
+    // consumer. Every catch-and-continue site in this generator must consult it
+    // before falling through — see trackCommit.
+    const commit = { emitted: false };
+
     const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
       this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
@@ -6315,9 +6644,14 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
-          yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
           console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
         }
       }
@@ -6330,14 +6664,22 @@ let isMultimodal = !!(imagePaths?.length);
           // we'd send 'natively' or a Gemini ID as the Groq model name → 400.
           const groqModelId = this.isGroqModel(this.currentModelId) ? this.currentModelId : GROQ_MODEL;
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
-          yield* this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal), commit);
           return;
         } catch (e: any) {
-          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
+          // A 401 still disables local Groq for the session even post-commit —
+          // that is provider bookkeeping, not output, so it runs before the
+          // commit guard returns.
           if (typeof e?.message === 'string' && /401|invalid[_\s-]api[_\s-]key/i.test(e.message)) {
             this._groqLocalDisabled = true;
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session. Re-enable by saving a new key in Settings.");
           }
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
+          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
         }
         // Local Groq failed — fall through to Natively if available
       }
@@ -6345,9 +6687,18 @@ let isMultimodal = !!(imagePaths?.length);
         // streamWithNatively → generateWithNatively → sends fast_mode:true → server Groq pool
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Natively server Groq pool...`);
         try {
-          yield* this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          // This is the site the 2026-08-12 live capture hit: the server aborted
+          // at 61s AFTER streaming 8047 tokens, and the old unconditional
+          // fall-through appended a whole second answer to what the user had
+          // already read.
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Natively fast-mode failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
           console.warn("[LLMHelper] Natively fast-mode failed, falling back:", e.message);
         }
       }
@@ -6436,14 +6787,14 @@ let isMultimodal = !!(imagePaths?.length);
           // Route multimodal to Groq Llama 4 Scout (vision-capable)
           const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-          yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal), commit);
           return;
         }
         // Text-only Groq
         const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
-        yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
+        yield* this.trackCommit(this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal), commit);
         return;
       } catch (e: any) {
         // 413 / 429 / 5xx on Groq → fall through to Natively / Gemini cascade
@@ -6463,6 +6814,15 @@ let isMultimodal = !!(imagePaths?.length);
         } else {
           // Unknown error — log and fall through anyway so the user still gets an answer
           console.warn('[LLMHelper] Groq streaming failed, falling through:', msg.slice(0, 120));
+        }
+        // A post-commit failure must NOT fall through: the providers below
+        // would append a second, complete answer to the partial the user has
+        // already read. Provider bookkeeping (the 401 disable above) still
+        // applies; only the fall-through is suppressed.
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Groq failed AFTER first token — ending stream rather than appending a second answer:', msg.slice(0, 120));
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
         }
         // Fall through to Natively at line ~5435
       }
@@ -6583,9 +6943,22 @@ let isMultimodal = !!(imagePaths?.length);
             },
           }));
           try {
-            yield* runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal);
+            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal), commit);
             return;
           } catch (raceErr: any) {
+            // runStreamingTextFallback is commit-point-safe INTERNALLY (it never
+            // switches rungs after a rung's first token). That guarantee stops
+            // duplication inside the engine — it does not stop it here: if the
+            // committed rung dies mid-stream the engine throws, and the old
+            // unconditional fall-through handed the turn to the Gemini block,
+            // which would append a second complete answer to what the user had
+            // already read. This is the primary text path, so it is the site
+            // where that would happen most often.
+            if (commit.emitted) {
+              console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
+              yield LLMHelper.TRUNCATION_SENTINEL;
+              return;
+            }
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
             telemetryService.track({ name: 'provider_error', durationMs: Date.now() - raceStart, properties: { path: 'text', stage: 'race_exhausted' } });
             // Fall through to the Gemini block below as the final safety net.
@@ -6623,11 +6996,31 @@ let isMultimodal = !!(imagePaths?.length);
       try {
         for await (const chunk of this.streamGeminiTextCascade(userContent, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget)) {
           geminiYielded = true;
+          // Mirror into the generator-wide commit state so the last-resort
+          // providers below observe the same fact this block already tracks.
+          if (typeof chunk === 'string' && chunk.trim().length > 0) commit.emitted = true;
           yield chunk;
         }
         return;
       } catch (e: any) {
-        if (geminiYielded || abortSignal?.aborted) throw e; // mid-stream: cannot switch (would duplicate)
+        // Mid-stream: cannot switch providers (would append a second full
+        // answer onto the partial one the user is already reading).
+        //
+        // Code-review 2026-08-13: this was the last post-commit site still
+        // THROWING while the other eight yield TRUNCATION_SENTINEL and return.
+        // A throw bypasses _streamChatTracked's sentinel branch entirely, so
+        // outcome.truncated stayed false, `gemini-stream-done` was never sent,
+        // and ipcHandlers ran its generation-FAILURE path — an error banner
+        // over an answer the user had already partly read. Since the Gemini
+        // cascade is the primary text path, the branch's whole `incomplete`
+        // signal was dead exactly where it mattered most. A caller abort still
+        // throws: that is a cancellation, not a truncated answer.
+        if (abortSignal?.aborted) throw e;
+        if (geminiYielded) {
+          console.warn('[LLMHelper] Gemini cascade failed AFTER first token — ending stream rather than appending a second answer:', e?.message || e);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn('[LLMHelper] Gemini cascade failed pre-commit — falling through to next provider:', e?.message || e);
         // fall through to the Natively last-resort below
       }
@@ -6639,9 +7032,14 @@ let isMultimodal = !!(imagePaths?.length);
     // to a different one rather than failing the answer.
     if (this.hasNatively()) {
       try {
-        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal);
+        yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Natively last-resort failed AFTER first token — ending stream rather than appending a second answer:', e.message);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
       }
     }
@@ -6676,9 +7074,16 @@ let isMultimodal = !!(imagePaths?.length);
         console.log(`[LLMHelper] Falling back to configured custom provider "${configuredCustom.name}" — currentModelId is ${this.currentModelId} and no cloud provider answered.`);
       }
       try {
-        yield* this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal);
+        yield* this.trackCommit(this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          // Nothing left to fall through to — but throwing here would surface a
+          // provider error over an answer the user has already partly read.
+          console.warn(`[LLMHelper] Configured custom last-resort failed AFTER first token — ending stream: ${e?.message || e}`);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
       } finally {
         // Restore — never leave a non-active customProvider on the instance,
@@ -6779,7 +7184,9 @@ let isMultimodal = !!(imagePaths?.length);
       if (!trialToken) throw new Error('Trial token not found');
       streamHeaders['x-trial-token'] = trialToken;
     } else {
-      streamHeaders['x-natively-key'] = nativelyKey;
+      // Non-null: this `else` implies `e2eLocalToken` is falsy, and the guard above
+      // (`if (!nativelyKey && !e2eLocalToken) throw`) already threw for a null key.
+      streamHeaders['x-natively-key'] = nativelyKey!;
     }
 
     // Early-bail if the caller has already aborted (e.g., user superseded
@@ -6809,7 +7216,17 @@ let isMultimodal = !!(imagePaths?.length);
     };
     abortSignal?.addEventListener('abort', onCallerAbort, { once: true });
 
-    let response: Response;
+    // Definite-assignment: `response` is always assigned before the `response.ok`
+    // read below, via an invariant tsc cannot see.
+    //   - attempt 0 cannot take the `signal.aborted` break: the caller-abort
+    //     early-bail above returns, and there is no `await` between it and the
+    //     loop, so the connect-timeout `setTimeout` cannot have fired yet.
+    //   - attempts 1-2 are only reached from the DNS-retry path, which always
+    //     leaves `lastErr` set, so `if (lastErr) throw lastErr` fires first.
+    // NOTE: this invariant is fragile — introducing an `await` before the loop
+    // would make the abort break reachable and `response.ok` would throw a
+    // TypeError. See docs/ts7-upgrade-report.md (fragile invariants).
+    let response!: Response;
     try {
       // Retry on transient DNS failures (ENOTFOUND / EAI_AGAIN).
       // Railway's 1s TTL means the OS resolver can return ENOTFOUND for 2-3s
@@ -8373,6 +8790,24 @@ let isMultimodal = !!(imagePaths?.length);
     geminiMessage: string,
     config?: { temperature?: number; maxTokens?: number }
   ): AsyncGenerator<string, void, unknown> {
+    // Bounded like every other PUBLIC streaming entry point (code review
+    // 2026-08-12). The Groq branch already sets max_tokens, but the Gemini
+    // fallback delegates to streamWithGeminiModel with no output bound at all.
+    // This method currently has no callers — the doc comment above claiming
+    // RecapLLM/FollowUpLLM/WhatToAnswerLLM use it is stale — but it is public,
+    // so it is bounded rather than left as a trap for the next caller.
+    yield* this.capOutput(
+      this._streamWithGroqOrGeminiInner(groqMessage, geminiMessage, config),
+      { chars: 0 },
+      'streamWithGroqOrGemini',
+    );
+  }
+
+  private async * _streamWithGroqOrGeminiInner(
+    groqMessage: string,
+    geminiMessage: string,
+    config?: { temperature?: number; maxTokens?: number }
+  ): AsyncGenerator<string, void, unknown> {
     const temperature = config?.temperature ?? 0.3;
     const maxTokens = config?.maxTokens ?? 8192;
 
@@ -8601,15 +9036,26 @@ let isMultimodal = !!(imagePaths?.length);
         // Collect the async generator into a Promise so withTimeout works.
         // ignoreKnowledgeMode=true: meeting summaries must never go through the
         // profile/knowledge intercept — it would corrupt the output.
+        // streamChatLongForm, not streamChat: the live output cap is sized for
+        // what_to_answer answers (p100 2530 chars) and silently truncated long
+        // summaries, which then passed the length check below and were
+        // persisted as complete. `outcome` also lets that be DETECTED rather
+        // than inferred from the text.
+        const { stream, outcome } = this.streamChatLongForm(`Context:\n${context}`, undefined, undefined, systemPrompt, true);
         const collectChunks = async (): Promise<string> => {
           let result = '';
-          for await (const chunk of this.streamChat(`Context:\n${context}`, undefined, undefined, systemPrompt, true)) {
+          for await (const chunk of stream) {
             result += chunk;
           }
           return result;
         };
         const text = await this.withTimeout(collectChunks(), 60000, 'Custom Provider Summary');
-        if (text.trim().length > 0) {
+        if (outcome.truncated) {
+          // Do not persist an incomplete summary as the meeting's summary, and
+          // do not silently swap the user's chosen provider either — fall to
+          // the next ATTEMPT the same way any other failure here does.
+          console.warn(`[LLMHelper] ⚠️ Custom provider summary stopped early (${outcome.reason}) — falling back rather than saving a partial summary.`);
+        } else if (text.trim().length > 0) {
           console.log(`[LLMHelper] ✅ Custom provider summary generated successfully.`);
           return this.processResponse(text);
         }
@@ -8899,9 +9345,20 @@ let isMultimodal = !!(imagePaths?.length);
    * Universal Chat (Non-streaming)
    */
   public async chat(message: string, imagePaths?: string[], context?: string, systemPromptOverride?: string, skipModeInjection: boolean = false): Promise<string> {
+    // F3 (code-review 2026-08-14): this is a BUFFERED caller — nothing is
+    // shown to a user mid-stream, so the streaming path's "end by returning,
+    // never throw" contract does not apply here. When the post-commit
+    // truncation sentinel fires (provider died after first token, runaway
+    // cap), a partial buffer must surface as an ERROR — callers like
+    // modes:generate-from-brief persist this return value as a completed
+    // generation, which is exactly how mid-sentence artifacts were saved.
+    const { stream, outcome } = this.streamChatWithOutcome(message, imagePaths, context, systemPromptOverride, false, skipModeInjection);
     let fullResponse = "";
-    for await (const chunk of this.streamChat(message, imagePaths, context, systemPromptOverride, false, skipModeInjection)) {
+    for await (const chunk of stream) {
       fullResponse += chunk;
+    }
+    if (outcome.truncated) {
+      throw new Error('Generation ended before completion (provider stream truncated) — partial output discarded rather than saved as complete.');
     }
     return fullResponse;
   }

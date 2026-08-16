@@ -418,6 +418,12 @@ user log/
 /dispute_evidence/
 scripts/*evidence*.py
 scripts/combine_*_single_file.py
+# The dispute handover docs are ALSO written to the repo root, outside every
+# directory rule above — byte-identical strays that a `git add -A` would sweep
+# in. This repo is PUBLIC and those files carry a named customer's email, phone
+# number and home address, so the root copies need their own rule.
+/*_DISPUTE_HANDOVER.md
+/*_DISPUTE_*.md
 # Autopilot campaign prompts — internal docs, not source
 /HANDOFF*.md
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
@@ -459,12 +465,33 @@ fixtures/
 # before its contents can be.
 !electron/**/__tests__/fixtures/
 !electron/**/__tests__/fixtures/**
+# Same sweep deleted tests/fixtures/modes/* (73 files) in 6f8e3329 — the mode
+# reference-file corpus that CustomModes / ModePersonaScenarios / Seminar /
+# ModeFixtureIntegrity / ModeBleedingMatrix import. That turned ~120 suite
+# cases into unconditional ENOENT failures on every fresh checkout. Restored
+# from 6f8e3329~1 (2026-08-11) and re-included here so the cleanup cannot
+# recur. Same two-line pattern as above: re-include the directory first, then
+# its contents.
+!tests/fixtures/
+!tests/fixtures/**
 tools/
 
 # Vision benchmark source documentation + generated reports
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# Usage ledger — the progress file is the mandated handoff contract across three
+# campaigns (16 architectural decisions, 5 open findings, the full forensics
+# record), the architecture doc is the system's specification, and the privacy
+# diff is a release gate. Untracked, none of it survives a fresh clone or a
+# worktree — which is exactly where the next person picks this up.
+!docs/usage-ledger-architecture.md
+!docs/usage-ledger-progress.md
+!docs/usage-ledger-privacy-diff.md
+# TypeScript 7 upgrade — audit + report are deliverables, not scratch notes,
+# so they are allowlisted out of the blanket `docs/*` ignore above.
+!docs/ts7-upgrade-audit.md
+!docs/ts7-upgrade-report.md
 benchmark-results/
 
 
@@ -475,3 +502,15 @@ benchmark-results/
 
 # Unbuilt feature PRDs — planning documents, never shipped to the public repo
 /upcoming/
+
+# Working-directory artifacts that are NOT part of this application.
+# These accumulated as untracked noise; none of them belong in the app repo.
+#   natively-control/    a separate 1.8 GB / 41k-file project checkout
+#   chargeback_evidence/ payment-dispute documents (business records, not code)
+#   undefined/           written by a bug that resolved a path to the literal
+#                        string "undefined" — if this reappears, fix the caller
+#   natively_debug.size* one-off debug dumps
+/natively-control/
+/chargeback_evidence/
+/undefined/
+/natively_debug.size*

@@ -1,0 +1,11 @@
+feature,Natively,Cluely,Final_Round_AI,Otter
+per_mode_reference_files,YES,NO,NO,NO
+custom_modes,YES,NO,NO,NO
+hybrid_local_cloud_retrieval,YES,NO,NO,NO
+local_only_operation,YES,NO,NO,NO
+post_call_action_items,YES,PARTIAL,NO,YES
+screen_context_with_OCR,YES,YES,PARTIAL,NO
+sales_objection_handling,YES,NO,NO,NO
+interview_specialist_mode,YES,YES,YES,NO
+lecture_mode,YES,NO,NO,NO
+custom_provider_data_scopes,YES,NO,NO,NO

@@ -1,0 +1,9 @@
+Lecture notes — Green's function
+
+Green's function definition: G satisfies LG=delta. For a linear differential operator L, the Green's function G(x; s) is the response at x to a unit impulse at s. Formally, LG(x; s) = delta(x - s).
+
+Once G is known, the solution to L u = f is u(x) = integral G(x; s) f(s) ds.
+
+Common cases:
+- Laplace on a half-plane → method of images.
+- 1D Sturm–Liouville → modified Bessel functions.

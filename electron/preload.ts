@@ -638,7 +638,6 @@ interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
-  toggleAdvancedSettings: () => Promise<void>;
   openSettingsTab: (tab: string) => Promise<void>;
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>;
@@ -782,6 +781,14 @@ interface ElectronAPI {
    *  enabled — the tap captures below the IME and breaks composition, so
    *  the renderer falls back to plain DOM focus on click. */
   stealthTapShouldAutoEngage: () => Promise<boolean>;
+  /** Re-probe the IME list mid-session (renderer calls this on window focus)
+   *  so a Pinyin/Hangul source added AFTER mount updates the auto-engage
+   *  decision. Was missing from the bridge — the renderer's optional call
+   *  silently no-op'd and the stale mount-time value swallowed CJK
+   *  composition keystrokes (F-116). */
+  stealthTapRefreshIme: () => Promise<boolean>;
+  /** Ollama runtime failure notifications (F-119). */
+  onOllamaError: (cb: (data: { message: string }) => void) => () => void;
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void;
   onStealthKeyCaptured: (
     cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
@@ -1021,7 +1028,8 @@ interface ElectronAPI {
     persisted?: boolean;
     error?: string;
   }>;
-  e2eInvoke: (channel: string, ...args: any[]) => Promise<any>;
+  /** Present only in NATIVELY_E2E=1 sessions (F-117). */
+  e2eInvoke?: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
@@ -1331,7 +1339,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('ensure-expanded', subscription);
     };
   },
-  toggleAdvancedSettings: () => ipcRenderer.invoke('toggle-advanced-settings'),
+  // toggleAdvancedSettings was removed (F-121): it invoked
+  // 'toggle-advanced-settings', a channel no handler ever registered — any
+  // caller got a silent "No handler registered" rejection. Zero call sites.
   openSettingsTab: (tab: string) => ipcRenderer.invoke('settings:open-tab', tab),
   onOpenSettingsTab: (callback: (tab: string) => void) => {
     const subscription = (_: any, tab: string) => callback(tab);
@@ -2320,6 +2330,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('embedding:incompatible-provider-warning', subscription);
     };
   },
+  // Silent-degradation notices (F-120): EmbeddingPipeline has always
+  // broadcast these; nothing consumed them, so a fallback embedding provider
+  // (semantic-search quality drop) and a failed space persist (vectors stuck
+  // "pending" until re-index) were invisible to the user.
+  onEmbeddingDegraded: (
+    callback: (data: { kind: 'fallback' | 'persist-failed'; fallbackProvider?: string; reason?: string }) => void,
+  ) => {
+    const onFallback = (_: any, data: any) => callback({ kind: 'fallback', ...data });
+    const onPersistFailed = (_: any, data: any) => callback({ kind: 'persist-failed', ...data });
+    ipcRenderer.on('embedding:fallback-activated', onFallback);
+    ipcRenderer.on('embedding:space-persist-failed', onPersistFailed);
+    return () => {
+      ipcRenderer.removeListener('embedding:fallback-activated', onFallback);
+      ipcRenderer.removeListener('embedding:space-persist-failed', onPersistFailed);
+    };
+  },
   // Automatic background re-index progress (fired when the embedding space changes,
   // e.g. after a Gemini embedding-model upgrade). started → progress* → complete.
   onReindexProgress: (
@@ -2414,6 +2440,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
+  stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime'),
+  // Ollama runtime failures (unreachable / no models, after the fallback also
+  // failed). Main has always broadcast 'ollama-error'; the bridge never
+  // exposed it, so the notification went nowhere (F-119).
+  onOllamaError: (cb: (data: { message: string }) => void) => {
+    const sub = (_: any, data: { message: string }) => cb(data);
+    ipcRenderer.on('ollama-error', sub);
+    return () => {
+      ipcRenderer.removeListener('ollama-error', sub);
+    };
+  },
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
     const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state);
     ipcRenderer.on('stealth-tap-state', sub);
@@ -2637,11 +2674,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     key?: string;
     persist?: boolean;
   }) => ipcRenderer.invoke('modes:generate-from-brief', params),
-  // E2E test bridge — generic invoke for the __e2e__:* handlers, which only exist
-  // when the main process was started with NATIVELY_E2E=1. No-op surface in a
-  // shipped app (the handlers aren't registered, so invoke rejects).
-  e2eInvoke: (channel: string, ...args: any[]) =>
-    ipcRenderer.invoke(channel, ...args),
+  // E2E test bridge — generic invoke for the __e2e__:* handlers. GATED on the
+  // same env that registers those handlers: the previous comment claimed this
+  // was a "no-op surface in a shipped app", but NATIVELY_E2E gates only the
+  // __e2e__:* HANDLERS, not the channel argument — an unconditional
+  // passthrough let any renderer code reach every production channel
+  // ('quit-app', 'set-openai-api-key', 'delete-meeting', …), defeating the
+  // curated bridge's containment (F-117, live-reproduced in
+  // scripts/audit/F-117-repro.mjs). Undefined in shipped sessions.
+  ...(process.env.NATIVELY_E2E === '1'
+    ? {
+        e2eInvoke: (channel: string, ...args: any[]) =>
+          ipcRenderer.invoke(channel, ...args),
+      }
+    : {}),
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },

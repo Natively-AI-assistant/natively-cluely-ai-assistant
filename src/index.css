@@ -8075,58 +8075,102 @@ html[data-platform="linux"] body {
   }
 }
 
-/* Transitions.dev — Toggle. Settings-area switches only; .t-toggle-lg
-   overrides travel to 20px for the 44x26 controls. */
+/* Apple-style toggle — the reference component's exact 88x40/4px-inset/
+   52x32-thumb/28px-travel/56px-press-width/24px-press-on-travel proportions,
+   reproduced at each size variant via literal px values (below) computed
+   from the SAME ratios (thumb 59% of track width, inset 10% of track
+   height, etc — see the per-variant comments), not CSS `zoom`. An earlier
+   version used `zoom: <factor>` to scale the canonical shape down in one
+   step; `zoom` is a legacy, non-standard property that has known bad
+   interactions with `backdrop-filter`/compositing, which both the meeting
+   and settings overlay windows use (unlike the plain panel this was
+   originally tested in) — it visually dropped the thumb there. These
+   literal values are mathematically identical to what the old `zoom`
+   factors produced, so the shape/ratio guarantee is unchanged; only the
+   mechanism is safer. */
 :root {
-    --toggle-dur: 350ms;
-    --toggle-travel: 14.66px;
-    --toggle-ov1: 1px;
-    --toggle-ov2: 0px;
-    /* The spec ships 0ms here, but its own header says "the track colour
-       cross-fades on its own clock" — 0ms gives no cross-fade at all, and the
-       migration also stripped the per-panel `transition-colors` that used to
-       fade it, so the track was snapping while the thumb sprang over 350ms.
-       200ms lands the colour comfortably before the bounce settles. */
-    --toggle-track: 200ms;
-    --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+    /* Hardcoded on purpose, same as --toggle-off/-thumb: every toggle in the
+       app reads identically regardless of theme or panel, ignoring each
+       caller's own track token (bg-accent-primary, --pi-accent, --aip-accent,
+       Phone Mirror's amber LAN switch, …) and the app's periwinkle accent. */
+    --toggle-off: #474949;
+    --toggle-on: #6688F5;
+    --toggle-thumb: #e1ebfe;
+    --toggle-focus-ring: rgba(102, 136, 245, 0.22);
 }
-
-/* Travel must equal (track − 2*border − 2*padding − thumb), or the thumb rests
-   off-centre in one of the two states. Each variant below is paired with the
-   exact geometry it assumes; a call site with different padding must override
-   `--toggle-travel` itself (see .aip-switch, which has a 1px border). */
-/* border-color as well as background: the SettingsOverlay and Intelligence
-   tracks swap `border-transparent` <-> `border-border-muted` between states, so
-   fading only the fill would still leave the outline snapping. */
 .t-toggle {
-    transition: background var(--toggle-track) var(--toggle-ease),
-                border-color var(--toggle-track) var(--toggle-ease);
+    position: relative;
+    display: inline-block;
+    padding: 0;
+    margin: 0;
+    border: none;
+    outline: none;
+    border-radius: 999px;
+    background: var(--toggle-off);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+        background 220ms cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 180ms ease,
+        transform 120ms ease;
 }
-/* 44px track, no border, 3px padding, 18px thumb. */
-.t-toggle.t-toggle-lg { --toggle-travel: 20px; }
-/* Same 44px track but with a 1px border (2px less content box) or 2px padding.
-   These are plain classes, NOT Tailwind `[--toggle-travel:18px]` utilities:
-   utilities are emitted where `@tailwind utilities` sits near the top of this
-   file, so `.t-toggle.t-toggle-lg` below would both out-specify (0,2,0 vs
-   0,1,0) and out-order them, and the override would silently do nothing. */
-.t-toggle.t-toggle-lg.t-toggle-bordered { --toggle-travel: 18px; }
-.t-toggle.t-toggle-lg.t-toggle-tight { --toggle-travel: 22px; }
-/* The compact 30x18 switch in the quick-settings popup. */
-.t-toggle.t-toggle-sm { --toggle-travel: 12px; }
-/* The 32x16 switch in the Launcher's detectability row. */
-.t-toggle.t-toggle-xs { --toggle-travel: 16px; }
-/* The thumb is white in both states — it never recolours, so there is no
-   background transition here and nothing colour-related to hint to
-   will-change. Only the travel is animated. */
+.t-toggle:disabled { cursor: not-allowed; opacity: 0.5; }
+.t-toggle[data-on="true"] { background: var(--toggle-on); }
+.t-toggle:focus-visible {
+    box-shadow: 0 0 0 4px var(--toggle-focus-ring);
+}
+/* `hover:` guard so a tap on touch/trackpad doesn't leave a stuck brighten. */
+@media (hover: hover) {
+    .t-toggle:not(:disabled):hover { filter: brightness(1.03); }
+}
+/* Each variant's own box size + geometry (previously `zoom: <factor>` on the
+   canonical 88x40/52x32 shape — see the file-level comment above). Height
+   matches each row's original height exactly; width grows to preserve the
+   reference's 2.2:1 track aspect ratio, same trade-off as before. */
+.t-toggle.t-toggle-lg {
+    width: 52.8px; height: 24px;
+    --toggle-inset: 2.4px; --toggle-thumb-w: 31.2px; --toggle-thumb-h: 19.2px;
+    --toggle-travel: 16.8px; --toggle-grow: 2.4px;
+}
+.t-toggle.t-toggle-sm {
+    width: 39.6px; height: 18px;
+    --toggle-inset: 1.8px; --toggle-thumb-w: 23.4px; --toggle-thumb-h: 14.4px;
+    --toggle-travel: 12.6px; --toggle-grow: 1.8px;
+}
+.t-toggle.t-toggle-xs {
+    width: 35.2px; height: 16px;
+    --toggle-inset: 1.6px; --toggle-thumb-w: 20.8px; --toggle-thumb-h: 12.8px;
+    --toggle-travel: 11.2px; --toggle-grow: 1.6px;
+}
 .t-toggle-thumb {
-    translate: 0 0;
-    will-change: translate;
-    display: block;
-    width: 14px;
-    height: 14px;
-    border-radius: 9999px;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+    position: absolute;
+    top: var(--toggle-inset);
+    left: var(--toggle-inset);
+    width: var(--toggle-thumb-w);
+    height: var(--toggle-thumb-h);
+    border-radius: 999px;
+    background: var(--toggle-thumb);
+    transform: translateX(0);
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    transition:
+        transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+        width 160ms cubic-bezier(0.22, 1, 0.36, 1),
+        background 180ms ease;
+}
+.t-toggle[data-on="true"] .t-toggle-thumb {
+    transform: translateX(var(--toggle-travel));
+}
+/* Elastic press, matching the reference exactly: literal width growth (not a
+   scale trick), anchored against whichever wall the thumb is resting on —
+   left edge fixed when OFF; when ON, translateX shrinks by --toggle-grow so
+   the RIGHT edge stays flush instead of the thumb overshooting the track. */
+.t-toggle:not(:disabled):active .t-toggle-thumb {
+    width: calc(var(--toggle-thumb-w) + var(--toggle-grow));
+}
+.t-toggle[data-on="true"]:not(:disabled):active .t-toggle-thumb {
+    transform: translateX(calc(var(--toggle-travel) - var(--toggle-grow)));
 }
 /* Opt out of the shared fill when a panel paints its own knob. This rule
    exists because `background`/`box-shadow` above sit AFTER `@tailwind
@@ -8138,26 +8182,8 @@ html[data-platform="linux"] body {
     background: none;
     box-shadow: none;
 }
-.t-toggle-lg .t-toggle-thumb { width: 18px; height: 18px; }
-.t-toggle-sm .t-toggle-thumb { width: 15px; height: 15px; }
-.t-toggle-xs .t-toggle-thumb { width: 12px; height: 12px; }
-.t-toggle[data-on="true"] .t-toggle-thumb { translate: var(--toggle-travel) 0; }
-.t-toggle.is-init[data-on="true"] .t-toggle-thumb { animation: t-toggle-on var(--toggle-dur) var(--toggle-ease) both; }
-.t-toggle.is-init[data-on="false"] .t-toggle-thumb { animation: t-toggle-off var(--toggle-dur) var(--toggle-ease) both; }
-@keyframes t-toggle-on {
-    0% { translate: 0 0; }
-    55% { translate: calc(var(--toggle-travel) + var(--toggle-ov1)) 0; }
-    80% { translate: calc(var(--toggle-travel) - var(--toggle-ov2)) 0; }
-    100% { translate: var(--toggle-travel) 0; }
-}
-@keyframes t-toggle-off {
-    0% { translate: var(--toggle-travel) 0; }
-    55% { translate: calc(0px - var(--toggle-ov1)) 0; }
-    80% { translate: var(--toggle-ov2) 0; }
-    100% { translate: 0 0; }
-}
 @media (prefers-reduced-motion: reduce) {
-    .t-toggle-thumb { animation: none !important; }
+    .t-toggle-thumb { transition: none !important; }
 }
 
 /* ── Tabs sliding (transitions.dev 16) ────────────────────────────────

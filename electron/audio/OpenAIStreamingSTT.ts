@@ -14,6 +14,7 @@
 
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { safeDetachAndClose } from './wsSafeTeardown';
 import axios from 'axios';
 import FormData from 'form-data';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
@@ -400,8 +401,11 @@ export class OpenAIStreamingSTT extends EventEmitter {
         this.connectionTimeoutTimer = setTimeout(() => {
             console.warn(`[OpenAIStreaming] WebSocket connection timed out after 10s (attempt=${this.reconnectAttempts + 1})`);
             if (this.ws) {
-                this.ws.removeAllListeners();
-                this.ws.close();
+                // safeDetachAndClose (F-201): the socket is CONNECTING here by
+                // construction (this timer is cleared in 'open'), and a bare
+                // strip-then-close turns ws's abort error into an
+                // uncaughtException → irreversible emergencyCloseDatabase.
+                safeDetachAndClose(this.ws);
                 this.ws = null;
                 this.isConnecting = false;
                 this._handleWsClose(1006, Buffer.from('Connection Timeout'));
@@ -425,8 +429,10 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 // isConnecting — _handleWsClose will also clear it, but the
                 // symmetry guards against a refactor that breaks one path.
                 if (this.ws) {
-                    this.ws.removeAllListeners();
-                    this.ws.close();
+                    // safeDetachAndClose (F-201): socket is OPEN here, but a
+                    // socket error during the close handshake would also
+                    // escape a listener-less emitter.
+                    safeDetachAndClose(this.ws);
                     this.ws = null;
                     this.isConnecting = false;
                     this._handleWsClose(1008, Buffer.from('Session Setup Timeout'));
@@ -763,8 +769,10 @@ export class OpenAIStreamingSTT extends EventEmitter {
                 console.warn('[OpenAIStreaming][WS] Graceful commit failed:', err);
             }
         }
-        this.ws.removeAllListeners();
-        this.ws.close();
+        // safeDetachAndClose (F-201): reachable mid-handshake from
+        // setRecognitionLanguage / setApiKey / stop() — a CONNECTING socket
+        // here would otherwise escalate the abort error to uncaughtException.
+        safeDetachAndClose(this.ws);
         this.ws = null;
         this.isSessionReady = false;
         this.isConnecting = false; // Allow immediate reconnect (e.g. language change)

@@ -1,0 +1,5 @@
+quarter,projected_arr_usd,assumed_mom_growth,paid_users,blended_cac_usd,gross_margin_pct,notes
+Q1 2026,480000,0.18,6200,42,78,Run rate exit number
+Q2 2026,820000,0.18,9800,48,78,Assumes paid acquisition channel ramps in May
+Q3 2026,1300000,0.18,14000,55,77,Assumes price tier change effective July 1
+Q4 2026,1800000,0.18,18500,62,77,Q4 2026 projected ARR $1.8M assumes 18% MoM growth holds

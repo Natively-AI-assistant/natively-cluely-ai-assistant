@@ -13,6 +13,13 @@ const SQLITE_VEC_VERSION = '0.1.7-alpha.2';
 const packages = [
   'sqlite-vec-darwin-arm64',
   'sqlite-vec-darwin-x64',
+  // Phase 5 (semantic-retrieval repair, 2026-08-13): Windows parity. The
+  // header's reasoning — npm skips optional deps whose "cpu"/"os" constraints
+  // don't match the build host — applies identically to a Windows artifact
+  // built or CI'd from macOS. Without this, such a build silently degrades to
+  // the O(n) JS cosine fallback (VectorStore logs "sqlite-vec not available")
+  // instead of native vec0 search.
+  'sqlite-vec-windows-x64',
 ];
 
 for (const pkg of packages) {

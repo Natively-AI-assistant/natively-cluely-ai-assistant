@@ -1166,6 +1166,13 @@ export class WindowHelper {
       }
 
       this.overlayWindow.on('close', (e) => {
+        // During app quit this close comes from Electron's CloseAllWindows
+        // sweep (before-quit has already run the destructive teardown).
+        // Preventing it would CANCEL the quit and leave a windowless,
+        // post-teardown process alive on macOS — so let it proceed.
+        if (this.appState.isQuitting()) {
+          return;
+        }
         if (this.overlayWindow?.isVisible()) {
           e.preventDefault();
           if (this.appState.getIsMeetingActive()) {

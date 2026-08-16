@@ -28,21 +28,57 @@ const REQUIRED_MARKDOWN_HEADINGS = CODING_SECTIONS.map(section => `## ${section}
 const sectionHeader = (label: string): RegExp =>
   new RegExp(`^\\s*#{0,3}\\s*(?:\\*\\*)?\\s*(?:${label})\\s*(?:\\*\\*)?\\s*(?::|[-–—])?\\s*$`, 'im');
 
-const SECTION_ALIASES: Record<string, RegExp[]> = {
-  Approach: [sectionHeader('Approach')],
-  'Technique / Data Structure / Algorithm Used': [
-    sectionHeader('Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used'),
-  ],
-  Code: [sectionHeader('Code')],
-  'Dry Run': [sectionHeader('Dry Run')],
-  Complexity: [sectionHeader('Complexity')],
-  'Interviewer Follow-up Points': [
-    sectionHeader('Interviewer Follow-up Points|Follow-up Points|Follow-ups'),
-  ],
+// The SAME label alternations as `sectionHeader`, but requiring a real markdown
+// heading (`#`..`###`) and refusing the bold form. Kept beside the aliases so
+// the two cannot drift apart.
+const markdownSectionHeader = (label: string): RegExp =>
+  new RegExp(`^\\s*#{1,3}\\s+(?:${label})\\s*(?::|[-–—])?\\s*$`, 'im');
+
+const SECTION_LABELS: Record<string, string> = {
+  Approach: 'Approach',
+  'Technique / Data Structure / Algorithm Used':
+    'Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used',
+  Code: 'Code',
+  'Dry Run': 'Dry Run',
+  Complexity: 'Complexity',
+  'Interviewer Follow-up Points': 'Interviewer Follow-up Points|Follow-up Points|Follow-ups',
 };
+
+const SECTION_ALIASES: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(SECTION_LABELS).map(([section, label]) => [section, [sectionHeader(label)]]),
+);
+
+const SECTION_MARKDOWN_HEADERS: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(SECTION_LABELS).map(([section, label]) => [section, [markdownSectionHeader(label)]]),
+);
 
 const hasSection = (answer: string, section: string): boolean =>
   SECTION_ALIASES[section]?.some(pattern => pattern.test(answer)) ?? false;
+
+// Strips CLOSED fences, then any UNTERMINATED trailing fence.
+//
+// Code-review 2026-08-13: the non-greedy `[\s\S]*?` needs a closing ``` to
+// match, so an answer cut off inside its code block kept the whole block. That
+// is not an edge case on this branch — MAX_STREAM_OUTPUT_CHARS (client) and
+// AI_STREAM_MAX_OUTPUT_TOKENS (server) both cut mid-token, and a coding answer
+// is usually inside a fence at that point. Every caller here treats the result
+// as PROSE (complexity extraction, canonical-heading detection), so leaking
+// code into it published a Big-O from a discarded approach — "# brute force is
+// O(n^2), too slow" — as the shipped answer's official Complexity section.
+const stripFencedCode = (answer: string): string =>
+  answer.replace(/```[\s\S]*?```/g, ' ').replace(/```[\s\S]*$/, ' ');
+// "Did the model start OUR canonical scaffold?" — a canonical section LABEL
+// written as a real markdown heading. Both halves must hold on the SAME
+// heading, which is what the previous two-term conjunction (any canonical label
+// anywhere, in any style) AND (any `##` heading anywhere) could not express:
+// a model writing `## Solution` in its own words plus a bold `**Complexity**`
+// satisfied both terms separately and was fed back into the lossy repair.
+const usesCanonicalSectionHeadings = (answer: string): boolean => {
+  const prose = stripFencedCode(answer);
+  return CODING_SECTIONS.some(section =>
+    SECTION_MARKDOWN_HEADERS[section]?.some(pattern => pattern.test(prose)) ?? false,
+  );
+};
 
 const hasCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]*\n[\s\S]+?```/.test(answer);
 const hasLanguageTaggedCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]+\n[\s\S]+?```/.test(answer);
@@ -178,7 +214,35 @@ const extractFirstCodeBlock = (answer: string): { language: string; code: string
   };
 };
 
-const stripCodeBlock = (answer: string, block?: string): string => block ? answer.replace(block, '').trim() : answer.trim();
+/**
+ * Remove the extracted code block from prose that will be re-emitted as the
+ * Approach section (the code lives in its own `## Code` section).
+ *
+ * Also drops the model's own lead-in heading when the block was its ONLY
+ * content. Live regression (2026-08-11): the model wrote
+ *
+ *     **Python implementation:**
+ *
+ *     ```python … ```
+ *
+ * and removing just the fence left "**Python implementation:**" followed by
+ * nothing — the user watched code appear under that heading and then vanish
+ * from it. A label whose entire body was lifted out belongs with the code, not
+ * stranded above an empty gap. Only a short bold/heading line immediately above
+ * the block is taken, and only when nothing else separates it from the fence,
+ * so ordinary prose is never removed.
+ */
+const CODE_LEAD_IN_RE = /(?:^|\n)[ \t]*(?:\*\*[^\n*]{0,60}?:?\*\*|#{1,6}[ \t][^\n]{0,60}?)[ \t]*:?[ \t]*\n(?:[ \t]*\n)*$/;
+
+const stripCodeBlock = (answer: string, block?: string): string => {
+  if (!block) return answer.trim();
+  const at = answer.indexOf(block);
+  if (at < 0) return answer.replace(block, '').trim();
+  const before = answer.slice(0, at);
+  const after = answer.slice(at + block.length);
+  const trimmedBefore = CODE_LEAD_IN_RE.test(before) ? before.replace(CODE_LEAD_IN_RE, '\n') : before;
+  return `${trimmedBefore}${after}`.replace(/\n{3,}/g, '\n\n').trim();
+};
 
 const inferLanguage = (answer: string, explicit?: string): string => {
   if (explicit && explicit.trim()) return explicit.trim();
@@ -373,8 +437,23 @@ export const repairCodingMarkdown = (rawResponse: string, question?: string, lan
   // if there's no complexity section AND no extractable bound do we use the
   // honest O(?) placeholder.
   const complexitySection = (parsed.sections.complexity || '').trim();
+  // Live regression (2026-08-10, real natively-api answer): the model stated
+  // "runs in O(n) time and O(1) space" in prose that sat AFTER its own bold
+  // heading, so it landed in a parsed section rather than the preamble — and
+  // scanning only the preamble missed it, overwriting a correct bound with the
+  // O(?) placeholder. Search the preamble first (most common position), then
+  // the rest of the model's own text, before ever falling back to the marker.
+  // Never fabricate a bound; only lift one the model actually wrote.
+  // Code-review 2026-08-12: the last fallback scanned `trimmed` — the whole
+  // answer, fences included — so an answer whose only Big-O sat in a comment
+  // about a DISCARDED approach ("# brute force is O(n^2), too slow") had that
+  // bound lifted out of the fence and published as the shipped code's official
+  // Complexity section. The validation gate strips fences for exactly this
+  // reason (see `proseOnly` in validateCodingMarkdown); the repairer, which
+  // actually writes the user-visible line, must do the same.
   const complexity = complexitySection
-    || extractComplexityText(parsed.preamble) // bound stated inline in prose
+    || extractComplexityText(parsed.preamble)          // bound stated inline in prose
+    || extractComplexityText(stripFencedCode(trimmed)) // bound stated anywhere else in PROSE
     || MISSING_COMPLEXITY_MARKER;
 
   // Follow-ups: parsed section (as lines) or the standard two prompts.
@@ -415,12 +494,77 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
     && !startsWithCode
     && !leaksContext;
 
+  // SUBSTANTIVELY COMPLETE ANSWERS ARE NOT REWRITTEN (live regression,
+  // 2026-08-10). Reproduced against the real natively-api backend on a healthy
+  // ~1.7s answer — no deadline, nothing malformed: the model simply wrote a
+  // correct, complete solution in its OWN format (bold pseudo-headings) instead
+  // of the six `##` headings. The reformat then LOST content — it dropped the
+  // second fenced block and replaced the model's own "O(n) time and O(1) space"
+  // with the O(?) placeholder. 2 of 3 live coding answers hit this.
+  //
+  // An answer that carries working code AND a stated complexity has everything
+  // the contract exists to guarantee; only its heading style differs. Rewriting
+  // it can lose real content and can only ever gain cosmetics, so the trade is
+  // strictly negative. The repair still runs where it genuinely helps — a
+  // missing code block, a missing bound, or leaked context — which is the case
+  // it was built for.
+  // `hasComplexity` requires the LABELLED form ("Time Complexity: O(n)"). The
+  // live answer stated its bound as natural prose — "runs in O(n) time and O(1)
+  // space" — which is a real, user-visible complexity statement that the label
+  // check rejects. `extractComplexityText` is the existing parser for exactly
+  // that phrasing, so completeness is judged on "did the model state a bound in
+  // any form", not "did it use our heading style".
+  // Code-review 2026-08-12: extractComplexityText is fence-blind, so a code
+  // COMMENT ("# brute force is O(n^2), too slow") satisfied this check and
+  // suppressed the repair for an answer that never stated a bound TO THE USER.
+  // Strip fenced blocks before asking whether the model stated its complexity.
+  const proseOnly = stripFencedCode(answer);
+  const statesComplexity = complexity || Boolean(extractComplexityText(proseOnly));
+  // Narrow exemption: it applies only when the model used its OWN format and
+  // wrote everything. An answer that already uses the canonical `##` headings
+  // but puts them in the WRONG ORDER is a different case — re-ordering known
+  // sections is lossless (every section is parsed and re-emitted verbatim), and
+  // leading with a bare code block is a real presentation problem worth fixing.
+  // So an answer that has recognized canonical sections still gets repaired;
+  // only a model-formatted, complete answer is left alone.
+  // Code-review 2026-08-12: this was `missingSections.length === 0`, i.e. true
+  // only when ALL SIX canonical sections exist. An answer that started the
+  // canonical scaffold and dropped out partway (say Approach + Code +
+  // Complexity, no Dry Run / Technique / Follow-ups) therefore counted as
+  // "not canonical" and was wrongly treated as model-formatted-and-complete —
+  // exempting exactly the half-finished answers the contract exists to repair.
+  // ANY canonical heading means the model was using our format, so the
+  // exemption (which is only for a model using its OWN format) must not apply.
+  //
+  // Code-review 2026-08-12 (round 2): `missingSections` alone cannot express
+  // that, because `sectionHeader` deliberately matches a bold `**Approach**`
+  // too — so the widened test caught the model's OWN format and fed complete
+  // bold-heading answers back into the lossy repair, re-opening the 2026-08-10
+  // regression this exemption exists to close. Both halves are required: the
+  // answer must carry a real `##` markdown heading AND at least one heading we
+  // recognize as canonical.
+  //
+  // Code-review 2026-08-13: expressing that as two INDEPENDENT terms still
+  // failed, because they could be satisfied by two DIFFERENT lines. Verified:
+  // `## Solution` + `**Complexity**` on its own line makes term 1 true (via the
+  // bold form) and term 2 true (via `## Solution`), so a complete, correctly
+  // formatted answer was sent to `repairCodingMarkdown`, which keeps only the
+  // FIRST fenced block and dropped the user's second code block. Both halves
+  // must hold on the SAME heading — that is `usesCanonicalSectionHeadings`.
+  const usesCanonicalHeadings = usesCanonicalSectionHeadings(answer);
+  const substantivelyComplete = codeBlock
+    && hasTaggedBlock
+    && statesComplexity
+    && !startsWithCode
+    && !leaksContext
+    && !usesCanonicalHeadings;
+
   return {
     ok,
     missingSections,
     hasCodeBlock: codeBlock,
     hasComplexity: complexity,
-    repaired: ok ? undefined : repairCodingMarkdown(answer),
+    repaired: (ok || substantivelyComplete) ? undefined : repairCodingMarkdown(answer),
   };
 };
 

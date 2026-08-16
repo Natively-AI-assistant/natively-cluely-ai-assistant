@@ -14,21 +14,24 @@ import {
 import { useToggleInit } from './settings/useToggleInit';
 
 /**
- * The quick-settings popup's compact 30x18 switch.
- *
- * Same `.t-toggle` contract as the main settings panels, on the `sm` size
- * variant (12px travel, 15px knob). Two things are deliberately local:
+ * The quick-settings popup's switch (`sm` variant: the shared .t-toggle
+ * rule's literal 88x40/52x32 reference shape at `zoom: 0.45` — a 39.6x18
+ * track, matching the original 18px row height). Same shared `.t-toggle`
+ * contract as the main settings panels — colors, curves, and press
+ * character match every other toggle in the app exactly, by construction
+ * (same design, smaller zoom). Two things are deliberately local:
  *
  *  - The knob is theme-INVERTED here (black on dark, white on light), which is
- *    the opposite of the shared `.t-toggle-thumb` white default. A Tailwind
+ *    the opposite of the shared `.t-toggle-thumb` tinted default. A Tailwind
  *    class alone CANNOT do this: the shared rule sits after `@tailwind
  *    utilities` in index.css, so at equal specificity it beats `bg-black`.
  *    Hence `t-toggle-thumb-custom`, which clears the shared fill so
  *    `knobClassName` takes effect.
- *  - `active:scale-[0.92]` press feedback, which the larger switches don't have.
+ *  - `active:scale-[0.92]` press feedback on the whole button, layered on top
+ *    of (not replacing) the shared thumb's own press-squish.
  *
- * One `useToggleInit()` per instance — a flag shared across switches makes every
- * OFF switch in the panel play the off-bounce the moment any one is touched.
+ * `useToggleInit()` is currently inert — see useToggleInit's docstring; the
+ * CSS bounce it used to arm was replaced by a plain transition.
  */
 const PopupToggle: React.FC<{
     checked: boolean;

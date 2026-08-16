@@ -35,13 +35,13 @@ Resolution follows the requested precedence for each label:
 
 | Label | Current resolved ID | Source |
 | --- | --- | --- |
-| Gemini 3.6 Flash | `gemini-3.6-flash` | repository |
+| Gemini 3.7 Flash | `gemini-3.7-flash` | repository |
 | Gemini 3.1 Flash-Lite | `gemini-3.1-flash-lite` | repository |
 | Gemini 3.5 Flash-Lite | `gemini-3.5-flash-lite` | benchmark config |
 
 Environment names:
 
-- `NATIVELY_BENCHMARK_GEMINI_36_FLASH_MODEL`
+- `NATIVELY_BENCHMARK_GEMINI_37_FLASH_MODEL`
 - `NATIVELY_BENCHMARK_GEMINI_31_FLASH_LITE_MODEL`
 - `NATIVELY_BENCHMARK_GEMINI_35_FLASH_LITE_MODEL`
 
@@ -62,7 +62,7 @@ Build and run:
 ```bash
 npm run benchmark:vision -- \
   --image "/absolute/path/to/screenshot.png" \
-  --models "gemini-3.6-flash,gemini-3.1-flash-lite,gemini-3.5-flash-lite" \
+  --models "gemini-3.7-flash,gemini-3.1-flash-lite,gemini-3.5-flash-lite" \
   --mode technical-interview \
   --question "Read the visible problem and give the exact answer I should say aloud." \
   --runs 10 \

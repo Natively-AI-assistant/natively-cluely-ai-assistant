@@ -10,6 +10,30 @@
 
 import type { Ctx, StageConfig, ToasterId } from './orchestrator';
 
+/**
+ * Engagement policy for the review prompt, mirrored from the review ledger
+ * (electron/services/ReviewPromptLogic.ts, and its backend twin in
+ * natively-api/reviews.js). Restated here because this module is renderer-side
+ * and cannot import from electron/ — the ReviewPromptLogic header already
+ * documents that this trio must be kept in sync.
+ *
+ * WHY THIS IS A PREDICATE AND NOT `triggers`. The ledger's rule is
+ * "N sessions OR M minutes" — either one qualifies. The orchestrator ANDs every
+ * trigger it is given, so expressing this as requiresStartupCount +
+ * requiresTotalUsageMs silently changed the policy to "N sessions AND M
+ * minutes", a strictly harder gate. That is what shipped: the catalog demanded
+ * 6 startups AND 45 minutes while the ledger asked for 3 OR 30, so the ledger's
+ * thresholds were dead in production and tuning them moved nothing.
+ */
+export const REVIEW_PROMPT_MIN_SESSIONS = 3;
+export const REVIEW_PROMPT_MIN_USAGE_MS = 30 * 60 * 1000;
+
+/** True once the user is engaged enough to be asked — sessions OR usage. */
+export function reviewEngagementMet(ctx: Ctx): boolean {
+  return ctx.startupCount >= REVIEW_PROMPT_MIN_SESSIONS
+    || ctx.totalUsageMs >= REVIEW_PROMPT_MIN_USAGE_MS;
+}
+
 export const STAGE_ORDER: ToasterId[] = [
   'permissions',
   'browser_extension',
@@ -172,9 +196,10 @@ export const STAGES: StageConfig[] = [
       requiresHomepageDuration: 10_000,
       requiresForeground: true,
       requiresMeetingInactive: true,
-      requiresStartupCount: 6,
-      requiresTotalUsageMs: 45 * 60 * 1000, // 45 minutes
+      // Engagement is NOT expressed here: `triggers` are ANDed, and the policy
+      // is "sessions OR usage". See reviewEngagementMet above.
     },
+    customPredicate: reviewEngagementMet,
     requiresStages: ['ads'],
     cooldownMs: () => 90 * 24 * 60 * 60 * 1000, // 90 days
   },

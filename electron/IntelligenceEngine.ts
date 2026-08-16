@@ -56,6 +56,12 @@ import { isIntelligenceFlagEnabled } from './intelligence/intelligenceFlags';
 import { applyAnswerContract } from './intelligence/OutputShapeNormalizer';
 import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
+// Type-only (fully erased at runtime, adds no require()). `getKnowledgeOrchestrator()`
+// is declared `: any`, so the orchestrator's real result type is invisible here and
+// tsc collapsed the grounding result to `{}`. Naming it restores genuine checking on
+// the seven property reads below instead of masking them with a cast.
+// Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
+import type { PromptAssemblyResult } from '../premium/electron/knowledge/ContextAssembler';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
@@ -68,7 +74,13 @@ export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' |
  * time. Used to cap profile grounding on the latency-critical WTA path so a
  * slow `processQuestion` can never stall first-token (REPORT §21, hypothesis L2).
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<{ value: T; timedOut: boolean }> {
+// `F` is separate from `T` on purpose: a timeout fallback is generally NOT the
+// same type as the resolved value (here it is `null` standing in for "no
+// knowledge"). Sharing one parameter made inference collapse T onto the
+// fallback's type, so callers saw `null` — and after a truthiness check,
+// `never`. Type-level only; no runtime change. `F = T` keeps existing callers
+// that do pass a same-typed fallback inferring exactly as before.
+function withTimeout<T, F = T>(promise: Promise<T>, ms: number, fallback: F): Promise<{ value: T | F; timedOut: boolean }> {
     return new Promise((resolve) => {
         let settled = false;
         const timer = setTimeout(() => {
@@ -905,6 +917,25 @@ export class IntelligenceEngine extends EventEmitter {
         // every live token (#3) so the renderer can drop stale-generation batches.
         const snapshotModeInfo = this.getActiveModeInfo();
         const documentGroundedCustomModeActive = snapshotModeInfo?.documentGroundedCustomModeActive === true;
+        // Defect C split (2026-08-01): STRICT knowledge suppression vs broad
+        // source isolation. Strictness consumers below (skip-legacy-retrieval,
+        // forceDocumentGrounding, the generic-knowledge bypass gate, and the
+        // doc-grounded govern site) read THIS; isolation consumers keep the
+        // broad flag. WTA was never migrated when manual chat was
+        // (LLMHelper:5448) — the root asymmetry behind the 2026-08-11 reports.
+        const strictDocumentGroundedActive = (snapshotModeInfo as any)?.strictDocumentGroundedActive === true;
+        // Review follow-up R1 (2026-08-12): the strict-only migration
+        // over-corrected for modes that HAVE files. A template-seeded mode
+        // (origin default_new_mode => strict=false even with files) that a
+        // user uploaded a document into was losing forced doc retrieval AND
+        // the post-stream zero-fabrication validator, while manual chat kept
+        // both via its broad-flag gate (ipcHandlers ~4056). Enforcement is
+        // honest exactly when the bounded universe EXISTS: an explicit strict
+        // contract, or any doc-grounded mode with at least one real file —
+        // the same line packGovernsGeneration draws.
+        const docGroundedEnforcementActive = strictDocumentGroundedActive
+            || (snapshotModeInfo?.documentGroundedCustomModeActive === true
+                && Boolean((snapshotModeInfo as any)?.hasReferenceFiles));
         const snapshotModeId = this.getActiveModeId();
         // The narrow ActiveModeInfo snapshot is enough for planning, but a
         // multi-family typed reference pack also needs the full mode row and its
@@ -1123,7 +1154,7 @@ export class IntelligenceEngine extends EventEmitter {
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || documentGroundedCustomModeActive
+            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive
                 ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
                 : (async () => {
                     try {
@@ -1145,7 +1176,7 @@ export class IntelligenceEngine extends EventEmitter {
                             } catch { /* flag module unavailable → no rerank */ }
                             return await mm.buildRetrievedActiveModeContextBlockHybrid(
                                 preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo?.id, allowRerank,
-                                documentGroundedCustomModeActive ? { forceDocumentGrounding: true } : undefined,
+                                docGroundedEnforcementActive ? { forceDocumentGrounding: true } : undefined,
                             );
                         }
                         return '';
@@ -1497,8 +1528,17 @@ export class IntelligenceEngine extends EventEmitter {
             // its own gated channel. Fully dynamic; resume-derived.
             let candidateProfile = '';
             try {
-                const orchestrator = this.llmHelper.getKnowledgeOrchestrator?.();
-                if (orchestrator?.isKnowledgeMode?.() && !documentGroundedCustomModeActive
+                // Typed HERE, at the declaration, rather than as a type argument on the
+                // withTimeout(...) call below. getKnowledgeOrchestrator() is declared
+                // `: any`, which made inference collapse the grounding result to `{}`.
+                // Annotating the call site would have worked too, but
+                // WtaParallelPrestream.test.mjs asserts on the literal source text
+                // `await withTimeout(orchestrator.processQuestion(` — so the fix belongs
+                // on the binding, leaving every call site spelled exactly as before.
+                const orchestrator: (Record<string, any> & {
+                    processQuestion(question: string): Promise<PromptAssemblyResult | null>;
+                }) | undefined = this.llmHelper.getKnowledgeOrchestrator?.();
+                if (orchestrator?.isKnowledgeMode?.() && !strictDocumentGroundedActive
                     && wtaDecisionAllowsCandidateProfile) {
                     const extracted = extractedQuestion;
                     // Only ground question types that resolve to the candidate's
@@ -1704,8 +1744,14 @@ export class IntelligenceEngine extends EventEmitter {
                 // already fixed once (also originally `const`, causing an
                 // identical silent-catch failure) — applying the same `var`
                 // fix (function-scoped, survives past this try block) here.
-                var _wtaHasProfile = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
-                var _wtaHasJd = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
+                // Explicit `| undefined`: these are `var`s read from a later, more
+                // deeply nested block that may execute without this line having run
+                // (the readers already wrap the access in try/catch for exactly that
+                // reason). Hoisted `var` yields `undefined` there, not a TDZ throw,
+                // and every consumer treats it as falsy — so this annotation states
+                // the existing runtime contract. Type-level only; no runtime change.
+                var _wtaHasProfile: boolean | undefined = Boolean((_wtaOrchForAvail as any)?.activeResume?.structured_data);
+                var _wtaHasJd: boolean | undefined = Boolean((_wtaOrchForAvail as any)?.activeJD?.structured_data);
                 // Campaign-3 (2026-07-19): declared with `var` so the reference survives the
                 // try/catch scope (my JIT block at line ~1635 consults _wtaPlan.answerType
                 // to widen the manual-evidence gate to jd_summary / jd_fact / etc. — the
@@ -1886,8 +1932,11 @@ export class IntelligenceEngine extends EventEmitter {
                     // suffix-renaming issue when inner try-block vars are
                     // referenced from a different inner-block than their
                     // declaration. Same data, fresh computation, no scope-leak.
-                    const _c3HasProfile = (() => { try { return _wtaHasProfile; } catch { return false; } })();
-                    const _c3HasJd = (() => { try { return _wtaHasJd; } catch { return false; } })();
+                    // `?? false` mirrors the `catch { return false }` fallback: an
+                    // unrun declaration leaves the hoisted `var` undefined, and every
+                    // consumer already treats that as "not available".
+                    const _c3HasProfile = (() => { try { return _wtaHasProfile ?? false; } catch { return false; } })();
+                    const _c3HasJd = (() => { try { return _wtaHasJd ?? false; } catch { return false; } })();
                     const _c3HasRefFiles = (() => { try { return Boolean((snapshotModeInfo as any)?.hasReferenceFiles); } catch { return false; } })();
                     // Grounding-campaign2 fix (2026-07-20): was `let` — block-
                     // scoped to this try block — but the SourceBadge emit site
@@ -1927,13 +1976,13 @@ export class IntelligenceEngine extends EventEmitter {
                     if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({
-                            question: extractedQuestion.latestQuestion || lastInterviewerTurn,
+                            question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
                             profile: resume, jobDescription: jd, source: 'what_to_answer',
                             answerType: jitAnswerType,
                         });
                         if (evidence) {
                             const jit = buildProfileJitPrompt({
-                                question: extractedQuestion.latestQuestion || lastInterviewerTurn,
+                                question: extractedQuestion.latestQuestion || lastInterviewerTurn || '',
                                 answerType: evidence.answerType,
                                 answerShape: evidence.answerShape,
                                 sourceOwner: evidence.sourceOwner,
@@ -2286,11 +2335,30 @@ export class IntelligenceEngine extends EventEmitter {
                         // (`forbiddenFamilies=[]`) and a JD-only decision can
                         // leak résumé content through the rendered pack.
                         turnSourceDecision: canonicalTurn.turnSourceDecision,
-                        govern: true,
+                        // A refusal pack only GOVERNS when the mode's authority
+                        // promises a bounded universe (evidenceRequired
+                        // authorities). profile_only/general_mixed turns whose
+                        // retrieval came back empty fall through to the legacy
+                        // path so the model answers — live report 2026-08-11:
+                        // a WTA screenshot turn in a looking-for-work mode was
+                        // governed into "not directly mentioned in the
+                        // uploaded material" with zero files and an empty
+                        // question, while the same screenshot answered fine on
+                        // manual-chat. packGovernsGeneration is the tested
+                        // predicate for that line.
+                        govern: contextOsStatic.packGovernsGeneration({
+                            answerPolicy: coordinatorResult.pack.answerPolicy,
+                            sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                            hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                        }),
                     };
                     // The typed pack is now the sole factual injection. Do not also
                     // pass the JIT's raw profile XML into WhatToAnswerLLM.
-                    candidateProfile = '';
+                    // ONLY when the pack actually governs: an ungoverned turn
+                    // (refusal pack in a non-bounded mode, 2026-08-11) runs the
+                    // legacy path, and stripping its profile XML here would
+                    // change legacy behaviour as a side effect of the fix.
+                    if (wtaContextOsGeneration.govern) candidateProfile = '';
                     wtaTrace.noteContext({
                         source: 'context_os_turn_evidence_coordinator',
                         trustLevel: 'high',
@@ -2318,7 +2386,22 @@ export class IntelligenceEngine extends EventEmitter {
             if (wtaTurnContract
                 && wtaTurnContract.sourceOwner === 'clarify'
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
-                && !isSpeculative) {
+                && !isSpeculative
+                // Visual turns bypass clarification — the manual-chat twin has
+                // had this since its escape hatches; WTA never did (2026-08-11:
+                // a screenshot turn with an EMPTY question was asked "which
+                // source do you mean"). R4 (2026-08-12): images were only one of
+                // WTA's THREE visual channels — screen-OCR and DOM context took
+                // the same dead-end — so the bypass now uses the engine's own
+                // visual-context predicate rather than re-deriving a subset.
+                && !_wtaHasVisualContext
+                // And a clarify born of a reference-bound mode with ZERO files
+                // is not actionable — there is no universe to disambiguate
+                // into. See clarificationIsActionable (refusalPolicy.ts).
+                && contextOsStatic.clarificationIsActionable({
+                    sourceAuthority: canonicalTurn.sourceAuthority ?? null,
+                    hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
+                })) {
                 try {
                     const { buildSourceClarification, buildContextOsTrace, logContextOsTrace } = contextOsStatic;
                     // Evidence-execution-repair (2026-07-12): prefer the legacy,
@@ -2347,7 +2430,15 @@ export class IntelligenceEngine extends EventEmitter {
                     if (isIntelligenceFlagEnabled('trace')) {
                         logContextOsTrace(buildContextOsTrace({
                             contract: wtaTurnContract,
-                            sourceAuthority: wtaTurnContract.reason,
+                            // R7 (2026-08-12, review finding): this stored
+                            // contract.reason — a diagnostic SENTENCE — as the
+                            // sourceAuthority, corrupting the trace field. Same
+                            // reason-vs-surface class as the 2026-08-11 fix.
+                            // Merge seam (2026-08-15): 'legacy' fallback, not
+                            // null — buildContextOsTrace types the field as
+                            // string, and 'legacy' is main's own convention at
+                            // the equivalent governed-turn sites.
+                            sourceAuthority: canonicalTurn.sourceAuthority ?? 'legacy',
                             question: String(extractedQuestion.latestQuestion || question || ''),
                             usedSources: [],
                             finalAction: 'clarify',
@@ -2421,7 +2512,15 @@ export class IntelligenceEngine extends EventEmitter {
             // block (no double retrieval) and governs the factual prompt.
             if (!wtaContextOsGeneration
                 && wtaTurnContract
-                && documentGroundedCustomModeActive
+                && docGroundedEnforcementActive
+                // Live proof 2026-08-11: documentGroundedCustomModeActive can be
+                // TRUE with hasReferenceFiles FALSE (custom mode, contract seeded
+                // reference_files_primary, zero files). Governing that turn
+                // builds an empty pack whose answerPolicy is ask_clarification,
+                // and the surface then yielded contract.reason — the raw
+                // developer diagnostic — to the user. A doc-grounded govern
+                // with no documents governs nothing: require the files.
+                && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
                 && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
                 wtaContextOsGeneration = {
                     contract: wtaTurnContract,
@@ -2430,7 +2529,12 @@ export class IntelligenceEngine extends EventEmitter {
                     modeSnapshot: {
                         modeId: snapshotModeId ?? null,
                         modeName: snapshotModeInfo?.name ?? null,
-                        sourceAuthority: wtaTurnContract.reason,
+                        // R7 (2026-08-12): was contract.reason — a diagnostic
+                        // sentence — which then flowed into every benchmark
+                        // audit row for site-2-governed turns. Merge seam
+                        // (2026-08-15): 'legacy', not null — the snapshot field
+                        // is string-typed and 'legacy' is the convention.
+                        sourceAuthority: canonicalTurn.sourceAuthority ?? 'legacy',
                     },
                     turnSourceDecision: canonicalTurn.turnSourceDecision,
                     govern: true,
@@ -2492,6 +2596,40 @@ export class IntelligenceEngine extends EventEmitter {
                         // though the answer was said out loud a minute ago.
                         conversationSummary: _ctx.conversationWindow(90),
                         retrieval: _ctx.port as any,
+                        // Hand the bridge THIS turn's routed verdict rather than
+                        // letting it re-derive one from keywords — see
+                        // BridgeInput.codingTask. AnswerPlanner already
+                        // classified the turn; a keyword list disagreeing with it
+                        // silently drops the coding contract.
+                        codingTask: isCodingAnswerType(answerPlan.answerType),
+                        // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
+                        // `_v3.system` REPLACES the v2 base prompt below
+                        // (WhatToAnswerLLM.ts:813), and the V3 composer has no coding
+                        // contract of its own — so a V3-owned coding turn lost the six
+                        // mandatory headings entirely. Measured live: the model emitted
+                        // ZERO `##` headings and opened with a raw ```python fence, so
+                        // it wrote no Complexity and no Dry Run, and the downstream
+                        // repair painted "O(?) — state the actual time bound" into the
+                        // sections the model was never asked for. The model never
+                        // disobeyed the contract; it never received it.
+                        //
+                        // This is the hook the bridge already exposes for exactly this
+                        // (BridgeInput.personaBase), and it mirrors the manual-chat call
+                        // site in ipcHandlers. Resolved through resolveV2SystemPrompt so
+                        // the contract text has ONE source and cannot drift. Param
+                        // annotated inline because buildV3Prompt arrives via a lazy
+                        // require (any), so the literal gets no contextual type.
+                        personaBase: ({ codingTask }: { codingTask: boolean }) => {
+                            try {
+                                const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                return resolveV2SystemPrompt({
+                                    action: 'answer',
+                                    tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
+                                    activeMode: snapshotModeInfo ?? undefined,
+                                    codingTask,
+                                });
+                            } catch { return null; } // no persona ⇒ composition unchanged
+                        },
                     });
                     if (_v3) {
                         wtaTrace.lifecycle('planned', {
@@ -2543,7 +2681,14 @@ export class IntelligenceEngine extends EventEmitter {
             }).lifecycle('provider_dispatched', {
                 providerAttempts: 1,
             });
-            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal);
+            // Code review 2026-08-12: the truncation fix (9b78621b) wired manual
+            // chat only — while the live capture that motivated it was a
+            // what_to_answer turn. A WTA answer cut short by a post-commit
+            // provider failure or the runaway cap was still written to the
+            // session transcript and usage, and fed to the NEXT turn as
+            // prior_assistant_responses evidence.
+            const wtaTruncation = { truncated: false };
+            const stream = this.whatToAnswerLLM.generateStream(preparedTranscript, temporalContext, intentResult, imagePaths, screenContext, options?.promptInstruction, options?.activeSkill, options?.domContext, candidateProfile || undefined, answerPlan, modeContextPromise, requestSnapshot, whatToAnswerCancellationToken.signal, wtaTruncation);
             let streamAborted = false;
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
@@ -2648,6 +2793,17 @@ export class IntelligenceEngine extends EventEmitter {
             // Full-JIT policy forbids deterministic profile fallback here; ship a
             // transparent non-authoritative line instead of guessing from cached/AOT prose.
             let wtaWriteDecision = decideSessionWritePolicy({ finalGenerationMode: 'jit_llm', validationOk: true, sourceContractHonored: true });
+            // An INCOMPLETE answer must not become session history. It would be
+            // replayed to the next turn as prior_assistant_responses evidence
+            // and stand in for a complete answer that was never produced. The
+            // user still SEES the partial text; it just is not stored.
+            if (wtaTruncation.truncated) {
+                wtaWriteDecision = decideSessionWritePolicy({
+                    finalGenerationMode: 'provider_error_no_answer',
+                    validationOk: false,
+                    criticalViolations: ['stream_truncated'],
+                });
+            }
             if (liveDeadlineFired && !emittedStreamingToken && !isSpeculative
                 && this.currentGenerationId === generationId) {
                 streamingTokenBuffer = '';
@@ -2850,7 +3006,26 @@ export class IntelligenceEngine extends EventEmitter {
             trace.mark('validation_started', { answerType: answerPlan.answerType });
             wtaTrace.lifecycle('validating', { answerType: answerPlan.answerType });
             const structureValidation = validateAnswerStructure(answerPlan.answerType, fullAnswer);
-            if (!structureValidation.ok && structureValidation.repaired) {
+            // DEADLINE-TRUNCATED ANSWERS ARE NOT MALFORMED (user-reported
+            // 2026-08-09, reproduced): the coding scaffold repair below fabricates
+            // any section the model didn't write — a code block holding
+            // MISSING_CODE_MARKER, "O(?)" complexity, a generic dry-run. That is
+            // the right call for a model that ignored the contract, and the WRONG
+            // call for a stream the first-useful/stall deadline cut short: the
+            // model was still writing.
+            //
+            // It is user-visible because CodingStreamGate opens at 48 chars (or on
+            // the first heading), well below STREAMING_SAFE_PREFIX_CHARS (160), so
+            // a coding answer is ALREADY ON SCREEN while fullAnswer is short.
+            // Measured pre-fix: 68 visible chars of correct approach text replaced
+            // by 676 chars of mostly-fabricated scaffold. Keeping the honest
+            // partial is strictly better — the user keeps what they were reading,
+            // and nothing is invented on their behalf.
+            const structureRepairSuppressedByDeadline = liveDeadlineFired && emittedStreamingToken;
+            if (structureRepairSuppressedByDeadline && !structureValidation.ok) {
+                trace.mark('validation_completed', { reason: 'structure_repair_skipped_deadline_truncated' });
+            }
+            if (!structureRepairSuppressedByDeadline && !structureValidation.ok && structureValidation.repaired) {
                 console.warn('[IntelligenceEngine] Repaired answer structure', {
                     answerType: answerPlan.answerType,
                     missingSections: structureValidation.missingSections,
@@ -3095,7 +3270,20 @@ export class IntelligenceEngine extends EventEmitter {
             // retrieval window. Zero-fabrication remains sacred: repairs that add a
             // number+unit not present in the evidence are rejected.
             try {
-                if (!isCoding && documentGroundedCustomModeActive && this.currentGenerationId === generationId) {
+                // Review finding F1 (2026-08-12): the SEVENTH strictness
+                // consumer, missed by the layer-5 migration. On the broad flag
+                // this validator ran for template-seeded fileless modes, built
+                // an empty retrievedBlock, and OVERWROTE a correct streamed
+                // answer with "I could not find that in the retrieved sections
+                // of the document." — one typed question away from the fixed
+                // turn. Enforcement (strict OR broad-with-files, = the manual
+                // twin's gate) + files + doc-shaped answer are all required —
+                // R1 (2026-08-12): strict-only here dropped the
+                // zero-fabrication validator for seeded modes WITH files.
+                if (!isCoding && docGroundedEnforcementActive
+                    && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
+                    && isDocGroundedAnswerType(answerPlan.answerType)
+                    && this.currentGenerationId === generationId) {
                     const docQuestion = (answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
                     if (docQuestion) {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
@@ -3142,7 +3330,17 @@ export class IntelligenceEngine extends EventEmitter {
                         // runs on validation failure regardless of governance —
                         // that is a deliberate second attempt at repair, not a
                         // duplicate of the first-pass retrieval.
-                        const _governedPack = wtaContextOsGeneration?.evidencePack;
+                        // Code-review 2026-08-12: keyed on pack PRESENCE, but a
+                        // pack rides along even when it does NOT govern
+                        // (packGovernsGeneration false — the layer-1
+                        // fall-through). Such a pack has no items, so this
+                        // validator checked the answer against an EMPTY
+                        // evidence block for a turn the legacy retrieval path
+                        // actually answered, and refused it. Match
+                        // WhatToAnswerLLM's gate: govern, not presence.
+                        const _governedPack = wtaContextOsGeneration?.govern
+                            ? wtaContextOsGeneration.evidencePack
+                            : undefined;
                         let docContextBlock = (_governedPack && _governedPack.items.length > 0)
                             ? _governedPack.items.map((it) => `[Section: ${it.pointer?.section || it.sourceId}]\n${it.text}`).join('\n\n')
                             : await buildDocContext(false);
@@ -4851,7 +5049,16 @@ export class IntelligenceEngine extends EventEmitter {
                 // and the raw context blob are both bypassed.
                 answer = await this.answerLLM.generate(_v3.user, undefined, answerPlan, _v3.system);
             } else {
-                const context = activeModeInfo?.documentGroundedCustomModeActive === true || isCodingAnswerType(answerPlan.answerType)
+                // R5 (2026-08-12, review finding): the broad flag stripped the
+                // live transcript from this fallback for template-seeded modes
+                // that get NO doc-grounding benefit in exchange (the plan is not
+                // doc-shaped, no doc retrieval or validation runs) — a visibly
+                // context-blind answer. Strip only under real doc enforcement:
+                // an explicit strict contract, or a doc mode with actual files.
+                const _docEnforced = (activeModeInfo as any)?.strictDocumentGroundedActive === true
+                    || (activeModeInfo?.documentGroundedCustomModeActive === true
+                        && Boolean((activeModeInfo as any)?.hasReferenceFiles));
+                const context = _docEnforced || isCodingAnswerType(answerPlan.answerType)
                     ? undefined
                     : this.session.getFormattedContext(120);
                 answer = await this.answerLLM.generate(question, context, answerPlan);
