@@ -224,12 +224,23 @@ jobs:
       # fail the check. A Windows regression now shows up as a warning instead of
       # being invisible.
       #
-      # NOTE: the 139/2832 figure predates the runner fix (Electron ABI instead
-      # of plain node, #442) and is therefore stale — the first advisory run
-      # re-measures it.
+      # RE-MEASURED 2026-08-17 on main @ e701c809 (the first fully green run), by
+      # attributing each count to its own step in the Windows job log rather than
+      # trusting step conclusions — two of them carry continue-on-error, so their
+      # "success" proves nothing:
       #
-      # TODO: fix the Windows failures, then drop `continue-on-error` so the leg
-      # is enforcing on both platforms.
+      #     npm test              7540 tests,  41 fail   <- still advisory, below
+      #     test:intelligence      963 tests,   0 fail   <- now ENFORCING
+      #     test:lib               327 tests,   0 fail   <- already enforcing
+      #     test:scripts            20 tests,   0 fail   <- already enforcing
+      #
+      # So the old "139 of 2832 / 3 of 957" figures are superseded: the real
+      # Windows gap is 41 tests in ONE suite, and intelligence has closed
+      # completely. The TODO below is being worked off suite by suite as each
+      # goes green, which is what it asked for.
+      #
+      # TODO: fix the remaining 41 Windows failures in `npm test`, then drop its
+      # `continue-on-error` too and the leg is enforcing on both platforms.
       - name: Run Electron unit tests
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
@@ -247,9 +258,14 @@ jobs:
       # while the job is being cancelled, turning a cancel into a multi-minute
       # wait. The job still fails if any suite fails — this only stops one
       # failure from hiding the others' results.
+      # ENFORCING ON BOTH LEGS since 2026-08-17. This carried
+      # `continue-on-error: runner.os == 'Windows'` while Windows failed 3 of 957
+      # here; it now passes 963 of 963 on Windows (green on the two consecutive
+      # runs before this change landed), so the gate was muting a suite that no
+      # longer needs muting — and a muted step cannot report the regression it
+      # exists to catch.
       - name: Run intelligence unit tests
         if: ${{ !cancelled() }}
-        continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm run test:intelligence
 
       # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
