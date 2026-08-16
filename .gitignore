@@ -445,6 +445,15 @@ campaign3-log.md
 contextauthresearchdoc.md
 test/
 test-fixtures/
+# …except the two tiny documents SafeDocumentTextExtractor needs. The rest of
+# test-fixtures/ is a 46MB corpus regenerated with live MiniMax calls, which no
+# CI run can reproduce — so those two suites failed on every run for want of a
+# 3.7KB PDF and a 2.2KB DOCX. These are generated deterministically by
+# scripts/e2e/lib/docwriters.mjs (jsPDF + JSZip, no network, no model) and carry
+# only the marker names the tests assert on.
+!test-fixtures/profiles/p01/resume.pdf
+!test-fixtures/profiles/p03/resume.docx
+
 traces/
 traces2/
 traces3/
