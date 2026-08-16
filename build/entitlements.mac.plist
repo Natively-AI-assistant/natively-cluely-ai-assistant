@@ -34,6 +34,39 @@
     <true/>
 
     <!--
+      KEYCHAIN ACCESS GROUP — issue #322 forward-stability.
+
+      Electron safeStorage (Chromium OSCrypt) stores its key as a generic-password
+      item, "Natively Safe Storage", in the login keychain. Without a stable access
+      group that item's ACL is bound to the CONCRETE signing context that created
+      it, so a later re-sign (new certificate, changed entitlement set, moving from
+      an unsigned build to a signed one) can make safeStorage.decryptString() throw
+      on an item this same app wrote. That is issue #322: keys that "show as invalid
+      after restart".
+
+      TeamID.appId — BJM29W3UQ6 (electron-builder.signed.cjs) + com.electron.meeting-notes
+      (package.json build.appId). A typo in either half silently reintroduces #322,
+      which is why KeychainEntitlement.test.mjs pins all three against their sources.
+
+      MIGRATION RISK, STATED PLAINLY: adding an entitlement changes the signature.
+      The first launch after the release that carries this may itself be the
+      signing-context change that fails to decrypt the OLD item. The recovery path
+      added alongside it is what makes that survivable rather than terminal — the
+      store is preserved, three failed cold starts escalate to needsCredentialReentry
+      rather than an unrecoverable empty state, and the app-managed fallback is
+      re-keyed when provenance proves the keyring file is foreign. It still MUST be
+      verified on a signed, notarized build against a machine holding a pre-existing
+      "Natively Safe Storage" item before it ships.
+
+      Helpers do NOT get this: safeStorage runs in the main process only, and
+      entitlements.mac.inherit.plist is asserted to omit it.
+    -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>BJM29W3UQ6.com.electron.meeting-notes</string>
+    </array>
+
+    <!--
       INTENTIONALLY OMITTED (verified against Apple docs + codebase audit, 2026-05-29):
         * com.apple.security.screen-capture        — NOT a real Apple entitlement.
           ScreenCaptureKit + the CoreAudio process tap are pure-TCC (Screen & System
