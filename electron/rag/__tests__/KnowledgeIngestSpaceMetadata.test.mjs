@@ -6,6 +6,48 @@
 // mid-ingest, local vectors were persisted as cloud-space vectors.
 //
 // Run under Electron ABI: ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron --test <file>
+//
+// ─── STATUS 2026-08-16: THIS TEST HAS NEVER PASSED — READ BEFORE "FIXING" IT ──
+//
+// It fails with `TypeError: orch.setEmbedWithMetadataFn is not a function`,
+// which reads like a broken test but is not. Provenance:
+//
+//   * Added 2026-07-11 in a476bac5, titled "chore(wip): snapshot in-flight
+//     RAG/embedding + Hindsight + STT work" — a WIP snapshot.
+//   * `setEmbedWithMetadataFn` has NEVER existed on any premium branch
+//     (`git log --all -S setEmbedWithMetadataFn` over all 120 commits / 20
+//     branches returns nothing, while the control `setActiveSpaceFn` hits
+//     immediately). The seam this test drives was never written.
+//
+// So the header above describes the fix in the PAST TENSE ("used to snapshot
+// activeSpace BEFORE embedding") while the code still does exactly that. The
+// test documents an intended design, not a regression.
+//
+// THE UNDERLYING BUG IS REAL, and is worth fixing properly:
+//
+//   premium/electron/knowledge/KnowledgeOrchestrator.ts:1034
+//       const activeSpace = this.activeSpaceFn?.();          // snapshot
+//       const nodesWithEmbeddings = await chunkAndEmbedDocument(..., this.embedFn);
+//   :1040  this.db.saveNodes(this._stampSpace(nodesWithEmbeddings, activeSpace), docId);
+//   :1047  (same for generateStarStoryNodes' STAR nodes)
+//   :580   (same shape on the confirmed-evidence path)
+//
+// The space is snapshotted BEFORE embedding and stamped after. If embedFn
+// degrades cloud->local mid-ingest, local vectors are persisted labelled as
+// cloud-space vectors, and retrieval then computes cosine similarity across
+// two incompatible embedding spaces — silently, with no error.
+//
+// Why this was NOT auto-fixed: satisfying this test is not a stamp fix. It
+// requires (a) a new premium API returning producer metadata, (b) threading it
+// through chunkAndEmbedDocument and generateStarStoryNodes, and (c) a
+// BEHAVIOURAL change to space-convergence policy — line 94 below demands that
+// a cloud convergence DEGRADE to the local producer space on metadata
+// mismatch. That is a design decision for the premium owner, in a separate
+// private repo, needing its own PR plus a gitlink bump.
+//
+// Note also: this test loads dist-electron/premium/**, which comes from the
+// gitlink. It therefore CANNOT be made green from the outer repo at all — CI
+// will report it red until premium itself ships the seam.
 
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
