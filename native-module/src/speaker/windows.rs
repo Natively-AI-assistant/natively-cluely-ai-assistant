@@ -11,6 +11,39 @@ use std::thread;
 use std::time::Duration;
 use tracing::error;
 use wasapi::{get_default_device, DeviceCollection, Direction, SampleType, ShareMode, WaveFormat};
+use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
+use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+
+/// WASAPI capture runs on the dedicated thread below. COM initialization is
+/// thread/apartment scoped, so this capture thread must initialize COM before
+/// accessing COM-backed audio interfaces.
+struct ComApartmentGuard {
+    should_uninitialize: bool,
+}
+
+impl ComApartmentGuard {
+    fn initialize() -> Result<Self> {
+        match unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) } {
+            Ok(()) => Ok(Self {
+                should_uninitialize: true,
+            }),
+            // A host may have initialized this thread as STA already. COM is
+            // still available; do not balance a call that did not succeed.
+            Err(error) if error.code() == RPC_E_CHANGED_MODE => Ok(Self {
+                should_uninitialize: false,
+            }),
+            Err(error) => Err(anyhow::anyhow!("CoInitializeEx failed: {}", error)),
+        }
+    }
+}
+
+impl Drop for ComApartmentGuard {
+    fn drop(&mut self) {
+        if self.should_uninitialize {
+            unsafe { CoUninitialize() };
+        }
+    }
+}
 
 struct WakerState {
     shutdown: bool,
@@ -190,6 +223,9 @@ impl SpeakerInput {
         init_tx: mpsc::Sender<Result<u32>>,
         device_id: Option<String>,
     ) -> Result<()> {
+        // Must remain alive for the full WASAPI lifetime so every COM object is
+        // released before CoUninitialize runs on this same capture thread.
+        let _com_guard = ComApartmentGuard::initialize()?;
         let init_result = (|| -> Result<_> {
             // Resolve target render device. If the saved device_id is stale
             // (unplugged, renamed, fresh install with leftover settings) we
