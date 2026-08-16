@@ -6,14 +6,30 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // The judge lives in benchmarks/ (TS) — node v25 strips types on import.
-const { judgeAnswerDeterministic } = await import(
-  pathToFileURL(path.resolve(__dirname, '../../../benchmarks/profile-intelligence/answer_quality_judge.ts')).href
-);
+//
+// benchmarks/ WAS tracked and was removed by 6f8e3329 ("remove tracked prompt,
+// result, eval, and test fixture files per updated .gitignore"), which took 44MB
+// of eval data with it and left this file importing a module that is no longer
+// in the repository. A top-level await import() of a missing path throws at
+// module load, so all 14 tests here failed as one unloadable file on every run
+// since — a permanent red that no CI machine could ever clear.
+//
+// Skipped explicitly instead, with the reason visible in the runner. The judge
+// is pure and deterministic, so restoring benchmarks/ locally makes these run
+// again untouched.
+const JUDGE_PATH = path.resolve(__dirname, '../../../benchmarks/profile-intelligence/answer_quality_judge.ts');
+const JUDGE_MISSING = !fs.existsSync(JUDGE_PATH)
+  ? 'skip: benchmarks/profile-intelligence/answer_quality_judge.ts is not in the repo (removed by 6f8e3329); restore benchmarks/ to run the judge suite'
+  : false;
+const { judgeAnswerDeterministic } = JUDGE_MISSING
+  ? { judgeAnswerDeterministic: () => { throw new Error('judge unavailable'); } }
+  : await import(pathToFileURL(JUDGE_PATH).href);
 
 const J = (answer, opts = {}) => judgeAnswerDeterministic({
   question: opts.question || 'why should we hire you', answer,
@@ -22,7 +38,7 @@ const J = (answer, opts = {}) => judgeAnswerDeterministic({
   firstUsefulMs: opts.firstUsefulMs,
 });
 
-describe('rewards a strong, speakable candidate answer', () => {
+describe('rewards a strong, speakable candidate answer', { skip: JUDGE_MISSING }, () => {
   test('grounded, confident, concise first-person → excellent (>=4)', () => {
     const s = J('I bring three years of backend engineering with Python and SQL, and I have shipped low-latency data pipelines end to end. I move fast and own outcomes.');
     assert.ok(s.overall_human_quality_score >= 4, `got ${s.overall_human_quality_score}`);
@@ -31,7 +47,7 @@ describe('rewards a strong, speakable candidate answer', () => {
   });
 });
 
-describe('penalizes the real defects', () => {
+describe('penalizes the real defects', { skip: JUDGE_MISSING }, () => {
   test('assistant-meta in a candidate answer → wrong_voice / not_speakable, low speakability', () => {
     const s = J('As an AI assistant, the candidate is probably a good fit, maybe.');
     assert.ok(s.speakability_score <= 3);
@@ -73,7 +89,7 @@ describe('penalizes the real defects', () => {
   });
 });
 
-describe('respects style + answer-type length budgets', () => {
+describe('respects style + answer-type length budgets', { skip: JUDGE_MISSING }, () => {
   test('a detailed coding answer is NOT penalized for length', () => {
     const long = 'First, we use a hash map to store seen values. '.repeat(15);
     const s = J(long, { answerType: 'coding_question_answer', voice: 'assistant_explanation', style: 'detailed', question: 'explain two sum in detail' });
