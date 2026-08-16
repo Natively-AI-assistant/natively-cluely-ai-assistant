@@ -309,8 +309,52 @@ class ZeroShotClassifier {
         return {
             isPackaged,
             localModelPath: path.join(process.resourcesPath || '', 'models'),
-            cacheDir: path.join(__dirname, '../../resources/models'),
+            cacheDir: ZeroShotClassifier.resolveDevModelRoot(),
         };
+    }
+
+    /**
+     * Model root for the UNPACKAGED path.
+     *
+     * This was `path.join(__dirname, '../../resources/models')`, which is only
+     * right when running from SOURCE (electron/llm/ -> repo root). Under the
+     * compiled layout __dirname is dist-electron/electron/llm/, so it resolved to
+     * `dist-electron/resources/models` — a directory the build never creates and
+     * `scripts/download-models.js` never verifies. transformers.js then treated
+     * it as a cache and downloaded into it, and a partial download there loads as
+     * "Protobuf parsing failed" while the real, VERIFY-OK tree sat unused at the
+     * repo root. (Seen in CI: the same run logs `[download-models] VERIFY OK` and
+     * then fails to parse a model out of the dist-electron copy.)
+     *
+     * Prefer whichever candidate actually holds the model directory, so both the
+     * source and compiled layouts land on the tree download-models.js populates.
+     */
+    private static resolveDevModelRoot(): string {
+        // Walk up to the REPO ROOT (the directory holding package.json) and use
+        // its resources/models. That is the one download-models.js populates and
+        // verifies; anything under dist-electron/ is a transformers.js download
+        // cache that nothing checks, and preferring "first candidate that exists"
+        // picks it precisely because a partial download created it.
+        const seen = new Set<string>();
+        let dir = __dirname;
+        for (let i = 0; i < 6; i++) {
+            if (seen.has(dir)) break;
+            seen.add(dir);
+            try {
+                if (fs.existsSync(path.join(dir, 'package.json'))) {
+                    const root = path.join(dir, 'resources', 'models');
+                    if (fs.existsSync(path.join(root, 'Xenova', 'mobilebert-uncased-mnli'))) return root;
+                }
+            } catch { /* unreadable level — keep walking */ }
+            const parent = path.dirname(dir);
+            if (parent === dir) break;
+            dir = parent;
+        }
+        const cwdRoot = path.join(process.cwd(), 'resources', 'models');
+        try {
+            if (fs.existsSync(path.join(cwdRoot, 'Xenova', 'mobilebert-uncased-mnli'))) return cwdRoot;
+        } catch { /* fall through */ }
+        return path.join(__dirname, '../../resources/models');
     }
 
     /**
