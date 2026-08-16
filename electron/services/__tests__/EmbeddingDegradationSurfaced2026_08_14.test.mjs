@@ -33,8 +33,20 @@ test('App.tsx consumes onEmbeddingDegraded into a user-visible banner', () => {
   const idx = appTsx.indexOf('onEmbeddingDegraded');
   assert.notEqual(idx, -1, 'App.tsx must register an onEmbeddingDegraded listener (F-120)');
   const body = appTsx.slice(idx, idx + 700);
+  // Inline call OR delegation to a local helper that does it — see the sibling
+  // F-119 pin. Both notices share showTransientBannerFailure() so a single
+  // cancellable timer serves them; that refactor kept the behaviour and broke
+  // only the pin. What matters is that degradation reaches the status banner.
+  const direct = /setOllamaPullStatus\('failed'\)/.test(body);
+  const viaHelper = [...body.matchAll(/\b([a-z][A-Za-z0-9_]*)\s*\(/g)]
+    .map(m => m[1])
+    .some(name => {
+      const hIdx = appTsx.indexOf(`const ${name} =`);
+      return hIdx !== -1 && /setOllamaPullStatus\('failed'\)/.test(appTsx.slice(hIdx, hIdx + 600));
+    });
   assert.ok(
-    /setOllamaPullStatus\('failed'\)/.test(body),
-    'the listener must surface degradation via the status banner'
+    direct || viaHelper,
+    'the listener must surface degradation via the status banner, ' +
+    'either inline or through a local helper that does'
   );
 });

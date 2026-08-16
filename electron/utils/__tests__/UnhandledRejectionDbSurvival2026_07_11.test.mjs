@@ -139,6 +139,13 @@ describe('unhandledRejection no longer unconditionally kills the database', () =
       "emergencyCloseDatabase('render-process-gone')",      // guarded by isQuitting() — app is going away
       "emergencyCloseDatabase('initializeApp-failed')",     // followed by terminateAfterFatalError
       'emergencyCloseDatabase(why)',                        // the coordinator's own injected close
+      // Both added when the recoverable-event bug was fixed: Chromium respawns a
+      // dead GPU/utility child and the app keeps running, so these close only
+      // under appState.isQuitting() — the same sanctioned shape as
+      // render-process-gone above. The sibling test below proves the guard is
+      // actually there rather than taking this comment's word for it.
+      "emergencyCloseDatabase('child-process-gone')",
+      "emergencyCloseDatabase('gpu-process-crashed')",
     ];
     // Strip comments first — main.ts discusses emergencyCloseDatabase() at
     // length in prose, and those mentions are not call sites.
@@ -168,15 +175,41 @@ describe('unhandledRejection no longer unconditionally kills the database', () =
   });
 
   test('recoverable process events must not destroy the database', () => {
-    // These three handlers do NOT exit, so they must never close the DB.
-    // gpu-process-crashed in particular fires on routine Windows TDR driver
-    // resets; child-process-gone fires for any dead helper process.
+    // These handlers do NOT exit on the recoverable path, so they must never
+    // close the DB while the app keeps running. gpu-process-crashed in
+    // particular fires on routine Windows TDR driver resets; child-process-gone
+    // fires for any dead helper process.
+    //
+    // This asserted the *substring* `emergencyCloseDatabase('<reason>')` was
+    // absent, which became wrong the moment the bug was genuinely fixed:
+    // main.ts keeps the call but gates it behind `appState.isQuitting?.()`, so
+    // the DB closes only during a real teardown — where the child exodus is
+    // part of the quit. A substring scan cannot see a guard, so the CORRECT
+    // code failed the pin. Assert the guard, not the absence.
+    let checked = 0;
     for (const reason of ['SIGHUP', 'child-process-gone', 'gpu-process-crashed']) {
-      assert.ok(
-        !source.includes(`emergencyCloseDatabase('${reason}')`),
-        `${reason} is a recoverable event whose handler keeps the process alive — ` +
-        'it must not close the database.',
-      );
+      const needle = `emergencyCloseDatabase('${reason}')`;
+      for (let at = source.indexOf(needle); at >= 0; at = source.indexOf(needle, at + needle.length)) {
+        checked++;
+        // Anchor on the enclosing handler registration, then require the
+        // nearest preceding `if (` to sit inside that handler AND gate on
+        // isQuitting. Drop the guard and the nearest `if (` no longer matches.
+        const handlerAt = Math.max(
+          source.lastIndexOf('app.on(', at),
+          source.lastIndexOf('process.on(', at),
+        );
+        const ifAt = source.lastIndexOf('if (', at);
+        assert.ok(
+          ifAt > handlerAt && /isQuitting/.test(source.slice(ifAt, at)),
+          `${reason} keeps the process alive, so emergencyCloseDatabase('${reason}') must ` +
+          'sit inside an appState.isQuitting() guard. Closing the database is irreversible ' +
+          '(it nulls the singleton with no reopen path), so an unguarded close turns a ' +
+          'routine child/GPU restart into silent, session-wide persistence loss.',
+        );
+      }
     }
+    // Absence also satisfies the invariant, but all three reasons vanishing at
+    // once means the anchors drifted rather than the code getting safer.
+    assert.ok(checked > 0, 'the scan must find at least one call site (guards against a vacuous pass)');
   });
 });

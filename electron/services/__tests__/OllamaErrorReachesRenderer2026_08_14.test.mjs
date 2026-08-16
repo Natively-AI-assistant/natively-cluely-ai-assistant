@@ -40,8 +40,23 @@ test('App.tsx consumes onOllamaError into the failed banner state', () => {
   const idx = appTsx.indexOf('onOllamaError');
   assert.notEqual(idx, -1, 'App.tsx must register an onOllamaError listener (F-119)');
   const body = appTsx.slice(idx, idx + 500);
+  // The listener may set the banner inline, OR delegate to a local helper that
+  // does. Both transient failure notices were routed through a shared
+  // showTransientBannerFailure() so they share one cancellable reset timer
+  // instead of leaking a timer per event — a refactor that preserved the
+  // user-visible behaviour but defeated a pin that only looked for the inline
+  // call. Follow one level of indirection; the banner reaching 'failed' is the
+  // contract, not where the call is written.
+  const direct = /setOllamaPullStatus\('failed'\)/.test(body);
+  const viaHelper = [...body.matchAll(/\b([a-z][A-Za-z0-9_]*)\s*\(/g)]
+    .map(m => m[1])
+    .some(name => {
+      const hIdx = appTsx.indexOf(`const ${name} =`);
+      return hIdx !== -1 && /setOllamaPullStatus\('failed'\)/.test(appTsx.slice(hIdx, hIdx + 600));
+    });
   assert.ok(
-    /setOllamaPullStatus\('failed'\)/.test(body),
-    "the listener must surface the failure via the banner's 'failed' state"
+    direct || viaHelper,
+    "the listener must surface the failure via the banner's 'failed' state, " +
+    'either inline or through a local helper that does'
   );
 });
