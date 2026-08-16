@@ -206,19 +206,21 @@ export function contractBlocks(contract: Pick<TurnContextContract, 'enforcement'
   return Boolean(contract && contract.enforcement === 'enforce');
 }
 
-// ── Authority-contradiction guard: REMOVED (Phase 6 Slice 0, item A6) ───────
+// ── Authority-contradiction guard — REMOVED (Slice 0, A6) ──────────────────
 //
-// A dev-only tripwire that fired when enforcement was armed, the kernel decided
-// `sourceOwner === 'clarify'`, and the caller recorded `finalAction === 'answer'`
-// anyway. 03_ROOT_CAUSES.md (RC8) and 05_COMPONENT_DISPOSITION.md (§A6) retired
-// it: it had zero production callers and zero test coverage, and the condition
-// it checked was not the one implicated in the investigation — the trace that
-// motivated it turned out to be MISLEADING (a hardcoded provisional value logged
-// before the clarification decision ran, fixed at the ipcHandlers.ts call site),
-// not a genuine authority disagreement.
+// `assertNoAuthorityContradiction` and its `AuthorityContradictionCheck` type
+// lived here as a dev-only tripwire with zero production callers and zero test
+// coverage. 03_ROOT_CAUSES.md (RC8) and 05_COMPONENT_DISPOSITION.md (A6)
+// dispositioned it for deletion: it checked `sourceOwner === 'clarify'` next to
+// `finalAction === 'answer'`, a condition distinct from the one actually
+// implicated (RC1: finalAction hardcoded regardless of
+// evidenceCoverage.confidence), and the trace that motivated it turned out to
+// be a misleading hardcoded provisional value, fixed at the ipcHandlers.ts call
+// site.
 //
-// Its re-export was dropped from index.ts at the time, but the definition itself
-// was left behind — unreachable, and outliving three other files that already
-// describe it in the past tense (contextRoute.ts, evidencePackValidation.ts).
-// Completed here. The narrower successor guard lives in contextRoute.ts; see
-// evidencePackValidation.ts for the coverage-confidence check that supersedes it.
+// The deletion was documented as done elsewhere (contextRoute.ts:152 says
+// "deleted Slice 0, A6") but the code was never actually removed, so
+// AssertNoAuthorityContradictionRemoved2026_07_25 has been failing on main.
+// The replacement is the broader evidence-pack validation in
+// evidencePackValidation.ts — see contextRoute.ts for why that check is the
+// right shape.

@@ -2,6 +2,16 @@ name: Build Smoke
 
 on:
   pull_request:
+  # Main had NO per-commit signal: this workflow ran on pull_request only, so a
+  # PR whose Build Smoke failed could be merged and main itself was never
+  # re-checked. That is exactly how c2ad3133 landed a TS7005 that broke the
+  # FIRST build step — `Typecheck Electron main process` — and went unnoticed
+  # for three days while every subsequent PR inherited a red check it did not
+  # cause. With this trigger, a break is attributable to the commit that
+  # introduced it instead of to whoever opens the next PR.
+  push:
+    branches:
+      - main
   workflow_dispatch:
   # MUST live here, not on the job. `schedule` is not a valid job key, and an
   # unknown key makes GitHub reject the whole workflow at parse time — every run
@@ -131,9 +141,51 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify-native-arch.js
 
-      - name: Typecheck Electron main process
+      # Real-execution proof that this platform's sqlite-vec binary loads and
+      # answers a vector query (2026-08-15). The Windows leg is the ONLY
+      # automated Windows this repo has, and vec0.dll had never been executed
+      # anywhere — the Windows pin (sqlite-vec-windows-x64) was verified from
+      # macOS as fetch + loader-name mapping only. BLOCKING on BOTH legs by
+      # design: VectorStore degrades to a JS-cosine fallback when the native
+      # extension is missing, which is exactly how a broken platform binary
+      # would otherwise ship green. Runs under Electron's ABI because
+      # postinstall builds better-sqlite3 for Electron, not system Node.
+      - name: Verify sqlite-vec native extension loads (vec0)
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: npx --no-install electron scripts/verify-sqlite-vec-load.mjs
+
+      # TypeScript 7 is now the PRIMARY type-checker: `typecheck:electron` runs
+      # node_modules/typescript7/bin/tsc. Emit is untouched — esbuild owns
+      # dist-electron and vite owns dist; TS 7 only checks.
+      #
+      # This runs on BOTH legs on purpose. TS 7 is a native Go binary shipped as
+      # per-platform optional dependencies (@typescript/typescript-darwin-arm64,
+      # -win32-x64, ...), so the Windows leg is the ONLY thing that proves the
+      # win32 binary resolves and runs — a macOS-only check would say nothing
+      # about it.
+      #
+      # ⚠️ EXPECTED RED until the two deferred findings are resolved
+      # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
+      # EvidenceResolver's DI port, and ModeHybridRetriever's genuinely-nullable
+      # reranker. Deliberately left BLOCKING rather than downgraded to
+      # continue-on-error — muting a real gate to hide two known type errors is
+      # exactly the loosening this migration is not allowed to do. TS 5.9.3 and
+      # TS 7.0.2 report byte-identical error lists here, so this is a deferral
+      # backlog, NOT a TS 7 incompatibility.
+      - name: Typecheck Electron main process (TypeScript 7)
         run: npm run typecheck:electron
 
+      # Insurance for one release cycle: if TS 7 ever diverges from the compiler
+      # this repo shipped on, this step is what tells us. Non-blocking because
+      # TS 7 is the source of truth now. `typescript` 5.x stays installed
+      # regardless — react-doctor (.husky/pre-commit, every commit by everyone),
+      # typescript-eslint and tap all cap below TS 7.
+      - name: Typecheck Electron main process with TypeScript 5 (non-blocking insurance)
+        continue-on-error: true
+        run: npm run typecheck:ts5:electron
+
+      # `npm run build` now type-checks the renderer with TS 7 before vite emits.
       - name: Build renderer
         run: npm run build
 
@@ -182,7 +234,21 @@ jobs:
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
 
+      # The four test steps here are INDEPENDENT suites over disjoint globs, so
+      # each of the three below carries `!cancelled()`. Without it a failed step
+      # skips every later one, and on the macOS leg — the only enforcing leg —
+      # that meant one red suite suppressed the other three: `test:intelligence`
+      # had never once been measured in CI, because `npm test` failed on every
+      # run that ever reached it. (Windows was unaffected only because
+      # `continue-on-error` keeps its steps' conclusion green.)
+      #
+      # `!cancelled()` rather than `always()`: both keep a later suite running
+      # after an earlier one fails, but `always()` ALSO forces the step to run
+      # while the job is being cancelled, turning a cancel into a multi-minute
+      # wait. The job still fails if any suite fails — this only stops one
+      # failure from hiding the others' results.
       - name: Run intelligence unit tests
+        if: ${{ !cancelled() }}
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm run test:intelligence
 
@@ -194,6 +260,7 @@ jobs:
       # mirror), so a real production-catalog regression fails CI, not just the
       # hand-maintained mirror.
       - name: Run src/lib unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:lib
 
       # Runs on BOTH legs by design. scripts/package-app.js and
@@ -203,6 +270,7 @@ jobs:
       # resolver / signal-table as parameters, so each leg exercises both
       # platform shapes rather than only its own.
       - name: Run build-script unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:scripts
 
   api-smoke:

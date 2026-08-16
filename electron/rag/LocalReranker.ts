@@ -13,9 +13,12 @@
 //   • ESM-only package → forced runtime import() via `new Function` inside the
 //     dedicated worker (see localRerankerWorker.ts for the why).
 //   • Packaged prod: local_files_only, model read from resources/models. The
-//     reranker model is NOT bundled yet, so in a packaged build load() fails and
-//     the caller falls through to the existing top-K — that is the intended
-//     default-OFF posture until the model is added to extraResources.
+//     reranker model IS bundled (stale-comment fix 2026-08-13): download-models.js
+//     fetches Xenova/bge-reranker-base (q8) at postinstall, extraResources maps
+//     resources/models/ → models/, and verify-packaged-local-assets.mjs lists all
+//     four reranker files in REQUIRED_MODEL_FILES — the build FAILS without them.
+//     If the model is genuinely absent at runtime, load() fails and the caller
+//     falls through to the existing top-K (graceful degradation, not the norm).
 //   • Dev: allowRemoteModels so the model is fetched + cached on first use.
 //
 // WORKER-ISOLATED (2026-07-05 SIGTRAP crash hardening): the actual ONNX

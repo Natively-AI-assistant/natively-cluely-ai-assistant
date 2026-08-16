@@ -1625,7 +1625,7 @@ export class ModesManager {
                 );
             } catch (err) {
                 // Don't let a hybrid outage block a document-grounded answer.
-                console.warn('[ModesManager] hybrid forceDocumentGrounding failed, falling back to lexical:', err?.message);
+                console.warn('[ModesManager] hybrid forceDocumentGrounding failed, falling back to lexical:', (err as { message?: string })?.message);
                 return this.buildRetrievedActiveModeContextBlock(
                     query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId, retrievalOptions,
                 );

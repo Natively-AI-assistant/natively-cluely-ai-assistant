@@ -91,7 +91,9 @@ async function updatePromptCache(promptText: string): Promise<void> {
       return v;
     });
     cachedPromptText = trimmed;
-    if (cachedPromptIds.length === 0) {
+    // Non-null: assigned unconditionally just above; tsc drops the narrowing of a
+    // module-level `let` across the intervening .map() callback.
+    if (cachedPromptIds!.length === 0) {
       console.debug('[WhisperWorker] Prompt tokenized to 0 ids — biasing disabled');
     }
   } catch (e: any) {
@@ -269,11 +271,27 @@ parentPort.on('message', async (msg: any) => {
       const streaming: boolean = !!msg.streaming;
 
       // English-only checkpoints (Distil-Whisper + .en variants) have no
-      // multilingual decoder. Force language='english' regardless of the
-      // user's auto/non-English setting so the model isn't asked to
-      // transcribe phonetically into the wrong language.
-      if (ENGLISH_ONLY_MODELS.has(loadedModelId)) {
-        language = 'english';
+      // multilingual decoder — and transformers.js REJECTS the decoder-prompt
+      // options for them outright. From the installed library source:
+      //
+      //   if (e.is_multilingual) { …lang_to_id / task_to_id… }
+      //   else if (s || r) throw new Error(
+      //     "Cannot specify `task` or `language` for an English-only model…")
+      //
+      // where s = generationConfig.language and r = generationConfig.task. So
+      // BOTH must be omitted, not just one, and this block previously did the
+      // exact opposite: it FORCED language='english' on precisely the models
+      // that forbid it. Every transcription then threw, and because the
+      // streaming loop re-dispatches per audio window the failure repeated
+      // once per chunk — 15,733 identical errors across three days in the
+      // 2026-08-12 production log (10,183 of them in a single day), with the
+      // user's local STT silently producing nothing the whole time.
+      //
+      // Omitting them is not a downgrade: an English-only checkpoint can only
+      // transcribe, and only in English, so there is nothing left to express.
+      const isEnglishOnly = ENGLISH_ONLY_MODELS.has(loadedModelId);
+      if (isEnglishOnly) {
+        language = null;
       }
 
       // Streaming partial passes use deterministic settings so consecutive
@@ -304,7 +322,14 @@ parentPort.on('message', async (msg: any) => {
             logprob_threshold: -1.0,
             no_speech_threshold: 0.6,
           };
-      if (language) opts.language = language;
+      // `task` is set unconditionally in BOTH opts branches above, so an
+      // English-only model must have it stripped here — fixing only the
+      // `language` line would still throw on `task`.
+      if (isEnglishOnly) {
+        delete opts.task;
+      } else if (language) {
+        opts.language = language;
+      }
 
       // Use the pre-tokenized prompt cache populated by setPrompt messages.
       // Skip for Moonshine (cached IDs are null in that case anyway).

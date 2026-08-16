@@ -255,7 +255,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // so a provider the user switched off (or a model they filtered out) is never
       // installed as the fallback.
       const next = modelAvailable('natively') ? 'natively'
-        : modelAvailable('gemini-3.6-flash') ? 'gemini-3.6-flash'
+        : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
@@ -1375,45 +1375,84 @@ export function initializeIpcHandlers(appState: AppState): void {
             let liveModeIdAtRecord: string | null = null;
             try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
             if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
-              // A truncated answer must NOT enter conversation state, memory, or
-              // the session transcript. It would become the antecedent for the
-              // next turn's referent resolution and be replayed as if it were a
-              // complete answer — the same class of defect as the
-              // "(referring to: Makefile)" contamination. The user still SEES
-              // the partial text; it just does not become history.
+              // A truncated ANSWER must NOT enter conversation state or memory.
+              // It would become the antecedent for the next turn's referent
+              // resolution and be replayed as if it were a complete answer —
+              // the same class of defect as the "(referring to: Makefile)"
+              // contamination. The user still SEES the partial text; it just
+              // does not become history.
+              //
+              // Code-review 2026-08-13: the guard originally wrapped ALL FOUR
+              // blocks, so a truncated turn also dropped the sinks that record
+              // the USER's side — the question they actually asked. That is
+              // never in doubt just because the answer stopped early, and
+              // suppressing it lost the meeting transcript row, the usage row
+              // (a regression of the very bug the logUsage comment below
+              // documents), and the phone-mirror question. Split by SIDE:
+              // answer-side sinks honor the truncation guard, user-side sinks
+              // always run.
               if (v3Truncated) {
-                console.warn('[IPC] skipping history/memory sinks for a truncated answer', { streamId: myStreamId });
-              } else {
-              try {
-                const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
-                recordAnswerSummary(String(senderId), finalText);
-              } catch { /* continuity only */ }
-              try {
-                _manualConversationMemory.record({
-                  sessionId: String(senderId),
-                  userMessage: String(message || ''),
-                  assistantAnswer: finalText,
-                  mode: (modeInfo as any)?.templateType,
-                  timestamp: Date.now(),
-                });
-              } catch { /* memory only */ }
+                console.warn('[IPC] truncated answer — recording the user turn but skipping answer-side history/memory sinks', { streamId: myStreamId });
+              }
+              // ── ANSWER-SIDE SINKS (skipped when truncated) ──────────────
+              if (!v3Truncated) {
+                try {
+                  const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                  recordAnswerSummary(String(senderId), finalText);
+                } catch { /* continuity only */ }
+                try {
+                  // The user/answer PAIR is the antecedent unit for follow-up
+                  // referent resolution, so a truncated answer suppresses the
+                  // whole pair — the user turn is still preserved in the
+                  // session transcript below.
+                  _manualConversationMemory.record({
+                    sessionId: String(senderId),
+                    userMessage: String(message || ''),
+                    assistantAnswer: finalText,
+                    mode: (modeInfo as any)?.templateType,
+                    timestamp: Date.now(),
+                  });
+                } catch { /* memory only */ }
+              } // end answer-side sinks
               try {
                 const im = appState.getIntelligenceManager();
                 im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
-                im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
+                if (!v3Truncated) im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
                 // Usage too: ai_interactions ("usage" in Meeting Notes) is
                 // populated solely from SessionTracker's usage log at
                 // saveMeeting time. Every legacy exit logs it; without this,
                 // a V3-answered chat during a meeting left the meeting's
                 // usage panel empty (confirmed in the live DB: V3 meetings
-                // had transcript rows but zero usage rows).
-                im?.logUsage?.('chat', String(message || ''), finalText);
+                // had transcript rows but zero usage rows). A truncated turn
+                // still consumed the call, so it is still usage.
+                //
+                // But the usage log is NOT write-only (code-review 2026-08-14):
+                // SessionTracker.getRecentManualTurn reads fullUsage and
+                // IntelligenceEngine.buildRecentManualContext injects the pair
+                // into the NEXT prompt as <previous_assistant_answer_excerpt>.
+                // Plain logUsage would therefore feed the truncated answer back
+                // as conversation context — defeating the answer-side guard
+                // above through a second door. `synthetic: true` is the existing
+                // opt-out: getRecentManualTurn skips those entries (line ~688)
+                // while every persistence path still returns them, so the
+                // Meeting Notes row survives and the replay does not.
+                if (v3Truncated) {
+                  im?.pushUsage?.({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: String(message || ''),
+                    answer: finalText,
+                    source: 'manual_chat',
+                    synthetic: true,
+                  });
+                } else {
+                  im?.logUsage?.('chat', String(message || ''), finalText);
+                }
               } catch { /* session transcript only */ }
               try {
                 PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
-                PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
+                if (!v3Truncated) PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
               } catch { /* mirror only */ }
-              } // end !v3Truncated
             }
 
             return null;
@@ -1609,7 +1648,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
                   { streamId: myStreamId },
                 );
-                return;
+                return null;  // sibling error paths return null; handler is typed `| null`
               }
               skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
               const strippedQuery = skillPrefixMatch[2].trim();
@@ -1625,12 +1664,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                 `Skill "/${candidateId}" not found. Available: ${available}`,
                 { streamId: myStreamId },
               );
-              return;
+              return null;  // sibling error paths return null; handler is typed `| null`
             }
           } catch (skillErr: any) {
             console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
             event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
-            return;
+            return null;  // sibling error paths return null; handler is typed `| null`
           }
         }
 
@@ -1778,13 +1817,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             turnSourceDecision: manualTurnSourceDecision,
           });
-          if (isIntelligenceFlagEnabled('trace')) {
+          if (isIntelligenceFlagEnabled('trace')) {  // manualOwnership! below: assigned unconditionally at 1790-1797
             console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
-              owner: manualOwnership.owner,
-              profileAllowed: manualOwnership.profileAllowed,
-              explicitProfileAsk: manualOwnership.explicitProfileAsk,
-              shouldClarifyInsteadOfProfile: manualOwnership.shouldClarifyInsteadOfProfile,
-              reason: manualOwnership.reason,
+              owner: manualOwnership!.owner,
+              profileAllowed: manualOwnership!.profileAllowed,
+              explicitProfileAsk: manualOwnership!.explicitProfileAsk,
+              shouldClarifyInsteadOfProfile: manualOwnership!.shouldClarifyInsteadOfProfile,
+              reason: manualOwnership!.reason,
               answerType: answerPlan.answerType,
             }));
           }
@@ -8341,7 +8380,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let response;
 
         if (provider === 'gemini') {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
           response = await axios.post(
             url,
             {
@@ -8725,7 +8764,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.6-flash' };
+      return { model: 'gemini-3.7-flash' };
     }
   });
 
@@ -9235,7 +9274,39 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   // MODE 1: Assist (Passive observation)
+  // ── Usage-ledger feature instrumentation (phase 4) ─────────────────────────
+  //
+  // `runTracked` emits feature_started and exactly one terminal event. The
+  // feature name comes from the ACTIVE MODE and is only a NAMED feature when
+  // that mode is a built-in — a custom mode a user renamed "Technical
+  // Interview" reports the honest `mode_execution` instead (§31).
+  //
+  // Everything is wrapped: instrumentation must never be able to fail the answer
+  // it measures, so a failure to resolve the mode degrades to `mode_execution`
+  // rather than throwing into the handler.
+  const _usageFeature = (): any => {
+    try {
+      const { featureForMode } = require('./services/usageInstrumentation');
+      const { ModesManager: _MMUsage } = require('./services/ModesManager');
+      return featureForMode(_MMUsage.getInstance().getActiveMode());
+    } catch {
+      return 'mode_execution';
+    }
+  };
+  const _tracked = async <T>(fn: () => Promise<T>, failedIf?: (r: T) => boolean): Promise<T> => {
+    try {
+      const { runTracked } = require('./services/usageInstrumentation');
+      return await runTracked(_usageFeature(), fn, failedIf ? { failedIf } : undefined);
+    } catch (e: any) {
+      // Only a require()/wiring failure lands here; runTracked rethrows the
+      // handler's own error untouched, so this cannot swallow a real one.
+      if (e && e.__usageWrapperFailure) return fn();
+      throw e;
+    }
+  };
+
   safeHandle('generate-assist', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
@@ -9252,6 +9323,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.insight === null || r.insight === undefined);
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
@@ -9270,6 +9342,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       imagePaths?: string[],
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
+      return _tracked(async () => {
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -9462,16 +9535,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
+        // Returns an error object rather than throwing. runTracked's default
+        // predicate reads the truthy `error` field and records this as FAILED —
+        // a dispute report must never imply service was delivered when it was
+        // not (§6). The two early returns above use the same shape and are
+        // classified the same way, which is the point of the shared wrapper.
         return {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
         };
       }
+      });
     },
   );
 
   safeHandle('generate-clarify', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const clarification = await intelligenceManager.runClarify();
@@ -9497,6 +9577,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.clarification === null || r.clarification === undefined);
   });
 
   // Shared helper: validate, then run images through the vision-first ImageOptimizer
@@ -9532,6 +9613,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   }
 
   safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -9586,9 +9668,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   safeHandle('generate-brainstorm', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -9642,6 +9726,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
@@ -9667,6 +9752,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // MODE 3: Follow-Up (Refinement)
   safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
@@ -9683,10 +9769,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.refined === null || r.refined === undefined);
   });
 
   // MODE 4: Recap (Summary)
   safeHandle('generate-recap', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
@@ -9703,10 +9791,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.summary === null || r.summary === undefined);
   });
 
   // MODE 6: Follow-Up Questions
   safeHandle('generate-follow-up-questions', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
@@ -9723,6 +9813,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.questions === null || r.questions === undefined);
   });
 
   // MODE 5: Manual Answer (Fallback)
@@ -9974,6 +10065,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   safeHandle('generate-followup-email', async (_, input: any) => {
+    return _tracked(async () => {
     try {
       const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
       const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
@@ -10011,6 +10103,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error generating follow-up email:', error);
       throw error;
     }
+    });
   });
 
   safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {
@@ -10221,7 +10314,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { fallback: true };
         }
         console.error('[RAG] Live query error:', error);
-        event.sender.send('rag:stream-error', { live: true, error: msg });
+        // No rag:stream-error here (F-118): the {success:false} return below
+        // makes the renderer fall through to regular live chat, so a terminal
+        // error event would DOUBLE-SIGNAL — the error handler stapled
+        // "[RAG Error: …]" into the bubble and cleared streaming state, and
+        // the fallback then streamed fresh tokens into that torn-down row.
+        // For the live class the fallback owns the UX; the meeting/global
+        // handlers keep their terminal events because nothing falls back.
+        // Live-reproduced in scripts/audit/F-118-repro.mjs.
       }
       return { success: false, error: error.message };
     } finally {
@@ -11835,7 +11935,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
       const file = await ingestModeReferenceFile({
         modeId,
-        filePath: selectedPath,
+        filePath: selectedPath!,  // guarded + assigned on the straight line above
         onIndexStatus: (status, fileId) => {
           BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase: status });
@@ -12326,7 +12426,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
         const win = appState.getMainWindow() ?? undefined;
-        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
           type: 'warning',
           message: 'Allow LAN access?',
           detail:
@@ -12334,7 +12434,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           buttons: ['Cancel', 'Allow LAN access'],
           defaultId: 0,
           cancelId: 0,
-        });
+        };
+        // Electron types (options) and (parent, options) but not (undefined, options);
+        // picking the overload by parent presence leaves the runtime call unchanged.
+        const response = win
+          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+          : dialog.showMessageBoxSync(lanBindDialogOptions);
         if (response !== 1) {
           return { ok: false, declined: true };
         }

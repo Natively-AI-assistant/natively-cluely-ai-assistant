@@ -151,7 +151,7 @@ class ZeroShotClassifier {
                 const pending = this.pendingRequests.get(msg.requestId as number);
                 if (!pending) return;
                 clearTimeout(pending.timer);
-                this.pendingRequests.delete(msg.requestId);
+                this.pendingRequests.delete(msg.requestId as number);  // same cast as the .get() above
 
                 if (msg.type === 'error') {
                     pending.reject(new Error(msg.error || 'Worker error'));

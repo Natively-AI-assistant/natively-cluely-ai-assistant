@@ -37,7 +37,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -222,10 +222,28 @@ describe('Context OS — production-default contract build behavior (2026-07-18)
         process.platform === 'win32' ? 'junction' : 'dir',
       );
       try {
-        execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
-          cwd: repoRoot,
-          stdio: 'pipe',
-        });
+        // execFileSync with an ARGS ARRAY, and tsc invoked as `node <entry>`
+        // rather than through a `.bin` shim.
+        //
+        // Two Windows-only breakages, both of which made this suite's `before`
+        // hook throw "tsc emission failed" and cancel every child test:
+        //   1. `target` is a mkdtemp path — on Windows
+        //      `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\...` — interpolated
+        //      unquoted into a shell string.
+        //   2. a `.bin` shim is extensionless on POSIX but a `.cmd` on Windows,
+        //      which execFileSync (no shell) cannot launch.
+        //
+        // CLAUDE.md: "Pass command arguments as arrays when possible. Avoid
+        // shell interpolation. Quote paths safely. Handle executable
+        // extensions correctly."
+        //
+        // The compiler stays typescript7 + tsconfig.emit.json: this suite reads
+        // the EMITTED tree, and TS7 owns the emit path as of the migration.
+        execFileSync(process.execPath, [
+          path.join('node_modules', 'typescript7', 'bin', 'tsc'),
+          '-p', path.join('electron', 'tsconfig.emit.json'),
+          '--outDir', target,
+        ], { cwd: repoRoot, stdio: 'pipe' });
       } catch (_e) { /* tsc returns 1 on unrelated errors; we only need the emit */ }
       if (!fs.existsSync(path.join(target, 'electron/intelligence/context-os/index.js'))) {
         throw new Error('tsc emission failed — context-os/index.js missing from isolated tree');
@@ -490,22 +508,21 @@ describe('Context OS — multi-family coordinator admission predicate (2026-07-1
     }
   });
 
-  test('coordinator fails CLOSED when reference retrieval throws — refusal pack, no partial evidence', async () => {
-    // REWRITTEN. This asserted that `resolve()` THROWS and that the handler's
-    // catch resets the governed flag — but it only ever set two local variables
-    // inside its own try/catch, so it passed or failed on the test's own control
-    // flow and never touched production behaviour.
+  test('a thrown retriever yields a REFUSAL pack, and never discards the other family', async () => {
+    // Rewritten 2026-08-14. The original asserted that a thrown retrieval
+    // PROPAGATES out of `resolve()`, mirroring an ipcHandlers catch block. That
+    // contract was deliberately superseded on 2026-07-23
+    // (TurnEvidenceCoordinator.ts:181): the retrievers are now settled
+    // independently with `Promise.allSettled`, precisely so "a thrown profile
+    // retriever cannot discard already-retrieved reference evidence (and vice
+    // versa)" — the file header's own promise that neither retriever has
+    // authority over the other source family. `Promise.all` violated it on the
+    // failure path.
     //
-    // The coordinator no longer throws here, deliberately: it moved from
-    // Promise.all to Promise.allSettled so a failing REFERENCE retriever cannot
-    // discard evidence the PROFILE retriever already returned — the file header's
-    // contract that "either retriever has no authority over the other source
-    // family", which Promise.all violated on the failure path.
-    //
-    // It is still fail-closed, just expressed as a refusal pack instead of an
-    // exception. That is the contract worth pinning, and this now checks the real
-    // returned value: no items may leak through, and the policy must be a refusal
-    // so the caller cannot treat the turn as governed-with-evidence.
+    // So the coordinator no longer throws; it returns a FAILURE PACK. That is
+    // still fail-closed where it matters — the turn refuses rather than
+    // answering on missing evidence — which is what this now asserts. The old
+    // test had been red on main since that change.
     const co = cjsRequire(path.resolve(repoRoot, 'dist-electron/electron/intelligence/context-os/index.js'));
     const contract = co.buildTurnContractForSurface({
       surface: 'manual_chat',
@@ -525,31 +542,42 @@ describe('Context OS — multi-family coordinator admission predicate (2026-07-1
       requiredEvidenceKinds: ['reference_files', 'profile_resume', 'projects', 'profile_jd'],
       allowedEvidenceKinds: ['reference_files', 'profile_resume', 'projects', 'profile_jd'],
     };
+
     const { TurnEvidenceCoordinator } = co;
     const coordinator = new TurnEvidenceCoordinator();
-    const result = await coordinator.resolve({
-      decision,
-      contract,
-      retrieveReferenceEvidence: async () => { throw new Error('INJECTED_RETRIEVAL_THROW'); },
-      retrieveProfileEvidence: async () => ({
-        packId: 'p', turnId: contract.turnId, sourceOwner: contract.sourceOwner,
-        requestedProperty: contract.requestedProperty, items: [], rejected: [],
-        coverage: { hasDirectEvidence: false, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence: 0 },
-        conflicts: [], answerPolicy: 'answer',
-      }),
-    });
 
+    let threw = null;
+    let result = null;
+    try {
+      result = await coordinator.resolve({
+        decision,
+        contract,
+        retrieveReferenceEvidence: async () => { throw new Error('INJECTED_RETRIEVAL_THROW'); },
+        retrieveProfileEvidence: async () => ({
+          packId: 'p', turnId: contract.turnId, sourceOwner: contract.sourceOwner,
+          requestedProperty: contract.requestedProperty, items: [], rejected: [],
+          coverage: { hasDirectEvidence: false, propertySatisfied: false, entityMatched: false, sourceOwnerSatisfied: true, confidence: 0 },
+          conflicts: [], answerPolicy: 'answer',
+        }),
+      });
+    } catch (err) {
+      threw = err;
+    }
+
+    assert.equal(threw, null, 'a thrown retriever must be contained, not propagated (allSettled contract)');
+    assert.ok(result, 'resolve() must still return a pack');
+    // Address `result.pack` directly rather than `result.evidencePack ?? result.pack ?? result`:
+    // a fallback chain keeps passing if the return shape drifts, which is the
+    // failure mode a shape-sensitive test exists to catch.
     assert.equal(
-      result.pack.answerPolicy, 'refuse_insufficient_evidence',
-      'a thrown retrieval must produce a REFUSAL pack — anything else lets the turn answer ungrounded',
+      result.pack.answerPolicy,
+      'refuse_insufficient_evidence',
+      'a required family that failed to retrieve must refuse the turn, not answer on what is left',
     );
     assert.equal(result.pack.items.length, 0, 'no partial evidence may survive a failed retrieval');
     assert.ok(
       result.failures.some((f) => f.family === 'reference_files'),
       'the failing family must be reported so the caller can fall back to the legacy path',
     );
-    // The caller's own contract (ipcHandlers): a refusal pack must NOT be treated
-    // as a governed generation context.
-    assert.notEqual(result.pack.answerPolicy, 'answer');
   });
 });

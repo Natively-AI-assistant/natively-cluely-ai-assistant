@@ -183,6 +183,22 @@ describe('complete-inventory metadata (grounded absence)', () => {
       'fixture sanity: the résumé really does not list Kubernetes');
   });
 
+  test('semanticAdmissionGate flag ON does not disturb policy admission (Phase 1 invariant)', async () => {
+    // The semantic-admission gate lives in HybridSearchEngine (premium answer
+    // path). This port's complete-inventory policy admission at fixed 0.6 —
+    // the evidence for grounded absence, which BY CONSTRUCTION cannot rank on
+    // similarity — must be byte-for-byte unaffected by the flag.
+    process.env.NATIVELY_SEMANTIC_ADMISSION_GATE = 'on';
+    try {
+      const r = await lfwPort().retrieve({ decision: lfwDecision('Do I have Kubernetes experience?') });
+      const skills = r.evidence.find((e) => e.metadata?.completeInventory === true && e.sourceType === 'RESUME');
+      assert.ok(skills, 'the inventory must still be policy-admitted with the gate flag ON');
+      assert.ok(!skills.content.includes('Kubernetes'));
+    } finally {
+      delete process.env.NATIVELY_SEMANTIC_ADMISSION_GATE;
+    }
+  });
+
   test('per-entry narrative sections are NOT marked complete', () => {
     const sections = renderProfileSections('resume', RESUME_STRUCTURED);
     const aether = sections.find((s) => s.section.includes('Aetherbot'));

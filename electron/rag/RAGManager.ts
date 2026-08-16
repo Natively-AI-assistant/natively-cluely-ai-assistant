@@ -278,11 +278,22 @@ export class RAGManager {
         const prompt = buildRAGPrompt(query, context.formattedContext, 'meeting', context.intent);
 
         // Stream response
-        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
+        const streamOutcome: { incomplete?: boolean } = {};
+        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
 
         for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
+        }
+        // F7 (code-review 2026-08-14): surface an incomplete stream to the
+        // reader. Without this, a capped or post-commit-failed stream ended
+        // normally, ipcHandlers sent rag:stream-complete, and the renderer
+        // finalized a mid-sentence bubble as a complete answer that then
+        // entered conversation state. The coda makes the truncation VISIBLE
+        // in the rendered/persisted answer (skipped on user abort — that is
+        // a cancellation, not a truncation).
+        if (streamOutcome.incomplete && !abortSignal?.aborted) {
+            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
         }
     }
 
@@ -309,11 +320,22 @@ export class RAGManager {
         const prompt = buildRAGPrompt(query, context.formattedContext, 'global', context.intent);
 
         // Stream response
-        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
+        const streamOutcome: { incomplete?: boolean } = {};
+        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
 
         for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
+        }
+        // F7 (code-review 2026-08-14): surface an incomplete stream to the
+        // reader. Without this, a capped or post-commit-failed stream ended
+        // normally, ipcHandlers sent rag:stream-complete, and the renderer
+        // finalized a mid-sentence bubble as a complete answer that then
+        // entered conversation state. The coda makes the truncation VISIBLE
+        // in the rendered/persisted answer (skipped on user abort — that is
+        // a cancellation, not a truncation).
+        if (streamOutcome.incomplete && !abortSignal?.aborted) {
+            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
         }
     }
 

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: April 25th 2026_
+_Last updated: August 15th 2026_
 
 This policy describes how **Natively** — the desktop application, the **Natively Pro** licensed features, and the **Natively API** managed service — handles your data. We've tried to write it like a person, not a lawyer.
 
@@ -62,11 +62,34 @@ For Natively Pro, the Natively API, and the Free Trial we maintain a small opera
 | Plan / product / order ID | Operate billing, refunds, and support | Same as above |
 | Billing email | Send order confirmations, renewal notices, security &amp; terms updates, and support | Until you ask us to delete the account, plus any period required by tax law |
 | Quota counters (AI / STT / search) | Enforce plan limits and bill correctly | Rolling — counters reset per cycle; aggregate history kept for accounting |
+| Usage ledger — a record of each AI, search and speech-to-text request we run for you: timestamp, endpoint, provider and model name, token and duration counts, and whether it succeeded or failed | Bill correctly, investigate billing disputes and refunds, diagnose failures, and meet statutory accounting-record obligations | 8 years from the date of the event (Companies Act 2013 record-keeping; GST records for 72 months from annual-return filing) |
+| Licence activity — a timestamped record, at most once every 6 hours, that your licensed application contacted our servers to check its entitlement | Confirm a licence was in active use, investigate billing disputes, detect licence sharing | Same as above |
+| Feature activity reported by the app — which built-in feature ran (for example Technical Interview or Meeting Copilot), whether it completed, failed or was cancelled, how long it took, and a category for any error | Understand which features are used, diagnose failures, and evidence usage in a billing dispute where the work ran on your own device and our servers therefore never saw it | Same as above |
+| App context — application version, operating system, and a random installation identifier generated on your device | Tell one installation of your licence apart from another, and reproduce version-specific bugs | Same as above |
+| Diagnostics — timings and counts from the answer pipeline (how long a step took, how many documents were consulted, whether re-ranking ran) | Diagnose slow or failing behaviour | 45 days |
 | Free Trial token, started_at / expires_at | Provide and time-limit the trial | Until 90 days after trial expiry |
 | Anti-abuse signals (rate-limited IP, multi-account heuristics) | Prevent trial farming, refund-rebuy abuse, license sharing | Up to 12 months from last signal |
 | Support correspondence | Answer your questions and keep a record of what we agreed | Up to 3 years from the last message in the thread |
 
 We do **not** store the audio you capture, the screen content you capture, your transcripts, your prompts, or your generated outputs on our servers.
+
+This applies to the usage ledger too. The ledger records **that** something happened — when,
+through which endpoint, on which model, whether it succeeded, and how much of your quota it
+used. It never records **what** it was about. No prompt text, answer text, résumé or
+job-description content, meeting transcript, document content, clipboard content, keystroke
+or screenshot is written to it, and neither is any provider API key: your Natively key
+appears only as a one-way hash that cannot be reversed back into the key.
+
+The installation identifier is a random value generated on your device the first time the app
+runs. It is not derived from your hardware, and we do not collect a hardware fingerprint for
+this purpose. One licence may have several installations, and we record them separately so we
+can tell them apart — not so we can identify a machine.
+
+Where the app reports its own feature activity to us, we label those records as
+**self-reported by the application** and keep them separate from what our servers observed
+directly. We do not present the two as the same kind of evidence, because they are not: the
+first is a report from software running on your computer, and the second is something our own
+systems executed and measured.
 
 ### 3.3 What payment processors handle
 
@@ -187,7 +210,7 @@ You have the following rights in respect of personal data we hold about you:
 
 - **Access** — you can ask what data we hold about you and receive a copy.
 - **Correction** — you can ask us to correct data that's inaccurate or incomplete.
-- **Erasure** — you can ask us to delete your account and the data associated with it, subject to retention required by law (e.g., tax records).
+- **Erasure** — you can ask us to delete your account and the data associated with it. Where a record must be kept by law (for example accounting and tax records), we **pseudonymise** it rather than keep it identifiable: your billing email, installation identifiers and licence-key hash are erased from the usage ledger, and the remaining rows are re-keyed to a salted hash so they survive only as an anonymous count for accounting. The salt is not stored, so the link back to you cannot be rebuilt afterwards. If a payment dispute is open when you ask, we hold the underlying records until it closes and pseudonymise immediately after.
 - **Portability** — you can ask for a copy of your data in a machine-readable format.
 - **Withdraw consent** — where processing relies on your consent, you can withdraw it at any time. (Note that this may require us to terminate paid services that depend on the data.)
 - **Object** — you can object to processing that relies on legitimate interest (e.g., anti-abuse).
