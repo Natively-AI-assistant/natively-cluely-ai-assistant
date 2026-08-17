@@ -19,7 +19,7 @@ on:
   # smoke-tested. Verified: three most recent runs each report total_count 0.
   #
   # Moving it made the workflow PARSE. Making it PASS additionally required the
-  # private `premium` submodule (electron/tsconfig.json includes
+  # private `premium` submodule (electron/tsconfig.premium-check.json includes
   # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
   # calls) — see the checkout steps below, which fetch it explicitly.
   #
@@ -69,7 +69,7 @@ jobs:
           persist-credentials: true
 
       # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
-      # that both build steps genuinely need: electron/tsconfig.json includes
+      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
       # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
       # calls. Without it every run dies at the first typecheck with
       #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
@@ -175,6 +175,17 @@ jobs:
       # backlog, NOT a TS 7 incompatibility.
       - name: Typecheck Electron main process (TypeScript 7)
         run: npm run typecheck:electron
+
+      # Coverage gate for the `premium/` submodule. tsconfig.json deliberately
+      # drops premium from its ROOT FILE SET so `strict` applies only to this
+      # repo's sources — which silently took 38 premium files (KnowledgeOrchestrator,
+      # StructuredExtractor, NegotiationEngine, LicenseManager, all of roleInsight/)
+      # out of type-checking entirely, because they are reached via untyped
+      # require() and nothing else checks them: premium/ has no tsconfig of its own.
+      # This runs them at the strictness they were written against.
+      - name: Typecheck premium submodule (TypeScript 7)
+        if: steps.submodule_token.outputs.available == 'true'
+        run: npm run typecheck:premium
 
       # Insurance for one release cycle: if TS 7 ever diverges from the compiler
       # this repo shipped on, this step is what tells us. Non-blocking because
@@ -318,7 +329,7 @@ jobs:
           persist-credentials: true
 
       # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
-      # that both build steps genuinely need: electron/tsconfig.json includes
+      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
       # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
       # calls. Without it every run dies at the first typecheck with
       #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'

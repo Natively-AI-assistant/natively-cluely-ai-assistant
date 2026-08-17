@@ -44,9 +44,11 @@ export type ServiceAccountRejection =
 
 /**
  * NOTE: deliberately ONE shape with optional fields rather than a discriminated
- * union on `usable`. `electron/tsconfig.json` does not enable `strict`, so
- * narrowing a boolean-literal discriminant does not apply there and every
- * `verdict.reason` read after an `if (!verdict.usable)` would be a type error.
+ * union on `usable`. This dates from when `electron/tsconfig.json` did not enable
+ * `strict` — it does now (TS 7 migration), so the original reason no longer holds
+ * and a discriminated union WOULD narrow correctly here. Kept as-is because
+ * changing the shape is a refactor with call-site churn, not a typing fix; the
+ * annotation is therefore load-bearing today but no longer strictly necessary.
  * A single interface keeps the call sites honest under both configs.
  */
 export interface ServiceAccountVerdict {

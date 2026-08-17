@@ -65,7 +65,11 @@ const distDir = (() => {
   // non-zero status and verify post-hoc that LLMHelper.js was produced.
   try {
     execFileSync(process.execPath, [
-      path.join('node_modules', 'typescript7', 'bin', 'tsc'),
+      // lib/tsc.js, not bin/tsc: bin/tsc is EXTENSIONLESS and contains `import`,
+    // and Node only treats an extensionless entry as ESM from >=22.7 (module
+    // detection). lib/tsc.js is a real .js under "type": "module", so it is ESM
+    // on every Node version. This repo declares no `engines` floor.
+    path.join('node_modules', 'typescript7', 'lib', 'tsc.js'),
       '-p', path.join('electron', 'tsconfig.emit.json'),
       '--outDir', target,
     ], { cwd: repoRoot, stdio: 'pipe' });
