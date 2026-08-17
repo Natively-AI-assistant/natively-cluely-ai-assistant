@@ -27,6 +27,10 @@ findings turned out to **break `npm run dist`**, so they had to be resolved rath
 
 **TS 7 is not faster here** — 0.477 s vs 0.461 s on 1317 files. Measured, §12.
 
+**A later code review found two real defects in this work and one false claim — §17.** They are fixed;
+the section is kept rather than folded away, because one of them was a *safety test that could no
+longer fail* and that is worth being able to find again.
+
 **The last step — replacing `typescript` itself — is externally blocked, and §16 proves it rather than
 asserting it:** `require('typescript@7.0.2')` returns `{ version, versionMajorMinor }`. Two keys.
 TS 5.9.3 returns 2244. TS 7.0's main entry exposes *only the version string*.
@@ -119,7 +123,7 @@ Verified: still 0 errors under TS 5.9.3.
 | `strict` | *(absent)* | `true` | Decision 1 / audit §7.2 option D. |
 | `types` | *(absent)* | `["node"]` | TS 7 requires it explicitly. |
 | `noEmit` | *(absent)* | `true` | **This is the §5 conflict.** |
-| `include` | had `../premium/electron/**/*.ts` | premium removed from the **root file set** | Scopes `strict` to this repo. premium still type-checks as a *dependency* — verified **0 × TS2307**. |
+| `include` | had `../premium/electron/**/*.ts` | premium removed from the **root file set** | Scopes `strict` to this repo. ⚠️ **My original justification here was wrong — see §17.** |
 
 Old values are preserved in comments in both files.
 
@@ -633,3 +637,81 @@ VS Code resolves, so no `typescript.tsdk` setting is needed then either.
 
 Nothing else in the repo needs to change — every tsconfig on a build path is already TS7-legal, and
 the emit config already uses a pairing only TS 7 accepts.
+
+---
+
+## 17. Post-migration code review — two defects and a false claim
+
+A review scoped specifically to the 12 migration commits (the two earlier attempts had reviewed
+another task's working tree instead). It confirmed the substance — every `!` assertion's invariant,
+the `app.dock` gating, the `EvidenceResolver` retype, the reranker guard, `withTimeout<T, F = T>` —
+and found the following, all now fixed in `42fff808`.
+
+### 17.1 ❌ My "0 × TS2307" justification was wrong
+
+§3 claimed premium "still type-checks as a *dependency* — verified 0 × TS2307". **TS2307 is
+cannot-find-module.** It proves imports *resolve*; it says nothing about whether files are *checked*.
+I used a resolution check as evidence of a coverage property it cannot establish.
+
+Measured properly with `--listFiles`:
+
+| | premium files in the program |
+|---|---|
+| original `include` | **47** |
+| after the migration | **9** |
+
+**38 files silently lost all type-checking** — `KnowledgeOrchestrator.ts`, `StructuredExtractor.ts`,
+`HeuristicExtractor.ts`, `NegotiationEngine.ts`, `services/LicenseManager.ts`, and the entire
+`roleInsight/` subsystem. They reach runtime via untyped `require()`, which pulls nothing into the
+program. `premium/` has no tsconfig of its own, so `typecheck:electron` was the *only* gate on a
+submodule other people commit into.
+
+Nothing was broken at the time — those 38 files were error-free at the old strictness — so this was a
+**coverage regression, not a live bug**. That distinction is why it went unnoticed: every gate stayed
+green.
+
+### 17.2 ❌ A safety test became vacuous — it could not fail
+
+`KnowledgeOrchestratorTypecheck.test.mjs` runs tsc and asserts no `TS2339` lines mention
+`KnowledgeOrchestrator.ts`. Once §17.1 removed that file from the program, tsc emitted **no lines for
+it at all**, so the filter matched nothing and the assertion passed unconditionally.
+
+Proven, not argued: injecting a real `TS2339` into `KnowledgeOrchestrator.ts` left the guard **passing**.
+
+**Fix:** `electron/tsconfig.premium-check.json` — premium as the root file set at the strictness it was
+written against (`strict` off, `noImplicitAny` on), plus `npm run typecheck:premium` and a CI step. 47
+files back, 0 errors under both compilers. The same injected error now **fails** the guard.
+
+Two things that mattered in building it, both discovered by measuring rather than reasoning:
+- `exclude` must be **overridden, not inherited** — inheriting `"../premium/**"` cancels the include and
+  yields `TS18003` (no inputs): a gate that checks nothing, i.e. the exact bug being fixed.
+- premium must be the **only** root entry. Listing `electron/**` too re-checks this repo at a different
+  strictness and reports 3 `TS7018`s that `strict` does not produce — noise this gate must not emit.
+
+### 17.3 ❌ The TS 7 entry point required Node ≥ 22.7
+
+`node_modules/typescript7/bin/tsc` is **extensionless** and contains `import`, under `"type": "module"`.
+Node treats an extensionless entry as CommonJS unless module detection is active (unflagged in 22.7),
+and this repo declares **no `engines` floor**. A developer on Node 20 LTS would get
+`SyntaxError: Cannot use import statement outside a module` from `npm run build` — on macOS *and*
+Windows. CI pins Node 22 and I was on 25, so neither surfaced it.
+
+**Fix:** all four scripts and four harnesses use `node_modules/typescript7/lib/tsc.js` — a real `.js`
+under `"type": "module"`, therefore ESM on every Node. Verified identical (`Version 7.0.2`, same exit 0,
+same typecheck result).
+
+### 17.4 Accepted but not actioned
+
+- **Windows binary resolution is still unproven.** `typecheck:electron` is on the release path
+  (`app:build` chains it with `&&`), and TS 7 ships as a per-platform optional dependency
+  (`@typescript/typescript-win32-x64`). An install where that optional dep does not land breaks
+  `npm run dist` on Windows only. No CI run has ever established that the win32 binary resolves: the
+  step was `continue-on-error` in `b0fe882d` and declared "EXPECTED RED" in `5f34baa0`, so a genuine
+  failure was indistinguishable from expected redness. It should be green now — **`Requires physical
+  Windows verification`**.
+- **The §8 contamination disclosure was incomplete.** It named only the Gemini work. The review found
+  three further undisclosed hunks swept into migration commits: a `DefaultOutputWatcher` rollback in
+  `efda6e2b`, and `UsageOutbox` startup wiring plus `streamChatLongForm`/truncation tracking in
+  `20115636`. Consequence worth stating: `git blame` on that audio change points at a commit titled
+  *"keep source-asserting guard tests passing (type fixes at declarations)"*. Reverting the migration
+  would silently revert those too.
