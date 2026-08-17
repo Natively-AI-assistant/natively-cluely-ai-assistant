@@ -6336,6 +6336,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (ragManager) {
           ragManager.initializeEmbeddings({
             openaiKey: cm.getOpenaiApiKey() || undefined,
+            openrouterKey: cm.getOpenrouterApiKey() || undefined,
             geminiKey: apiKey || undefined,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
@@ -6416,6 +6417,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (ragManager) {
           ragManager.initializeEmbeddings({
             openaiKey: apiKey || undefined,
+            openrouterKey: cm.getOpenrouterApiKey() || undefined,
             geminiKey: cm.getGeminiApiKey() || undefined,
             ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
             providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
@@ -6436,6 +6438,59 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error('Error saving OpenAI API key:', error);
       return { success: false, error: error.message };
+    }
+  });
+
+  // OpenRouter is wired for EMBEDDINGS ONLY (default model: NVIDIA Nemotron 3 Embed
+  // 1B, free tier, 2048d). Deliberately does NOT touch LLMHelper/IntelligenceManager —
+  // it is not part of the chat provider chain, so there is nothing to re-route.
+  safeHandle('set-openrouter-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const keyChanged = cm.getOpenrouterApiKey() !== apiKey;
+      cm.setOpenrouterApiKey(apiKey);
+
+      if (keyChanged) {
+        const ragManager = appState.getRAGManager();
+        if (ragManager) {
+          // Same rationale as set-openai-api-key: without this re-init the embedder
+          // keeps its old provider until restart and uploads stay lexical_only.
+          ragManager.initializeEmbeddings({
+            openaiKey: cm.getOpenaiApiKey() || undefined,
+            openrouterKey: apiKey || undefined,
+            geminiKey: cm.getGeminiApiKey() || undefined,
+            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
+            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
+            explicitKeyManagement: true,
+          });
+          appState.scheduleModeReferenceIndexRetry();
+        }
+        broadcastCredentialsChanged();
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error saving OpenRouter API key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Validate an OpenRouter embedding key WITHOUT persisting it: embeds one probe
+  // string and reports the model/dimensions actually returned.
+  safeHandle('test-openrouter-embeddings', async (_, apiKey?: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const key = (apiKey || '').trim() || CredentialsManager.getInstance().getOpenrouterApiKey();
+      if (!key) return { success: false, error: 'No OpenRouter API key provided' };
+
+      const { OpenRouterEmbeddingProvider } = require('./rag/providers/OpenRouterEmbeddingProvider');
+      const provider = new OpenRouterEmbeddingProvider(key);
+      const vector = await provider.embedQuery('natively embedding connectivity probe');
+      return { success: true, model: provider.model, dimensions: vector.length };
+    } catch (error: any) {
+      // Message only — never echo the key back to the renderer.
+      return { success: false, error: String(error?.message || error).slice(0, 300) };
     }
   });
 
@@ -7471,12 +7526,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasGeminiKey: hasKey(creds.geminiApiKey),
         hasGroqKey: hasKey(creds.groqApiKey),
         hasOpenaiKey: hasKey(creds.openaiApiKey),
+        // Embeddings-only provider (OpenRouter), reported separately from the chat keys.
+        hasOpenrouterKey: hasKey(creds.openrouterApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
         litellmBaseURL: creds.litellmBaseURL || null,
+        litellmProxyKind: creds.litellmProxyKind === 'cliproxyapi' ? 'cliproxyapi' : 'generic',
         litellmMaxTokens: creds.litellmMaxTokens || null,
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
@@ -7520,10 +7578,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasGeminiKey: false,
         hasGroqKey: false,
         hasOpenaiKey: false,
+        hasOpenrouterKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
+        litellmProxyKind: 'generic',
         litellmMaxTokens: null,
         hasNativelyKey: false,
         googleServiceAccountPath: null,

@@ -1869,6 +1869,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         deepseek: [deepseekApiKey, setDeepseekApiKey],
     };
 
+    // --- OpenRouter (EMBEDDINGS only — not a chat provider) ---
+    const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+    const [openrouterProbe, setOpenrouterProbe] = useState<{ status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>({ status: 'idle' });
+
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
     const [litellmBaseURL, setLitellmBaseURL] = useState('');
     const [litellmApiKey, setLitellmApiKey] = useState('');
@@ -2066,7 +2070,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         claude: creds.hasClaudeKey,
                         deepseek: creds.hasDeepseekKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
-                        natively: creds.hasNativelyKey || false
+                        natively: creds.hasNativelyKey || false,
+                        openrouter: creds.hasOpenrouterKey || false
                     });
                     // Prefill stored LiteLLM config so re-saving doesn't silently reset it.
                     // (baseURL is config, not a secret; the key stays masked/blank = keep.)
@@ -2887,6 +2892,45 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
     };
 
+    // ── OpenRouter (embeddings only) ────────────────────────────────────────────
+    // Kept out of handleSaveKey/handleTestConnection because those drive the CHAT
+    // provider chain (llmHelper re-routing, model discovery, default-model checks).
+    // OpenRouter here only feeds the embedding pipeline.
+    const handleSaveOpenrouter = async () => {
+        const key = openrouterApiKey.trim();
+        if (!key) return;
+        setSavingStatus(prev => ({ ...prev, openrouter: true }));
+        try {
+            const result = await window.electronAPI.setOpenrouterApiKey(key);
+            if (result?.success) {
+                setSavedStatus(prev => ({ ...prev, openrouter: true }));
+                setHasStoredKey(prev => ({ ...prev, openrouter: true }));
+                setOpenrouterApiKey('');
+                setTimeout(() => setSavedStatus(prev => ({ ...prev, openrouter: false })), 2000);
+            } else {
+                setOpenrouterProbe({ status: 'error', message: result?.error || t('Could not save the OpenRouter key.') });
+            }
+        } catch (e: any) {
+            setOpenrouterProbe({ status: 'error', message: e?.message || String(e) });
+        } finally {
+            setSavingStatus(prev => ({ ...prev, openrouter: false }));
+        }
+    };
+
+    const handleTestOpenrouter = async () => {
+        setOpenrouterProbe({ status: 'testing' });
+        try {
+            const result = await window.electronAPI.testOpenrouterEmbeddings(openrouterApiKey.trim() || undefined);
+            if (result?.success) {
+                setOpenrouterProbe({ status: 'success', message: `${result.model} · ${result.dimensions}d` });
+            } else {
+                setOpenrouterProbe({ status: 'error', message: result?.error || t('Embedding request failed.') });
+            }
+        } catch (e: any) {
+            setOpenrouterProbe({ status: 'error', message: e?.message || String(e) });
+        }
+    };
+
     const handleRemoveKey = (provider: string, setter: (val: string) => void) => {
         setPendingConfirm({ kind: 'providerKey', provider, setter });
     };
@@ -2904,10 +2948,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey('');
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
+            // @ts-ignore
+            if (provider === 'openrouter') result = await window.electronAPI.setOpenrouterApiKey('');
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
                 setter('');
+                // Drop the stale "working / failed" probe result with the key it described.
+                if (provider === 'openrouter') setOpenrouterProbe({ status: 'idle' });
             }
         } catch (e) {
             console.error(`Failed to remove ${provider} key:`, e);
@@ -3308,6 +3356,72 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             />
                         );
                     })}
+
+                    {/* OpenRouter — EMBEDDINGS ONLY. Feeds the reference-file / meeting
+                        embedding pipeline (default: NVIDIA Nemotron 3 Embed 1B, free tier,
+                        2048d). It is probed after OpenAI and Gemini, so adding this key
+                        never changes the embedding space of an install that already has
+                        one of those (which would force a full re-index). */}
+                    <div className="bg-bg-item-surface rounded-xl p-5 border border-border-subtle space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <label className="block text-xs font-bold text-text-primary mb-0">OpenRouter ({t('embeddings')})</label>
+                                <p className="text-[10px] text-text-secondary">
+                                    {t('Free embedding model for reference files and meeting search (Nemotron 3 Embed 1B, 2048d). Not used for chat.')}{' '}
+                                    <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" className="text-accent-primary hover:underline">{t('Get Key')}</a>
+                                </p>
+                            </div>
+                            {hasStoredKey.openrouter && (
+                                <span className="text-[10px] font-medium text-emerald-500 uppercase tracking-wide">{t('Configured')}</span>
+                            )}
+                        </div>
+
+                        <input
+                            type="password"
+                            value={openrouterApiKey}
+                            onChange={e => { setOpenrouterApiKey(e.target.value); setOpenrouterProbe({ status: 'idle' }); }}
+                            className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono focus:outline-none focus:border-accent-primary"
+                            placeholder={hasStoredKey.openrouter ? t('•••••••• (leave blank to keep)') : 'sk-or-v1-...'}
+                        />
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleTestOpenrouter}
+                                disabled={openrouterProbe.status === 'testing' || (!openrouterApiKey.trim() && !hasStoredKey.openrouter)}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border-subtle text-text-secondary hover:text-text-primary disabled:opacity-50 transition-opacity"
+                            >
+                                {openrouterProbe.status === 'testing' ? t('Testing…') : t('Test embeddings')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveOpenrouter}
+                                disabled={!openrouterApiKey.trim() || !!savingStatus.openrouter}
+                                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg disabled:opacity-50 transition-opacity"
+                            >
+                                {savingStatus.openrouter ? t('Saving…') : savedStatus.openrouter ? t('Saved ✓') : t('Save')}
+                            </button>
+                            {hasStoredKey.openrouter && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveKey('openrouter', setOpenrouterApiKey)}
+                                    className="px-3 py-1.5 text-xs font-medium rounded-lg border border-border-subtle text-text-secondary hover:text-text-primary transition-colors"
+                                >
+                                    {t('Remove')}
+                                </button>
+                            )}
+                        </div>
+
+                        {openrouterProbe.status === 'success' && (
+                            <p className="text-[10px] text-emerald-500">{t('Embeddings working')} — {openrouterProbe.message}</p>
+                        )}
+                        {openrouterProbe.status === 'error' && (
+                            <p className="text-[10px] text-red-500">{openrouterProbe.message}</p>
+                        )}
+                        <p className="text-[10px] text-text-secondary">
+                            {t('Free-tier models are rate-limited per day, so indexing a large corpus can slow down or pause. Switching embedding providers re-indexes existing files.')}
+                        </p>
+                    </div>
 
                 </div>
             </div>

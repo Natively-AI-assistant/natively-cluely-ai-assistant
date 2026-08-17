@@ -40,6 +40,14 @@ export class EmbeddingPipeline {
     private vectorStore: VectorStore;
     private isProcessing = false;
     private initPromise: Promise<void> | null = null;
+    /**
+     * True while an initialize() call is still resolving a provider. During a
+     * RE-initialization (a Settings key save) the OUTGOING provider stays
+     * assigned so in-flight work keeps functioning — which means `provider !=
+     * null` is NOT sufficient to conclude the pipeline is settled. waitForReady()
+     * consults this so callers wait for the NEW provider instead of racing the swap.
+     */
+    private _initializing = false;
     /** Tracks the config used in the most recent successful initialize() call to enable idempotency. */
     private _lastConfig: AppAPIConfig | null = null;
 
@@ -65,12 +73,16 @@ export class EmbeddingPipeline {
         // config carries API keys and this line would otherwise leak them to logs/crash reports.
         console.log('[EmbeddingPipeline] Initializing with config:', {
             openaiKey: !!config.openaiKey,
+            openrouterKey: !!config.openrouterKey,
             geminiKey: !!config.geminiKey,
             ollamaUrl: config.ollamaUrl || null,
             geminiEmbeddingModel: config.geminiEmbeddingModel || null,
             geminiEmbeddingDims: config.geminiEmbeddingDims || null,
+            openrouterEmbeddingModel: config.openrouterEmbeddingModel || null,
+            openrouterEmbeddingDims: config.openrouterEmbeddingDims || null,
         });
-        this.initPromise = this._doInitialize(config);
+        this._initializing = true;
+        this.initPromise = this._doInitialize(config).finally(() => { this._initializing = false; });
         return this.initPromise;
     }
 
@@ -85,11 +97,14 @@ export class EmbeddingPipeline {
         const normScopes = (value: AppAPIConfig['providerDataScopes']) => JSON.stringify(value || {});
         return (
             norm(prev.openaiKey) !== norm(next.openaiKey) ||
+            norm(prev.openrouterKey) !== norm(next.openrouterKey) ||
             norm(prev.geminiKey) !== norm(next.geminiKey) ||
             norm(prev.ollamaUrl) !== norm(next.ollamaUrl) ||
             normList(prev.geminiKeys) !== normList(next.geminiKeys) ||
             norm(prev.geminiEmbeddingModel) !== norm(next.geminiEmbeddingModel) ||
             (prev.geminiEmbeddingDims || 0) !== (next.geminiEmbeddingDims || 0) ||
+            norm(prev.openrouterEmbeddingModel) !== norm(next.openrouterEmbeddingModel) ||
+            (prev.openrouterEmbeddingDims || 0) !== (next.openrouterEmbeddingDims || 0) ||
             normScopes(prev.providerDataScopes) !== normScopes(next.providerDataScopes) ||
             Boolean(prev.explicitKeyManagement) !== Boolean(next.explicitKeyManagement)
         );
@@ -193,7 +208,18 @@ export class EmbeddingPipeline {
      * Throws if initialization failed entirely.
      */
     async waitForReady(timeoutMs: number = 15000): Promise<void> {
-        if (this.provider) return; // already ready
+        // NOT `if (this.provider) return` alone: during a re-initialization the
+        // OUTGOING provider is still assigned, so that would hand the caller the
+        // provider that is being replaced. The bug this fixes: saving an embedding
+        // key kicks initializeEmbeddings() + scheduleModeReferenceIndexRetry() back
+        // to back; the retry's waitForReady() returned instantly against the old
+        // (cold local MiniLM, isLoaded() === false) provider, so indexFile() took
+        // the `!isEmbeddingAvailable()` branch and re-stamped every reference file
+        // `lexical_only` with a NULL space — moments before the new provider landed.
+        // Nothing re-kicks the retry afterwards, so files stayed lexical-only until
+        // the next app start. Waiting for the in-flight swap makes the retry see
+        // the provider the user just configured.
+        if (this.provider && !this._initializing) return; // already ready and settled
         if (this.initPromise) {
             // Race against a timeout so we don't hang forever
             await Promise.race([

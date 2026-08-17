@@ -109,6 +109,9 @@ export class ProcessingHelper {
       console.log("[ProcessingHelper] Initializing RAGManager embeddings with available keys");
       ragManager.initializeEmbeddings({
           openaiKey: openaiKey || undefined,
+          // OpenRouter is embeddings-only, so it is not part of the llmHelper wiring
+          // above — it only needs to reach the embedding pipeline.
+          openrouterKey: credManager.getOpenrouterApiKey() || undefined,
           geminiKey: geminiKey || undefined,
           // ollamaUrl is not fetched in CredentialsManager yet by default, but we pass these keys
           providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()

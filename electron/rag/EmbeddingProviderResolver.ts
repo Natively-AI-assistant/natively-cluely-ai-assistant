@@ -1,5 +1,6 @@
 import { IEmbeddingProvider } from './providers/IEmbeddingProvider';
 import { OpenAIEmbeddingProvider } from './providers/OpenAIEmbeddingProvider';
+import { OpenRouterEmbeddingProvider } from './providers/OpenRouterEmbeddingProvider';
 import { GeminiEmbeddingProvider } from './providers/GeminiEmbeddingProvider';
 import { OllamaEmbeddingProvider } from './providers/OllamaEmbeddingProvider';
 import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
@@ -7,6 +8,8 @@ import { ProviderScopeError, assertProviderDataScopes, type ProviderDataScopePol
 
 export interface AppAPIConfig {
   openaiKey?: string;
+  /** OpenRouter key — embeddings only (its default model is NVIDIA Nemotron 3 Embed 1B, free tier). */
+  openrouterKey?: string;
   geminiKey?: string;
   // Optional Gemini key POOL for rotation + per-key 429 cooldown. When present,
   // ALL of these (plus geminiKey) are handed to GeminiEmbeddingProvider so a
@@ -19,6 +22,13 @@ export interface AppAPIConfig {
   geminiEmbeddingModel?: string;
   geminiEmbeddingDims?: number;
   /**
+   * Optional overrides for the OpenRouter embedding model/dims. Changing either
+   * changes the embedding SPACE and therefore forces a full re-index — only set
+   * these deliberately (e.g. moving off the free Nemotron tier).
+   */
+  openrouterEmbeddingModel?: string;
+  openrouterEmbeddingDims?: number;
+  /**
    * True when config came from the Settings UI credential store. In that mode,
    * clearing a key must actually remove that provider; shell/.env keys should not
    * silently keep it alive and make the UI lie about provider availability.
@@ -30,7 +40,7 @@ export class EmbeddingProviderResolver {
   /** Cloud providers get a bounded probe-retry before we demote (hysteresis). */
   private static readonly CLOUD_PROBE_ATTEMPTS = 3;
   private static readonly CLOUD_PROBE_BACKOFF_MS = 400;
-  private static readonly CLOUD_PROVIDER_NAMES = new Set(['openai', 'gemini']);
+  private static readonly CLOUD_PROVIDER_NAMES = new Set(['openai', 'openrouter', 'gemini']);
 
   /**
    * Probe a provider's availability. For CLOUD providers (which require a real
@@ -122,6 +132,30 @@ export class EmbeddingProviderResolver {
           geminiPool,
           config.geminiEmbeddingModel ?? envModel,
           config.geminiEmbeddingDims ?? (Number.isFinite(envDims) ? envDims : undefined),
+        ));
+      } catch (error) {
+        if (error instanceof ProviderScopeError) {
+          embeddingsDenied = true;
+          console.warn('[ScopeFallback] embeddings denied for cloud; routing to Ollama');
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    // OpenRouter sits AFTER openai/gemini on purpose: an install that already has
+    // one of those keys must keep its current provider (and therefore its embedding
+    // SPACE) when an OpenRouter key is added, otherwise adding the key would silently
+    // trigger a full re-index of the whole corpus.
+    if (config.openrouterKey) {
+      try {
+        assertProviderDataScopes('openrouter_embeddings', ['embeddings'], config.providerDataScopes);
+        const envModel = process.env.NATIVELY_OPENROUTER_EMBED_MODEL;
+        const envDims = process.env.NATIVELY_OPENROUTER_EMBED_DIMS ? Number(process.env.NATIVELY_OPENROUTER_EMBED_DIMS) : undefined;
+        candidates.push(new OpenRouterEmbeddingProvider(
+          config.openrouterKey,
+          config.openrouterEmbeddingModel ?? envModel ?? undefined,
+          config.openrouterEmbeddingDims ?? (Number.isFinite(envDims) ? envDims : undefined),
         ));
       } catch (error) {
         if (error instanceof ProviderScopeError) {

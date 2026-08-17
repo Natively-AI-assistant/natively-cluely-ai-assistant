@@ -65,10 +65,14 @@ export interface StoredCredentials {
     geminiApiKey?: string;
     groqApiKey?: string;
     openaiApiKey?: string;
+    /** OpenRouter key. Used for EMBEDDINGS only — not part of the chat provider chain. */
+    openrouterApiKey?: string;
     claudeApiKey?: string;
     deepseekApiKey?: string;
     litellmApiKey?: string;
     litellmBaseURL?: string;
+    /** Presentation/integration type for the OpenAI-compatible proxy. */
+    litellmProxyKind?: 'generic' | 'cliproxyapi';
     /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
     litellmMaxTokens?: number;
     googleServiceAccountPath?: string;
@@ -458,6 +462,11 @@ export class CredentialsManager {
         return this.credentials.openaiApiKey;
     }
 
+    /** OpenRouter key — read by the embedding provider resolver, not the chat router. */
+    public getOpenrouterApiKey(): string | undefined {
+        return this.credentials.openrouterApiKey;
+    }
+
     public getClaudeApiKey(): string | undefined {
         return this.credentials.claudeApiKey;
     }
@@ -737,6 +746,13 @@ export class CredentialsManager {
         this.credentials.openaiApiKey = trimmed || undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] OpenAI API Key updated');
+    }
+
+    public setOpenrouterApiKey(key: string): void {
+        const trimmed = (key || '').trim();
+        this.credentials.openrouterApiKey = trimmed || undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] OpenRouter API Key updated');
     }
 
     public setClaudeApiKey(key: string): void {

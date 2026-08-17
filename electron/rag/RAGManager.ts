@@ -72,6 +72,8 @@ export interface RAGManagerConfig {
     dbPath: string;
     extPath: string;
     openaiKey?: string;
+    /** OpenRouter key — embeddings only (Nemotron 3 Embed 1B on the free tier by default). */
+    openrouterKey?: string;
     geminiKey?: string;
     geminiKeys?: string[];   // optional pool for embedding key-rotation + 429 cooldown
     ollamaUrl?: string;
@@ -120,6 +122,7 @@ export class RAGManager {
 
         this.embeddingPipeline.initialize({
             openaiKey: config.openaiKey,
+            openrouterKey: config.openrouterKey,
             geminiKey: config.geminiKey,
             geminiKeys: config.geminiKeys,
             ollamaUrl: config.ollamaUrl,
@@ -158,7 +161,7 @@ export class RAGManager {
         return this.embeddingPipeline;
     }
 
-    initializeEmbeddings(keys: { openaiKey?: string, geminiKey?: string, geminiKeys?: string[], ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy, explicitKeyManagement?: boolean }): void {
+    initializeEmbeddings(keys: { openaiKey?: string, openrouterKey?: string, geminiKey?: string, geminiKeys?: string[], ollamaUrl?: string, providerDataScopes?: ProviderDataScopePolicy, explicitKeyManagement?: boolean }): void {
         const initPromise = this.embeddingPipeline.initialize({
             ...keys,
             explicitKeyManagement: keys.explicitKeyManagement,

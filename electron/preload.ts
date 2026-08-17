@@ -112,6 +112,10 @@ interface ElectronAPI {
   setGeminiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setGroqApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  /** OpenRouter key — used for EMBEDDINGS only, never chat routing. */
+  setOpenrouterApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  /** Probe an OpenRouter embedding key without persisting it. */
+  testOpenrouterEmbeddings: (apiKey?: string) => Promise<{ success: boolean; model?: string; dimensions?: number; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
@@ -189,6 +193,7 @@ interface ElectronAPI {
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
     hasOpenaiKey: boolean;
+    hasOpenrouterKey?: boolean;
     hasClaudeKey: boolean;
     hasDeepseekKey: boolean;
     disabledProviders?: string[];
@@ -1463,6 +1468,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setGeminiApiKey: (apiKey: string) => ipcRenderer.invoke('set-gemini-api-key', apiKey),
   setGroqApiKey: (apiKey: string) => ipcRenderer.invoke('set-groq-api-key', apiKey),
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
+  setOpenrouterApiKey: (apiKey: string) => ipcRenderer.invoke('set-openrouter-api-key', apiKey),
+  testOpenrouterEmbeddings: (apiKey?: string) => ipcRenderer.invoke('test-openrouter-embeddings', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
