@@ -22,6 +22,18 @@ Live LLM testing: DeepSeek `deepseek-chat` via `DEEPSEEK_API_KEY` in `.env` (ver
 
 ---
 
+## CAMPAIGN-WIDE REGRESSION VERDICT (full suite, 2026-08-18)
+Baseline (c2ad3133, throwaway worktree): 7312 tests / 7114 pass / 135 fail / 63 skipped — 165 unique failing names, pinned in scripts/audit/BASELINE-failures.txt.
+Audit branch: 7368 tests / 7168 pass / 137 fail / 63 skipped — 167 unique failing names (test count is higher because the campaign ADDED 20 test files).
+Name-level diff: **zero regressions attributable to this campaign.** The two names present in mine but absent from the baseline list belong to a test file that does not exist at c2ad3133 at all, so it could not have failed there — see F-401 below.
+
+## F-401 [P2, PRE-EXISTING — found by the regression diff, not introduced here] Semantic admission gate ships with 2 tests that have never passed
+Phase: 4 (retrieval) | Area: electron/llm/__tests__/SpaceAwareThresholds2026_08_13.test.mjs + the semantic admission gate it covers
+Status: FOUND → CONFIRMED (born failing) → NOT FIXED (out of the audit's change scope; owner decision)
+Evidence: the file was introduced by b1e16f59 ("feat(retrieval): Phases 1+3 — semantic admission gate + space-aware thresholds"). Running that exact commit in a clean worktree reproduces 5 pass / 2 fail — identical to the current result. The failures are `telemetry fires in OBSERVE mode (flag OFF) …` and `telemetry reflects enforcement when the gate is ON`, both asserting `flag OFF → observe mode` and getting `true !== false`.
+Why it matters: the gate's own regression tests disagree with its behaviour on the OFF path, i.e. the flag-off (observe-only) contract is unverified in CI and may not hold — the exact "flag defaults" hazard this repo has been bitten by before. Two candidate readings (the flag resolution reads a persisted/test-polluted value, or the observe-mode branch genuinely enforces) need the feature owner to disambiguate intent before a fix is safe.
+Deliberately NOT fixed by this campaign: changing an admission-gate flag contract on a guess could silently alter retrieval behaviour for every mode; and it is unrelated to any defect this campaign introduced.
+
 # Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
 
 ## ⚠ WORKSPACE ADVISORY (2026-08-18 04:50) — campaign moved to an isolated worktree
