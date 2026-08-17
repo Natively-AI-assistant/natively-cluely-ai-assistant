@@ -38,7 +38,22 @@ export interface NemotronTokenizer {
 // AutoTokenizer path — see joinPieces()'s own doc comment below for why the
 // primary path needs this too, not just the fallback.
 function joinPieces(pieces: string[]): string {
-  return pieces.join('').replace(/▁/g, ' ').trim();
+  return pieces
+    .join('')
+    .replace(/▁/g, ' ')
+    // Strip the model's own control tokens. The vocab embeds one language-tag
+    // token per locale (`<en-US>`, `<bg-BG>`, ... — see vocab.txt lines 2,
+    // 257, 398, ...) plus `<unk>` at id 0, and the model re-emits a language
+    // tag at utterance boundaries mid-stream, not just at sequence start —
+    // observed as "lazy dog. <en-US> The quick brown..." in a 9.8s two-
+    // utterance run. These are not in the AutoTokenizer path's
+    // `special_tokens` list either, so BOTH decode paths leaked them; doing
+    // the strip here fixes both at the single shared join point. The pattern
+    // is exact-shape (`<xx-XX>` / `<unk>`), not a general angle-bracket
+    // strip, so real transcribed text can never match it.
+    .replace(/<(?:unk|[a-z]{2,3}(?:-[A-Z]{2})?)>/g, '')
+    .replace(/ {2,}/g, ' ')
+    .trim();
 }
 
 // Fallback decoder: vocab.txt is a flat, newline-delimited id -> piece
