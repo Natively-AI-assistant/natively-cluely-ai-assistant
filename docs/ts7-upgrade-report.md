@@ -337,6 +337,22 @@ After discovering this, every later commit touching a contaminated file was stag
 `ipcHandlers.ts`, `DatabaseManager.ts` and `LLMHelper.ts` were committed without consuming the other
 task's changes, which remain intact and unstaged.
 
+### 8.1 The disclosure above was incomplete — the full list
+
+The original disclosure named only the Gemini model-bump work. A later review found three further
+hunks that are neither TS 7 work nor were disclosed. All three verified by `git show`:
+
+| Commit | Hunk | Why it matters |
+|---|---|---|
+| `efda6e2b` | `DefaultOutputWatcher` gains `previousObservedOutputId` + an ownership-bail rollback | A real macOS **audio route-rebinding change**. `git blame` now attributes it to a commit titled *"keep source-asserting guard tests passing (type fixes at declarations)"*. |
+| `20115636` | `UsageOutbox.start(...)` + `dispatchOnce()` wiring in `initializeApp()` | Startup wiring for another task's ledger feature. |
+| `20115636` | `streamChatLongForm` / `MAX_SUMMARY_OUTPUT_CHARS` / `capOutput` truncation tracking / the post-commit Gemini `TRUNCATION_SENTINEL` change | Answer-truncation behaviour. |
+
+**Consequence, stated plainly:** reverting this migration — the thing keeping it behaviour-neutral was
+supposed to make safe — would silently revert an audio fix, the outbox wiring, and truncation handling.
+Anyone reverting should cherry-pick these back. I have **not** audited these hunks; I only confirmed the
+watcher rollback converges (the next 4 s tick re-fires and rebuilds), so it is not itself a defect.
+
 `main` untouched. Zero files deleted. Zero `git add -A` / `-a` / `stash`.
 
 ---
@@ -700,15 +716,35 @@ Windows. CI pins Node 22 and I was on 25, so neither surfaced it.
 under `"type": "module"`, therefore ESM on every Node. Verified identical (`Version 7.0.2`, same exit 0,
 same typecheck result).
 
+The review also noted the absent `engines` floor as the root cause of *why nobody would notice*. That is
+now declared: **`"engines": { "node": ">=22.6.0" }`**. The number is evidence-based, not aspirational —
+four scripts (`test:lib`, `eval:intelligence:ui`, `test:intelligence:ui:grader`,
+`benchmark:l4-aggregate`) use `--experimental-strip-types`, which landed in Node 22.6, and that is the
+highest floor anything in the repo actually needs. Consistent with CI's `node-version: 22`.
+
 ### 17.4 Accepted but not actioned
 
-- **Windows binary resolution is still unproven.** `typecheck:electron` is on the release path
-  (`app:build` chains it with `&&`), and TS 7 ships as a per-platform optional dependency
-  (`@typescript/typescript-win32-x64`). An install where that optional dep does not land breaks
-  `npm run dist` on Windows only. No CI run has ever established that the win32 binary resolves: the
-  step was `continue-on-error` in `b0fe882d` and declared "EXPECTED RED" in `5f34baa0`, so a genuine
-  failure was indistinguishable from expected redness. It should be green now — **`Requires physical
-  Windows verification`**.
+- **Windows binary resolution — investigated, risk much smaller than first stated.** The concern was
+  that `typecheck:electron` is on the release path (`app:build` chains it with `&&`) while TS 7 ships as
+  a per-platform optional dependency, so a missing `@typescript/typescript-win32-x64` would break
+  `npm run dist` on Windows only. Three measurements narrow this considerably:
+  1. **The lockfile carries the win32 packages** — `@typescript/typescript-win32-x64` and `-win32-arm64`
+     are both present with `resolved`, `os: ["win32"]`, `optional: true`. `npm ci` (what CI runs)
+     installs platform-matching optional deps by default, so the normal path is covered.
+  2. **The failure mode is loud, not mysterious.** Reproduced locally by hiding the darwin package —
+     exactly what Windows would hit:
+     ```
+     Error: Unable to resolve @typescript/typescript-darwin-arm64.
+     Either your platform is unsupported, or you are missing the package on disk.
+     ```
+     exit 1, from `typescript7/lib/getExePath.js`. A diagnosable message, not a silent miscompile.
+  3. **Nothing in this repo uses `--omit=optional`** (grepped `package.json`, workflows, `scripts/`) —
+     the one path that would actually strip those packages is not exercised here.
+
+  Residual, and still true: **no CI run has ever positively established that the win32 binary executes**,
+  because the step was `continue-on-error` in `b0fe882d` and declared "EXPECTED RED" in `5f34baa0`, so a
+  genuine failure was indistinguishable from expected redness. It is blocking and should be green now.
+  **`Requires physical Windows verification`** — the next Windows CI run settles it.
 - **The §8 contamination disclosure was incomplete.** It named only the Gemini work. The review found
   three further undisclosed hunks swept into migration commits: a `DefaultOutputWatcher` rollback in
   `efda6e2b`, and `UsageOutbox` startup wiring plus `streamChatLongForm`/truncation tracking in
