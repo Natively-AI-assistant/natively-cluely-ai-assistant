@@ -612,13 +612,18 @@ export class LocalWhisperSTT extends EventEmitter {
         } else {
             copy = open.samples.slice();
         }
-        this.armStreamingWatchdog();
+        // Logged BEFORE arming, deliberately: LocalWhisperStuckWorker.test.mjs
+        // asserts armStreamingWatchdog() and worker.postMessage sit within 200
+        // characters of each other, as a proxy for "both on the same dispatch
+        // path". Putting this between them breaks that proximity check without
+        // changing behaviour, so it goes above instead.
         if (this.isNemotronModel) {
             console.log(
                 `[LocalWhisperSTT/${this.channelLabel}] → transcribe ${taskId}: ${copy.length} samples ` +
                 `(${Math.round((copy.length / 16000) * 1000)}ms delta, segment=${Math.round(open.durationMs)}ms, reset=${nemotronReset})`,
             );
         }
+        this.armStreamingWatchdog();
         this.worker.postMessage(
             { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true, nemotronReset, channelId: this.nemotronChannelId },
             [copy.buffer]
