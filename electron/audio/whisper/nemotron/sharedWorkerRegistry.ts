@@ -281,6 +281,11 @@ export async function acquireSharedNemotronWorker(
   return { worker: capturedWorker, channelId, release };
 }
 
+// Matches LocalWhisperSTT's own worker-termination grace for every other model
+// (its `workerTerminateTimer`), so Nemotron is not the one path that kills a
+// worker mid native ONNX run.
+const WORKER_TERMINATE_GRACE_MS = 5000;
+
 function releaseChannel(state: SharedNemotronWorkerState, capturedWorker: Worker, channelId: string): void {
   if (state.worker !== capturedWorker) {
     // The shared worker has already been reset/replaced — either it crashed
@@ -300,7 +305,34 @@ function releaseChannel(state: SharedNemotronWorkerState, capturedWorker: Worker
   // Last channel — tear the whole worker down.
   const slotRelease = state.slotRelease;
   resetState(state);
-  try { capturedWorker.terminate(); } catch { /* already dead */ }
+  // GRACE BEFORE terminate(), mirroring LocalWhisperSTT's non-Nemotron path
+  // (its 5s `workerTerminateTimer`, LocalWhisperSTT.ts ~1280).
+  //
+  // This used to call terminate() synchronously, on the stated reasoning that
+  // release() "decides synchronously whether the underlying worker actually
+  // terminates ... there's nothing to defer". There is: the worker thread may
+  // be *inside* a native onnxruntime run(). Killing it there aborts the whole
+  // process — `libc++abi: terminating due to uncaught exception of type
+  // Napi::Error` -> SIGABRT, reproduced on 2026-08-17 by ending a meeting
+  // while the first transcribe was still running.
+  //
+  // Nemotron is far more exposed to this than any other model: ModelPreloader
+  // skips it, so the ~7s cold session load happens at meeting start, VAD banks
+  // a backlog while it loads, and the first dispatch is seconds of inference
+  // (observed 4080ms of mic audio, 5670ms of system). stop() only keeps the
+  // worker alive for pending FINALS — `streamingTaskInFlight` is not counted
+  // (see shouldKeepWorkerForFinals) — so a streaming task in flight is orphaned
+  // by design. Every other model survives that orphaning purely because of the
+  // 5s timer this path was missing.
+  const t = setTimeout(() => {
+    try { capturedWorker.terminate(); } catch { /* already dead */ }
+  }, WORKER_TERMINATE_GRACE_MS);
+  // unref so a pending teardown never pins the event loop on app quit.
+  (t as unknown as { unref?: () => void }).unref?.();
+  // Slot is freed immediately, NOT behind the grace timer — same ordering as
+  // the non-Nemotron path (LocalWhisperSTT.ts ~1235 releases before arming its
+  // timer). Holding it for the grace window would starve a rapid meeting
+  // restart against the gate's default cap of 2.
   if (slotRelease) slotRelease();
 }
 
