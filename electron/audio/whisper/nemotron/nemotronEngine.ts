@@ -66,12 +66,14 @@ export interface ChunkTranscript {
  * compute graphs — `InferenceSession.run()` carries all state via its own
  * input/output tensors, never on the session object itself — so concurrent
  * `.run()` calls from two different NemotronEngine instances against the
- * same shared session are a supported ORT pattern. This app's
- * getBoundedOnnxSessionOptions() already pins intra/inter-op threads to 1,
- * so concurrent calls serialize inside the session rather than truly
- * parallelize — correct either way, just not faster; that's an existing,
- * deliberate constraint elsewhere in this codebase, not something to "fix"
- * here. The tokenizer is likewise safe to share: loadNemotronTokenizer's
+ * same shared session are a supported ORT pattern. These sessions are built
+ * with getBoundedOnnxSessionOptions('rnnt-decode'), whose intra-op default is
+ * now the performance-core count (capped at 4) rather than 1 — so concurrent
+ * calls from two channels genuinely parallelize inside the session instead of
+ * serializing on a single thread, as an earlier version of this comment
+ * described. Sharing stays correct either way; that reasoning never depended
+ * on the thread count, only on run() carrying all state in its own tensors.
+ * The tokenizer is likewise safe to share: loadNemotronTokenizer's
  * returned `decode()` (see tokenizer.ts) only reads from the loaded
  * vocab/model — convert_ids_to_tokens() is a pure id-array -> token-array
  * lookup with no mutable per-call instance state — confirmed by direct
@@ -88,7 +90,7 @@ async function createSessionWithFallback(
   filePath: string,
   executionProviders: string[],
 ): Promise<InferenceSession> {
-  const sessionOptions = { ...getBoundedOnnxSessionOptions(), executionProviders };
+  const sessionOptions = { ...getBoundedOnnxSessionOptions('rnnt-decode'), executionProviders };
   try {
     return await InferenceSession.create(filePath, sessionOptions as any);
   } catch (e) {
@@ -96,7 +98,7 @@ async function createSessionWithFallback(
       `[NemotronEngine] Session creation failed with providers [${executionProviders.join(',')}] for ${path.basename(filePath)}, falling back to CPU:`,
       (e as Error)?.message,
     );
-    return InferenceSession.create(filePath, { ...getBoundedOnnxSessionOptions(), executionProviders: ['cpu'] } as any);
+    return InferenceSession.create(filePath, { ...getBoundedOnnxSessionOptions('rnnt-decode'), executionProviders: ['cpu'] } as any);
   }
 }
 
