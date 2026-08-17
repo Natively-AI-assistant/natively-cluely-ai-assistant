@@ -52,6 +52,12 @@ import type { WorkerOutMessage } from './whisper/types';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
 import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
 import { acquireSharedNemotronWorker } from './whisper/nemotron/sharedWorkerRegistry';
+// The engine's fixed audio window. Imported rather than duplicated as a local
+// literal so the streaming gate can never drift out of sync with the value
+// NemotronEngine.pushAudio() actually buffers against. melFrontend has no
+// eager imports (transformers is loaded lazily inside it), so pulling this
+// constant in costs nothing at main-process startup.
+import { CHUNK_SAMPLES as NEMOTRON_CHUNK_SAMPLES } from './whisper/nemotron/melFrontend';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends EventEmitter {
@@ -261,6 +267,14 @@ export class LocalWhisperSTT extends EventEmitter {
         // LocalAgreement-2 for the same reason as Moonshine: the worker's
         // per-chunk greedy RNNT decode is already stable, so there's no
         // ambiguous partial to stabilize across two passes.
+        //
+        // NOTE: `minAudioMs` is ADVISORY for this model — streamingTick() gates
+        // Nemotron on the pending DELTA reaching one whole CHUNK_SAMPLES window
+        // instead, because the generic duration gate measures the whole segment
+        // while the payload is only the new tail. It is kept equal to the chunk
+        // duration so the two agree, but changing it here will NOT change
+        // dispatch cadence; change the gate in streamingTick(). `intervalMs`
+        // remains live — it is how often the gate is re-evaluated.
         if (LocalWhisperSTT.isNemotronModelId(modelId)) {
             return { intervalMs: 560, minAudioMs: 560, skipAgreement: true };
         }
@@ -585,7 +599,39 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.streamingTaskInFlight) { this.recordStreamingStall(); return; }
 
         const open = this.vad.peekOpenSegment();
-        if (!open || open.durationMs < this.streamingMinAudioMs) {
+        if (!open) {
+            this.recordStreamingStall();
+            return;
+        }
+        // Nemotron gates on the DELTA, not the segment duration.
+        //
+        // The generic gate below compares open.durationMs (the WHOLE open
+        // segment) against streamingMinAudioMs, which is right for every other
+        // model because they re-send the whole segment every tick. Nemotron
+        // sends only what's new since the cursor, so the two quantities are
+        // different — and once the segment passes 560ms the generic gate is
+        // permanently satisfied, firing ticks with whatever sub-chunk sliver
+        // has accrued.
+        //
+        // The engine consumes audio in fixed NEMOTRON_CHUNK_SAMPLES windows and
+        // buffers anything short of one, so a sliver dispatch does literally no
+        // work: it returns zero chunks and zero token ids, yet still occupies
+        // streamingTaskInFlight for a full worker round-trip that blocks the
+        // next dispatch. Measured against the real model on a 2.46s fixture:
+        //
+        //   560ms deltas (aligned)   tick 2 -> "Quick brown"          (1120ms)
+        //   540ms deltas (sliver)    tick 3 -> "Quick brown"          (1620ms)
+        //   300ms deltas (sliver)    tick 4 -> "Quick brown"          (1200ms)
+        //                            ...and 4 of 9 ticks did no work at all.
+        //
+        // Gating on the delta makes every dispatch process at least one whole
+        // chunk, which is what produces incremental partial text.
+        if (this.isNemotronModel) {
+            if (open.samples.length - this.nemotronSentSamples < NEMOTRON_CHUNK_SAMPLES) {
+                this.recordStreamingStall();
+                return;
+            }
+        } else if (open.durationMs < this.streamingMinAudioMs) {
             this.recordStreamingStall();
             return;
         }
@@ -604,11 +650,18 @@ export class LocalWhisperSTT extends EventEmitter {
         let copy: Float32Array<ArrayBuffer>;
         let nemotronReset = false;
         if (this.isNemotronModel) {
-            // Send only what's new since the last tick. `open.samples` keeps
-            // growing (VAD hasn't closed this segment); slice(cursor) is the delta.
+            // Send only what's new since the last tick, truncated to a WHOLE
+            // number of engine chunks. The remainder stays behind the cursor
+            // rather than being shipped as a sliver the engine would just
+            // buffer — it goes out with the next aligned tick, or (if the
+            // segment closes first) with dispatchFinal, whose own
+            // `audio.slice(nemotronSentSamples)` picks up exactly the samples
+            // this loop never sent, and flush() zero-pads that tail.
             nemotronReset = this.nemotronSentSamples === 0;
-            copy = open.samples.slice(this.nemotronSentSamples);
-            this.nemotronSentSamples = open.samples.length;
+            const pending = open.samples.length - this.nemotronSentSamples;
+            const aligned = Math.floor(pending / NEMOTRON_CHUNK_SAMPLES) * NEMOTRON_CHUNK_SAMPLES;
+            copy = open.samples.slice(this.nemotronSentSamples, this.nemotronSentSamples + aligned);
+            this.nemotronSentSamples += aligned;
         } else {
             copy = open.samples.slice();
         }
