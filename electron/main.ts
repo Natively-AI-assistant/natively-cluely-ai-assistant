@@ -1273,6 +1273,14 @@ function normalizeDisguiseMode(value: unknown): DisguiseMode {
     : 'none'
 }
 
+/** Which capture channels actually started (F-105 per-channel isolation).
+ *  Named rather than inline so tooling that extracts method bodies by
+ *  brace-matching the signature is not confused by an inline object type. */
+interface CaptureChannelStartResult {
+  mic: boolean;
+  system: boolean;
+}
+
 export class AppState {
   private static instance: AppState | null = null
 
@@ -5403,7 +5411,7 @@ export class AppState {
    * before the CoreAudio tap avoids HAL contention (same ordering invariant
    * as every call site this replaces).
    */
-  private startCaptureChannels(context: string): { mic: boolean; system: boolean } {
+  private startCaptureChannels(context: string): CaptureChannelStartResult {
     const started = { mic: false, system: false };
     try {
       this.microphoneCapture?.start();

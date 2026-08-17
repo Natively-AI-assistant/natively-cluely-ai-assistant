@@ -61,6 +61,16 @@ function firstIndexOf(re, body) {
 }
 
 function assertMicStartsBeforeSystem(body, label) {
+  // Since F-105 (per-channel failure isolation — a mic start() throw must not
+  // take the system channel and the route watcher down with it) the four
+  // channel starts live in the shared startCaptureChannels() helper. A call
+  // site that delegates upholds this HAL-ordering invariant exactly when the
+  // helper does, so follow the delegation instead of demanding the literal
+  // calls inline.
+  if (/this\.startCaptureChannels\(/.test(scrubNonCode(body))) {
+    body = extractMethodBody('startCaptureChannels');
+    label = `${label} → startCaptureChannels`;
+  }
   const micIdx = firstIndexOf(/this\.microphoneCapture\??\.start\(\)/, body);
   const sysIdx = firstIndexOf(/(?:this\.systemAudioCapture\??|systemCapturePausedByMicRecovery)\.start\(\)/, body);
   assert.ok(micIdx >= 0, `${label}: could not find microphoneCapture.start()`);

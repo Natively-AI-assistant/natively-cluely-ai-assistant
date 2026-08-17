@@ -185,14 +185,23 @@ test('active meeting reconfigure starts replacement captures and STT streams', (
     'BUG: active-meeting reconfigure must start replacements after new captures are constructed and wired.',
   );
 
+  // Since F-105 the four channel starts live in the shared
+  // startCaptureChannels() helper so a mic start() throw can no longer take
+  // the system channel down with it. The call site delegates; assert the
+  // delegation here and the actual start calls in the helper body.
   const activeStartBlock = reconfigureBody.slice(activeStartIndex);
+  assert.ok(
+    /this\.startCaptureChannels\(/.test(activeStartBlock),
+    'BUG: active reconfigure must start the capture channels (via startCaptureChannels).',
+  );
+  const helperBody = extractMethodBody('startCaptureChannels');
   for (const expected of [
     'this.systemAudioCapture?.start()',
     'this.microphoneCapture?.start()',
     'this.googleSTT?.start()',
     'this.googleSTT_User?.start()',
   ]) {
-    assert.ok(activeStartBlock.includes(expected), `BUG: active reconfigure must call ${expected}.`);
+    assert.ok(helperBody.includes(expected), `BUG: startCaptureChannels must call ${expected}.`);
   }
 });
 

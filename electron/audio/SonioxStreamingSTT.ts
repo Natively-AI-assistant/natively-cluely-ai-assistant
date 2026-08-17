@@ -234,7 +234,19 @@ export class SonioxStreamingSTT extends EventEmitter {
         // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
         this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions() as any);
 
+        // F-203: identity guard. stop() does not detach listeners and
+        // scheduleRestart()/setSampleRate()/setRecognitionLanguage() do a
+        // synchronous stop()+start(), so the OLD socket's async 'close' would
+        // otherwise run against the NEW session: null out the live `this.ws`
+        // (write() can no longer reach it), clear the new keepalive, and — on
+        // a normal 1000 close — set isActive=false, which silently drops every
+        // subsequent chunk with no 'error' emitted and no banner (total silent
+        // death until a manual Stop/Start). Mirrors NativelyProSTT's
+        // documented `guard(ws === this.ws)` pattern.
+        const ws = this.ws;
+
         this.ws.on('open', () => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             // Guard: stop() may have been called while the WS handshake was in flight.
             // shouldReconnect is set to false by stop() before ws is nulled, so it's a
             // reliable signal that we should abort here without crashing.
@@ -347,6 +359,7 @@ export class SonioxStreamingSTT extends EventEmitter {
                 if (msg.finished) {
                     console.log('[SonioxStreaming] Session finished');
                     // We don't stop entirely, just clear WS so it can lazily reconnect on next audio
+                    if (ws !== this.ws) return; // F-203: don't clear a newer session's socket
                     if (this.ws) {
                         this.ws.close();
                         this.ws = null;
@@ -359,11 +372,13 @@ export class SonioxStreamingSTT extends EventEmitter {
         });
 
         this.ws.on('error', (err: Error) => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             console.error('[SonioxStreaming] WebSocket error:', err.message);
             this.emit('error', err);
         });
 
         this.ws.on('close', (code: number, reason: Buffer) => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             // Null out the ws reference immediately to prevent stale reuse
             this.ws = null;
             this.isConnecting = false;

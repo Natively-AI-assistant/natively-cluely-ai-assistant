@@ -24,6 +24,15 @@ Live LLM testing: DeepSeek `deepseek-chat` via `DEEPSEEK_API_KEY` in `.env` (ver
 
 # Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
 
+## ⚠ WORKSPACE ADVISORY (2026-08-18 04:50) — campaign moved to an isolated worktree
+Mid-campaign, a SECOND agent was found actively working in /Users/evin/natively-cluely-ai-assistant (commit 93s old at detection), and it had advanced the `audit/autopilot-2026-08-14` pointer onto its own work (building on top of my commits — my line is intact and is an ancestor of theirs). Continuing in that shared checkout would have meant our `npm run build:electron` runs clobbering each other's `dist-electron/`, making every overnight verification untrustworthy, and my app-launch repros racing their edits.
+Actions taken (non-destructive, nothing of theirs touched):
+- Tagged my verified Phase 1+2 line as `audit-autopilot-phase1-2-final` (918de598) so it can never be lost.
+- Created an isolated worktree `/Users/evin/natively-audit-wt` on branch `audit/autopilot-2026-08-18` from that tag; symlinked node_modules, .env, native-module binaries, and the premium/natively-api submodules (read-only for this audit).
+- Verified in isolation: build:electron clean, F-112 repro PASSES → the worktree is a faithful environment.
+All Phase 2+ work continues in the worktree. The other agent's branch, index, and working tree are untouched. Phase 1 commits (a9d7ea42…88793025) and F-201 (918de598) remain reachable from BOTH lines.
+Note (from an independent code review that ran against the shared checkout): the `premium` submodule pointer there is REWOUND to a strict ancestor (ae7b4ba0 → e5e400d8) and `natively-api` is bumped — both uncommitted. Verified NONE of my 20 audit commits contain a submodule pointer change (scoped `--only` pathspecs throughout). Flagging for the branch owner; the audit does not touch submodule pins.
+
 ## ⚠ MERGE ADVISORY (F-202) — read before shipping this branch
 This branch (forked at c2ad3133) does NOT contain main's commit 21c4e22f ("fix(lifecycle): stop rapid meeting start/stop from silently killing the database"): the NativelyProSTT selective-listener-removal fix, its 285-line regression test (NativelyProSTTConnectingCancellation2026_08_07.test.mjs), MeetingLifecycleQueue, and FatalMainProcessCoordinator (incl. terminateAfterFatalError) all exist only on main. Merging/shipping this branch without a forward-merge of main resurrects a found-fixed-and-tested P0 in its WORSE form (no terminate → app runs on with a dead SQLite handle). The audit does not perform that merge (integration decision for the branch owner, conflicts with in-flight work); F-201's fix below patches the vulnerable sites minimally on this branch, but the merge is still required for the coordinator/queue infrastructure.
 
@@ -46,9 +55,25 @@ Commit: (pending)
 ## F-202 [P0] Branch regresses main's shipped fix + lifecycle infrastructure
 Status: FOUND → CONFIRMED (git-graph evidence above) → ADVISORY (no code fix possible within audit scope; forward-merge required)
 
+## ⚠ CORRECTION to the Phase 1 close-out (2026-08-18) — 5 self-inflicted test failures found and fixed
+The Phase 1 close-out claimed the full suite's 127 failures were "all verified as pre-existing baseline red". That claim was NOT rigorous: I spot-checked exactly ONE failing name. Building a TRUE baseline (throwaway worktree at the pre-audit commit c2ad3133, same suite, same runner) proved **my Phase 1 F-105 refactor broke 5 tests**:
+- MeetingStartMicBeforeSystemOrder.test.mjs ×3 (startMeeting / reconfigureAudio / reconfigureSttProvider mic-before-system ordering)
+- BluetoothHfpAvoidance.test.mjs ×1 (active reconfigure starts replacement captures)
+- StartStopRaceDeferredInit.test.mjs ×1 (deferred-init STT/RAG ownership flags)
+All five were STALE SOURCE-ASSERTION tests, not behavioral breakage: they scan each method body for literal `microphoneCapture.start()` / `googleSTT?.start()` adjacency, which F-105 moved into the shared `startCaptureChannels()` helper. The HAL-ordering invariant (mic before system) and the ownership-flag invariant both still hold — inside the helper, and now per-channel accurate.
+Repairs: the three tests now FOLLOW the delegation (assert the call site delegates, then assert the invariant in the helper body). One product change was needed too — `startCaptureChannels` returned an inline object type `{ mic: boolean; system: boolean }`, whose brace confused the tests' signature-based method-body extractor; it now returns a named `CaptureChannelStartResult` interface (no behavior change).
+Verified after repair: audio suite 325 pass / 12 fail, and the 12 match the pre-audit baseline EXACTLY (`comm` diff empty) → zero regressions attributable to this campaign.
+Process fix for the rest of the campaign: every phase close-out now diffs failing-test NAMES against a real baseline worktree run, never by assertion.
+
 ## F-203 [P1] Google/Soniox/Deepgram lack the stale-connection identity guard
 Phase: 2 | Area: GoogleSTT / SonioxStreamingSTT / DeepgramStreamingSTT
-Status: FOUND
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-203-repro.mjs — real GoogleSTT from the dist bundle with its private `client` swapped for a fake gRPC transport (no credentials, no network); `setSampleRate(48000)` drives the same synchronous stop()+start() main.ts triggers on the first audio chunk of every meeting. PRE-FIX: 2 streams created, `this.stream` === NULL and isStreaming=false after the destroyed stream's async 'close' → the live stream#2 orphaned (open, never ended) → exit 1.
+Root cause: handlers close over `this` only, so a discarded connection's async events mutate the CURRENT connection's state. Google: 'error'/'end'/'close' each run `this.stream = null`. Soniox: 'close' nulls this.ws, clears the new keepalive, and on a normal 1000 close sets isActive=false (every later chunk dropped, no 'error', no banner — total silent death). Deepgram: stale Open re-registers Transcript on the live connection (doubled finals into handleTranscript AND the RAG feed) and stale Close clears the live timers.
+Fix: NativelyProSTT's documented identity-guard pattern applied to all three — bind the connection to a local at creation and bail (`if (x !== this.x) return;`) in every STATE-MUTATING handler. Deepgram's inner Transcript listener now binds to the captured connection so a stale Open cannot double-register. Deliberately NOT guarded: Google's 'data' and Soniox's transcript emission — they mutate no connection state and a late final is still real user speech (only Soniox's `msg.finished` socket-clearing branch is guarded).
+E2E verification: repro → exit 0 (live stream#2 intact, isStreaming=true). Pin: StaleSttConnectionGuards2026_08_18.test.mjs (3/3, one per provider). Full audio suite 325/337 with zero regressions vs the true baseline.
+Cross-platform: pure JS state machines; both platforms.
+Commit: (pending)
 Hypothesis: NativelyProSTT installs `if (ws !== this.ws) return;` guards on every handler (documented CRITICAL, :497-511); the other three don't. GoogleSTT: proactive 270s restart + every set* does synchronous stop+start; the destroyed stream's 'close' fires one tick later and nulls the FRESH stream (:422-427) → orphaned gRPC stream + third stream via lazy reconnect; fires at meeting start (setSampleRate on first chunk) and every 270s. Soniox: old socket's close handler clobbers this.ws (:368), kills the new keepalive (:371), and on code 1000 sets isActive=false → every chunk dropped, no error, no banner — total silent death. Deepgram: old handlers set wrong-connection state, register a SECOND Transcript listener (doubled finals into handleTranscript + RAG), clearTimers kills the live keepalive; buffer discarded on restart (Soniox preserves it).
 Trigger: any mid-stream setSampleRate/setAudioChannelCount/setRecognitionLanguage; Google additionally every 270s.
 Confidence: high (Google/Soniox) / medium (Deepgram SDK timing).

@@ -80,10 +80,17 @@ test('deferred audio init aborts and destroys stale captures after awaited setup
     'BUG: stale deferred audio init must not stop STT/RAG work unless this stale init started it.',
   );
   assert.ok(
-    /this\.googleSTT\?\.start\s*\(\s*\);[\s\S]*systemSttStartedByInit\s*=\s*true/.test(deferredInit) &&
-      /this\.googleSTT_User\?\.start\s*\(\s*\);[\s\S]*userSttStartedByInit\s*=\s*true/.test(deferredInit) &&
+    // Since F-105 the STT/capture starts are delegated to
+    // startCaptureChannels(), which reports per-channel success; the deferred
+    // init assigns the ownership flags from that result. The invariant is
+    // unchanged (a flag is set iff THIS init started that resource) and is now
+    // strictly more accurate, since a channel that failed to start no longer
+    // claims ownership.
+    /startCaptureChannels\s*\([^)]*\)/.test(deferredInit) &&
+      /systemSttStartedByInit\s*=\s*channelsStarted\.system/.test(deferredInit) &&
+      /userSttStartedByInit\s*=\s*channelsStarted\.mic/.test(deferredInit) &&
       /this\.ragManager\.startLiveIndexing\s*\([^)]*\);[\s\S]*liveIndexingStartedByInit\s*=\s*true/.test(deferredInit),
-    'BUG: deferred audio init must set STT/RAG ownership flags immediately after starting those resources.',
+    'BUG: deferred audio init must set STT/RAG ownership flags from the channel-start result.',
   );
   assert.ok(
     /await\s+this\.reconfigureAudio\s*\([^)]*\);[\s\S]*systemCaptureOwnedByInit\s*=\s*this\.systemAudioCapture;[\s\S]*microphoneCaptureOwnedByInit\s*=\s*this\.microphoneCapture;[\s\S]*if\s*\(\s*!isCurrentMeeting\s*\(\s*\)\s*\)\s*\{[\s\S]*abortStaleAudioInit\s*\(\s*\);[\s\S]*return;[\s\S]*\}/.test(deferredInit),
