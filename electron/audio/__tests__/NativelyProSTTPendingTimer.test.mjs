@@ -66,9 +66,22 @@ test('setSampleRate inline 250ms reconnect timer must not fire after stop()/star
     stt.isActive = true;
     stt.isConnected = true;
     stt.sampleRate = 16000;
+    // A live socket must be present: since F-204 the gate keys on the socket
+    // state (reconnect unless absent/CONNECTING) rather than on isConnected,
+    // because the auth frame that commits sample_rate is sent in ws.on('open')
+    // — one round-trip BEFORE isConnected flips. `isConnected === true` with
+    // `ws === null` is unreachable in production anyway: closeUpstream()
+    // clears isConnected before nulling ws.
+    stt.ws = {
+        readyState: 1, // WebSocket.OPEN
+        removeAllListeners() {},
+        on() {},
+        send() {},
+        close() {},
+    };
 
     // 3) Trigger the inline 250ms setTimeout. closeUpstream() runs synchronously
-    //    inside; ws is null so it's a no-op as expected.
+    //    inside and tears the stub socket down.
     stt.setSampleRate(48000);
 
     // Sanity: a pending timer handle must exist now (the fix tracks it).

@@ -107,6 +107,14 @@ export class LocalWhisperSTT extends EventEmitter {
     // before we terminate it. Tracked so rapid stop/start cycles or app quit
     // don't pin the event loop with stale termination timers.
     private workerTerminateTimer: ReturnType<typeof setTimeout> | null = null;
+    /** F-205: bounds the "keep the worker alive to drain finals" path in
+     *  stop(). Every other release path is worker-reply-driven, so a worker
+     *  that never replies (hung ONNX inference) would otherwise leak both the
+     *  worker AND the shared ONNX semaphore slot for the rest of the session. */
+    private drainWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Upper bound on the post-stop final drain. Generous relative to a normal
+     *  whisper pass; this exists only to catch a wedged worker. */
+    private static readonly DRAIN_WATCHDOG_MS = 15_000;
 
     // Streaming inference loop state.
     // Self-chaining setTimeout (not setInterval) so the delay can adapt at
@@ -278,7 +286,30 @@ export class LocalWhisperSTT extends EventEmitter {
         const w = this.worker;
         if (w) {
             const shouldKeepWorkerForFinals = this.isDrainingFinals && (this.pendingAudio.length > 0 || this.drainingFinalsInFlight > 0);
-            if (shouldKeepWorkerForFinals) return;
+            if (shouldKeepWorkerForFinals) {
+                // F-205: bound the drain. The release paths from here on are
+                // all worker-reply-driven ('result'/'error'/flushPending), and
+                // dispatchFinal() clears the streaming watchdog — so a worker
+                // wedged inside ONNX inference would keep this.slotRelease
+                // held forever. acquireOnnxSlot is an unbounded semaphore with
+                // no timeout, so the NEXT meeting's spawnWorker would await it
+                // for the rest of the app session with no 'error' emitted and
+                // no banner, taking the local embedder/reranker/intent
+                // classifier down with it.
+                if (this.drainWatchdogTimer) clearTimeout(this.drainWatchdogTimer);
+                const dt = setTimeout(() => {
+                    this.drainWatchdogTimer = null;
+                    if (this.worker !== w) return; // drain completed normally
+                    console.warn(
+                        `[LocalWhisperSTT] Final drain did not complete within ${LocalWhisperSTT.DRAIN_WATCHDOG_MS}ms — ` +
+                        `terminating the worker and releasing the shared ONNX slot.`,
+                    );
+                    this.beginWorkerTermination(w);
+                }, LocalWhisperSTT.DRAIN_WATCHDOG_MS);
+                (dt as any).unref?.();
+                this.drainWatchdogTimer = dt;
+                return;
+            }
             this.beginWorkerTermination(w);
         }
     }
@@ -824,6 +855,8 @@ export class LocalWhisperSTT extends EventEmitter {
         // Reset the sent-prompt tracker: a future spawnWorker call will get a
         // fresh worker with empty cache, so we must re-push on next ready.
         this.contextPromptSentToWorker = '';
+        // F-205: the drain is over (normally or by watchdog) — cancel the bound.
+        if (this.drainWatchdogTimer) { clearTimeout(this.drainWatchdogTimer); this.drainWatchdogTimer = null; }
         w.removeAllListeners('message');
         w.removeAllListeners('error');
         if (this.workerTerminateTimer) clearTimeout(this.workerTerminateTimer);
