@@ -79,7 +79,12 @@ Trigger: any mid-stream setSampleRate/setAudioChannelCount/setRecognitionLanguag
 Confidence: high (Google/Soniox) / medium (Deepgram SDK timing).
 
 ## F-204 [P2] NativelyProSTT setSampleRate gate diverges from its own comment
-Status: FOUND — gate at :258 uses isActive&&isConnected but the auth frame commits the OLD rate at ws 'open' (:521-522), one round-trip BEFORE isConnected (:582); in the OPEN-but-not-connected window a rate change is skipped → server transcodes at the wrong rate (the exact garbled-transcript failure the comment warns about). Window = relay connect latency; setSampleRate fires on first system chunk (~5-7s after start). Confidence: medium.
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-204-repro.mjs — real NativelyProSTT with ws forced to readyState OPEN and isConnected=false (the post-auth-frame, pre-server-confirm window). PRE-FIX: no close, no intentionalClose, no pendingConnectTimer → the rate change was silently dropped → exit 1.
+Root cause: gate used `isActive && isConnected`; isConnected only flips on the server's {status:'connected'} frame, a full round-trip after ws.on('open') sent the auth frame that COMMITS sample_rate.
+Fix: gate on the states the block's own comment describes — reconnect unless pre-handshake (`!ws || ws.readyState === WebSocket.CONNECTING`).
+E2E verification: repro → exit 0. Pin: NativelyProRateGateStates2026_08_18.test.mjs (4/4) covering BOTH directions — OPEN-unconfirmed and confirmed reconnect; CONNECTING and null do NOT (preserving the documented avoidance of a wasted TLS round-trip and the spurious abort log).
+Original hypothesis retained below — gate at :258 uses isActive&&isConnected but the auth frame commits the OLD rate at ws 'open' (:521-522), one round-trip BEFORE isConnected (:582); in the OPEN-but-not-connected window a rate change is skipped → server transcodes at the wrong rate (the exact garbled-transcript failure the comment warns about). Window = relay connect latency; setSampleRate fires on first system chunk (~5-7s after start). Confidence: medium.
 
 ## F-205 [P2] LocalWhisperSTT drain leak holds the shared ONNX slot forever
 Status: FOUND — stop() keeps the worker for draining finals (:278-283) with NO drain timeout; all release paths are worker-reply-driven; dispatchFinal DISARMS the streaming watchdog (:581). A hung inference leaks the worker AND the acquireOnnxSlot('high') semaphore slot (no timeout, onnxThreadConfig:165-191) → next meeting's spawnWorker awaits forever, no error emitted, no banner; embedder/reranker/intent behind the same gate. Confidence: medium-high.
