@@ -276,7 +276,15 @@ export class LocalWhisperSTT extends EventEmitter {
         // dispatch cadence; change the gate in streamingTick(). `intervalMs`
         // remains live — it is how often the gate is re-evaluated.
         if (LocalWhisperSTT.isNemotronModelId(modelId)) {
-            return { intervalMs: 560, minAudioMs: 560, skipAgreement: true };
+            // intervalMs is HALF the chunk duration, not equal to it. The tick
+            // only decides whether a whole chunk is pending; polling at exactly
+            // the chunk duration means a chunk that completes just after a tick
+            // waits a further full 560ms before dispatch — up to 1120ms of
+            // audio sitting idle before inference starts. Polling at 280ms
+            // halves that worst case. Ticks that find less than a chunk are
+            // free (one peek and a subtraction) and no longer count as stalls,
+            // so a faster poll costs nothing.
+            return { intervalMs: 280, minAudioMs: 560, skipAgreement: true };
         }
         return { intervalMs: 1500, minAudioMs: 800, skipAgreement: false };
     }
@@ -628,7 +636,19 @@ export class LocalWhisperSTT extends EventEmitter {
         // chunk, which is what produces incremental partial text.
         if (this.isNemotronModel) {
             if (open.samples.length - this.nemotronSentSamples < NEMOTRON_CHUNK_SAMPLES) {
-                this.recordStreamingStall();
+                // NOT a stall — deliberately does not call recordStreamingStall().
+                //
+                // A stall means "nothing useful is happening" (worker busy, no
+                // speech) and earns exponential backoff up to
+                // STREAMING_INTERVAL_MAX_MS. Mid-utterance, "the delta hasn't
+                // reached a chunk boundary yet" is the NORMAL state for most
+                // ticks — the tick rate is deliberately faster than the chunk
+                // duration so a completed chunk is picked up promptly. Counting
+                // those as stalls would back the loop off to 1120ms, 2240ms,
+                // 4480ms... while the user is still talking, which is the exact
+                // opposite of what the audio is telling us. Genuine silence is
+                // already caught by the isInSpeech() check above, which does
+                // still record a stall.
                 return;
             }
         } else if (open.durationMs < this.streamingMinAudioMs) {
