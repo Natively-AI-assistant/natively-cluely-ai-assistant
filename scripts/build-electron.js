@@ -38,8 +38,31 @@ if (fs.existsSync(electronDir)) {
 
 // Also include premium electron files if they exist
 const premiumDir = path.resolve(rootDir, 'premium/electron');
-if (fs.existsSync(premiumDir)) {
+const hasPremium = fs.existsSync(premiumDir);
+if (hasPremium) {
   entryPoints.push(...findTs(premiumDir).map(f => path.relative(rootDir, f)));
+}
+
+// `premium` is a private submodule. Without access to it the checkout leaves the
+// directory empty, and esbuild then fails the WHOLE build on the relative
+// requires in resolveCompanySearchProvider.ts — even though those requires are
+// already lazy and guarded by a credential check at runtime. Marking them
+// external when the submodule is absent restores the intended degradation: the
+// bundle emits the require untouched, it throws only if that code path is
+// actually reached, and the app logs "Knowledge modules not available" instead
+// of failing to build at all. When the submodule IS present nothing changes —
+// the files are real entry points and esbuild resolves them normally.
+const premiumOptionalPlugin = {
+  name: 'premium-optional',
+  setup(build) {
+    build.onResolve({ filter: /(^|\/)premium\/electron\// }, (args) => {
+      if (hasPremium) return null;
+      return { path: args.path, external: true };
+    });
+  },
+};
+if (!hasPremium) {
+  console.warn('[build-electron] premium submodule not checked out — premium imports left external (profile intelligence disabled at runtime).');
 }
 
 const start = Date.now();
@@ -94,6 +117,7 @@ const buildOptions = {
     'pdf-parse',
     'mammoth',
   ],
+  plugins: [premiumOptionalPlugin],
   sourcemap: true,
   jsx: 'automatic',
   loader: {
