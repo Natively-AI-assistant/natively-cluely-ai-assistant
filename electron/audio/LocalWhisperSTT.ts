@@ -712,6 +712,24 @@ export class LocalWhisperSTT extends EventEmitter {
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
 
         const cleaned = filterHallucination(text);
+        if (this.isNemotronModel) {
+            // Mirrors the `← result` log so the partial path is no longer the
+            // one silent leg. Distinguishes engine-returned-nothing from
+            // filtered from deduped from actually emitted — the four outcomes
+            // that all looked identical as `first-partial: n=0`.
+            const raw = text ?? '';
+            const verdict = raw.length === 0
+                ? 'ENGINE RETURNED EMPTY'
+                : !cleaned
+                    ? 'DROPPED BY filterHallucination'
+                    : cleaned === this.lastEmittedText
+                        ? 'DEDUPED (identical to previous partial)'
+                        : 'EMITTED';
+            console.log(
+                `[LocalWhisperSTT/${this.channelLabel}] ~ partial: raw=${raw.length}ch ` +
+                `${raw.length > 0 ? JSON.stringify(raw.slice(0, 80)) : ''} → ${verdict}`,
+            );
+        }
         if (!cleaned) return;
 
         // Streaming-class models (Moonshine) produce stable, deterministic
