@@ -613,6 +613,12 @@ export class LocalWhisperSTT extends EventEmitter {
             copy = open.samples.slice();
         }
         this.armStreamingWatchdog();
+        if (this.isNemotronModel) {
+            console.log(
+                `[LocalWhisperSTT/${this.channelLabel}] → transcribe ${taskId}: ${copy.length} samples ` +
+                `(${Math.round((copy.length / 16000) * 1000)}ms delta, segment=${Math.round(open.durationMs)}ms, reset=${nemotronReset})`,
+            );
+        }
         this.worker.postMessage(
             { type: 'transcribe', taskId, audio: copy, language: this.language, streaming: true, nemotronReset, channelId: this.nemotronChannelId },
             [copy.buffer]
@@ -1003,6 +1009,17 @@ export class LocalWhisperSTT extends EventEmitter {
                 this.handleStreamingPartial(msg.text);
             } else if (msg.type === 'result') {
                 const text = filterHallucination(msg.text);
+                if (this.isNemotronModel) {
+                    // Distinguishes the three silent outcomes this path had no
+                    // way to tell apart: engine returned nothing, engine returned
+                    // text that filterHallucination then dropped, or a real emit.
+                    const raw = msg.text ?? '';
+                    console.log(
+                        `[LocalWhisperSTT/${this.channelLabel}] ← result: raw=${raw.length}ch ` +
+                        `${raw.length === 0 ? '(ENGINE RETURNED EMPTY)' : JSON.stringify(raw.slice(0, 80))} ` +
+                        `→ ${text ? 'EMITTED' : raw.length > 0 ? 'DROPPED BY filterHallucination' : 'nothing to emit'}`,
+                    );
+                }
                 if (text) {
                     if (this.segmentOpenedAt > 0) {
                         const dt = performance.now() - this.segmentOpenedAt;

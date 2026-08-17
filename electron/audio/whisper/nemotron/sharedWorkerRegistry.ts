@@ -193,7 +193,10 @@ export async function acquireSharedNemotronWorker(
       // Joining an existing (possibly still-loading) worker.
       capturedWorker = state.worker;
       state.refCount++;
+      console.log(`[sharedWorkerRegistry] channel "${channelId}" JOINED existing worker (refCount=${state.refCount})`);
     } else {
+      console.log(`[sharedWorkerRegistry] channel "${channelId}" COLD START — awaiting ONNX slot (weight 1, 15s deadline)...`);
+      const slotWaitStartedAt = Date.now();
       // Cold start — this registry owns the ONE ONNX slot acquisition for
       // Nemotron; LocalWhisperSTT no longer calls acquireOnnxSlot directly
       // for it.
@@ -224,6 +227,7 @@ export async function acquireSharedNemotronWorker(
       // coexistence contract the pre-Nemotron catalog always had: local STT
       // plus one background ONNX consumer, capped at 2 workers.
       const slotRelease = await acquireOnnxSlot('high', 1);
+      console.log(`[sharedWorkerRegistry] ONNX slot acquired after ${Date.now() - slotWaitStartedAt}ms — spawning worker for ${modelId}`);
       capturedWorker = new Worker(workerPath);
       state.worker = capturedWorker;
       state.modelId = modelId;
