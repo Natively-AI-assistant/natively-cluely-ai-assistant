@@ -230,6 +230,15 @@ export class SettingsManager {
     }
 
     public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
+        // R-15: when the store is degraded, saveSettings() refuses. Mutating
+        // in-memory first left the process believing the write succeeded while
+        // disk still held the old value — and roughly fifteen IPC handlers report
+        // success to the renderer off this call. Refuse before mutating so memory
+        // and disk cannot disagree.
+        if (this.settingsUnreadable) {
+            console.warn(`[SettingsManager] Refusing to set "${String(key)}": the settings store is degraded this session (see the quarantine warning at startup).`);
+            return;
+        }
         this.settings[key] = value;
         this.saveSettings();
     }
@@ -382,9 +391,7 @@ export class SettingsManager {
                     // treats this exact situation as unacceptable and refuses
                     // writes for the session; mirror that here so a recoverable
                     // file is never overwritten with a partial one.
-                    console.error('[SettingsManager] Failed to parse settings.json. Continuing READ-ONLY for this session so the existing file is not overwritten. Error:', parseError);
-                    this.settings = {};
-                    this.settingsUnreadable = true;
+                    this.quarantineUnreadableSettings(parseError);
                 }
                 console.log('[SettingsManager] Settings loaded');
             }
@@ -431,14 +438,66 @@ export class SettingsManager {
         return this.settingsUnreadable;
     }
 
+    /**
+     * R-15: a file that cannot be PARSED will never parse — the content is
+     * deterministic — so refusing writes for "this session" actually refused them
+     * on every launch, forever, with no recovery path (isDegraded() had no
+     * callers and nothing ever cleared the flag). A 0-byte, whitespace-only,
+     * "null" or BOM-prefixed settings.json therefore bricked the settings store
+     * permanently, and saveSettings' missing fsync is one of the ways such a file
+     * gets created in the first place.
+     *
+     * F-703's underlying concern was still right: never overwrite a recoverable
+     * file with an empty object. Quarantine satisfies both — the original bytes
+     * are PRESERVED under a timestamped name for recovery, and the app continues
+     * with defaults on a writable store so it self-heals on the next write.
+     *
+     * If the rename itself fails we fall back to F-703's read-only stance, which
+     * is the correct conservative choice: we could not move the file, so we must
+     * not overwrite it either.
+     */
+    private quarantineUnreadableSettings(cause: unknown): void {
+        this.settings = {};
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const quarantinePath = `${this.settingsPath}.corrupt-${stamp}`;
+        try {
+            fs.renameSync(this.settingsPath, quarantinePath);
+            this.settingsUnreadable = false;
+            console.error(
+                `[SettingsManager] settings.json could not be parsed and was moved to ${quarantinePath}. `
+                + 'Continuing with defaults on a writable store; the original file is preserved for recovery. Cause:',
+                cause,
+            );
+        } catch (renameErr) {
+            this.settingsUnreadable = true;
+            console.error(
+                '[SettingsManager] settings.json could not be parsed AND could not be quarantined; '
+                + 'continuing READ-ONLY so the existing file is not overwritten. Parse cause:',
+                cause, 'Quarantine error:', renameErr,
+            );
+        }
+    }
+
     private saveSettings(): void {
         if (this.settingsUnreadable) {
-            console.warn('[SettingsManager] Refusing to save: settings.json was unreadable this session, so writing would overwrite it with an incomplete set. Restart after repairing or removing the file.');
+            console.warn('[SettingsManager] Refusing to save: settings.json was unreadable and could not be quarantined, so writing would overwrite it with an incomplete set. Repair or remove the file, then restart.');
             return;
         }
         try {
             const tmpPath = this.settingsPath + '.tmp';
-            fs.writeFileSync(tmpPath, JSON.stringify(this.settings, null, 2));
+            // R-15: write + fsync + rename. Without the fsync the rename could be
+            // durable while the DATA was still in the page cache, so a power loss
+            // left a 0-byte settings.json — which is exactly the input that used to
+            // brick the store permanently. Only the FILE is synced: fsync on a
+            // directory handle is not supported on Windows, so syncing the parent
+            // would break the win32 path for a guarantee we do not need here.
+            const fd = fs.openSync(tmpPath, 'w');
+            try {
+                fs.writeFileSync(fd, JSON.stringify(this.settings, null, 2));
+                fs.fsyncSync(fd);
+            } finally {
+                fs.closeSync(fd);
+            }
             fs.renameSync(tmpPath, this.settingsPath);
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);
