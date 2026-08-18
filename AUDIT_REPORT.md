@@ -114,6 +114,12 @@ Area: ipcHandlers.ts:969 & :12504 (one shared ++_chatStreamId) vs src/lib/chatSt
 Status: FOUND. Main process comments claim cross-surface false supersession "can't happen"; the renderer guard is strictly newest-numeric-id-wins over a counter BOTH surfaces allocate from. A phone chat started during a live desktop stream adopts the phone id, appends phone text into the desktop bubble, then drops every remaining desktop token; the phone's done (no finalText) finalizes the mixed row, and the desktop's later done is ALSO honored (double finalize). Unit-reproducible in 2 calls.
 
 ## F-304 [P2] TurnPlanner regex fallback diverges from AnswerPlanner (JD route hijacks coding/doc)
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-304-repro.mjs drives the REAL planTurn with answerType omitted (exactly when the regex probe runs) across five questions. PRE-FIX (baseline): "According to the doc, what are the qualifications?" routed jd_question → exit 1. POST-FIX: all five route correctly → exit 0.
+Fix: the fallback now mirrors resolveJdSourceType's two gates and checks coding/doc FIRST — a coding verb vetoes the JD route, and the JD route requires actual JD framing (RE_JD_SUMMARY) rather than a bare requirement word appearing anywhere.
+Guarded against over-reach: genuine JD questions ("What are the requirements for this role?", "Tell me about this position") still route jd_question WITH seedCandidateBackground, and a bare requirement word without JD framing no longer does.
+Pin: electron/llm/__tests__/TurnPlannerFallbackParity2026_08_18.test.mjs (4/4 — coding veto incl. seedCandidateBackground off, doc precedence, genuine JD preserved, framing requirement).
+Regression check: llm + services suites, only the known never-passing F-401 pair absent from the baseline → zero regressions.
 Area: TurnPlanner.ts:260-285 vs AnswerPlanner.ts:1374/1394/1438
 Status: FOUND. TurnPlanner's fallback lacks AnswerPlanner's two gates (coding-verb veto, JD-framing requirement) and evaluates the JD cue FIRST, so "Write a function that returns the required buffer size" routes jd_question — probing profile_jd/profile_resume, never reference_files, and switching on seedCandidateBackground. Same class as the documented technical_concept_answer defect, left open on the text-fallback branch. Unit-reproducible in 1 call.
 

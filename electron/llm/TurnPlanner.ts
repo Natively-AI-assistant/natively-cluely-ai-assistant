@@ -278,10 +278,23 @@ function deriveQuestionKind(input: TurnPlanInput): { kind: QuestionKind; reason:
   const q = (input.question || '').trim();
   if (!q) return { kind: 'general', reason: 'empty_question' };
   if (RE_IDENTITY.test(q)) return { kind: 'profile_question', reason: 'regex_identity' };
-  if (RE_JD_REQUIREMENTS.test(q)) return { kind: 'jd_question', reason: 'regex_jd_requirements' };
-  if (RE_JD_SUMMARY.test(q)) return { kind: 'jd_question', reason: 'regex_jd_summary' };
-  if (RE_CODING.test(q)) return { kind: 'coding_question', reason: 'regex_coding' };
+  // F-304: mirror AnswerPlanner's two gates around the JD cue, and check
+  // coding/doc FIRST. This fallback claimed to "stay in sync with
+  // AnswerPlanner's IDENTITY_PATTERNS / JD_*_CUE_RE" but had neither of
+  // resolveJdSourceType's guards:
+  //   1. a coding verb ALWAYS vetoes the JD route (AnswerPlanner:1374), and
+  //   2. no JD framing => no JD route (AnswerPlanner:1394).
+  // RE_JD_REQUIREMENTS matches the bare words required/qualifications/duties
+  // anywhere, so "Write a function that returns the required buffer size" was
+  // routed jd_question — probing profile_jd/profile_resume, never
+  // reference_files, and switching ON seedCandidateBackground for a coding
+  // question. AnswerPlanner routes the identical text to the coding family.
+  const codingShaped = RE_CODING.test(q);
+  if (codingShaped) return { kind: 'coding_question', reason: 'regex_coding' };
   if (RE_DOC.test(q)) return { kind: 'doc_question', reason: 'regex_doc' };
+  const jdFramed = RE_JD_SUMMARY.test(q);
+  if (RE_JD_REQUIREMENTS.test(q) && jdFramed) return { kind: 'jd_question', reason: 'regex_jd_requirements' };
+  if (jdFramed) return { kind: 'jd_question', reason: 'regex_jd_summary' };
   return { kind: 'general', reason: 'regex_general' };
 }
 
