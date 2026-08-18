@@ -962,7 +962,18 @@ export class IntelligenceEngine extends EventEmitter {
                 groundingProfile: rawSnapshotSourceContract.groundingProfile
                     ? Object.freeze({ ...rawSnapshotSourceContract.groundingProfile })
                     : undefined,
-                templateType: rawSnapshotSourceContract.templateType,
+                // F-501: read the template from the MODE, not the contract.
+                // ModeSourceContract has no `templateType` field at all (only
+                // `seededForTemplateType`), so this always resolved to
+                // undefined and TurnPlanner's `sourceContract?.templateType
+                // === 'seminar'` check could never be true — leaving Seminar
+                // Mode's entire strictness contract (evidence required + the
+                // "Not in your reference files" preamble) unreachable. The real
+                // value is one object away, on the mode info this contract was
+                // snapshotted from. Falls back to the contract field so a
+                // future contract that DOES carry one still wins nothing less.
+                templateType: (snapshotModeInfo as any)?.templateType
+                    ?? rawSnapshotSourceContract.templateType,
             })
             : null;
         const meetingMarker = this.currentSessionId
