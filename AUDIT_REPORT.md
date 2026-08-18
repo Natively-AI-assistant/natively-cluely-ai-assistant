@@ -1043,9 +1043,36 @@ F-705 test.
 **Name-level diff: zero regressions.** Exactly two failing names are absent from
 the pinned baseline list, and both belong to
 `electron/llm/__tests__/SpaceAwareThresholds2026_08_13.test.mjs` — a file that
-does not exist at `c2ad3133` (added by `b1e16f59`). They are the F-401 pair
-already recorded above as never having passed since their own introducing
-commit. Verified by `ls` at the baseline worktree, not assumed.
+does not exist at `c2ad3133` (added by `b1e16f59`). Verified by `ls` at the
+baseline worktree, not assumed.
+
+**CORRECTION (2026-08-19) — the F-401 characterisation in this report was WRONG.**
+Earlier sections call that pair "never passing since their introducing commit".
+That claim was inherited across sessions and never verified. It is false, and the
+real cause is a defect in the MEASUREMENT ENVIRONMENT, not in any code:
+
+`premium/` in this worktree is a **symlink to the main checkout's `premium/`**
+(created so the worktree could build at all). `HybridSearchEngine.ts` imports
+`'../../../electron/llm/semanticAdmissionGate'`, and esbuild resolves that
+relative path **through the symlink target** — landing in the MAIN CHECKOUT's
+`electron/llm/semanticAdmissionGate.ts`, which is a different agent's branch
+(`fix/wta-phase1-question-detection`). There the gate has been recalibrated:
+floor `0.69` instead of `0.55`, and the flag is now a KILL SWITCH
+(`isKillSwitchFlagEnabled`) that defaults ON rather than OFF. Hence
+`enforced: true` with the flag unset, and `floor` 0.69 vs the asserted 0.55.
+
+Proven causally: patching the built bundle to this branch's own gate semantics
+(0.55 + flag-defaults-OFF) and re-running the file gives **7 pass / 0 fail**.
+
+Consequences:
+1. **F-401 is not a defect on this branch.** This branch already implements the
+   observe-only contract — flag OFF ⇒ `semanticFloor` null ⇒ legacy admission
+   unchanged, telemetry still emitted. No code change is required.
+2. **Any test result in this worktree that depends on `premium/` code was
+   measured against another branch's source.** That does not affect the
+   R-01…R-15 fixes (none touch premium, and every one carries its own repro),
+   but it is a standing hazard for anyone reusing this worktree, and it is the
+   reason a "regression" appeared that no commit here caused.
 
 **Per-area diffs against a real baseline worktree** (the pinned list does not
 glob every `__tests__` directory, so these were measured directly):
@@ -1094,3 +1121,46 @@ Validation categories, stated exactly:
 * `Requires physical Windows verification` — R-15 quarantine + fsync under a real
   win32 filesystem, and R-10's DPAPI behaviour when both credential stores exist.
 * Not claimed: `Tested physically on Windows`, `Build validated on Windows`.
+
+---
+
+## §19 — Owner decisions (2026-08-19)
+
+Four open questions were put to the owner. Answers and resulting actions:
+
+| Question | Decision | Action taken |
+|----------|----------|--------------|
+| **R-10** — behaviour when both credential stores exist | **Startup prompt to choose** | Design ACCEPTED, **not yet built**. The shipped behaviour remains union + fallback-only writes (nothing destroyed). See §19.1 for the agreed spec. |
+| **F-412** — the topic-blind evidence tier in the repair gate | **Keep the tier removed** | No change; current state already matches. The trade is recorded in §18.2. |
+| **F-401** — flag-OFF contract for the semantic admission gate | **Flag OFF = observe only** | **No code change needed** — this branch already implements exactly that. The two "failing" tests were a symlink artifact, not a defect; see the CORRECTION in §18.3. |
+| **Next step** | **Land this branch** | Merge preparation below. |
+
+### §19.1 — Agreed spec for the R-10 startup prompt (NOT yet implemented)
+
+When `credentialStoresAmbiguous` is set at load:
+
+1. Surface a modal before any credential-consuming feature runs: *"Two credential
+   sets were found for this profile. Keep which?"*
+2. Show, for each store, the **key NAMES and last-4 only** — never values, and
+   never write either set to a log. Label them by provenance the code can
+   actually prove: "OS keyring (`credentials.enc`)" vs "app-managed backup
+   (`credentials.fallback.enc`)", plus each file's mtime.
+3. On choice: persist the winning set through the normal keyring path, move the
+   loser aside as `*.superseded-<ts>` (preserve, never delete), clear
+   `credentialStoresAmbiguous`, and re-emit the storage diagnostic.
+4. Offer "Keep both (merge, backup wins)" as an explicit third option — that is
+   today's silent default, and it should become a deliberate choice.
+5. Until the user answers, keep the current non-destructive behaviour.
+
+Rationale for the prompt over auto-preferring the keyring: mtime genuinely cannot
+distinguish a restored profile from a legitimate fallback-newer state, so any
+automatic rule silently loses one of the two populations. The user is the only
+one who knows which machine the keys came from.
+
+**Shipped in this pass alongside the decision:** `emitStorageStatusDiagnostic`
+now reports `mode:'fallback'`, `usedFallback:true` and a new `storesAmbiguous`
+flag in this state. Previously it derived `mode` from
+`safeStorage.isEncryptionAvailable()`, which is `true` here — so it reported
+`mode:'keyring'` while every write went to the fallback, and the affected
+population would have been counted as **zero**. Fixing this first means the
+prompt's rollout can actually be sized from real data.

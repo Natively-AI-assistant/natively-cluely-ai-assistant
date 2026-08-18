@@ -257,8 +257,17 @@ export class CredentialsManager {
                 // Which persistence path keys actually take: the OS keyring, or the
                 // app-managed AES fallback. Lets us size the keyring-less population and
                 // judge whether signing/keyring follow-up is warranted. Never key material.
-                mode: available ? 'keyring' : 'fallback',
-                usedFallback: !available,
+                // R-10: `available` alone MISREPORTS the path when both credential
+                // stores exist and neither can be proven newer. In that state
+                // isEncryptionAvailable() is true, so this reported mode:'keyring',
+                // usedFallback:false — while every write was actually going to the
+                // app-managed fallback and credentials.enc was being left untouched.
+                // The affected population would have been counted as zero.
+                mode: this.credentialStoresAmbiguous ? 'fallback' : (available ? 'keyring' : 'fallback'),
+                usedFallback: !available || this.credentialStoresAmbiguous,
+                // Distinguishes "no keyring on this machine" from "keyring exists but
+                // a second store is present and unresolved" — they need different fixes.
+                storesAmbiguous: this.credentialStoresAmbiguous,
             };
 
             // Linux is the only platform where the backend enum is meaningful and
