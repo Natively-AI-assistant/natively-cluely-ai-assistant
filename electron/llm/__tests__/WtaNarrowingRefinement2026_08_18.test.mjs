@@ -82,6 +82,46 @@ describe('correction swaps the corrected entity into the previous question', () 
   });
 });
 
+describe('topic shift keeps the FULL shifted phrase (wta_skill_054)', () => {
+  // Live-benchmark genuine miss: "and Python frameworks?" resolved to
+  // "What is your experience with python?" — SKILL_TOKEN_RE kept only the
+  // known token and silently dropped "frameworks", answering the wrong
+  // (broader) question. Same defect class as "Kafka consumer groups".
+  test('"and Python frameworks?" keeps "frameworks" in the standalone rewrite', () => {
+    const r = resolveFollowUpOrClarify({
+      latestQuestion: 'and Python frameworks?',
+      previousQuestion: 'How comfortable are you with Python?',
+      surface: 'what_to_answer',
+      hasPriorContext: true,
+    });
+    assert.ok(r.confidence >= 0.7, `confidence ${r.confidence}`);
+    assert.match(r.resolvedQuestion, /python frameworks/i, `got "${r.resolvedQuestion}"`);
+  });
+
+  test('"What about SQL window functions?" keeps the full phrase', () => {
+    const r = resolveFollowUpOrClarify({
+      latestQuestion: 'What about SQL window functions?',
+      previousQuestion: 'Rate your SQL skills out of 10.',
+      previousAnswerType: 'skill_experience_answer',
+      surface: 'what_to_answer',
+      hasPriorContext: true,
+    });
+    assert.ok(r.confidence >= 0.7, `confidence ${r.confidence}`);
+    assert.match(r.resolvedQuestion, /sql window functions/i, `got "${r.resolvedQuestion}"`);
+  });
+
+  test('single-token shift "And SQL?" keeps the exact prior framing (unchanged)', () => {
+    const r = resolveFollowUpOrClarify({
+      latestQuestion: 'And SQL?',
+      previousQuestion: 'Rate your Python skills out of 10.',
+      previousAnswerType: 'skill_experience_answer',
+      surface: 'what_to_answer',
+      hasPriorContext: true,
+    });
+    assert.equal(r.resolvedQuestion, 'Rate your SQL skills out of 10.');
+  });
+});
+
 describe('guards: ordinary statements are untouched', () => {
   test('"I think we are done here." is not a follow-up', () => {
     const r = resolveFollowUpOrClarify({

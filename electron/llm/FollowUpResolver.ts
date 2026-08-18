@@ -335,10 +335,18 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
     const skillMatch = skillRaw.match(SKILL_TOKEN_RE);
     if (skillMatch && prevWasSkill(ctx)) {
       const skill = skillMatch[0];
+      // WTA audit fix (wta_skill_054, 2026-08-18): keep the FULL shifted
+      // phrase — "and Python frameworks?" must resolve to "…Python
+      // frameworks", not collapse to the bare recognised token "python"
+      // (which silently broadens the question and answers the wrong thing).
+      // Re-match on the RAW question so entity casing survives into the
+      // rewrite; the cascade otherwise operates on the lowercased copy.
+      const rawShift = (ctx.latestQuestion || '').trim().match(TOPIC_SHIFT_RE);
+      const phrase = (rawShift ? rawShift[1] : skillRaw).trim().replace(/[?.!,\s]+$/, '');
       // Inherit the EXACT prior framing (rating vs experience) with the new skill.
       const wasRating = /\brate|out of (?:10|ten)|scale\b/.test(lc(ctx.previousQuestion));
       return {
-        resolvedQuestion: wasRating ? `Rate your ${skill} skills out of 10.` : `What is your experience with ${skill}?`,
+        resolvedQuestion: wasRating ? `Rate your ${phrase} skills out of 10.` : `What is your experience with ${phrase}?`,
         resolvedAnswerType: 'skill_experience_answer',
         resolvedSkill: skill,
         confidence: 0.9,

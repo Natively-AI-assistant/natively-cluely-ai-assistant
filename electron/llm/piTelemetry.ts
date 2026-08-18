@@ -24,6 +24,9 @@ export type PiTelemetryEvent =
   | 'wta_question_extracted'
   | 'wta_live_session_memory_enabled'
   | 'wta_live_followup_resolved'
+  // WTA audit Part 11 (2026-08-18): clause-coverage observation/repair.
+  // MARKER-ONLY: counts and booleans, never clause text.
+  | 'wta_clause_coverage'
   | 'wta_context_free_clarification'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'
