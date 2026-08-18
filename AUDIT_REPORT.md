@@ -1009,3 +1009,70 @@ mistaken for silently-updated tests:
    conflict) and writes only to the fallback, leaving `credentials.enc`
    byte-for-byte intact. This trades a possibly-stale ACTIVE value for a
    guarantee that no credential is ever destroyed on disk.
+
+### §18.3 — Final verification of the self-review pass
+
+**Full suite (`npm test`), whole-tree, after all R-fixes:**
+
+```
+tests 7412 | pass 7220 | fail 130
+```
+
+Baseline (`c2ad3133`, pinned in `scripts/audit/BASELINE-failures.txt`) was
+7411 / 7219 / 130. The extra test is one assertion added to the re-anchored
+F-705 test.
+
+**Name-level diff: zero regressions.** Exactly two failing names are absent from
+the pinned baseline list, and both belong to
+`electron/llm/__tests__/SpaceAwareThresholds2026_08_13.test.mjs` — a file that
+does not exist at `c2ad3133` (added by `b1e16f59`). They are the F-401 pair
+already recorded above as never having passed since their own introducing
+commit. Verified by `ls` at the baseline worktree, not assumed.
+
+**Per-area diffs against a real baseline worktree** (the pinned list does not
+glob every `__tests__` directory, so these were measured directly):
+
+| Suite | Now | Baseline | Regressions |
+|-------|-----|----------|-------------|
+| `electron/services/knowledge/__tests__` | 43 fail | 43 fail | 0 (identical set) |
+| `electron/services/__tests__/*red*` (credentials) | 9 fail | 9 fail | 0 (identical set) |
+| `electron/rag/__tests__` | 4 fail | 4 fail | 0 (all pinned) |
+| `electron/db/__tests__` | 0 fail | — | 0 |
+| `electron/llm/__tests__/TurnPlanner*` | 0 fail (38) | — | 0 |
+| `electron/llm/__tests__/ManualChat*` | 0 fail (87) | — | 0 |
+| guard suites (both copies) | 0 fail (20) | — | 0 |
+
+**All twelve repros re-run together, after every fix was in place** — so a
+cross-fix interaction could not hide behind individually-green runs:
+R-01 · R-02 · R-03 · R-04 · R-05 · R-06 · R-07 · R-08 · R-09 · R-10 · R-11 · R-15 → all PASS.
+
+**Submodule pins untouched:** `git diff c2ad3133..HEAD -- natively-api premium`
+is empty.
+
+### §18.4 — Cross-platform statement for this pass
+
+Only one change in this pass is cross-platform-sensitive: **R-15**, which adds
+filesystem durability and a rename to `SettingsManager`.
+
+* **Expected macOS behaviour:** `openSync`/`writeFileSync(fd)`/`fsyncSync`/
+  `closeSync` then `renameSync`; quarantine rename succeeds.
+* **Expected Windows behaviour:** identical. Only the FILE handle is fsynced —
+  `fsyncSync` on a *directory* handle is not supported on win32, so the parent
+  directory is deliberately not synced. The quarantine name
+  (`settings.json.corrupt-2026-08-18T11-39-36-088Z`) is verified free of
+  `< > : " / \ | ? *`, which is why the ISO timestamp's `:` and `.` are
+  substituted. A win32 rename failure (EBUSY on a locked file, or an existing
+  destination) is caught and falls back to the read-only stance.
+
+Every other R-fix is SQL, pure logic, regex, timers, or renderer state, with no
+`process.platform` branch and no platform-specific API.
+
+Validation categories, stated exactly:
+
+* `Covered by automated macOS branch tests` — full suite + 12 repros, run on macOS.
+* `Reviewed but not executed on Windows` — R-15's win32 path (fsync-file-only,
+  rename legality, EBUSY fallback) was reasoned about and its filename validated
+  programmatically, but no Windows machine was available.
+* `Requires physical Windows verification` — R-15 quarantine + fsync under a real
+  win32 filesystem, and R-10's DPAPI behaviour when both credential stores exist.
+* Not claimed: `Tested physically on Windows`, `Build validated on Windows`.
