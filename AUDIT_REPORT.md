@@ -4,6 +4,52 @@ Started: 2026-08-14
 Branch for fixes: `audit/autopilot-2026-08-14` (created lazily at first verified fix; working dir is shared with in-flight work on `fix/answer-policy-and-conversation-state`, 51 dirty files at campaign start — commits will be scoped to audit-touched files only)
 Live LLM testing: DeepSeek `deepseek-chat` via `DEEPSEEK_API_KEY` in `.env` (verified present)
 
+
+# ═══ CAMPAIGN SUMMARY (as of 2026-08-18) ═══
+
+## Scope completed
+All 7 phases EXPLORED. 40 findings triaged. **31 fixed and verified**, each with a
+re-runnable repro under scripts/audit/ that fails before the fix and passes after,
+plus a regression pin. Branch: `audit/autopilot-2026-08-18` in the isolated worktree
+`/Users/evin/natively-audit-wt` (tag `audit-autopilot-phase1-2-final` marks the
+Phase 1+2 line).
+
+| Phase | Explored | Fixed | Notable |
+|---|---|---|---|
+| 1 Core runtime & IPC | ✅ | 18 | 2 P0 (quit zombie after destructive teardown; GPU restart killing the DB forever) |
+| 2 STT pipeline | ✅ | 5 | P0 ws-CONNECTING crash class; stale-connection guards for 3 providers |
+| 3 LLM routing & Answer Policy | ✅ | 3 | client gave up 3s before the server rotates; blank bubbles; cross-surface bubble corruption |
+| 4 Knowledge/RAG/OKF | ✅ | 2 | **vec0 L2 read as cosine** (silent under-retrieval on every query); cross-meeting transcript leak |
+| 5 Modes & Profile Intelligence | ✅ | 0 | 6 findings documented (Seminar strictness dead; mode pin missing) |
+| 6 Backend & licensing | ✅ | 1 (client half) | 3 security-sensitive, REPORT-ONLY by design (production submodule) |
+| 7 Settings/persistence/updater | ✅ | 2 | migration writing a global-MAX page count to every row + repair migration |
+
+## The three findings I'd read first
+1. **F-410 vec0 L2-as-cosine** — every RAG/meeting search silently under-retrieved. Measured: a chunk whose direction is IDENTICAL to the query (true cosine 1.0) scored 0.0 and was dropped. Ranking order was unaffected, which is why it never looked wrong. All existing tests forced the JS path, so the shipped native path was uncovered.
+2. **F-701 v22 migration** — permanently wrote the table-wide MAX page count into every reference file on upgrade; not self-healing. Fixed, plus a v27 repair migration for installs already hit.
+3. **F-602 rotating-key DoS bypass (backend, NOT fixed)** — a rotating fake key gets a fresh rate-limit AND DDoS bucket every request, each a guaranteed uncached DB query. Matches the documented outage trigger.
+
+## Deliberately NOT fixed (with reasons)
+- **All natively-api backend findings (F-602..F-606)** — a production submodule that deploys from main and is shared with another active agent. Auth/billing/rate-limit changes made unattended could lock out real users or open a hole. Documented with patch directions for owner review.
+- **F-401 semantic admission gate** — its two tests have never passed since their introducing commit; fixing the flag-OFF contract on a guess would silently change retrieval admission for every mode. Needs the feature owner's intent.
+- **F-206 OpenAI turn-coalescer ordering** — settling it needs a live OpenAI Realtime event capture; DeepSeek cannot stand in for another vendor's event stream, and a synthetic ordering would only re-assert the assumption under test.
+- **F-114 dev-mode Windows zombie** — win32-only branch, not reproducible on this machine. Fix proposed for a Windows session.
+- **Phase 5 findings (F-501..F-506)** — documented, not yet fixed; F-506 sits behind the premium symlink.
+
+## Verification posture (honest)
+- Every fix: macOS-verified via its own repro against the real code path or the repo's harnesses.
+- Regression: full-suite failing test NAMES diffed against a committed pre-audit baseline (scripts/audit/BASELINE-failures.txt, 165 names) — **not** by assertion. This practice was adopted after it caught 5 failures my own Phase 1 refactor had introduced.
+- Compile gate: `build:electron` (esbuild) + targeted suites. Full-project typecheck is NOT reproducible in the worktree (shared node_modules' TypeScript drifted past this branch's tsconfig); stated rather than glossed.
+- Windows: reviewed but NOT executed. All fixes are platform-neutral orchestration/state changes; no Windows-only branch was modified.
+
+## Two mistakes I made and caught
+1. **Phase 1 close-out over-claimed.** It said all suite failures were pre-existing after spot-checking one. A real baseline proved my F-105 refactor broke 5 tests (stale source-assertion tests, not behavioural). Repaired; the baseline-diff practice now prevents a repeat.
+2. **A build break I hid from myself.** SQL comments containing backticks terminated a JS template literal. I missed it because I ran the build with output redirected to /dev/null and then re-ran tests against a stale bundle. Fixed, all affected repros re-verified against a fresh build, and I stopped suppressing build output.
+
+## For the branch owner — two decisions only you can make
+1. **Forward-merge `main`.** This branch predates main's `21c4e22f`, which fixed the same ws crash class plus MeetingLifecycleQueue and FatalMainProcessCoordinator. My F-201 fix mitigates the crash locally but is not a substitute for that infrastructure.
+2. **The `premium` submodule pointer in the MAIN checkout is rewound** to a strict ancestor (uncommitted). None of this campaign's 44 commits touch any submodule pin — verified — but that working-tree state can silently drop merged work if committed.
+
 ## Campaign status
 
 | Phase | Area | Status |
