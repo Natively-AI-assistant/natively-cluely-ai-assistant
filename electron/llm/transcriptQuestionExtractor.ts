@@ -74,6 +74,16 @@ const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) 
 // shape campaign2 fix#5 (2026-07-17) was written to keep selecting.
 const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
 
+// Wait/hold idioms (negative-benchmark neg_logistics_011, 2026-08-18): "give
+// me one second", "bear with me" are pause REQUESTS, not asks — but "give me"
+// sits in IMPERATIVE_ASK/INTERROGATIVE_LEAD, so "Give me one second, my other
+// monitor just died." scored 0.8 (0.95 under unavailable punctuation) and
+// cleared both live gates. Capped below the gates like SOCIAL_PLEASANTRY —
+// unless the turn also classifies as a substantive type (a real question can
+// follow the pause in the same breath). The lookahead keeps "give me a second
+// OPINION/chance/example…" out of the idiom.
+const WAIT_IDIOM = /\b(give (me|us) (a|one|two|just a) (sec(ond)?s?|minutes?|moments?|mins?)\b(?!\s+(opinion|chance|example|reason|thought|look))|bear with me|hold on a (sec(ond)?|minute|moment)|one (moment|sec(ond)?),? please)\b/i;
+
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
 const QUESTION_MARK = /\?/;
 const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
@@ -524,6 +534,12 @@ export function extractLatestQuestion(
     // e.g. "...found us okay? Great — walk me through your last project."), in
     // which case classifyType already returned something other than 'general'.
     if (SOCIAL_PLEASANTRY.test(scoringText) && questionType === 'general') {
+        confidence = Math.min(confidence, 0.5);
+    }
+    // Wait/hold idiom cap (see WAIT_IDIOM above): same shape as the
+    // pleasantry down-weight — below both live gates unless a substantive
+    // classified type says a real ask shares the turn.
+    if (WAIT_IDIOM.test(scoringText) && questionType === 'general') {
         confidence = Math.min(confidence, 0.5);
     }
 

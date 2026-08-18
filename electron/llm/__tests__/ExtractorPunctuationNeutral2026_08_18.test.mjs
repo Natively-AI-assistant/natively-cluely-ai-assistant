@@ -101,6 +101,36 @@ describe('unavailable punctuation: clause-level interrogatives (the lead is ^-an
   });
 });
 
+describe('wait/hold idioms are not asks (negative-benchmark neg_logistics_011)', () => {
+  // "Give me one second, my other monitor just died." matched the `give me`
+  // imperative/interrogative lead and scored 0.8 (0.95 under unavailable
+  // provenance) — the only false-question in the 15-case negative set. The
+  // idiom is a pause request, not an ask.
+  for (const text of [
+    'Give me one second, my other monitor just died.',
+    'give me a moment to pull up your resume',
+    'Bear with me, the doc is loading.',
+    'Give us a minute while we switch rooms.',
+  ]) {
+    test(`"${text}" stays below the 0.6 grounding gate`, () => {
+      const r = extractLatestQuestion(turnsFor(text, 'unavailable'));
+      assert.ok(r.confidence < 0.6, `got ${r.confidence}`);
+    });
+  }
+
+  test('a real "give me" ask is unaffected', () => {
+    const r = extractLatestQuestion(turnsFor('Give me one example of a conflict you resolved.', 'unavailable'));
+    assert.ok(r.confidence >= 0.6, `got ${r.confidence}`);
+  });
+
+  test('"give me a second opinion on this system design" is still an ask (lookahead guard)', () => {
+    // "a second opinion" must not be swallowed by the "give me a second" wait
+    // idiom — the lookahead excludes noun continuations.
+    const r = extractLatestQuestion(turnsFor('give me a second opinion on this system design', 'unavailable'));
+    assert.ok(r.confidence >= 0.6, `got ${r.confidence}`);
+  });
+});
+
 describe('guaranteed punctuation keeps its evidential weight (unchanged)', () => {
   test('provider_final with a lead but NO mark keeps the legacy 0.8 penalty', () => {
     const r = extractLatestQuestion(turnsFor('why did you choose Kafka for the pipeline', 'provider_final'));
