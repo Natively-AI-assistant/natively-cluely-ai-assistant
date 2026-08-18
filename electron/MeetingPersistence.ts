@@ -887,7 +887,26 @@ Return ONLY valid JSON (no markdown code blocks):
             const modesMgr = ModesManager.getInstance();
             const storedMode = (details.detailedSummary as any)?.mode;
             if (!templateType) templateType = storedMode?.selectedTemplateType || modesMgr.getActiveMode()?.templateType;
-            const match = modesMgr.getModes().find((m: { id: string; name: string; templateType: string }) => m.templateType === templateType);
+            // F-503: prefer the mode this meeting actually ran under.
+            // MeetingPersistence PERSISTS selectedModeId at write time, but
+            // regeneration used to ignore it and resolve by templateType —
+            // `getModes()` is ORDER BY created_at ASC, so `find` returned the
+            // OLDEST row with that template. Every user-built custom mode is
+            // templateType 'general' and the built-in "General" is seeded
+            // first, so regenerating a meeting run under a custom mode silently
+            // used a DIFFERENT mode's note sections and then rewrote
+            // modeMeta.selectedModeId/Name with that other mode's identity.
+            const all = modesMgr.getModes() as Array<{ id: string; name: string; templateType: string }>;
+            const byId = storedMode?.selectedModeId
+                ? all.find((m) => m.id === storedMode.selectedModeId)
+                : undefined;
+            // Fall back to the legacy template lookup only when the recorded
+            // mode is gone (deleted) or was never recorded (pre-selectedModeId
+            // meetings).
+            const match = byId ?? all.find((m) => m.templateType === templateType);
+            if (!byId && storedMode?.selectedModeId) {
+                console.warn(`[MeetingPersistence] regenerate: mode ${storedMode.selectedModeId} no longer exists; falling back to the first '${templateType}' mode.`);
+            }
             if (match) { modeId = match.id; modeName = match.name; modeNoteSections = modesMgr.getNoteSections(match.id); }
             if (modeNoteSections.length === 0 && templateType) modeNoteSections = TEMPLATE_NOTE_SECTIONS[templateType as keyof typeof TEMPLATE_NOTE_SECTIONS] ?? [];
         } catch (e: any) {

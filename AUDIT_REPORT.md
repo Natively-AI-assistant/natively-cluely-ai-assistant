@@ -246,6 +246,11 @@ streamContextPolicy.ts:51-60 documents pinnedModeId as the defence against a mid
 Asymmetry that makes it P1: modes:set-active aborts desktop streams via _chatStreamsBySender, but the phone stream never registers there (only ipcHandlers.ts:975 does), so the phone surface has NEITHER the pin NOR the abort — phoneDocGrounded is captured pre-switch while retrieval runs post-switch. Static evidence; no paid key needed.
 
 ## F-503 [P2] Summary regeneration resolves the mode by templateType, not the persisted id
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-503-repro.mjs models the resolution exactly as the handler performs it and cross-checks the shipped source so the harness cannot drift. PRE-FIX (baseline): a meeting run under "My Interview Prep" regenerated as "General" → exit 1. POST-FIX: the recorded mode is used, and a deleted mode still falls back → exit 0.
+Fix: resolve by `storedMode.selectedModeId` first (the value MeetingPersistence already persists at write time); keep the templateType lookup as a FALLBACK for meetings recorded before that field existed or whose mode has since been deleted, with a warn line when the recorded mode is gone.
+Pin: electron/services/__tests__/RegenerateUsesRecordedMode2026_08_18.test.mjs (3/3 — source contract, recorded-mode-wins, deleted-mode fallback).
+Regression check: services suite, zero new failures vs baseline.
 MeetingPersistence.ts:417-420 persists selectedModeId/Name/TemplateType, but the regenerate path (:888-891) ignores selectedModeId and does `getModes().find(m => m.templateType === templateType)` — getModes() is ORDER BY created_at ASC, so it returns the OLDEST row with that template. Every custom mode is templateType 'general' and the built-in General is seeded first, so regenerating a meeting run under a custom mode silently uses another mode's note sections AND rewrites modeMeta with the wrong identity. Triggers once any custom mode exists.
 
 ## F-504 [P3] Unguarded _c3TurnPlan deref defeats its own null guard
