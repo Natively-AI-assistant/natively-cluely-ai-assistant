@@ -64,13 +64,12 @@ export class LiveRAGIndexer {
         console.log(`[LiveRAGIndexer] Started for meeting ${meetingId}`);
 
         this.timer = setInterval(() => {
-            // Track the in-flight tick so stop() can await it before flushing.
-            const running = this.tick();
-            this.inFlightTick = running;
-            void running.finally(() => {
-                if (this.inFlightTick === running) this.inFlightTick = null;
-            });
-            running.catch(err => {
+            // R-03(1a): tick() now registers itself in `inFlightTick` only when it
+            // actually enters the processing body. Registering here tracked EVERY
+            // tick — including the ones that return instantly at the isProcessing
+            // guard — and that no-op promise's completion nulled the ref while the
+            // real tick was still parked, which is what made stop()'s flush a no-op.
+            this.tick().catch(err => {
                 console.error('[LiveRAGIndexer] Tick error:', err);
             });
         }, INDEXING_INTERVAL_MS);
@@ -111,6 +110,31 @@ export class LiveRAGIndexer {
         this.isProcessing = true;
         const meetingId = this.meetingId;
 
+        // R-03(1a): register ONLY a tick that actually reached the body, so
+        // stop() awaits the parked work rather than an already-settled no-op.
+        const running = this.runTick(meetingId).finally(() => {
+            this.isProcessing = false;
+            if (this.inFlightTick === running) this.inFlightTick = null;
+        });
+        this.inFlightTick = running;
+        return running;
+    }
+
+    /**
+     * R-03(1b): a tick can park ~90s (ForegroundGate 30s + embeddings 30s+30s).
+     * If the meeting ended and a NEW one started meanwhile, this tick's counters
+     * belong to a dead session and must not be written into the live one.
+     * `processedUpTo` in particular is an ABSOLUTE segment count: writing a dead
+     * session's value into a fresh meeting drives `newSegmentCount` negative, so
+     * every later tick early-returns and the new meeting is never live-indexed at
+     * all. Baseline's `= this.allSegments.length` self-clamped to the live array
+     * and recovered on the next feed, so an unguarded write is a REGRESSION.
+     */
+    private stillOwns(meetingId: string): boolean {
+        return this.isActive && this.meetingId === meetingId;
+    }
+
+    private async runTick(meetingId: string): Promise<void> {
         try {
             // 1. Get only new segments
             // F-414: capture the slice point and advance the high-water mark
@@ -127,14 +151,14 @@ export class LiveRAGIndexer {
             // 2. Preprocess
             const cleaned = preprocessTranscript(newSegments);
             if (cleaned.length === 0) {
-                this.indexedSegmentCount = processedUpTo;
+                if (this.stillOwns(meetingId)) this.indexedSegmentCount = processedUpTo;
                 return;
             }
 
             // 3. Chunk with offset index
             const chunks = chunkTranscript(meetingId, cleaned);
             if (chunks.length === 0) {
-                this.indexedSegmentCount = processedUpTo;
+                if (this.stillOwns(meetingId)) this.indexedSegmentCount = processedUpTo;
                 return;
             }
 
@@ -183,7 +207,7 @@ export class LiveRAGIndexer {
                 } catch (err) {
                     console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId}:`, err);
                 }
-                this.indexedChunkCount += embeddedCount;
+                if (this.stillOwns(meetingId)) this.indexedChunkCount += embeddedCount;
                 console.log(`[LiveRAGIndexer] Embedded ${embeddedCount}/${chunkIds.length} chunks (${this.indexedChunkCount} total with embeddings)`);
             } else {
                 console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
@@ -192,12 +216,10 @@ export class LiveRAGIndexer {
             // 6. Advance high-water mark — to what this tick actually
             //    processed (see the sliceStart note above), not to the live
             //    length, so segments appended mid-tick are picked up next time.
-            this.indexedSegmentCount = processedUpTo;
+            if (this.stillOwns(meetingId)) this.indexedSegmentCount = processedUpTo;
 
         } catch (err) {
             console.error('[LiveRAGIndexer] Processing error:', err);
-        } finally {
-            this.isProcessing = false;
         }
     }
 
@@ -206,6 +228,12 @@ export class LiveRAGIndexer {
      */
     async stop(): Promise<void> {
         if (!this.isActive) return;
+
+        // R-03: start() calls stop() WITHOUT awaiting it, and stop() can now park
+        // ~90s on an in-flight tick. Capture which session we are stopping so a
+        // late resumption cannot flush into, or tear down, a meeting that started
+        // in the meantime.
+        const stopping = this.meetingId;
 
         console.log(`[LiveRAGIndexer] Stopping for meeting ${this.meetingId}`);
 
@@ -222,7 +250,17 @@ export class LiveRAGIndexer {
         if (this.inFlightTick) {
             try { await this.inFlightTick; } catch { /* the tick logs its own errors */ }
         }
-        await this.tick(true);
+        if (this.meetingId === stopping) {
+            await this.tick(true);
+        }
+
+        if (this.meetingId !== stopping) {
+            console.warn(
+                `[LiveRAGIndexer] stop(${stopping}) resumed after ${this.meetingId} had already started — `
+                + 'skipping the reset so the new session is not torn down.'
+            );
+            return;
+        }
 
         const meetingId = this.meetingId;
         this.isActive = false;
