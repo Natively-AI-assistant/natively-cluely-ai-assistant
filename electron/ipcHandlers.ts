@@ -3360,11 +3360,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           // fallback line below. Codex CLI shares the cold-load profile
           // (subprocess spawn → codex CLI loads the model → first delta).
           const usingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+          // F-301: on the natively-api route the server rotates providers at
+          // 10s; give it room to rescue the turn instead of aborting at 7s.
+          const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
           let manualFirstUseful = false;
           let manualSuperseded = false;
           await raceStreamWithDeadline({
             stream: stream as AsyncGenerator<string>,
-            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm),
+            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {

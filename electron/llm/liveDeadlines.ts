@@ -148,8 +148,21 @@ const COMPLEX_TYPES = new Set<AnswerType>([
  * far longer LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS regardless of answer type. The
  * caller passes llmHelper.isUsingOllama(). Defaults false (cloud) for back-compat.
  */
-export function firstUsefulDeadlineMs(answerType: AnswerType, isLocal: boolean = false): number {
+export function firstUsefulDeadlineMs(
+  answerType: AnswerType,
+  isLocal: boolean = false,
+  viaServerCascade: boolean = false,
+): number {
   if (isLocal) return LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS;
+  // F-301: on the natively-api route the SERVER runs a sequential cascade and
+  // cuts over to the next provider at AI_TTFT_BUDGET_MS (10s). Aborting at the
+  // 7s provider cap tore down the HTTP request 3s BEFORE that rescue could
+  // happen, so the user got "The model did not produce an answer in time" on a
+  // turn the server was about to deliver. This is the same ordering invariant
+  // LIVE_TOTAL_HARD_TIMEOUT_MS documents — it had only ever been applied to
+  // the WTA path, never to manual chat, which is the path its own rationale
+  // describes. Reuse that constant so the two cannot drift apart.
+  if (viaServerCascade) return LIVE_TOTAL_HARD_TIMEOUT_MS;
   return COMPLEX_TYPES.has(answerType)
     ? LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS
     : LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS;

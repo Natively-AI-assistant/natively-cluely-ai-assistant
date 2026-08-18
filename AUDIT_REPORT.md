@@ -38,6 +38,11 @@ Deliberately NOT fixed by this campaign: changing an admission-gate flag contrac
 # Phase 3 — LLM routing & Answer Policy (exploration complete 2026-08-18)
 
 ## F-301 [P1] Manual chat abandons the turn 3s BEFORE the server would rotate providers
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-301-repro.mjs reads AI_TTFT_BUDGET_MS straight out of natively-api/server.js (so the two cannot drift) and compares it against the deadline the manual-chat handler actually uses. PRE-FIX (baseline worktree): server route 7000 vs server budget 10000 → exit 1. POST-FIX: 13000 vs 10000, with direct-provider still 7000 and local still 30000 → exit 0.
+Fix: new LLMHelper.isUsingNativelyServerCascade() (mirrors isUsingOllama/isUsingCodexCli) feeds a third `viaServerCascade` argument to firstUsefulDeadlineMs, which returns the EXISTING LIVE_TOTAL_HARD_TIMEOUT_MS (13000) on that route — reusing the constant that already documents this invariant rather than inventing a new number. Deliberately scoped: routes with no server cascade keep 7000/30000, since stretching them would only make users wait longer for a failure that has no rescue behind it.
+Pin: electron/llm/__tests__/ManualChatOutlivesServerRotation2026_08_18.test.mjs (3/3 — ordering vs the real server constant, unchanged non-cascade budgets, and the call site actually passing the flag).
+Regression check: LLM suite unchanged at 16 failures; the only names absent from the pinned baseline are the F-401 pair that have never passed → zero regressions.
 Area: ipcHandlers.ts:3367 + liveDeadlines.ts:151-156 vs natively-api server.js:2142 (AI_TTFT_BUDGET_MS=10_000)
 Status: FOUND. firstUsefulDeadlineMs() returns 7000 for every cloud answer type; the client aborts the HTTP request at 7s, while the server rotates to MiniMax-M3 at 10s and would have delivered. The constant that WAS raised to 13000 (LIVE_TOTAL_HARD_TIMEOUT_MS) is used only on the WTA path (IntelligenceEngine 2648/2671) — the manual-chat handler the ordering test's own rationale describes still uses 7000. Repair regens are 7000-8000, also below 10000. User sees "The model did not produce an answer in time…" on a RECOVERABLE turn. Unit-reproducible, no paid call.
 
