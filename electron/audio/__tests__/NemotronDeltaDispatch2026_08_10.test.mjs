@@ -52,6 +52,13 @@ const { LocalWhisperSTT } = await import(
 
 const NEMOTRON_MODEL_ID = 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
 
+// The engine's fixed audio window. Imported from the built melFrontend rather
+// than hardcoded, so these expectations track the real constant if it ever
+// changes with a different export.
+const { CHUNK_SAMPLES } = await import(
+  pathToFileURL(path.join(distRoot, 'whisper/nemotron/melFrontend.js')).href
+);
+
 /** Minimal fake VAD stub — only the surface streamingTick()/dispatchFinal() touch. */
 function makeFakeVad(samples) {
   return {
@@ -111,6 +118,8 @@ describe('Nemotron delta-dispatch (Task 10 fix round 1)', () => {
     lws = new LocalWhisperSTT(NEMOTRON_MODEL_ID);
     assert.equal(lws['isNemotronModel'], true, 'model id must be classified as Nemotron');
 
+    // Deliberately NOT a multiple of CHUNK_SAMPLES — real VAD segments never
+    // are, and the ragged remainder is the whole point of the alignment rule.
     const samples = new Float32Array(9000).fill(0.1);
     const worker = makeFakeWorker();
     wireActive(lws, worker, makeFakeVad(samples));
@@ -122,8 +131,35 @@ describe('Nemotron delta-dispatch (Task 10 fix round 1)', () => {
     assert.equal(msg.type, 'transcribe');
     assert.equal(msg.streaming, true);
     assert.equal(msg.nemotronReset, true, 'first tick of a segment must set nemotronReset');
-    assert.equal(msg.audio.length, samples.length, 'first tick must send the full buffer');
-    assert.equal(lws['nemotronSentSamples'], samples.length);
+    // The payload is truncated to whole engine chunks. Shipping the ragged
+    // 40-sample remainder too would be a no-op the engine just buffers, while
+    // still costing a full worker round-trip that blocks the next dispatch.
+    assert.equal(msg.audio.length, CHUNK_SAMPLES, 'first tick must send exactly one whole chunk, not the ragged buffer');
+    assert.equal(msg.audio.length % CHUNK_SAMPLES, 0, 'payload must always be chunk-aligned');
+    assert.equal(lws['nemotronSentSamples'], CHUNK_SAMPLES, 'cursor advances by what was SENT, so the remainder is retained');
+  });
+
+  test('a delta shorter than one engine chunk is HELD, not dispatched as a no-op', () => {
+    // The regression this guards: gating on open.durationMs (the whole segment)
+    // while sending a delta meant that once a segment passed the duration
+    // threshold, every later tick fired with whatever sliver had accrued —
+    // zero chunks processed, zero tokens returned, one wasted round-trip.
+    lws = new LocalWhisperSTT(NEMOTRON_MODEL_ID);
+    const worker = makeFakeWorker();
+
+    const tick1 = new Float32Array(CHUNK_SAMPLES * 2).fill(0.1);
+    wireActive(lws, worker, makeFakeVad(tick1));
+    lws['streamingTick']();
+    lws['streamingTaskInFlight'] = false;
+    assert.equal(worker.posted.length, 1);
+
+    // Segment grew, but by less than one chunk since the cursor.
+    const grown = new Float32Array(CHUNK_SAMPLES * 2 + 500).fill(0.1);
+    lws['vad'] = makeFakeVad(grown);
+    lws['streamingTick']();
+
+    assert.equal(worker.posted.length, 1, 'sub-chunk delta must not be dispatched');
+    assert.equal(lws['nemotronSentSamples'], CHUNK_SAMPLES * 2, 'cursor must not advance on a held tick');
   });
 
   test('second streamingTick sends only the DELTA with nemotronReset=false', () => {
@@ -144,12 +180,16 @@ describe('Nemotron delta-dispatch (Task 10 fix round 1)', () => {
     assert.equal(worker.posted.length, 2);
     const secondMsg = worker.posted[1];
     assert.equal(secondMsg.nemotronReset, false, 'second tick must NOT reset');
-    assert.equal(
-      secondMsg.audio.length,
-      tick2Samples.length - tick1Samples.length,
-      'second tick must send only the delta (9000 new samples), not the cumulative 18000',
+    // Still a DELTA, never the cumulative buffer — that is the invariant this
+    // test exists for. It is now also chunk-aligned: tick 1 consumed one whole
+    // chunk of the 9000 available, so 18000 - 8960 = 9040 is pending, of which
+    // one whole chunk goes out and 80 samples stay behind the cursor.
+    assert.ok(
+      secondMsg.audio.length < tick2Samples.length,
+      'second tick must send a delta, not the cumulative buffer',
     );
-    assert.equal(lws['nemotronSentSamples'], tick2Samples.length);
+    assert.equal(secondMsg.audio.length, CHUNK_SAMPLES, 'second tick sends one whole chunk');
+    assert.equal(lws['nemotronSentSamples'], CHUNK_SAMPLES * 2);
   });
 
   test('dispatchFinal sends only the untick\'d tail and resets the cursor to 0', () => {
@@ -171,10 +211,14 @@ describe('Nemotron delta-dispatch (Task 10 fix round 1)', () => {
     const finalMsg = worker.posted[1];
     assert.equal(finalMsg.streaming, false);
     assert.equal(finalMsg.nemotronReset, false, 'mid-segment final must not reset (tick 1 already reset)');
+    // The tail is everything the streaming loop never sent — which now includes
+    // the ragged remainder the alignment rule held back (9000 - 8960 = 40),
+    // so 12000 - 8960 = 3040. Every sample reaches the engine exactly once:
+    // none dropped, none sent twice.
     assert.equal(
       finalMsg.audio.length,
-      fullSegment.length - tick1Samples.length,
-      'dispatchFinal must send only the tail beyond what streaming already sent',
+      fullSegment.length - CHUNK_SAMPLES,
+      'dispatchFinal must send exactly the samples streaming left behind, including the held-back remainder',
     );
     assert.equal(lws['nemotronSentSamples'], 0, 'cursor must reset to 0 at the segment boundary');
   });

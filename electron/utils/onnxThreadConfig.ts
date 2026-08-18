@@ -73,13 +73,63 @@ function readBoolEnv(name: string, fallback: boolean): boolean {
 }
 
 /**
+ * Workload shape, which decides the intra-op thread default.
+ *
+ * 'default' — one graph pass per unit of work (Whisper/Distil/Moonshine/
+ *   Parakeet encode, embeddings, reranking, intent classification). A single
+ *   intra-op thread costs these very little, so they keep the conservative
+ *   bound the crash forensics below argue for.
+ *
+ * 'rnnt-decode' — the autoregressive transducer loop (Nemotron). One chunk is
+ *   an encoder pass PLUS a per-encoder-frame greedy loop where every emitted
+ *   symbol costs a decoder run and a joint run, so a chunk is ~two orders of
+ *   magnitude more ORT invocations than a CTC pass. Published profiling of
+ *   Parakeet RNN-T puts ~67% of runtime in greedy decoding vs ~33% in the
+ *   encoder, and pinning that loop to one thread is what made Nemotron feel
+ *   slow next to CTC models of the same parameter count.
+ */
+export type OnnxWorkload = 'default' | 'rnnt-decode';
+
+/**
+ * Intra-op default for the transducer decode loop.
+ *
+ * Measured on an M-series (10 logical / 4 performance cores), Nemotron int4,
+ * CPU EP, 2.46s fixture, median of 3 after warmup — identical transcript at
+ * every setting:
+ *
+ *   1 thread   936ms   RTF 0.380
+ *   2 threads  547ms   RTF 0.222
+ *   4 threads  385ms   RTF 0.156   <-- best
+ *   8 threads  528ms   RTF 0.214
+ *
+ * 8 is WORSE than 4: past the performance-core count the pool spills onto
+ * efficiency cores and contends. So this tracks cores but caps at 4 rather
+ * than scaling with the whole machine — the cap is the point, not a guess.
+ * Halving logical cores approximates the perf-core count portably (Apple's
+ * hw.perflevel0 has no cross-platform equivalent).
+ */
+function defaultRnntIntraOpThreads(): number {
+    let logical = 4;
+    try {
+        logical = (require('os') as typeof import('os')).cpus()?.length || 4;
+    } catch {
+        logical = 4;
+    }
+    return Math.max(1, Math.min(4, Math.floor(logical / 2)));
+}
+
+/**
  * Bounded thread-count session options shared by every local ONNX consumer.
  * Kept as a fresh object per call (session_options is merged/mutated by
  * transformers.js internals — never share one object across sessions).
+ *
+ * `NATIVELY_ONNX_INTRA_OP_THREADS` still overrides every workload, so the
+ * measurements above stay reproducible without a new build.
  */
-export function getBoundedOnnxSessionOptions(): OnnxThreadBounds {
+export function getBoundedOnnxSessionOptions(workload: OnnxWorkload = 'default'): OnnxThreadBounds {
+    const intraDefault = workload === 'rnnt-decode' ? defaultRnntIntraOpThreads() : 1;
     return {
-        intraOpNumThreads: readIntEnv('NATIVELY_ONNX_INTRA_OP_THREADS', 1),
+        intraOpNumThreads: readIntEnv('NATIVELY_ONNX_INTRA_OP_THREADS', intraDefault),
         interOpNumThreads: readIntEnv('NATIVELY_ONNX_INTER_OP_THREADS', 1),
         executionMode: 'sequential',
         // Disable ORT's persistent BFCArena/memory-pattern reuse by default.

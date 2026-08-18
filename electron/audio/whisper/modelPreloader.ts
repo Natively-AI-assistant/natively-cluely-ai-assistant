@@ -21,6 +21,12 @@ import { app } from 'electron';
 import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
+import { acquireSharedNemotronWorker } from './nemotron/sharedWorkerRegistry';
+
+// Stable channelId for the preloader's warm hold. Distinct from LocalWhisperSTT's
+// per-channel ids ('mic' / 'system'), so it occupies its own registry slot and
+// its engine instance is never mistaken for an audio channel's.
+const NEMOTRON_WARM_CHANNEL_ID = 'preload-warm';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
 import {
     consumePoisonedOnnxLoad,
@@ -101,6 +107,13 @@ export function clearLoadSentinel(modelId?: string): void {
 class ModelPreloader {
     private warmWorker: Worker | null = null;
     private warmModelId: string | null = null;
+    // Nemotron only. Not a Worker: the registry owns that. This is just the
+    // refcount hold that keeps its shared worker (and the three loaded ONNX
+    // sessions) alive between meetings, so mic/system JOIN instead of cold
+    // starting. Released when the selected model changes away from Nemotron.
+    private nemotronWarmRelease: (() => void) | null = null;
+    private nemotronWarmModelId: string | null = null;
+    private nemotronWarmLoading = false;
     private loadingWorker: Worker | null = null;
     private pendingModelId: string | null = null;
     private loading = false;
@@ -115,23 +128,103 @@ class ModelPreloader {
      * Safe to call multiple times — no-ops if already warm or loading for the same model.
      * Cancels an in-progress load if a different model is requested.
      */
-    preload(modelId: string): void {
-        // Dual-channel Nemotron (2026-08-13): Nemotron routes worker
-        // acquisition entirely through sharedWorkerRegistry.ts instead of
-        // this class's single-warm-worker model. Layering this preloader's
-        // "one warm worker, hand it to whichever channel asks first" scheme
-        // on top of the registry's own refcounted cold-start/join lifecycle
-        // would create a second, competing concept of "who owns this
-        // worker" — not worth the complexity for what was already found to
-        // be a barely-exercised optimization path for Nemotron specifically
-        // (the local-whisper-preload IPC channel has zero real renderer call
-        // sites; this is only reached via the one-time app-launch preload
-        // call). LocalWhisperSTT.spawnWorker's Nemotron branch pays its own
-        // real cold-start cost on first use instead — see that method.
-        if (modelId.toLowerCase().includes('nemotron')) {
-            console.log(`[ModelPreloader] Skipping preload for ${modelId} — Nemotron routes through sharedWorkerRegistry.ts instead`);
+    /**
+     * Warms Nemotron by taking a long-lived registry channel. The registry
+     * remains the sole owner of the worker — this only contributes a refcount
+     * so the loaded sessions survive between meetings.
+     *
+     * Deliberately fire-and-forget: preload() is synchronous by contract (its
+     * only caller is the app-launch path, which must not block on a ~7s model
+     * load). A failure here is non-fatal — LocalWhisperSTT still cold-starts
+     * through the registry exactly as before, just slowly.
+     */
+    private preloadNemotronViaRegistry(modelId: string): void {
+        if (this.nemotronWarmModelId === modelId && this.nemotronWarmRelease) return;
+        if (this.nemotronWarmLoading) return;
+        // A different Nemotron build was warm — let it go before warming this one.
+        this.releaseNemotronWarmHold();
+        // Same persisted cooldown the normal preload path honours — a model
+        // that just crashed the process must not be re-warmed on every launch.
+        const failureExpiry = this.recentFailures.get(modelId);
+        if (failureExpiry && failureExpiry > Date.now()) {
+            console.warn(`[ModelPreloader] Skipping Nemotron warm for ${modelId} — recent failure cooldown until ${new Date(failureExpiry).toISOString()}`);
             return;
         }
+        const workerPath = resolveWhisperWorkerPath();
+        if (!workerPath || !fs.existsSync(workerPath)) {
+            console.error(`[ModelPreloader] Worker path missing or invalid: ${workerPath}`);
+            this.recordFailure(modelId);
+            return;
+        }
+        if (!hasEnoughMemoryForOnnxSession()) {
+            console.warn(`[ModelPreloader] Skipping Nemotron warm — under ${getMinFreeGBForOnnxSession()}GB free`);
+            return;
+        }
+        const initMsg = buildWorkerInitMessage(modelId);
+        this.nemotronWarmLoading = true;
+        console.log(`[ModelPreloader] Warming Nemotron via sharedWorkerRegistry for ${modelId}...`);
+        const startedAt = Date.now();
+        // Same crash sentinel every other preloaded model gets: a NATIVE abort
+        // during session load kills the process before any catch runs, and the
+        // sentinel is what makes the next launch treat the model as poisoned.
+        writeLoadSentinel(modelId);
+        acquireSharedNemotronWorker(modelId, NEMOTRON_WARM_CHANNEL_ID, initMsg.executionProviders ?? ['cpu'], initMsg.cacheDir, workerPath)
+            .then(({ release }) => {
+                clearLoadSentinel(modelId);
+                this.nemotronWarmLoading = false;
+                // Model changed while we were loading — don't strand a hold on
+                // a worker nobody wants.
+                if (this.pendingModelId && this.pendingModelId !== modelId) { release(); return; }
+                this.nemotronWarmRelease = release;
+                this.nemotronWarmModelId = modelId;
+                console.log(`[ModelPreloader] Nemotron warm for ${modelId} (${Date.now() - startedAt}ms) — channels will join, not cold start`);
+            })
+            .catch((err: unknown) => {
+                clearLoadSentinel(modelId);
+                this.nemotronWarmLoading = false;
+                this.recordFailure(modelId);
+                console.warn(`[ModelPreloader] Nemotron warm failed for ${modelId}:`, (err as Error)?.message ?? err);
+            });
+    }
+
+    /** Drops the Nemotron warm hold, if any. Safe to call unconditionally. */
+    private releaseNemotronWarmHold(): void {
+        if (!this.nemotronWarmRelease) return;
+        console.log(`[ModelPreloader] Releasing Nemotron warm hold for ${this.nemotronWarmModelId}`);
+        try { this.nemotronWarmRelease(); } catch { /* registry already torn down */ }
+        this.nemotronWarmRelease = null;
+        this.nemotronWarmModelId = null;
+    }
+
+    preload(modelId: string): void {
+        // Dual-channel Nemotron routes worker acquisition entirely through
+        // sharedWorkerRegistry.ts, so it must NOT go through this class's
+        // "one warm worker, hand it to whichever channel asks first" scheme —
+        // that would create a second, competing concept of who owns the
+        // worker. This used to return outright, leaving LocalWhisperSTT to pay
+        // the cold start on first use.
+        //
+        // That cold start is not cheap and not hidden: loading the three ONNX
+        // sessions takes ~7s, and it happened at MEETING START. VAD banks a
+        // backlog for those 7s, so the first dispatch is seconds of audio
+        // (observed 4080ms mic / 5670ms system) — and streamingTaskInFlight
+        // gates re-dispatch until it returns, so the streaming loop stalls
+        // behind that one oversized request. A short meeting ended before any
+        // result came back and produced an empty transcript.
+        //
+        // Fixed by warming through the REGISTRY rather than through
+        // warmWorker: acquire a long-lived channel here and hold its release.
+        // The registry stays the single owner (no competing lifecycle), the
+        // sessions load at app start, and mic/system then JOIN a ready worker
+        // — their NemotronEngine.create() reuses nemotronSharedResources and
+        // returns without loading anything.
+        if (modelId.toLowerCase().includes('nemotron')) {
+            this.preloadNemotronViaRegistry(modelId);
+            return;
+        }
+        // Switching AWAY from Nemotron — drop the warm hold so the registry can
+        // tear its worker down and free the ONNX slot for the incoming model.
+        this.releaseNemotronWarmHold();
         if (this.warmModelId === modelId && this.warmWorker) return;
         if (this.pendingModelId === modelId && this.loading) return;
 

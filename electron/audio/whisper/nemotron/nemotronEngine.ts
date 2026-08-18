@@ -66,12 +66,14 @@ export interface ChunkTranscript {
  * compute graphs — `InferenceSession.run()` carries all state via its own
  * input/output tensors, never on the session object itself — so concurrent
  * `.run()` calls from two different NemotronEngine instances against the
- * same shared session are a supported ORT pattern. This app's
- * getBoundedOnnxSessionOptions() already pins intra/inter-op threads to 1,
- * so concurrent calls serialize inside the session rather than truly
- * parallelize — correct either way, just not faster; that's an existing,
- * deliberate constraint elsewhere in this codebase, not something to "fix"
- * here. The tokenizer is likewise safe to share: loadNemotronTokenizer's
+ * same shared session are a supported ORT pattern. These sessions are built
+ * with getBoundedOnnxSessionOptions('rnnt-decode'), whose intra-op default is
+ * now the performance-core count (capped at 4) rather than 1 — so concurrent
+ * calls from two channels genuinely parallelize inside the session instead of
+ * serializing on a single thread, as an earlier version of this comment
+ * described. Sharing stays correct either way; that reasoning never depended
+ * on the thread count, only on run() carrying all state in its own tensors.
+ * The tokenizer is likewise safe to share: loadNemotronTokenizer's
  * returned `decode()` (see tokenizer.ts) only reads from the loaded
  * vocab/model — convert_ids_to_tokens() is a pure id-array -> token-array
  * lookup with no mutable per-call instance state — confirmed by direct
@@ -88,7 +90,7 @@ async function createSessionWithFallback(
   filePath: string,
   executionProviders: string[],
 ): Promise<InferenceSession> {
-  const sessionOptions = { ...getBoundedOnnxSessionOptions(), executionProviders };
+  const sessionOptions = { ...getBoundedOnnxSessionOptions('rnnt-decode'), executionProviders };
   try {
     return await InferenceSession.create(filePath, sessionOptions as any);
   } catch (e) {
@@ -96,7 +98,7 @@ async function createSessionWithFallback(
       `[NemotronEngine] Session creation failed with providers [${executionProviders.join(',')}] for ${path.basename(filePath)}, falling back to CPU:`,
       (e as Error)?.message,
     );
-    return InferenceSession.create(filePath, { ...getBoundedOnnxSessionOptions(), executionProviders: ['cpu'] } as any);
+    return InferenceSession.create(filePath, { ...getBoundedOnnxSessionOptions('rnnt-decode'), executionProviders: ['cpu'] } as any);
   }
 }
 
@@ -196,9 +198,44 @@ export class NemotronEngine {
     this.decoderState = zeroDecoderState();
     this.pendingLength = 0;
     this.lookbackBuffer = new Float32Array(0);
+    this.prerollPending = true;
   }
 
+  // Utterance-start silence pre-roll. With zero left context, the model
+  // drops a weak unstressed first word: measured on real TTS audio, "the
+  // meeting is scheduled..." transcribed as "meeting is scheduled..." and
+  // "our quarterly revenue..." as "Quarterly revenue..." (capitalized — the
+  // model genuinely believes the utterance starts there). Any pre-roll from
+  // 25ms up recovered the first word (0% WER on all four test sentences at
+  // 50ms and at 100ms alike).
+  //
+  // 50ms, not more, because of tr-TR: that locale is documented marginal
+  // (0.0 word overlap even when "working" — multilang-verify-report.md) and
+  // its output flips chaotically with tiny start-offset shifts: non-empty at
+  // 0ms, EMPTY at 25/75/100ms, non-empty at 50ms — where it also produced
+  // its best-yet output ("Melhaba bin mıdumi" vs reference "Merhaba, benim
+  // adım"). 50ms is the measured point satisfying both the first-word fix
+  // and the multilang suite's non-empty regression bar for every locale.
+  //
+  // This is a model-behavior mitigation, not an integration detail, so it
+  // lives in the engine where every caller (app, tests, sims) gets it. Cost:
+  // the first chunk needs 50ms less real audio to fill (slightly EARLIER
+  // first inference) and one 800-sample memcpy per segment.
+  // Env-overridable for measurement (NATIVELY_NEMOTRON_PREROLL_MS); the
+  // shipped default is the measured minimum that recovers weak first words.
+  private static readonly PREROLL_SAMPLES = (() => {
+    const ms = Number.parseInt(process.env.NATIVELY_NEMOTRON_PREROLL_MS ?? '', 10);
+    return Number.isFinite(ms) && ms >= 0 ? Math.round((ms / 1000) * 16000) : 800; // 50ms @ 16kHz
+  })();
+  private prerollPending = true;
+
   async pushAudio(pcm: Float32Array): Promise<ChunkTranscript[]> {
+    if (this.prerollPending) {
+      this.prerollPending = false;
+      const padded = new Float32Array(NemotronEngine.PREROLL_SAMPLES + pcm.length);
+      padded.set(pcm, NemotronEngine.PREROLL_SAMPLES); // leading zeros = silence
+      pcm = padded;
+    }
     const results: ChunkTranscript[] = [];
     let offset = 0;
     while (offset < pcm.length) {

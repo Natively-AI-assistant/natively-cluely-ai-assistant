@@ -52,6 +52,12 @@ import type { WorkerOutMessage } from './whisper/types';
 import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../utils/onnxThreadConfig';
 import { resolveNemotronLangId } from './whisper/nemotron/languageTable';
 import { acquireSharedNemotronWorker } from './whisper/nemotron/sharedWorkerRegistry';
+// The engine's fixed audio window. Imported rather than duplicated as a local
+// literal so the streaming gate can never drift out of sync with the value
+// NemotronEngine.pushAudio() actually buffers against. melFrontend has no
+// eager imports (transformers is loaded lazily inside it), so pulling this
+// constant in costs nothing at main-process startup.
+import { CHUNK_SAMPLES as NEMOTRON_CHUNK_SAMPLES } from './whisper/nemotron/melFrontend';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 
 export class LocalWhisperSTT extends EventEmitter {
@@ -261,8 +267,24 @@ export class LocalWhisperSTT extends EventEmitter {
         // LocalAgreement-2 for the same reason as Moonshine: the worker's
         // per-chunk greedy RNNT decode is already stable, so there's no
         // ambiguous partial to stabilize across two passes.
+        //
+        // NOTE: `minAudioMs` is ADVISORY for this model — streamingTick() gates
+        // Nemotron on the pending DELTA reaching one whole CHUNK_SAMPLES window
+        // instead, because the generic duration gate measures the whole segment
+        // while the payload is only the new tail. It is kept equal to the chunk
+        // duration so the two agree, but changing it here will NOT change
+        // dispatch cadence; change the gate in streamingTick(). `intervalMs`
+        // remains live — it is how often the gate is re-evaluated.
         if (LocalWhisperSTT.isNemotronModelId(modelId)) {
-            return { intervalMs: 560, minAudioMs: 560, skipAgreement: true };
+            // intervalMs is HALF the chunk duration, not equal to it. The tick
+            // only decides whether a whole chunk is pending; polling at exactly
+            // the chunk duration means a chunk that completes just after a tick
+            // waits a further full 560ms before dispatch — up to 1120ms of
+            // audio sitting idle before inference starts. Polling at 280ms
+            // halves that worst case. Ticks that find less than a chunk are
+            // free (one peek and a subtraction) and no longer count as stalls,
+            // so a faster poll costs nothing.
+            return { intervalMs: 280, minAudioMs: 560, skipAgreement: true };
         }
         return { intervalMs: 1500, minAudioMs: 800, skipAgreement: false };
     }
@@ -585,7 +607,51 @@ export class LocalWhisperSTT extends EventEmitter {
         if (this.streamingTaskInFlight) { this.recordStreamingStall(); return; }
 
         const open = this.vad.peekOpenSegment();
-        if (!open || open.durationMs < this.streamingMinAudioMs) {
+        if (!open) {
+            this.recordStreamingStall();
+            return;
+        }
+        // Nemotron gates on the DELTA, not the segment duration.
+        //
+        // The generic gate below compares open.durationMs (the WHOLE open
+        // segment) against streamingMinAudioMs, which is right for every other
+        // model because they re-send the whole segment every tick. Nemotron
+        // sends only what's new since the cursor, so the two quantities are
+        // different — and once the segment passes 560ms the generic gate is
+        // permanently satisfied, firing ticks with whatever sub-chunk sliver
+        // has accrued.
+        //
+        // The engine consumes audio in fixed NEMOTRON_CHUNK_SAMPLES windows and
+        // buffers anything short of one, so a sliver dispatch does literally no
+        // work: it returns zero chunks and zero token ids, yet still occupies
+        // streamingTaskInFlight for a full worker round-trip that blocks the
+        // next dispatch. Measured against the real model on a 2.46s fixture:
+        //
+        //   560ms deltas (aligned)   tick 2 -> "Quick brown"          (1120ms)
+        //   540ms deltas (sliver)    tick 3 -> "Quick brown"          (1620ms)
+        //   300ms deltas (sliver)    tick 4 -> "Quick brown"          (1200ms)
+        //                            ...and 4 of 9 ticks did no work at all.
+        //
+        // Gating on the delta makes every dispatch process at least one whole
+        // chunk, which is what produces incremental partial text.
+        if (this.isNemotronModel) {
+            if (open.samples.length - this.nemotronSentSamples < NEMOTRON_CHUNK_SAMPLES) {
+                // NOT a stall — deliberately does not call recordStreamingStall().
+                //
+                // A stall means "nothing useful is happening" (worker busy, no
+                // speech) and earns exponential backoff up to
+                // STREAMING_INTERVAL_MAX_MS. Mid-utterance, "the delta hasn't
+                // reached a chunk boundary yet" is the NORMAL state for most
+                // ticks — the tick rate is deliberately faster than the chunk
+                // duration so a completed chunk is picked up promptly. Counting
+                // those as stalls would back the loop off to 1120ms, 2240ms,
+                // 4480ms... while the user is still talking, which is the exact
+                // opposite of what the audio is telling us. Genuine silence is
+                // already caught by the isInSpeech() check above, which does
+                // still record a stall.
+                return;
+            }
+        } else if (open.durationMs < this.streamingMinAudioMs) {
             this.recordStreamingStall();
             return;
         }
@@ -604,13 +670,31 @@ export class LocalWhisperSTT extends EventEmitter {
         let copy: Float32Array<ArrayBuffer>;
         let nemotronReset = false;
         if (this.isNemotronModel) {
-            // Send only what's new since the last tick. `open.samples` keeps
-            // growing (VAD hasn't closed this segment); slice(cursor) is the delta.
+            // Send only what's new since the last tick, truncated to a WHOLE
+            // number of engine chunks. The remainder stays behind the cursor
+            // rather than being shipped as a sliver the engine would just
+            // buffer — it goes out with the next aligned tick, or (if the
+            // segment closes first) with dispatchFinal, whose own
+            // `audio.slice(nemotronSentSamples)` picks up exactly the samples
+            // this loop never sent, and flush() zero-pads that tail.
             nemotronReset = this.nemotronSentSamples === 0;
-            copy = open.samples.slice(this.nemotronSentSamples);
-            this.nemotronSentSamples = open.samples.length;
+            const pending = open.samples.length - this.nemotronSentSamples;
+            const aligned = Math.floor(pending / NEMOTRON_CHUNK_SAMPLES) * NEMOTRON_CHUNK_SAMPLES;
+            copy = open.samples.slice(this.nemotronSentSamples, this.nemotronSentSamples + aligned);
+            this.nemotronSentSamples += aligned;
         } else {
             copy = open.samples.slice();
+        }
+        // Logged BEFORE arming, deliberately: LocalWhisperStuckWorker.test.mjs
+        // asserts armStreamingWatchdog() and worker.postMessage sit within 200
+        // characters of each other, as a proxy for "both on the same dispatch
+        // path". Putting this between them breaks that proximity check without
+        // changing behaviour, so it goes above instead.
+        if (this.isNemotronModel) {
+            console.log(
+                `[LocalWhisperSTT/${this.channelLabel}] → transcribe ${taskId}: ${copy.length} samples ` +
+                `(${Math.round((copy.length / 16000) * 1000)}ms delta, segment=${Math.round(open.durationMs)}ms, reset=${nemotronReset})`,
+            );
         }
         this.armStreamingWatchdog();
         this.worker.postMessage(
@@ -648,6 +732,24 @@ export class LocalWhisperSTT extends EventEmitter {
         this.streamingNextDelayMs = this.streamingIntervalBaseMs;
 
         const cleaned = filterHallucination(text);
+        if (this.isNemotronModel) {
+            // Mirrors the `← result` log so the partial path is no longer the
+            // one silent leg. Distinguishes engine-returned-nothing from
+            // filtered from deduped from actually emitted — the four outcomes
+            // that all looked identical as `first-partial: n=0`.
+            const raw = text ?? '';
+            const verdict = raw.length === 0
+                ? 'ENGINE RETURNED EMPTY'
+                : !cleaned
+                    ? 'DROPPED BY filterHallucination'
+                    : cleaned === this.lastEmittedText
+                        ? 'DEDUPED (identical to previous partial)'
+                        : 'EMITTED';
+            console.log(
+                `[LocalWhisperSTT/${this.channelLabel}] ~ partial: raw=${raw.length}ch ` +
+                `${raw.length > 0 ? JSON.stringify(raw.slice(0, 80)) : ''} → ${verdict}`,
+            );
+        }
         if (!cleaned) return;
 
         // Streaming-class models (Moonshine) produce stable, deterministic
@@ -1003,6 +1105,17 @@ export class LocalWhisperSTT extends EventEmitter {
                 this.handleStreamingPartial(msg.text);
             } else if (msg.type === 'result') {
                 const text = filterHallucination(msg.text);
+                if (this.isNemotronModel) {
+                    // Distinguishes the three silent outcomes this path had no
+                    // way to tell apart: engine returned nothing, engine returned
+                    // text that filterHallucination then dropped, or a real emit.
+                    const raw = msg.text ?? '';
+                    console.log(
+                        `[LocalWhisperSTT/${this.channelLabel}] ← result: raw=${raw.length}ch ` +
+                        `${raw.length === 0 ? '(ENGINE RETURNED EMPTY)' : JSON.stringify(raw.slice(0, 80))} ` +
+                        `→ ${text ? 'EMITTED' : raw.length > 0 ? 'DROPPED BY filterHallucination' : 'nothing to emit'}`,
+                    );
+                }
                 if (text) {
                     if (this.segmentOpenedAt > 0) {
                         const dt = performance.now() - this.segmentOpenedAt;
