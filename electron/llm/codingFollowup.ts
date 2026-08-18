@@ -84,7 +84,7 @@ const BACKREF_RE =
 // SHORT message containing them is a coding follow-up on their own ("make it iterative",
 // "what's the complexity", "handle duplicates", "without extra space").
 const CONTINUATION_STRONG_RE =
-  /\b(in[- ]?place|iterativ|recursiv|complexit|big[- ]?o|dry[- ]?run|trace|step\s+through|edge\s+cases?|handle\s+(?:duplicates?|negatives?|empty|nulls?)|space[- ]?optimi|without\s+(?:extra\s+)?space|one[- ]?pass|two[- ]?pointers?|time\s+and\s+space)\b/i;
+  /\b(in[- ]?place|iterativ|recursiv|brute[- ]?force|memoi[sz]\w*|tabulat\w*|complexit|big[- ]?o|dry[- ]?run|trace|step\s+through|edge\s+cases?|handle\s+(?:duplicates?|negatives?|empty|nulls?)|space[- ]?optimi|without\s+(?:extra\s+)?space|one[- ]?pass|two[- ]?pointers?|time\s+and\s+space)\b/i;
 // LOOSE generic verbs ("optimize", "improve", "rewrite", "convert", "faster") that ALSO
 // appear in non-coding asks ("improve our onboarding", "rewrite the landing page copy").
 // These only count as a coding continuation when paired with an explicit back-reference
@@ -101,9 +101,61 @@ const CONTINUATION_LOOSE_RE =
  * Guarded so a long, self-contained coding question is NOT treated as a follow-up:
  * a continuation must be short OR carry an explicit back-reference.
  */
+// A BARE request for the code — "code?", "the code", "show the code", "can I
+// see the code". These carry no problem of their own: they only mean anything
+// relative to what was just answered.
+//
+// Live repro 2026-08-18: after a What-to-Answer turn solved Trapping Rain Water
+// from a screenshot, typing "code?" in chat produced a confident, complete
+// BINARY SEARCH answer. The word "code" matches CODING_PATTERNS, so the turn was
+// routed coding and given the full contract — with no prior problem attached, so
+// the model picked one. Answering the wrong question with total confidence is
+// worse than answering nothing.
+// Matched as a TOKEN SET rather than a phrase list. Reported 2026-08-18: the
+// user typed "code answe" — a truncated "code answer" — and the phrase regex
+// missed it, so the turn again arrived with no problem attached and the model
+// invented one (a full Missing Number solution for a Trapping Rain Water
+// screen). Real users type fragments, and enumerating phrasings loses to them.
+//
+// The rule instead: a SHORT message built only from filler plus a
+// code/answer/solution token carries no subject of its own. Anything with a real
+// content word ("write code for two sum", "the code review went well") has one,
+// and falls through.
+const BARE_CODE_TOKENS = new Set([
+  'code', 'codes', 'coding',
+  'answer', 'answers', 'answe', 'ans',
+  'solution', 'soln', 'sol',
+  'the', 'a', 'me', 'my', 'your', 'that', 'this', 'it', 'its',
+  'show', 'give', 'send', 'see', 'can', 'i', 'you', 'please', 'pls', 'plz',
+  'and', 'now', 'with', 'also', 'just', 'only', 'full', 'complete', 'whole',
+  'for', 'of', 'in',
+]);
+const CODE_NOUNS = new Set(['code', 'codes', 'coding', 'answer', 'answers', 'answe', 'ans', 'solution', 'soln', 'sol']);
+
+/**
+ * Is this a bare "give me the code" with no problem of its own?
+ *
+ * True when the message is short, every token is filler or a code/answer noun,
+ * and at least one token IS a code/answer noun. "code?", "code answe",
+ * "show me the code", "and the code?", "full solution please" → true.
+ * "write code for two sum", "what does this code do" → false.
+ */
+export function isBareCodeRequest(question: string): boolean {
+  const tokens = (question || '')
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 5) return false;
+  if (!tokens.some((t) => CODE_NOUNS.has(t))) return false;
+  return tokens.every((t) => BARE_CODE_TOKENS.has(t));
+}
+
 export function isCodingContinuation(question: string): boolean {
   const q = lc(question);
   if (!q) return false;
+  // A bare code request is ALWAYS a continuation — it has no subject of its own.
+  if (isBareCodeRequest(q)) return true;
   if (detectExplicitCodingContract(q)) return true; // code_only/complexity/dry-run/explain are all continuations-or-constraints
   const words = q.split(/\s+/).filter(Boolean).length;
   // STRONG coding signal: a SHORT message is a follow-up on its own; a LONG one needs a
@@ -114,6 +166,23 @@ export function isCodingContinuation(question: string): boolean {
   // onboarding email" / "rewrite the landing page copy" are NOT coding follow-ups.
   if (CONTINUATION_LOOSE_RE.test(q)) return BACKREF_RE.test(q);
   return false;
+}
+
+/**
+ * Does this assistant answer LOOK like a coding/algorithm answer — something a
+ * coding follow-up ("complexity?", "make it iterative", "dry run it") can
+ * meaningfully anchor to?
+ *
+ * Gate for the cross-surface prior-answer fallback: a coding continuation after
+ * a SALES answer must not drag that answer in as a "prior coding problem". The
+ * check is broad on purpose — the overlay's spoken answers often carry no code
+ * fence (the live Trapping Rain Water answer was pure prose) but always name
+ * the technique, the complexity, or the algorithm.
+ */
+export function looksLikeCodingAnswer(text: string | undefined | null): boolean {
+  const t = (text || '');
+  if (!t.trim()) return false;
+  return /```|##\s*(?:Approach|Code|Complexity|Dry Run)|\bO\([a-z0-9 ]*\)|\b(?:time|space)\s+complexit|\balgorithm\b|\btwo[- ]pointer|\bhash\s*(?:map|set)\b|\bbinary\s+search\b|\bsliding\s+window\b|\brecursion\b|\bdynamic\s+programming\b|\blinear\s+time\b|\bconstant\s+space\b/i.test(t);
 }
 
 /** A stored coding turn (what we recall to give a follow-up its prior problem). */
@@ -168,6 +237,26 @@ ${NO_LEAK_RULES}${verification}
 </answer_contract>`;
   }
 
+  const body = codingFormatDirective(explicitContract);
+
+  return `<answer_contract>
+answerType: coding (explicit format: ${explicitContract})
+${body}
+
+${NO_LEAK_RULES}
+</answer_contract>`;
+}
+
+/**
+ * The imperative body for ONE explicit format constraint, without any wrapper.
+ *
+ * Exported so the live/WTA surfaces (promptSystemV2's coding contract block)
+ * state the SAME constraint as the manual-chat `<answer_contract>` instead of
+ * writing a second copy that can drift. Before this, "just give me the code"
+ * was honoured in chat and ignored on every live surface — the six-section
+ * template was attached regardless (see .audit/coding-template-audit-2026-08-18.md).
+ */
+export function codingFormatDirective(explicitContract: Exclude<ExplicitCodingContract, null>): string {
   const body = (() => {
     switch (explicitContract) {
       case 'code_only':
@@ -183,13 +272,7 @@ Reference the SAME problem/solution from the prior turn. Do NOT restate the prob
         return `The user asked for an EXPLANATION with NO CODE. Output a clear, speakable explanation in prose (and short bullets if helpful). Do NOT output any code block. No "## Code" section.`;
     }
   })();
-
-  return `<answer_contract>
-answerType: coding (explicit format: ${explicitContract})
-${body}
-
-${NO_LEAK_RULES}
-</answer_contract>`;
+  return body;
 }
 
 /** Verification (the hidden test block) only makes sense when NEW code is produced. */

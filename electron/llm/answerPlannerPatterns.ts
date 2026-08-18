@@ -166,6 +166,19 @@ export const CODING_PATTERNS = [
   // skill_experience / jd_fit routing (benchmark 2026-06-05).
   /\b(write|implement|code|coding|program|snippet|function|script|reverse|sort|parse)\b[\w ,'-]*\b(javascript|typescript|python|java|c\+\+|sql|go|golang|rust)\b/i,
   /\bin (javascript|typescript|python|java|c\+\+|sql|golang|rust)\b[\w ,'-]*\b(write|code|implement|function|program)\b/i,
+  // BUILD / CREATE / MAKE, paired with a build-task OBJECT (2026-08-18).
+  // Measured: only "write a …" reliably routed to a coding type. "Build me a CSV
+  // parser in typescript" landed on project_answer (answered as a résumé project
+  // story), "Create a CSV parser" and "Make me a debounce utility" on
+  // unknown_answer — no coding contract at all, in any mode.
+  //
+  // The verbs are deliberately NOT bare. "build rapport", "create a deck", "make
+  // a decision", "build a relationship with the customer" are ordinary
+  // non-coding English and a bare verb here would repeat the `class`/`method`
+  // P0 documented at the top of this list. Each verb must be followed, within
+  // one short clause, by an object that is unambiguously software.
+  /\b(build|create|make|generate)\b[\w ,'-]{0,30}\b(component|hook|endpoint|route|middleware|controller|api|sdk|cli|script|utility|util|helper|parser|serializer|validator|logger|function|class|method|query|form|dashboard|scraper|crawler|migration|web ?app|webpage|web page)\b/i,
+  /\b(build|create|make|generate)\b[\w ,'-]{0,30}\b(in|using|with)\s+(javascript|typescript|python|java|c\+\+|sql|go|golang|rust|react|node\.?js|express|django|flask)\b/i,
   ...COMMON_CODING_PROBLEM_PATTERNS,
 ];
 
@@ -331,7 +344,13 @@ const SOURCE_CODE_EVIDENCE_PATTERNS = [
   // "what does your actual <X> code look like", "show me your <X> code", "your
   // real code for <X>" — asking about NATIVELY's own implementation. A source-
   // evidence request (must not fabricate), not a generic coding task.
-  /\b(what does |show me |whats )?(your|the natively|natively'?s)\s+(actual\s+|real\s+)?[\w ]*\bcode\b\s*(look|is|for|of)?/i,
+  // The lead-in is MANDATORY (2026-08-18). It was optional, so the pattern
+  // reduced to a bare "your code" anywhere in the text — and "// your code here",
+  // the most common starter-stub comment on LeetCode/HackerRank, routed a pasted
+  // coding template to source_code_evidence_answer. The turn then got no coding
+  // contract at all outside technical-interview mode. "your real/actual code"
+  // with no lead-in is still caught by the dedicated pattern below.
+  /\b(what does|what'?s|whats|show me|tell me about)\s+(your|the natively|natively'?s)\s+(actual\s+|real\s+)?[\w ]*\bcode\b\s*(look|is|for|of)?/i,
   /\byour (real|actual) code\b/i,
   // "repo-verifiable / github-verifiable snippet|code" — explicitly asks for code
   // that can be checked against the public repo; this IS a source-evidence request

@@ -2747,22 +2747,35 @@ export class IntelligenceEngine extends EventEmitter {
                                 // classification the planner did not produce);
                                 // the extra signals only refine an already
                                 // coding-shaped turn.
+                                // Screen content arrives on THREE channels — pixels
+                                // (imagePaths), DOM text (options.domContext, the
+                                // companion-extension capture), and OCR — and which one
+                                // fires depends on whether the extension is paired.
+                                // Read the UNION, never one transport (live repro
+                                // 2026-08-18: DOM capture succeeded, imageCount was 0,
+                                // and everything keyed on images went dark).
+                                const _screenText = [options?.domContext, options?.screenContext?.ocrText]
+                                    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+                                    .join('\n\n');
                                 const codingSignals = resolveCodingPromptSignals({
                                     answerType: answerPlan.answerType,
                                     question: answerPlan.question,
-                                    // The reported case is a LeetCode stub ON SCREEN, which
-                                    // never appears in the extracted question. The screen OCR
-                                    // is already this turn's evidence; reading it here only
-                                    // decides whether the contract says "a template IS
-                                    // present" instead of "if one is present".
-                                    surroundingText: options?.screenContext?.ocrText,
+                                    surroundingText: _screenText || undefined,
                                 });
+                                // Screenshot/capture promotion, mirroring WhatToAnswerLLM:
+                                // when screen content is present and the question points at
+                                // the screen (or there is none), the routed type is not what
+                                // the turn is about — attach the contract and let its own
+                                // applicability boundary skip non-coding screens.
+                                const _screenIsSubject = ((imagePaths?.length ?? 0) > 0 || _screenText.length > 0)
+                                    && (!answerPlan.question?.trim() || require('./llm/codingPromptSignals').isDeicticAsk(answerPlan.question));
+                                const _promoted = !codingSignals.codingTask && _screenIsSubject;
                                 return resolveV2SystemPrompt({
                                     action: 'answer',
                                     tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
                                     activeMode: snapshotModeInfo ?? undefined,
-                                    codingTask,
-                                    codingTaskKind: codingSignals.codingTaskKind,
+                                    codingTask: codingTask || _promoted,
+                                    codingTaskKind: codingSignals.codingTaskKind ?? (_promoted ? 'dsa' : undefined),
                                     codingFormat: codingSignals.codingFormat,
                                     suppliedTemplate: codingSignals.suppliedTemplate,
                                 });

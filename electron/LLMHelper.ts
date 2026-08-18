@@ -2818,8 +2818,28 @@ try {
             action: 'answer',
             tier: v2TierForPromptTier(this.getPromptTier()),
             // Universal coding contract: attach when the routed answer type is
-            // coding-shaped, regardless of the active mode (2026-08-02).
-            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+            // coding-shaped, regardless of the active mode (2026-08-02). The
+            // contract SHAPE, an explicit user format request, and a code
+            // template already present in the message ride along from the one
+            // shared resolver (.audit/coding-template-audit-2026-08-18.md).
+            ...(() => {
+              try {
+                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
+                // Attached-screenshot promotion (2026-08-19 channel audit): a
+                // message with an image whose text only points at it ("solve
+                // this", or nothing) is about the image; without this, a
+                // screenshotted coding problem sent through the legacy chat
+                // transport answered in prose. The contract's applicability
+                // boundary skips non-coding screenshots.
+                if (!resolved.codingTask
+                    && (imagePaths?.length ?? 0) > 0
+                    && (!message?.trim() || isDeicticAsk(message))) {
+                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+              } catch { return { codingTask: false }; }
+            })(),
           }) ?? systemPromptOverride;
     }
     v2BasePromptActive = isV2ComposedPrompt(systemPromptOverride);
@@ -5503,8 +5523,28 @@ let isMultimodal = !!(imagePaths?.length);
             action: 'answer',
             tier: v2TierForPromptTier(this.getPromptTier()),
             // Universal coding contract: attach when the routed answer type is
-            // coding-shaped, regardless of the active mode (2026-08-02).
-            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+            // coding-shaped, regardless of the active mode (2026-08-02). The
+            // contract SHAPE, an explicit user format request, and a code
+            // template already present in the message ride along from the one
+            // shared resolver (.audit/coding-template-audit-2026-08-18.md).
+            ...(() => {
+              try {
+                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
+                // Attached-screenshot promotion (2026-08-19 channel audit): a
+                // message with an image whose text only points at it ("solve
+                // this", or nothing) is about the image; without this, a
+                // screenshotted coding problem sent through the legacy chat
+                // transport answered in prose. The contract's applicability
+                // boundary skips non-coding screenshots.
+                if (!resolved.codingTask
+                    && (imagePaths?.length ?? 0) > 0
+                    && (!message?.trim() || isDeicticAsk(message))) {
+                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+              } catch { return { codingTask: false }; }
+            })(),
           }) ?? systemPromptOverride;
         }
         callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
@@ -6404,6 +6444,7 @@ let isMultimodal = !!(imagePaths?.length);
         // the EXACT same pack — Phase 9 identity requirement). A no-op
         // reassignment when `pack` already came from `_cog.evidencePack`.
         (_cog as any).evidencePack = pack;
+        } // end image-exemption else — exempted turns skip decline AND pack rendering
       }
     } catch (cogErr: any) {
       const governedContext = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;

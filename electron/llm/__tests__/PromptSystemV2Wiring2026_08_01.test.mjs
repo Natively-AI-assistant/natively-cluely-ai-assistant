@@ -184,22 +184,47 @@ describe('turn-composer production wiring (buildTurnContentV2)', () => {
   });
 });
 
-describe('universal coding contract — semantic wiring (codingTask from routed answer type)', () => {
-  test('manual chat passes isCodingChat; phone chat derives from its plan', () => {
-    assert.match(ipcSrc, /resolveManualChatBasePrompt\(llmHelper, \{ codingTask: isCodingChat \}\)/,
-      'manual chat must thread the semantic coding classification');
-    assert.match(ipcSrc, /codingTask: !!\(phoneRouteOptions\?\.answerType && isCodingAnswerType/,
-      'phone chat must derive codingTask from its own answer plan');
+describe('universal coding contract — every surface resolves its signals through ONE module', () => {
+  // 2026-08-18: each surface used to compute `codingTask` with its own inline
+  // `isCodingAnswerType(...)` expression, which was fine while the signal was a
+  // single boolean and became a drift hazard the moment the contract needed a
+  // SHAPE ('dsa' vs 'impl'), an explicit user format request, and a
+  // supplied-template flag as well. `resolveCodingPromptSignals` is now the one
+  // producer; these pins fail when a surface is added or reverted to a hand-rolled
+  // boolean. See .audit/coding-template-audit-2026-08-18.md.
+  const SURFACES = [
+    ['../../ipcHandlers.ts', 3],       // V3 personaBase, manual chat base prompt, phone chat
+    ['../../LLMHelper.ts', 2],         // _streamChatInner + chatWithGemini
+    ['../../IntelligenceEngine.ts', 3],// V3 personaBase + both validator stand-downs
+    ['../WhatToAnswerLLM.ts', 1],
+    ['../AnswerLLM.ts', 1],
+  ];
+
+  for (const [rel, expected] of SURFACES) {
+    test(`${path.basename(rel)} resolves coding signals through the shared resolver`, () => {
+      const src = read(rel);
+      const hits = (src.match(/resolveCodingPromptSignals\(/g) || []).length;
+      assert.equal(hits, expected, `${rel}: expected ${expected} resolveCodingPromptSignals call(s), got ${hits}`);
+    });
+  }
+
+  test('no surface hand-rolls the coding boolean beside the resolver', () => {
+    // The old shape, pinned NEGATIVELY: a reintroduced inline boolean would
+    // silently ship a coding turn with no contract shape and no format request.
+    assert.doesNotMatch(llmHelperSrc, /codingTask: \(\(\) => \{ try \{ const \{ isCodingAnswerType \}/);
+    assert.doesNotMatch(read('../WhatToAnswerLLM.ts'), /codingTask: isCodingAnswerType\(answerPlan\?\.answerType as AnswerType\)/);
+    assert.doesNotMatch(read('../AnswerLLM.ts'), /codingTask: !!\(answerPlan && isCodingAnswerType\(answerPlan\.answerType\)\)/);
   });
 
-  test('LLMHelper default resolves thread codingTask from routeOptions on BOTH entry points', () => {
-    const hits = (llmHelperSrc.match(/codingTask: \(\(\) => \{ try \{ const \{ isCodingAnswerType \}/g) || []).length;
-    assert.equal(hits, 2, `expected both _streamChatInner and chatWithGemini to thread codingTask (got ${hits})`);
-  });
-
-  test('WTA and AnswerLLM thread codingTask from the answer plan', () => {
-    assert.match(read('../WhatToAnswerLLM.ts'), /codingTask: isCodingAnswerType\(answerPlan\?\.answerType as AnswerType\)/);
-    assert.match(read('../AnswerLLM.ts'), /codingTask: !!\(answerPlan && isCodingAnswerType\(answerPlan\.answerType\)\)/);
+  test('the live path passes the explicit format contract to the repair layer', () => {
+    // Prompt-only would be undone: with no contract argument
+    // validateAnswerStructure force-injects the six sections back into a
+    // "code only" answer. Manual chat has always passed it; the live path did not.
+    assert.match(engineSrc, /validateAnswerStructure\(\s*answerPlan\.answerType, fullAnswer, liveExplicitCodingContract,?\s*\)/);
+    // Resolved through the SHARED resolver, not detectExplicitCodingContract
+    // directly, so the repair layer stands down on exactly the formats the prompt
+    // asked for (the continuation-only ones are gated on a prior coding turn).
+    assert.match(engineSrc, /const liveExplicitCodingContract = require\('\.\/llm\/codingPromptSignals'\)\.resolveCodingPromptSignals\(/);
   });
 });
 

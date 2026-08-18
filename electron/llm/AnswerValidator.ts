@@ -786,7 +786,20 @@ const validateImplAnswer = (answer: string): AnswerValidationResult => {
     return { ok: false, missingSections: ['Code'], hasCodeBlock: false, hasComplexity: false };
   }
 
-  const isJsx = /\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=|<[A-Z][a-zA-Z]*[\s/>]/.test(codeBlock.code);
+  // JSX detection must not fire on GENERICS. `<[A-Z][a-zA-Z]*[\s/>]` matches
+  // `Stack<Character>`, `Map<Integer, Integer>`, `vector<int>` and `List<String>`,
+  // so a correct Java or C++ answer had its fence rewritten to ```tsx by the
+  // repair below (live benchmark 2026-08-18: Java isBalanced returned tagged
+  // ```tsx). A statically-typed non-JS language is excluded outright, and the
+  // bare-tag heuristic now requires a tag that actually opens or closes an
+  // element rather than any `<Word`.
+  const looksStaticallyTypedNonJs =
+    /\bimport\s+java\.|\bpublic\s+(?:static\s+)?(?:class|int|void|boolean|String)\b|#include\s*<|\bstd::|\busing\s+namespace\b|\bfunc\s+\w+\s*\(|\bfn\s+\w+\s*\(|\bpackage\s+main\b/.test(codeBlock.code);
+  const isJsx = !looksStaticallyTypedNonJs && (
+    /\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=/.test(codeBlock.code)
+    // A real element: `<Foo />`, `<Foo>` followed later by `</Foo>`, or `</Foo>`.
+    || /<[A-Z][A-Za-z0-9]*\s*\/>|<\/[A-Z][A-Za-z0-9]*>/.test(codeBlock.code)
+  );
   // Note: codeBlock.language defaults to 'python' when the fence had no tag
   // (see extractFirstCodeBlock). Treat empty/undefined as "no tag" so an
   // untagged JSX fence still triggers repair — empty-tag is as wrong as
