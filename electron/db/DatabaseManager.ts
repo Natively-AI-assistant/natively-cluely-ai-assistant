@@ -1179,16 +1179,16 @@ export class DatabaseManager {
                                     )
                                     ELSE NULL
                                 END
-                            -- F-701: NO `FROM mode_reference_files` here. An
-                            -- inner FROM re-opens the table and SHADOWS the
-                            -- outer UPDATE row, which made
-                            -- `mode_reference_files.id = mode_reference_files.id`
-                            -- a tautology over that inner instance — so the
+                            -- F-701: there is deliberately NO inner FROM here.
+                            -- An inner FROM mode_reference_files re-opens the
+                            -- table and SHADOWS the outer UPDATE row, which made
+                            -- the old self-equality correlation predicate a
+                            -- tautology over that inner instance — so the
                             -- subquery was UNCORRELATED and MAX(page_num)
                             -- returned the largest page number in the WHOLE
                             -- table, written into every row (a 3-page document
                             -- reporting 6 pages). A seed with no FROM is a
-                            -- single-row SELECT whose `content` binds to the
+                            -- single-row SELECT whose content column binds to the
                             -- row being updated, which is the correlation this
                             -- migration always intended.
                         UNION ALL

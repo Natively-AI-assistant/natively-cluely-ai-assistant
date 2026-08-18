@@ -367,6 +367,25 @@ export class RAGManager {
             return;
         }
         
+        // F-411: purge anything still sitting under this id BEFORE indexing the
+        // new session. The live id is a CONSTANT ('live-meeting-current'), and
+        // the only cleanup is at meeting end — guarded by !isMeetingActive, and
+        // deliberately skipped when a new meeting has already started. So after
+        // a crash, a force-quit, or a start that overlaps the previous drain,
+        // the previous meeting's transcript chunks survive under the same id;
+        // the live "ask about this meeting" surface filters only on meeting_id,
+        // so meeting A's transcript was served as evidence for meeting B.
+        // There is no startup sweep anywhere, and `chunks` has no
+        // UNIQUE(meeting_id, chunk_index) to stop the rows interleaving.
+        // Purging here is the one place that runs on EVERY path into a new
+        // live session, and it is safe: these JIT rows are always disposable
+        // (post-meeting RAG re-indexes under the real meeting id).
+        try {
+            this.deleteMeetingData(meetingId);
+        } catch (e) {
+            console.warn('[RAGManager] Failed to purge stale live-indexing data before start:', e);
+        }
+
         // Ensure meeting row exists in DB to satisfy foreign key constraints for chunks
         try {
             this.db.prepare(`

@@ -112,6 +112,15 @@ Measured (worktree artifacts, offline): distance matches sqrt(2-2cos) to 4dp and
 Why it survived: L2 is monotonic in cosine for normalized vectors, so RANKING is unchanged — the failure is silent under-retrieval with no wrong-looking output and no log. Every existing test forces useNativeVec=false (ReindexPredicateDriftProof:89, SearchSpaceFilter:194, RequeueReindexAtomicity:11) — the tested path is not the shipped path (migrations v8/v9 always create vec_chunks_768, so production runs native).
 
 ## F-411 [P1] 'live-meeting-current' chunks leak ACROSS meetings (cross-meeting transcript disclosure)
+Status: FOUND → CONFIRMED → ROOT-CAUSED → FIXED-VERIFIED
+Fix: startLiveIndexing now purges the constant live id (deleteMeetingData) BEFORE recreating the meeting row and starting the indexer — the one point every path into a new live session passes through, so it covers the crash, force-quit AND overlapped-drain cases that the end-of-meeting cleanup misses. Wrapped in try/catch so a cleanup failure can never stop a meeting starting. Safe because JIT rows are always disposable (post-meeting RAG re-indexes under the real meeting id).
+Pin: electron/rag/__tests__/LiveIndexPurgesStaleSession2026_08_18.test.mjs (2/2 — purge precedes both the row insert and indexer start; purge is fault-tolerant).
+Regression check: RAG + services suites, 123 unique failing names ALL present in the pinned baseline → zero new.
+
+## ⚠ SELF-CAUGHT DEFECT IN MY OWN FIX (2026-08-18) — build break masked by suppressed output
+While fixing F-701 I wrote SQL comments containing BACKTICKS inside a JS template literal, which terminated the string and broke `build:electron`. I did not notice immediately because I had run the build as `npm run build:electron >/dev/null 2>&1 && <tests>` — the redirect hid the error, and when the `&&` short-circuited I re-ran the tests WITHOUT a build, so they passed against a STALE bundle. The F-701/F-702/F-410 repros also kept passing because they read the .ts source and slice the SQL out of it, so they validated SQL semantics but never compilation.
+Caught by the next build, fixed by removing every backtick from those comments, and ALL THREE repros plus the suites were then re-verified against a freshly-built bundle.
+Process fixes adopted for the rest of the campaign: (1) NEVER suppress build output — a hidden build failure invalidates every test run after it; (2) a repro that reads source text is not a compile gate, so `build:electron` must be green in the same command whose output I actually read.
 Area: main.ts:5697 (constant id for every meeting) · cleanup only at :5966-5976, guarded by !isMeetingActive · no startup sweep · chunks has no UNIQUE(meeting_id, chunk_index)
 Status: FOUND. After a crash/force-quit the JIT rows survive; the next meeting appends to the same id, and the live "ask about this meeting" surface (ipcHandlers.ts:10141/10164) filters only on meeting_id — so meeting A's transcript is served as evidence for meeting B. The authors anticipated the overlap case and chose to SKIP deletion ("New meeting started during cleanup — skipping…"), leaving the same state.
 
