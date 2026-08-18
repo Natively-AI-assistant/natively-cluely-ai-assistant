@@ -267,9 +267,11 @@ Regression check: services suite, zero new failures vs baseline.
 MeetingPersistence.ts:417-420 persists selectedModeId/Name/TemplateType, but the regenerate path (:888-891) ignores selectedModeId and does `getModes().find(m => m.templateType === templateType)` — getModes() is ORDER BY created_at ASC, so it returns the OLDEST row with that template. Every custom mode is templateType 'general' and the built-in General is seeded first, so regenerating a meeting run under a custom mode silently uses another mode's note sections AND rewrites modeMeta with the wrong identity. Triggers once any custom mode exists.
 
 ## F-504 [P3] Unguarded _c3TurnPlan deref defeats its own null guard
+Status: FIXED-VERIFIED. The dead const (never read — the live consumer optional-chains its own copy) was the single unguarded deref, so a TurnPlanner dynamic-import failure threw a TypeError that the outer catch swallowed, discarding the whole JIT profile-evidence block. Removed; the live optional-chained consumer is pinned to stay that way.
 IntelligenceEngine.ts:1933 dereferences `_c3TurnPlan.answerDirectives` unguarded (every other use is optional-chained), and the const is never read — dead code. If the TurnPlanner dynamic import fails, this throws inside the fallback and the outer catch discards the whole JIT profile-evidence block, leaving candidateProfile empty: the defensive fallback destroys the grounding it exists to protect.
 
 ## F-505 [P3] 'seminar' missing from two mode-prior normalizers
+Status: FIXED-VERIFIED. Both MODE_TEMPLATE_TYPES sets now carry the 8th template, and the repro cross-checks that modeProfiles genuinely defines all 8 so the fix cannot be cargo-culted.
 ProfileIntelligenceRouter.ts:85-87 and ContextRouter.ts:117-119 still carry the pre-Campaign-3 7-member template list, so toActiveModeInfo returns null for seminar and planAnswer runs mode-blind. Shadow-only today (contextRouterV2 feeds a telemetry divergence marker), hence P3.
 
 ## F-506 [P3] Profile grounding gate classifies with a hardcoded source:'manual_input'
@@ -359,6 +361,7 @@ Note (from an independent code review that ran against the shared checkout): the
 
 ## RUN-CONTINUITY NOTE (2026-08-18, unattended run)
 The machine slept mid-run and killed two in-flight exploration agents (Phases 3 and 7). Mitigation: `caffeinate -dimsu -t 28800` now holds the machine awake for the remainder of the session (non-destructive, self-expiring after 8h, no config changed). Both explorations were re-launched. Phases 3-7 explorations run against the isolated worktree only.
+BASELINE GAP FOUND AND CLOSED (2026-08-18): the pinned baseline was captured with `npm test`, whose globs do NOT include electron/intelligence/__tests__ — that suite lives behind the separate `test:intelligence` script. Running it while verifying F-504/F-505 surfaced 7 failures that looked like regressions and were not: re-running the same glob at the baseline commit reproduced all 7 exactly. scripts/audit/BASELINE-failures.txt now includes them, so a future check over that glob is meaningful instead of alarming.
 Authoritative regression baselines for the remaining phases are being captured by running the FULL suite at the pre-audit commit in /tmp/natively-baseline-wt; every phase close-out diffs failing test NAMES against it rather than asserting.
 
 ## ⚠ MERGE ADVISORY (F-202) — read before shipping this branch

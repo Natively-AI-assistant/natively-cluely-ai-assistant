@@ -1941,7 +1941,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // profile_question / jd_question (founder §2.5). A
                     // general-kind question (salary, unroutable, "why hire you"
                     // when no profile match) MUST NOT auto-seed a bio dump.
-                    const seedCandidateBackground = _c3TurnPlan.answerDirectives.seedCandidateBackground;
+                    // F-504: the unguarded `_c3TurnPlan.answerDirectives` deref that
+                    // used to sit here was DEAD (never read — the live consumer below
+                    // optional-chains its own copy) and was the one place that could
+                    // throw when the TurnPlanner dynamic import failed and left
+                    // _c3TurnPlan null. That TypeError was swallowed by the outer
+                    // catch, discarding the whole JIT profile-evidence block and
+                    // leaving candidateProfile empty — the defensive fallback
+                    // destroying the grounding it exists to protect.
                     if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({

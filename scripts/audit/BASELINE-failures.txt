@@ -23,9 +23,11 @@
 ✖ ClarifyLLM: every streamChat() call passes ignoreKnowledgeMode=true
 ✖ Codex active-model and fast-mode options require enabled config AND signed-in OAuth
 ✖ CodexCliService: AbortSignal + deadline both propagate to the fetch + reader
+✖ Context OS — multi-family coordinator admission predicate (2026-07-18)
 ✖ D: full agent_message.delta stream yields the concatenated text via stream()
 ✖ FALLBACK fall-through: an undecryptable keyring file no longer strands a readable fallback
 ✖ FIX-003: ModeHybridRetriever batches chunk embeddings
+✖ FIX: manual-chat and WTA short-circuits prefer the specific legacy message over the generic kernel one
 ✖ G.1: gpt-5.4 + xhigh → wire carries -c model_reasoning_effort="xhigh" (no downgrade for 5.4)
 ✖ G.2: gpt-5.3-codex + xhigh → resolver downgrades to "low" on the wire (smoking-gun)
 ✖ G.3: gpt-5-codex + none → resolver downgrades to "low" (codex variants reject "none")
@@ -64,9 +66,11 @@
 ✖ TRANSIENT: ≤2 decrypt failures do NOT trigger re-entry, then a healthy launch recovers
 ✖ UX4: audio test probes system audio in parallel with the mic
 ✖ VERIFIED-HEALED: a recovery re-key KEEPS the fallback until a cold-start decrypt proves the keyring readable
+✖ WIRING (manual chat): the clarification short-circuit checks manualOwnership.shouldClarifyInsteadOfProfile before buildSourceClarification
 ✖ WhatToAnswerLLM prefers async hybrid when method exists, falls back to sync
 ✖ WhatToAnswerLLM: document-grounded custom mode fails closed when reference-files scope is denied before provider dispatch
 ✖ a PDF parse timeout cancels the underlying parse and never emits an unhandled rejection
+✖ a call site that omits the `allowed` parameter fails tsc --noEmit with the expected diagnostic
 ✖ a decrypt failure does NOT destroy a recoverable fallback (no migrate of empty creds)
 ✖ a document-grounded custom-mode answer with scaffold-shaped headings never triggers this guard's repair stream (doc-grounded exclusion)
 ✖ a free-form no-content hallucination with no shared vocabulary is regenerated into a real answer
@@ -83,6 +87,7 @@
 ✖ chatWithGemini: intro shortcut PASSES THROUGH even in lecture mode
 ✖ checkAnswerRelevance — corpus regression pin (2026-07-19)
 ✖ cloud→local fallback during ingest stamps saved nodes with local space, not pre-call active cloud space
+✖ coordinator throw → legacy path resets coordinatorGovernedProfileEvidence and manualContextOsGeneration
 ✖ curl provider save handlers validate renderer payloads before persistence
 ✖ data persists across a CLOSE+REOPEN of the file (not :memory:)
 ✖ dev mode: preflight does NOT publish missing_required_asset for native-audio
@@ -122,11 +127,13 @@
 ✖ main acquires the single-instance lock before native ABI recovery can rebuild or relaunch
 ✖ model-changed call sites use the targeted helper
 ✖ no fastQueryEmbedFn → returns embedFn directly
+✖ no source file repo-wide imports/calls assertNoAuthorityContradiction
 ✖ numeral equivalence
 ✖ observe-only relevance check must not block the answer pipeline
 ✖ open-external IPC only allows known external destinations
 ✖ parallel fallback: getEmbedding calls overlap (Promise.all) rather than serializing
 ✖ preload and renderer type expose promptInstruction option on generateWhatToSay
+✖ processQuestionGated's third parameter is a REAL compile-time requirement
 ✖ profile:delete clears both tiers via the transactional entrypoint
 ✖ profile:delete-jd clears both tiers via the transactional entrypoint
 ✖ race / late-arrival safety
