@@ -117,6 +117,33 @@ const WEAK_FOLLOW_UP_MARKERS = /\b(that|this|it|those|these|the (project|one|sys
 const STRONG_FOLLOW_UP_MARKERS = /\b(you (just )?(said|mentioned)\b|\bmentioned (earlier|before)\b|\bsaid (earlier|before)\b|(going|coming) back to (that|this|it|what you (said|mentioned)|the (earlier|previous|last) (point|topic|question|thing))\b|the previous (point|topic|question|thing|example)( you (mentioned|said|brought up|raised))?\b|circling back|you (had )?(brought up|touched on|referenced))\b/i;
 const FOLLOW_UP_WORD_CAP = 14;
 
+// ── Clause-level interrogatives for UNPUNCTUATED providers (WTA audit
+// F9/Phase 3, 2026-08-18) ───────────────────────────────────────────────────
+// INTERROGATIVE_LEAD is ^-anchored by design, and on punctuating providers a
+// prefix clause is separated by a comma/period so the lead survives cleaning.
+// On a no-punctuation provider ("Soniox-class"), "Just to confirm, what
+// should I call you?" arrives as one flat "just to confirm what should i
+// call you" — the wh-lead sits MID-STRING, hasMark/hasLead both fail, and
+// the answerability floor caps the turn at 0.3, silently skipping profile
+// grounding (measured: 12 of the 102 selection-dataset cases cross below the
+// 0.6 gate this way). These patterns recover the interrogative CLAUSE
+// deterministically and are consulted ONLY when the turn's
+// punctuationSource === 'unavailable' — on punctuating providers the missing
+// '?'/comma stays real negative evidence.
+//   1. wh-word + auxiliary/degree word ("how strong is", "what should i",
+//      "how ready are", "why did you") anywhere in the turn.
+const CLAUSE_INTERROGATIVE = /\b(what|why|how|when|where|which|who|whose|whom)\s+(should|would|could|can|do|did|does|is|are|was|were|am|have|has|had|will|many|much|long|soon|often|strong|ready|good|comfortable|confident|familiar|experienced|about)\b/i;
+//   2. auxiliary + second person ("can you", "did you", "are you") anywhere —
+//      the interviewer addressing the candidate interrogatively.
+const AUX_SECOND_PERSON = /\b(can|could|would|will|do|did|does|are|were|have|has)\s+you\b/i;
+//   3. a trailing wh-fragment ("…engineering-heavy why data"): why/what-about
+//      + a 1-2 word object at the very END of the turn.
+const TRAILING_WH_FRAGMENT = /\b(why|what about|how about)\s+[\w'-]+( [\w'-]+)?$/i;
+//   4. a bare topic-shift fragment ("and sql", "and python frameworks") —
+//      "and" is too common for the anywhere rule, so the WHOLE turn must be
+//      the fragment (≤4 words).
+const SHORT_TOPIC_SHIFT = /^and\s+[\w'-]+( [\w'-]+){0,2}$/i;
+
 // Demonstrative-only openers that strongly imply a follow-up ("can you explain that?").
 const DEMONSTRATIVE_FOLLOW_UP = /\b(explain|elaborate on|tell me more about|go deeper into|expand on)\s+(that|this|it|those|these)\b/i;
 
@@ -383,6 +410,16 @@ export function extractLatestQuestion(
     const latestQuestion = rawTextAt(chosenIdx) || scoringText;
     const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);
     const hasLead = INTERROGATIVE_LEAD.test(scoringText);
+    // F9: on providers that never guarantee punctuation, the absence of '?'
+    // (and of clause-separating commas) is NEUTRAL — see the clause patterns
+    // above and the confidence block below.
+    const punctuationUnavailable = chosen.punctuationSource === 'unavailable';
+    const hasClauseInterrogative = punctuationUnavailable && !hasMark && !hasLead && (
+        CLAUSE_INTERROGATIVE.test(scoringText)
+        || AUX_SECOND_PERSON.test(scoringText)
+        || TRAILING_WH_FRAGMENT.test(scoringText)
+        || (scoringText.split(/\s+/).length <= 4 && SHORT_TOPIC_SHIFT.test(scoringText))
+    );
 
     // Follow-up detection: demonstrative-only ask, a STRONG explicit backward-
     // reference marker (unambiguous regardless of sentence length), or a WEAK
@@ -409,6 +446,7 @@ export function extractLatestQuestion(
     // A weak demonstrative alone is not evidence of a question. Require real
     // interrogative or imperative shape, or an explicit backward reference.
     const isAnswerable = hasMark || hasLead
+        || hasClauseInterrogative
         || IMPERATIVE_ASK.test(scoringText)
         || DEMONSTRATIVE_FOLLOW_UP.test(scoringText)
         || STRONG_FOLLOW_UP_MARKERS.test(scoringText);
@@ -458,9 +496,25 @@ export function extractLatestQuestion(
     // Confidence: explicit '?' + interrogative lead is strongest. A bare
     // imperative ask ("tell me about your projects") with a lead but no '?' is
     // still high. A non-question interviewer statement we fell back to is low.
+    //
+    // Punctuation-provenance-aware scoring (WTA audit F9/Phase 3, 2026-08-18):
+    // whether a '?' CAN appear is a property of the STT provider, not the
+    // utterance — only Deepgram/Google/local models guarantee punctuation
+    // (see punctuationProvenance.ts). When the chosen turn is stamped
+    // 'unavailable', a missing mark is NEUTRAL: an interrogative lead alone
+    // scores like mark+lead. Measured before this fix (102-case selection
+    // dataset, punctuation-stripped): selection unchanged, but mean
+    // confidence fell 0.777 → 0.63 and 18 → 30 cases dropped below the live
+    // 0.6 grounding gate — ~12% of turns silently losing profile grounding
+    // on no-punctuation providers. ABSENT provenance (legacy writers, typed
+    // questions) keeps byte-identical legacy scoring — this branch only
+    // fires for segments stamped by the STT seam. Mirrors
+    // QuestionLedger.askShape so live and shadow scoring cannot drift.
     let confidence = 0.4;
     if (hasMark && hasLead) confidence = 0.95;
+    else if (hasLead && punctuationUnavailable) confidence = 0.95;
     else if (hasMark || hasLead) confidence = 0.8;
+    else if (hasClauseInterrogative) confidence = 0.75;
     if (questionType !== 'general' && confidence < 0.8) confidence = 0.7;
 
     // Social-pleasantry down-weight: a question-shaped chit-chat turn ("did you

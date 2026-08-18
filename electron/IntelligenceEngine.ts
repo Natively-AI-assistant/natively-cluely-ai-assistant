@@ -1140,7 +1140,10 @@ export class IntelligenceEngine extends EventEmitter {
                     contextItems.push({
                         role: 'interviewer',
                         text: lastInterim.text,
-                        timestamp: lastInterim.timestamp
+                        timestamp: lastInterim.timestamp,
+                        // F9: the interim carries provider punctuation provenance
+                        // from the STT seam (provider_interim / unavailable).
+                        ...(lastInterim.punctuationSource ? { punctuationSource: lastInterim.punctuationSource } : {}),
                     });
                 }
             }
@@ -1148,7 +1151,9 @@ export class IntelligenceEngine extends EventEmitter {
             const transcriptTurns = contextItems.map(item => ({
                 role: item.role,
                 text: item.text,
-                timestamp: item.timestamp
+                timestamp: item.timestamp,
+                // F9: provenance flows to the extractor's confidence scoring.
+                ...(item.punctuationSource ? { punctuationSource: item.punctuationSource } : {}),
             }));
 
             let preparedTranscript = prepareTranscriptForWhatToAnswer(transcriptTurns, 12);
@@ -2716,11 +2721,26 @@ export class IntelligenceEngine extends EventEmitter {
                         personaBase: ({ codingTask }: { codingTask: boolean }) => {
                             try {
                                 const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+                                const { resolveCodingPromptSignals } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                                // Contract SHAPE + explicit format + supplied
+                                // template, from the one resolver every surface
+                                // shares. `codingTask` stays the bridge's
+                                // verdict (it may be true on a V3 CODING_TASK
+                                // classification the planner did not produce);
+                                // the extra signals only refine an already
+                                // coding-shaped turn.
+                                const codingSignals = resolveCodingPromptSignals({
+                                    answerType: answerPlan.answerType,
+                                    question: answerPlan.question,
+                                });
                                 return resolveV2SystemPrompt({
                                     action: 'answer',
                                     tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
                                     activeMode: snapshotModeInfo ?? undefined,
                                     codingTask,
+                                    codingTaskKind: codingSignals.codingTaskKind,
+                                    codingFormat: codingSignals.codingFormat,
+                                    suppliedTemplate: codingSignals.suppliedTemplate,
                                 });
                             } catch { return null; } // no persona ⇒ composition unchanged
                         },
