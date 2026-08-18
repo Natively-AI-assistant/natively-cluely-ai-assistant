@@ -1252,6 +1252,9 @@ export class CredentialsManager {
         // decrypt may be transient, so the two lead to different write-back
         // behaviour in step 2. See the migrate-up comment there.
         let keyringReadFailed = false;
+        // F-704: set when a NEWER app-managed fallback should win this load.
+        // Previously this deleted the keyring file outright; see the guard below.
+        let preferFallbackThisLoad = false;
         // Recomputed from scratch on every load (init() may run more than once).
         this.keyringUnreadable = false;
         try {
@@ -1271,9 +1274,14 @@ export class CredentialsManager {
             //          — the fallback is newer (from the restore time) but contains
             //          STALE data from another machine. This is rare; the user will
             //          re-enter the key on first save.
-            //      (b) cross-machine copy where both files share a salt (impossible —
-            //          SALT_PATH is machine-bound via os.userInfo/MachineGuid, so a
-            //          cross-machine fallback cannot decrypt anyway).
+            //      (b) a WHOLE-PROFILE copy, where both files travel together.
+            //          F-704 correction: this was previously called "impossible"
+            //          on the grounds that SALT_PATH is machine-bound via
+            //          os.userInfo/MachineGuid. It is not — getFallbackKey()
+            //          derives from a CONSTANT string plus the per-install salt,
+            //          and that salt sits in the same userData directory as the
+            //          ciphertext. A restored profile therefore DOES decrypt, so
+            //          this branch must never take a destructive action.
             //    Both edge cases are bounded and recoverable; the worst outcome is a
             //    single re-entry of the affected credential.
             if (fs.existsSync(CREDENTIALS_PATH)) {
@@ -1304,8 +1312,27 @@ export class CredentialsManager {
                         // The user would simply re-enter the affected key on next save.
                         // Bounded and recoverable; documented in the comment block above.
                         if (fallbackMtime > keyringMtime) {
-                            console.warn('[CredentialsManager] Stale keyring file detected (older than fallback); removing before load');
-                            this.removeKeyringFile();
+                            // F-704: PREFER the fallback for this load, but do NOT
+                            // delete the keyring file.
+                            //
+                            // The "KNOWN MIS-FIRE" note above concluded a restored
+                            // fallback was harmless because it "decrypts with THIS
+                            // machine's salt and key material, so decryption would
+                            // fail". That is not true: getFallbackKey() derives from a
+                            // CONSTANT string plus a salt stored in the SAME userData
+                            // directory as the ciphertext, so a whole-profile restore
+                            // (Time Machine, Migration Assistant, synced AppData,
+                            // support bundle) carries salt and blob together and the
+                            // key re-derives identically. Decryption SUCCEEDS — and
+                            // the delete had already destroyed the user's CURRENT
+                            // credentials, silently reverting them to the older set
+                            // with no error.
+                            //
+                            // Preferring without deleting keeps the intended
+                            // behaviour (newer file wins) while making the mis-fire
+                            // recoverable: the keyring file is still on disk.
+                            console.warn('[CredentialsManager] Fallback is newer than the keyring file; preferring it for this load (keyring file preserved)');
+                            preferFallbackThisLoad = true;
                         }
                     } catch (statErr) {
                         // statSync failed — proceed with the normal path; if the keyring
@@ -1313,7 +1340,7 @@ export class CredentialsManager {
                     }
                 }
 
-                if (keyringAvailable && fs.existsSync(CREDENTIALS_PATH)) {
+                if (keyringAvailable && !preferFallbackThisLoad && fs.existsSync(CREDENTIALS_PATH)) {
                     const encrypted = fs.readFileSync(CREDENTIALS_PATH);
                     let keyringSuccess = false;
                     try {
