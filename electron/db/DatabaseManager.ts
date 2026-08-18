@@ -2787,10 +2787,15 @@ export class DatabaseManager {
             // `chunks`), degrading recall monotonically with every deletion.
             // Must run BEFORE the parent DELETE, while the chunk ids are still
             // resolvable.
-            this.deleteVectorsForMeeting(id);
-
-            const stmt = this.db.prepare('DELETE FROM meetings WHERE id = ?');
-            const info = stmt.run(id);
+            // R-12: the vector reap and the parent DELETE must be one unit. Ordering
+            // the reap first is required (the chunk ids must still resolve), but with
+            // no transaction a failure of the parent DELETE left the vectors gone and
+            // the meeting present. This was inert only while R-01 meant nothing was
+            // ever deleted; fixing R-01 makes it reachable.
+            const info = this.db.transaction((meetingId: string) => {
+                this.deleteVectorsForMeeting(meetingId);
+                return this.db!.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId);
+            })(id);
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
             return info.changes > 0;
         } catch (error) {
@@ -2812,25 +2817,32 @@ export class DatabaseManager {
         try {
             const dims = this.getExistingVecDims();
             if (!dims.length) return;
-            const chunkIds = this.db.prepare('SELECT id FROM chunks WHERE meeting_id = ?').all(meetingId) as any[];
-            const summaryIds = this.db.prepare(
-                'SELECT cs.id AS id FROM chunk_summaries cs JOIN chunks c ON c.id = cs.chunk_id WHERE c.meeting_id = ?'
-            ).all(meetingId) as any[];
+            const chunkIds = (this.db.prepare('SELECT id FROM chunks WHERE meeting_id = ?')
+                .all(meetingId) as any[]).map((r) => r.id);
+            // R-01: chunk_summaries is keyed per-MEETING — (id, meeting_id UNIQUE,
+            // summary_text, embedding, created_at). There is no `chunk_id` column and
+            // no migration adds one, so the previous `JOIN chunks c ON c.id = cs.chunk_id`
+            // threw at prepare() time. That prepare sits outside the per-dim loop and
+            // inside the outer try, so the throw unwound past the per-dim catches into
+            // the outer catch — which only warns. The chunk deletes below were never
+            // reached and this function reaped nothing. Matches VectorStore.ts:676/725.
+            const summaryIds = (this.db.prepare('SELECT id FROM chunk_summaries WHERE meeting_id = ?')
+                .all(meetingId) as any[]).map((r) => r.id);
+            // SQLite caps bound parameters (measured 32766 in this build), so delete in
+            // batches rather than building one placeholder per chunk.
+            const BATCH = 500;
+            const deleteIn = (table: string, column: string, ids: number[]) => {
+                for (let i = 0; i < ids.length; i += BATCH) {
+                    const slice = ids.slice(i, i + BATCH);
+                    const ph = slice.map(() => '?').join(',');
+                    try {
+                        this.db!.prepare(`DELETE FROM ${table} WHERE ${column} IN (${ph})`).run(...slice);
+                    } catch (_) { /* dim table may not exist */ }
+                }
+            };
             for (const dim of dims) {
-                if (chunkIds.length) {
-                    const ph = chunkIds.map(() => '?').join(',');
-                    try {
-                        this.db.prepare(`DELETE FROM vec_chunks_${dim} WHERE chunk_id IN (${ph})`)
-                            .run(...chunkIds.map((r) => r.id));
-                    } catch (_) { /* dim table may not exist */ }
-                }
-                if (summaryIds.length) {
-                    const ph = summaryIds.map(() => '?').join(',');
-                    try {
-                        this.db.prepare(`DELETE FROM vec_summaries_${dim} WHERE summary_id IN (${ph})`)
-                            .run(...summaryIds.map((r) => r.id));
-                    } catch (_) { /* dim table may not exist */ }
-                }
+                if (chunkIds.length) deleteIn(`vec_chunks_${dim}`, 'chunk_id', chunkIds);
+                if (summaryIds.length) deleteIn(`vec_summaries_${dim}`, 'summary_id', summaryIds);
             }
         } catch (e) {
             console.warn(`[DatabaseManager] deleteVectorsForMeeting(${meetingId}) failed (non-fatal):`, e);

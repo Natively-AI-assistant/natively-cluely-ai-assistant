@@ -905,3 +905,52 @@ Processing queue (severity order):
 6. F-105 [P1] mic start() throw kills system channel
 7. F-110 [P1] init failure leaves lock-holding zombie
 8. F-106..F-119 [P2], then P3s (F-112, F-114, F-120, F-121, F-122)
+
+---
+
+## §18 — Adversarial self-review of the campaign's own fixes (2026-08-18)
+
+Four adversarial reviewers were dispatched with instructions to REFUTE, not approve, the
+fixes this campaign shipped. Every claim below was **independently re-verified by me**
+against the source before being accepted. This section is the honest record: several of my
+own fixes were no-ops, and two were regressions against baseline.
+
+### Confirmed defects IN MY OWN FIXES — Tier A (branch is worse than baseline on these paths)
+
+| ID | Defect | Status |
+|----|--------|--------|
+| R-01 | **F-705 deletes nothing.** `chunk_summaries` has no `chunk_id` column (schema: `id, meeting_id, summary_text, embedding, created_at`; no migration adds one). The JOIN throws at `prepare()` time, unwinds past the per-dim catches into the outer `catch` at DatabaseManager.ts:2834, which only `console.warn`s. Chunk vectors are never reached → the reported orphan-vector bug is 100% intact and silent. | OPEN |
+| R-02 | **F-303 permanently bricks desktop chat.** A phone stream that errors *after* committing tokens sends `gemini-stream-error` with no `gemini-stream-done`; NativelyInterface.tsx:5448 early-returns on `source === 'phone-mirror'` BEFORE the ref reset, leaving the guard pinned to `'phone'`. Every later desktop stream is rejected (`accept:false`, `honor:false`) — no text, spinner forever, until Escape. Unbounded; pre-F-303 this was harmless. | OPEN |
+| R-03 | **F-414's mechanism never fires (1a)** — the interval assigns `inFlightTick` for *every* tick including the ones that return instantly at the `isProcessing` guard; that no-op promise's `.finally` nulls the ref while the real tick is still parked, so `stop()` awaits nothing and the "final flush" is the same no-op the fix targeted. **(1b) New regression** — the parked tick then writes its stale absolute `processedUpTo` into the NEXT meeting's `indexedSegmentCount`, driving `newSegmentCount` negative so the new meeting is never live-indexed at all. Baseline's `= this.allSegments.length` self-clamped and recovered. | OPEN |
+| R-04 | **F-413 removes evidence for legitimate questions.** `relevance <= 0 → return 0` zeroes any card whose only signal is `typeBoost`, making the entire `TYPE_BOOST_FOR_QUESTION_TYPE` table dead as an admission mechanism. Measured: OKF profile cards 4 → 0 on "Why should we hire you?" / "What makes you a good fit?", with **no** intent-seed rescue (0 `INTENT_TYPE_BOOSTS` regex matches), so `retrieveProfileEvidence` returns `blockedReason:'no_match'` and the candidate's whole resume-card layer vanishes. | OPEN |
+| R-05 | **v28 destroys v27's retry.** `runMigrations` reads `user_version` once into `const version` (DatabaseManager.ts:419). v27's catch deliberately does not re-throw, logging "leaving version at 26 to retry next launch" — but control then falls into `if (version < 28)` against the stale snapshot, v28 succeeds, and sets `user_version = 28`. The page-count repair never runs again. My own v27 comment is therefore false, and this was self-inflicted by adding v28. | OPEN |
+
+### Confirmed defects — Tier B (incomplete / narrower blast radius)
+
+| ID | Defect | Status |
+|----|--------|--------|
+| R-06 | **F-305 made acceptance WEAKER.** Replacing the closed-fence regex with `checkCodeCompleteness().ok` accepts a regen with *no* fences and one with an *unterminated* fence (both yield zero blocks → `ok:true`). The raised 8000-char ceiling makes the unclosed-fence case reachable, so a truncated regen now atomically replaces the streamed answer. Violates the invariant stated in the comment 3 lines above the gate. | OPEN |
+| R-07 | **F-304 gates on the wrong regex.** `resolveJdSourceType`'s framing gate is `JD_REFERENCE_CUE_RE` (`\bjd\b`, `\bjob\s*description\b`, …); I used `RE_JD_SUMMARY`, which has neither. Plus `RE_CODING` is broader than `hasWriteCodeVerb`. Measured: 4 real JD questions now route to `coding`, and "…in this JD?" routes to `general`, losing JD grounding entirely. | OPEN |
+| R-08 | **F-410 leaves the 384-d local provider on L2.** Both v28 loops iterate `KNOWN_DIMS = [768,1536,3072]`; `LocalEmbeddingProvider.dimensions = 384` (the offline fallback). `ensuredDims.clear()` is insufficient because the re-create is `CREATE VIRTUAL TABLE IF NOT EXISTS` — a silent no-op on the surviving table, whose persisted DDL has no `distance_metric`. Result: mixed metrics under one shared threshold. `getExistingVecDims()` exists for exactly this and its own docstring warns about it. | OPEN |
+| R-09 | **F-302 arithmetic under-counts.** `fullResponse.trim().length + token.trim().length` misses interior whitespace. One line: `(fullResponse + token).trim().length >= 5`. (The near-deadline truncation window behind it is pre-existing in `raceStreamWithDeadline`.) | OPEN |
+| R-10 | **F-704's repro is vacuous.** Rewritten as behavioural, it now reports INCONCLUSIVE — the restored fallback never decrypts, so the destructive migrate-up path is never exercised. The *fix* is believed correct but is **not yet evidenced**. Blocker 1b also stands: when a restored fallback fails to decrypt, `credentials = {}` and `keyringUnreadable` is never set, so the first ordinary save destroys the keyring. | OPEN |
+
+### Tier C
+
+| ID | Item | Status |
+|----|------|--------|
+| R-11 | **v27 dropped the `IS NULL` guard (D4).** `WHERE content LIKE '%[Page %]%'` is unconditional, so it cannot distinguish v22 corruption from a correct ingested value, and downgrades the timeout case (real `data.total` 10 → marker-MAX 3). The second UPDATE is not scoped to marker-bearing rows at all and fabricates 100% coverage for docs with zero extracted pages. Needs provenance scoping, not a heuristic. | OPEN |
+| R-12 | `deleteMeeting` is not atomic (vectors deleted before the parent row, no transaction). Inert **only** because R-01 masks it — fixing R-01 activates it. | OPEN |
+| R-13 | v28 is not wrapped in a transaction; a crash mid-rebuild leaves tables that exist-but-are-empty, which `detectVecSupport`/`hasVecExtension` probe successfully → silent zero-result RAG with no error. vec0 `DELETE` was measured to roll back; vec0 `DROP TABLE` rollback was **not** verified. | OPEN |
+| R-14 | Duplicated `chatStreamSourceRef.current = null;` at NativelyInterface.tsx:3258-3259 and 5460-5461. | OPEN |
+| R-15 | F-703 settings degraded-latch (verified defective, still unfixed) and F-601 error mapping. | OPEN |
+
+### Cleared on attack (reviewers tried and failed to break these)
+
+F-701's correlated recursive CTE (verified: 3-marker row → 3, 6-marker row → 6; terminates; malformed input yields 0 not NULL);
+`1 - distance` **is** cosine under `distance_metric=cosine` (measured 1.0 / 0.0 / −1.0);
+`length(embedding) = dim*4` float32 arithmetic; `BigInt(row.id)` is required by vec0 0.1.9;
+no cross-meeting deletion (global AUTOINCREMENT ids); v28 non-destructive without sqlite-vec and idempotent on retry;
+F-411 scoping (single caller, guarded, no restart path); F-415 dimension-safety in the shipped configuration;
+F-122 stream scope filters (all three channels always send an object; no self-drop; third consumer is a different `webContents`);
+F-501 (`templateType` genuinely populated, `'seminar'` exclusive); F-502 (t0 snapshot; phone pin is the load-bearing one).
