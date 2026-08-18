@@ -1433,7 +1433,18 @@ export class DatabaseManager {
                 console.log(`[DatabaseManager] v27 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
                 this.db.pragma('user_version = 27');
             } catch (e) {
-                console.error('[DatabaseManager] v27 page-count repair failed (leaving version at 26 to retry next launch):', e);
+                // R-05: this block deliberately swallows rather than re-throwing so
+                // the repair retries next launch. But `version` above is read ONCE
+                // into a const, so control fell straight into `if (version < 28)`
+                // with the stale snapshot (26); v28 then succeeded and stamped
+                // user_version = 28. On the next launch `version < 27` was false and
+                // the page-count repair NEVER ran again — the comment below was a
+                // false claim, and it was this commit's own v28 block that made it
+                // false. Re-reading the pragma would not help: 26 < 28 is still true.
+                // A swallowed failure must STOP the chain so the version stays put.
+                console.error('[DatabaseManager] v27 page-count repair failed (leaving version at 26 to retry next launch); '
+                    + 'skipping all later migrations this launch so the version is not stamped past it:', e);
+                return;
             }
         }
 
