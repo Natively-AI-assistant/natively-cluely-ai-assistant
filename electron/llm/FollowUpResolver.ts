@@ -247,6 +247,83 @@ const PROJECT_DRILLIN_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|and,?\s*)*(?:how (?:is|wa
 export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   const q = lc(ctx.latestQuestion);
   if (!q) return NONE;
+
+  // ── NARROWING REFINEMENTS & CORRECTIONS (WTA audit F2, 2026-08-18) ────────
+  // "I mean specifically consumer groups." / "And specifically the rebalancing
+  // problem?" narrow the PREVIOUS question to a sub-topic; "Sorry, I mean
+  // Kafka." corrects an entity in it. Neither shape matched any rule below, so
+  // the resolver returned NONE and IntelligenceEngine's 0.7 apply gate dropped
+  // the turn (and any SessionMemory-recalled entity) on the floor. These run
+  // BEFORE the 8-word cap because the anchoring markers ("specifically",
+  // "sorry, I mean") are explicit enough to stay precise on longer turns; they
+  // carry their own 14-word cap. Synthesis is deliberately mechanical — the
+  // previous question is restated with the focus attached — so the rewrite
+  // never fabricates content.
+  {
+    const raw = (ctx.latestQuestion || '').trim();
+    const refWords = raw.split(/\s+/).filter(Boolean).length;
+    const prevRaw = (ctx.previousQuestion || '').trim();
+    const NARROW_RE = /^(?:(?:and|but|so|okay|ok|sorry|yes|no)[,.!]?\s+)*(?:i\s+meant?\s+)?(?:(?:more\s+)?specifically|in\s+particular|particularly)[,]?\s+(?:about\s+)?(.+?)[?.!\s]*$/i;
+    const CORRECTION_RE = /^(?:(?:sorry|no|actually|wait)[,.!]?\s+)+i\s+meant?\s+(.+?)[?.!\s]*$/i;
+    if (refWords <= 14) {
+      const narrow = raw.match(NARROW_RE);
+      if (narrow && narrow[1]) {
+        const focus = narrow[1].trim();
+        if (prevRaw) {
+          return {
+            resolvedQuestion: `${prevRaw.replace(/[?.!\s]+$/, '')} — specifically, ${focus}?`,
+            resolvedAnswerType: ctx.previousAnswerType,
+            resolvedEntity: ctx.lastEntity,
+            confidence: 0.75,
+            reason: 'narrowing_refinement',
+          };
+        }
+        if (ctx.lastEntity) {
+          return {
+            resolvedQuestion: `Tell me more about ${ctx.lastEntity} — specifically, ${focus}.`,
+            resolvedAnswerType: ctx.previousAnswerType,
+            resolvedEntity: ctx.lastEntity,
+            confidence: 0.7,
+            reason: 'narrowing_refinement_entity',
+          };
+        }
+      }
+      const corr = raw.match(CORRECTION_RE);
+      if (corr && corr[1] && prevRaw) {
+        const focus = corr[1].trim();
+        if (focus.split(/\s+/).length <= 4) {
+          // Swap the LAST non-sentence-initial proper-noun-ish token of the
+          // previous question for the corrected one ("Why did you choose
+          // Redis?" + "Kafka" → "Why did you choose Kafka?").
+          let swapTarget: string | null = null;
+          const properRe = /\b[A-Z][A-Za-z0-9+#.]*\b/g;
+          let m: RegExpExecArray | null;
+          while ((m = properRe.exec(prevRaw)) !== null) {
+            if (m.index > 0) swapTarget = m[0];
+          }
+          if (swapTarget) {
+            const lastIdx = prevRaw.lastIndexOf(swapTarget);
+            const swapped = prevRaw.slice(0, lastIdx) + focus + prevRaw.slice(lastIdx + swapTarget.length);
+            return {
+              resolvedQuestion: swapped,
+              resolvedAnswerType: ctx.previousAnswerType,
+              resolvedEntity: focus,
+              confidence: 0.75,
+              reason: 'correction_entity_swap',
+            };
+          }
+        }
+        return {
+          resolvedQuestion: `${prevRaw.replace(/[?.!\s]+$/, '')} — I mean ${focus}?`,
+          resolvedAnswerType: ctx.previousAnswerType,
+          resolvedEntity: ctx.lastEntity,
+          confidence: 0.7,
+          reason: 'correction_no_swap',
+        };
+      }
+    }
+  }
+
   // Long, self-contained questions are not bare follow-ups.
   const wordCount = q.split(/\s+/).filter(Boolean).length;
   if (wordCount > 8) return NONE;

@@ -1488,7 +1488,17 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
   const textNoTechStack = text
     .replace(/\b(tech|technology|technical)\s+stack\b/g, 'techstack')
     .replace(/\bfull[- ]?stack\b/g, 'fullstack')
-    .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
+    .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up')
+    // WTA audit F1 (2026-08-18): a demonstrative/possessive "stack" ("that
+    // stack", "your stack") is a tech-stack reference — the data-structure
+    // noun is never referred to that way in an interviewer ask. Without this,
+    // "Why did you choose that stack?" fails the project-followup branch's
+    // DSA negation guard and lands on dsa_question_answer (profile forbidden
+    // + six-section coding repair). Choice-verb + "the stack" is the same
+    // tech-stack sense; bare "a stack"/"the stack" elsewhere ("difference
+    // between the stack and the heap") stays a data-structure term.
+    .replace(/\b(that|this|your|our|their|my)\s+stack\b/g, '$1 techstack')
+    .replace(/\b(chose|choose|chosen|choosing|pick|picked|picking|selected|select|use|used|using|went with|decided? on)\s+the\s+stack\b/g, '$1 the techstack');
   const extractedType = input.extractedQuestion?.questionType;
   // Defect C split: prefer the EXPLICIT strictness flag when the snapshot
   // carries it (live snapshots always do since 2026-08-12); fall back to the

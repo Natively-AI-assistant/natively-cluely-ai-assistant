@@ -540,7 +540,15 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
     // to `[IntelligenceEngine] Temporal RAG { ..., intent: 'coding', ... }`.
     // Same idiom-neutralization shape as the sibling fixes in
     // AnswerPlanner.ts/IntentClassifier.ts (premium)/HybridSearchEngine.ts.
-    const textNoStackUpIdiom = text.replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
+    const textNoStackUpIdiom = text
+        .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up')
+        // WTA audit F1 (2026-08-18): same neutralization as AnswerPlanner's
+        // textNoTechStack — demonstrative/possessive "stack" and choice-verb +
+        // "the stack" are tech-stack references, not the data-structure noun.
+        // Without this, "Why did you choose that stack?" fast-paths to
+        // coding@0.95 and overrides correct project routing downstream.
+        .replace(/\b(that|this|your|our|their|my)\s+stack\b/g, '$1 techstack')
+        .replace(/\b(chose|choose|chosen|choosing|pick|picked|picking|selected|select|use|used|using|went with|decided? on)\s+the\s+stack\b/g, '$1 the techstack');
 
     // DSA/coding interview patterns. Keep this deterministic and run it
     // BEFORE behavioral/example matching so prompts like "give me an example
