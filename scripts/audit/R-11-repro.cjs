@@ -43,12 +43,18 @@ const check = (label, actual, expected) => {
 
 // --- Pull v27's two UPDATE statements verbatim out of the source ----------
 const src = fs.readFileSync(SRC, 'utf8');
-const v27Start = src.indexOf('v26 → v27');
-const anchor = v27Start >= 0 ? v27Start : src.indexOf('v27 page-count repair failed');
-const v27Block = src.slice(anchor, src.indexOf('user_version = 27', anchor));
+// Anchor on the migration's PURPOSE, never its version number: the number
+// legitimately changes when this branch is merged (main's usage_outbox also
+// claimed v27, so the repair was renumbered to v28). Pinning the number made
+// this repro fail against correct code.
+const anchor = src.indexOf('REPAIR the page counts corrupted by v22');
+if (anchor < 0) { console.error('[R-11] FAIL: page-count repair migration not found in source'); process.exit(1); }
+const endMarker = src.indexOf('page-count repair failed', anchor);
+if (endMarker < 0) { console.error('[R-11] FAIL: end of the repair block not found'); process.exit(1); }
+const v27Block = src.slice(anchor, endMarker);
 const stmts = [...v27Block.matchAll(/`(\s*UPDATE mode_reference_files[\s\S]*?)`/g)].map((m) => m[1]);
 if (stmts.length !== 2) {
-  console.error(`[R-11] FAIL: expected 2 UPDATE statements in v27, found ${stmts.length}`);
+  console.error(`[R-11] FAIL: expected 2 UPDATE statements in the page-count repair, found ${stmts.length}`);
   process.exit(1);
 }
 const [REDERIVE_SQL, FILL_SQL] = stmts;

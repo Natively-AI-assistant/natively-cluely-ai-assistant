@@ -37,10 +37,12 @@ const check = (label, actual, expected) => {
 
 // --- Which dimension list does v28 actually drive from? -------------------
 const src = fs.readFileSync(SRC, 'utf8');
-const v28Start = src.indexOf("Applying migration v27 \u2192 v28");
-if (v28Start < 0) { console.error('[R-08] FAIL: v28 migration block not found in source'); process.exit(1); }
-const v28End = src.indexOf("user_version = 28", v28Start);
-if (v28End < 0) { console.error('[R-08] FAIL: v28 end marker not found after its start'); process.exit(1); }
+// Anchor on PURPOSE, not version number — the vec0 rebuild was renumbered from
+// v28 to v29 when main's usage_outbox migration (also v27) was merged in.
+const v28Start = src.indexOf("rebuild vec0 tables with cosine distance");
+if (v28Start < 0) { console.error('[R-08] FAIL: vec0 rebuild migration not found in source'); process.exit(1); }
+const v28End = src.indexOf("vec0 cosine rebuild failed", v28Start);
+if (v28End < 0) { console.error('[R-08] FAIL: end of the vec0 rebuild block not found'); process.exit(1); }
 const v28 = src.slice(v28Start, v28End);
 check('v28 enumerates EXISTING dims       ', /getExistingVecDims\(\)/.test(v28), true);
 check('v28 does not iterate KNOWN_DIMS    ', /for \(const dim of DatabaseManager\.KNOWN_DIMS\)/.test(v28), false);

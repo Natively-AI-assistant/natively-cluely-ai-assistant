@@ -1318,9 +1318,6 @@ export class CredentialsManager {
             // Clear the degraded state so the rest of the session behaves normally
             // and the banner drops immediately rather than after a restart.
             this.keyringUnreadable = false;
-        this.credentialStoresAmbiguous = false;
-        // R-10: prefer the newer fallback for THIS load without deleting anything.
-        let preferFallbackThisLoad = false;
             this.clearDecryptFailCount();
             console.log('[CredentialsManager] Re-entered credentials persisted — degraded state cleared');
         }
@@ -1519,6 +1516,9 @@ export class CredentialsManager {
         let keyringReadFailed = false;
         // Recomputed from scratch on every load (init() may run more than once).
         this.keyringUnreadable = false;
+        this.credentialStoresAmbiguous = false;
+        // R-10: prefer the newer fallback for THIS load without deleting anything.
+        let preferFallbackThisLoad = false;
         try {
             // 1) Encrypted keyring file is authoritative when the keyring is available.
             //    However, if a previous saveCredentials() hit the fallback path AND the
@@ -1585,17 +1585,26 @@ export class CredentialsManager {
                             // not, the fallback is authoritative and normal writes may
                             // continue. Only when that is INCONCLUSIVE do we treat the
                             // two stores as ambiguous and stop writing to the keyring.
+                            //
+                            // PROVENANCE DOES NOT HELP HERE — measured, not assumed.
+                            // The obvious improvement is "if the fallback is provably
+                            // ours and the keyring is not, the fallback is authoritative"
+                            // (fileIsOurs). That is WRONG for precisely the case this
+                            // guard exists to protect: a whole-profile restore carries
+                            // the provenance record along with the salt and both blobs,
+                            // so the RESTORED fallback hashes as ours while the user's
+                            // CURRENT keyring — whose record the restore just
+                            // overwrote — hashes as foreign. The "decisive" branch then
+                            // destroys exactly the credentials we are protecting.
+                            // Verified: enabling that narrowing made R-10's repro write
+                            // STALE-FROM-BACKUP over the live keyring.
+                            //
+                            // So mtime-newer is ALWAYS treated as ambiguous: prefer the
+                            // fallback for this load, destroy neither store.
                             preferFallbackThisLoad = true;
-                            const fbOurs = this.fileIsOurs('fallback', FALLBACK_PATH);
-                            const krOurs = this.fileIsOurs('enc', CREDENTIALS_PATH);
-                            if (fbOurs && !krOurs) {
-                                console.warn('[CredentialsManager] Fallback is newer AND provably ours while the keyring file is not; '
-                                    + 'preferring the fallback for this load (keyring file preserved).');
-                            } else {
-                                this.credentialStoresAmbiguous = true;
-                                console.warn('[CredentialsManager] Fallback is newer than the keyring file and provenance is inconclusive; '
-                                    + 'preferring it for this load, preserving BOTH files, and not writing to the keyring this session.');
-                            }
+                            this.credentialStoresAmbiguous = true;
+                            console.warn('[CredentialsManager] Fallback is newer than the keyring file and neither can be proven newer in a '
+                                + 'trustworthy way; preferring it for this load, preserving BOTH files, and not writing to the keyring this session.');
                         }
                     } catch (statErr) {
                         // statSync failed — proceed with the normal path; if the keyring
