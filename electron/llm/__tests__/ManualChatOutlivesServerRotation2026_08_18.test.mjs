@@ -15,11 +15,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
-const { firstUsefulDeadlineMs } = await import(path.join(root, 'dist-electron/electron/llm/liveDeadlines.js'));
+const { firstUsefulDeadlineMs } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/llm/liveDeadlines.js')).href);
 
 // The server's rotation budget, read from natively-api/server.js when that tree
 // is available so real drift is caught, and falling back to the DOCUMENTED value

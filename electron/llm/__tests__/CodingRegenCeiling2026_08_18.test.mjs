@@ -16,12 +16,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const { CODING_REGEN_ABORT_CHARS, MAX_STREAM_OUTPUT_CHARS } =
-  await import(path.join(root, 'dist-electron/electron/llm/index.js'));
+  await import(pathToFileURL(path.join(root, 'dist-electron/electron/llm/index.js')).href);
 const src = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
 
 test('the regen ceiling is at least the size of the artifact it requests', () => {

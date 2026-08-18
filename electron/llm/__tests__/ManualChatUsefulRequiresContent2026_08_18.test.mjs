@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
@@ -45,7 +45,7 @@ test('the manual-chat useful predicate requires real content, not just a token',
 });
 
 test('whitespace-only output leaves the turn not-useful so the fallback can fire', async () => {
-  const { raceStreamWithDeadline } = await import(path.join(distLlm, 'liveDeadlines.js'));
+  const { raceStreamWithDeadline } = await import(pathToFileURL(path.join(distLlm, 'liveDeadlines.js')).href);
   async function* whitespaceThenHang() { yield '\n\n'; await new Promise(() => {}); }
 
   let text = '';

@@ -16,11 +16,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { planTurn } = await import(
-  path.resolve(__dirname, '../../../dist-electron/electron/llm/TurnPlanner.js'));
+  pathToFileURL(path.resolve(__dirname, '../../../dist-electron/electron/llm/TurnPlanner.js')).href);
 
 const availability = {
   hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true,

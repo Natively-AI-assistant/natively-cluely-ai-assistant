@@ -20,11 +20,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(__dirname, '../../../dist-electron/electron/rag/LiveRAGIndexer.js');
-const { LiveRAGIndexer } = await import(dist);
+const { LiveRAGIndexer } = await import(pathToFileURL(dist).href);
 
 function harness() {
   const stored = [];
