@@ -1251,3 +1251,54 @@ All 12 repros pass on the merged tree. Credential suites 66/66 — including
 `CredentialPersistenceBehavior`'s PR #370 test, which pinned the destructive
 unlink R-10 removes; its own fixture uses an undecryptable fallback, so the old
 behaviour left the user with nothing at all.
+
+### §20.1 — Two defects only CI could catch
+
+Getting the PR to a MERGEABLE state mattered for a concrete reason: while it was
+`CONFLICTING`, GitHub never produced a merge ref, so **no check ever queued**. The
+first green-lit run immediately found two real problems that every local gate had
+missed.
+
+**1. `TS2531: Object is possibly 'null'` ×6 — would have shipped.**
+R-13 wrapped the vec0 rebuild in `this.db.transaction(() => { ... })`. TypeScript
+does not carry the enclosing method's `this.db` non-null narrowing INTO the arrow
+function, so every use inside the closure errored. Invisible locally because
+**esbuild does not typecheck**, and the full-project typecheck was not
+reproducible in the audit worktree (its shared `node_modules`' `typescript7` had
+drifted past that branch's tsconfig) — a limitation §18.3 recorded rather than
+glossed, and it cost exactly what that kind of gap costs. Fixed by capturing a
+non-null local before the closure. Both the macOS and Windows legs failed on this
+same root cause; nothing platform-specific.
+
+That fix then broke this campaign's own `R-08` repro, which pinned the receiver
+name `this.db.transaction(` — the pinned-identifier false-failure class from
+§18.1, this time self-inflicted by the fix. Assertion generalised.
+
+**2. A test that depended on a submodule CI never checks out.**
+F-301's `ManualChatOutlivesServerRotation` read `natively-api/server.js` for the
+server's `AI_TTFT_BUDGET_MS`. `natively-api` is an **undescribed gitlink** —
+`.gitmodules` describes only `premium` — so CI never checks it out and
+`readFileSync` threw. The test failed on a machine where the invariant was
+perfectly fine, and passed locally only because that path is symlinked in the
+audit worktrees. This is NOT flakiness; it is deterministic and would have failed
+on every clean checkout forever.
+
+Fixed to fall back to the documented `10_000ms` when the tree is absent, so the
+load-bearing assertion (client deadline > server rotation budget) still runs
+everywhere instead of being skipped — deliberately avoiding the vacuous-pass
+failure mode §18.1 exists to warn about. When the tree IS present its value stays
+authoritative and drift from the documented constant is asserted. Verified both
+ways: 3/3 with `natively-api` present, and 3/3 with it moved aside to reproduce
+CI's exact condition.
+
+**Pattern worth keeping.** Each verification layer in this campaign caught defects
+the layer below it could not see:
+
+| Layer | Caught |
+|-------|--------|
+| Adversarial review | 15 defects in the campaign's own fixes (2 no-ops, 1 regression vs baseline) |
+| Repros on the merged tree | a scope bug that broke every credential load; an "improvement" to R-10 that was unsound |
+| Textual merge → semantic check | the v27 migration collision, which conflicts in NEITHER file textually |
+| CI | a typecheck error esbuild cannot see; a test that only passes where a submodule happens to be symlinked |
+
+A green local suite is evidence about the local environment, not about the change.
