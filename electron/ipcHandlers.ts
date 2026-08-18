@@ -6759,13 +6759,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
-      // Get hardware ID for HWID-binding
-      let hwid = 'unavailable';
+      // Get hardware ID for HWID-binding.
+      //
+      // F-601: this MUST be a real per-machine identity. LicenseManager
+      // returns the literal string 'unavailable' when the native module
+      // failed to load (its own JSDoc scopes that value to "display to the
+      // user for support purposes"), and the trial row is keyed
+      // `hwid text NOT NULL UNIQUE` server-side. Sending the sentinel makes
+      // every machine with a broken native module collide on ONE
+      // free_trials row: the server's idempotent re-issue branch hands back
+      // a valid signed trial token for a STRANGER's trial, exposing their
+      // usage counters and billing every request against their quota.
+      // Fail closed instead — a trial that cannot be bound to this machine
+      // must not be started.
+      let hwid = '';
       try {
         const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        hwid = LicenseManager.getInstance().getHardwareId() || 'unavailable';
+        hwid = LicenseManager.getInstance().getHardwareId() || '';
       } catch {
-        /* LicenseManager not available — fall back */
+        /* LicenseManager not available — handled by the guard below */
+      }
+      if (!hwid || hwid === 'unavailable') {
+        console.error('[Trial] Refusing to start a trial without a real hardware id (native module unavailable).');
+        return { ok: false, error: 'hardware_id_unavailable' };
       }
 
       const res = await fetch('https://api.natively.software/v1/trial/start', {

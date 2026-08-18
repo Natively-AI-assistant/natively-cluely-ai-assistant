@@ -34,6 +34,69 @@ Evidence: the file was introduced by b1e16f59 ("feat(retrieval): Phases 1+3 — 
 Why it matters: the gate's own regression tests disagree with its behaviour on the OFF path, i.e. the flag-off (observe-only) contract is unverified in CI and may not hold — the exact "flag defaults" hazard this repo has been bitten by before. Two candidate readings (the flag resolution reads a persisted/test-polluted value, or the observe-mode branch genuinely enforces) need the feature owner to disambiguate intent before a fix is safe.
 Deliberately NOT fixed by this campaign: changing an admission-gate flag contract on a guess could silently alter retrieval behaviour for every mode; and it is unrelated to any defect this campaign introduced.
 
+
+# Phase 3 — LLM routing & Answer Policy (exploration complete 2026-08-18)
+
+## F-301 [P1] Manual chat abandons the turn 3s BEFORE the server would rotate providers
+Area: ipcHandlers.ts:3367 + liveDeadlines.ts:151-156 vs natively-api server.js:2142 (AI_TTFT_BUDGET_MS=10_000)
+Status: FOUND. firstUsefulDeadlineMs() returns 7000 for every cloud answer type; the client aborts the HTTP request at 7s, while the server rotates to MiniMax-M3 at 10s and would have delivered. The constant that WAS raised to 13000 (LIVE_TOTAL_HARD_TIMEOUT_MS) is used only on the WTA path (IntelligenceEngine 2648/2671) — the manual-chat handler the ordering test's own rationale describes still uses 7000. Repair regens are 7000-8000, also below 10000. User sees "The model did not produce an answer in time…" on a RECOVERABLE turn. Unit-reproducible, no paid call.
+
+## F-302 [P1] Manual-chat "useful" predicate is "any token arrived" → blank bubbles + degraded deadline
+Area: ipcHandlers.ts:3368/3384/3423
+Status: FOUND. Every other call site uses a content threshold (>=5/8/10 chars); the PRIMARY manual-chat path sets manualFirstUseful on any token object, and raceStreamWithDeadline/streamChat never filter whitespace. Two consequences: (a) a "\n\n" first chunk flips the budget from the 7s first-useful to the 8s stall guard; (b) the blank-answer fallback at :3423 requires !manualFirstUseful && !fullResponse.trim(), so a whitespace-only answer skips it and commits an EMPTY bubble — violating the comment 3 lines above ("a live answer is NEVER blank when a safe fallback exists"). Unit-reproducible.
+
+## F-303 [P1] Renderer stream guard supersedes ACROSS surfaces (phone ↔ desktop)
+Area: ipcHandlers.ts:969 & :12504 (one shared ++_chatStreamId) vs src/lib/chatStreamGuard.mjs:30-70
+Status: FOUND. Main process comments claim cross-surface false supersession "can't happen"; the renderer guard is strictly newest-numeric-id-wins over a counter BOTH surfaces allocate from. A phone chat started during a live desktop stream adopts the phone id, appends phone text into the desktop bubble, then drops every remaining desktop token; the phone's done (no finalText) finalizes the mixed row, and the desktop's later done is ALSO honored (double finalize). Unit-reproducible in 2 calls.
+
+## F-304 [P2] TurnPlanner regex fallback diverges from AnswerPlanner (JD route hijacks coding/doc)
+Area: TurnPlanner.ts:260-285 vs AnswerPlanner.ts:1374/1394/1438
+Status: FOUND. TurnPlanner's fallback lacks AnswerPlanner's two gates (coding-verb veto, JD-framing requirement) and evaluates the JD cue FIRST, so "Write a function that returns the required buffer size" routes jd_question — probing profile_jd/profile_resume, never reference_files, and switching on seedCandidateBackground. Same class as the documented technical_concept_answer defect, left open on the text-fallback branch. Unit-reproducible in 1 call.
+
+## F-305 [P2] Meta-retry accepts a hard-truncated regen as the FINAL answer
+Area: ipcHandlers.ts:3506-3517 vs the sibling regen at :3597
+Status: FOUND. shouldAbort cuts at 4000 chars though the repo sizes this exact six-section artifact at ~8000 (liveDeadlines.ts:130-131); acceptance only needs length>=20 + any closed code fence, so a mid-sentence truncation is accepted and atomically REPLACES the streamed row. The sibling regen 80 lines below uses checkCodeCompleteness — the safe pattern exists in the same function. Unit-reproducible with a fake stream.
+
+## F-306 [P2] ProviderRouter circuit breakers are dead code
+Area: ProviderRouter.ts:384-607; only refs are LLMHelper.ts:47/428/853
+Status: FOUND. selectProvider/recordSuccess/recordFailure/getProviderHealth have zero production call sites, so there is NO provider-level health tracking in the live cascade; the only real breaker (rateLimitCircuit) is per-model and trips only on consecutive 429s — never on 5xx/timeouts/deadline aborts. A provider that is timing out is retried every turn. Tests exercise the class directly, which is why the dead code passes CI. Static.
+
+Phase 3 coverage gaps (not audited): AnswerValidator/WhatToAnswerLLM internals, codeVerification/**, conversation state (SessionMemory, FollowUpResolver, referent resolution) ENTIRELY uncovered, V3 prompt assembly beyond [[GIST]], composer-absence/refusal branches, vision cascade.
+
+# Phase 6 — Backend & licensing (exploration complete 2026-08-18)
+
+## ⚠ SCOPE DECISION: backend findings are REPORT-ONLY (no autonomous commits)
+F-601..F-606 live in the `natively-api` SUBMODULE — a separate repo that deploys to PRODUCTION (Railway deploys main), shared with the other active agent, and governing auth, billing and trials. Changing rate-limiting/trial/webhook logic there unattended could lock out real users or open a hole; per the campaign's own "outward-facing actions" constraint these are documented with precise patches and left for owner review. The CLIENT half of F-601, which lives in THIS repo, is fixed below.
+
+## F-601 [P1, SECURITY] Trial 'unavailable' HWID sentinel shares ONE trial row across machines
+Client: electron/ipcHandlers.ts:6762-6774 (THIS repo) · Server: natively-api server.js:5444-5477 · Schema: free_trials.hwid text NOT NULL UNIQUE
+Status: FOUND → CONFIRMED (client half read verbatim) → CLIENT HALF FIXED-VERIFIED (see below); server half report-only.
+Mechanism: LicenseManager.getHardwareId() returns the literal 'unavailable' when the native module fails to load (its JSDoc scopes that value to support display). The client sent it as the trial-binding identity; it is 11 chars so it passes the server's 4..256 validation; free_trials.hwid is UNIQUE, so exactly one row holds it and the server's idempotent re-issue branch mints a valid signed trial token for THAT STRANGER'S ROW — disclosing their usage counters via /v1/trial/status and billing every request against their quota. First machine to arrive owns the row forever (no purge).
+Client fix (this repo): fail closed — refuse to start a trial when no real hardware id is available, returning `hardware_id_unavailable` instead of sending a sentinel.
+Server-side patch for owner review: reject sentinel/non-identity hwids at /v1/trial/start (allow-list a format, or explicitly deny 'unavailable' and short/low-entropy values).
+
+## F-602 [P1, SECURITY] Rotating a fake key bypasses BOTH the rate limiter and the DDoS guard
+natively-api server.js:455-458, 1907-1952, 2912-2959
+Status: FOUND — report-only. The limiter buckets on the CLAIMED x-natively-key (hashIdentity of any string), and checkDDoS records into the identity bucket while only READING the IP bucket. A caller rotating a well-formed nonexistent key per request gets a fresh bucket every time and never increments the shared IP bucket. Each such request is a guaranteed cache miss that issues a PostgREST query against api_keys and returns BEFORE keyCache.set, and the breaker records success on a genuine miss so it never sheds. One unauthenticated request = one DB query, unbounded — the documented outage trigger. Existing regression test pins only the SINGLE-key case, which is why it survived.
+Patch direction for owner: bucket unauthenticated/unvalidated callers by IP (only use the identity bucket AFTER validateKey succeeds), and cache negative lookups.
+
+## F-603 [P1] Subscription revocation fails OPEN on a DB error
+natively-api server.js:11468-11535, 11035, 11052 (contrast the correct cancel branches at :11442/:11459)
+Status: FOUND — report-only. The webhook route 200s to Dodo BEFORE dispatch and retries only on a THROW; the expired/on_hold/failed revocation branches discard the supabase error object entirely, while the grant paths in the same file check theirs. One transient Supabase error during subscription.expired = permanent free service. No reconciliation: sub_period_end has writers but NO readers repo-wide, and sweep_expired_subscriptions() exists only in an incident write-up.
+Patch direction: check-and-throw in every revocation branch (matching the cancel branches), plus a period-end sweep.
+
+## F-604 [P2] /v1/trial/status bypasses the resilient auth path
+server.js:5569-5584 vs the full policy at :2439-2470. No deadline, no breaker, no stale-serve; a Supabase stall renders as 404 trial_not_found and the client polls it every 30s (src/App.tsx:601), piling unbounded queries onto a stalled dependency where the breaker cannot see them. Client tolerates the 404 (no user-visible breakage) → P2. Report-only.
+
+## F-605 [P2] Trial per-IP cap is LIFETIME, not windowed (CGNAT lockout)
+server.js:5485-5503 counts all free_trials rows ever for an ip_hash with no time predicate and nothing purges the table, so a university/office/carrier NAT permanently exhausts its 5 slots. TRIAL_MAX_PER_IP doubles as an hourly attempt cap and this lifetime cap — one knob, two semantics. Also the attempt counter increments BEFORE the idempotent re-issue branch, so a client re-fetching its own trial burns its own budget. Report-only (window length is a product decision).
+
+## F-606 [P3] Unauthenticated review routes leak raw Supabase error messages
+natively-api/reviews.js — handlers forward `error.message` verbatim on two unauthenticated routes, bypassing the global opaque-error handler. Report-only.
+
+Phase 6 verified-clean (explicit): calendar routes authed + redirect allow-list; Dodo signature verification fails closed with timing-safe compare and a ±300s window; Resend dedupe:false is idempotent by construction; telegram webhook; checkAdminSecret covers every admin route; no raw key/token logging; trial token HMAC with length-checked compare; LOCAL_TEST_AUTH triple-gated; trustProxy not a hop count. Notably: a DB outage does NOT become "your key is invalid" on the key path (only on /v1/trial/status — F-604).
+Phase 6 coverage gaps: the ~3,100-line /v1/transcribe WS handler, /v1/chat|embed|search internals, relay token signing, usage-ledger flush paths, RLS posture (no CREATE POLICY in repo; API uses the service key), and index coverage (schema dump has zero CREATE INDEX).
+
 # Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
 
 ## ⚠ WORKSPACE ADVISORY (2026-08-18 04:50) — campaign moved to an isolated worktree
