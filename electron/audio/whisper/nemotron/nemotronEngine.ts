@@ -198,9 +198,44 @@ export class NemotronEngine {
     this.decoderState = zeroDecoderState();
     this.pendingLength = 0;
     this.lookbackBuffer = new Float32Array(0);
+    this.prerollPending = true;
   }
 
+  // Utterance-start silence pre-roll. With zero left context, the model
+  // drops a weak unstressed first word: measured on real TTS audio, "the
+  // meeting is scheduled..." transcribed as "meeting is scheduled..." and
+  // "our quarterly revenue..." as "Quarterly revenue..." (capitalized — the
+  // model genuinely believes the utterance starts there). Any pre-roll from
+  // 25ms up recovered the first word (0% WER on all four test sentences at
+  // 50ms and at 100ms alike).
+  //
+  // 50ms, not more, because of tr-TR: that locale is documented marginal
+  // (0.0 word overlap even when "working" — multilang-verify-report.md) and
+  // its output flips chaotically with tiny start-offset shifts: non-empty at
+  // 0ms, EMPTY at 25/75/100ms, non-empty at 50ms — where it also produced
+  // its best-yet output ("Melhaba bin mıdumi" vs reference "Merhaba, benim
+  // adım"). 50ms is the measured point satisfying both the first-word fix
+  // and the multilang suite's non-empty regression bar for every locale.
+  //
+  // This is a model-behavior mitigation, not an integration detail, so it
+  // lives in the engine where every caller (app, tests, sims) gets it. Cost:
+  // the first chunk needs 50ms less real audio to fill (slightly EARLIER
+  // first inference) and one 800-sample memcpy per segment.
+  // Env-overridable for measurement (NATIVELY_NEMOTRON_PREROLL_MS); the
+  // shipped default is the measured minimum that recovers weak first words.
+  private static readonly PREROLL_SAMPLES = (() => {
+    const ms = Number.parseInt(process.env.NATIVELY_NEMOTRON_PREROLL_MS ?? '', 10);
+    return Number.isFinite(ms) && ms >= 0 ? Math.round((ms / 1000) * 16000) : 800; // 50ms @ 16kHz
+  })();
+  private prerollPending = true;
+
   async pushAudio(pcm: Float32Array): Promise<ChunkTranscript[]> {
+    if (this.prerollPending) {
+      this.prerollPending = false;
+      const padded = new Float32Array(NemotronEngine.PREROLL_SAMPLES + pcm.length);
+      padded.set(pcm, NemotronEngine.PREROLL_SAMPLES); // leading zeros = silence
+      pcm = padded;
+    }
     const results: ChunkTranscript[] = [];
     let offset = 0;
     while (offset < pcm.length) {

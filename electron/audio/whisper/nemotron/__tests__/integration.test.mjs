@@ -187,3 +187,29 @@ if (!enginePresent) {
 }
 
 export { readPcm16Mono, wordOverlap, KNOWN_PHRASE, MODEL_DIR, FIXTURE_WAV };
+
+test(
+  'utterance-start pre-roll: 50ms of silence is prepended exactly once per segment',
+  { skip: !modelPresent || !enginePresent },
+  async () => {
+    // Arithmetic proof, no accuracy flakiness: CHUNK_SAMPLES is 8960 and the
+    // pre-roll is 800 (50ms @ 16kHz — see PREROLL_SAMPLES' comment for why
+    // 50ms and not more: any >=25ms fixes weak first words, and 50ms is the
+    // point where the marginal tr-TR locale also stays non-empty). After
+    // reset(), pushing 8960-800 = 8160 samples completes exactly one chunk
+    // ONLY IF 800 zeros were prepended. A second push of a full 8960 then
+    // completes exactly one more chunk ONLY IF no pre-roll was added again
+    // (pending buffer is empty after the first chunk: 800+8160 fills it with
+    // zero remainder).
+    const engine = await NemotronEngine.create(MODEL_DIR, ['cpu']);
+    engine.reset();
+    const first = await engine.pushAudio(new Float32Array(8960 - 800));
+    assert.equal(first.length, 1, 'preroll + 8160 samples must complete exactly one chunk');
+    const second = await engine.pushAudio(new Float32Array(8960));
+    assert.equal(second.length, 1, 'no second preroll: a full chunk must complete exactly one chunk');
+    // And the WHY, against real audio: without the pre-roll, a weak unstressed
+    // first word ("the", "our") was dropped at utterance start — measured on
+    // real TTS sentences, recovered identically at 100/200/400ms of leading
+    // silence. See the PREROLL_SAMPLES comment in nemotronEngine.ts.
+  },
+);
