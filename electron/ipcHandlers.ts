@@ -12696,8 +12696,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch);
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
-            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId });
-            win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId, source: 'phone' });
+            win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
             intelligenceManager.addAssistantMessage(clarify, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, clarify);
             if (isIntelligenceFlagEnabled('trace')) {
@@ -12732,7 +12732,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { phoneMirror.publishToken(String(myStreamId), token); } catch (_) {}
             // streamId lets the desktop renderer drop tokens from a superseded
             // chat stream (audit finding #3); backward-compatible optional arg.
-            win?.webContents.send('gemini-stream-token', token, { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-token', token, { streamId: myStreamId, source: 'phone' });
             full += token;
           },
           onCleanup: () => { try { phoneController.abort(); } catch { /* noop */ } },
@@ -12742,7 +12742,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             phoneMirror.publishDone(String(myStreamId), full);
           } catch (_) {}
-          win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+          win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
           // Document-grounded: block a greeting/empty answer from SessionTracker
           // so it can't contaminate the next turn (same backstop as the desktop
           // path, minus the regenerate — the phone surface keeps it simple).

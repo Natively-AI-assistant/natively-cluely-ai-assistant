@@ -27,24 +27,42 @@
  * @param {number|null|undefined} incomingId the streamId on the incoming token (may be absent)
  * @returns {{ accept: boolean, activeId: number|null }}
  */
-export function resolveChatStreamToken(activeId, incomingId) {
+export function resolveChatStreamToken(activeId, incomingId, activeSource, incomingSource) {
   const cur = typeof activeId === 'number' ? activeId : null;
+  const curSrc = normalizeSource(activeSource);
+  const inSrc = normalizeSource(incomingSource);
   if (typeof incomingId !== 'number') {
     // Backward-compatible path: no id on the wire → behave exactly as before.
-    return { accept: true, activeId: cur };
+    return { accept: true, activeId: cur, activeSource: curSrc };
   }
   if (cur === null) {
-    return { accept: true, activeId: incomingId };
+    return { accept: true, activeId: incomingId, activeSource: inSrc };
+  }
+  // F-303: supersession is SURFACE-SCOPED. The desktop and phone-mirror paths
+  // allocate from ONE shared counter in the main process, so a plain
+  // newest-numeric-wins rule let a phone stream started mid-desktop-answer
+  // adopt the desktop bubble, append its text, and then drop every remaining
+  // desktop token as "stale" — truncating the answer on screen while the main
+  // process happily kept streaming it. A stream from a different surface is
+  // never a supersession of this one; the active stream owns its bubble until
+  // it is done.
+  if (curSrc !== inSrc) {
+    return { accept: false, activeId: cur, activeSource: curSrc };
   }
   if (incomingId === cur) {
-    return { accept: true, activeId: cur };
+    return { accept: true, activeId: cur, activeSource: curSrc };
   }
   if (incomingId > cur) {
-    // A newer stream superseded the one we were rendering — adopt it.
-    return { accept: true, activeId: incomingId };
+    // A newer stream on the SAME surface superseded the one we were rendering.
+    return { accept: true, activeId: incomingId, activeSource: inSrc };
   }
   // incomingId < cur → an older, already-superseded stream is still emitting. Drop.
-  return { accept: false, activeId: cur };
+  return { accept: false, activeId: cur, activeSource: curSrc };
+}
+
+/** Absent/unknown source means the legacy desktop path. */
+function normalizeSource(source) {
+  return typeof source === 'string' && source ? source : 'desktop';
 }
 
 /**
@@ -57,17 +75,25 @@ export function resolveChatStreamToken(activeId, incomingId) {
  * @param {number|null|undefined} incomingId
  * @returns {{ honor: boolean, activeId: number|null }}
  */
-export function resolveChatStreamDone(activeId, incomingId) {
+export function resolveChatStreamDone(activeId, incomingId, activeSource, incomingSource) {
   const cur = typeof activeId === 'number' ? activeId : null;
+  const curSrc = normalizeSource(activeSource);
+  const inSrc = normalizeSource(incomingSource);
   if (typeof incomingId !== 'number') {
     // No id → backward-compatible: honor and clear.
-    return { honor: true, activeId: null };
+    return { honor: true, activeId: null, activeSource: null };
+  }
+  // F-303: a done from a DIFFERENT surface must not finalize (and clear) the
+  // active stream's row — that is how a phone stream used to close a desktop
+  // bubble with its own, finalText-less completion.
+  if (cur !== null && curSrc !== inSrc) {
+    return { honor: false, activeId: cur, activeSource: curSrc };
   }
   if (cur === null || incomingId >= cur) {
-    return { honor: true, activeId: null };
+    return { honor: true, activeId: null, activeSource: null };
   }
   // Stale done for an already-superseded stream — ignore, keep current active.
-  return { honor: false, activeId: cur };
+  return { honor: false, activeId: cur, activeSource: curSrc };
 }
 
 // ── Live-answer (what-to-answer) batch guard (audit finding #3, full) ──────────

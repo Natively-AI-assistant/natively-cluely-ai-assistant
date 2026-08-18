@@ -3255,6 +3255,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       console.log('[NativelyInterface] Resetting session state...');
       window.electronAPI?.cancelChatStream?.();
       chatStreamIdRef.current = null;
+    chatStreamSourceRef.current = null;
+      chatStreamSourceRef.current = null;
       requestStartTimeRef.current = null;
       setMessages([]);
       eagerCodeExpansionHoldRef.current = false;
@@ -3573,6 +3575,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on one channel from both the desktop and phone-mirror paths; this lets us drop
   // tokens/done from a superseded stream. null = no id adopted yet (back-compat).
   const chatStreamIdRef = useRef<number | null>(null);
+  // F-303: the surface that owns the currently-adopted chat stream ('desktop'
+  // or 'phone'). Supersession is scoped to a surface because both paths
+  // allocate stream ids from ONE shared counter in the main process.
+  const chatStreamSourceRef = useRef<string | null>(null);
   // Active LIVE-ANSWER generation id (audit finding #3, full). The live what-to-
   // answer path streams on `intelligence-token-batch` (kind='suggested_answer')
   // keyed only on intent, so two back-to-back live answers share the same intent
@@ -4193,6 +4199,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const cancelActiveChatStream = useCallback(() => {
     window.electronAPI?.cancelChatStream?.();
     chatStreamIdRef.current = null;
+    chatStreamSourceRef.current = null;
     requestStartTimeRef.current = null;
     setIsProcessing(false);
     flushToken();
@@ -5281,8 +5288,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // without a streamId (back-compat) are always accepted.
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token, meta) => {
-        const decision = resolveChatStreamToken(chatStreamIdRef.current, meta?.streamId);
+        const decision = resolveChatStreamToken(
+          chatStreamIdRef.current, meta?.streamId,
+          chatStreamSourceRef.current, (meta as any)?.source,
+        );
         chatStreamIdRef.current = decision.activeId;
+        chatStreamSourceRef.current = decision.activeSource ?? null;
         if (!decision.accept) return;
         queueToken('chat', token);
       }),
@@ -5294,8 +5305,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Ignore a done from a superseded stream (audit finding #3) so it can't
         // tear down a newer stream's row. A done without a streamId is honored
         // (back-compat). On an honored done we clear the adopted id.
-        const doneDecision = resolveChatStreamDone(chatStreamIdRef.current, data?.streamId);
+        const doneDecision = resolveChatStreamDone(
+          chatStreamIdRef.current, data?.streamId,
+          chatStreamSourceRef.current, (data as any)?.source,
+        );
         chatStreamIdRef.current = doneDecision.activeId;
+        chatStreamSourceRef.current = doneDecision.activeSource ?? null;
         if (!doneDecision.honor) return;
         // finalText is set ONLY when the backend's coding validate→repair changed
         // the streamed answer — it authoritatively REPLACES the streamed row text
@@ -5442,6 +5457,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // next stream starts clean (audit finding #3). Safe today because ids are
         // monotonic, but keeps token/done/error ref management consistent.
         chatStreamIdRef.current = null;
+    chatStreamSourceRef.current = null;
+      chatStreamSourceRef.current = null;
         setMessages((prev) => {
           // Append error to the current message or add new one?
           // Let's add a new error block if the previous one confusing,
