@@ -3204,6 +3204,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             {
               answerType: answerPlan.answerType,
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
+              // F-502: the t0-pinned mode. streamContextPolicy documents this as
+              // the defence against a mid-request `modes:set-active` leaking a
+              // different mode's documents into an answer whose contract is
+              // scoped to the first mode — but only the WTA path ever set it, so
+              // every mode read inside streamChat after an await resolved the
+              // LIVE singleton instead.
+              pinnedModeId: manualActiveMode?.id ?? null,
               // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
               // from THIS manual-chat conversation's own last answer, never a
               // WTA/phone-mirror turn that happened to write the shared
@@ -12545,9 +12552,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // strip prior-assistant turns from the snapshot (topic-collapse), and block
       // an invalid answer from being saved (contamination loop).
       let phoneDocGrounded = false;
+      // F-502: pin the mode id at t0 as well. phoneDocGrounded is captured here,
+      // BEFORE the awaits, but every mode read inside streamChat resolved the
+      // LIVE ModesManager singleton — so a `modes:set-active` landing mid-request
+      // made retrieval read a DIFFERENT mode's documents than the contract this
+      // turn was planned against. The phone surface is the worse half: unlike
+      // desktop it never registers in _chatStreamsBySender, so modes:set-active
+      // does not abort it either.
+      let phonePinnedModeId: string | null = null;
       try {
         const { ModesManager } = require('./services/ModesManager');
-        phoneDocGrounded = ModesManager.getInstance().getActiveModeInfo()?.documentGroundedCustomModeActive === true;
+        const phoneModeInfo = ModesManager.getInstance().getActiveModeInfo();
+        phoneDocGrounded = phoneModeInfo?.documentGroundedCustomModeActive === true;
+        phonePinnedModeId = phoneModeInfo?.id ?? null;
       } catch { /* mode unavailable — treat as non-doc-grounded */ }
 
       // Doc-grounded strict-isolation (audit #3, 2026-07-05): mirror the
@@ -12615,6 +12632,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             phoneRouteOptions = {
               answerType: phonePlan?.answerType || 'unknown_answer',
               forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
+              // F-502: t0-pinned mode — see phonePinnedModeId above.
+              pinnedModeId: phonePinnedModeId,
             };
           }
         } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
