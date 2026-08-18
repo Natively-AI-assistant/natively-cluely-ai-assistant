@@ -9,6 +9,13 @@
 //
 // Pure helper — runs under plain `node --test` (no compiled deps).
 
+// NOTE (F-303, 2026-08-18): supersession is now SURFACE-SCOPED — the desktop and
+// phone-mirror paths allocate stream ids from ONE shared counter, so a plain
+// newest-numeric-wins rule let a phone stream hijack and truncate a live desktop
+// bubble. The reducers therefore also report which surface owns the adopted
+// stream. Callers that pass no source are treated as the legacy 'desktop'
+// surface, so every case below keeps its original accept/activeId semantics;
+// only the extra `activeSource` field is new.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -20,24 +27,24 @@ const { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch } 
 
 describe('resolveChatStreamToken', () => {
   test('no incoming id → accept, active id unchanged (backward compat)', () => {
-    assert.deepEqual(resolveChatStreamToken(null, undefined), { accept: true, activeId: null });
-    assert.deepEqual(resolveChatStreamToken(7, undefined), { accept: true, activeId: 7 });
+    assert.deepEqual(resolveChatStreamToken(null, undefined), { accept: true, activeId: null, activeSource: null });
+    assert.deepEqual(resolveChatStreamToken(7, undefined), { accept: true, activeId: 7, activeSource: 'desktop' });
   });
 
   test('first token with an id is adopted', () => {
-    assert.deepEqual(resolveChatStreamToken(null, 3), { accept: true, activeId: 3 });
+    assert.deepEqual(resolveChatStreamToken(null, 3), { accept: true, activeId: 3, activeSource: 'desktop' });
   });
 
   test('same id → accept, unchanged', () => {
-    assert.deepEqual(resolveChatStreamToken(3, 3), { accept: true, activeId: 3 });
+    assert.deepEqual(resolveChatStreamToken(3, 3), { accept: true, activeId: 3, activeSource: 'desktop' });
   });
 
   test('newer id supersedes (accept + adopt)', () => {
-    assert.deepEqual(resolveChatStreamToken(3, 5), { accept: true, activeId: 5 });
+    assert.deepEqual(resolveChatStreamToken(3, 5), { accept: true, activeId: 5, activeSource: 'desktop' });
   });
 
   test('older id is DROPPED (stale stream still trickling)', () => {
-    assert.deepEqual(resolveChatStreamToken(5, 3), { accept: false, activeId: 5 });
+    assert.deepEqual(resolveChatStreamToken(5, 3), { accept: false, activeId: 5, activeSource: 'desktop' });
   });
 
   test('interleave: desktop(5) active, late phone(4) token dropped, then desktop(5) continues', () => {
@@ -57,30 +64,30 @@ describe('resolveChatStreamToken', () => {
   test('a genuinely newer stream takes over mid-flight', () => {
     let active = 5;
     const d = resolveChatStreamToken(active, 9);
-    assert.deepEqual(d, { accept: true, activeId: 9 });
+    assert.deepEqual(d, { accept: true, activeId: 9, activeSource: 'desktop' });
   });
 });
 
 describe('resolveChatStreamDone', () => {
   test('no id → honor + clear (backward compat)', () => {
-    assert.deepEqual(resolveChatStreamDone(5, undefined), { honor: true, activeId: null });
-    assert.deepEqual(resolveChatStreamDone(null, undefined), { honor: true, activeId: null });
+    assert.deepEqual(resolveChatStreamDone(5, undefined), { honor: true, activeId: null, activeSource: null });
+    assert.deepEqual(resolveChatStreamDone(null, undefined), { honor: true, activeId: null, activeSource: null });
   });
 
   test('done for the active stream → honor + clear', () => {
-    assert.deepEqual(resolveChatStreamDone(5, 5), { honor: true, activeId: null });
+    assert.deepEqual(resolveChatStreamDone(5, 5), { honor: true, activeId: null, activeSource: null });
   });
 
   test('done for a NEWER stream → honor + clear', () => {
-    assert.deepEqual(resolveChatStreamDone(5, 7), { honor: true, activeId: null });
+    assert.deepEqual(resolveChatStreamDone(5, 7), { honor: true, activeId: null, activeSource: null });
   });
 
   test('stale done (older stream) is IGNORED, active id preserved', () => {
-    assert.deepEqual(resolveChatStreamDone(5, 3), { honor: false, activeId: 5 });
+    assert.deepEqual(resolveChatStreamDone(5, 3), { honor: false, activeId: 5, activeSource: 'desktop' });
   });
 
   test('done with no active id yet → honor (lets a fast-path no-id answer finalize)', () => {
-    assert.deepEqual(resolveChatStreamDone(null, 5), { honor: true, activeId: null });
+    assert.deepEqual(resolveChatStreamDone(null, 5), { honor: true, activeId: null, activeSource: null });
   });
 });
 

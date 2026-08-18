@@ -42,7 +42,10 @@ Phase 1+2 line).
 - Compile gate: `build:electron` (esbuild) + targeted suites. Full-project typecheck is NOT reproducible in the worktree (shared node_modules' TypeScript drifted past this branch's tsconfig); stated rather than glossed.
 - Windows: reviewed but NOT executed. All fixes are platform-neutral orchestration/state changes; no Windows-only branch was modified.
 
-## Two mistakes I made and caught
+## Three mistakes I made and caught
+3. **F-303 broke 12 tests and my per-finding check missed it.** After changing the guard's return shape I ran `npm run test:lib` (325/325 green) and moved on — but the repo keeps a SECOND copy of the guard tests under `electron/services/__tests__/`, which `test:lib` does not glob, plus a wire-shape assertion pinning the phone payload to EXACTLY `{ streamId }`. The final full-suite name-diff caught all 12. Repaired: the duplicate suite now expects the new `activeSource` field (and `resolveLiveAnswerBatch`, which is unchanged, keeps its 2-field shape); the wire assertion now checks that phone tokens CARRY a streamId instead of pinning the payload to a single field; and the reducer no longer claims a surface when nothing is adopted. Lesson: a targeted suite passing is not evidence when the repo duplicates tests across globs — only the full-suite baseline diff is.
+
+## Two earlier mistakes I made and caught
 1. **Phase 1 close-out over-claimed.** It said all suite failures were pre-existing after spot-checking one. A real baseline proved my F-105 refactor broke 5 tests (stale source-assertion tests, not behavioural). Repaired; the baseline-diff practice now prevents a repeat.
 2. **A build break I hid from myself.** SQL comments containing backticks terminated a JS template literal. I missed it because I ran the build with output redirected to /dev/null and then re-ran tests against a stale bundle. Fixed, all affected repros re-verified against a fresh build, and I stopped suppressing build output.
 

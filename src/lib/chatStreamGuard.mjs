@@ -33,7 +33,9 @@ export function resolveChatStreamToken(activeId, incomingId, activeSource, incom
   const inSrc = normalizeSource(incomingSource);
   if (typeof incomingId !== 'number') {
     // Backward-compatible path: no id on the wire → behave exactly as before.
-    return { accept: true, activeId: cur, activeSource: curSrc };
+    // Preserve the raw active source: with nothing adopted it stays null rather
+    // than claiming a surface.
+    return { accept: true, activeId: cur, activeSource: cur === null ? null : curSrc };
   }
   if (cur === null) {
     return { accept: true, activeId: incomingId, activeSource: inSrc };
