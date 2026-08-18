@@ -1127,61 +1127,6 @@ export class IntelligenceEngine extends EventEmitter {
             );
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
-            // ── PARALLEL PRE-STREAM STAGES (PI v3, W5) ─────────────────────────
-            // The three pre-stream awaits are mutually independent, so they run
-            // CONCURRENTLY instead of serially:
-            //   1. classifyIntent      (~50-800ms — regex fast path → SLM)
-            //   2. profile grounding   (≤2000ms budget, below)
-            //   3. mode-context retrieval (hybrid; one query embed since W3)
-            // Serial worst case was their SUM (~3s+ before the provider saw the
-            // prompt); now it's their MAX. Mode retrieval is kicked here and the
-            // PROMISE is handed to WhatToAnswerLLM, which still applies its own
-            // budget race + the reference_files scope/route gates — a forbidden
-            // layer simply discards the prefetched result, so the leak surface
-            // is unchanged. answerType is irrelevant to retrieval since W2
-            // (customContext is pinned, not retrieved — reference files only).
-            // .catch() inline: the promise floats unawaited through the
-            // follow-up/grounding blocks below — a rejection there would be an
-            // unhandled rejection. The neutral fallback mirrors the classifier's
-            // own Tier-3 default.
-            const intentPromise = classifyIntent(
-                lastInterviewerTurn,
-                preparedTranscript,
-                this.session.getAssistantResponseHistory().length
-            ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
-                { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
-            ));
-            // Governed document turns resolve through EvidenceResolver inside
-            // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
-            // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive
-                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
-                : (async () => {
-                    try {
-                        const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
-                        const mm = ModesManager.getInstance();
-                        if (typeof mm.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-                            // pinnedModeId (#6): parallel-prefetch reads the SAME mode captured
-                            // at t0, so a mid-request mode switch can't mismatch retrieval.
-                            // Phase 3: allowRerank on the LIVE prefetch path only when
-                            // ragSpeculativeRerank is on. The reranker is prewarmed at
-                            // mode activation and this prefetch is consumed under the
-                            // caller's raceWithBudget — so a (warm) rerank costs ~tens of
-                            // ms and an overrun falls through to the non-reranked block.
-                            let allowRerank = false;
-                            try {
-                                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                                const { isRagSpeculativeRerankEnabled } = require('./intelligence/intelligenceFlags');
-                                allowRerank = isRagSpeculativeRerankEnabled();
-                            } catch { /* flag module unavailable → no rerank */ }
-                            return await mm.buildRetrievedActiveModeContextBlockHybrid(
-                                preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo?.id, allowRerank,
-                                docGroundedEnforcementActive ? { forceDocumentGrounding: true } : undefined,
-                            );
-                        }
-                        return '';
-                    } catch { return ''; }
-                })();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
             // WTA mint point (Phase 6 Slice 1, "what changes" item 1): one
             // TurnId for this What-to-Answer invocation, threaded into every
@@ -1439,6 +1384,91 @@ export class IntelligenceEngine extends EventEmitter {
                 isFollowUp: extractedQuestion.isFollowUp,
                 confidence: extractedQuestion.confidence,
             });
+
+            // ── PARALLEL PRE-STREAM STAGES (PI v3, W5; reordered WTA audit
+            // F5/F6/F7, 2026-08-18) ────────────────────────────────────────────
+            // classifyIntent (~50-800ms) and mode-context retrieval run
+            // CONCURRENTLY with profile grounding below — wall time is their
+            // MAX, not their SUM. They are kicked HERE, after question
+            // extraction + follow-up resolution (both fully synchronous string
+            // work, sub-10ms), instead of before it, because:
+            //   F6 — intent must classify the RESOLVED question (the same
+            //        expression _wtaQ/wtaTurnQuestion use), not the raw last
+            //        interviewer turn; a resolved "And SQL?" is a skill probe,
+            //        not whatever the previous turn looked like.
+            //   F5 — retrieval's QUERY slot must be the resolved question, not
+            //        the whole prepared transcript: with several questions in
+            //        the window, a transcript-blob query retrieves evidence for
+            //        the wrong one. The transcript still rides along in the
+            //        TRANSCRIPT slot, and the query falls back to it when no
+            //        question was found.
+            //   F7 — the long-range recall block is prepended to
+            //        preparedTranscript in the resolution block above; kicking
+            //        retrieval before it captured the pre-recall window.
+            // Mode retrieval is a PROMISE handed to WhatToAnswerLLM, which
+            // still applies its own budget race + reference_files scope/route
+            // gates — a forbidden layer discards the prefetched result, so the
+            // leak surface is unchanged. .catch() inline: the promises float
+            // unawaited through the grounding blocks below — a rejection there
+            // would be an unhandled rejection. The intent fallback mirrors the
+            // classifier's own Tier-3 default.
+            const wtaResolvedQuestionForKicks = question || extractedQuestion.latestQuestion || lastInterviewerTurn;
+            const intentPromise = classifyIntent(
+                question || extractedQuestion.latestQuestion || lastInterviewerTurn,
+                preparedTranscript,
+                this.session.getAssistantResponseHistory().length
+            ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
+                { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
+            ));
+            // Query = resolved question; blob fallback only when nothing was
+            // extracted (mirrors WhatToAnswerLLM's own inline
+            // `answerPlan?.question?.trim() || cleanedTranscript`).
+            const wtaPrefetchQuery = (wtaResolvedQuestionForKicks || '').trim() || preparedTranscript;
+            // Provisional answerType for retrieval scoping (ModesManager uses
+            // it to scope customContext). planAnswer here is the cheap regex
+            // pass without intentResult — the canonical plan below may refine
+            // the type, but a provisional scope beats the previous `undefined`.
+            const wtaPrefetchAnswerType = (() => {
+                try {
+                    return planAnswer({
+                        question: String(wtaResolvedQuestionForKicks || ''),
+                        source: 'what_to_answer',
+                        speakerPerspective: 'interviewer',
+                        activeMode: snapshotModeInfo,
+                    }).answerType;
+                } catch { return undefined; }
+            })();
+            // Governed document turns resolve through EvidenceResolver inside
+            // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
+            // an ignored retrieval is an unauthorized competing evidence path.
+            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive
+                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
+                : (async () => {
+                    try {
+                        const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                        const mm = ModesManager.getInstance();
+                        if (typeof mm.buildRetrievedActiveModeContextBlockHybrid === 'function') {
+                            // pinnedModeId (#6): parallel-prefetch reads the SAME mode captured
+                            // at t0, so a mid-request mode switch can't mismatch retrieval.
+                            // Phase 3: allowRerank on the LIVE prefetch path only when
+                            // ragSpeculativeRerank is on. The reranker is prewarmed at
+                            // mode activation and this prefetch is consumed under the
+                            // caller's raceWithBudget — so a (warm) rerank costs ~tens of
+                            // ms and an overrun falls through to the non-reranked block.
+                            let allowRerank = false;
+                            try {
+                                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                                const { isRagSpeculativeRerankEnabled } = require('./intelligence/intelligenceFlags');
+                                allowRerank = isRagSpeculativeRerankEnabled();
+                            } catch { /* flag module unavailable → no rerank */ }
+                            return await mm.buildRetrievedActiveModeContextBlockHybrid(
+                                wtaPrefetchQuery, preparedTranscript, 1800, wtaPrefetchAnswerType, true, snapshotModeInfo?.id, allowRerank,
+                                docGroundedEnforcementActive ? { forceDocumentGrounding: true } : undefined,
+                            );
+                        }
+                        return '';
+                    } catch { return ''; }
+                })();
 
             // ── Candidate-profile grounding for interviewer questions ─────────
             // The "What to answer?" path streams with ignoreKnowledgeMode=true, so

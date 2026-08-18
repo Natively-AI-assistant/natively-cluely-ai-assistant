@@ -81,7 +81,11 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   });
 
   test('the parallel mode-context prefetch is pinned to the t0 mode id', () => {
-    assert.match(body, /buildRetrievedActiveModeContextBlockHybrid\(\s*preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo\?\.id,/,
+    // WTA audit F5 (2026-08-18): the query slot is the resolved question
+    // (wtaPrefetchQuery, transcript-blob fallback) and a provisional
+    // answerType replaces the old `undefined` — the pinned t0 mode id this
+    // test exists for is unchanged.
+    assert.match(body, /buildRetrievedActiveModeContextBlockHybrid\(\s*wtaPrefetchQuery, preparedTranscript, 1800, wtaPrefetchAnswerType, true, snapshotModeInfo\?\.id,/,
       'the prefetched retrieval must pin the snapshot mode id');
   });
 
