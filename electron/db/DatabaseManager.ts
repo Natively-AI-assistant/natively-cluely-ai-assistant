@@ -1583,27 +1583,34 @@ export class DatabaseManager {
                 // error anywhere. Verified for this build that vec0 DROP TABLE does
                 // roll back (3 rows dropped inside a tx, 3 rows present after abort),
                 // so the wrap is sound rather than assumed.
-                this.db.transaction(() => {
+                // R-13 follow-up: capture a non-null local. TypeScript does not carry
+                // the enclosing method's `this.db` narrowing INTO the arrow function, so
+                // every use inside the transaction was TS2531 "Object is possibly null"
+                // (CI typecheck caught this; esbuild does not typecheck, so the local
+                // build was green). runMigrations() already returns early when this.db
+                // is null, so the local is genuinely non-null here.
+                const db = this.db;
+                db.transaction(() => {
                 for (const dim of dimsToRebuild) {
-                    this.db.exec(`DROP TABLE IF EXISTS vec_chunks_${dim};`);
-                    this.db.exec(`DROP TABLE IF EXISTS vec_summaries_${dim};`);
+                    db.exec(`DROP TABLE IF EXISTS vec_chunks_${dim};`);
+                    db.exec(`DROP TABLE IF EXISTS vec_summaries_${dim};`);
                 }
                 this.ensuredDims.clear();
                 for (const dim of dimsToRebuild) {
                     this.ensureVecTableForDim(dim); // now emits distance_metric=cosine
                     const bytes = dim * 4;
-                    const chunkIns = this.db.prepare(
+                    const chunkIns = db.prepare(
                         `INSERT OR REPLACE INTO vec_chunks_${dim}(chunk_id, embedding) VALUES (?, ?)`
                     );
-                    for (const row of this.db.prepare(
+                    for (const row of db.prepare(
                         `SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL AND length(embedding) = ?`
                     ).iterate(bytes) as Iterable<any>) {
                         try { chunkIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
                     }
-                    const sumIns = this.db.prepare(
+                    const sumIns = db.prepare(
                         `INSERT OR REPLACE INTO vec_summaries_${dim}(summary_id, embedding) VALUES (?, ?)`
                     );
-                    for (const row of this.db.prepare(
+                    for (const row of db.prepare(
                         `SELECT id, embedding FROM chunk_summaries WHERE embedding IS NOT NULL AND length(embedding) = ?`
                     ).iterate(bytes) as Iterable<any>) {
                         try { sumIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }

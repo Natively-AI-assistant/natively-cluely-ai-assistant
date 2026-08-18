@@ -46,7 +46,10 @@ if (v28End < 0) { console.error('[R-08] FAIL: end of the vec0 rebuild block not 
 const v28 = src.slice(v28Start, v28End);
 check('v28 enumerates EXISTING dims       ', /getExistingVecDims\(\)/.test(v28), true);
 check('v28 does not iterate KNOWN_DIMS    ', /for \(const dim of DatabaseManager\.KNOWN_DIMS\)/.test(v28), false);
-check('v28 wraps the rebuild in a tx      ', /this\.db\.transaction\(/.test(v28), true);
+// Match the transaction call regardless of receiver: the rebuild captures a
+// non-null local (`const db = this.db`) because TS does not carry the enclosing
+// method's narrowing into the arrow function, so this is `db.transaction(` now.
+check('v28 wraps the rebuild in a tx      ', /\b(?:this\.db|db)\.transaction\(/.test(v28), true);
 
 // --- The metric consequence, measured on a real 384-d table ---------------
 const db = new Database(':memory:');
