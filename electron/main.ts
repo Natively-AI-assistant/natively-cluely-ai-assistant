@@ -2797,6 +2797,9 @@ export class AppState {
       if (lv > cv) return true;
       if (lv < cv) return false;
     }
+    // F-708: same equal-after-stripping case as isRealUpgrade — a prerelease is
+    // older than the stable of the same version, so beta -> stable is newer.
+    if (/-/.test(current) && !/-/.test(latest)) return true;
     return false;
   }
 
@@ -2836,6 +2839,17 @@ export class AppState {
       if (r[i] > c[i]) return true
       if (r[i] < c[i]) return false
     }
+    // F-708: numerically equal after stripping pre-release suffixes. Stripping
+    // BOTH operands makes 2.1.0-beta.2 -> 2.1.0 compare equal, so a user on a
+    // prerelease was told "update not available" for the matching stable and
+    // stayed stuck until the next minor. Prereleases DO ship here (tags
+    // v2.1.0-beta.1/.2, generateUpdatesFilesForAllChannels: true).
+    // A prerelease is by definition older than the stable of the same version,
+    // so prerelease -> stable is a real upgrade. Every other equal case
+    // (stable -> stable, stable -> prerelease, prerelease -> same prerelease)
+    // stays false, preserving the downgrade protection this method exists for.
+    const isPre = (v: string) => /-/.test(v.replace(/^v/, ''))
+    if (isPre(current) && !isPre(remote)) return true
     return false
   }
 

@@ -326,6 +326,10 @@ ipcHandlers.ts:11284-11286 returns granted for non-darwin, but Electron's own ty
 electron-updater's channel setter ends with `this.allowDowngrade = true` (verified in the installed 6.x copy), so main.ts:2643 disables exactly the library filter the comment at :2651-2655 says it is belt-and-bracing. No user-visible failure today because AppState.isRealUpgrade catches every downgrade — but that hand-rolled gate is now load-bearing. One-line fix: set allowDowngrade=false after :2643.
 
 ## F-708 [P3] isRealUpgrade blocks the legitimate prerelease→stable upgrade
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-708-repro.mjs EXTRACTS the real static out of main.ts and evaluates it — main.ts cannot be required standalone (it binds electron at module scope), and the repo's existing test uses a hand-copied re-implementation that can silently drift, which is the same class of problem. PRE-FIX (baseline): 2.1.0-beta.2 → 2.1.0 returned false → exit 1. POST-FIX: true, with all five other cases unchanged → exit 0.
+Fix: after the numeric comparison ties, a prerelease current + stable remote is treated as an upgrade (a prerelease is by definition older than the stable of the same version). Applied to BOTH comparators — the PHASE-2A static and the dev-only isVersionNewer, which had the identical bug. Every other equal case (stable→stable, stable→prerelease, same prerelease) stays false, so downgrade protection is untouched.
+Pin: the repo's own electron/update/AppState.isRealUpgrade.test.mjs gained the F-708 cases AND its drifting re-implementation was updated to match the source (10/10).
 stripPre is applied to BOTH operands, so isRealUpgrade('2.1.0-beta.2','2.1.0') compares equal → false, and a beta user is told "update not available" until the next minor. Prereleases have shipped (tags v2.1.0-beta.1/.2) and generateUpdatesFilesForAllChannels is on.
 
 ## F-709 [P3] will-quit clobbers the specific quit reason
