@@ -3543,7 +3543,26 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // REPLACED the streamed row with it, so the user's final answer
                 // ended mid-word. The sibling regen ~80 lines below already
                 // guards with checkCodeCompleteness; use the same bar here.
-                if (regenTrim.length >= 20 && checkCodeCompleteness(regenTrim).ok) {
+                //
+                // R-06: that change REPLACED the closed-fence test instead of ADDING
+                // to it, which made the gate strictly WEAKER. extractFencedCodeBlocks
+                // requires a CLOSING fence, so an answer with no fences — or with an
+                // unterminated one — yields zero blocks and checkCodeCompleteness
+                // returns ok:true vacuously. Two regressions followed:
+                //   - another meta-reply (>=20 chars, no code at all) was accepted,
+                //     directly violating the invariant stated at the top of this block
+                //     ("only accept if the regen actually contains a code fence; never
+                //     overwrite with another meta-reply") and emitting a bogus
+                //     retry-succeeded telemetry event;
+                //   - raising CODING_REGEN_ABORT_CHARS to 8000 made the unclosed-fence
+                //     case REACHABLE: when shouldAbort fires mid-code-block the regen
+                //     ends on a dangling fence, and accepting it atomically replaces
+                //     the streamed answer with one whose fence never closes, so
+                //     markdown swallows everything after it.
+                // Both bars are required: the fence must close AND its contents must
+                // be complete.
+                const regenHasClosedFence = /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(regenTrim);
+                if (regenTrim.length >= 20 && regenHasClosedFence && checkCodeCompleteness(regenTrim).ok) {
                   fullResponse = regenTrim;
                   finalText = regenTrim;
                   // Re-strip <verification_spec>: the regen prompt includes the

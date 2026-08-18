@@ -38,10 +38,15 @@ test('no hardcoded 4000-char regen abort remains', () => {
   assert.equal(n, 2, 'both the meta-reply retry and the completeness retry must use it');
 });
 
-test('the meta-retry accepts on completeness, not a bare fence regex', () => {
-  const i = src.indexOf('pi_coding_meta_retry_succeeded');
-  assert.notEqual(i, -1);
-  const accept = src.slice(Math.max(0, i - 1400), i);
-  assert.ok(/checkCodeCompleteness\(regenTrim\)\.ok/.test(accept),
-    'the meta-retry must use the same completeness bar as its sibling regen (F-305)');
+test('the meta-retry requires a CLOSED FENCE and completeness, not either alone', () => {
+  // R-06: F-305 originally asserted only the completeness bar here, because it
+  // REPLACED the closed-fence regex rather than adding to it. That made the gate
+  // strictly weaker: extractFencedCodeBlocks needs a closing fence, so a regen
+  // with no fence — or an unterminated one — yields zero blocks and
+  // checkCodeCompleteness returns ok:true vacuously. Both bars are required.
+  const i = src.indexOf('const regenHasClosedFence =');
+  assert.notEqual(i, -1, 'the meta-retry must re-establish the closed-fence bar');
+  const accept = src.slice(i, i + 600);
+  assert.ok(/regenTrim\.length >= 20 && regenHasClosedFence && checkCodeCompleteness\(regenTrim\)\.ok/.test(accept),
+    'the meta-retry gate must require length, a closed fence, AND completeness');
 });
