@@ -21,11 +21,35 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 const { firstUsefulDeadlineMs } = await import(path.join(root, 'dist-electron/electron/llm/liveDeadlines.js'));
 
+// The server's rotation budget, read from natively-api/server.js when that tree
+// is available so real drift is caught, and falling back to the DOCUMENTED value
+// when it is not.
+//
+// `natively-api` is an UNDESCRIBED gitlink — .gitmodules only describes
+// `premium` — so CI never checks it out and readFileSync threw there. That made
+// this test fail on a machine where the invariant was perfectly fine, while
+// passing locally where the directory is present. The fallback keeps the real
+// assertion (`deadline > budget`) running everywhere rather than skipping it,
+// so this cannot degrade into a vacuous pass.
+const DOCUMENTED_AI_TTFT_BUDGET_MS = 10_000;
+
 function serverBudget() {
-  const server = fs.readFileSync(path.join(root, 'natively-api/server.js'), 'utf8');
+  const serverPath = path.join(root, 'natively-api/server.js');
+  let server;
+  try {
+    server = fs.readFileSync(serverPath, 'utf8');
+  } catch {
+    return DOCUMENTED_AI_TTFT_BUDGET_MS;
+  }
   const m = server.match(/AI_TTFT_BUDGET_MS\s*=\s*Number\(process\.env\.AI_TTFT_BUDGET_MS\)\s*\|\|\s*([0-9_]+)/);
   assert.ok(m, 'could not read AI_TTFT_BUDGET_MS from natively-api/server.js');
-  return Number(m[1].replace(/_/g, ''));
+  const parsed = Number(m[1].replace(/_/g, ''));
+  // If the server tree IS present, its value is authoritative — and a drift from
+  // the documented constant is exactly what this test should surface.
+  assert.equal(parsed, DOCUMENTED_AI_TTFT_BUDGET_MS,
+    `natively-api's AI_TTFT_BUDGET_MS is ${parsed}ms but this test documents ${DOCUMENTED_AI_TTFT_BUDGET_MS}ms — `
+    + 'update the constant here (and re-check the client deadline) rather than letting the two drift');
+  return parsed;
 }
 
 test('manual chat outlives the server provider rotation on the cascade route', () => {
