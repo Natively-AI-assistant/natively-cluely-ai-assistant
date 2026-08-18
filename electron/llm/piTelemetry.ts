@@ -27,6 +27,9 @@ export type PiTelemetryEvent =
   // WTA audit Part 11 (2026-08-18): clause-coverage observation/repair.
   // MARKER-ONLY: counts and booleans, never clause text.
   | 'wta_clause_coverage'
+  // WTA audit F14 residual (2026-08-18): the legacy `_wtaPlan` and the
+  // canonical plan classified one turn differently. MARKER-ONLY: enums.
+  | 'wta_plan_divergence'
   | 'wta_context_free_clarification'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'

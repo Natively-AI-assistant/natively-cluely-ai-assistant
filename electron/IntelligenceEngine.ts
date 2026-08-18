@@ -2133,6 +2133,24 @@ export class IntelligenceEngine extends EventEmitter {
                 availability: snapshotSourceAvailability,
             });
             const answerPlan = canonicalTurn.answerPlan;
+            // TWO-PLANS DIVERGENCE TELEMETRY (WTA audit F14 residual,
+            // observe-only, 2026-08-18): `_wtaPlan` (evidence/source gates,
+            // hardcoded source:'what_to_answer') and `canonicalTurn.answerPlan`
+            // (answer contract, source manual_input on typed presses, sees
+            // intentResult) can classify ONE turn differently — the audit's
+            // residual provenance asymmetry. This marker quantifies how often
+            // before any unification is attempted (Phase 5, shadow-first).
+            // MARKER-ONLY: answer-type enums and booleans, never text.
+            try {
+                const legacyType = (() => { try { return _wtaPlan?.answerType ?? null; } catch { return null; } })();
+                if (legacyType && legacyType !== answerPlan.answerType) {
+                    piTelemetry.emit('wta_plan_divergence', {
+                        legacyType,
+                        canonicalType: answerPlan.answerType,
+                        typedPress: Boolean(question),
+                    });
+                }
+            } catch { /* telemetry only */ }
             trace.mark('answer_type_selected', {
                 answerType: answerPlan.answerType,
                 outputPerspective: answerPlan.outputPerspective,

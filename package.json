@@ -58,6 +58,7 @@
     "benchmark:profile:build": "npm run build:electron && npm run benchmark:profile && npm run benchmark:profile:score",
     "benchmark:wta": "cross-env NODE_NO_WARNINGS=1 node benchmarks/profile-intelligence/run_what_to_answer_benchmark.ts",
     "benchmark:wta:selection": "npm run build:electron && node benchmarks/profile-intelligence/run_selection_benchmark.mjs",
+    "benchmark:wta:ledger": "npm run build:electron && node benchmarks/profile-intelligence/run_ledger_benchmark.mjs",
     "benchmark:wta:75": "cross-env NODE_NO_WARNINGS=1 node benchmarks/profile-intelligence/run_what_to_answer_benchmark.ts --questions=75",
     "benchmark:wta:100": "cross-env NODE_NO_WARNINGS=1 node benchmarks/profile-intelligence/run_what_to_answer_benchmark.ts --questions=100",
     "benchmark:manual-regression": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_manual_chat_regression.ts",

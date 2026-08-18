@@ -109,6 +109,12 @@ export interface CandidateTurnInput {
 const QUESTION_MARK = /\?/;
 const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had)\b/i;
 const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// Task directives ("Solve Two Sum.", "Rate your Python skills out of 10.",
+// "Convince me…") — imperative-mood asks the tell-me family misses
+// (ledger-benchmark 2026-08-18: 9 of 10 no-ask windows). Anchored to the
+// clause START (imperative position) or a comma boundary ("…analyst role,
+// connect it for me") so declarative uses ("We design for scale") don't match.
+const TASK_DIRECTIVE = /(?:^|,\s*)(?:(?:ok(?:ay)?|so|now|next|alright|great|please)[,.!]?\s+)*(?:please\s+)?(solve|write|implement|rate|rank|convince|design|build|debug|code|optimi[sz]e|refactor|estimate|compare|sketch|whiteboard|connect|reverse|check|find|print|sort)\b/i;
 const CORRECTION_LEAD = /^(?:(?:sorry|no|actually|wait)[,.!]?\s+)+i\s+meant?\b/i;
 // Discourse/backchannel prefixes that precede a real ask in the same breath
 // ("That makes sense, but why…", "Sorry, before that — why…"). Stripped
@@ -118,6 +124,19 @@ const DISCOURSE_PREFIX = /^(?:(?:that makes sense|that'?s (?:fair|great|good|int
 // coordinator directly before a wh-lead. A mid-sentence wh without either
 // ("tell me WHAT you did") is NOT a boundary.
 const CLAUSE_SPLIT = /,\s*(?:and\s+|but\s+|or\s+)?(?=(?:what|why|how|when|where|which|who|whose|whom)\b)|\s+(?:and|but|or)\s+(?=(?:what|why|how|when|where|which|who|whose|whom)\b)/i;
+// Pleasantries and wait/hold idioms are question-SHAPED but not asks the
+// candidate should answer via WTA (divergence-benchmark negatives 008/009/011).
+// Local copies of the extractor's guards — the Phase-3 segmenter unifies them.
+const PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
+const WAIT_IDIOM = /\b(give (me|us) (a|one|two|just a) (sec(ond)?s?|minutes?|moments?|mins?)\b(?!\s+(opinion|chance|example|reason|thought|look))|bear with me|hold on a (sec(ond)?|minute|moment)|one (moment|sec(ond)?),? please)\b/i;
+// Clause-level interrogatives for UNPUNCTUATED turns — mirrors the live
+// extractor's F9/Phase-3 recovery (transcriptQuestionExtractor.ts): with no
+// '?'/comma, a prefix clause hides the wh/aux lead mid-string ("just to
+// confirm what should i call you"). Consulted only when punctuationSource is
+// 'unavailable'. Local copies; the Phase-3 segmenter unifies these.
+const CLAUSE_INTERROGATIVE = /\b(what|why|how|when|where|which|who|whose|whom)\s+(should|would|could|can|do|did|does|is|are|was|were|am|have|has|had|will|many|much|long|soon|often|strong|ready|good|comfortable|confident|familiar|experienced|about)\b/i;
+const AUX_SECOND_PERSON = /\b(can|could|would|will|do|did|does|are|were|have|has)\s+you\b/i;
+const TRAILING_WH_FRAGMENT = /\b(why|what about|how about)\s+[\w'-]+( [\w'-]+)?$/i;
 
 const STOPWORDS = new Set([
     'the', 'a', 'an', 'and', 'but', 'or', 'so', 'that', 'this', 'these', 'those', 'there', 'here',
@@ -193,26 +212,44 @@ export class QuestionLedger {
 
     ingestCandidateTurn(turn: CandidateTurnInput): void {
         const words = turn.text.trim().split(/\s+/).filter(Boolean);
-        if (words.length < 8) return; // acknowledgements never answer anything
+        // Pure acknowledgements ("Yeah, sure.", "Okay.") never answer anything;
+        // nor does anything under 4 words.
+        const ACK_WORDS = new Set(['yeah', 'yes', 'no', 'sure', 'okay', 'ok', 'right', 'got', 'it',
+            'of', 'course', 'definitely', 'absolutely', 'correct', 'exactly', 'thanks', 'thank', 'you']);
+        const isAckOnly = words.every(w => ACK_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, '')));
+        if (words.length < 4 || isAckOnly) return;
         const turnTerms = contentTerms(turn.text);
         const open = this.asks.filter(a =>
             (a.status === 'open' || a.status === 'partially_answered') && a.sourceTimestamp <= turn.timestamp);
-        for (const ask of open) {
-            const ov = overlapCount(contentTerms(ask.standaloneText), turnTerms);
-            if (ov >= 2) {
-                ask.status = 'answered';
-                ask.confidence.state = 0.8;
-            } else if (ov === 1 && words.length >= 25) {
-                ask.status = 'partially_answered';
-                ask.confidence.state = 0.6;
+        if (words.length >= 8) {
+            for (const ask of open) {
+                const ov = overlapCount(contentTerms(ask.standaloneText), turnTerms);
+                if (ov >= 2) {
+                    ask.status = 'answered';
+                    ask.confidence.state = 0.8;
+                } else if (ov === 1 && words.length >= 25) {
+                    ask.status = 'partially_answered';
+                    ask.confidence.state = 0.6;
+                }
             }
         }
-        // A substantive reply right after a SINGLE open ask answers it even
+        // A direct reply right after a SINGLE open ask addresses it even
         // without term echo (people rarely repeat the question's words).
+        // Divergence-benchmark adjudication 2026-08-18: the old 15-word floor
+        // left stale asks open, which then OUTRANKED the fresh follow-up. A
+        // short direct reply (4-7 words: "That would be Natively.") is
+        // PARTIALLY answered — enough to stop outranking a fresh ask, honest
+        // about possibly being an interrupted lead-in ("Sure, so at a high
+        // level…"). A substantive reply (≥8 words) is answered.
         const stillOpen = this.asks.filter(a => a.status === 'open');
-        if (stillOpen.length === 1 && words.length >= 15) {
-            stillOpen[0].status = 'answered';
-            stillOpen[0].confidence.state = 0.6;
+        if (stillOpen.length === 1) {
+            if (words.length >= 8) {
+                stillOpen[0].status = 'answered';
+                stillOpen[0].confidence.state = 0.6;
+            } else {
+                stillOpen[0].status = 'partially_answered';
+                stillOpen[0].confidence.state = 0.55;
+            }
         }
     }
 
@@ -248,7 +285,20 @@ export class QuestionLedger {
             body = next;
         }
         if (!body.trim()) return [];
-        const clauses = body.split(CLAUSE_SPLIT).map(c => c.trim()).filter(Boolean);
+        const rawClauses = body.split(CLAUSE_SPLIT).map(c => c.trim()).filter(Boolean);
+        // Merge bare wh tail-clauses back into their sibling ("what did you
+        // study" + "where?" → one ask): a ≤2-word clause is a coordination
+        // remnant, not an atomic ask (divergence-benchmark case 080 — a
+        // standalone "Where?" ask is unanswerable).
+        const clauses: string[] = [];
+        for (const clause of rawClauses) {
+            const w = clause.replace(/[?.!]+$/, '').trim().split(/\s+/).filter(Boolean);
+            if (w.length <= 2 && clauses.length > 0) {
+                clauses[clauses.length - 1] = `${clauses[clauses.length - 1].replace(/[?.!]+$/, '')} and ${clause.replace(/^(and|but|or)\s+/i, '')}`;
+            } else {
+                clauses.push(clause);
+            }
+        }
         const compound = clauses.length > 1;
 
         const out: Ask[] = [];
@@ -262,8 +312,22 @@ export class QuestionLedger {
     private askShape(clause: string, punctuation: PunctuationSource | undefined): { isAsk: boolean; act: DialogueAct; conf: number } {
         const hasMark = QUESTION_MARK.test(clause);
         const hasLead = INTERROGATIVE_LEAD.test(clause);
-        const hasImperative = IMPERATIVE_ASK.test(clause);
+        const hasImperative = IMPERATIVE_ASK.test(clause) || TASK_DIRECTIVE.test(clause);
+        // Pleasantry/wait idioms: question-shaped small talk and pause
+        // requests are not asks (nothing for WTA to answer).
+        if (PLEASANTRY.test(clause) || WAIT_IDIOM.test(clause)) {
+            return { isAsk: false, act: 'statement', conf: 0.8 };
+        }
         if (!hasMark && !hasLead && !hasImperative) {
+            // Unpunctuated clause-level recovery (parity with the extractor's
+            // F9 fix): only when the provider never guaranteed punctuation.
+            if (punctuation === 'unavailable' && (
+                CLAUSE_INTERROGATIVE.test(clause)
+                || AUX_SECOND_PERSON.test(clause)
+                || TRAILING_WH_FRAGMENT.test(clause)
+            )) {
+                return { isAsk: true, act: 'question', conf: 0.75 };
+            }
             const short = clause.split(/\s+/).length <= 5;
             return { isAsk: false, act: short ? 'backchannel' : 'statement', conf: 0.8 };
         }

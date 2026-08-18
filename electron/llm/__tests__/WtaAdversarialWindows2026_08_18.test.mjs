@@ -125,8 +125,14 @@ describe('interruption mid-answer', () => {
     const l = feedLedger(turns);
     const billing = l.getAsks().find(a => /billing/i.test(a.standaloneText));
     assert.ok(billing && billing.status !== 'answered',
-      'a 5-word interrupted reply must not count as an answer');
-    assert.equal(l.getOpenAsks().length, 2, 'both the interrupted ask and the new one are open');
+      'a 5-word interrupted reply must not count as a full answer');
+    // 2026-08-18 refinement: an interrupted lead-in marks the ask
+    // partially_answered (honest state) — still active/rankable, but a fresh
+    // ask outranks it.
+    assert.ok(['open', 'partially_answered'].includes(billing.status), billing.status);
+    const active = l.rankActiveAsks(turns[2].timestamp + 1000);
+    assert.equal(active.length, 2, 'both the interrupted ask and the new one stay active');
+    assert.match(active[0].standaloneText, /database/i, 'the fresh ask ranks first');
   });
 });
 

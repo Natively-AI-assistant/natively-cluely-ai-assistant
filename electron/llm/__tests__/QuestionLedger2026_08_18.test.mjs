@@ -185,6 +185,115 @@ describe('the spec success criterion, end to end', () => {
   });
 });
 
+describe('ledger-benchmark adjudication fixes (2026-08-18 divergence run)', () => {
+  test('a short direct reply answers the single open ask ("That would be Natively.")', () => {
+    // Divergence wta_project_039/054: 4-6 word replies were ignored (<8 word
+    // floor), the stale ask stayed open and outranked the fresh follow-up.
+    const l = new QuestionLedger();
+    l.ingestInterviewerTurn({ text: 'Which is your best project?', timestamp: s(0) });
+    l.ingestCandidateTurn({ text: 'That would be Natively.', timestamp: s(5) });
+    assert.equal(l.getOpenAsks().length, 0, 'a direct reply to the only open ask answers it');
+    const asks2 = l.ingestInterviewerTurn({ text: 'How is it developed?', timestamp: s(10) });
+    assert.equal(asks2.length, 1);
+    const ranked = l.rankActiveAsks(s(11));
+    assert.match(ranked[0].standaloneText, /developed/i, 'the fresh follow-up ranks first');
+  });
+
+  test('a bare acknowledgement still answers nothing', () => {
+    const l = new QuestionLedger();
+    l.ingestInterviewerTurn({ text: 'Why did you choose Kafka?', timestamp: s(0) });
+    l.ingestCandidateTurn({ text: 'Yeah, sure.', timestamp: s(2) });
+    l.ingestCandidateTurn({ text: 'Okay.', timestamp: s(3) });
+    assert.equal(l.getOpenAsks().length, 1);
+  });
+
+  test('pleasantries and wait idioms never become open asks (negatives 008/009/011)', () => {
+    const l = new QuestionLedger();
+    l.ingestInterviewerTurn({ text: 'Did you have any trouble finding parking?', timestamp: s(0) });
+    l.ingestInterviewerTurn({ text: 'How was your weekend?', timestamp: s(1) });
+    l.ingestInterviewerTurn({ text: 'Give me one second, my other monitor just died.', timestamp: s(2) });
+    assert.equal(l.getOpenAsks().length, 0, `got: ${l.getOpenAsks().map(a => a.standaloneText).join(' | ')}`);
+  });
+
+  test('a bare wh tail-clause merges into its sibling instead of standing alone (case 080)', () => {
+    // "what did you study and where?" split into ["what did you study",
+    // "where?"] — a bare "Where?" ask is useless as a standalone.
+    const l = new QuestionLedger();
+    const asks = l.ingestInterviewerTurn({ text: 'And your degree — what did you study and where?', timestamp: s(0) });
+    assert.equal(asks.length, 1, `got: ${asks.map(a => a.standaloneText).join(' | ')}`);
+    assert.match(asks[0].standaloneText, /study/i);
+    assert.match(asks[0].standaloneText, /where/i, 'the tail clause is kept inside the merged ask');
+  });
+
+  test('genuine compound clauses still decompose (guard)', () => {
+    const l = new QuestionLedger();
+    const asks = l.ingestInterviewerTurn({
+      text: 'Why did you choose Kafka, how did you handle consumer groups, and what would you change?',
+      timestamp: s(0),
+    });
+    assert.equal(asks.length, 3);
+  });
+});
+
+describe('task directives are asks (ledger-benchmark no-ask windows)', () => {
+  // 9 of 10 "ledger found no ask" windows were imperative task directives —
+  // the IMPERATIVE_ASK family only covered "tell me/describe/explain".
+  for (const text of [
+    'Solve Two Sum.',
+    'Write a SQL query for the second highest salary.',
+    'Implement binary search.',
+    'Rate your Python skills out of 10.',
+    'Convince me you are right for this role.',
+  ]) {
+    test(`"${text}" creates an open ask`, () => {
+      const l = new QuestionLedger();
+      const asks = l.ingestInterviewerTurn({ text, timestamp: s(0) });
+      assert.equal(asks.length, 1, `got ${asks.length}`);
+      assert.equal(asks[0].dialogueAct, 'request');
+    });
+  }
+
+  test('a comma-anchored mid-sentence directive is caught ("…, connect it for me.")', () => {
+    const l = new QuestionLedger();
+    const asks = l.ingestInterviewerTurn({
+      text: 'You said full stack, but this is a data analyst role, connect it for me.',
+      timestamp: s(0),
+    });
+    assert.ok(asks.length >= 1, 'the directive clause becomes an ask');
+  });
+
+  test('guard: declarative verb usage is not a directive ("We design for scale.")', () => {
+    const l = new QuestionLedger();
+    assert.equal(l.ingestInterviewerTurn({ text: 'We design for scale.', timestamp: s(0) }).length, 0);
+    assert.equal(l.ingestInterviewerTurn({ text: 'Our teams build and solve problems together every day.', timestamp: s(1) }).length, 0);
+  });
+});
+
+describe('unpunctuated clause-level interrogatives (parity with the live extractor)', () => {
+  // Provider-sim ledger benchmark: 12 windows lost their ask when punctuation
+  // was stripped — the ledger lacked the extractor's clause-level recovery
+  // for punctuationSource 'unavailable'.
+  for (const text of [
+    'just to confirm what should i call you',
+    'on a scale of one to ten how strong is your react',
+    'before we dive in can you quickly introduce yourself',
+  ]) {
+    test(`"${text}" (unavailable punctuation) creates an ask`, () => {
+      const l = new QuestionLedger();
+      const asks = l.ingestInterviewerTurn({ text, timestamp: s(0), punctuationSource: 'unavailable' });
+      assert.equal(asks.length, 1, `got ${asks.length}`);
+    });
+  }
+
+  test('guard: the same statement stays a non-ask under unavailable punctuation', () => {
+    const l = new QuestionLedger();
+    assert.equal(
+      l.ingestInterviewerTurn({ text: 'and then we moved the deployment to the new cluster', timestamp: s(0), punctuationSource: 'unavailable' }).length,
+      0,
+    );
+  });
+});
+
 describe('bounds and hygiene', () => {
   test('the ledger is bounded', () => {
     const l = new QuestionLedger();
