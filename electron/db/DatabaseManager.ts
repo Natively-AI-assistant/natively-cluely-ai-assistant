@@ -1437,6 +1437,64 @@ export class DatabaseManager {
             }
         }
 
+        // Version 27 → 28: rebuild the vec0 tables with distance_metric=cosine (F-410).
+        //
+        // The tables were created without a distance metric, and sqlite-vec
+        // defaults to L2. VectorStore then read that column as if it were a
+        // cosine distance (`similarity = 1 - vecRow.distance`) and every
+        // consumer thresholded the result as a cosine in [-1,1]: minSimilarity
+        // 0.25, MEETING_MIN_SIMILARITY 0.3, MEETING_RAG_MIN_SIMILARITY. For
+        // unit vectors L2 = sqrt(2-2cos), so a 0.25 floor silently demanded
+        // cos >= 0.719; for NON-unit vectors it is worse still — a vector with
+        // identical direction but twice the magnitude scores 0.0 and is
+        // dropped outright (measured). The JS fallback computes true cosine and
+        // applies the SAME floor, so the two paths disagreed sharply on
+        // identical data — and every existing test forces the JS path, which is
+        // why the shipped native path was never covered.
+        //
+        // Ranking order is unaffected for normalized vectors (L2 is monotonic
+        // in cosine), which is why this degraded recall silently rather than
+        // producing visibly wrong output.
+        //
+        // vec0 virtual tables cannot be ALTERed, so the metric change requires
+        // a drop + recreate + backfill from the embedding BLOBs still held in
+        // chunks / chunk_summaries.
+        if (version < 28) {
+            console.log('[DatabaseManager] Applying migration v27 → v28: rebuild vec0 tables with cosine distance');
+            try {
+                let rebuilt = 0;
+                for (const dim of DatabaseManager.KNOWN_DIMS) {
+                    this.db.exec(`DROP TABLE IF EXISTS vec_chunks_${dim};`);
+                    this.db.exec(`DROP TABLE IF EXISTS vec_summaries_${dim};`);
+                }
+                this.ensuredDims.clear();
+                for (const dim of DatabaseManager.KNOWN_DIMS) {
+                    this.ensureVecTableForDim(dim); // now emits distance_metric=cosine
+                    const bytes = dim * 4;
+                    const chunkIns = this.db.prepare(
+                        `INSERT OR REPLACE INTO vec_chunks_${dim}(chunk_id, embedding) VALUES (?, ?)`
+                    );
+                    for (const row of this.db.prepare(
+                        `SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL AND length(embedding) = ?`
+                    ).iterate(bytes) as Iterable<any>) {
+                        try { chunkIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
+                    }
+                    const sumIns = this.db.prepare(
+                        `INSERT OR REPLACE INTO vec_summaries_${dim}(summary_id, embedding) VALUES (?, ?)`
+                    );
+                    for (const row of this.db.prepare(
+                        `SELECT id, embedding FROM chunk_summaries WHERE embedding IS NOT NULL AND length(embedding) = ?`
+                    ).iterate(bytes) as Iterable<any>) {
+                        try { sumIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
+                    }
+                }
+                console.log(`[DatabaseManager] v28: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
+                this.db.pragma('user_version = 28');
+            } catch (e) {
+                console.error('[DatabaseManager] v28 vec0 cosine rebuild failed (leaving version at 27 to retry next launch):', e);
+            }
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -2230,13 +2288,13 @@ export class DatabaseManager {
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks_${dim} USING vec0(
                     chunk_id INTEGER PRIMARY KEY,
-                    embedding float[${dim}]
+                    embedding float[${dim}] distance_metric=cosine
                 );
             `);
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries_${dim} USING vec0(
                     summary_id INTEGER PRIMARY KEY,
-                    embedding float[${dim}]
+                    embedding float[${dim}] distance_metric=cosine
                 );
             `);
             this.ensuredDims.add(dim);
