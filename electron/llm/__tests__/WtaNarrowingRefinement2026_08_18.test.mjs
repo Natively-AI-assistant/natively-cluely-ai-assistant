@@ -122,6 +122,48 @@ describe('topic shift keeps the FULL shifted phrase (wta_skill_054)', () => {
   });
 });
 
+describe('project drill-in preserves the asked question (wta_project_041)', () => {
+  // Live-benchmark defect: "What tech stack did you use there?" (no resolved
+  // entity) was REPLACED by the canned "Can you go deeper on that project?" —
+  // the type inheritance is the value of this rule; swapping the words loses
+  // the actual ask (tech stack → generic drill-in).
+  test('a specific drill-in question keeps its own words when no entity resolved', () => {
+    const r = resolveFollowUpOrClarify({
+      latestQuestion: 'What tech stack did you use there?',
+      previousQuestion: 'Tell me about your best project.',
+      previousAnswerType: 'project_answer',
+      surface: 'what_to_answer',
+      hasPriorContext: true,
+    });
+    assert.ok(r.confidence >= 0.7, `confidence ${r.confidence}`);
+    assert.equal(r.resolvedAnswerType, 'project_followup_answer');
+    assert.match(r.resolvedQuestion, /tech stack/i, `got "${r.resolvedQuestion}"`);
+  });
+
+  test('a truly bare drill-in fragment still gets a usable generic rewrite', () => {
+    const r = resolveFollowUpOrClarify({
+      latestQuestion: 'That project?',
+      previousQuestion: 'Tell me about your best project.',
+      previousAnswerType: 'project_answer',
+      surface: 'what_to_answer',
+      hasPriorContext: true,
+    });
+    assert.ok(r.confidence >= 0.7, `confidence ${r.confidence}`);
+    assert.ok(r.resolvedQuestion.length > 10, 'bare fragment expands to something answerable');
+  });
+
+  test('entity substitution branch is unchanged', () => {
+    const r = resolveFollowUpOrClarify({
+      latestQuestion: 'How is it developed?',
+      previousQuestion: 'Which is your best project?',
+      lastEntity: 'Natively',
+      surface: 'what_to_answer',
+      hasPriorContext: true,
+    });
+    assert.match(r.resolvedQuestion, /Natively/);
+  });
+});
+
 describe('guards: ordinary statements are untouched', () => {
   test('"I think we are done here." is not a follow-up', () => {
     const r = resolveFollowUpOrClarify({

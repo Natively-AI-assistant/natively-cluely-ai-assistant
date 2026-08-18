@@ -377,10 +377,20 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   // 1b. PROJECT DRILL-IN: "how is it developed?", "that project?", "what stack?",
   //     "your role?" — about the project already on the table.
   if (PROJECT_DRILLIN_RE.test(q) && (ctx.lastEntity || prevWasProject(ctx))) {
+    // WTA audit fix (wta_project_041, 2026-08-18): when no entity resolved,
+    // a SPECIFIC drill-in ("What tech stack did you use there?") must keep
+    // its own words — the value of this rule is the project_followup type
+    // inheritance, and the old canned replacement ("Can you go deeper on
+    // that project?") threw away the actual ask. Only a truly bare fragment
+    // (≤3 words, e.g. "That project?") still expands to the generic rewrite.
+    const rawDrillin = (ctx.latestQuestion || '').trim();
+    const drillinWords = rawDrillin.split(/\s+/).filter(Boolean).length;
     return {
       resolvedQuestion: ctx.lastEntity
-        ? `${ctx.latestQuestion.replace(/\b(it|that|this)\b/i, ctx.lastEntity).trim()}`.replace(/\?*$/, '?')
-        : 'Can you go deeper on that project?',
+        ? `${rawDrillin.replace(/\b(it|that|this)\b/i, ctx.lastEntity).trim()}`.replace(/\?*$/, '?')
+        : drillinWords >= 4
+          ? rawDrillin.replace(/\?*$/, '?')
+          : 'Can you go deeper on that project?',
       resolvedAnswerType: 'project_followup_answer',
       resolvedEntity: ctx.lastEntity,
       confidence: 0.85,
