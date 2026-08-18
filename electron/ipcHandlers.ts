@@ -3381,7 +3381,18 @@ export function initializeIpcHandlers(appState: AppState): void {
               try { myController?.abort(); } catch { /* noop */ }
             },
             onToken: (token: string) => {
-              manualFirstUseful = true;
+              // F-302: "useful" must mean USER-USEFUL CONTENT, not "a token
+              // object arrived". raceStreamWithDeadline forwards every yielded
+              // value unfiltered, so a leading "\n\n" used to flip this flag —
+              // which (a) swapped the 7s first-useful budget for the 8s
+              // inter-token stall guard, and (b) made the blank-answer fallback
+              // below unreachable for a whitespace-only response, committing an
+              // EMPTY bubble. Every other call site in the repo already uses a
+              // content threshold (>=5/8/10 chars); this primary manual-chat
+              // path was the sole outlier.
+              if (fullResponse.trim().length + token.trim().length >= 5) {
+                manualFirstUseful = true;
+              }
               // First token back from the provider — the gap from
               // provider_request_started is pre-work + provider TTFT (the real cost).
               chatTrace.markFirstUseful({ via: codingGate ? 'gated' : 'stream' });

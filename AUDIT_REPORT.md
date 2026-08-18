@@ -42,6 +42,11 @@ Area: ipcHandlers.ts:3367 + liveDeadlines.ts:151-156 vs natively-api server.js:2
 Status: FOUND. firstUsefulDeadlineMs() returns 7000 for every cloud answer type; the client aborts the HTTP request at 7s, while the server rotates to MiniMax-M3 at 10s and would have delivered. The constant that WAS raised to 13000 (LIVE_TOTAL_HARD_TIMEOUT_MS) is used only on the WTA path (IntelligenceEngine 2648/2671) — the manual-chat handler the ordering test's own rationale describes still uses 7000. Repair regens are 7000-8000, also below 10000. User sees "The model did not produce an answer in time…" on a RECOVERABLE turn. Unit-reproducible, no paid call.
 
 ## F-302 [P1] Manual-chat "useful" predicate is "any token arrived" → blank bubbles + degraded deadline
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-302-repro.mjs drives the REAL raceStreamWithDeadline with a generator that yields "\n\n" then hangs, and includes a CONTROL using the pre-fix wiring so it self-demonstrates. Measured — pre-fix: outcome 'stall_timeout' at 8003ms, useful=true, fallbackWouldFire=FALSE (empty bubble). Post-fix: 'first_useful_timeout' at 704ms, useful=false, fallbackWouldFire=TRUE.
+Fix: the flag is now gated on accumulated trimmed content reaching 5 chars, matching every other call site in the repo.
+Pin: electron/llm/__tests__/ManualChatUsefulRequiresContent2026_08_18.test.mjs (2/2 — source contract + a behavioural run through the real driver).
+Regression check: LLM suite 3287 pass / 16 fail; the only two names absent from the pinned baseline are the F-401 pair, which have never passed since their own introducing commit → zero regressions.
 Area: ipcHandlers.ts:3368/3384/3423
 Status: FOUND. Every other call site uses a content threshold (>=5/8/10 chars); the PRIMARY manual-chat path sets manualFirstUseful on any token object, and raceStreamWithDeadline/streamChat never filter whitespace. Two consequences: (a) a "\n\n" first chunk flips the budget from the 7s first-useful to the 8s stall guard; (b) the blank-answer fallback at :3423 requires !manualFirstUseful && !fullResponse.trim(), so a whitespace-only answer skips it and commits an EMPTY bubble — violating the comment 3 lines above ("a live answer is NEVER blank when a safe fallback exists"). Unit-reproducible.
 
