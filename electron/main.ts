@@ -1222,6 +1222,7 @@ import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { NativelyProSTT } from "./audio/NativelyProSTT"
+import { punctuationSourceFor } from "./llm/punctuationProvenance"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
@@ -1296,6 +1297,7 @@ try {
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
+import { describePageCaptureFallback, PAGE_CAPTURE_FALLBACK_CHANNEL } from "./services/pageCaptureFallback"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -1867,6 +1869,13 @@ export class AppState {
             console.warn('[Main] DOM capture error — falling back to screenshot:', e?.message || e);
           }
           if (!captured) {
+            // Tell the overlay WHY the page capture became a screenshot. The
+            // fallback is by design, but doing it silently made the hotkey look
+            // broken — the user only saw "Screenshot attached" with no hint that
+            // the extension wasn't connected / this site wasn't granted
+            // (2026-08-18 report). The notice renders as a warn-tone status pill.
+            const fallbackNotice = describePageCaptureFallback(domFailureReason);
+            this.sendToWindow(this.getMainWindow(), PAGE_CAPTURE_FALLBACK_CHANNEL, fallbackNotice);
             // Both legs of this fallback can fail, and the screenshot's throw used
             // to propagate to the outer handler and mask the DOM reason entirely —
             // the user saw an unrelated "Failed to capture screen" (or, since that
@@ -1876,7 +1885,11 @@ export class AppState {
             try {
               await this.captureScreenAndProcess();
             } catch (shotErr: any) {
-              const needsHost = /must request permission to access this host|Cannot access contents of/i.test(domFailureReason);
+              // The extension reports an ungranted host as the outcome kind
+              // 'needs-host-permission' (not Chrome's raw wording) — the shared
+              // mapper matches both, so reuse it instead of a local regex that
+              // silently drifted from what actually flows over the channel.
+              const needsHost = fallbackNotice.kind === 'needs-host-permission';
               console.error(
                 '[Main] Capture failed on BOTH paths.\n' +
                   `  • Page context: ${domFailureReason || 'unavailable'}\n` +
@@ -3220,6 +3233,21 @@ export class AppState {
 
     stt.setRecognitionLanguage(sttLanguage);
 
+    // WTA audit F9 (2026-08-18): effective provider id for punctuation
+    // provenance — derived from the CONSTRUCTED instance, not the settings
+    // value, because several ladder branches above silently fall back to
+    // GoogleSTT (missing key, unknown provider). RestSTT keeps the settings
+    // id (groq/azure/ibmwatson — all map to 'unavailable' anyway); the
+    // local-whisper branch falls through to its settings id.
+    const effectiveSttId: string =
+      stt instanceof DeepgramStreamingSTT ? 'deepgram'
+      : stt instanceof SonioxStreamingSTT ? 'soniox'
+      : stt instanceof OpenAIStreamingSTT ? 'openai'
+      : stt instanceof ElevenLabsStreamingSTT ? 'elevenlabs'
+      : stt instanceof NativelyProSTT ? 'natively'
+      : stt instanceof GoogleSTT ? 'google'
+      : sttProvider;
+
     // Wire Transcript Events
     stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string }) => {
       // Accept transcripts while a meeting is active OR while we're draining
@@ -3240,7 +3268,12 @@ export class AppState {
         // Defect B (2026-08-01): this is the ONLY real spoken-audio seam —
         // provenance 'stt' makes these segments memory-eligible; typed chat
         // and assistant answers (other origins) are excluded from extraction.
-        origin: 'stt'
+        origin: 'stt',
+        // WTA audit F9: provider identity + punctuation provenance, so
+        // downstream question scoring can treat a missing '?' as NEUTRAL
+        // when this provider never guaranteed punctuation.
+        sttProvider: effectiveSttId,
+        punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
       });
 
       // Feed final transcript to JIT RAG indexer

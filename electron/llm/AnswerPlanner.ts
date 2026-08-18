@@ -1809,9 +1809,14 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     // coding verb, or a technical-concept subject; those fall through to the
     // technical/DSA/coding cluster below (profileContextPolicy = forbidden). This
     // keeps the "coding answers never use resume" invariant intact. ("what tech
-    // STACK did you use?" survives: `stack` here is matched by the followup
-    // pattern, and DSA's bare `stack` is gated by this being a personal "did you
-    // use" phrasing — verified by ProfileRoutingMatrix over-capture guards.)
+    // STACK did you use?" survives because the textNoTechStack rewrite above
+    // neutralizes "tech/technology/technical stack", "full-stack",
+    // "stack(s|ed) up", and — WTA audit F1, 2026-08-18 — demonstrative/
+    // possessive "that/this/your/our/their/my stack" plus choice-verb + "the
+    // stack" BEFORE the DSA/technical patterns see the text. There is no
+    // "personal did-you-use" gate; the rewrite is the ONLY protection, so any
+    // new tech-stack phrasing must be added there. Pinned by
+    // ProfileRoutingMatrix + WtaBareStackRouting2026_08_18.)
     answerType = 'project_followup_answer';
   } else if (
     // HIGH-CONFIDENCE JD-FIT BRIDGE — the interviewer challenges that the

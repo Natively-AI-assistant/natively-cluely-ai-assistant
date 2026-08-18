@@ -530,7 +530,7 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
     // classifying a JD-comparison question ("The JD calls for 8+ years and
     // deep Go or Java expertise — how do you stack up there?") as `coding`
     // intent at 0.95 confidence. That intent flows into AnswerPlanner.planAnswer
-    // (electron/llm/AnswerPlanner.ts:2596's `input.intentResult?.intent ===
+    // (AnswerPlanner.ts's coding branch `input.intentResult?.intent ===
     // 'coding'` check), which OVERRIDES the otherwise-correct jd_fit_answer
     // routing (see the AnswerPlanner-level "stack up" fix in the same
     // campaign) and forces `coding_question_answer` — forbidding resume/jd

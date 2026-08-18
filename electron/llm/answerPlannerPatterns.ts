@@ -41,7 +41,8 @@ export // CI/CD and related devops terms (live-confirmed leak, 2026-07-27): "wha
 // match then injected profile context because the profile happens to contain
 // devops-adjacent terms. Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS
 // itself (not merged into the array above) — that array is also consulted
-// directly by the project_followup_answer negation guard below (~line 2535,
+// directly by the project_followup_answer negation guard in AnswerPlanner.ts
+// (search followUpHasProjectContext —
 // `!includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)`), and a code-
 // review pass confirmed live that merging it there misroutes genuine own-
 // project follow-ups ("how did you handle CI/CD?", "why did you choose
@@ -63,7 +64,8 @@ export // Software-engineering concept vocabulary (live-confirmed leak, 2026-07-
 // common OOP/design-pattern/testing/infra terms with the identical gap.
 // Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS (same reason as
 // DEVOPS_CICD_PATTERNS above): that array also feeds the project_followup_answer
-// negation guard below (~line 2547), and merging there would misroute genuine
+// negation guard in AnswerPlanner.ts (the same followUpHasProjectContext
+// predicate), and merging there would misroute genuine
 // own-project follow-ups ("how did you apply dependency injection in your
 // project?") away from project_followup_answer/required. Consulted only by
 // isLikelyTechnicalConcept, which the negation guard does not use.
