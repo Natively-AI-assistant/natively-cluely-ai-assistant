@@ -159,6 +159,44 @@ premium KnowledgeOrchestrator.ts:1955 classifies live-transcript questions as ma
 Phase 5 explicitly disproved (do not re-litigate): MODE_TEMPLATES does contain 'seminar'; grounding-profile constants are never mutated (spread copies); ModeContextRetriever/ModeHybridRetriever caches are all mode- or file-keyed; ACTIVE_MODE_CACHE is invalidated at all six write choke points; NATIVELY_SEMINAR_MODE has no non-test setter; isProfileGroundingV2Enabled is live.
 Phase 5 not covered: ModeReferenceFileIngestion, ModeGenerator, ~95% of ModeContextRetriever, OKF per-mode isolation, Pro gating beyond modes:set-active (note: it gates on templateType !== 'general', so every user-built custom mode is free-tier activatable — untraced).
 
+
+# Phase 7 — Settings / Persistence / Updater / Packaging (exploration complete 2026-08-18)
+
+## F-701 [P1] Migration v21→v22 writes a GLOBAL MAX page_count to every reference file (permanent, upgrade-only corruption)
+Area: DatabaseManager.ts:1153-1208
+Status: FOUND (explorer reproduced it by running the exact SQL literal against a fixture with the real better-sqlite3 build)
+Mechanism: the recursive CTE seeds `WHERE mode_reference_files.id = mode_reference_files.id`, which binds to the INNER FROM instance — a tautology — so the subquery is UNCORRELATED and `MAX(page_num)` is the max across ALL rows. Every marker-bearing row gets that one value. Measured: a 3-page document reports 6 pages when a 6-page document exists. Not self-healing (the `page_count IS NULL` predicate is false on re-run), so the wrong value is permanent. Consumed by ModeContextRetriever.ts:615-659, inflating referenceFilePageCount by (n_files × max − true_total). Fresh profiles are unaffected (empty table) — this is upgrade-only.
+
+## F-702 [P2] The same migration never backfills extracted_page_count despite its own title
+Phase 1 sets only page_count; Phase 2 sets both but is gated on `page_count IS NULL`, which Phase 1 just falsified for exactly those rows. extracted_page_count stays NULL forever, so ModeContextRetriever's fallback makes ingested-pages == total-pages and the extraction-coverage signal is silently unavailable for all pre-v22 documents. No later migration (v23-v26) backfills it.
+
+## F-703 [P2] A corrupt settings.json is silently replaced with a one-key file on the next set()
+SettingsManager.ts:375-378 catches a parse failure with `this.settings = {}` and no degraded flag; the next set() serializes `{}`+1 key over settings.json, destroying ~60 keys. The same codebase treats this exact risk as unacceptable for credentials — CredentialsManager sets keyringUnreadable and REFUSES every write for the session (:1088-1097) with a pre-mutation guard (:1117-1126). SettingsManager has neither. Reachable from ~15 IPC handlers, so it fires on the first toggle.
+
+## F-704 [P2] The credential fallback is NOT machine-bound, contradicting three explicit code claims
+credentialFallbackCrypto.ts:17-18 and CredentialsManager.ts:1044-1047/:1275 all assert machine/install binding, but getFallbackKey builds materialParts from a CONSTANT string (no os.userInfo, no MachineGuid) and the salt lives in the SAME userData directory as the ciphertext. Any whole-profile copy (Time Machine restore, Migration Assistant, synced AppData, support bundle) re-derives the key identically. Secondary consequence beyond docs: the stale-fallback logic at :1297-1309 depends on that claim, so on a restored profile decryption SUCCEEDS and the mtime guard DELETES the current keyring file, silently reverting the user to older credentials with no error.
+
+## F-705 [P2] vec0 orphans survive meeting delete (virtual tables get no FK cascade)
+deleteMeeting (:2634-2647) and clearAllData (:2686-2706) rely purely on ON DELETE CASCADE, which cannot reach `USING vec0` virtual tables; VectorStore's own delete paths DO issue explicit DELETEs (:321/:641/:689), so the maintainers know. Orphaned vectors consume top-K slots (searchSimilarNative drops unresolvable ids at :242), degrading recall monotonically with every deleted meeting. Downgraded from P1 because fetchLimit = limit*4 gives a 4× buffer.
+
+## F-706 [P2] Windows microphone permission is hardcoded 'granted'
+ipcHandlers.ts:11284-11286 returns granted for non-darwin, but Electron's own typings document getMediaAccessStatus('microphone') as @platform win32,darwin. With the Windows privacy toggle off, onboarding never prompts and mic capture yields silence with no diagnosable cause. The macOS branch directly above does a full status query plus a capture probe — a missing platform branch, not a platform limitation. (screen:'granted' on Windows is legitimate.)
+
+## F-707 [P3] Setting autoUpdater.channel silently enables downgrades
+electron-updater's channel setter ends with `this.allowDowngrade = true` (verified in the installed 6.x copy), so main.ts:2643 disables exactly the library filter the comment at :2651-2655 says it is belt-and-bracing. No user-visible failure today because AppState.isRealUpgrade catches every downgrade — but that hand-rolled gate is now load-bearing. One-line fix: set allowDowngrade=false after :2643.
+
+## F-708 [P3] isRealUpgrade blocks the legitimate prerelease→stable upgrade
+stripPre is applied to BOTH operands, so isRealUpgrade('2.1.0-beta.2','2.1.0') compares equal → false, and a beta user is told "update not available" until the next minor. Prereleases have shipped (tags v2.1.0-beta.1/.2) and generateUpdatesFilesForAllChannels is on.
+
+## F-709 [P3] will-quit clobbers the specific quit reason
+lifecycleTracker.ts:110-112 records 'user-quit' with no guard, nine lines above the before-quit handler that deliberately preserves a more specific reason; will-quit fires last, so 'updater-quit-install' and its version metadata are always lost. Diagnostics only (fatal paths use app.exit and skip will-quit).
+
+## F-710 [P3] The unsigned-macOS updater fallback ignores the public path it captured
+main.ts:2723 stores info.filePath specifically to avoid private APIs, and :2893-2899 then reads only two undocumented electron-updater internals. The stored value is never read anywhere.
+
+Phase 7 verified clean (negatives worth trusting the report by): settings/credentials writes are tmp+rename atomic (no fsync, but no partial-write corruption); single-process only, so no cross-window write race; asarUnpack covers all five Worker targets and every asar→unpacked rewrite site; the WAL self-heal's broad SQLITE_BUSY trigger is not exploitable behind the single-instance lock; chunk_id reuse refuted (AUTOINCREMENT); crash-path vs clean-path DB close are consistent. A dev-only manual-update-check UI hang was found and deliberately NOT filed (development-only).
+Phase 7 gaps: fresh-profile boot end-to-end, first-run permission ORDERING, entitlements/notarize hooks, NSIS behaviour, and migrations v1→v20 + v23→v26 read at header level only (an F-701-class defect could hide in a skimmed block).
+
 # Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
 
 ## ⚠ WORKSPACE ADVISORY (2026-08-18 04:50) — campaign moved to an isolated worktree
