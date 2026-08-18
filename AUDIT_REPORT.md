@@ -1164,3 +1164,90 @@ flag in this state. Previously it derived `mode` from
 `mode:'keyring'` while every write went to the fallback, and the affected
 population would have been counted as **zero**. Fixing this first means the
 prompt's rollout can actually be sized from real data.
+
+---
+
+## §20 — Forward-merge of `main` (2026-08-19)
+
+Owner decision was "land this branch". `main` was 219 commits ahead of the fork
+point; the PR was `CONFLICTING`, which in this repo means CI never queues at all.
+Merged `main` into the branch in a CLEAN worktree — the audit worktree cannot run
+git operations because its `premium`/`natively-api` are symlinks where git expects
+submodules.
+
+### The conflict that actually mattered: a migration-version collision
+
+`main`'s **v26 → v27 creates `usage_outbox`**. This branch's **v27 was the v22
+page-count repair**. Both stamp `user_version = 27`, so whichever ran first would
+have **permanently suppressed the other**:
+
+* a user coming from `main` would never get the page-count repair;
+* a user from this branch would never get `usage_outbox`, breaking the usage ledger.
+
+No textual merge can catch this — both sides are individually valid. Resolved by
+keeping `main`'s 27 and renumbering this branch's two migrations:
+
+| Version | Migration | Origin |
+|---------|-----------|--------|
+| 27 | `usage_outbox` | main (trunk keeps its number) |
+| 28 | v22 page-count repair | this branch |
+| 29 | vec0 cosine rebuild | this branch |
+
+R-05's chain-stop (a swallowed failure must not let a later block stamp past it)
+is preserved across the renumber. This branch was never released, so no installed
+profile can be sitting on the old 27/28 numbering.
+
+### The other seven
+
+* **`CredentialsManager`** — rebuilt from `main`'s version with this branch's R-10
+  changes re-applied, rather than untangling markers: `main` had restructured the
+  load path heavily (provenance hashing via `fileIsOurs`, a re-key path,
+  `reentryRequired`). Both survive. Note `main` **still had the destructive mtime
+  guard** (`fallbackMtime > keyringMtime → removeKeyringFile()`), i.e. the
+  whole-profile-restore credential loss is live on `main` today; this merge removes it.
+* **`liveDeadlines` / `llm/index`** — additive; kept both `CODING_REGEN_ABORT_CHARS`
+  and `MAX_SUMMARY_OUTPUT_CHARS`.
+* **`LocalWhisperSTT`** — kept both. This branch's F-205 drain-watchdog cancel is
+  ordered FIRST, because `main`'s Nemotron shared-worker branch returns early and
+  would otherwise skip it.
+* **Three audio tests** — took `main`. It had independently made the same F-105
+  delegation fix, more defensively (handles the delegating and non-delegating shapes).
+* **Submodule pins** — took `main`'s newer `premium`/`natively-api`; this branch
+  never moved them.
+
+### Three defects the post-merge verification caught in my OWN resolution
+
+1. **Scope bug (would have shipped).** `let preferFallbackThisLoad` landed in
+   `saveCredentials()` instead of `loadCredentials()` — `main` has three
+   `keyringUnreadable = false;` sites and the anchored replace hit the first.
+   Every load threw `ReferenceError`. The outer catch turned it into "saves
+   DISABLED this session", so nothing was destroyed, but no credentials loaded.
+2. **A "smarter" R-10 that was unsound — measured, not argued.** The merge first
+   used `main`'s provenance to narrow the ambiguity: *fallback provably ours and
+   keyring provably not ⇒ fallback authoritative*. That is wrong for exactly the
+   case R-10 protects: a whole-profile restore carries the PROVENANCE RECORD along
+   with the salt and both blobs, so the restored fallback hashes as ours while the
+   user's current keyring — whose record the restore just overwrote — hashes as
+   foreign. The repro caught it writing `STALE-FROM-BACKUP` over live keys.
+   mtime-newer is now **always** ambiguous; neither store is destroyed.
+3. **R-08/R-11 repros pinned migration VERSION NUMBERS**, which legitimately
+   changed here. Re-anchored on the migration's PURPOSE — the same false-failure
+   class already recorded in §18.1.
+
+### Verification of the merge
+
+| | tests | pass | fail |
+|---|---|---|---|
+| `main` (59bec00e) | 7673 | 7598 | 11 |
+| merged | 7725 | 7649 | 12 → **11** after the one fix below |
+
+Name-level diff isolated **exactly one** name failing on the merge but not on
+`main`: `OkfPhase0FalseRefusalGuard`'s pin asserting the topic-blind tier is OR'd
+into the repair gate. That is the owner-confirmed F-412 contract change, so the
+pin was updated (and now also pins the disjunct negatively). **No other
+regression against `main`.**
+
+All 12 repros pass on the merged tree. Credential suites 66/66 — including
+`CredentialPersistenceBehavior`'s PR #370 test, which pinned the destructive
+unlink R-10 removes; its own fixture uses an undecryptable fallback, so the old
+behaviour left the user with nothing at all.
