@@ -108,7 +108,17 @@ export class LifecycleTracker {
 
     // MISSING HANDLERS that this module adds (PHASE-2E):
     app.on('will-quit', (event) => {
-      record('will-quit', 'user-quit');
+      // F-709: do NOT clobber a more specific reason. Electron fires
+      // will-quit AFTER before-quit, and before-quit deliberately preserves an
+      // existing reason (see below) — so an unguarded record here always won,
+      // overwriting e.g. 'updater-quit-install' with 'user-quit' and dropping
+      // its {fromVersion,toVersion} meta. The next launch then could not tell
+      // "user quit" from "applied an update". Mirror the before-quit guard.
+      if (!this.marker.quitReason) {
+        record('will-quit', 'user-quit');
+      } else {
+        record('will-quit', this.marker.quitReason, this.marker.quitMeta);
+      }
     });
 
     app.on('window-all-closed', () => {

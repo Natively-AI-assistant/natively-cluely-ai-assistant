@@ -323,6 +323,9 @@ HONEST LIMITATION: this cannot be executed on macOS. The pin is a source contrac
 ipcHandlers.ts:11284-11286 returns granted for non-darwin, but Electron's own typings document getMediaAccessStatus('microphone') as @platform win32,darwin. With the Windows privacy toggle off, onboarding never prompts and mic capture yields silence with no diagnosable cause. The macOS branch directly above does a full status query plus a capture probe — a missing platform branch, not a platform limitation. (screen:'granted' on Windows is legitimate.)
 
 ## F-707 [P3] Setting autoUpdater.channel silently enables downgrades
+Status: FIXED-VERIFIED (repro: scripts/audit/F-707-709-710-repro.mjs; PRE-FIX baseline reproduced all three, POST-FIX all pass).
+NOTE ON MY OWN REPRO: the first version of it SKIPPED F-707 (regex window too narrow) and PASSED F-709 vacuously (its window reached the before-quit guard below). Both were caught by running it against the baseline, where F-709 should have failed and didn't. Corrected before relying on it.
+Confirmed against the INSTALLED electron-updater 6.8.3: the `channel` setter's last statement is `this.allowDowngrade = true`. `autoUpdater.allowDowngrade = false` is now restored immediately after the channel assignment, so the library filter the quitAndInstall comment relies on actually exists again and isRealUpgrade goes back to being redundancy rather than the only guard.
 electron-updater's channel setter ends with `this.allowDowngrade = true` (verified in the installed 6.x copy), so main.ts:2643 disables exactly the library filter the comment at :2651-2655 says it is belt-and-bracing. No user-visible failure today because AppState.isRealUpgrade catches every downgrade — but that hand-rolled gate is now load-bearing. One-line fix: set allowDowngrade=false after :2643.
 
 ## F-708 [P3] isRealUpgrade blocks the legitimate prerelease→stable upgrade
@@ -333,9 +336,11 @@ Pin: the repo's own electron/update/AppState.isRealUpgrade.test.mjs gained the F
 stripPre is applied to BOTH operands, so isRealUpgrade('2.1.0-beta.2','2.1.0') compares equal → false, and a beta user is told "update not available" until the next minor. Prereleases have shipped (tags v2.1.0-beta.1/.2) and generateUpdatesFilesForAllChannels is on.
 
 ## F-709 [P3] will-quit clobbers the specific quit reason
+Status: FIXED-VERIFIED. will-quit now mirrors before-quit's guard, preserving 'updater-quit-install' and its {fromVersion,toVersion} meta so the next launch can tell an applied update from a user quit.
 lifecycleTracker.ts:110-112 records 'user-quit' with no guard, nine lines above the before-quit handler that deliberately preserves a more specific reason; will-quit fires last, so 'updater-quit-install' and its version metadata are always lost. Diagnostics only (fatal paths use app.exit and skip will-quit).
 
 ## F-710 [P3] The unsigned-macOS updater fallback ignores the public path it captured
+Status: FIXED-VERIFIED. The fallback now prefers `this.downloadedUpdateInfo?.updateFile` before the two undocumented electron-updater internals, which is what capturing it was for.
 main.ts:2723 stores info.filePath specifically to avoid private APIs, and :2893-2899 then reads only two undocumented electron-updater internals. The stored value is never read anywhere.
 
 Phase 7 verified clean (negatives worth trusting the report by): settings/credentials writes are tmp+rename atomic (no fsync, but no partial-write corruption); single-process only, so no cross-window write race; asarUnpack covers all five Worker targets and every asar→unpacked rewrite site; the WAL self-heal's broad SQLITE_BUSY trigger is not exploitable behind the single-instance lock; chunk_id reuse refuted (AUTOINCREMENT); crash-path vs clean-path DB close are consistent. A dev-only manual-update-check UI hang was found and deliberately NOT filed (development-only).
