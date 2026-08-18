@@ -7,6 +7,9 @@ import * as os from 'os';
 import * as path from 'path';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
+// Premium-first knowledge-module resolution with a local fallback. Not literal
+// requires — see electron/knowledgeModules.ts for the esbuild reasoning.
+import { loadKnowledgeTypes, loadKnowledgeModule } from './knowledgeModules';
 import { AppState } from './main';
 import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
 import { describeServiceAccountRejection } from './services/googleServiceAccount';
@@ -7184,7 +7187,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (orchestrator) {
           orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
+          const { DocType } = loadKnowledgeTypes();
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
@@ -7252,7 +7255,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (orchestrator) {
           orchestrator.setKnowledgeMode(false);
-          const { DocType } = require('../premium/electron/knowledge/types');
+          const { DocType } = loadKnowledgeTypes();
           orchestrator.deleteDocumentsByType(DocType.RESUME);
           orchestrator.deleteDocumentsByType(DocType.JD);
         }
@@ -10531,7 +10534,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
         };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = loadKnowledgeTypes();
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.RESUME);
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
@@ -10591,7 +10594,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // upload slot and invites a duplicate upload. NOT covered by
       // aot_pipeline_running: that is JD-side and, per the comment above,
       // deliberately excluded from the resume readiness signal.
-      const { DocType: StatusDocType } = require('../premium/electron/knowledge/types');
+      const { DocType: StatusDocType } = loadKnowledgeTypes();
       return {
         hasProfile: status.hasResume,
         profileMode: status.activeMode,
@@ -10648,7 +10651,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = loadKnowledgeTypes();
       // Both tiers in ONE transaction. Deleting only Tier 1 here left Tier 2's
       // PII-bearing knowledge_cards orphaned — the user asked for their résumé
       // to be removed and half of it stayed on disk. Tier 1 (premium
@@ -10750,7 +10753,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           error: 'Knowledge engine not initialized. Please ensure API keys are configured.',
         };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = loadKnowledgeTypes();
       const result = await orchestrator.ingestDocument(resolvedPath, DocType.JD);
       if (!result?.success && path.extname(resolvedPath).toLowerCase() === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
@@ -10781,7 +10784,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!orchestrator) {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = loadKnowledgeTypes();
       // Same cross-tier transaction as profile:delete above — see the comment
       // there for why a Tier-1-only delete is a partial delete.
       const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
@@ -11300,7 +11303,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const resolved = consumeSelectedProfilePath(tempPath);
       if (!resolved) return { success: false, error: 'Could not stage the pasted job description.' };
 
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = loadKnowledgeTypes();
       const result = await orchestrator.ingestDocument(resolved, DocType.JD);
       if (result?.success) {
         try {
@@ -11344,8 +11347,15 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       }
 
-      const { resolveFromUrl } = require('../premium/electron/knowledge/roleInsight/JdSourceResolver');
-      const resolvedJd = await resolveFromUrl(url.trim(), provider, '');
+      // Not implemented locally yet — the resolver returns null without the
+      // premium submodule, so treat it as an unreadable page rather than
+      // throwing a TypeError on an absent function.
+      const jdSource = loadKnowledgeModule('roleInsight/JdSourceResolver') as
+        | { resolveFromUrl?: (url: string, provider: unknown, hint: string) => Promise<any> }
+        | null;
+      const resolvedJd = jdSource?.resolveFromUrl
+        ? await jdSource.resolveFromUrl(url.trim(), provider, '')
+        : null;
       if (!resolvedJd) {
         return {
           success: false,
@@ -11361,7 +11371,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const staged = consumeSelectedProfilePath(tempPath);
       if (!staged) return { success: false, error: 'Could not stage the imported job description.' };
 
-      const { DocType } = require('../premium/electron/knowledge/types');
+      const { DocType } = loadKnowledgeTypes();
       const result = await orchestrator.ingestDocument(staged, DocType.JD);
       if (result?.success) {
         try {
@@ -13214,7 +13224,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
-        const { DocType } = require('../premium/electron/knowledge/types');
+        const { DocType } = loadKnowledgeTypes();
         const dt = params.docType === 'jd' ? DocType.JD : DocType.RESUME;
         const result = await orchestrator.ingestDocument(params.filePath, dt);
         if (result?.success) {
@@ -13298,7 +13308,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       try {
         const orchestrator = appState.getKnowledgeOrchestrator();
         if (!orchestrator) return { success: false, error: 'orchestrator_not_initialized' };
-        const { DocType } = require('../premium/electron/knowledge/types');
+        const { DocType } = loadKnowledgeTypes();
         orchestrator.deleteDocumentsByType(DocType.RESUME);
         orchestrator.deleteDocumentsByType(DocType.JD);
         return { success: true };

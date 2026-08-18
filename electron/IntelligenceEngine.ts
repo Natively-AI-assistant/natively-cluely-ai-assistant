@@ -61,7 +61,12 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // tsc collapsed the grounding result to `{}`. Naming it restores genuine checking on
 // the seven property reads below instead of masking them with a cast.
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
-import type { PromptAssemblyResult } from '../premium/electron/knowledge/ContextAssembler';
+// Repointed from premium/electron/knowledge/ContextAssembler to the local
+// contract: premium/ is absent from this checkout, which made the old
+// specifier a hard TS2307. This is a type-only import of a structural shape
+// derived from the property reads below, so it stays correct whether the
+// runtime orchestrator is the premium one or the local implementation.
+import type { PromptAssemblyResult } from './localKnowledge/types';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';

@@ -1285,11 +1285,20 @@ let KnowledgeOrchestratorClass: any = null;
 let KnowledgeDatabaseManagerClass: any = null;
 // Phase 1: shared comp-evidence detector for transcript-aware intent routing.
 let textHasCompEvidence: ((text: string) => boolean) | null = null;
+// Routed through the resolver so a local implementation can supply these when
+// the premium submodule is absent. Premium still wins when installed; a null
+// result reproduces the previous catch behaviour exactly (feature disabled).
 try {
-    KnowledgeOrchestratorClass = require('../premium/electron/knowledge/KnowledgeOrchestrator').KnowledgeOrchestrator;
-    KnowledgeDatabaseManagerClass = require('../premium/electron/knowledge/KnowledgeDatabaseManager').KnowledgeDatabaseManager;
-    textHasCompEvidence = require('../premium/electron/knowledge/NegotiationConversationTracker').textHasCompEvidence;
+    const { loadKnowledgeModule } = require('./knowledgeModules');
+    KnowledgeOrchestratorClass = loadKnowledgeModule('KnowledgeOrchestrator')?.KnowledgeOrchestrator ?? null;
+    KnowledgeDatabaseManagerClass = loadKnowledgeModule('KnowledgeDatabaseManager')?.KnowledgeDatabaseManager ?? null;
+    textHasCompEvidence = loadKnowledgeModule('NegotiationConversationTracker')?.textHasCompEvidence ?? null;
 } catch {
+    KnowledgeOrchestratorClass = null;
+    KnowledgeDatabaseManagerClass = null;
+    textHasCompEvidence = null;
+}
+if (!KnowledgeOrchestratorClass) {
     console.log('[Main] Knowledge modules not available — profile intelligence disabled.');
 }
 
