@@ -276,6 +276,11 @@ SettingsManager.ts:375-378 catches a parse failure with `this.settings = {}` and
 credentialFallbackCrypto.ts:17-18 and CredentialsManager.ts:1044-1047/:1275 all assert machine/install binding, but getFallbackKey builds materialParts from a CONSTANT string (no os.userInfo, no MachineGuid) and the salt lives in the SAME userData directory as the ciphertext. Any whole-profile copy (Time Machine restore, Migration Assistant, synced AppData, support bundle) re-derives the key identically. Secondary consequence beyond docs: the stale-fallback logic at :1297-1309 depends on that claim, so on a restored profile decryption SUCCEEDS and the mtime guard DELETES the current keyring file, silently reverting the user to older credentials with no error.
 
 ## F-705 [P2] vec0 orphans survive meeting delete (virtual tables get no FK cascade)
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-705-repro.cjs — real better-sqlite3 + real sqlite-vec, shipped schema shape, with an env-flag control for the pre-fix path. Measured: WITHOUT the reap 3 vectors outlive the cascade (chunks 0, vec rows 3); WITH it, 0.
+Fix: new DatabaseManager.deleteVectorsForMeeting() resolves chunk and summary ids through the ordinary tables and deletes the matching vec0 rows for every provisioned dimension; deleteMeeting calls it BEFORE the parent DELETE (while the ids are still resolvable), and clearAllData clears the vec0 tables inside its existing transaction. Best-effort per dimension, since a dimension table may legitimately not exist.
+Pin: electron/services/__tests__/VecOrphansReapedOnDelete2026_08_18.test.mjs (3/3 — reap-before-cascade ordering, the reaper's own shape, and the full-wipe path).
+Regression check: rag + services suites, zero new failures vs baseline.
 deleteMeeting (:2634-2647) and clearAllData (:2686-2706) rely purely on ON DELETE CASCADE, which cannot reach `USING vec0` virtual tables; VectorStore's own delete paths DO issue explicit DELETEs (:321/:641/:689), so the maintainers know. Orphaned vectors consume top-K slots (searchSimilarNative drops unresolvable ids at :242), degrading recall monotonically with every deleted meeting. Downgraded from P1 because fetchLimit = limit*4 gives a 4× buffer.
 
 ## F-706 [P2] Windows microphone permission is hardcoded 'granted'

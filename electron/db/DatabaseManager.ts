@@ -2776,6 +2776,19 @@ export class DatabaseManager {
         if (!this.db) return false;
 
         try {
+            // F-705: reap the vec0 rows FIRST. `vec_chunks_*`/`vec_summaries_*`
+            // are USING vec0 VIRTUAL tables, and SQLite virtual tables carry no
+            // foreign keys — an ON DELETE CASCADE from `meetings` can never
+            // reach them. VectorStore's own delete paths already issue explicit
+            // DELETEs for exactly this reason, but deleteMeeting/clearAllData
+            // never call into it, so every deleted meeting left its vectors
+            // behind. Orphans then consume slots in the KNN top-K
+            // (searchSimilarNative silently drops ids it cannot resolve back to
+            // `chunks`), degrading recall monotonically with every deletion.
+            // Must run BEFORE the parent DELETE, while the chunk ids are still
+            // resolvable.
+            this.deleteVectorsForMeeting(id);
+
             const stmt = this.db.prepare('DELETE FROM meetings WHERE id = ?');
             const info = stmt.run(id);
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
@@ -2783,6 +2796,44 @@ export class DatabaseManager {
         } catch (error) {
             console.error(`[DatabaseManager] Failed to delete meeting ${id}:`, error);
             return false;
+        }
+    }
+
+    /**
+     * Delete the vec0 index rows belonging to a meeting (F-705).
+     *
+     * vec0 virtual tables cannot participate in foreign-key cascades, so this
+     * has to be explicit. Resolves chunk/summary ids through the ordinary
+     * tables, so it MUST be called before the parent row is removed. Best-effort
+     * per dimension: a dimension table may legitimately not exist.
+     */
+    public deleteVectorsForMeeting(meetingId: string): void {
+        if (!this.db) return;
+        try {
+            const dims = this.getExistingVecDims();
+            if (!dims.length) return;
+            const chunkIds = this.db.prepare('SELECT id FROM chunks WHERE meeting_id = ?').all(meetingId) as any[];
+            const summaryIds = this.db.prepare(
+                'SELECT cs.id AS id FROM chunk_summaries cs JOIN chunks c ON c.id = cs.chunk_id WHERE c.meeting_id = ?'
+            ).all(meetingId) as any[];
+            for (const dim of dims) {
+                if (chunkIds.length) {
+                    const ph = chunkIds.map(() => '?').join(',');
+                    try {
+                        this.db.prepare(`DELETE FROM vec_chunks_${dim} WHERE chunk_id IN (${ph})`)
+                            .run(...chunkIds.map((r) => r.id));
+                    } catch (_) { /* dim table may not exist */ }
+                }
+                if (summaryIds.length) {
+                    const ph = summaryIds.map(() => '?').join(',');
+                    try {
+                        this.db.prepare(`DELETE FROM vec_summaries_${dim} WHERE summary_id IN (${ph})`)
+                            .run(...summaryIds.map((r) => r.id));
+                    } catch (_) { /* dim table may not exist */ }
+                }
+            }
+        } catch (e) {
+            console.warn(`[DatabaseManager] deleteVectorsForMeeting(${meetingId}) failed (non-fatal):`, e);
         }
     }
 
@@ -2831,6 +2882,13 @@ export class DatabaseManager {
             // but SQLite handles cascades). Using a transaction ensures we never
             // end up in a half-cleared state if one statement fails.
             this.db.transaction(() => {
+                // F-705: vec0 virtual tables take no part in FK cascades, so a
+                // full wipe has to clear them explicitly too — otherwise
+                // "clear all data" left every embedding vector on disk.
+                for (const dim of this.getExistingVecDims()) {
+                    try { this.db!.exec(`DELETE FROM vec_chunks_${dim}`); } catch (_) { /* table may not exist */ }
+                    try { this.db!.exec(`DELETE FROM vec_summaries_${dim}`); } catch (_) { /* table may not exist */ }
+                }
                 this.db!.exec('DELETE FROM embedding_queue');
                 this.db!.exec('DELETE FROM chunk_summaries');
                 this.db!.exec('DELETE FROM chunks');
