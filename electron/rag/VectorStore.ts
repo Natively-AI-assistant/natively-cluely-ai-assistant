@@ -433,6 +433,36 @@ export class VectorStore {
      * makes them searchable in-session (search filters on space) and keeps them
      * out of the "unknown-space" re-index sweep. Idempotent; only sets when NULL.
      */
+    /**
+     * Re-stamp a meeting's embedding space after a MID-MEETING provider
+     * promotion (F-415).
+     *
+     * stampMeetingSpaceIfUnset is a no-op once the column is set, so the live
+     * indexer — which stamps on its FIRST successful tick — could never record
+     * a later fallback. The meeting then claimed the old space while newer
+     * chunks were in the new one, and the query-time space filter excluded the
+     * meeting entirely: zero live-RAG results exactly when the cloud provider
+     * is down and the fallback exists to help. The queued path handles this via
+     * activateMeetingFallback → clearEmbeddingsForMeeting; the live path had no
+     * equivalent.
+     *
+     * Only rewrites when the space actually CHANGED, so the common case stays a
+     * single no-op UPDATE.
+     */
+    restampMeetingSpaceOnChange(meetingId: string, providerName: string, dimensions: number, space: string): boolean {
+        try {
+            const row = this.db.prepare('SELECT embedding_space AS s FROM meetings WHERE id = ?').get(meetingId) as any;
+            if (!row || row.s == null || row.s === space) return false;
+            this.db.prepare(
+                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ?'
+            ).run(providerName, dimensions, space, meetingId);
+            console.warn(`[VectorStore] Meeting ${meetingId} embedding space changed ${row.s} -> ${space} (mid-meeting provider fallback); re-stamped.`);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     stampMeetingSpaceIfUnset(meetingId: string, providerName: string, dimensions: number, space: string): void {
         try {
             this.db.prepare(

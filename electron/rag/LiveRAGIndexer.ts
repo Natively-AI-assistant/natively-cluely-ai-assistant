@@ -170,6 +170,15 @@ export class LiveRAGIndexer {
                     }
                     if (embeddedCount > 0 && provider && space && dimensions) {
                         this.vectorStore.stampMeetingSpaceIfUnset(meetingId, provider, dimensions, space);
+                        // F-415: the comment above is true WITHIN a batch, but not
+                        // ACROSS ticks. If a later tick falls back to a different
+                        // provider, the meeting is already stamped and
+                        // stampMeetingSpaceIfUnset is a no-op — so the row keeps
+                        // claiming the old space while these chunks are in the new
+                        // one, and the query-time space filter then excludes the
+                        // meeting entirely (zero live results precisely when the
+                        // cloud provider is down). Re-stamp on an actual change.
+                        this.vectorStore.restampMeetingSpaceOnChange?.(meetingId, provider, dimensions, space);
                     }
                 } catch (err) {
                     console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId}:`, err);
