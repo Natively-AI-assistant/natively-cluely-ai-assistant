@@ -186,7 +186,7 @@ export function retrieveProfileEvidence(input: ProfileRetrievalInput): ProfileRe
     // Reuse the shared lexical retriever per pack. Pull a WIDER candidate set
     // (2×topN, floor 12) so the intent-boost pass below can rescue a card the
     // pure-lexical top-N would have dropped, then the final sort+slice trims to topN.
-    for (const sc of queryOkfCards(pack, input.question, classification, { topN: Math.max(topN * 2, 12), minScore: 0.1 })) {
+    for (const sc of queryOkfCards(pack, input.question, classification, { topN: Math.max(topN * 2, 12), minScore: 0.1, admitOnConfidenceAlone: true })) {
       const existing = byId.get(sc.card.id);
       if (!existing || sc.score > existing.score) byId.set(sc.card.id, sc);
     }

@@ -48,6 +48,7 @@ function scoreCard(
   targetEntities: string[],
   classification: QuestionClassification,
   queryWordIdf?: Map<string, number>,
+  admitOnConfidenceAlone = false,
 ): number {
   const titleWords = contentWords(card.title);
   const titleHits = titleWords.filter((w) => queryWords.has(w)).length;
@@ -94,22 +95,36 @@ function scoreCard(
   const typeBoost = TYPE_BOOST_FOR_QUESTION_TYPE[classification.type]?.[card.type] || 0;
   const confidenceBoost = CONFIDENCE_BOOST[card.confidence];
 
-  // F-413: the RELEVANCE terms are what say this card is about the question;
-  // typeBoost and confidenceBoost only say "this card is a good card of a
-  // useful shape". CONFIDENCE_BOOST.high (0.15) alone exceeded the 0.12
-  // minScore floor, and OkfCardBuilder marks essentially every front-matter
-  // card and every substantial section 'high' — so a card was admitted with
-  // ZERO query overlap, which is why tier 4 ("no cards AND no chunks") became
-  // unreachable at the false-refusal repair gate and every off-topic question
-  // looked evidenced. The boosts now RANK cards that already have some
-  // relevance; they cannot ADMIT one on their own.
+  // F-413: CONFIDENCE_BOOST.high (0.15) alone exceeded the 0.12 minScore floor,
+  // and OkfCardBuilder marks essentially every front-matter card and every
+  // substantial section 'high' — so a card was admitted with ZERO query overlap,
+  // which is why tier 4 ("no cards AND no chunks") became unreachable at the
+  // false-refusal repair gate and every off-topic question looked evidenced.
+  //
+  // R-04 corrects that fix, which over-reached. The two boosts are NOT alike:
+  //   - confidenceBoost is card-INTRINSIC. Every card carries it regardless of
+  //     the question, so it can never be evidence of relevance. It ranks only.
+  //   - typeBoost is QUERY-DERIVED — a sparse table keyed on the question's own
+  //     classification.type crossed with card.type. TYPE_BOOST[result].result
+  //     exists precisely to surface the one `result` card for a `result`
+  //     question whose wording differs. Excluding it from admission made the
+  //     whole table dead as an admission mechanism: it could then only re-rank
+  //     cards that had already matched lexically, the case where it was least
+  //     needed. Measured before this correction: a 3-card pack returned 0 cards
+  //     for "How did the evaluation turn out?".
+  //
+  // Confidence-alone admission stays available as an explicit opt-in because the
+  // PROFILE path depends on it: OkfProfileRetriever passes minScore 0.1 below the
+  // 0.15 floor deliberately, and its intent-seed rescue does not cover broad
+  // questions ("Why should we hire you?" matches no INTENT_TYPE_BOOSTS regex), so
+  // a global strict rule silently deleted the candidate's entire resume-card layer.
   const relevance =
     0.35 * titleScore +
     0.30 * bodyScore +
     0.20 * entityScore +
     0.05 * tagScore +
     exactTitleBoost;
-  if (relevance <= 0) return 0;
+  if (relevance + typeBoost <= 0 && !admitOnConfidenceAlone) return 0;
   return relevance + typeBoost + confidenceBoost;
 }
 
@@ -118,6 +133,13 @@ export interface OkfRetrieveOptions {
   minScore?: number;
   /** OKF Phase 7: when set, enables the retrieval-result cache keyed by (fileId, pack.packVersion, topN, question). */
   fileId?: string;
+  /**
+   * R-04: admit a card on its intrinsic confidence alone, with no query overlap
+   * and no question-type match. OFF by default so the document path keeps tier 4
+   * reachable. The profile path opts IN — it pairs this with minScore 0.1 to keep
+   * a floor of candidate cards for broad questions the intent seeds do not cover.
+   */
+  admitOnConfidenceAlone?: boolean;
 }
 
 /**
@@ -193,7 +215,7 @@ export function queryOkfCards(
       }
       const scored: ScoredCard[] = retrievableCards.map((card) => ({
         card,
-        score: scoreCard(card, queryWords, classification.targetEntities, classification, queryWordIdf),
+        score: scoreCard(card, queryWords, classification.targetEntities, classification, queryWordIdf, options.admitOnConfidenceAlone === true),
       }));
       result = scored
         .filter((s) => s.score >= minScore)

@@ -4406,9 +4406,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                   //
                   // EvidenceAssembler.computeTier is TOPIC-BLIND — it returns
                   // tier 2 for ANY synthesis-classified question as soon as the
-                  // pack yields >=1 card, and (before F-413) OkfRetriever's
-                  // type/confidence boosts cleared the score floor with ZERO
-                  // query-word overlap. As an independent disjunct it therefore
+                  // pack yields >=1 card, and OkfRetriever's type boost still
+                  // clears the score floor with ZERO query-word overlap (that is
+                  // its purpose: surface the one `result` card for a `result`
+                  // question worded differently). R-04 narrowed this — confidence
+                  // ALONE no longer admits on the document path — but a card can
+                  // still be admitted without any topical overlap, so the tier
+                  // remains topic-blind. As an independent disjunct it therefore
                   // made the off-topic gate above unable to veto anything: an
                   // off-topic synthesis question ("What is the key takeaway for
                   // the Kyoto Protocol?" against a robotics thesis) produced

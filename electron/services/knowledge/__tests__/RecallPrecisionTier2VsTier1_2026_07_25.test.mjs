@@ -93,12 +93,28 @@ function realisticPack() {
 }
 
 describe('Tier 2 (queryOkfCards, pure lexical) fails to recall a zero-lexical-overlap paraphrase in a realistic multi-card résumé', () => {
-  test('the target card scores ONLY the confidence floor (0.15) — identical to two totally unrelated cards (Skills, Education)', () => {
+  test('the target card scores ZERO — identical to two totally unrelated cards (Skills, Education)', () => {
     const pack = realisticPack();
     const classification = classifyQuestion(KUBERNETES_QUESTION);
     const results = queryOkfCards(pack, KUBERNETES_QUESTION, classification, { topN: 100, minScore: -1 });
     const byId = Object.fromEntries(results.map((r) => [r.card.id, r.score]));
-    assert.equal(Number(byId.target.toFixed(2)), 0.15);
+    // MECHANISM UPDATED 2026-08-18 (audit F-413 / R-04), FINDING UNCHANGED.
+    // This assertion used to read 0.15 — the unconditional per-card
+    // CONFIDENCE_BOOST described in the header. That floor admitted every card
+    // in the pack regardless of the question, which made the false-refusal
+    // repair gate's "no evidence" tier unreachable, so F-413 removed
+    // confidence-alone admission from the document path (it survives as an
+    // explicit opt-in for the profile path, which pairs it with minScore 0.1).
+    // The target therefore now scores 0 rather than 0.15.
+    //
+    // The finding this file exists to record is NOT weakened by that — it is
+    // strengthened. The point was never the magnitude of the floor; it was that
+    // the floor carries NO DISCRIMINATING SIGNAL, so the genuinely relevant card
+    // is indistinguishable from Skills and Education. That is still exactly true
+    // at 0, and the card is still not recalled. Slice 5's disposition (do NOT
+    // retire Tier 1 vector search without a Tier-2-scoped vector fallback)
+    // stands unchanged.
+    assert.equal(byId.target, 0);
     assert.equal(byId.target, byId.c3, 'target ties with the Skills card — no discriminating signal at all');
     assert.equal(byId.target, byId.c4, 'target ties with the Education card — no discriminating signal at all');
   });
@@ -120,7 +136,13 @@ describe('Tier 2 (queryOkfCards, pure lexical) fails to recall a zero-lexical-ov
     const classification = classifyQuestion(KUBERNETES_QUESTION);
     const results = queryOkfCards(pack, KUBERNETES_QUESTION, classification, { topN: 6 });
     assert.equal(results.find((r) => r.card.id === 'target'), undefined, 'the relevant card must be MISSING from a realistic top-6 result set');
-    assert.equal(results.length, 6);
+    // Was `=== 6` while the confidence floor admitted every card. With
+    // confidence-alone admission removed from the document path (F-413 / R-04)
+    // the zero-signal cards are no longer admitted at all, so the result set is
+    // now SHORTER than topN. The assertion that matters is the one above — the
+    // relevant card is absent — and it holds either way. Asserting a non-empty
+    // set keeps this from passing vacuously on an empty result.
+    assert.ok(results.length > 0 && results.length <= 6, `expected 1..6 results, got ${results.length}`);
   });
 
   test('control: a LEXICALLY-OVERLAPPING phrasing of the SAME question DOES recall the target fine — Tier 2 is not broken, just structurally blind to this paraphrase', () => {
