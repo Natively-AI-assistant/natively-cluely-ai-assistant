@@ -36,6 +36,10 @@
 
 import { resolveFollowUpOrClarify } from './FollowUpResolver';
 import type { PunctuationSource } from './punctuationProvenance';
+import {
+    SOCIAL_PLEASANTRY as PLEASANTRY, WAIT_IDIOM,
+    CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT,
+} from './questionShapes';
 
 export type DialogueAct =
     | 'question'
@@ -127,16 +131,16 @@ const CLAUSE_SPLIT = /,\s*(?:and\s+|but\s+|or\s+)?(?=(?:what|why|how|when|where|
 // Pleasantries and wait/hold idioms are question-SHAPED but not asks the
 // candidate should answer via WTA (divergence-benchmark negatives 008/009/011).
 // Local copies of the extractor's guards — the Phase-3 segmenter unifies them.
-const PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
-const WAIT_IDIOM = /\b(give (me|us) (a|one|two|just a) (sec(ond)?s?|minutes?|moments?|mins?)\b(?!\s+(opinion|chance|example|reason|thought|look))|bear with me|hold on a (sec(ond)?|minute|moment)|one (moment|sec(ond)?),? please)\b/i;
+// PLEASANTRY (SOCIAL_PLEASANTRY): shared — see questionShapes.ts.
+// WAIT_IDIOM: shared — see questionShapes.ts.
 // Clause-level interrogatives for UNPUNCTUATED turns — mirrors the live
 // extractor's F9/Phase-3 recovery (transcriptQuestionExtractor.ts): with no
 // '?'/comma, a prefix clause hides the wh/aux lead mid-string ("just to
 // confirm what should i call you"). Consulted only when punctuationSource is
 // 'unavailable'. Local copies; the Phase-3 segmenter unifies these.
-const CLAUSE_INTERROGATIVE = /\b(what|why|how|when|where|which|who|whose|whom)\s+(should|would|could|can|do|did|does|is|are|was|were|am|have|has|had|will|many|much|long|soon|often|strong|ready|good|comfortable|confident|familiar|experienced|about)\b/i;
-const AUX_SECOND_PERSON = /\b(can|could|would|will|do|did|does|are|were|have|has)\s+you\b/i;
-const TRAILING_WH_FRAGMENT = /\b(why|what about|how about)\s+[\w'-]+( [\w'-]+)?$/i;
+// CLAUSE_INTERROGATIVE: shared — see questionShapes.ts.
+// AUX_SECOND_PERSON: shared — see questionShapes.ts.
+// TRAILING_WH_FRAGMENT: shared — see questionShapes.ts.
 
 const STOPWORDS = new Set([
     'the', 'a', 'an', 'and', 'but', 'or', 'so', 'that', 'this', 'these', 'those', 'there', 'here',

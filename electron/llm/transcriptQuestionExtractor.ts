@@ -19,6 +19,10 @@
 // is derived from the transcript turns and generic question/role grammar.
 
 import { TranscriptTurn, cleanTranscript } from './transcriptCleaner';
+import {
+    SOCIAL_PLEASANTRY, WAIT_IDIOM,
+    CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT, SHORT_TOPIC_SHIFT,
+} from './questionShapes';
 
 export type DetectedSpeaker = 'interviewer' | 'candidate' | 'unknown';
 
@@ -65,7 +69,7 @@ const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are y
 // confidence below the live gate so they don't trigger a suggestion on their own.
 // Anchored on the social TOPIC so a real question that merely contains the word
 // (e.g. "how did you architect the parking-lot allocation service?") is unaffected.
-const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bfind (us|the office|parking|the building|your way|this place)\s+(ok(ay)?|alright|all right)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\b(traffic|parking|weather|commute) (was|is|been)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
+// SOCIAL_PLEASANTRY: shared — see questionShapes.ts.
 
 // An imperative ask appearing ANYWHERE in the turn, not just sentence-initially.
 // INTERROGATIVE_LEAD is ^-anchored on purpose (it feeds confidence scoring), but
@@ -82,7 +86,7 @@ const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|shar
 // unless the turn also classifies as a substantive type (a real question can
 // follow the pause in the same breath). The lookahead keeps "give me a second
 // OPINION/chance/example…" out of the idiom.
-const WAIT_IDIOM = /\b(give (me|us) (a|one|two|just a) (sec(ond)?s?|minutes?|moments?|mins?)\b(?!\s+(opinion|chance|example|reason|thought|look))|bear with me|hold on a (sec(ond)?|minute|moment)|one (moment|sec(ond)?),? please)\b/i;
+// WAIT_IDIOM: shared — see questionShapes.ts.
 
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
 const QUESTION_MARK = /\?/;
@@ -142,17 +146,17 @@ const FOLLOW_UP_WORD_CAP = 14;
 // '?'/comma stays real negative evidence.
 //   1. wh-word + auxiliary/degree word ("how strong is", "what should i",
 //      "how ready are", "why did you") anywhere in the turn.
-const CLAUSE_INTERROGATIVE = /\b(what|why|how|when|where|which|who|whose|whom)\s+(should|would|could|can|do|did|does|is|are|was|were|am|have|has|had|will|many|much|long|soon|often|strong|ready|good|comfortable|confident|familiar|experienced|about)\b/i;
+// CLAUSE_INTERROGATIVE: shared — see questionShapes.ts.
 //   2. auxiliary + second person ("can you", "did you", "are you") anywhere —
 //      the interviewer addressing the candidate interrogatively.
-const AUX_SECOND_PERSON = /\b(can|could|would|will|do|did|does|are|were|have|has)\s+you\b/i;
+// AUX_SECOND_PERSON: shared — see questionShapes.ts.
 //   3. a trailing wh-fragment ("…engineering-heavy why data"): why/what-about
 //      + a 1-2 word object at the very END of the turn.
-const TRAILING_WH_FRAGMENT = /\b(why|what about|how about)\s+[\w'-]+( [\w'-]+)?$/i;
+// TRAILING_WH_FRAGMENT: shared — see questionShapes.ts.
 //   4. a bare topic-shift fragment ("and sql", "and python frameworks") —
 //      "and" is too common for the anywhere rule, so the WHOLE turn must be
 //      the fragment (≤4 words).
-const SHORT_TOPIC_SHIFT = /^and\s+[\w'-]+( [\w'-]+){0,2}$/i;
+// SHORT_TOPIC_SHIFT: shared — see questionShapes.ts.
 
 // Demonstrative-only openers that strongly imply a follow-up ("can you explain that?").
 const DEMONSTRATIVE_FOLLOW_UP = /\b(explain|elaborate on|tell me more about|go deeper into|expand on)\s+(that|this|it|those|these)\b/i;
