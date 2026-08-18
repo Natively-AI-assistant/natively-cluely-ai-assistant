@@ -134,6 +134,21 @@ export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
  */
 export const MAX_STREAM_OUTPUT_CHARS = 16000;
 
+/**
+ * Abort ceiling for a coding REGENERATION (the meta-reply retry and the
+ * completeness retry).
+ *
+ * F-305: both regens used a hardcoded 4000, which is HALF the size this file
+ * already measures for the very artifact their prompt asks for — "a six-section
+ * coding answer with multiple code blocks, ~8000" (see MAX_STREAM_OUTPUT_CHARS
+ * above). A correct answer therefore got cut mid-sentence, and because the
+ * meta-retry accepted on nothing more than "length >= 20 and some closed code
+ * fence", that truncation was accepted and atomically REPLACED the streamed
+ * row — the user's final answer ended mid-word. Sized to the documented
+ * estimate; MAX_STREAM_OUTPUT_CHARS remains the outer runaway bound.
+ */
+export const CODING_REGEN_ABORT_CHARS = 8000;
+
 const COMPLEX_TYPES = new Set<AnswerType>([
   'coding_question_answer', 'dsa_question_answer', 'system_design_answer', 'debugging_question_answer',
 ]);
