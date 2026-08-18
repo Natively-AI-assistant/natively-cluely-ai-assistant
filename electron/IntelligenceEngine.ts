@@ -231,6 +231,10 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Speculative inference: start LLM on high-confidence interviewer partials
     private speculativeTimer: ReturnType<typeof setTimeout> | null = null;
+    // WTA audit Phase 2 (2026-08-18): shadow QuestionLedger — flag-gated,
+    // observe-only (parity trace in runWhatShouldISay). Lazily constructed on
+    // the first final turn while questionLedgerShadow is enabled.
+    private questionLedgerShadow: import('./llm/questionLedger').QuestionLedger | null = null;
     private speculativeText: string | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
@@ -535,6 +539,35 @@ export class IntelligenceEngine extends EventEmitter {
     handleTranscript(segment: TranscriptSegment, skipRefinementCheck: boolean = false): void {
         const result = this.session.handleTranscript(segment);
         this.lastTranscriptTime = Date.now();
+
+        // QUESTION LEDGER SHADOW (WTA audit Phase 2, 2026-08-18): behind the
+        // default-OFF questionLedgerShadow flag, feed every FINAL turn into a
+        // session-lifetime QuestionLedger. Observe-only — the ledger is read
+        // exclusively by the parity trace in runWhatShouldISay; it never
+        // touches selection, retrieval, or the prompt. try/catch so a ledger
+        // fault can never break the primary transcript path.
+        if (segment.final && result) {
+            try {
+                if (isIntelligenceFlagEnabled('questionLedgerShadow')) {
+                    if (!this.questionLedgerShadow) {
+                        const { QuestionLedger } = require('./llm/questionLedger') as typeof import('./llm/questionLedger');
+                        this.questionLedgerShadow = new QuestionLedger();
+                    }
+                    if (result.role === 'interviewer') {
+                        this.questionLedgerShadow.ingestInterviewerTurn({
+                            text: segment.text,
+                            timestamp: segment.timestamp,
+                            punctuationSource: segment.punctuationSource,
+                        });
+                    } else if (result.role === 'user') {
+                        this.questionLedgerShadow.ingestCandidateTurn({
+                            text: segment.text,
+                            timestamp: segment.timestamp,
+                        });
+                    }
+                }
+            } catch { /* shadow only — never affects the transcript path */ }
+        }
 
         if (segment.speaker === 'interviewer') {
             if (!segment.final) {
@@ -1384,6 +1417,28 @@ export class IntelligenceEngine extends EventEmitter {
                 isFollowUp: extractedQuestion.isFollowUp,
                 confidence: extractedQuestion.confidence,
             });
+
+            // QUESTION LEDGER SHADOW parity (WTA audit Phase 2): compare the
+            // ledger's top-ranked active ask against the RESOLVED question the
+            // live path selected. Observe-only (included: false) — this trace
+            // is the promotion evidence for Phase 5 (cluster ranking replacing
+            // latest-wins): divergence rate by category decides, never vibes.
+            try {
+                if (this.questionLedgerShadow && isIntelligenceFlagEnabled('questionLedgerShadow')) {
+                    const rankedAsks = this.questionLedgerShadow.rankActiveAsks(Date.now());
+                    const topAsk = rankedAsks[0];
+                    const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+                    wtaTrace.noteContext({
+                        source: 'question_ledger_shadow', trustLevel: 'low',
+                        requested: true, retrieved: Boolean(topAsk), included: false,
+                        reason: topAsk && extractedQuestion.latestQuestion
+                            ? (norm(topAsk.standaloneText) === norm(extractedQuestion.latestQuestion)
+                                ? 'ledger_parity'
+                                : `ledger_divergence_open_${rankedAsks.length}`)
+                            : 'ledger_empty',
+                    });
+                }
+            } catch { /* shadow only — never affects the answer */ }
 
             // ── PARALLEL PRE-STREAM STAGES (PI v3, W5; reordered WTA audit
             // F5/F6/F7, 2026-08-18) ────────────────────────────────────────────
