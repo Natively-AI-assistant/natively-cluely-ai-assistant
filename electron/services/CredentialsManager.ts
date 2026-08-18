@@ -179,6 +179,22 @@ export class CredentialsManager {
      */
     private keyringUnreadable = false;
 
+    /**
+     * R-10: set when a NEWER app-managed fallback won this load while an
+     * apparently-fine keyring file also exists. mtime cannot distinguish the two
+     * situations that produce it — (a) a legitimate fallback save whose stale-keyring
+     * cleanup failed, and (b) a whole-profile restore dropping an OLD fallback next
+     * to CURRENT keyring credentials — so the stores are AMBIGUOUS, not ordered.
+     *
+     * Under that ambiguity no save may destroy either store: writes go to the
+     * fallback and leave credentials.enc byte-for-byte intact, so whichever store
+     * the user actually needs is still on disk. This is deliberately NOT routed
+     * through keyringUnreadable: that flag refuses writes outright and tells the
+     * user to restart, and a restart does not change mtimes — the refusal would be
+     * permanent and its recovery text false (the F-703 mistake).
+     */
+    private credentialStoresAmbiguous = false;
+
     private constructor() {
         // Load on construction after app ready
     }
@@ -1136,7 +1152,14 @@ export class CredentialsManager {
         // fallback instead of returning false, otherwise keys are silently lost
         // on restart (the bug reported for Deepgram and other STT keys).
         try {
-            if (safeStorage.isEncryptionAvailable()) {
+            // R-10: while the two stores are ambiguous, the keyring file is the ONLY
+            // remaining copy of whatever it holds that the fallback does not. Writing
+            // over it — which this branch does unconditionally — is what destroyed
+            // the user's current credentials after a whole-profile restore. Skip
+            // straight to the fallback branch below, which is additionally stopped
+            // from calling removeKeyringFile(). Net effect: both files survive, so
+            // whichever one the user actually needs is still recoverable.
+            if (safeStorage.isEncryptionAvailable() && !this.credentialStoresAmbiguous) {
                 const data = JSON.stringify(this.credentials);
                 const encrypted = safeStorage.encryptString(data);
                 const tmpEnc = CREDENTIALS_PATH + '.tmp';
@@ -1167,8 +1190,15 @@ export class CredentialsManager {
             // next startup and treat the old keyring data as authoritative —
             // otherwise the just-saved key would be silently overwritten by the
             // stale keyring contents when loadCredentials() deletes the fallback.
-            this.removeKeyringFile();
-            console.warn('[CredentialsManager] OS keyring unavailable; saved via app-managed encrypted fallback (machine-bound, will survive restart)');
+            if (this.credentialStoresAmbiguous) {
+                console.warn('[CredentialsManager] Saved to the app-managed fallback and left the keyring file untouched '
+                    + '(both credential stores are present and neither can be proven newer). '
+                    + 'RECOVERY: if your keys look out of date, quit the app and delete credentials.fallback.enc from the '
+                    + 'user-data directory — the keyring file still holds the other set.');
+            } else {
+                this.removeKeyringFile();
+                console.warn('[CredentialsManager] OS keyring unavailable; saved via app-managed encrypted fallback (machine-bound, will survive restart)');
+            }
             return true;
         } catch (error) {
             console.error('[CredentialsManager] Failed to save credentials:', (error as Error)?.message ?? String(error));
@@ -1257,6 +1287,7 @@ export class CredentialsManager {
         let preferFallbackThisLoad = false;
         // Recomputed from scratch on every load (init() may run more than once).
         this.keyringUnreadable = false;
+        this.credentialStoresAmbiguous = false;
         try {
             // 1) Encrypted keyring file is authoritative when the keyring is available.
             //    However, if a previous saveCredentials() hit the fallback path AND the
@@ -1333,6 +1364,7 @@ export class CredentialsManager {
                             // recoverable: the keyring file is still on disk.
                             console.warn('[CredentialsManager] Fallback is newer than the keyring file; preferring it for this load (keyring file preserved)');
                             preferFallbackThisLoad = true;
+                            this.credentialStoresAmbiguous = true;
                         }
                     } catch (statErr) {
                         // statSync failed — proceed with the normal path; if the keyring
@@ -1388,8 +1420,30 @@ export class CredentialsManager {
                     const decrypted = decryptCredentialBlob(blob, this.getFallbackKey());
                     const parsed = JSON.parse(decrypted);
                     if (typeof parsed === 'object' && parsed !== null) {
-                        this.credentials = parsed;
-                        console.log('[CredentialsManager] Loaded credentials from app-managed fallback');
+                        if (this.credentialStoresAmbiguous) {
+                            // R-10: the keyring read was SKIPPED, not failed, so its
+                            // contents are still available and may hold keys the
+                            // fallback has never seen. Replacing wholesale dropped
+                            // them from the active set (measured: a restored fallback
+                            // holding only geminiApiKey hid the user's openai and
+                            // claude keys, and the next save then wrote that reduced
+                            // set to disk). Union the two, fallback winning on
+                            // conflict — that keeps the legitimate case correct (a
+                            // fallback written after the keyring IS newer) while no
+                            // key present in only one store disappears.
+                            let keyringSet: StoredCredentials = {};
+                            try {
+                                const kr = JSON.parse(safeStorage.decryptString(fs.readFileSync(CREDENTIALS_PATH)));
+                                if (typeof kr === 'object' && kr !== null) keyringSet = kr;
+                            } catch { /* unreadable — the fallback alone is the best we have */ }
+                            this.credentials = { ...keyringSet, ...parsed };
+                            console.warn('[CredentialsManager] Both credential stores are present and neither can be proven newer. '
+                                + 'Running from their union (app-managed fallback wins on conflict); BOTH files are preserved and '
+                                + 'saves will not overwrite the keyring file this session.');
+                        } else {
+                            this.credentials = parsed;
+                            console.log('[CredentialsManager] Loaded credentials from app-managed fallback');
+                        }
                     } else {
                         throw new Error('Fallback credentials is not a valid object');
                     }
@@ -1403,12 +1457,33 @@ export class CredentialsManager {
                     // holds {} — and the first ordinary save would serialize that
                     // near-empty object straight over it. This is the reachable half of
                     // the restored-profile case: a fallback carried from another
-                    // machine WITHOUT its salt fails to decrypt here. Refuse writes so
-                    // the intact keyring survives to a launch that can read it.
+                    // machine WITHOUT its salt fails to decrypt here.
+                    //
+                    // A fallback that will not decrypt carries NO information, so it is
+                    // no evidence that the keyring is stale and must not win the mtime
+                    // race. Recover by reading the keyring we skipped. Refusing instead
+                    // would lock the user out of their real credentials on EVERY boot —
+                    // the undecryptable file stays newer forever, so the refusal would
+                    // never lift (the same permanent-lockout shape as F-703).
                     if (fs.existsSync(CREDENTIALS_PATH)) {
-                        this.keyringUnreadable = true;
-                        console.warn('[CredentialsManager] An unreadable app-managed fallback left credentials empty while an encrypted keyring file is still present. '
-                            + 'Saves are disabled this session so the keyring file is not overwritten with an empty set.');
+                        let recovered = false;
+                        try {
+                            const kr = JSON.parse(safeStorage.decryptString(fs.readFileSync(CREDENTIALS_PATH)));
+                            if (typeof kr === 'object' && kr !== null) {
+                                this.credentials = kr;
+                                recovered = true;
+                                console.warn('[CredentialsManager] The app-managed fallback could not be decrypted and carries no usable data; '
+                                    + 'loaded the encrypted keyring instead. The unreadable fallback is left on disk and is ignored.');
+                            }
+                        } catch { /* keyring unreadable too — fall through to the refusal */ }
+                        if (!recovered) {
+                            this.keyringUnreadable = true;
+                            console.warn('[CredentialsManager] Neither credential store could be read. Saves are disabled this session so the '
+                                + 'existing keyring file is not overwritten with an empty set.');
+                        }
+                        // Either way the stores are no longer ambiguous: the fallback
+                        // holds nothing, so it cannot be the newer truth.
+                        this.credentialStoresAmbiguous = false;
                     }
                 }
 

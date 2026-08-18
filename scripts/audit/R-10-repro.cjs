@@ -128,8 +128,12 @@ function scenario(label, { fallbackDecrypts }) {
   console.log(`[R-10] loaded into memory : ${JSON.stringify(loaded)}`);
 
   if (fallbackDecrypts) {
-    // The destructive path must actually have been reachable.
-    check('  fallback DID decrypt (path exercised)', loaded, STALE);
+    // The destructive path must actually have been reachable, and the active set
+    // must be the UNION of both stores with the fallback winning on conflict —
+    // so no key that exists in only one store disappears from the session.
+    check('  fallback DID decrypt (path exercised)', loaded.geminiApiKey, 'STALE-FROM-BACKUP');
+    check('  keyring-only openai still active     ', loaded.openaiApiKey, 'CURRENT-OPENAI');
+    check('  keyring-only claude still active     ', loaded.claudeApiKey, 'CURRENT-CLAUDE');
   }
 
   // Simulate the user saving one key, as any settings toggle would.
@@ -145,9 +149,28 @@ function scenario(label, { fallbackDecrypts }) {
   console.log(`[R-10] keyring contents   : ${JSON.stringify(keyringContents)}`);
 
   check('  keyring file survives                ', keyringStillThere, true);
+  if (fallbackDecrypts) {
+    // Only meaningful while the stores are AMBIGUOUS. When the fallback cannot be
+    // decrypted the manager recovers from the keyring, the ambiguity is resolved,
+    // and the long-standing 'keyring is authoritative' cleanup removes the
+    // unreadable blob — correct, and not a behaviour this fix introduces.
+    check('  fallback file also survives          ', fs.existsSync(fallbackPath), true);
+  }
   check('  CURRENT gemini key survives          ', keyringContents && keyringContents.geminiApiKey, 'CURRENT-REAL-KEY');
   check('  CURRENT openai key survives          ', keyringContents && keyringContents.openaiApiKey, 'CURRENT-OPENAI');
   check('  CURRENT claude key survives          ', keyringContents && keyringContents.claudeApiKey, 'CURRENT-CLAUDE');
+
+  // Stability: the save just made the fallback newer again, so the NEXT boot is
+  // ambiguous too. Verify that is a stable fixed point — no oscillation, no
+  // progressive loss across relaunches.
+  const reboot = freshManager(userData, true);
+  const rebooted = reboot.getAllCredentials();
+  check('  reboot keeps openai                  ', rebooted.openaiApiKey, 'CURRENT-OPENAI');
+  check('  reboot keeps claude                  ', rebooted.claudeApiKey, 'CURRENT-CLAUDE');
+  check('  reboot keeps the newly saved groq    ', rebooted.groqApiKey, 'NEW-GROQ-KEY');
+  const raw2 = fs.readFileSync(keyringPath).toString('utf8');
+  const keyring2 = raw2.startsWith('KEYRING:') ? JSON.parse(raw2.slice(8)) : null;
+  check('  keyring STILL untouched after reboot ', keyring2 && keyring2.geminiApiKey, 'CURRENT-REAL-KEY');
 
   fs.rmSync(userData, { recursive: true, force: true });
   void saveResult;
