@@ -212,6 +212,13 @@ Area: ipcHandlers.ts:4374 (`|| isTier1Or2Evidence`) vs the gate at :4360-4371 an
 Status: FOUND (explorer executed an empirical proof: an off-topic "Kyoto Protocol" question against a robotics pack yields hasEntityEvidence:false but isTier1Or2Evidence:true → shouldRepair:true). An honest "not in the document" refusal is discarded and the model is re-prompted with a stronger-synthesis instruction — the exact hallucination pressure the gate exists to prevent. Flag defaults put this in dev/test/benchmark, not packaged production.
 
 ## F-413 [P2] OKF confidence boost (0.15) exceeds minScore (0.12) → tier 4 unreachable at the repair gate
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-413-repro.mjs drives the REAL queryOkfCards. PRE-FIX (baseline): an off-topic question retrieved 2 cards scoring exactly 0.150 — precisely CONFIDENCE_BOOST.high, clearing the 0.12 floor with zero overlap → exit 1. POST-FIX: 0 cards off-topic, while on-topic still returns 2 (0.450, 0.277) → exit 0.
+Fix: the relevance terms (title/body/entity/tag/exact-title) are computed first and a card with zero relevance scores 0; typeBoost and confidenceBoost are then added only on top. Boosts now RANK cards that already have some relevance instead of ADMITTING irrelevant ones.
+IMPORTANT SCOPE CORRECTION made while reproducing: my first repro tested a SYNTHESIS question and showed score 1 both before and after. That is not the defect — a whole-document synthesis question deliberately short-circuits to the first N content cards with score 1 so "what is the conclusion?" returns the document's conclusion rather than depending on word overlap. That path is BY DESIGN and is left untouched; the harm it could do at the repair gate was already removed by F-412. The repro was retargeted to the scored path, where the boost mechanism actually operates.
+(Also corrected: I briefly concluded the fix had not compiled because grepping the bundle for the comment tag returned 0 — esbuild strips comments. Checking the emitted CODE showed it was present.)
+Pin: electron/services/__tests__/OkfBoostsRankNotAdmit2026_08_18.test.mjs (3/3 — no admission on the bare boost, on-topic still retrieved and ordered, and the synthesis short-circuit explicitly preserved).
+Regression check: services + rag suites, zero new failures vs baseline.
 Area: OkfRetriever.ts:31/:132/:104 · OkfCardBuilder.ts:22-30 (nearly everything is 'high') · EvidenceAssembler.ts:52-54 · call site ipcHandlers.ts:4219 passes rawChunkText:''
 Status: FOUND. A high-confidence card clears the floor on its boost ALONE with zero overlap, so the hard-refusal tier can never fire at that call site. Feeds F-412.
 

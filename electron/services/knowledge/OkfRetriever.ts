@@ -94,15 +94,23 @@ function scoreCard(
   const typeBoost = TYPE_BOOST_FOR_QUESTION_TYPE[classification.type]?.[card.type] || 0;
   const confidenceBoost = CONFIDENCE_BOOST[card.confidence];
 
-  return (
+  // F-413: the RELEVANCE terms are what say this card is about the question;
+  // typeBoost and confidenceBoost only say "this card is a good card of a
+  // useful shape". CONFIDENCE_BOOST.high (0.15) alone exceeded the 0.12
+  // minScore floor, and OkfCardBuilder marks essentially every front-matter
+  // card and every substantial section 'high' — so a card was admitted with
+  // ZERO query overlap, which is why tier 4 ("no cards AND no chunks") became
+  // unreachable at the false-refusal repair gate and every off-topic question
+  // looked evidenced. The boosts now RANK cards that already have some
+  // relevance; they cannot ADMIT one on their own.
+  const relevance =
     0.35 * titleScore +
     0.30 * bodyScore +
     0.20 * entityScore +
     0.05 * tagScore +
-    exactTitleBoost +
-    typeBoost +
-    confidenceBoost
-  );
+    exactTitleBoost;
+  if (relevance <= 0) return 0;
+  return relevance + typeBoost + confidenceBoost;
 }
 
 export interface OkfRetrieveOptions {
