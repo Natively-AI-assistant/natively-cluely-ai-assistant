@@ -726,13 +726,13 @@ interface ElectronAPI {
   }>;
   ragRetryEmbeddings: () => Promise<{ success: boolean }>;
   onRAGStreamChunk: (
-    callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; chunk: string }) => void,
   ) => () => void;
   onRAGStreamComplete: (
-    callback: (data: { meetingId?: string; global?: boolean }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean }) => void,
   ) => () => void;
   onRAGStreamError: (
-    callback: (data: { meetingId?: string; global?: boolean; error: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; error: string }) => void,
   ) => () => void;
 
   // Keybind Management
@@ -2369,7 +2369,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reindexIncompatibleMeetings: () => ipcRenderer.invoke('rag:reindex-incompatible-meetings'),
 
   onRAGStreamChunk: (
-    callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; chunk: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-chunk', subscription);
@@ -2385,7 +2385,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onRAGStreamError: (
-    callback: (data: { meetingId?: string; global?: boolean; error: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; error: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-error', subscription);

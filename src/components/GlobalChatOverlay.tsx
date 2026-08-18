@@ -243,7 +243,16 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
 
             // Set up RAG streaming listeners (RAF-batched)
             streamBuffer.reset();
+            // F-122: the rag:stream-* channels are SHARED by three scopes and
+            // main tags every payload ({meetingId} | {live:true} | {global:true}),
+            // but no consumer read the tag — so a meeting-scoped or live-scoped
+            // stream could paint into this overlay's bubble. GlobalChatOverlay and
+            // MeetingDetails are siblings in the same Launcher renderer, and
+            // abortPriorRAGQueriesOfClass only supersedes WITHIN a class, so two
+            // different-class queries can genuinely be in flight together.
+            const isGlobal = (d: any) => d?.global === true;
             const tokenCleanup = window.electronAPI?.onRAGStreamChunk((data: { chunk: string }) => {
+                if (!isGlobal(data)) return;
                 setChatState('streaming_response');
                 streamBuffer.appendToken(data.chunk, (content) => {
                     setMessages(prev => prev.map(msg =>
@@ -254,7 +263,8 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
                 });
             });
 
-            const doneCleanup = window.electronAPI?.onRAGStreamComplete(() => {
+            const doneCleanup = window.electronAPI?.onRAGStreamComplete((data?: any) => {
+                if (data && !isGlobal(data)) return;   // F-122
                 // The stream can legitimately complete with zero chunks (e.g. a
                 // short non-question like "hi" fed through the strict RAG-grounding
                 // prompt can make the model return an empty/degenerate completion).
@@ -275,6 +285,7 @@ const GlobalChatOverlay: React.FC<GlobalChatOverlayProps> = ({
             });
 
             const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
+                if (!isGlobal(data)) return;   // F-122
                 console.error('[GlobalChat] RAG stream error:', data.error);
                 setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                 setErrorMessage("Couldn't get a response. Please try again.");
