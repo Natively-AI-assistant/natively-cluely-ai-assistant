@@ -131,6 +131,34 @@ Status: FOUND. The in-file comment's guarantee holds within a batch but not acro
 Phase 4 coverage gaps: PDF/doc extraction + page counting (DocumentMap/FrontMatterExtractor unopened; noted-but-unverified: extractConceptCards records only [pageStart,pageEnd], dropping interior pages), graph layer, LocalReranker worker lifecycle, Context-OS governed path, profile-OKF surface. Verified clean: deleteKnowledgeSource cascade covers all six child tables; knowledge_index_versions pack_id nullable; SemanticChunker overlap.
 All Phase 4 findings are reproducible fully OFFLINE — no paid or DeepSeek call needed.
 
+
+# Phase 5 — Modes & Profile Intelligence (exploration complete 2026-08-18)
+Coverage caveat: premium/ and natively-api/ are symlinks into the OTHER checkout, so extraction/orchestrator internals were not inside the isolated worktree; only F-506 touches premium and it is deliberately demoted.
+
+## F-501 [P1] Seminar Mode's entire strictness contract is unreachable (two independent dead links)
+Link A: ModeSourceContract has no `templateType` field (modeSourceContract.ts:69-139) yet IntelligenceEngine.ts:965 reads `rawSnapshotSourceContract.templateType` → always undefined, so TurnPlanner.ts:342's seminar check can never be true and groundingProfileFor falls to DEFAULT. No writer ever persists `groundingProfile` either (defaultSourceContractForNewMode / buildUserSelectedSourceContract / every migrate branch omit it; 0 hits in renderer).
+Link B: the badge path's planTurn call (IntelligenceEngine.ts:1914-1922) passes NO sourceContract at all, and SourceBadge.ts:104-112's seminar branch additionally requires !evidenceFound while the caller hardcodes evidenceFound:true.
+Net: Seminar routes correctly (MODE_CONTEXT_PROFILES → lecture_answer still works) but is NOT strict — no evidence requirement, no "Not in your reference files" preamble. Pure-function repro, no API key.
+
+## F-502 [P1] Manual and phone chat never pin the mode; phone chat also escapes the abort
+streamContextPolicy.ts:51-60 documents pinnedModeId as the defence against a mid-request `modes:set-active` leaking another mode's documents. The ONLY producers are WhatToAnswerLLM.ts:781/785 (live path). Desktop manual chat (ipcHandlers.ts:3204-3259) and phone-mirror chat (:12585-12588) both omit it, so every mode read inside streamChat after an await resolves the LIVE active mode (LLMHelper.ts:5417/5428/5475/5628/5682/5874/5890/6069) — :5475 being the doc-grounded hybrid retrieval the comment names as the leak vector.
+Asymmetry that makes it P1: modes:set-active aborts desktop streams via _chatStreamsBySender, but the phone stream never registers there (only ipcHandlers.ts:975 does), so the phone surface has NEITHER the pin NOR the abort — phoneDocGrounded is captured pre-switch while retrieval runs post-switch. Static evidence; no paid key needed.
+
+## F-503 [P2] Summary regeneration resolves the mode by templateType, not the persisted id
+MeetingPersistence.ts:417-420 persists selectedModeId/Name/TemplateType, but the regenerate path (:888-891) ignores selectedModeId and does `getModes().find(m => m.templateType === templateType)` — getModes() is ORDER BY created_at ASC, so it returns the OLDEST row with that template. Every custom mode is templateType 'general' and the built-in General is seeded first, so regenerating a meeting run under a custom mode silently uses another mode's note sections AND rewrites modeMeta with the wrong identity. Triggers once any custom mode exists.
+
+## F-504 [P3] Unguarded _c3TurnPlan deref defeats its own null guard
+IntelligenceEngine.ts:1933 dereferences `_c3TurnPlan.answerDirectives` unguarded (every other use is optional-chained), and the const is never read — dead code. If the TurnPlanner dynamic import fails, this throws inside the fallback and the outer catch discards the whole JIT profile-evidence block, leaving candidateProfile empty: the defensive fallback destroys the grounding it exists to protect.
+
+## F-505 [P3] 'seminar' missing from two mode-prior normalizers
+ProfileIntelligenceRouter.ts:85-87 and ContextRouter.ts:117-119 still carry the pre-Campaign-3 7-member template list, so toActiveModeInfo returns null for seminar and planAnswer runs mode-blind. Shadow-only today (contextRouterV2 feeds a telemetry divergence marker), hence P3.
+
+## F-506 [P3] Profile grounding gate classifies with a hardcoded source:'manual_input'
+premium KnowledgeOrchestrator.ts:1955 classifies live-transcript questions as manual input, which changes the fallthrough floor (unknown_answer → no forbidden layers, vs general_meeting_answer → resume/jd/negotiation forbidden) and stamps factualRecall. No reachable leak constructed (the upstream wtaDecisionAllowsCandidateProfile gate blocks reference-files authorities), so filed as a classification mismatch, not demonstrated contamination. In premium/ — verify before acting.
+
+Phase 5 explicitly disproved (do not re-litigate): MODE_TEMPLATES does contain 'seminar'; grounding-profile constants are never mutated (spread copies); ModeContextRetriever/ModeHybridRetriever caches are all mode- or file-keyed; ACTIVE_MODE_CACHE is invalidated at all six write choke points; NATIVELY_SEMINAR_MODE has no non-test setter; isProfileGroundingV2Enabled is live.
+Phase 5 not covered: ModeReferenceFileIngestion, ModeGenerator, ~95% of ModeContextRetriever, OKF per-mode isolation, Pro gating beyond modes:set-active (note: it gates on templateType !== 'general', so every user-built custom mode is free-tier activatable — untraced).
+
 # Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
 
 ## ⚠ WORKSPACE ADVISORY (2026-08-18 04:50) — campaign moved to an isolated worktree
