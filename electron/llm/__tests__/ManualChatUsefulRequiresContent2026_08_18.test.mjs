@@ -28,7 +28,12 @@ test('the manual-chat useful predicate requires real content, not just a token',
   assert.notEqual(i, -1, 'manual-chat deadline wiring not found');
   const onToken = src.indexOf('onToken: (token: string) => {', i);
   assert.notEqual(onToken, -1);
-  const body = src.slice(onToken, onToken + 900);
+  // Window sized from the CLOSING of the guard rather than a fixed byte count:
+  // a fixed window silently fails the moment an explanatory comment grows (it
+  // did, for R-09), which reads as a regression when nothing behavioural moved.
+  const guard = src.indexOf('manualFirstUseful = true;', onToken);
+  assert.notEqual(guard, -1, 'the useful-flag assignment must follow onToken');
+  const body = src.slice(onToken, guard + 40);
   assert.ok(
     !/onToken: \(token: string\) => \{\s*\n\s*manualFirstUseful = true;/.test(body),
     'manualFirstUseful must not be set unconditionally on any token (F-302)'

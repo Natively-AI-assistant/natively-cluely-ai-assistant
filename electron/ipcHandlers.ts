@@ -3400,7 +3400,9 @@ export function initializeIpcHandlers(appState: AppState): void {
               // EMPTY bubble. Every other call site in the repo already uses a
               // content threshold (>=5/8/10 chars); this primary manual-chat
               // path was the sole outlier.
-              if (fullResponse.trim().length + token.trim().length >= 5) {
+              // R-09: concatenate THEN trim once — trimming each side separately
+              // loses the interior whitespace ("a b" + " c" counted 4, not 5).
+              if ((fullResponse + token).trim().length >= 5) {
                 manualFirstUseful = true;
               }
               // First token back from the provider — the gap from
