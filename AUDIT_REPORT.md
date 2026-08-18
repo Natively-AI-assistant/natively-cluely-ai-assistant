@@ -270,6 +270,13 @@ Status: FOUND → REPRODUCED → FIXED-VERIFIED (fixed together with F-701; the 
 Phase 1 sets only page_count; Phase 2 sets both but is gated on `page_count IS NULL`, which Phase 1 just falsified for exactly those rows. extracted_page_count stays NULL forever, so ModeContextRetriever's fallback makes ingested-pages == total-pages and the extraction-coverage signal is silently unavailable for all pre-v22 documents. No later migration (v23-v26) backfills it.
 
 ## F-703 [P2] A corrupt settings.json is silently replaced with a one-key file on the next set()
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-703-repro.cjs drives the REAL built SettingsManager against a temp userData dir holding a truncated settings.json, then performs one ordinary set(). PRE-FIX (baseline): the file became `{"interfaceTheme": "light"}` — every other setting destroyed, original unrecoverable → exit 1. POST-FIX: the corrupt file is byte-identical afterwards → exit 0.
+Fix: an unreadable/unparseable EXISTING settings file now latches `settingsUnreadable`, and saveSettings() refuses to write for the session with an actionable log line — mirroring CredentialsManager's keyringUnreadable policy, whose comment states the identical rationale ("saving would overwrite it with an incomplete set"). Reads keep working (callers get defaults). A public isDegraded() exposes the state.
+Scoped deliberately: only a file that EXISTS but cannot be read latches. A genuinely absent file (first run) takes the existsSync branch and stays writable — pinned, so the fix cannot brick fresh profiles.
+Pin: electron/services/__tests__/SettingsRefuseWriteWhenDegraded2026_08_18.test.mjs (2/2 — corrupt file preserved; fresh profile still persists normally).
+Regression check: services suite, zero new failures vs baseline.
+FOLLOW-UP: there is no user-facing surface for the degraded state — the app runs on defaults and only logs. Wiring isDegraded() to a banner ("your settings file is unreadable; repair or remove it") is a UI decision left to the owner.
 SettingsManager.ts:375-378 catches a parse failure with `this.settings = {}` and no degraded flag; the next set() serializes `{}`+1 key over settings.json, destroying ~60 keys. The same codebase treats this exact risk as unacceptable for credentials — CredentialsManager sets keyringUnreadable and REFUSES every write for the session (:1088-1097) with a pre-mutation guard (:1117-1126). SettingsManager has neither. Reachable from ~15 IPC handlers, so it fires on the first toggle.
 
 ## F-704 [P2] The credential fallback is NOT machine-bound, contradicting three explicit code claims

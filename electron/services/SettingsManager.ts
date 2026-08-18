@@ -373,14 +373,29 @@ export class SettingsManager {
                         throw new Error('Settings JSON is not a valid object');
                     }
                 } catch (parseError) {
-                    console.error('[SettingsManager] Failed to parse settings.json. Continuing with empty settings. Error:', parseError);
+                    // F-703: the file EXISTS but is unreadable. Continuing with
+                    // `{}` is fine for reads, but the next set() used to
+                    // serialize that empty object straight over settings.json —
+                    // destroying every user setting (~60 keys incl. API/CLI
+                    // paths, retention, provider scopes, onboarding state) on
+                    // the first toggle after a corrupt read. CredentialsManager
+                    // treats this exact situation as unacceptable and refuses
+                    // writes for the session; mirror that here so a recoverable
+                    // file is never overwritten with a partial one.
+                    console.error('[SettingsManager] Failed to parse settings.json. Continuing READ-ONLY for this session so the existing file is not overwritten. Error:', parseError);
                     this.settings = {};
+                    this.settingsUnreadable = true;
                 }
                 console.log('[SettingsManager] Settings loaded');
             }
         } catch (e) {
-            console.error('[SettingsManager] Failed to read settings file:', e);
+            // F-703: same reasoning as the parse failure above — a file we
+            // could not READ must not be overwritten from an empty in-memory
+            // object. (A genuinely absent file is handled by the existsSync
+            // branch above and stays writable, so first-run is unaffected.)
+            console.error('[SettingsManager] Failed to read settings file; continuing READ-ONLY for this session:', e);
             this.settings = {};
+            this.settingsUnreadable = true;
         }
     }
 
@@ -402,7 +417,25 @@ export class SettingsManager {
         }
     }
 
+    /**
+     * F-703: set when settings.json exists but could not be read/parsed. While
+     * true the in-memory object is a partial view, so persisting it would
+     * destroy the user's real settings. Reads continue to work (callers get
+     * defaults); writes are refused for the session, exactly as
+     * CredentialsManager does for an unreadable keyring.
+     */
+    private settingsUnreadable = false;
+
+    /** True when settings could not be loaded and writes are being refused. */
+    public isDegraded(): boolean {
+        return this.settingsUnreadable;
+    }
+
     private saveSettings(): void {
+        if (this.settingsUnreadable) {
+            console.warn('[SettingsManager] Refusing to save: settings.json was unreadable this session, so writing would overwrite it with an incomplete set. Restart after repairing or removing the file.');
+            return;
+        }
         try {
             const tmpPath = this.settingsPath + '.tmp';
             fs.writeFileSync(tmpPath, JSON.stringify(this.settings, null, 2));
