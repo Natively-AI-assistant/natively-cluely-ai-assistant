@@ -97,6 +97,40 @@ natively-api/reviews.js — handlers forward `error.message` verbatim on two una
 Phase 6 verified-clean (explicit): calendar routes authed + redirect allow-list; Dodo signature verification fails closed with timing-safe compare and a ±300s window; Resend dedupe:false is idempotent by construction; telegram webhook; checkAdminSecret covers every admin route; no raw key/token logging; trial token HMAC with length-checked compare; LOCAL_TEST_AUTH triple-gated; trustProxy not a hop count. Notably: a DB outage does NOT become "your key is invalid" on the key path (only on /v1/trial/status — F-604).
 Phase 6 coverage gaps: the ~3,100-line /v1/transcribe WS handler, /v1/chat|embed|search internals, relay token signing, usage-ledger flush paths, RLS posture (no CREATE POLICY in repo; API uses the service key), and index coverage (schema dump has zero CREATE INDEX).
 
+
+# Phase 4 — Knowledge / RAG / OKF (exploration complete 2026-08-18)
+(Numbered F-41x to avoid colliding with F-401, the pre-existing gate-test finding.)
+
+## F-410 [P1] vec0 returns L2 distance; the code reads it as COSINE → silent under-retrieval on every query
+Area: VectorStore.ts:243/:507 (`similarity = 1 - vecRow.distance`) · DatabaseManager.ts:2148-2159 (vec0 DDL with NO distance_metric)
+Status: FOUND (explorer executed an empirical proof)
+Mechanism: sqlite-vec 0.1.9 defaults to L2, so `distance` is Euclidean. `1 - L2` is labelled `similarity` and thresholded by consumers that assume cosine in [-1,1]: minSimilarity 0.25 (VectorStore), MEETING_MIN_SIMILARITY 0.3, MEETING_RAG_MIN_SIMILARITY. For unit vectors L2 = sqrt(2-2cos), so t=0.25 really demands cos>=0.719 and t=0.3 demands cos>=0.755. The JS fallback computes TRUE cosine and applies the same t, so the two paths disagree hugely on identical data.
+Measured (worktree artifacts, offline): distance matches sqrt(2-2cos) to 4dp and equals vec_distance_l2, not vec_distance_cosine. A chunk at true cosine 0.7071 scores 0.2346 natively and is DROPPED at 0.25, while the JS path keeps it.
+Why it survived: L2 is monotonic in cosine for normalized vectors, so RANKING is unchanged — the failure is silent under-retrieval with no wrong-looking output and no log. Every existing test forces useNativeVec=false (ReindexPredicateDriftProof:89, SearchSpaceFilter:194, RequeueReindexAtomicity:11) — the tested path is not the shipped path (migrations v8/v9 always create vec_chunks_768, so production runs native).
+
+## F-411 [P1] 'live-meeting-current' chunks leak ACROSS meetings (cross-meeting transcript disclosure)
+Area: main.ts:5697 (constant id for every meeting) · cleanup only at :5966-5976, guarded by !isMeetingActive · no startup sweep · chunks has no UNIQUE(meeting_id, chunk_index)
+Status: FOUND. After a crash/force-quit the JIT rows survive; the next meeting appends to the same id, and the live "ask about this meeting" surface (ipcHandlers.ts:10141/10164) filters only on meeting_id — so meeting A's transcript is served as evidence for meeting B. The authors anticipated the overlap case and chose to SKIP deletion ("New meeting started during cleanup — skipping…"), leaving the same state.
+
+## F-412 [P1] False-refusal repair bypasses its own off-topic gate via the tier disjunct
+Area: ipcHandlers.ts:4374 (`|| isTier1Or2Evidence`) vs the gate at :4360-4371 and the claim at :4390-4392 · EvidenceAssembler.ts:53-56 (topic-blind tier 2) · OkfRetriever.ts:95-104 (boosts with no overlap precondition)
+Status: FOUND (explorer executed an empirical proof: an off-topic "Kyoto Protocol" question against a robotics pack yields hasEntityEvidence:false but isTier1Or2Evidence:true → shouldRepair:true). An honest "not in the document" refusal is discarded and the model is re-prompted with a stronger-synthesis instruction — the exact hallucination pressure the gate exists to prevent. Flag defaults put this in dev/test/benchmark, not packaged production.
+
+## F-413 [P2] OKF confidence boost (0.15) exceeds minScore (0.12) → tier 4 unreachable at the repair gate
+Area: OkfRetriever.ts:31/:132/:104 · OkfCardBuilder.ts:22-30 (nearly everything is 'high') · EvidenceAssembler.ts:52-54 · call site ipcHandlers.ts:4219 passes rawChunkText:''
+Status: FOUND. A high-confidence card clears the floor on its boost ALONE with zero overlap, so the hard-refusal tier can never fire at that call site. Feeds F-412.
+
+## F-414 [P2] LiveRAGIndexer "final flush" is a no-op when a tick is in flight → dropped transcript tail
+Area: LiveRAGIndexer.ts:176 vs the isProcessing guard at :84; stop() then zeroes allSegments/indexedSegmentCount at :179-182
+Status: FOUND. The in-flight window is up to ~90s (ForegroundGate.waitUntilIdle 30s + embed 30s primary + 30s fallback), so "ask a question, then stop the meeting" routinely drops every segment since the tick's slice point. MIN_NEW_SEGMENTS=3 also applies to the final flush, so a meeting ending with 1-2 segments always loses them. The resumed tick can then leave hasIndexedChunks() true on a stopped indexer.
+
+## F-415 [P2] Live indexer cannot re-stamp embedding_space after a mid-meeting provider fallback
+Area: LiveRAGIndexer.ts:141 → VectorStore.stampMeetingSpaceIfUnset (WHERE embedding_space IS NULL) · EmbeddingPipeline.promoteFallbackProvider
+Status: FOUND. The in-file comment's guarantee holds within a batch but not across ticks: after a promotion the meeting still claims the old space while later chunks are in the new one, and the query-time space filter then excludes the meeting entirely — zero live RAG results exactly when the cloud provider is down. The queue path handles this correctly (activateMeetingFallback → clearEmbeddingsForMeeting); the live path has no equivalent. Bounded to the session (REINDEX_PREDICATE re-embeds next launch) → P2.
+
+Phase 4 coverage gaps: PDF/doc extraction + page counting (DocumentMap/FrontMatterExtractor unopened; noted-but-unverified: extractConceptCards records only [pageStart,pageEnd], dropping interior pages), graph layer, LocalReranker worker lifecycle, Context-OS governed path, profile-OKF surface. Verified clean: deleteKnowledgeSource cascade covers all six child tables; knowledge_index_versions pack_id nullable; SemanticChunker overlap.
+All Phase 4 findings are reproducible fully OFFLINE — no paid or DeepSeek call needed.
+
 # Phase 2 — STT pipeline (exploration complete 2026-08-14; findings in severity order)
 
 ## ⚠ WORKSPACE ADVISORY (2026-08-18 04:50) — campaign moved to an isolated worktree
