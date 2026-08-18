@@ -164,10 +164,14 @@ Phase 5 not covered: ModeReferenceFileIngestion, ModeGenerator, ~95% of ModeCont
 
 ## F-701 [P1] Migration v21→v22 writes a GLOBAL MAX page_count to every reference file (permanent, upgrade-only corruption)
 Area: DatabaseManager.ts:1153-1208
-Status: FOUND (explorer reproduced it by running the exact SQL literal against a fixture with the real better-sqlite3 build)
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-701-repro.cjs — EXTRACTS the phase-1 SQL literal straight out of DatabaseManager.ts and runs it against a two-document fixture on the real better-sqlite3 build. PRE-FIX: small-3page reports 6 pages (exit 1).
+Fix (two parts): (1) the seed's inner `FROM mode_reference_files` is removed, so `content` binds to the row being updated — a seed with no FROM is a single-row correlated SELECT, which is what the migration always intended; (2) NEW migration v26→v27 REPAIRS installs that already ran the broken v22, re-deriving page_count from the [Page N] markers (ground truth) unconditionally over marker-bearing rows — deliberately NOT gated on IS NULL, because the corrupt values are non-NULL — and it advances user_version only on success so a failure retries next launch.
+E2E verification: F-701 repro → exit 0 (3 and 6 derived correctly). scripts/audit/F-702-repro.cjs simulates an already-damaged install, runs the real v27 SQL, and asserts repair + idempotence → exit 0. RAG/DB suites: all 7 failing names match the pinned baseline exactly (zero new).
 Mechanism: the recursive CTE seeds `WHERE mode_reference_files.id = mode_reference_files.id`, which binds to the INNER FROM instance — a tautology — so the subquery is UNCORRELATED and `MAX(page_num)` is the max across ALL rows. Every marker-bearing row gets that one value. Measured: a 3-page document reports 6 pages when a 6-page document exists. Not self-healing (the `page_count IS NULL` predicate is false on re-run), so the wrong value is permanent. Consumed by ModeContextRetriever.ts:615-659, inflating referenceFilePageCount by (n_files × max − true_total). Fresh profiles are unaffected (empty table) — this is upgrade-only.
 
 ## F-702 [P2] The same migration never backfills extracted_page_count despite its own title
+Status: FOUND → REPRODUCED → FIXED-VERIFIED (fixed together with F-701; the v27 repair fills extracted_page_count from page_count, mirroring the ingestion path which writes both together). Verified by scripts/audit/F-702-repro.cjs.
 Phase 1 sets only page_count; Phase 2 sets both but is gated on `page_count IS NULL`, which Phase 1 just falsified for exactly those rows. extracted_page_count stays NULL forever, so ModeContextRetriever's fallback makes ingested-pages == total-pages and the extraction-coverage signal is silently unavailable for all pre-v22 documents. No later migration (v23-v26) backfills it.
 
 ## F-703 [P2] A corrupt settings.json is silently replaced with a one-key file on the next set()

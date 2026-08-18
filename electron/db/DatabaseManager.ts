@@ -1179,10 +1179,18 @@ export class DatabaseManager {
                                     )
                                     ELSE NULL
                                 END
-                            FROM mode_reference_files
-                            WHERE mode_reference_files.id = mode_reference_files.id
-                              AND page_count IS NULL
-                              AND content LIKE '%[Page %]%'
+                            -- F-701: NO `FROM mode_reference_files` here. An
+                            -- inner FROM re-opens the table and SHADOWS the
+                            -- outer UPDATE row, which made
+                            -- `mode_reference_files.id = mode_reference_files.id`
+                            -- a tautology over that inner instance — so the
+                            -- subquery was UNCORRELATED and MAX(page_num)
+                            -- returned the largest page number in the WHOLE
+                            -- table, written into every row (a 3-page document
+                            -- reporting 6 pages). A seed with no FROM is a
+                            -- single-row SELECT whose `content` binds to the
+                            -- row being updated, which is the correlation this
+                            -- migration always intended.
                         UNION ALL
                             SELECT
                                 substr(rest, instr(rest, '[Page ') + 6),
@@ -1353,6 +1361,80 @@ export class DatabaseManager {
                 this.db.exec(`ALTER TABLE modes ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0`);
             }
             this.db.pragma('user_version = 26');
+        }
+
+        // Version 26 → 27: REPAIR the page counts corrupted by v22 (F-701/F-702).
+        //
+        // v22's Phase 1 seeded its recursive CTE from an inner
+        // `FROM mode_reference_files`, which shadowed the outer UPDATE row and
+        // made its correlation predicate a tautology. The subquery was
+        // therefore uncorrelated and wrote the LARGEST page number in the whole
+        // table into EVERY marker-bearing row — a 3-page document reporting 6
+        // pages. It could not self-heal, because `page_count IS NULL` was false
+        // on any re-run. v22 also never set extracted_page_count on those rows
+        // (Phase 2 was gated on the same predicate Phase 1 had just falsified),
+        // so the extraction-coverage signal was silently absent.
+        //
+        // This repair re-derives both values from the [Page N] markers, which
+        // are ground truth for marker-bearing content. It is unconditional over
+        // marker-bearing rows (not gated on IS NULL) precisely because the bad
+        // values are non-NULL, and it is idempotent — re-running derives the
+        // same counts.
+        if (version < 27) {
+            console.log('[DatabaseManager] Applying migration v26 → v27: Repair v22 page_count/extracted_page_count corruption');
+            try {
+                const repaired = this.db.prepare(`
+                    UPDATE mode_reference_files
+                    SET page_count = (
+                        WITH RECURSIVE cte_pages(rest, page_num) AS (
+                            SELECT
+                                substr(content, instr(content, '[Page ') + 6),
+                                CASE
+                                    WHEN instr(content, '[Page ') > 0
+                                    THEN CAST(
+                                        substr(
+                                            content,
+                                            instr(content, '[Page ') + 6,
+                                            instr(substr(content, instr(content, '[Page ') + 6), ']') - 1
+                                        ) AS INTEGER
+                                    )
+                                    ELSE NULL
+                                END
+                        UNION ALL
+                            SELECT
+                                substr(rest, instr(rest, '[Page ') + 6),
+                                CASE
+                                    WHEN instr(rest, '[Page ') > 0
+                                    THEN CAST(
+                                        substr(
+                                            rest,
+                                            instr(rest, '[Page ') + 6,
+                                            instr(substr(rest, instr(rest, '[Page ') + 6), ']') - 1
+                                        ) AS INTEGER
+                                    )
+                                    ELSE NULL
+                                END
+                            FROM cte_pages
+                            WHERE instr(rest, '[Page ') > 0
+                            LIMIT 5000
+                        )
+                        SELECT MAX(page_num) FROM cte_pages WHERE page_num IS NOT NULL
+                    )
+                    WHERE content LIKE '%[Page %]%'
+                `).run();
+                // Mirror the ingestion path (ipcHandlers writes pageCount and
+                // extractedPageCount together) for rows still missing the
+                // extraction figure.
+                const filled = this.db.prepare(`
+                    UPDATE mode_reference_files
+                    SET extracted_page_count = page_count
+                    WHERE extracted_page_count IS NULL AND page_count IS NOT NULL
+                `).run();
+                console.log(`[DatabaseManager] v27 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
+                this.db.pragma('user_version = 27');
+            } catch (e) {
+                console.error('[DatabaseManager] v27 page-count repair failed (leaving version at 26 to retry next launch):', e);
+            }
         }
 
         console.log('[DatabaseManager] Migrations completed.');
