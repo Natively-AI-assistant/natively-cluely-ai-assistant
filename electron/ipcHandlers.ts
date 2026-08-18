@@ -4402,26 +4402,33 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // confident/synthesis-tier verdict, OR'd in as an additional
                   // signal. matchedHighSignalEntity is a whole-entity hit that
                   // is also present in the retrieved context.
-                  // F-412: isTier1Or2Evidence must NOT be an independent
-                  // disjunct. EvidenceAssembler.computeTier is TOPIC-BLIND — it
-                  // returns tier 2 for ANY synthesis-classified question as soon
-                  // as the pack yields >=1 card, and OkfRetriever's type/
-                  // confidence boosts clear the score floor with ZERO query-word
-                  // overlap. OR'ing it in therefore made the off-topic gate
-                  // directly above unable to veto anything: an off-topic
-                  // synthesis question ("What is the key takeaway for the Kyoto
-                  // Protocol?" against a robotics thesis) produced
+                  // F-412: the tier signal is deliberately NOT consulted here.
+                  //
+                  // EvidenceAssembler.computeTier is TOPIC-BLIND — it returns
+                  // tier 2 for ANY synthesis-classified question as soon as the
+                  // pack yields >=1 card, and (before F-413) OkfRetriever's
+                  // type/confidence boosts cleared the score floor with ZERO
+                  // query-word overlap. As an independent disjunct it therefore
+                  // made the off-topic gate above unable to veto anything: an
+                  // off-topic synthesis question ("What is the key takeaway for
+                  // the Kyoto Protocol?" against a robotics thesis) produced
                   // hasEntityEvidence=false yet still repaired, discarding an
                   // honest "not in the document" refusal and re-prompting the
-                  // model with a stronger-synthesis instruction — precisely the
+                  // model with a stronger-synthesis instruction — the exact
                   // hallucination pressure this gate exists to prevent.
-                  // The tier is kept as a CORROBORATING signal: it may
-                  // strengthen a topically-relevant question, never substitute
-                  // for topical relevance.
+                  //
+                  // HONESTY NOTE (self-review): the first version of this fix
+                  // wrote `|| (isTier1Or2Evidence && hasEntityEvidence)` and
+                  // described the tier as a "corroborating signal". That was
+                  // false. `hasRealEvidence` IS `hasEntityEvidence` (see its
+                  // assignment above), so that disjunct could only ever be true
+                  // when the first disjunct had already fired — provably dead
+                  // code. The real, and correct, effect is that the tier no
+                  // longer participates at all; the expression now says so.
+                  // isTier1Or2Evidence is still COMPUTED above and reported in
+                  // the diagnostic below, which is where its value belongs.
                   const hasStrongEvidence =
-                    hasRealEvidence
-                    || Boolean(matchedHighSignalEntity)
-                    || (isTier1Or2Evidence && hasEntityEvidence);
+                    hasRealEvidence || Boolean(matchedHighSignalEntity);
                   // GOVERNANCE INTEGRITY (2026-07-13): when EvidenceResolver
                   // GOVERNED this turn and its typed pack's policy is an explicit
                   // refusal, that decision is authoritative — it already ran
@@ -4449,6 +4456,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                       tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
                       matchedHighSignalEntity: matchedHighSignalEntity || null,
+                      // F-412: reported for explainability only — the tier is
+                      // topic-blind and deliberately does NOT gate this decision.
+                      isTier1Or2Evidence,
                     });
                     piTelemetry.emit('pi_doc_grounded_false_refusal_repair_attempted', {
                       isSystemOwnRefusalPhrase,
@@ -4465,6 +4475,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                       wholeNameHit,
                       tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
+                      isTier1Or2Evidence,
                     });
                   }
                 }

@@ -30,15 +30,21 @@ function shippedExpression() {
 
 test('the tier signal may only corroborate topical relevance, never replace it', () => {
   const expr = shippedExpression();
-  assert.ok(/isTier1Or2Evidence\s*&&\s*hasEntityEvidence/.test(expr),
-    'isTier1Or2Evidence must be ANDed with topical relevance — as an independent disjunct it makes the off-topic gate unable to veto (F-412)');
-  assert.ok(!/\|\|\s*isTier1Or2Evidence\s*;/.test(expr),
-    'the bare tier disjunct must not return');
+  // SELF-REVIEW CORRECTION: the first fix wrote
+  // `|| (isTier1Or2Evidence && hasEntityEvidence)` and this test asserted it.
+  // That disjunct was provably DEAD — hasRealEvidence IS hasEntityEvidence, so
+  // it could only be true when the first disjunct had already fired. The real
+  // contract is that the topic-blind tier does not participate in the gate AT
+  // ALL; assert that instead of a shape that only looked correct.
+  assert.ok(!/isTier1Or2Evidence/.test(expr),
+    'the topic-blind tier must not appear in the repair gate — it cannot veto or admit (F-412)');
+  assert.ok(/hasRealEvidence\s*\|\|\s*Boolean\(matchedHighSignalEntity\)/.test(expr),
+    'the gate must admit only on topical evidence or a whole-entity hit');
 });
 
 test('the decision keeps off-topic refusals and still repairs on-topic answers', () => {
-  const decide = (c) =>
-    c.hasEntityEvidence || Boolean(c.matchedHighSignalEntity) || (c.isTier1Or2Evidence && c.hasEntityEvidence);
+  // Mirrors the shipped expression: the tier is absent by design.
+  const decide = (c) => c.hasEntityEvidence || Boolean(c.matchedHighSignalEntity);
 
   // Off-topic synthesis question against an unrelated pack (the measured case).
   assert.equal(decide({ hasEntityEvidence: false, matchedHighSignalEntity: false, isTier1Or2Evidence: true }), false,

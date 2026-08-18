@@ -35,11 +35,16 @@ const onTopic  = { hasEntityEvidence: true,  matchedHighSignalEntity: false, isT
 // On-topic but tier-poor: must still repair via the real-evidence path.
 const onTopicNoTier = { hasEntityEvidence: true, matchedHighSignalEntity: false, isTier1Or2Evidence: false };
 
-const decide = (c) => c.hasEntityEvidence || Boolean(c.matchedHighSignalEntity) || (c.isTier1Or2Evidence && c.hasEntityEvidence);
+// Mirrors the shipped expression. SELF-REVIEW: the first fix kept the tier as
+// `|| (isTier1Or2Evidence && hasEntityEvidence)` and called it "corroborating".
+// That was dead code — hasRealEvidence IS hasEntityEvidence, so the disjunct
+// could only fire when the first one already had. The tier is now absent by
+// design and reported in the decision diagnostics instead.
+const decide = (c) => c.hasEntityEvidence || Boolean(c.matchedHighSignalEntity);
 
 let bad = false;
-if (!/isTier1Or2Evidence\s*&&\s*hasEntityEvidence/.test(expr)) {
-  console.error('[F-412] the shipped expression still uses isTier1Or2Evidence as an INDEPENDENT disjunct — the off-topic gate cannot veto (F-412 reproduced)');
+if (/isTier1Or2Evidence/.test(expr)) {
+  console.error('[F-412] the topic-blind tier still appears in the repair gate (F-412 reproduced)');
   bad = true;
 }
 if (decide(offTopic)) { console.error('[F-412] an off-topic synthesis question would still be repaired'); bad = true; }
@@ -48,5 +53,5 @@ if (!decide(onTopicNoTier)) { console.error('[F-412] an on-topic, tier-poor ques
 
 console.log('[F-412] off-topic repaired?', decide(offTopic), '| on-topic repaired?', decide(onTopic), '| on-topic tier-poor repaired?', decide(onTopicNoTier));
 if (bad) { console.error('[F-412] FAIL'); process.exit(1); }
-console.log('[F-412] PASS: the tier only corroborates topical relevance; off-topic refusals stand, on-topic repairs still fire.');
+console.log('[F-412] PASS: the topic-blind tier no longer participates in the gate; off-topic refusals stand, on-topic repairs still fire.');
 process.exit(0);
