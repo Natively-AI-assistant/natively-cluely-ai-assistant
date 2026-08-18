@@ -11337,7 +11337,27 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { microphone: mic, screen, platform: 'darwin' };
     }
-    // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
+    // F-706: Windows 10/11 DOES expose a queryable microphone privacy state —
+    // Electron's own typings document getMediaAccessStatus('microphone') as
+    // @platform win32,darwin, and note the global setting that controls it.
+    // Reporting a hardcoded 'granted' meant that with the per-app or global
+    // microphone toggle off, onboarding never prompted, the launcher's
+    // permission check stayed green, and capture silently yielded nothing with
+    // no diagnosable cause. Screen capture has no equivalent Windows gate, so
+    // 'granted' remains correct there.
+    if (process.platform === 'win32') {
+      let microphone: string = 'granted';
+      try {
+        // Any non-'granted' value (denied / restricted / not-determined) must
+        // surface; fall back to 'granted' only if the API itself is unavailable,
+        // so a query failure can never LOCK a working machine out of capture.
+        microphone = systemPreferences.getMediaAccessStatus('microphone') || 'granted';
+      } catch {
+        microphone = 'granted';
+      }
+      return { microphone, screen: 'granted', platform: 'win32' };
+    }
+    // Linux: no queryable per-app permission model here.
     return { microphone: 'granted', screen: 'granted', platform: process.platform };
   });
 

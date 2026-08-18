@@ -291,6 +291,11 @@ Regression check: rag + services suites, zero new failures vs baseline.
 deleteMeeting (:2634-2647) and clearAllData (:2686-2706) rely purely on ON DELETE CASCADE, which cannot reach `USING vec0` virtual tables; VectorStore's own delete paths DO issue explicit DELETEs (:321/:641/:689), so the maintainers know. Orphaned vectors consume top-K slots (searchSimilarNative drops unresolvable ids at :242), degrading recall monotonically with every deleted meeting. Downgraded from P1 because fetchLimit = limit*4 gives a 4× buffer.
 
 ## F-706 [P2] Windows microphone permission is hardcoded 'granted'
+Status: FOUND → CONFIRMED → ROOT-CAUSED → FIXED (macOS-verified only; REQUIRES PHYSICAL WINDOWS VERIFICATION)
+Fix: permissions:check gains an explicit win32 branch that queries systemPreferences.getMediaAccessStatus('microphone') — the API Electron's own typings document as @platform win32,darwin, directly contradicting the old comment's claim that Windows has no queryable state. screen stays 'granted' (no equivalent Windows gate); Linux keeps the previous behaviour.
+Safety property: a thrown/unavailable API falls back to 'granted', never to denied — a query failure must not lock a working machine out of capture. Pinned.
+Pin: electron/services/__tests__/WindowsMicPermissionQueried2026_08_18.test.mjs (2/2 — the win32 branch queries the real status; the failure path falls back to granted). WindowsPlatformParity suite 22/22.
+HONEST LIMITATION: this cannot be executed on macOS. The pin is a source contract. Confirming that a Windows machine with the microphone privacy toggle OFF now reports 'denied' and raises the prompt still needs a physical Windows run.
 ipcHandlers.ts:11284-11286 returns granted for non-darwin, but Electron's own typings document getMediaAccessStatus('microphone') as @platform win32,darwin. With the Windows privacy toggle off, onboarding never prompts and mic capture yields silence with no diagnosable cause. The macOS branch directly above does a full status query plus a capture probe — a missing platform branch, not a platform limitation. (screen:'granted' on Windows is legitimate.)
 
 ## F-707 [P3] Setting autoUpdater.channel silently enables downgrades
