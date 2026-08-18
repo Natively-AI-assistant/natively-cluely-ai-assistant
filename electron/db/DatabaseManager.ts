@@ -1420,15 +1420,45 @@ export class DatabaseManager {
                         )
                         SELECT MAX(page_num) FROM cte_pages WHERE page_num IS NOT NULL
                     )
+                    -- R-11: scope the re-derive to rows v22 could actually have
+                    -- corrupted. v22 Phase 1 ran WHERE page_count IS NULL AND
+                    -- content LIKE '%[Page %]%' and set ONLY page_count — it never
+                    -- wrote extracted_page_count. The ingestion path writes the two
+                    -- TOGETHER (pageCount from data.total, extractedPageCount from
+                    -- data.pages). So extracted_page_count IS NULL is the signature
+                    -- of a row v22 touched, and its presence is the signature of a
+                    -- row that came from ingestion and must be left alone.
+                    --
+                    -- Without this scope the re-derive was unconditional and
+                    -- DOWNGRADED correct values: on the extractor's timeout path
+                    -- (SafeDocumentTextExtractor withTimeout -> parser.destroy())
+                    -- data.pages is partial while data.total is the true count, so a
+                    -- document with a correct page_count of 10 and an honest 3/10
+                    -- coverage signal was rewritten to 3/3 — destroying the value AND
+                    -- erasing the coverage gap it encoded, which ModeContextRetriever
+                    -- consumes as ingested-page coverage.
                     WHERE content LIKE '%[Page %]%'
+                      AND extracted_page_count IS NULL
                 `).run();
                 // Mirror the ingestion path (ipcHandlers writes pageCount and
                 // extractedPageCount together) for rows still missing the
                 // extraction figure.
+                //
+                // R-11: scoped to MARKER-BEARING rows. Unscoped, this reached rows
+                // v22 never touched and fabricated 100% extraction coverage for
+                // documents from which zero page-level text was extracted — a PDF
+                // whose data.pages came back empty has page_count from data.total but
+                // extractedPageCount undefined -> NULL, and this wrote page_count
+                // into it. A marker-less row now keeps NULL, an honest "unknown",
+                // rather than claiming full coverage. (A scanned PDF with
+                // extracted_page_count = 0 was already safe: `?? null` preserves 0
+                // and the IS NULL guard skips it.)
                 const filled = this.db.prepare(`
                     UPDATE mode_reference_files
                     SET extracted_page_count = page_count
-                    WHERE extracted_page_count IS NULL AND page_count IS NOT NULL
+                    WHERE extracted_page_count IS NULL
+                      AND page_count IS NOT NULL
+                      AND content LIKE '%[Page %]%'
                 `).run();
                 console.log(`[DatabaseManager] v27 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
                 this.db.pragma('user_version = 27');
