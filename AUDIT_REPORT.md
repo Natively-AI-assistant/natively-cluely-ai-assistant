@@ -101,6 +101,27 @@ whole-document synthesis deliberately short-circuits.
 3. **The F-707/709/710 repro initially skipped one check and passed another vacuously** (regex windows too narrow / too wide). Running it against the baseline — where a check should have failed and didn't — exposed both before I relied on it.
 4. **A baseline gap**: the pinned baseline came from `npm test`, which does not glob electron/intelligence/__tests__. Seven failures there looked like regressions and were not; they reproduce exactly at the baseline commit and are now pinned.
 
+
+## ═══ FINAL REGRESSION VERDICT (2026-08-18, after the second pass) ═══
+Suites: `npm test` + the `electron/intelligence/__tests__` glob (the one the pinned
+baseline originally missed).
+
+- **7411 tests, 7219 pass, 130 fail, 62 skipped.**
+- Name-diff vs the pinned pre-audit baseline (172 names): the ONLY two names absent from
+  it are the F-401 pair, which have never passed since their own introducing commit
+  (verified by running that commit in a clean worktree). → **zero regressions
+  attributable to this campaign**, across 50 fixes and 66 commits.
+- 13 baseline-failing names now pass. **I am not claiming these as fixes.** They are
+  overwhelmingly — and possibly entirely — explained by an ENVIRONMENT difference: the
+  audit worktree symlinks the gitignored `resources/models` assets, which those tests
+  require (LocalEmbeddingProvider, LocalReranker, preflight, tokenizer/onnx presence).
+  A few relevance-guard tests also flipped; I did not establish a causal link to any
+  change in this campaign and am not attributing them.
+
+Compile gates: `build:electron` green; `vite build` green; renderer `tsc` shows no errors
+in any file this campaign touched (the remaining errors are the pre-existing
+@types/environment drift documented earlier).
+
 ## Campaign status
 
 | Phase | Area | Status |
