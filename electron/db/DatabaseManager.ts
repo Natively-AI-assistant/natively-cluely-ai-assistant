@@ -1474,12 +1474,39 @@ export class DatabaseManager {
             console.log('[DatabaseManager] Applying migration v27 → v28: rebuild vec0 tables with cosine distance');
             try {
                 let rebuilt = 0;
-                for (const dim of DatabaseManager.KNOWN_DIMS) {
+                // R-08: enumerate the dimensions that actually EXIST, not just
+                // KNOWN_DIMS ([768, 1536, 3072]). LocalEmbeddingProvider — the
+                // offline fallback — is 384-d, so vec_chunks_384 is a real, shipped
+                // table on any install that has ever embedded locally. Iterating
+                // KNOWN_DIMS left it on L2 forever: the drop skipped it, and the
+                // later re-create is `CREATE VIRTUAL TABLE IF NOT EXISTS`, a silent
+                // no-op on a surviving table whose persisted DDL carries no
+                // distance_metric. The result was MIXED metrics under one shared
+                // `similarity = 1 - distance` and one shared threshold — on unit
+                // vectors L2 = sqrt(2-2cos), so a 0.25 floor silently demanded
+                // cos >= 0.719 on precisely the provider used when the cloud is down.
+                // getExistingVecDims() returns KNOWN_DIMS union the discovered ones
+                // and its own docstring warns about this exact case; it must be
+                // captured BEFORE the drop loop, or discovery finds nothing.
+                const dimsToRebuild = this.getExistingVecDims();
+                // R-13: the drop and the backfill must be ONE unit. v28 was not
+                // transactional, so a crash after the drop loop but during the
+                // rebuild left the vec0 tables EXISTING BUT EMPTY — and both
+                // detectVecSupport (VectorStore.ts:66) and hasVecExtension
+                // (:2388) probe with `SELECT count(*) ... LIMIT 1`, which SUCCEEDS
+                // on an empty table. useNativeVec stayed true, searchSimilarNative
+                // returned [] on zero rows, and there is no JS fallback on an empty
+                // result (only on a throw) — a silent, total RAG blackout with no
+                // error anywhere. Verified for this build that vec0 DROP TABLE does
+                // roll back (3 rows dropped inside a tx, 3 rows present after abort),
+                // so the wrap is sound rather than assumed.
+                this.db.transaction(() => {
+                for (const dim of dimsToRebuild) {
                     this.db.exec(`DROP TABLE IF EXISTS vec_chunks_${dim};`);
                     this.db.exec(`DROP TABLE IF EXISTS vec_summaries_${dim};`);
                 }
                 this.ensuredDims.clear();
-                for (const dim of DatabaseManager.KNOWN_DIMS) {
+                for (const dim of dimsToRebuild) {
                     this.ensureVecTableForDim(dim); // now emits distance_metric=cosine
                     const bytes = dim * 4;
                     const chunkIns = this.db.prepare(
@@ -1499,6 +1526,7 @@ export class DatabaseManager {
                         try { sumIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
                     }
                 }
+                })();
                 console.log(`[DatabaseManager] v28: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
                 this.db.pragma('user_version = 28');
             } catch (e) {
