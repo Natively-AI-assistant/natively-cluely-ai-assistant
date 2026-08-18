@@ -18,3 +18,8 @@ export function resolveLiveAnswerBatch(
   activeId: number | null | undefined,
   incomingId: number | null | undefined,
 ): { accept: boolean; activeId: number | null };
+
+export function resolveChatStreamSurfaceError(
+  activeSource: string | null | undefined,
+  incomingSource: string | null | undefined,
+): { release: boolean };

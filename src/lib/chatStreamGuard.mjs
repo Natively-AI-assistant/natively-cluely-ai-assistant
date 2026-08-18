@@ -140,3 +140,33 @@ export function resolveLiveAnswerBatch(activeId, incomingId) {
   }
   return { accept: false, activeId: cur };
 }
+
+/**
+ * Decide whether a `gemini-stream-error` from `incomingSource` must RELEASE the
+ * adopted stream guard.
+ *
+ * R-02: the renderer deliberately discards phone-mirror errors so a phone
+ * failure cannot deface a desktop bubble — but discarding the event must not
+ * also discard the cleanup. Phone tokens are tagged 'phone' while the phone
+ * error is tagged 'phone-mirror', and a provider that throws AFTER committing
+ * tokens never sends a `done`. So a failed phone turn left the guard pinned to
+ * the phone surface permanently, and every subsequent DESKTOP stream was
+ * rejected as a cross-surface supersession — no text, endless spinner.
+ *
+ * An error always ends its own stream, so releasing is safe whenever the error
+ * comes from the surface that currently owns the guard.
+ *
+ * @param {string|null|undefined} activeSource
+ * @param {string|null|undefined} incomingSource
+ * @returns {{ release: boolean }}
+ */
+export function resolveChatStreamSurfaceError(activeSource, incomingSource) {
+  if (activeSource == null) return { release: false };
+  return { release: sameSurface(activeSource, incomingSource) };
+}
+
+/** 'phone' (token tag) and 'phone-mirror' (error tag) are the same surface. */
+function sameSurface(a, b) {
+  const norm = (s) => (s === 'phone-mirror' ? 'phone' : normalizeSource(s));
+  return norm(a) === norm(b);
+}

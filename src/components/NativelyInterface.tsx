@@ -273,7 +273,7 @@ import {
   splitStreamingCodeLines,
 } from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -3255,7 +3255,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       console.log('[NativelyInterface] Resetting session state...');
       window.electronAPI?.cancelChatStream?.();
       chatStreamIdRef.current = null;
-    chatStreamSourceRef.current = null;
       chatStreamSourceRef.current = null;
       requestStartTimeRef.current = null;
       setMessages([]);
@@ -5446,7 +5445,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // source:'phone-mirror' and no streamId; a desktop failure carries the
         // originating streamId — drop it unless it matches the adopted stream.
         // Untagged errors keep the legacy behavior exactly.
-        if (meta?.source === 'phone-mirror') return;
+        if (meta?.source === 'phone-mirror') {
+          // R-02: this branch deliberately keeps a phone failure out of the
+          // desktop UI, but it must still RELEASE the stream guard. Phone
+          // tokens are tagged source:'phone' (ipcHandlers.ts:12814) while this
+          // error is tagged 'phone-mirror' (:12851), and a provider that throws
+          // AFTER committing tokens never sends a `done` — so a phone turn that
+          // failed mid-answer left the guard pinned to the phone surface
+          // forever. Every later DESKTOP stream was then rejected as a
+          // cross-surface supersession (accept:false / honor:false): no text at
+          // all and a spinner that never stopped, until the user hit Escape.
+          // Releasing is safe here because this phone stream is definitively over.
+          if (resolveChatStreamSurfaceError(chatStreamSourceRef.current, meta.source).release) {
+            chatStreamIdRef.current = null;
+            chatStreamSourceRef.current = null;
+          }
+          return;
+        }
         if (typeof meta?.streamId === 'number'
           && chatStreamIdRef.current !== null
           && meta.streamId !== chatStreamIdRef.current) return;
@@ -5457,7 +5472,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // next stream starts clean (audit finding #3). Safe today because ids are
         // monotonic, but keeps token/done/error ref management consistent.
         chatStreamIdRef.current = null;
-    chatStreamSourceRef.current = null;
       chatStreamSourceRef.current = null;
         setMessages((prev) => {
           // Append error to the current message or add new one?
