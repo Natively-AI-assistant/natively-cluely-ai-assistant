@@ -1372,7 +1372,12 @@ export class CredentialsManager {
                 console.warn(
                     keyringReadFailed
                         ? '[CredentialsManager] Encrypted credentials present but unreadable; trying app-managed fallback'
-                        : '[CredentialsManager] Encrypted credentials present but keyring unavailable; trying app-managed fallback',
+                        : preferFallbackThisLoad
+                            // F-704: the read was SKIPPED, not failed — saying
+                            // "keyring unavailable" sent support chasing an
+                            // availability problem that does not exist.
+                            ? '[CredentialsManager] Keyring read skipped this load (a newer app-managed fallback takes precedence); trying fallback'
+                            : '[CredentialsManager] Encrypted credentials present but keyring unavailable; trying app-managed fallback',
                 );
             }
 
@@ -1391,6 +1396,20 @@ export class CredentialsManager {
                 } catch (fbErr) {
                     console.error('[CredentialsManager] Failed to read app-managed fallback — starting fresh:', fbErr);
                     this.credentials = {};
+                    // F-704 blocker 1b: "starting fresh" is only safe when there is
+                    // nothing left to lose. If a keyring file EXISTS we have not
+                    // successfully read (a successful read returns above), then
+                    // credentials.enc still holds the user's real set while memory now
+                    // holds {} — and the first ordinary save would serialize that
+                    // near-empty object straight over it. This is the reachable half of
+                    // the restored-profile case: a fallback carried from another
+                    // machine WITHOUT its salt fails to decrypt here. Refuse writes so
+                    // the intact keyring survives to a launch that can read it.
+                    if (fs.existsSync(CREDENTIALS_PATH)) {
+                        this.keyringUnreadable = true;
+                        console.warn('[CredentialsManager] An unreadable app-managed fallback left credentials empty while an encrypted keyring file is still present. '
+                            + 'Saves are disabled this session so the keyring file is not overwritten with an empty set.');
+                    }
                 }
 
                 // Migrate up: if the keyring is now available, re-persist via safeStorage
@@ -1423,6 +1442,24 @@ export class CredentialsManager {
                     console.warn('[CredentialsManager] Running from the app-managed fallback because the keyring file would not decrypt. '
                         + 'Leaving the keyring file untouched in case the failure was transient — some recently-saved credentials may be missing '
                         + 'this session, and saves are disabled until a launch that can read it.');
+                } else if (preferFallbackThisLoad) {
+                    // F-704 (self-review fix): do NOT migrate up on the prefer
+                    // path. Skipping the keyring READ leaves keyringReadFailed
+                    // false, so this branch used to fire and saveCredentials()
+                    // re-encrypted the RESTORED fallback straight over
+                    // credentials.enc and then deleted the fallback — destroying
+                    // exactly the credentials the "don't delete the keyring file"
+                    // change was meant to protect. Preserving the file while
+                    // overwriting its contents milliseconds later is not
+                    // preservation; the first version of this fix was a no-op.
+                    //
+                    // We cannot tell a legitimately-newer fallback (a keyring
+                    // write that threw) from a restored-profile fallback by mtime
+                    // alone, so the safe action under that ambiguity is to destroy
+                    // NEITHER: run this session from the fallback we loaded, leave
+                    // both files intact, and let the next explicit save re-establish
+                    // the keyring normally.
+                    console.warn('[CredentialsManager] Running from a newer app-managed fallback; leaving the existing keyring file untouched (no migrate-up) so a restored profile cannot overwrite current credentials.');
                 } else if (keyringNow && Object.keys(this.credentials).length > 0) {
                     console.log('[CredentialsManager] Keyring now available — migrating fallback credentials to keyring');
                     this.saveCredentials();
