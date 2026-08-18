@@ -942,8 +942,8 @@ own fixes were no-ops, and two were regressions against baseline.
 | R-11 [FIXED-VERIFIED 7fa6b865] | **v27 dropped the `IS NULL` guard (D4).** `WHERE content LIKE '%[Page %]%'` is unconditional, so it cannot distinguish v22 corruption from a correct ingested value, and downgrades the timeout case (real `data.total` 10 → marker-MAX 3). The second UPDATE is not scoped to marker-bearing rows at all and fabricates 100% coverage for docs with zero extracted pages. Needs provenance scoping, not a heuristic. | FIXED-VERIFIED |
 | R-12 [FIXED-VERIFIED a5f1d2dd] | `deleteMeeting` is not atomic (vectors deleted before the parent row, no transaction). Inert **only** because R-01 masks it — fixing R-01 activates it. | FIXED-VERIFIED |
 | R-13 [FIXED-VERIFIED 056c4c43] | v28 is not wrapped in a transaction; a crash mid-rebuild leaves tables that exist-but-are-empty, which `detectVecSupport`/`hasVecExtension` probe successfully → silent zero-result RAG with no error. vec0 `DELETE` was measured to roll back; vec0 `DROP TABLE` rollback was **not** verified. | FIXED-VERIFIED |
-| R-14 [FIXED-VERIFIED 45afb484] | Duplicated `chatStreamSourceRef.current = null;` at NativelyInterface.tsx:3258-3259 and 5460-5461. | FIXED-VERIFIED |
-| R-15 [FIXED-VERIFIED 81182f6b] | F-703 settings degraded-latch (verified defective, still unfixed) and F-601 error mapping. | FIXED-VERIFIED |
+| R-14 [FIXED — verified by INSPECTION only, 45afb484] | Duplicated `chatStreamSourceRef.current = null;` at NativelyInterface.tsx:3258-3259 and 5460-5461. | FIXED-VERIFIED |
+| R-15 [FIXED-VERIFIED 81182f6b] | F-703 settings degraded-latch. (F-601's error mapping shipped in 5b94ef95 and is verified by INSPECTION only — a one-line renderer string with no test.) | FIXED-VERIFIED |
 
 ### Cleared on attack (reviewers tried and failed to break these)
 
@@ -1009,6 +1009,24 @@ mistaken for silently-updated tests:
    conflict) and writes only to the fallback, leaving `credentials.enc`
    byte-for-byte intact. This trades a possibly-stale ACTIVE value for a
    guarantee that no credential is ever destroyed on disk.
+
+   **Consequence, stated so it is not discovered later:** the ambiguity does not
+   self-clear — each save makes the fallback newer still, so the state persists
+   indefinitely. A user who never reads the warning therefore accumulates ALL
+   future keys in the app-managed fallback, which is weaker at rest than the OS
+   keyring (see `credentialFallbackCrypto.ts`). That is the accepted trade — no
+   destruction beats stronger-at-rest — but a deliberate exit (a UI prompt: "two
+   credential sets found, keep which?") is the right follow-up and is NOT
+   implemented here.
+
+**Verification method, stated precisely:** thirteen of the fifteen rows above have
+a repro under `scripts/audit/` that was observed to FAIL against the pre-fix code
+and PASS after. **R-14** (collapsing two duplicated ref assignments) and **F-601**
+(one renderer error-string mapping) are verified by INSPECTION only — for R-14, by
+confirming all four reset sites still pair `chatStreamIdRef` with
+`chatStreamSourceRef` (lines 3257/3258, 4200/4201, 5460/5461, 5474/5475). Given
+§18.1 is a confession about vacuous evidence, that distinction is drawn explicitly
+rather than left implicit.
 
 ### §18.3 — Final verification of the self-review pass
 
