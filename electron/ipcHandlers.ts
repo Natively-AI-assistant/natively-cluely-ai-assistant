@@ -4392,7 +4392,26 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // confident/synthesis-tier verdict, OR'd in as an additional
                   // signal. matchedHighSignalEntity is a whole-entity hit that
                   // is also present in the retrieved context.
-                  const hasStrongEvidence = hasRealEvidence || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence;
+                  // F-412: isTier1Or2Evidence must NOT be an independent
+                  // disjunct. EvidenceAssembler.computeTier is TOPIC-BLIND — it
+                  // returns tier 2 for ANY synthesis-classified question as soon
+                  // as the pack yields >=1 card, and OkfRetriever's type/
+                  // confidence boosts clear the score floor with ZERO query-word
+                  // overlap. OR'ing it in therefore made the off-topic gate
+                  // directly above unable to veto anything: an off-topic
+                  // synthesis question ("What is the key takeaway for the Kyoto
+                  // Protocol?" against a robotics thesis) produced
+                  // hasEntityEvidence=false yet still repaired, discarding an
+                  // honest "not in the document" refusal and re-prompting the
+                  // model with a stronger-synthesis instruction — precisely the
+                  // hallucination pressure this gate exists to prevent.
+                  // The tier is kept as a CORROBORATING signal: it may
+                  // strengthen a topically-relevant question, never substitute
+                  // for topical relevance.
+                  const hasStrongEvidence =
+                    hasRealEvidence
+                    || Boolean(matchedHighSignalEntity)
+                    || (isTier1Or2Evidence && hasEntityEvidence);
                   // GOVERNANCE INTEGRITY (2026-07-13): when EvidenceResolver
                   // GOVERNED this turn and its typed pack's policy is an explicit
                   // refusal, that decision is authoritative — it already ran

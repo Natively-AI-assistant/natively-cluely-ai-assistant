@@ -189,6 +189,12 @@ Area: main.ts:5697 (constant id for every meeting) · cleanup only at :5966-5976
 Status: FOUND. After a crash/force-quit the JIT rows survive; the next meeting appends to the same id, and the live "ask about this meeting" surface (ipcHandlers.ts:10141/10164) filters only on meeting_id — so meeting A's transcript is served as evidence for meeting B. The authors anticipated the overlap case and chose to SKIP deletion ("New meeting started during cleanup — skipping…"), leaving the same state.
 
 ## F-412 [P1] False-refusal repair bypasses its own off-topic gate via the tier disjunct
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-412-repro.mjs reads the SHIPPED expression out of ipcHandlers.ts (so the harness cannot drift from the code) and evaluates the decision for the measured off-topic case plus three must-still-repair cases. PRE-FIX (baseline): the bare `|| isTier1Or2Evidence` disjunct is present → exit 1. POST-FIX: exit 0.
+Fix: the tier is now a CORROBORATING signal — `(isTier1Or2Evidence && hasEntityEvidence)` — so it can strengthen a topically-relevant question but never substitute for topical relevance. hasRealEvidence and matchedHighSignalEntity paths are untouched, so genuine on-topic repairs (including tier-poor ones) still fire.
+Pin: electron/services/__tests__/FalseRefusalRepairRespectsOffTopicGate2026_08_18.test.mjs (2/2 — the shipped expression shape, plus a truth table covering off-topic, on-topic, tier-poor on-topic and whole-entity-hit cases so the fix cannot over-reach into suppressing real repairs).
+Regression check: services suite, zero new failures vs baseline.
+Note: this does NOT fix F-413 (the boost/minScore imbalance that makes tier 4 unreachable). F-412 removes the tier's ability to override topical relevance, which is the harmful half; F-413 remains as a separate scoring-calibration finding.
 Area: ipcHandlers.ts:4374 (`|| isTier1Or2Evidence`) vs the gate at :4360-4371 and the claim at :4390-4392 · EvidenceAssembler.ts:53-56 (topic-blind tier 2) · OkfRetriever.ts:95-104 (boosts with no overlap precondition)
 Status: FOUND (explorer executed an empirical proof: an off-topic "Kyoto Protocol" question against a robotics pack yields hasEntityEvidence:false but isTier1Or2Evidence:true → shouldRepair:true). An honest "not in the document" refusal is discarded and the model is re-prompted with a stronger-synthesis instruction — the exact hallucination pressure the gate exists to prevent. Flag defaults put this in dev/test/benchmark, not packaged production.
 
