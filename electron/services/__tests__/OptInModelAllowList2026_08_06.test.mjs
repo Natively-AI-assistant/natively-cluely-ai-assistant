@@ -16,11 +16,11 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
-const { isModelAllowed, isOptInModelProvider } = await import(path.join(root, 'src/utils/modelUtils.ts'));
+const { isModelAllowed, isOptInModelProvider } = await import(pathToFileURL(path.join(root, 'src/utils/modelUtils.ts')).href);
 
 const settings = fs.readFileSync(path.join(root, 'src/components/settings/AIProvidersSettings.tsx'), 'utf8');
 const selector = fs.readFileSync(path.join(root, 'src/components/ModelSelectorWindow.tsx'), 'utf8');
