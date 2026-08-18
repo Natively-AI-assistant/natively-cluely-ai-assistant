@@ -82,6 +82,17 @@ function freshManager(env) {
   delete require.cache[require.resolve(COMPILED)];
   const mod = require(COMPILED);
   if (mod.CredentialsManager.instance) mod.CredentialsManager.instance = undefined;
+  // getInstance() anchors the singleton on globalThis, NOT on the static field
+  // — 22 dist bundles each carry a copy of the class, and per-bundle instances
+  // meant a revoked key kept being served from a stale copy. Clearing only the
+  // static field therefore does NOT give a fresh manager: getInstance() returns
+  // the globalThis one, which still holds the FIRST env's CREDENTIALS_PATH /
+  // FALLBACK_PATH (module constants captured at its own require time) and the
+  // first env's safeStorage mock. Every test after the first then read and wrote
+  // the first test's userData directory, so `keyringAvailable = false` appeared
+  // to have no effect and the fallback file was never written where the test
+  // looked for it. Must be cleared in lockstep with the static field.
+  delete globalThis.__nativelyCredentialsManagerV1__;
   const cm = mod.CredentialsManager.getInstance();
   cm.init();
   return cm;
@@ -130,32 +141,32 @@ test('REPRO: a save during a keychain-decrypt-FAILED session must not permanentl
     'key must survive a transient keychain failure — an empty-state save must not clobber it');
 });
 
-test('wasExistingStoreUnreadable() reports true ONLY during an undecryptable-store launch', () => {
+test('isCredentialStoreDegraded() reports true ONLY during an undecryptable-store launch', () => {
   const env = makeEnv();
 
   // Healthy first run with a saved key → not unreadable.
   const cm = freshManager(env);
   cm.setDeepgramApiKey(SECRET);
-  assert.equal(cm.wasExistingStoreUnreadable(), false, 'a clean save is not an unreadable store');
+  assert.equal(cm.isCredentialStoreDegraded(), false, 'a clean save is not an unreadable store');
 
   // Reopen while the keychain can't decrypt → flag must be true so startup self-heals
   // (e.g. the GOOGLE_APPLICATION_CREDENTIALS persist in main.ts) know to skip persisting.
   env.state.decryptShouldThrow = true;
   const cm2 = freshManager(env);
-  assert.equal(cm2.wasExistingStoreUnreadable(), true, 'undecryptable existing store must report unreadable');
+  assert.equal(cm2.isCredentialStoreDegraded(), true, 'undecryptable existing store must report unreadable');
 
   // Healthy launch again → real data loads, flag clears.
   env.state.decryptShouldThrow = false;
   const cm3 = freshManager(env);
   assert.equal(cm3.getDeepgramApiKey(), SECRET);
-  assert.equal(cm3.wasExistingStoreUnreadable(), false, 'a successful load clears the flag');
+  assert.equal(cm3.isCredentialStoreDegraded(), false, 'a successful load clears the flag');
 });
 
 test('REPRO (side door): a single-field auto-populate during an unreadable session must not clobber the store', () => {
   // This models the main.ts startup self-heal that persists GOOGLE_APPLICATION_CREDENTIALS.
   // It calls a PUBLIC single-field setter (setGoogleServiceAccountPath) — which makes creds
   // non-empty, so saveCredentials()'s empty-set guard does NOT fire. The protection has to
-  // live at the CALL SITE via wasExistingStoreUnreadable(); this test asserts that contract:
+  // live at the CALL SITE via isCredentialStoreDegraded(); this test asserts that contract:
   // an auto-heal that respects the flag leaves the recoverable store intact.
   const env = makeEnv();
 
@@ -167,7 +178,7 @@ test('REPRO (side door): a single-field auto-populate during an unreadable sessi
   assert.equal(cm2.getDeepgramApiKey(), undefined, 'unreadable this session (expected)');
 
   // The fixed call site checks the flag before persisting. Emulate that guarded self-heal:
-  if (!cm2.wasExistingStoreUnreadable()) {
+  if (!cm2.isCredentialStoreDegraded()) {
     cm2.setGoogleServiceAccountPath('/some/env/service-account.json');
   }
   // (If the guard were missing and we called the setter unconditionally, the next launch
@@ -185,12 +196,12 @@ test('REPRO (side door 2): PhoneMirror ext-token mint during an unreadable sessi
   // launch getPhoneMirrorToken() is undefined (creds are the empty recovery set), so an
   // unguarded mint would write a single-field { phoneMirrorToken } — non-empty, past
   // saveCredentials()'s empty-set guard — clobbering the recoverable keyring file. The fixed
-  // call site mints in memory but only PERSISTS when !wasExistingStoreUnreadable().
+  // call site mints in memory but only PERSISTS when !isCredentialStoreDegraded().
   //
   // NOTE: this mirrors the call-site guard rather than importing the bundled function, because
   // PhoneMirrorService is esbuild-bundled with its OWN inlined CredentialsManager singleton —
   // driving the real function would require a test-only CM accessor in production code, a worse
-  // tradeoff than this contract test. The guard mechanism itself (wasExistingStoreUnreadable →
+  // tradeoff than this contract test. The guard mechanism itself (isCredentialStoreDegraded →
   // skip persist → store survives) is exercised end-to-end here and verified honest: defeating
   // the getter makes this and side-door-1 fail. The matching production call site is covered by
   // PhoneMirrorExtensionV2.test.mjs's persist round-trip on the healthy path.
@@ -205,7 +216,7 @@ test('REPRO (side door 2): PhoneMirror ext-token mint during an unreadable sessi
 
   // Emulate loadOrCreatePersistedExtToken()'s guarded mint-and-persist.
   const fresh = 'ext-tok-FRESH-0123456789abcdef';
-  if (!cm2.wasExistingStoreUnreadable()) {
+  if (!cm2.isCredentialStoreDegraded()) {
     cm2.setPhoneMirrorToken(fresh);
   }
 

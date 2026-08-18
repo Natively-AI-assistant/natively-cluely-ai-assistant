@@ -852,9 +852,21 @@ export class ModesManager {
         // `reference_files_primary`. This NEVER touches a `user_selected`
         // contract (the user's explicit choice); only `migrated_from_prompt`
         // contracts carry a migrationRevision and are eligible.
+        // The `general` exemption has to sit OUTSIDE the branch. It was written
+        // only into the second clause (the no-`seededForTemplateType` fallback),
+        // so once seeds started carrying `seededForTemplateType` — which they now
+        // all do — a `general` mode matched the FIRST clause
+        // (`seededForTemplateType === templateType`) and was treated as a stable
+        // template-aware seed. That is the exact opposite of the rule stated
+        // three paragraphs above: `general` is the "I'll decide later" template,
+        // its seed carries no user intent, and it is the ONE template whose
+        // default_new_mode contract must re-migrate once a prompt or file
+        // arrives. Frozen, a general mode kept the blank seed's authority
+        // forever no matter what the user later wrote or uploaded.
         const isTemplateAwareSeed = mode.sourceContract?.origin === 'default_new_mode'
+            && mode.templateType !== 'general'
             && (mode.sourceContract.seededForTemplateType === mode.templateType
-                || (!mode.sourceContract.seededForTemplateType && mode.templateType !== 'general'));
+                || !mode.sourceContract.seededForTemplateType);
         const staleMigration = mode.sourceContract?.origin === 'migrated_from_prompt'
             && (mode.sourceContract.migrationRevision ?? 1) < CURRENT_MIGRATION_REVISION;
         // Stale-seed detection (Knowledge Source canonical-gate repair, 2026-07-16):
@@ -1613,7 +1625,7 @@ export class ModesManager {
                 );
             } catch (err) {
                 // Don't let a hybrid outage block a document-grounded answer.
-                console.warn('[ModesManager] hybrid forceDocumentGrounding failed, falling back to lexical:', err?.message);
+                console.warn('[ModesManager] hybrid forceDocumentGrounding failed, falling back to lexical:', (err as { message?: string })?.message);
                 return this.buildRetrievedActiveModeContextBlock(
                     query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId, retrievalOptions,
                 );

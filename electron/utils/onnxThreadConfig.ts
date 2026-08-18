@@ -73,13 +73,63 @@ function readBoolEnv(name: string, fallback: boolean): boolean {
 }
 
 /**
+ * Workload shape, which decides the intra-op thread default.
+ *
+ * 'default' — one graph pass per unit of work (Whisper/Distil/Moonshine/
+ *   Parakeet encode, embeddings, reranking, intent classification). A single
+ *   intra-op thread costs these very little, so they keep the conservative
+ *   bound the crash forensics below argue for.
+ *
+ * 'rnnt-decode' — the autoregressive transducer loop (Nemotron). One chunk is
+ *   an encoder pass PLUS a per-encoder-frame greedy loop where every emitted
+ *   symbol costs a decoder run and a joint run, so a chunk is ~two orders of
+ *   magnitude more ORT invocations than a CTC pass. Published profiling of
+ *   Parakeet RNN-T puts ~67% of runtime in greedy decoding vs ~33% in the
+ *   encoder, and pinning that loop to one thread is what made Nemotron feel
+ *   slow next to CTC models of the same parameter count.
+ */
+export type OnnxWorkload = 'default' | 'rnnt-decode';
+
+/**
+ * Intra-op default for the transducer decode loop.
+ *
+ * Measured on an M-series (10 logical / 4 performance cores), Nemotron int4,
+ * CPU EP, 2.46s fixture, median of 3 after warmup — identical transcript at
+ * every setting:
+ *
+ *   1 thread   936ms   RTF 0.380
+ *   2 threads  547ms   RTF 0.222
+ *   4 threads  385ms   RTF 0.156   <-- best
+ *   8 threads  528ms   RTF 0.214
+ *
+ * 8 is WORSE than 4: past the performance-core count the pool spills onto
+ * efficiency cores and contends. So this tracks cores but caps at 4 rather
+ * than scaling with the whole machine — the cap is the point, not a guess.
+ * Halving logical cores approximates the perf-core count portably (Apple's
+ * hw.perflevel0 has no cross-platform equivalent).
+ */
+function defaultRnntIntraOpThreads(): number {
+    let logical = 4;
+    try {
+        logical = (require('os') as typeof import('os')).cpus()?.length || 4;
+    } catch {
+        logical = 4;
+    }
+    return Math.max(1, Math.min(4, Math.floor(logical / 2)));
+}
+
+/**
  * Bounded thread-count session options shared by every local ONNX consumer.
  * Kept as a fresh object per call (session_options is merged/mutated by
  * transformers.js internals — never share one object across sessions).
+ *
+ * `NATIVELY_ONNX_INTRA_OP_THREADS` still overrides every workload, so the
+ * measurements above stay reproducible without a new build.
  */
-export function getBoundedOnnxSessionOptions(): OnnxThreadBounds {
+export function getBoundedOnnxSessionOptions(workload: OnnxWorkload = 'default'): OnnxThreadBounds {
+    const intraDefault = workload === 'rnnt-decode' ? defaultRnntIntraOpThreads() : 1;
     return {
-        intraOpNumThreads: readIntEnv('NATIVELY_ONNX_INTRA_OP_THREADS', 1),
+        intraOpNumThreads: readIntEnv('NATIVELY_ONNX_INTRA_OP_THREADS', intraDefault),
         interOpNumThreads: readIntEnv('NATIVELY_ONNX_INTER_OP_THREADS', 1),
         executionMode: 'sequential',
         // Disable ORT's persistent BFCArena/memory-pattern reuse by default.
@@ -141,52 +191,136 @@ function readMinFreeGB(): number {
     return Number.isFinite(n) && n >= 0 ? n : 2.0;
 }
 
-function canAcquireNow(priority: OnnxSlotPriority): boolean {
+// A weight-exceeds-cap acquisition (see canAcquireNow's exclusive-mode
+// branch) is admitted only when the gate is completely free, and the
+// holder that eventually wins keeps it for its ENTIRE session lifetime
+// (e.g. a whole meeting for LocalWhisperSTT) — not a brief critical
+// section. So a wait past cold-start-plus-margin here isn't "queued a bit
+// longer", it's permanent: the current holder will not release until ITS
+// session ends, which for a live recording could be hours away. Reject
+// after this bound so the caller's existing error path can engage instead
+// of hanging forever. Deliberately NOT applied to weight <= cap
+// acquisitions (normal-priority queuing under ordinary contention is
+// expected to legitimately wait longer than this). Overridable via env var
+// (matching readMaxConcurrent/readMinFreeGB's own pattern) so tests don't
+// need to hand-wait the real default.
+function readExclusiveTimeoutMs(): number {
+    return readIntEnv('NATIVELY_ONNX_EXCLUSIVE_TIMEOUT_MS', 15000);
+}
+
+function canAcquireNow(priority: OnnxSlotPriority, weight: number): boolean {
     const cap = readMaxConcurrent();
-    if (priority === 'high') {
-        return _sem.inFlightNormal + _sem.inFlightHigh < cap;
+    const current = _sem.inFlightNormal + _sem.inFlightHigh;
+    // A request whose own weight exceeds the cap (Nemotron's 3 sessions
+    // against the default cap of 2) can never satisfy "current + weight <=
+    // cap" — that would deadlock forever. Treat it as exclusive: admit only
+    // when nothing else is in flight, then let it run alone even though it
+    // temporarily exceeds the nominal cap.
+    if (weight > cap) {
+        if (current > 0) return false;
+    } else if (current + weight > cap) {
+        return false;
     }
+    if (priority === 'high') return true;
     // Normal priority: only acquire when there are no high-priority waiters
     // queued (so Whisper can grab the next slot promptly).
-    if (_sem.waitersHigh.length > 0) return false;
-    return _sem.inFlightNormal + _sem.inFlightHigh < cap;
+    return _sem.waitersHigh.length === 0;
+}
+
+function removeFromQueue(queue: Array<() => void>, resolver: () => void): void {
+    const idx = queue.indexOf(resolver);
+    if (idx !== -1) queue.splice(idx, 1);
 }
 
 /**
  * Acquire a shared ONNX session slot. Returns a release function the caller
  * MUST call when the session is torn down (typically in worker `error`/`exit`
- * handlers). Blocks until a slot is available; NEVER rejects.
+ * handlers).
  *
  * Priority 'high' is for latency-critical consumers (Whisper) — it acquires
  * ahead of queued normal-priority waiters but does NOT preempt a running
  * session. If the cap is exhausted, high-priority waiters block normal-priority
  * acquisitions so Whisper can take the next free slot promptly.
+ *
+ * `weight` (default 1) is how many concurrent native ONNX sessions this one
+ * acquisition represents — NemotronEngine opens 3 (encoder/decoder/joint)
+ * per worker, so its caller passes `weight: 3`. A `weight` that exceeds the
+ * cap runs in exclusive mode (see canAcquireNow) and is subject to
+ * readExclusiveTimeoutMs(): since an exclusive holder keeps the gate for
+ * its entire session lifetime, a wait past that bound means the request
+ * cannot be satisfied while the current holder is alive, not that it needs
+ * a bit more patience — the promise REJECTS in that case instead of hanging
+ * forever. A `weight <= cap` acquisition still never rejects and blocks
+ * however long ordinary contention requires, exactly as before.
  */
-export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal'): Promise<() => void> {
+export async function acquireOnnxSlot(priority: OnnxSlotPriority = 'normal', weight: number = 1): Promise<() => void> {
+    const cap = readMaxConcurrent();
+    const exclusive = weight > cap;
     const queue = priority === 'high' ? _sem.waitersHigh : _sem.waitersNormal;
-    // Only enqueue when we're actually going to wait — otherwise stale
-    // resolvers accumulate in the queue and confuse the FIFO order.
-    while (!canAcquireNow(priority)) {
-        const waiterP = new Promise<void>(resolve => queue.push(resolve));
-        await waiterP;
+    const timeoutMs = readExclusiveTimeoutMs();
+    const deadline = exclusive ? Date.now() + timeoutMs : null;
+
+    while (!canAcquireNow(priority, weight)) {
+        let resolveWaiter!: () => void;
+        const waiterP = new Promise<void>((resolve) => {
+            resolveWaiter = resolve;
+            queue.push(resolve);
+        });
+
+        if (deadline === null) {
+            await waiterP;
+            continue;
+        }
+
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+            removeFromQueue(queue, resolveWaiter);
+            throw new Error(
+                `ONNX slot acquisition timed out after ${timeoutMs}ms — ` +
+                `weight ${weight} exceeds the concurrency cap (${cap}), and another exclusive-mode ` +
+                `session is already holding the gate for its full lifetime. This model cannot run ` +
+                `concurrently with the session currently holding the ONNX gate.`
+            );
+        }
+
+        const TIMEOUT = Symbol('onnx-slot-acquire-timeout');
+        const outcome = await Promise.race([
+            waiterP.then(() => 'resolved' as const),
+            new Promise<typeof TIMEOUT>((resolve) => setTimeout(() => resolve(TIMEOUT), remaining)),
+        ]);
+        if (outcome === TIMEOUT) {
+            removeFromQueue(queue, resolveWaiter);
+            throw new Error(
+                `ONNX slot acquisition timed out after ${timeoutMs}ms — ` +
+                `weight ${weight} exceeds the concurrency cap (${cap}), and another exclusive-mode ` +
+                `session is already holding the gate for its full lifetime. This model cannot run ` +
+                `concurrently with the session currently holding the ONNX gate.`
+            );
+        }
+        // Resolved normally within the deadline — loop re-checks canAcquireNow.
     }
-    if (priority === 'high') _sem.inFlightHigh++;
-    else _sem.inFlightNormal++;
+
+    if (priority === 'high') _sem.inFlightHigh += weight;
+    else _sem.inFlightNormal += weight;
 
     let released = false;
     return () => {
         if (released) return;
         released = true;
-        if (priority === 'high') _sem.inFlightHigh--;
-        else _sem.inFlightNormal--;
-        // Wake the next eligible waiter. Try high first, then normal — keeps
-        // Whisper latency-critical even when embeddings are queued.
-        const nextHigh = _sem.waitersHigh.shift();
-        if (nextHigh) nextHigh();
-        else {
-            const nextNormal = _sem.waitersNormal.shift();
-            if (nextNormal) nextNormal();
-        }
+        if (priority === 'high') _sem.inFlightHigh -= weight;
+        else _sem.inFlightNormal -= weight;
+        // Wake EVERY waiter, not just one: a multi-unit release (weight > 1)
+        // can free capacity for more than one queued weight-1 waiter, and a
+        // single-wake design (correct when every release always freed
+        // exactly what one waiter needed) would leave the extra capacity
+        // idle with nobody polling for it. Each woken waiter re-checks
+        // canAcquireNow itself (the `while` loop above) and re-enqueues if
+        // it still doesn't fit — waking more than necessary is safe, just
+        // slightly less efficient than a targeted wake.
+        const highWaiters = _sem.waitersHigh.splice(0);
+        const normalWaiters = _sem.waitersNormal.splice(0);
+        highWaiters.forEach(resolve => resolve());
+        normalWaiters.forEach(resolve => resolve());
     };
 }
 

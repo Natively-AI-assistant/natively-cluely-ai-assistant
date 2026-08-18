@@ -25,7 +25,12 @@ const root = path.resolve(__dirname, '../../..');
 const mainSource = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
 
 function extractMethodBody(methodName) {
-  const re = new RegExp(`(?:public|private|protected)\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`);
+  // The return-type annotation may itself contain braces —
+  // `startCaptureChannels(...): { mic: boolean; system: boolean } {`. The old
+  // `(?::[^{]*)?\{` stopped at the FIRST `{`, which is the return type's, so
+  // brace-scanning extracted `mic: boolean; system: boolean` as the "body".
+  // Consume a one-level brace group as a unit so the `{` we land on is the body.
+  const re = new RegExp(`(?:public|private|protected)\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)\\s*(?::\\s*[^{;=]*(?:\\{[^{}]*\\}\\s*)?)?\\s*\\{`);
   const m = re.exec(mainSource);
   assert.ok(m, `could not locate ${methodName} in main.ts`);
   let i = m.index + m[0].length;
@@ -60,16 +65,25 @@ function firstIndexOf(re, body) {
   return m ? m.index : -1;
 }
 
-function assertMicStartsBeforeSystem(body, label) {
-  // Since F-105 (per-channel failure isolation — a mic start() throw must not
-  // take the system channel and the route watcher down with it) the four
-  // channel starts live in the shared startCaptureChannels() helper. A call
-  // site that delegates upholds this HAL-ordering invariant exactly when the
-  // helper does, so follow the delegation instead of demanding the literal
-  // calls inline.
-  if (/this\.startCaptureChannels\(/.test(scrubNonCode(body))) {
-    body = extractMethodBody('startCaptureChannels');
-    label = `${label} → startCaptureChannels`;
+function assertMicStartsBeforeSystem(body, label, depth = 0) {
+  // A path may start the channels inline, or delegate to the shared
+  // startCaptureChannels() helper introduced with F-105 (per-channel failure
+  // isolation: a mic throw must not skip the system channel and every
+  // downstream step). The helper starts mic first and documents this very
+  // invariant, but the calls left the caller — so follow the delegation rather
+  // than reporting "could not find microphoneCapture.start()" on correct code.
+  const scrubbed = scrubNonCode(body);
+  if (
+    depth === 0
+    && /this\.startCaptureChannels\(/.test(scrubbed)
+    && !/this\.microphoneCapture\??\.start\(\)/.test(scrubbed)
+  ) {
+    assertMicStartsBeforeSystem(
+      extractMethodBody('startCaptureChannels'),
+      `${label} -> startCaptureChannels`,
+      depth + 1,
+    );
+    return;
   }
   const micIdx = firstIndexOf(/this\.microphoneCapture\??\.start\(\)/, body);
   const sysIdx = firstIndexOf(/(?:this\.systemAudioCapture\??|systemCapturePausedByMicRecovery)\.start\(\)/, body);
@@ -83,8 +97,8 @@ function assertMicStartsBeforeSystem(body, label) {
   );
 }
 
-test('startMeeting starts microphone before system audio', () => {
-  assertMicStartsBeforeSystem(extractMethodBody('startMeeting'), 'startMeeting');
+test('startMeetingTransition starts microphone before system audio', () => {
+  assertMicStartsBeforeSystem(extractMethodBody('startMeetingTransition'), 'startMeetingTransition');
 });
 
 test('reconfigureAudio restarts microphone before system audio during active meetings', () => {

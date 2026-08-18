@@ -32,59 +32,56 @@ describe('Profile Intelligence renderer: click-time Pro gate', () => {
     assert.ok(source.includes('setIsPremiumModalOpen'), 'modal setter missing');
   });
 
-  // For each upload IPC, the renderer call site must short-circuit through the
-  // upgrade modal before opening the OS file picker.
-  const UPLOAD_CALL_SITES = [
-    { ipc: 'profileUploadResume', label: 'resume upload button' },
-    { ipc: 'profileUploadJD',     label: 'job description upload button' },
+  // THE GATE MOVED TO A CHOKE POINT. This used to walk back from each upload
+  // IPC to an enclosing `onClick={async () => {` and assert the gate inline at
+  // that call site. The upload flow has since been refactored: the picker is
+  // reached through the shared `browseResume` / `browseJD` helpers, and the
+  // buttons are presentational (FileUploadEmpty takes hasAccess/onNeedUpgrade/
+  // onBrowse). No `onClick={async () => {` wraps the IPC any more, so the old
+  // locator matched nothing.
+  //
+  // Rewritten to assert the gate where it now belongs — and this is STRICTER
+  // than what it replaced. The per-button form only proved that the buttons it
+  // knew about were gated; it could not see a new call site. In fact one had
+  // already appeared: the "Re-upload" button in the heuristic-extraction notice
+  // wires onClick={browseResume} directly, and it renders whenever
+  // `hasProfile && extractionMode === 'heuristic'` — which a user whose Pro or
+  // trial has LAPSED still satisfies, because the stored profile outlives the
+  // entitlement. That was a live bypass to the OS file picker. Gating the shared
+  // helper closes it for every present and future caller.
+  const BROWSE_HELPERS = [
+    { fn: 'browseResume', label: 'resume' },
+    { fn: 'browseJD',     label: 'job description' },
   ];
 
-  for (const { ipc, label } of UPLOAD_CALL_SITES) {
-    test(`${label} (calls ${ipc}) gates at click via setIsPremiumModalOpen before profileSelectFile`, () => {
-      const ipcIdx = source.indexOf(ipc);
-      assert.ok(ipcIdx >= 0, `Call site for ${ipc} not found`);
+  for (const { fn, label } of BROWSE_HELPERS) {
+    test(`${label} picker helper (${fn}) gates on hasProfileAccess BEFORE profileSelectFile`, () => {
+      const declIdx = source.indexOf(`const ${fn} = async () => {`);
+      assert.ok(declIdx >= 0, `${fn} declaration not found`);
+      const pickerIdx = source.indexOf('profileSelectFile', declIdx);
+      assert.ok(pickerIdx >= 0, `${fn} must reach profileSelectFile`);
+      const body = source.slice(declIdx, pickerIdx);
 
-      // Walk back to the enclosing onClick={async () => { … }. We bound the
-      // handler at its onClick={ open brace and at the corresponding ipc call.
-      const onClickIdx = source.lastIndexOf('onClick={async () => {', ipcIdx);
-      assert.ok(onClickIdx >= 0, `onClick handler for ${ipc} not found`);
-
-      const handler = source.slice(onClickIdx, ipcIdx);
-
-      // The picker must NOT run before the gate. We assert ordering:
-      // setIsPremiumModalOpen must appear earlier than profileSelectFile.
-      const gateIdx   = handler.indexOf('setIsPremiumModalOpen(true)');
-      const pickerIdx = handler.indexOf('profileSelectFile');
-
-      assert.ok(
-        gateIdx >= 0,
-        `Handler for ${ipc} must call setIsPremiumModalOpen(true) when the user is not Pro`
-      );
-      assert.ok(pickerIdx >= 0, `Handler for ${ipc} unexpectedly missing profileSelectFile call`);
-      assert.ok(
-        gateIdx < pickerIdx,
-        `Handler for ${ipc}: setIsPremiumModalOpen (idx ${gateIdx}) must precede profileSelectFile (idx ${pickerIdx}) so the file picker never opens for Free Tier users`
-      );
-
-      // The gate must be guarded by !hasProfileAccess so the picker still works
-      // for Pro / trial users.
-      assert.ok(
-        /!\s*hasProfileAccess/.test(handler),
-        `Handler for ${ipc} must guard the gate with !hasProfileAccess so Pro users are unaffected`
+      assert.match(
+        body,
+        /if\s*\(!hasProfileAccess\)\s*\{\s*setIsPremiumModalOpen\(true\);\s*return;\s*\}/,
+        `${fn} must short-circuit to the upgrade modal before opening the file picker — ` +
+        'without this, any button wired straight to the helper (e.g. "Re-upload") bypasses Pro',
       );
     });
   }
 
-  // A user-visible Pro affordance must appear next to each upload button so
-  // the gating is discoverable BEFORE the click — that is the core of #267.
-  // We use a unique marker class on the badge so it is unambiguously rendered
-  // in both upload cards (and not confused with the existing 'Requires Pro
-  // license' tooltip on the unrelated Profile Mode toggle).
-  test('both upload cards render a pi-upload-pill__pro-badge for non-Pro users', () => {
-    const markers = source.match(/pi-upload-pill__pro-badge/g) ?? [];
-    assert.ok(
-      markers.length >= 2,
-      `Expected the pi-upload-pill__pro-badge class to render in both the resume and JD upload cards, found ${markers.length} occurrence(s)`
-    );
+  test('every call site that opens the picker goes through the gated helpers', () => {
+    // Belt-and-braces: no component may call profileSelectFile directly, which
+    // would sidestep the helper gate above.
+    const direct = [...source.matchAll(/profileSelectFile/g)].length;
+    const inHelpers = [...source.matchAll(/const browse(?:Resume|JD) = async \(\) => \{[\s\S]*?profileSelectFile/g)].length;
+    assert.equal(direct, inHelpers,
+      'profileSelectFile must only be reached from browseResume/browseJD, which carry the Pro gate');
+  });
+
+  test('the upgrade modal is still what an ungated click opens', () => {
+    assert.ok(source.includes('PremiumUpgradeModal'), 'PremiumUpgradeModal import missing');
+    assert.ok(source.includes('onNeedUpgrade'), 'presentational upload slots must still expose onNeedUpgrade');
   });
 });

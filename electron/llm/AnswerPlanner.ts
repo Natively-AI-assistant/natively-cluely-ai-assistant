@@ -184,20 +184,34 @@ export interface AnswerPlan {
   answerStyle: AnswerStyle;
   /** Soft spoken-length target in seconds (0 = no explicit constraint). */
   answerStyleTargetSeconds: number;
-  /**
-   * ISOLATION flag: the active mode's contract names reference files as the
-   * source of truth, so résumé/JD/Hindsight/OKF stay suppressed. Authority-only
-   * — true from mode creation, BEFORE any file is uploaded (ModesManager
-   * 2026-07-15). Never gate doc-shaped routing or the doc-grounding prompt
-   * instruction on this: see `documentGroundedFilesPresent`.
-   */
+  /** BROAD doc-grounded flag — true for every template-seeded doc mode, files
+   *  or not. Isolation consumers (contextRoute layer suppression,
+   *  conversationHistoryPolicy, candidate-profile drop) key on THIS, per the
+   *  ModesManager Defect C doctrine: isolation is cheap and stays wide.
+   *  R9 (2026-08-12): #446 briefly repurposed this field to strict-preferred,
+   *  silently turning plan-level isolation OFF for broad-not-strict modes. */
   documentGroundedCustomModeActive?: boolean;
-  /**
-   * The same mode WITH at least one usable reference file. This is the gate for
-   * anything that tells the model (or the validator) to answer FROM documents,
-   * because with zero files those instructions describe a universe that does
-   * not exist.
-   */
+  /** STRICT-preferred doc grounding (explicit strictness when the snapshot
+   *  carries it; broad fallback for legacy callers). Prompt-refusal semantics
+   *  (the grounding policyLine) key on THIS — a refusal instruction is only
+   *  honest for a genuinely bounded universe. */
+  strictDocumentGroundedActive?: boolean;
+  /** The engine's `docGroundedEnforcementActive` (R1): explicit strict contract
+   *  OR a doc-grounded mode with at least one real file. Everything that tells
+   *  the model (or the validator) to answer FROM documents keys on THIS, so the
+   *  prompt, the routing, the forced retrieval and the post-stream validator
+   *  cannot disagree about whether a turn is document-grounded. */
+  docGroundedEnforcementActive?: boolean;
+  /** STRICT on the AUTHORITY ALONE — `activeMode.strictDocumentGroundedActive`
+   *  verbatim, with no files check folded in. Deliberately separate from
+   *  `strictDocumentGroundedActive` above (which falls back to the broad flag
+   *  for legacy callers) because the refusal gate needs the un-fallen-back
+   *  value: strictDocumentGroundedFromContract returns true for
+   *  `reference_files_only` before anything is uploaded. */
+  documentGroundedStrict?: boolean;
+  /** Whether the active mode actually has at least one reference file. Paired
+   *  with `documentGroundedStrict` so the prompt can distinguish "bounded
+   *  universe exists" from "authority says documents, but there are none". */
   documentGroundedFilesPresent?: boolean;
 }
 
@@ -1476,26 +1490,41 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     .replace(/\bfull[- ]?stack\b/g, 'fullstack')
     .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
   const extractedType = input.extractedQuestion?.questionType;
-  // ONE flag was doing two incompatible jobs, and each narrowing of it broke
-  // the other job (2026-08-05 Bug 001, then code-review 2026-08-12). They are
-  // separated here because they answer different questions:
+  // Defect C split: prefer the EXPLICIT strictness flag when the snapshot
+  // carries it (live snapshots always do since 2026-08-12); fall back to the
+  // broad flag only for older callers/tests that never pass strict. Keying
+  // doc-shape routing and layer suppression on the broad flag ran the strict
+  // pipeline for stock template-seeded modes with zero files.
+  const documentGroundedCustomModeActive =
+    (input.activeMode?.strictDocumentGroundedActive ?? input.activeMode?.documentGroundedCustomModeActive) === true;
+  // R9: the raw broad flag, for the PLAN FIELD isolation consumers read.
+  const broadDocumentGroundedActive = input.activeMode?.documentGroundedCustomModeActive === true;
+  // 2026-08-13: the SAME predicate IntelligenceEngine calls
+  // `docGroundedEnforcementActive` (R1) — an explicit strict contract, or any
+  // doc-grounded mode with at least one real file.
   //
-  //  ISOLATION — "may this turn reach the résumé/JD/Hindsight/OKF?" This is
-  //  authority-only BY DESIGN (ModesManager 2026-07-15): the user's
-  //  template-level intent counts the moment the mode exists, so isolation
-  //  engages BEFORE the first upload. Narrowing it to the strict flag (which
-  //  is false for every template-seeded mode) silently re-opened résumé
-  //  injection on document-grounded turns.
+  // It exists here because the four gates that decide "this turn answers from
+  // documents" had drifted apart, and a template-seeded mode the user uploaded
+  // a file into fell through the crack: origin stays 'default_new_mode' so
+  // strict is false, but files exist so enforcement is true. Measured on main:
   //
-  //  ROUTING + PROMPT POLICY — "should this turn be shaped as, and told to
-  //  answer from, uploaded documents?" That is a lie when no file exists: it
-  //  routed general questions into doc shapes whose validator then refused
-  //  against an empty evidence block, and it handed the model the
-  //  "not in the uploaded material" refusal instruction with nothing uploaded.
-  //  Requires the guarded, files-present field.
-  const documentGroundedCustomModeActive = input.activeMode?.documentGroundedCustomModeActive === true;
-  const documentGroundedFilesPresent = documentGroundedCustomModeActive
-    && input.activeMode?.documentGrounded === true;
+  //   forced retrieval  routed doc-shape  grounding line  validator
+  //   lecture   true        true (fallback)     FALSE        true
+  //   team_meet true        FALSE               FALSE        false
+  //
+  // The lecture row is the dangerous one: the model is handed a document
+  // context block and then graded by the post-stream zero-fabrication
+  // validator, while its prompt never told it to ground anything — judged on a
+  // rule it was never given. The team_meet row is R1's own stated goal
+  // (restore the validator for seeded modes WITH files) going unmet, because
+  // the validator also requires a doc-shaped answerType that routing never
+  // produced.
+  //
+  // Fileless modes are unaffected (enforcement is false without files), so
+  // this cannot reopen the 2026-08-05 Bug 001 refusals. Isolation is untouched
+  // and stays authority-only on `broadDocumentGroundedActive`.
+  const docGroundedEnforcementActive = input.activeMode?.strictDocumentGroundedActive === true
+    || (broadDocumentGroundedActive && input.activeMode?.hasReferenceFiles === true);
   const explicitDocumentModeCodingAsk = /\b(write|implement|code|coding interview|dsa|dry run|time complexity|space complexity|big[-\s]?o|algorithm(?:ic)?|solution code|source code)\b/i.test(text);
   const explicitDocumentModeProfileAsk = /\b(resume|cv|profile|job description|\bjd\b|career|work experience|candidate profile|my background|your background|my projects?|your projects?|my skills?|your skills?)\b/i.test(text);
 
@@ -1982,7 +2011,7 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     answerType = applyModeFallback(answerType, true, input.source, input.activeMode);
   }
 
-  if (documentGroundedFilesPresent && !explicitDocumentModeCodingAsk && !explicitDocumentModeProfileAsk) {
+  if (docGroundedEnforcementActive && !explicitDocumentModeCodingAsk && !explicitDocumentModeProfileAsk) {
     // A user-created document-grounded custom mode makes uploaded/reference files
     // the primary source. Do not let generic coding/profile heuristics steal normal
     // seminar/thesis questions into contracts that forbid reference_files. Within
@@ -2083,8 +2112,17 @@ export const planAnswer = (input: PlanAnswerInput): AnswerPlan => {
     confidence: Math.max(input.intentResult?.confidence || input.extractedQuestion?.confidence || 0.7, 0),
     answerStyle: detectAnswerStyle(question).style,
     answerStyleTargetSeconds: detectAnswerStyle(question).targetSeconds,
-    documentGroundedCustomModeActive,
-    documentGroundedFilesPresent,
+    documentGroundedCustomModeActive: broadDocumentGroundedActive,
+    strictDocumentGroundedActive: documentGroundedCustomModeActive,
+    docGroundedEnforcementActive,
+    // Kept as two separate facts rather than one pre-combined boolean. The
+    // refusal gate needs BOTH, and the two previous attempts at this each
+    // failed by collapsing them: keying on strict alone let a fileless
+    // `reference_files_only` mode refuse against material the user never
+    // provided; keying on enforcement alone made a template-seeded mode refuse
+    // even though its retrieval was never forced.
+    documentGroundedStrict: input.activeMode?.strictDocumentGroundedActive === true,
+    documentGroundedFilesPresent: input.activeMode?.hasReferenceFiles === true,
   };
 };
 
@@ -2176,9 +2214,37 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
         // sales sessions (manual regression 2026-06-12).
         ? 'Speak in the FIRST PERSON as the product\'s seller/representative ("our product", "we"). Never identify as an AI assistant.'
         : 'Answer in a neutral, explanatory voice. Do not roleplay as the candidate.';
-  // Files-present, not authority-only: with nothing uploaded this line told the
-  // model to refuse against material the user never provided (Bug 001).
-  const policyLine = plan.documentGroundedFilesPresent
+  // R9: the grounding/refusal instruction keys on STRICT-preferred — telling
+  // the model to refuse outside "the uploaded material" is only honest when a
+  // bounded universe exists; the broad flag put that line into every
+  // template-seeded fileless mode's prompt.
+  // 2026-08-13: keyed on ENFORCEMENT, so the instruction the model receives
+  // matches the retrieval and validation it is actually subject to. Older
+  // plans that predate the field fall back to the previous behaviour.
+  // 2026-08-16: the doc-grounding policy line additionally requires FILES.
+  //
+  // R1 (`docGroundedEnforcementActive`) is what sets forceDocumentGrounding on
+  // the retrieval call (LLMHelper.ts:2299, IntelligenceEngine.ts:1179), so
+  // wherever it is true the model really is answering over retrieved documents
+  // and the honesty mandate is honest — that is the F9 dissolution, pinned by
+  // F9PurposeHonestyUnderR1_2026_08_15.
+  //
+  // But enforcement is ALSO true on the authority alone:
+  // strictDocumentGroundedFromContract returns true for `reference_files_only`
+  // before anything is uploaded, and its hasReferenceFiles check guards only the
+  // reference_files_primary/_plus_transcript branch. A mode with nothing
+  // uploaded — or whose last file was deleted — was therefore told to say the
+  // answer "is not in the uploaded material" when there was no uploaded material
+  // to be absent from. Requiring files closes exactly that hole and nothing else.
+  //
+  // Plans predating documentGroundedFilesPresent keep the old predicate.
+  const _docEnforcement = (plan.docGroundedEnforcementActive
+    ?? plan.strictDocumentGroundedActive ?? plan.documentGroundedCustomModeActive) === true;
+  const _docPolicyActive = plan.documentGroundedFilesPresent === undefined
+    ? _docEnforcement
+    : (_docEnforcement && plan.documentGroundedFilesPresent === true);
+
+  const policyLine = _docPolicyActive
     ? 'Ground every concrete claim in the uploaded/reference files for this custom mode. If the answer is not supported by the uploaded material, say plainly that the requested information is not in the uploaded material. Do not reconstruct it from general knowledge, prior assistant answers, profile, resume, JD, or persona context.'
     : plan.profileContextPolicy === 'required'
       ? 'Ground every concrete claim in the provided profile facts. Never invent names, numbers, metrics, companies, or technologies that are not in those facts.'

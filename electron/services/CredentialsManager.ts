@@ -16,6 +16,20 @@ const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
 const FALLBACK_PATH = path.join(app.getPath('userData'), 'credentials.fallback.enc');
 // Per-install random salt for the fallback key derivation (32 raw bytes, 0600).
 const SALT_PATH = path.join(app.getPath('userData'), 'credentials.salt');
+// Counts CONSECUTIVE cold starts that found a keyring file and could not decrypt
+// it. safeStorage.decryptString throws for transient reasons (a locked macOS
+// keychain, a denied access prompt, a roaming DPAPI profile mid-sync) as well as
+// permanent ones (issue #322: the item's ACL is bound to a signing context that
+// no longer matches). One failure cannot tell them apart; repetition across
+// distinct launches can. Below the threshold we stay quiet and keep waiting for a
+// healthy launch; at it, we stop pretending recovery is coming and ask the user to
+// re-enter. Deleted the moment a load or a re-key proves the keyring readable.
+const DECRYPT_FAIL_PATH = path.join(app.getPath('userData'), 'credentials.decryptfail');
+// Provenance of the two credential files: a sha256 of the exact bytes THIS
+// install last wrote to each. It is the only way to tell a store we wrote from
+// one we merely found — see the recovery re-key decision in loadCredentials().
+const PROVENANCE_PATH = path.join(app.getPath('userData'), 'credentials.provenance.json');
+const DECRYPT_FAIL_PERMANENT_THRESHOLD = 3;
 
 export interface CustomProvider {
     id: string;
@@ -38,6 +52,14 @@ export interface CurlProvider {
     curlCommand: string;
     responsePath: string; // e.g. "choices[0].message.content"
 }
+
+/**
+ * Providers that carry a per-provider default model. Every member must have a
+ * matching `<provider>PreferredModel` field on StoredCredentials — the getter
+ * and setter build the key by concatenation, so adding a name here without the
+ * field would silently read and write `undefined`.
+ */
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -80,6 +102,17 @@ export interface StoredCredentials {
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
     /**
+     * The LiteLLM model the user promoted to this provider's default, stored
+     * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
+     * allow-list and modelAvailable() all compare against — an unprefixed name
+     * here would make those surfaces disagree.
+     *
+     * Cleared whenever the proxy is removed or repointed: a default naming a
+     * model on the old host is worse than none, because routing would fall back
+     * to something that no longer exists.
+     */
+    litellmPreferredModel?: string;
+    /**
      * Provider ids the user switched off in Settings → AI Providers. A disabled
      * provider keeps its stored credential but contributes no models to the
      * picker and is never chosen as a routing fallback.
@@ -91,6 +124,17 @@ export interface StoredCredentials {
      * provider offers stays selectable. There is deliberately no "none" value:
      * hiding a provider entirely is what `disabledProviders` is for, so no
      * sentinel model id ever reaches persisted state.
+     *
+     * EXCEPTION — OPT-IN providers (currently LiteLLM only): there an empty list
+     * means NOTHING is selected. Those providers front an upstream's entire
+     * catalogue (300+ models is normal for a gateway), so defaulting to "all"
+     * floods the picker with models nobody chose. The selection is explicit, and
+     * a full selection is stored as the full explicit id list — never folded back
+     * to [], which would read as "none" and silently deselect everything.
+     *
+     * Still no sentinel: "none" is the natural empty list, not a magic id. The
+     * rule lives in isModelAllowed() (src/utils/modelUtils.ts) and is mirrored by
+     * modelAvailable() in ipcHandlers.ts.
      */
     cloudEnabledModels?: Record<string, string[]>;
     /**
@@ -175,23 +219,42 @@ export class CredentialsManager {
      * the right move is to preserve the file and let the next healthy launch
      * read it, not to overwrite it from a degraded in-memory view.
      *
-     * Cleared by an explicit user-initiated overwrite (see allowDegradedOverwrite).
+     * Cleared by a launch that can read the store, or by an explicit user-initiated
+     * re-entry once the failure has been classified permanent (see
+     * `needsCredentialReentry`).
      */
     private keyringUnreadable = false;
 
     /**
-     * R-10: set when a NEWER app-managed fallback won this load while an
-     * apparently-fine keyring file also exists. mtime cannot distinguish the two
-     * situations that produce it — (a) a legitimate fallback save whose stale-keyring
-     * cleanup failed, and (b) a whole-profile restore dropping an OLD fallback next
-     * to CURRENT keyring credentials — so the stores are AMBIGUOUS, not ordered.
+     * True once DECRYPT_FAIL_PERMANENT_THRESHOLD distinct cold starts have each
+     * found a keyring file they could not decrypt.
+     *
+     * This is the difference between "wait, it may come back" and "it is not
+     * coming back". While false, writes stay refused so a transient failure
+     * cannot destroy a recoverable store. Once true, the store is treated as
+     * lost rather than pending: the UI can show a re-enter banner, and a
+     * user-initiated save is ALLOWED through the degraded guard — refusing it
+     * would leave the user with no way out at all, which is strictly worse than
+     * overwriting a file that three launches have failed to read.
+     */
+    private reentryRequired = false;
+
+    /**
+     * R-10: set when a NEWER app-managed fallback won this load while a keyring file
+     * that we never proved foreign also exists. mtime alone cannot separate (a) a
+     * legitimate fallback save whose stale-keyring cleanup failed from (b) a
+     * whole-profile restore dropping an OLD fallback beside CURRENT keyring
+     * credentials — so the stores are AMBIGUOUS, not ordered.
      *
      * Under that ambiguity no save may destroy either store: writes go to the
-     * fallback and leave credentials.enc byte-for-byte intact, so whichever store
-     * the user actually needs is still on disk. This is deliberately NOT routed
-     * through keyringUnreadable: that flag refuses writes outright and tells the
-     * user to restart, and a restart does not change mtimes — the refusal would be
-     * permanent and its recovery text false (the F-703 mistake).
+     * fallback and leave credentials.enc byte-for-byte intact. Deliberately NOT
+     * routed through keyringUnreadable — that refuses writes and tells the user to
+     * restart, but a restart does not change mtimes, so the refusal would be
+     * permanent and its advice false (the F-703 mistake).
+     *
+     * Provenance NARROWS this: when the fallback is provably ours and the keyring
+     * provably is not, the fallback is authoritative rather than ambiguous, and
+     * normal keyring writes may proceed.
      */
     private credentialStoresAmbiguous = false;
 
@@ -227,6 +290,125 @@ export class CredentialsManager {
     }
 
     /**
+     * True when a credential store EXISTS on disk but this session could not read
+     * it, so `this.credentials` does not reflect what is stored.
+     *
+     * Call this before any startup self-heal that PERSISTS a single field —
+     * main.ts's GOOGLE_APPLICATION_CREDENTIALS write, PhoneMirror's ext-token
+     * mint. Those write one key into an otherwise-empty credential set, which is
+     * non-empty and so sails past saveCredentials()'s own guard, replacing the
+     * recoverable store with a one-field object. The guard has to live at the
+     * call site because only the call site knows the write is opportunistic
+     * rather than user-intended.
+     */
+    public wasExistingStoreUnreadable(): boolean {
+        return this.keyringUnreadable;
+    }
+
+    /**
+     * True when the store has failed to decrypt on DECRYPT_FAIL_PERMANENT_THRESHOLD
+     * separate cold starts and should be treated as lost rather than pending.
+     *
+     * Surfaces the "re-enter your keys" banner. While this is false a degraded
+     * session refuses writes to protect a store that may still come back; once it
+     * is true, a user-initiated save is allowed through so there is a way out.
+     */
+    public needsCredentialReentry(): boolean {
+        return this.reentryRequired;
+    }
+
+    /**
+     * Provenance — "did THIS install write that file?"
+     *
+     * Recorded as a sha256 of the exact bytes written, per file, at write time.
+     * It is the discriminator the recovery re-key needs: an unreadable keyring
+     * we wrote ourselves is most likely a TRANSIENT decrypt failure (locked
+     * keychain, denied prompt) and must be preserved, while an unreadable
+     * keyring we never wrote is foreign — a leftover from another signing
+     * context or a restored backup — and re-keying over it loses nothing.
+     *
+     * Absent or unreadable provenance always reads as "unknown", never as
+     * "foreign", so a legacy install that predates this file is treated
+     * conservatively rather than having its store rewritten.
+     */
+    private readProvenance(): Record<string, string> {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(PROVENANCE_PATH, 'utf8'));
+            return (parsed && typeof parsed === 'object') ? parsed : {};
+        } catch {
+            return {};
+        }
+    }
+
+    private writeProvenance(next: Record<string, string>): void {
+        try {
+            fs.writeFileSync(PROVENANCE_PATH, JSON.stringify(next), { mode: 0o600 });
+        } catch {
+            // Best-effort. Losing provenance degrades to "unknown", which is the
+            // conservative branch — never the destructive one.
+        }
+    }
+
+    /** Record that we just wrote `bytes` to `key` ('enc' | 'fallback'). */
+    private stampProvenance(key: 'enc' | 'fallback', bytes: Buffer): void {
+        const next = this.readProvenance();
+        next[key] = crypto.createHash('sha256').update(bytes).digest('hex');
+        this.writeProvenance(next);
+    }
+
+    private clearProvenance(key: 'enc' | 'fallback'): void {
+        const next = this.readProvenance();
+        if (key in next) {
+            delete next[key];
+            this.writeProvenance(next);
+        }
+    }
+
+    /** true only when the file exists AND its bytes match what we recorded. */
+    private fileIsOurs(key: 'enc' | 'fallback', filePath: string): boolean {
+        const recorded = this.readProvenance()[key];
+        if (!recorded) return false;
+        try {
+            const actual = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+            return actual === recorded;
+        } catch {
+            return false;
+        }
+    }
+
+    /** Consecutive cold starts that could not decrypt the keyring file. */
+    private readDecryptFailCount(): number {
+        try {
+            const raw = fs.readFileSync(DECRYPT_FAIL_PATH, 'utf8');
+            const n = Number.parseInt(String(raw).trim(), 10);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    /** Record one more failed cold start and return the new total. */
+    private bumpDecryptFailCount(): number {
+        const next = this.readDecryptFailCount() + 1;
+        try {
+            fs.writeFileSync(DECRYPT_FAIL_PATH, String(next), { mode: 0o600 });
+        } catch {
+            // Best-effort. An unwritable sidecar only means the failure is never
+            // classified permanent, which leaves the pre-existing (safe) behaviour
+            // of refusing writes — never the unsafe direction.
+        }
+        return next;
+    }
+
+    /** The keyring proved readable (load or re-key) — drop the failure history. */
+    private clearDecryptFailCount(): void {
+        try {
+            if (fs.existsSync(DECRYPT_FAIL_PATH)) fs.unlinkSync(DECRYPT_FAIL_PATH);
+        } catch { /* best-effort */ }
+        this.reentryRequired = false;
+    }
+
+    /**
      * Emit a privacy-safe snapshot of OS secure-storage availability via the
      * shared TelemetryService. Carries ONLY booleans/enums/platform — never any
      * key material. Called once at startup and again when an STT key save fails
@@ -257,16 +439,12 @@ export class CredentialsManager {
                 // Which persistence path keys actually take: the OS keyring, or the
                 // app-managed AES fallback. Lets us size the keyring-less population and
                 // judge whether signing/keyring follow-up is warranted. Never key material.
-                // R-10: `available` alone MISREPORTS the path when both credential
-                // stores exist and neither can be proven newer. In that state
-                // isEncryptionAvailable() is true, so this reported mode:'keyring',
-                // usedFallback:false — while every write was actually going to the
-                // app-managed fallback and credentials.enc was being left untouched.
-                // The affected population would have been counted as zero.
+                // R-10: `available` alone MISREPORTS the path when both stores exist and
+                // neither can be proven newer. isEncryptionAvailable() is true there, so
+                // this reported mode:'keyring', usedFallback:false while every write went
+                // to the app-managed fallback — the affected population counted as zero.
                 mode: this.credentialStoresAmbiguous ? 'fallback' : (available ? 'keyring' : 'fallback'),
                 usedFallback: !available || this.credentialStoresAmbiguous,
-                // Distinguishes "no keyring on this machine" from "keyring exists but
-                // a second store is present and unresolved" — they need different fixes.
                 storesAmbiguous: this.credentialStoresAmbiguous,
             };
 
@@ -624,13 +802,22 @@ export class CredentialsManager {
         if (this.refuseWriteWhileDegraded('set litellm config')) return;
         const trimmedURL = (baseURL || '').trim();
         const trimmedKey = (apiKey || '').trim();
+        const previousURL = (this.credentials.litellmBaseURL || '').trim();
         if (!trimmedURL) {
             this.credentials.litellmApiKey = undefined;
             this.credentials.litellmBaseURL = undefined;
             this.credentials.litellmMaxTokens = undefined;
+            this.credentials.litellmPreferredModel = undefined;
             this.saveCredentials();
             console.log('[CredentialsManager] LiteLLM config cleared');
             return;
+        }
+        // Repointing at a different proxy invalidates the default the same way it
+        // invalidates the discovered-model cache (dropped by the IPC handler): the
+        // model it names belongs to the old host. A same-URL re-save — the common
+        // case, e.g. changing only max-tokens — keeps it.
+        if (previousURL && previousURL !== trimmedURL) {
+            this.credentials.litellmPreferredModel = undefined;
         }
         // Empty key + existing stored key = keep it (the Settings field is masked
         // and left blank when re-saving e.g. just the max-tokens). Clearing the
@@ -865,12 +1052,12 @@ export class CredentialsManager {
         console.log('[CredentialsManager] Natively API Key updated');
     }
 
-    public getPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek'): string | undefined {
+    public getPreferredModel(provider: PreferredModelProvider): string | undefined {
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         return this.credentials[key] as string | undefined;
     }
 
-    public setPreferredModel(provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string): void {
+    public setPreferredModel(provider: PreferredModelProvider, modelId: string): void {
         if (this.refuseWriteWhileDegraded('set preferred model')) return;
         const key = `${provider}PreferredModel` as keyof StoredCredentials;
         (this.credentials as any)[key] = modelId;
@@ -1110,7 +1297,12 @@ export class CredentialsManager {
         //
         // Returns false — the same contract as an unwritable disk — so the STT
         // key handlers surface a real error rather than a false "Saved".
-        if (this.keyringUnreadable) {
+        // ...UNLESS the failure has already been classified permanent. Three
+        // separate cold starts have each failed to read it, so "wait for a healthy
+        // launch" has stopped being advice and become a dead end. At that point
+        // refusing the write leaves the user with no way to use the app at all,
+        // which is strictly worse than overwriting a file nothing can read.
+        if (this.keyringUnreadable && !this.reentryRequired) {
             console.error(
                 '[CredentialsManager] Refusing to save: the stored credential file could not be read this '
                 + 'session, so saving would overwrite it with an incomplete set. RECOVERY: quit and reopen the '
@@ -1119,7 +1311,20 @@ export class CredentialsManager {
             );
             return false;
         }
-        return this.writeCredentials();
+        const wasReentry = this.reentryRequired;
+        const persisted = this.writeCredentials();
+        if (persisted && wasReentry) {
+            // The re-entered value is on disk under a freshly written keyring item.
+            // Clear the degraded state so the rest of the session behaves normally
+            // and the banner drops immediately rather than after a restart.
+            this.keyringUnreadable = false;
+        this.credentialStoresAmbiguous = false;
+        // R-10: prefer the newer fallback for THIS load without deleting anything.
+        let preferFallbackThisLoad = false;
+            this.clearDecryptFailCount();
+            console.log('[CredentialsManager] Re-entered credentials persisted — degraded state cleared');
+        }
+        return persisted;
     }
 
     /**
@@ -1141,6 +1346,10 @@ export class CredentialsManager {
      */
     private refuseWriteWhileDegraded(op: string): boolean {
         if (!this.keyringUnreadable) return false;
+        // Permanent failure: the user is re-entering by hand and must be allowed
+        // to. Mirrors the same escape hatch in saveCredentials() — the two have to
+        // agree or the setter would reject a mutation the save would have accepted.
+        if (this.reentryRequired) return false;
         console.error(
             `[CredentialsManager] Refusing "${op}": the stored credential file could not be read this session. `
             + 'The change was NOT applied in memory either, so what you see still matches what is on disk. '
@@ -1152,7 +1361,7 @@ export class CredentialsManager {
 
     /** The actual write. Split from saveCredentials() so the degraded check has
      *  exactly one home and cannot be bypassed by a future caller. */
-    private writeCredentials(): boolean {
+    private writeCredentials(preserveFallback = false): boolean {
 
         // Try the OS keyring first. When safeStorage is available, this is the
         // preferred path. On Windows the underlying DPAPI can still throw after
@@ -1161,21 +1370,33 @@ export class CredentialsManager {
         // fallback instead of returning false, otherwise keys are silently lost
         // on restart (the bug reported for Deepgram and other STT keys).
         try {
-            // R-10: while the two stores are ambiguous, the keyring file is the ONLY
+            // R-10: while the two stores are ambiguous the keyring file is the ONLY
             // remaining copy of whatever it holds that the fallback does not. Writing
-            // over it — which this branch does unconditionally — is what destroyed
-            // the user's current credentials after a whole-profile restore. Skip
-            // straight to the fallback branch below, which is additionally stopped
-            // from calling removeKeyringFile(). Net effect: both files survive, so
-            // whichever one the user actually needs is still recoverable.
+            // over it — which this branch does unconditionally — is what destroyed the
+            // user's current credentials after a whole-profile restore. Skip to the
+            // fallback branch, which is additionally stopped from calling
+            // removeKeyringFile(), so BOTH files survive.
             if (safeStorage.isEncryptionAvailable() && !this.credentialStoresAmbiguous) {
                 const data = JSON.stringify(this.credentials);
                 const encrypted = safeStorage.encryptString(data);
                 const tmpEnc = CREDENTIALS_PATH + '.tmp';
                 fs.writeFileSync(tmpEnc, encrypted);
                 fs.renameSync(tmpEnc, CREDENTIALS_PATH);
+                // Record that these exact bytes are OURS, so a later unreadable
+                // load can tell a transient decrypt failure from a foreign file.
+                this.stampProvenance('enc', Buffer.from(encrypted));
                 // Keyring is the source of truth now — drop any stale fallback file.
-                this.removeFallbackFile();
+                //
+                // EXCEPT during a recovery re-key. There, the keyring item we just
+                // wrote is UNPROVEN: this session reached here precisely because
+                // the previous item would not decrypt, and encryptString succeeding
+                // says nothing about whether a FUTURE cold start can read it back
+                // (issue #322 is an ACL/signing-context mismatch, and the write side
+                // never fails). Deleting the fallback here would bet the user's only
+                // remaining readable copy on that assumption. Keep it until a real
+                // cold-start decrypt proves the keyring readable — that path, below
+                // in loadCredentials(), is what finally removes it.
+                if (!preserveFallback) this.removeFallbackFile();
                 return true;
             }
         } catch (keyringErr) {
@@ -1194,6 +1415,7 @@ export class CredentialsManager {
             const tmpFb = FALLBACK_PATH + '.tmp';
             fs.writeFileSync(tmpFb, blob, { mode: 0o600 });
             fs.renameSync(tmpFb, FALLBACK_PATH);
+            this.stampProvenance('fallback', Buffer.from(blob));
             // Stale keyring file is now out of sync (the fallback has the latest
             // credentials). Remove it so loadCredentials() does not find it on
             // next startup and treat the old keyring data as authoritative —
@@ -1220,6 +1442,9 @@ export class CredentialsManager {
         try {
             if (fs.existsSync(FALLBACK_PATH)) {
                 fs.unlinkSync(FALLBACK_PATH);
+                // Drop its provenance too, or a file restored later at the same
+                // path would still look like ours.
+                this.clearProvenance('fallback');
             }
         } catch (err) {
             console.warn('[CredentialsManager] Could not remove fallback credential file:', err);
@@ -1237,6 +1462,7 @@ export class CredentialsManager {
         try {
             if (fs.existsSync(CREDENTIALS_PATH)) {
                 fs.unlinkSync(CREDENTIALS_PATH);
+                this.clearProvenance('enc');
                 console.log('[CredentialsManager] Removed keyring credential file');
             }
         } catch (err) {
@@ -1291,12 +1517,8 @@ export class CredentialsManager {
         // decrypt may be transient, so the two lead to different write-back
         // behaviour in step 2. See the migrate-up comment there.
         let keyringReadFailed = false;
-        // F-704: set when a NEWER app-managed fallback should win this load.
-        // Previously this deleted the keyring file outright; see the guard below.
-        let preferFallbackThisLoad = false;
         // Recomputed from scratch on every load (init() may run more than once).
         this.keyringUnreadable = false;
-        this.credentialStoresAmbiguous = false;
         try {
             // 1) Encrypted keyring file is authoritative when the keyring is available.
             //    However, if a previous saveCredentials() hit the fallback path AND the
@@ -1314,14 +1536,9 @@ export class CredentialsManager {
             //          — the fallback is newer (from the restore time) but contains
             //          STALE data from another machine. This is rare; the user will
             //          re-enter the key on first save.
-            //      (b) a WHOLE-PROFILE copy, where both files travel together.
-            //          F-704 correction: this was previously called "impossible"
-            //          on the grounds that SALT_PATH is machine-bound via
-            //          os.userInfo/MachineGuid. It is not — getFallbackKey()
-            //          derives from a CONSTANT string plus the per-install salt,
-            //          and that salt sits in the same userData directory as the
-            //          ciphertext. A restored profile therefore DOES decrypt, so
-            //          this branch must never take a destructive action.
+            //      (b) cross-machine copy where both files share a salt (impossible —
+            //          SALT_PATH is machine-bound via os.userInfo/MachineGuid, so a
+            //          cross-machine fallback cannot decrypt anyway).
             //    Both edge cases are bounded and recoverable; the worst outcome is a
             //    single re-entry of the affected credential.
             if (fs.existsSync(CREDENTIALS_PATH)) {
@@ -1352,28 +1569,33 @@ export class CredentialsManager {
                         // The user would simply re-enter the affected key on next save.
                         // Bounded and recoverable; documented in the comment block above.
                         if (fallbackMtime > keyringMtime) {
-                            // F-704: PREFER the fallback for this load, but do NOT
-                            // delete the keyring file.
+                            // R-10: PREFER the fallback for this load; never delete the
+                            // keyring file. The "KNOWN MIS-FIRE" note above concluded a
+                            // restored fallback was harmless because it "decrypts with
+                            // THIS machine's salt ... so decryption would fail". That is
+                            // false for a WHOLE-PROFILE restore: getFallbackKey() derives
+                            // from a CONSTANT plus a salt stored in the SAME userData
+                            // directory as the ciphertext, so salt and blob travel
+                            // together and the key re-derives identically. Decryption
+                            // SUCCEEDS — and the delete had already destroyed the user's
+                            // CURRENT credentials, silently reverting them with no error.
                             //
-                            // The "KNOWN MIS-FIRE" note above concluded a restored
-                            // fallback was harmless because it "decrypts with THIS
-                            // machine's salt and key material, so decryption would
-                            // fail". That is not true: getFallbackKey() derives from a
-                            // CONSTANT string plus a salt stored in the SAME userData
-                            // directory as the ciphertext, so a whole-profile restore
-                            // (Time Machine, Migration Assistant, synced AppData,
-                            // support bundle) carries salt and blob together and the
-                            // key re-derives identically. Decryption SUCCEEDS — and
-                            // the delete had already destroyed the user's CURRENT
-                            // credentials, silently reverting them to the older set
-                            // with no error.
-                            //
-                            // Preferring without deleting keeps the intended
-                            // behaviour (newer file wins) while making the mis-fire
-                            // recoverable: the keyring file is still on disk.
-                            console.warn('[CredentialsManager] Fallback is newer than the keyring file; preferring it for this load (keyring file preserved)');
+                            // Provenance (added on main) is a better discriminator than
+                            // mtime: if the fallback is provably ours and the keyring is
+                            // not, the fallback is authoritative and normal writes may
+                            // continue. Only when that is INCONCLUSIVE do we treat the
+                            // two stores as ambiguous and stop writing to the keyring.
                             preferFallbackThisLoad = true;
-                            this.credentialStoresAmbiguous = true;
+                            const fbOurs = this.fileIsOurs('fallback', FALLBACK_PATH);
+                            const krOurs = this.fileIsOurs('enc', CREDENTIALS_PATH);
+                            if (fbOurs && !krOurs) {
+                                console.warn('[CredentialsManager] Fallback is newer AND provably ours while the keyring file is not; '
+                                    + 'preferring the fallback for this load (keyring file preserved).');
+                            } else {
+                                this.credentialStoresAmbiguous = true;
+                                console.warn('[CredentialsManager] Fallback is newer than the keyring file and provenance is inconclusive; '
+                                    + 'preferring it for this load, preserving BOTH files, and not writing to the keyring this session.');
+                            }
                         }
                     } catch (statErr) {
                         // statSync failed — proceed with the normal path; if the keyring
@@ -1400,6 +1622,12 @@ export class CredentialsManager {
                     }
 
                     if (keyringSuccess) {
+                        // A cold start just decrypted the keyring item. This is the
+                        // ONLY event that proves the keyring is genuinely readable,
+                        // so it is the only place allowed to retire the safety net:
+                        // it clears the failure history, drops any re-enter banner,
+                        // and removes the now-redundant fallback.
+                        this.clearDecryptFailCount();
                         // Keyring is authoritative — clean up any stale fallback + plaintext.
                         this.removeFallbackFile();
                         this.removePlaintextFile();
@@ -1414,12 +1642,27 @@ export class CredentialsManager {
                     keyringReadFailed
                         ? '[CredentialsManager] Encrypted credentials present but unreadable; trying app-managed fallback'
                         : preferFallbackThisLoad
-                            // F-704: the read was SKIPPED, not failed — saying
-                            // "keyring unavailable" sent support chasing an
-                            // availability problem that does not exist.
+                            // R-10: the read was SKIPPED, not failed — saying "keyring
+                            // unavailable" sent support chasing a problem that does not exist.
                             ? '[CredentialsManager] Keyring read skipped this load (a newer app-managed fallback takes precedence); trying fallback'
                             : '[CredentialsManager] Encrypted credentials present but keyring unavailable; trying app-managed fallback',
                 );
+                // Classify: transient (wait for a healthy launch) or permanent
+                // (stop waiting, ask the user to re-enter). Counted per COLD START,
+                // not per decrypt call, so a session that retries internally cannot
+                // inflate its way to the threshold. Only counted when the keyring
+                // reported itself available — an unavailable keyring is a stable
+                // platform state, not a decrypt failure, and must never escalate.
+                if (keyringReadFailed) {
+                    const failures = this.bumpDecryptFailCount();
+                    this.reentryRequired = failures >= DECRYPT_FAIL_PERMANENT_THRESHOLD;
+                    console.warn(
+                        `[CredentialsManager] Keyring decrypt failure ${failures}/${DECRYPT_FAIL_PERMANENT_THRESHOLD}`
+                        + (this.reentryRequired
+                            ? ' — treating the stored credentials as unrecoverable; re-entry required.'
+                            : ' — still treating this as transient; the file is preserved.'),
+                    );
+                }
             }
 
             // 2) App-managed encrypted fallback.
@@ -1430,16 +1673,12 @@ export class CredentialsManager {
                     const parsed = JSON.parse(decrypted);
                     if (typeof parsed === 'object' && parsed !== null) {
                         if (this.credentialStoresAmbiguous) {
-                            // R-10: the keyring read was SKIPPED, not failed, so its
-                            // contents are still available and may hold keys the
-                            // fallback has never seen. Replacing wholesale dropped
-                            // them from the active set (measured: a restored fallback
-                            // holding only geminiApiKey hid the user's openai and
-                            // claude keys, and the next save then wrote that reduced
-                            // set to disk). Union the two, fallback winning on
-                            // conflict — that keeps the legitimate case correct (a
-                            // fallback written after the keyring IS newer) while no
-                            // key present in only one store disappears.
+                            // R-10: the keyring read was SKIPPED, not failed, so its contents
+                            // are still available and may hold keys the fallback has never
+                            // seen. Replacing wholesale dropped them from the active set
+                            // (measured: a restored fallback holding only geminiApiKey hid
+                            // the user's openai and claude keys, and the next save wrote that
+                            // reduced set to disk). Union them, fallback winning on conflict.
                             let keyringSet: StoredCredentials = {};
                             try {
                                 const kr = JSON.parse(safeStorage.decryptString(fs.readFileSync(CREDENTIALS_PATH)));
@@ -1459,21 +1698,12 @@ export class CredentialsManager {
                 } catch (fbErr) {
                     console.error('[CredentialsManager] Failed to read app-managed fallback — starting fresh:', fbErr);
                     this.credentials = {};
-                    // F-704 blocker 1b: "starting fresh" is only safe when there is
-                    // nothing left to lose. If a keyring file EXISTS we have not
-                    // successfully read (a successful read returns above), then
-                    // credentials.enc still holds the user's real set while memory now
-                    // holds {} — and the first ordinary save would serialize that
-                    // near-empty object straight over it. This is the reachable half of
-                    // the restored-profile case: a fallback carried from another
-                    // machine WITHOUT its salt fails to decrypt here.
-                    //
-                    // A fallback that will not decrypt carries NO information, so it is
-                    // no evidence that the keyring is stale and must not win the mtime
-                    // race. Recover by reading the keyring we skipped. Refusing instead
-                    // would lock the user out of their real credentials on EVERY boot —
-                    // the undecryptable file stays newer forever, so the refusal would
-                    // never lift (the same permanent-lockout shape as F-703).
+                    // R-10 blocker 1b: "starting fresh" is only safe when there is nothing
+                    // left to lose. A fallback that will not decrypt carries NO information,
+                    // so it is no evidence the keyring is stale and must not win the mtime
+                    // race — recover by reading the keyring we skipped. Refusing instead
+                    // would lock the user out of their real credentials on EVERY boot, since
+                    // the undecryptable file stays newer forever (the F-703 lockout shape).
                     if (fs.existsSync(CREDENTIALS_PATH)) {
                         let recovered = false;
                         try {
@@ -1490,8 +1720,6 @@ export class CredentialsManager {
                             console.warn('[CredentialsManager] Neither credential store could be read. Saves are disabled this session so the '
                                 + 'existing keyring file is not overwritten with an empty set.');
                         }
-                        // Either way the stores are no longer ambiguous: the fallback
-                        // holds nothing, so it cannot be the newer truth.
                         this.credentialStoresAmbiguous = false;
                     }
                 }
@@ -1523,27 +1751,49 @@ export class CredentialsManager {
                 try { keyringNow = safeStorage.isEncryptionAvailable(); } catch { keyringNow = false; }
                 if (keyringReadFailed) {
                     this.keyringUnreadable = true;
-                    console.warn('[CredentialsManager] Running from the app-managed fallback because the keyring file would not decrypt. '
+                    // RECOVERY RE-KEY, gated on PROVENANCE.
+                    //
+                    // Two states look identical here — keyring present, decrypt
+                    // throws, fallback older — and they want opposite handling:
+                    //
+                    //   (a) a keyring holding STALE/FOREIGN data (a leftover from
+                    //       another signing context, or a restored backup). The
+                    //       fallback is the real store; re-keying from it heals
+                    //       the install and loses nothing.
+                    //   (b) a keyring WE wrote, whose decrypt failure is transient
+                    //       (locked keychain, denied prompt). Re-keying reverts the
+                    //       user to older credentials and destroys the newer ones —
+                    //       CredentialDegradedStoreGuard2026_08_05 pins this shut.
+                    //
+                    // Provenance separates them: we hash every file we write. The
+                    // re-key fires ONLY when the fallback is provably ours AND the
+                    // keyring provably is not. Absent provenance reads as UNKNOWN,
+                    // never as foreign, so a legacy install that predates this file
+                    // takes the conservative branch and is left untouched.
+                    const fallbackIsOurs = this.fileIsOurs('fallback', FALLBACK_PATH);
+                    const keyringIsOurs = this.fileIsOurs('enc', CREDENTIALS_PATH);
+                    if (keyringNow && !keyringIsOurs && fallbackIsOurs && Object.keys(this.credentials).length > 0) {
+                        // The new keyring item is UNPROVEN until a cold start
+                        // decrypts it, so the fallback is kept as the safety net —
+                        // see the preserveFallback argument to writeCredentials().
+                        const rekeyed = this.writeCredentials(true);
+                        console.warn('[CredentialsManager] The keyring file was not written by this install and will not decrypt; '
+                            + 're-keyed from the app-managed fallback ' + (rekeyed ? 'successfully' : 'UNSUCCESSFULLY') + '. '
+                            + 'The fallback is deliberately preserved until a cold start proves the new keyring item readable.');
+                    } else {
+                        console.warn('[CredentialsManager] Running from the app-managed fallback because the keyring file would not decrypt. '
                         + 'Leaving the keyring file untouched in case the failure was transient — some recently-saved credentials may be missing '
                         + 'this session, and saves are disabled until a launch that can read it.');
+                    }
                 } else if (preferFallbackThisLoad) {
-                    // F-704 (self-review fix): do NOT migrate up on the prefer
-                    // path. Skipping the keyring READ leaves keyringReadFailed
-                    // false, so this branch used to fire and saveCredentials()
-                    // re-encrypted the RESTORED fallback straight over
-                    // credentials.enc and then deleted the fallback — destroying
-                    // exactly the credentials the "don't delete the keyring file"
-                    // change was meant to protect. Preserving the file while
-                    // overwriting its contents milliseconds later is not
-                    // preservation; the first version of this fix was a no-op.
-                    //
-                    // We cannot tell a legitimately-newer fallback (a keyring
-                    // write that threw) from a restored-profile fallback by mtime
-                    // alone, so the safe action under that ambiguity is to destroy
-                    // NEITHER: run this session from the fallback we loaded, leave
-                    // both files intact, and let the next explicit save re-establish
-                    // the keyring normally.
-                    console.warn('[CredentialsManager] Running from a newer app-managed fallback; leaving the existing keyring file untouched (no migrate-up) so a restored profile cannot overwrite current credentials.');
+                    // R-10: do NOT migrate up on the prefer path. Skipping the keyring
+                    // READ leaves keyringReadFailed false, so this branch used to fire and
+                    // saveCredentials() re-encrypted the restored fallback straight over
+                    // credentials.enc, then deleted the fallback — destroying exactly the
+                    // credentials the "don't delete the keyring file" change protects.
+                    // Preserving a file while overwriting its contents milliseconds later
+                    // is not preservation.
+                    console.warn('[CredentialsManager] Running from a newer app-managed fallback; leaving the existing keyring file untouched (no migrate-up).');
                 } else if (keyringNow && Object.keys(this.credentials).length > 0) {
                     console.log('[CredentialsManager] Keyring now available — migrating fallback credentials to keyring');
                     this.saveCredentials();

@@ -26,8 +26,14 @@ test('LocalWhisperSTT.stop does not clear queued VAD finals before worker readin
 
 test('LocalWhisperSTT drains queued stop-time finals before terminating worker', () => {
   assert.ok(flushPendingStart >= 0, 'flushPending should exist');
-  assert.match(source, /if \(this\.isDrainingFinals\) \{\n\s+this\.drainingFinalsInFlight\+\+;\n\s+\}\n\s+this\.sendTranscribe\(audio, false\);/);
-  assert.match(flushPendingSource, /queued\.forEach\(audio => this\.sendTranscribe\(audio, false\)\);/);
+  // Task 10 fix round 1: dispatchFinal/flushPending now pass a Nemotron-only
+  // `nemotronReset` flag through to sendTranscribe (delta-dispatch cursor
+  // reset for the stateful Nemotron engine). `audio` was also renamed to
+  // `outgoing` in dispatchFinal since it's a Nemotron-only delta slice, not
+  // always the raw input `audio`. Both are additive to the same
+  // drain-before-terminate control flow this test pins.
+  assert.match(source, /if \(this\.isDrainingFinals\) \{\n\s+this\.drainingFinalsInFlight\+\+;\n\s+\}\n\s+this\.sendTranscribe\(outgoing, false, nemotronReset\);/);
+  assert.match(flushPendingSource, /queued\.forEach\(\(\{ audio, nemotronReset \}\) => this\.sendTranscribe\(audio, false, nemotronReset\)\);/);
   assert.match(listenerSource, /!this\.isActive && !\(this\.isDrainingFinals && msg\.type === 'result'\)/);
   assert.match(listenerSource, /this\.drainingFinalsInFlight = Math\.max\(0, this\.drainingFinalsInFlight - 1\);/);
   assert.match(listenerSource, /this\.beginWorkerTermination\(this\.worker\);/);

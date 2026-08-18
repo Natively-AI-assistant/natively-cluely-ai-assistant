@@ -193,8 +193,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         // A populated allow-list means the model must be in it. Empty means no
         // filter — see StoredCredentials.cloudEnabledModels. There is deliberately
         // no "none" sentinel: hiding a provider outright is disabledProviders' job.
+        //
+        // EXCEPT for opt-in providers (LiteLLM), where empty means NOTHING is
+        // selected. A gateway exposes the upstream's entire catalogue, so "empty
+        // = all" would put hundreds of unchosen models into routing.
+        //
+        // MIRRORS isModelAllowed() in src/utils/modelUtils.ts — that one decides
+        // what the user can pick, this one decides what routing accepts. If they
+        // diverge the picker offers models the router rejects. A drift guard test
+        // pins the two together.
+        const optInFamily = family === 'litellm';
         const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
-        if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
+        if (optInFamily) {
+          if (!enabledForFamily.includes(modelId)) return false;
+        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
@@ -226,8 +238,15 @@ export function initializeIpcHandlers(appState: AppState): void {
           const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(2500) });
           if (resp.ok) {
             const data: any = await resp.json();
-            const firstModel = (data?.data || []).map((m: any) => m?.id).find(Boolean);
-            if (firstModel) litellmFallbackModel = `litellm/${firstModel}`;
+            const ids: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+            // The user's chosen LiteLLM default wins over "whatever the proxy listed
+            // first" — but only if the proxy still offers it. Confirming it against
+            // the live list is what keeps a default that was set against an earlier
+            // catalogue from being installed as a model that no longer resolves.
+            const preferred = cm.getPreferredModel?.('litellm');
+            const preferredBare = preferred?.startsWith('litellm/') ? preferred.slice('litellm/'.length) : preferred;
+            const chosen = (preferredBare && ids.includes(preferredBare)) ? preferredBare : ids[0];
+            if (chosen) litellmFallbackModel = `litellm/${chosen}`;
           }
         } catch { /* LiteLLM fallback discovery best-effort */ }
       }
@@ -236,7 +255,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // so a provider the user switched off (or a model they filtered out) is never
       // installed as the fallback.
       const next = modelAvailable('natively') ? 'natively'
-        : modelAvailable('gemini-3.6-flash') ? 'gemini-3.6-flash'
+        : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
@@ -254,7 +273,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
-      appState.broadcast('model-changed', next);
+      // Same two listeners as every other model change. Converted alongside the
+      // rest rather than left as the one surviving broadcast — an untargeted
+      // straggler is how this class of fix keeps coming back.
+      appState.sendModelChanged(next);
       return next;
     } catch (error: any) {
       console.warn('[IPC] default model availability refresh failed:', error?.message || error);
@@ -974,6 +996,75 @@ export function initializeIpcHandlers(appState: AppState): void {
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
 
+        // Skill invocation parsed EARLY (PR #429 Bug 003). It used to live ~35k
+        // characters below, after the Context Intelligence V3 short-circuit had
+        // already returned — so under V3 (default ON since 2026-07-30) the
+        // `/skill-name` prefix reached the model as literal text and the skill
+        // instructions were never injected anywhere.
+        //
+        // Only the PARSE moved. `message` itself is still mutated at the original
+        // boundary below, so every existing reader in between is untouched.
+        let skillStrippedMessage: string | null = null;
+        // Skill invocation: /skill-name or $skill-name prefix (issue #303).
+        // Strip the prefix from message before planAnswer so routing sees the
+        // bare user query, then inject the skill's instructions into context
+        // right before streamChat so the model follows them for this turn only.
+        let skillPromptBlock = '';
+        const skillPrefixMatch = typeof message === 'string'
+          ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
+          : null;
+        // Defensive: strip any embedded <answer_contract>...</answer_contract>
+        // block from the user-visible message. See stripEmbeddedAnswerContract
+        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
+        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
+        // (skill dispatch, identity probe, source-switch resolution) sees the
+        // user's literal input — error logs and unmatched-skill fallbacks
+        // report the original message, not a stripped variant.
+        if (skillPrefixMatch) {
+          try {
+            const candidateId = skillPrefixMatch[1];
+            const skill = SkillsManager.getInstance().getSkill(candidateId);
+            if (skill) {
+              // Disabled skills still resolve by name but must NOT inject their
+              // instructions into the prompt — the user turned them off in
+              // Settings → Skills. Surface a clear error rather than silently
+              // proceeding (which would invoke the skill anyway).
+              if (skill.enabled === false) {
+                event.sender.send(
+                  'gemini-stream-error',
+                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
+                  { streamId: myStreamId },
+                );
+                return null;  // sibling error paths return null; handler is typed `| null`
+              }
+              skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
+              const strippedQuery = skillPrefixMatch[2].trim();
+              // Parsed here, APPLIED later (see the deferred assignment at the
+              // original site). Mutating `message` now would change what every
+              // reader between here and there sees — the identity probe, the
+              // source-switch resolution and the error logs all expect the
+              // user's literal input.
+              skillStrippedMessage = strippedQuery || `Please help me with the ${skill.name} skill.`;
+              console.log(`[IPC] Skill activated: ${skill.id}`);
+            } else {
+              const allSkills = SkillsManager.getInstance().listSkills();
+              const available = allSkills.length
+                ? allSkills.map(s => `/${s.id}`).join(', ')
+                : 'none registered';
+              event.sender.send(
+                'gemini-stream-error',
+                `Skill "/${candidateId}" not found. Available: ${available}`,
+                { streamId: myStreamId },
+              );
+              return null;  // sibling error paths return null; handler is typed `| null`
+            }
+          } catch (skillErr: any) {
+            console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
+            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
+            return null;  // sibling error paths return null; handler is typed `| null`
+          }
+        }
+
         // ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface ──────────────
         //
         // Deliberately a SHORT-CIRCUIT, not an interleave. The legacy assembly
@@ -1136,10 +1227,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             // block previously carried its own copy of all of that — two copies
             // of a security-relevant construction is how the tokenizer copies
             // drifted (§2 of the architecture review).
+            // The skill prefix is stripped for V3 too — otherwise the model reads
+            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
+            const v3Question = String((skillStrippedMessage ?? message) || '');
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
-              question: String(message || ''),
+              question: v3Question,
+              // PR #429 Bug 002: omitted entirely, so it defaulted to false even
+              // when the user attached screenshots — the V3 classifier then never
+              // added SCREEN_SPECIFIC / SCREEN_FACT and the image was not treated
+              // as authoritative evidence. Manual chat has no periodic-capture OCR
+              // object at all, so imagePaths is the only screen signal here.
+              hasScreenContext: (imagePaths?.length ?? 0) > 0,
               // Routed coding verdict, same as the WTA path (see
               // BridgeInput.codingTask). Without it the bridge falls back to its
               // keyword regex, which misses ordinary phrasings like "Write a BFS
@@ -1151,7 +1251,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               codingTask: (() => {
                 try {
                   return isCodingAnswerType(planAnswer({
-                    question: String(message || ''),
+                    question: v3Question,
                     source: 'manual_input',
                     speakerPerspective: 'user',
                     activeMode: modeInfo ?? undefined,
@@ -1235,11 +1335,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             // ends by returning, so the loop below cannot tell a truncated answer
             // from a complete one. Storing a truncated answer as history makes it
             // the antecedent for the NEXT turn's referent resolution.
+            // Bug 003: V3 owns this turn end to end, so if the skill block is not
+            // appended here it is injected nowhere at all.
+            const v3SystemPrompt = skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system;
             const v3Stream = llmHelper.streamChatWithOutcome(
               composed.user,
               imagePaths,
               undefined,
-              composed.system,
+              v3SystemPrompt,
               true,   // ignoreKnowledgeMode — V3 owns evidence; legacy injection must not re-enter
               true,   // skipModeInjection — same reason
               // Declared outbound data scopes. Was `[]`, which told the
@@ -1353,45 +1456,84 @@ export function initializeIpcHandlers(appState: AppState): void {
             let liveModeIdAtRecord: string | null = null;
             try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
             if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
-              // A truncated answer must NOT enter conversation state, memory, or
-              // the session transcript. It would become the antecedent for the
-              // next turn's referent resolution and be replayed as if it were a
-              // complete answer — the same class of defect as the
-              // "(referring to: Makefile)" contamination. The user still SEES
-              // the partial text; it just does not become history.
+              // A truncated ANSWER must NOT enter conversation state or memory.
+              // It would become the antecedent for the next turn's referent
+              // resolution and be replayed as if it were a complete answer —
+              // the same class of defect as the "(referring to: Makefile)"
+              // contamination. The user still SEES the partial text; it just
+              // does not become history.
+              //
+              // Code-review 2026-08-13: the guard originally wrapped ALL FOUR
+              // blocks, so a truncated turn also dropped the sinks that record
+              // the USER's side — the question they actually asked. That is
+              // never in doubt just because the answer stopped early, and
+              // suppressing it lost the meeting transcript row, the usage row
+              // (a regression of the very bug the logUsage comment below
+              // documents), and the phone-mirror question. Split by SIDE:
+              // answer-side sinks honor the truncation guard, user-side sinks
+              // always run.
               if (v3Truncated) {
-                console.warn('[IPC] skipping history/memory sinks for a truncated answer', { streamId: myStreamId });
-              } else {
-              try {
-                const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
-                recordAnswerSummary(String(senderId), finalText);
-              } catch { /* continuity only */ }
-              try {
-                _manualConversationMemory.record({
-                  sessionId: String(senderId),
-                  userMessage: String(message || ''),
-                  assistantAnswer: finalText,
-                  mode: (modeInfo as any)?.templateType,
-                  timestamp: Date.now(),
-                });
-              } catch { /* memory only */ }
+                console.warn('[IPC] truncated answer — recording the user turn but skipping answer-side history/memory sinks', { streamId: myStreamId });
+              }
+              // ── ANSWER-SIDE SINKS (skipped when truncated) ──────────────
+              if (!v3Truncated) {
+                try {
+                  const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                  recordAnswerSummary(String(senderId), finalText);
+                } catch { /* continuity only */ }
+                try {
+                  // The user/answer PAIR is the antecedent unit for follow-up
+                  // referent resolution, so a truncated answer suppresses the
+                  // whole pair — the user turn is still preserved in the
+                  // session transcript below.
+                  _manualConversationMemory.record({
+                    sessionId: String(senderId),
+                    userMessage: String(message || ''),
+                    assistantAnswer: finalText,
+                    mode: (modeInfo as any)?.templateType,
+                    timestamp: Date.now(),
+                  });
+                } catch { /* memory only */ }
+              } // end answer-side sinks
               try {
                 const im = appState.getIntelligenceManager();
                 im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
-                im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
+                if (!v3Truncated) im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
                 // Usage too: ai_interactions ("usage" in Meeting Notes) is
                 // populated solely from SessionTracker's usage log at
                 // saveMeeting time. Every legacy exit logs it; without this,
                 // a V3-answered chat during a meeting left the meeting's
                 // usage panel empty (confirmed in the live DB: V3 meetings
-                // had transcript rows but zero usage rows).
-                im?.logUsage?.('chat', String(message || ''), finalText);
+                // had transcript rows but zero usage rows). A truncated turn
+                // still consumed the call, so it is still usage.
+                //
+                // But the usage log is NOT write-only (code-review 2026-08-14):
+                // SessionTracker.getRecentManualTurn reads fullUsage and
+                // IntelligenceEngine.buildRecentManualContext injects the pair
+                // into the NEXT prompt as <previous_assistant_answer_excerpt>.
+                // Plain logUsage would therefore feed the truncated answer back
+                // as conversation context — defeating the answer-side guard
+                // above through a second door. `synthetic: true` is the existing
+                // opt-out: getRecentManualTurn skips those entries (line ~688)
+                // while every persistence path still returns them, so the
+                // Meeting Notes row survives and the replay does not.
+                if (v3Truncated) {
+                  im?.pushUsage?.({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: String(message || ''),
+                    answer: finalText,
+                    source: 'manual_chat',
+                    synthetic: true,
+                  });
+                } else {
+                  im?.logUsage?.('chat', String(message || ''), finalText);
+                }
               } catch { /* session transcript only */ }
               try {
                 PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
-                PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
+                if (!v3Truncated) PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
               } catch { /* mirror only */ }
-              } // end !v3Truncated
             }
 
             return null;
@@ -1445,7 +1587,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // loaded — are interview-rehearsal questions about the CANDIDATE and must
         // reach the deterministic profile fast path instead of leaking
         // "I'm Natively, an AI assistant".
-        if (!imagePaths?.length && typeof message === 'string') {
+        // !skillPromptBlock: a skill turn must never be hijacked by the canned
+        // identity reply. This was previously incidental — the probe ran on the raw
+        // "/humanize who are you", which its fully-anchored regexes could not match.
+        // Made explicit so the immunity does not depend on regex anchoring.
+        if (!skillPromptBlock && !imagePaths?.length && typeof message === 'string') {
           const { resolveIdentityProbe } = require('./llm/manualIdentityRouting') as typeof import('./llm/manualIdentityRouting');
           let probeProfileReady = false;
           try {
@@ -1557,59 +1703,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Released in the handler's finally below.
         _manualFgToken = ForegroundGate.begin('manual');
 
-        // Skill invocation: /skill-name or $skill-name prefix (issue #303).
-        // Strip the prefix from message before planAnswer so routing sees the
-        // bare user query, then inject the skill's instructions into context
-        // right before streamChat so the model follows them for this turn only.
-        let skillPromptBlock = '';
-        const skillPrefixMatch = typeof message === 'string'
-          ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
-          : null;
-        // Defensive: strip any embedded <answer_contract>...</answer_contract>
-        // block from the user-visible message. See stripEmbeddedAnswerContract
-        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
-        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
-        // (skill dispatch, identity probe, source-switch resolution) sees the
-        // user's literal input — error logs and unmatched-skill fallbacks
-        // report the original message, not a stripped variant.
-        if (skillPrefixMatch) {
-          try {
-            const candidateId = skillPrefixMatch[1];
-            const skill = SkillsManager.getInstance().getSkill(candidateId);
-            if (skill) {
-              // Disabled skills still resolve by name but must NOT inject their
-              // instructions into the prompt — the user turned them off in
-              // Settings → Skills. Surface a clear error rather than silently
-              // proceeding (which would invoke the skill anyway).
-              if (skill.enabled === false) {
-                event.sender.send(
-                  'gemini-stream-error',
-                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
-                  { streamId: myStreamId },
-                );
-                return;
-              }
-              skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
-              const strippedQuery = skillPrefixMatch[2].trim();
-              message = strippedQuery || `Please help me with the ${skill.name} skill.`;
-              console.log(`[IPC] Skill activated: ${skill.id}`);
-            } else {
-              const allSkills = SkillsManager.getInstance().listSkills();
-              const available = allSkills.length
-                ? allSkills.map(s => `/${s.id}`).join(', ')
-                : 'none registered';
-              event.sender.send(
-                'gemini-stream-error',
-                `Skill "/${candidateId}" not found. Available: ${available}`,
-                { streamId: myStreamId },
-              );
-              return;
-            }
-          } catch (skillErr: any) {
-            console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
-            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
-            return;
-          }
+        // Skill stripping APPLIED here, at the original boundary, so upstream
+        // routing (identity probe, source-switch resolution) and error logs keep
+        // seeing the user's literal input exactly as before the parse was hoisted.
+        if (skillStrippedMessage !== null) {
+          message = skillStrippedMessage;
         }
 
         // Active mode as a routing PRIOR (PI v3, W1): an ambiguous manual
@@ -1756,13 +1854,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             turnSourceDecision: manualTurnSourceDecision,
           });
-          if (isIntelligenceFlagEnabled('trace')) {
+          if (isIntelligenceFlagEnabled('trace')) {  // manualOwnership! below: assigned unconditionally at 1790-1797
             console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
-              owner: manualOwnership.owner,
-              profileAllowed: manualOwnership.profileAllowed,
-              explicitProfileAsk: manualOwnership.explicitProfileAsk,
-              shouldClarifyInsteadOfProfile: manualOwnership.shouldClarifyInsteadOfProfile,
-              reason: manualOwnership.reason,
+              owner: manualOwnership!.owner,
+              profileAllowed: manualOwnership!.profileAllowed,
+              explicitProfileAsk: manualOwnership!.explicitProfileAsk,
+              shouldClarifyInsteadOfProfile: manualOwnership!.shouldClarifyInsteadOfProfile,
+              reason: manualOwnership!.reason,
               answerType: answerPlan.answerType,
             }));
           }
@@ -4467,7 +4565,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // pack exists. A governed `answer`-policy pack that merely
                   // produced a weak answer is still repaired below — only an
                   // explicit governed REFUSAL is trusted here.
-                  const governedRefusal = manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
+                  // R10 (2026-08-12, review finding): keying on pack PRESENCE
+                  // contradicted the docblock ("only an explicit GOVERNED refusal
+                  // is trusted here") — an ungoverned refuse pack from a fileless
+                  // doc-flavored mode could block the false-refusal repair while
+                  // strong document evidence existed. Same class as #446's F3.
+                  const governedRefusal = manualContextOsGeneration?.govern === true
+                    && manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
                   // Both the system's own refusal phrase and a model-phrased
                   // refusal clear the same bar (the question is about a real
                   // document topic). Off-topic questions match neither a whole
@@ -5055,7 +5159,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // Phase 9 (exact-pack identity): when the typed pack GOVERNED
                   // this generation (H1), reuse that EXACT pack — same packId end
                   // to end. Otherwise build a verify-pack from the captured block.
-                  const verifyPack: import('./intelligence/context-os').EvidencePack = manualContextOsGeneration?.evidencePack ?? ((): import('./intelligence/context-os').EvidencePack => {
+                  // R3 (2026-08-12, review finding): PR #446 created the
+                  // pack-exists-with-govern:false state, and this consumer kept
+                  // keying on PRESENCE — so a legacy-path answer (the very turn
+                  // the fix un-gagged) was verified against the DISCARDED empty
+                  // refuse pack instead of the capturedEvidenceBlock it was
+                  // actually grounded in, persisting claims under the wrong
+                  // packId/answerPolicy/sourceOwner identity.
+                  const verifyPack: import('./intelligence/context-os').EvidencePack = (manualContextOsGeneration?.govern ? manualContextOsGeneration?.evidencePack : null) ?? ((): import('./intelligence/context-os').EvidencePack => {
                     const evItems = (() => {
                       if (!capturedEvidenceBlock.trim()) return [];
                       const snippets = parseModeSnippets(capturedEvidenceBlock);
@@ -6652,7 +6763,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      appState.broadcast('model-changed', defaultModel);
+      appState.sendModelChanged(defaultModel);
 
       // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
       // the audio pipeline immediately — without this, the in-memory pipeline still uses
@@ -7500,6 +7611,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
+        litellmPreferredModel: creds.litellmPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
         cloudEnabledModels: creds.cloudEnabledModels || {},
       };
@@ -7594,7 +7707,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -8312,8 +8425,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Settings overlay severed the event channel is no longer possible.
   safeHandle('local-whisper-start-download', async (_event, modelId: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      const r = LocalModelDownloadService.getInstance().start('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      const r = LocalModelDownloadService.getInstance().start(resolveLocalModelProviderName(modelId), modelId);
       // Preserve the original return shape: the panel treats 'already-downloading'
       // as a non-error success.
       if (r.alreadyDownloading) return { success: false, error: 'already-downloading' };
@@ -8325,8 +8438,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('local-whisper-cancel-download', async (_event, modelId: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      return LocalModelDownloadService.getInstance().cancel('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      return LocalModelDownloadService.getInstance().cancel(resolveLocalModelProviderName(modelId), modelId);
     } catch (e: any) {
       return { success: false, error: e?.message ?? String(e) };
     }
@@ -8338,8 +8451,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   // mid-download.
   safeHandle('local-whisper-get-download-state', async (_event, modelId?: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      return LocalModelDownloadService.getInstance().getState('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      // With a modelId, resolve its real provider (whisper vs nemotron) for
+      // the single-entry lookup. Without one (querying every in-flight
+      // download for the panel's initial mount), pass no providerName at
+      // all — getState() then returns entries across every registered
+      // provider; hardcoding 'whisper' here previously meant the panel
+      // could never see a Nemotron entry on remount.
+      return LocalModelDownloadService.getInstance().getState(
+        modelId ? resolveLocalModelProviderName(modelId) : undefined,
+        modelId,
+      );
     } catch {
       return modelId ? null : [];
     }
@@ -8406,7 +8528,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let response;
 
         if (provider === 'gemini') {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
           response = await axios.post(
             url,
             {
@@ -8738,7 +8860,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -8770,7 +8892,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -8790,7 +8912,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.6-flash' };
+      return { model: 'gemini-3.7-flash' };
     }
   });
 
@@ -9300,7 +9422,39 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   // MODE 1: Assist (Passive observation)
+  // ── Usage-ledger feature instrumentation (phase 4) ─────────────────────────
+  //
+  // `runTracked` emits feature_started and exactly one terminal event. The
+  // feature name comes from the ACTIVE MODE and is only a NAMED feature when
+  // that mode is a built-in — a custom mode a user renamed "Technical
+  // Interview" reports the honest `mode_execution` instead (§31).
+  //
+  // Everything is wrapped: instrumentation must never be able to fail the answer
+  // it measures, so a failure to resolve the mode degrades to `mode_execution`
+  // rather than throwing into the handler.
+  const _usageFeature = (): any => {
+    try {
+      const { featureForMode } = require('./services/usageInstrumentation');
+      const { ModesManager: _MMUsage } = require('./services/ModesManager');
+      return featureForMode(_MMUsage.getInstance().getActiveMode());
+    } catch {
+      return 'mode_execution';
+    }
+  };
+  const _tracked = async <T>(fn: () => Promise<T>, failedIf?: (r: T) => boolean): Promise<T> => {
+    try {
+      const { runTracked } = require('./services/usageInstrumentation');
+      return await runTracked(_usageFeature(), fn, failedIf ? { failedIf } : undefined);
+    } catch (e: any) {
+      // Only a require()/wiring failure lands here; runTracked rethrows the
+      // handler's own error untouched, so this cannot swallow a real one.
+      if (e && e.__usageWrapperFailure) return fn();
+      throw e;
+    }
+  };
+
   safeHandle('generate-assist', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
@@ -9317,6 +9471,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.insight === null || r.insight === undefined);
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
@@ -9335,6 +9490,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       imagePaths?: string[],
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
+      return _tracked(async () => {
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -9527,16 +9683,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
+        // Returns an error object rather than throwing. runTracked's default
+        // predicate reads the truthy `error` field and records this as FAILED —
+        // a dispute report must never imply service was delivered when it was
+        // not (§6). The two early returns above use the same shape and are
+        // classified the same way, which is the point of the shared wrapper.
         return {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
         };
       }
+      });
     },
   );
 
   safeHandle('generate-clarify', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const clarification = await intelligenceManager.runClarify();
@@ -9562,6 +9725,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.clarification === null || r.clarification === undefined);
   });
 
   // Shared helper: validate, then run images through the vision-first ImageOptimizer
@@ -9597,6 +9761,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   }
 
   safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -9651,9 +9816,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   safeHandle('generate-brainstorm', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -9707,6 +9874,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
@@ -9732,6 +9900,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // MODE 3: Follow-Up (Refinement)
   safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
@@ -9748,10 +9917,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.refined === null || r.refined === undefined);
   });
 
   // MODE 4: Recap (Summary)
   safeHandle('generate-recap', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
@@ -9768,10 +9939,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.summary === null || r.summary === undefined);
   });
 
   // MODE 6: Follow-Up Questions
   safeHandle('generate-follow-up-questions', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
@@ -9788,6 +9961,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.questions === null || r.questions === undefined);
   });
 
   // MODE 5: Manual Answer (Fallback)
@@ -10039,6 +10213,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   safeHandle('generate-followup-email', async (_, input: any) => {
+    return _tracked(async () => {
     try {
       const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
       const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
@@ -10076,6 +10251,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error generating follow-up email:', error);
       throw error;
     }
+    });
   });
 
   safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {
@@ -10575,7 +10751,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.RESUME);
+      // Both tiers in ONE transaction. Deleting only Tier 1 here left Tier 2's
+      // PII-bearing knowledge_cards orphaned — the user asked for their résumé
+      // to be removed and half of it stayed on disk. Tier 1 (premium
+      // KnowledgeDatabaseManager) and Tier 2 (this repo's DatabaseManager) wrap
+      // the SAME better-sqlite3 connection, so runInTransaction() is a genuine
+      // cross-tier rollback rather than call sequencing.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.RESUME, 'resume');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -10701,7 +10884,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.JD);
+      // Same cross-tier transaction as profile:delete above — see the comment
+      // there for why a Tier-1-only delete is a partial delete.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.JD, 'jd');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -11917,7 +12103,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
       const file = await ingestModeReferenceFile({
         modeId,
-        filePath: selectedPath,
+        filePath: selectedPath!,  // guarded + assigned on the straight line above
         onIndexStatus: (status, fileId) => {
           BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase: status });
@@ -12408,7 +12594,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
         const win = appState.getMainWindow() ?? undefined;
-        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
           type: 'warning',
           message: 'Allow LAN access?',
           detail:
@@ -12416,7 +12602,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           buttons: ['Cancel', 'Allow LAN access'],
           defaultId: 0,
           cancelId: 0,
-        });
+        };
+        // Electron types (options) and (parent, options) but not (undefined, options);
+        // picking the overload by parent presence leaves the runtime call unchanged.
+        const response = win
+          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+          : dialog.showMessageBoxSync(lanBindDialogOptions);
         if (response !== 1) {
           return { ok: false, declined: true };
         }

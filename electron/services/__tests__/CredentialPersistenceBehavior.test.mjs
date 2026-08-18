@@ -71,6 +71,13 @@ function freshManager(env) {
   const mod = require(COMPILED);
   // Reset the singleton in case the class object was cached elsewhere.
   if (mod.CredentialsManager.instance) mod.CredentialsManager.instance = undefined;
+  // getInstance() anchors the singleton on globalThis, not on the static field —
+  // 22 dist bundles each carry a copy of the class, and per-bundle instances meant
+  // a revoked key kept being served from a stale copy. Clearing only the static
+  // field leaves getInstance() returning the FIRST env's manager, which still holds
+  // that env's CREDENTIALS_PATH/FALLBACK_PATH and safeStorage mock — so every
+  // "restart" after the first silently read and wrote the first test's directory.
+  delete globalThis.__nativelyCredentialsManagerV1__;
   const cm = mod.CredentialsManager.getInstance();
   cm.init();
   return cm;

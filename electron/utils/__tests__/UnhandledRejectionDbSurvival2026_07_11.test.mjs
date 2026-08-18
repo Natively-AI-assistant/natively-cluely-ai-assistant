@@ -78,20 +78,28 @@ describe('unhandledRejection no longer unconditionally kills the database', () =
     }
     const body = source.slice(start, i - 1);
 
-    // emergencyCloseDatabase MUST appear only inside a conditional (the
+    // The DB-closing call MUST appear only inside a conditional (the
     // escalation branch), never as a bare top-level statement.
+    //
+    // UPDATED 2026-08-07: the escalation branch now routes through
+    // terminateAfterFatalError(), which closes the database AND exits as one
+    // atomic step (previously it closed the DB and left the process running on
+    // a dead handle). Either spelling satisfies this invariant; what matters is
+    // that the call is gated behind the threshold.
     assert.match(
       body,
-      /if\s*\([^)]*unhandledRejectionHistory[^)]*>=\s*UNHANDLED_REJECTION_MAX[^)]*\)\s*\{[\s\S]*emergencyCloseDatabase/,
-      'emergencyCloseDatabase must only be called inside the escalation-threshold branch',
+      /if\s*\([^)]*unhandledRejectionHistory[^)]*>=\s*UNHANDLED_REJECTION_MAX[^)]*\)\s*\{[\s\S]*(?:emergencyCloseDatabase|terminateAfterFatalError)/,
+      'the DB-closing/terminal call must only happen inside the escalation-threshold branch',
     );
     // Regression guard: the bug shape was an unconditional call right after
     // the logToFile line, with no guarding `if`. Assert that shape is gone —
     // there must be tracking/counting logic between the log line and any
-    // emergencyCloseDatabase call.
+    // DB-closing call.
     const logIdx = body.indexOf('[CRITICAL] Unhandled Rejection');
-    const closeIdx = body.indexOf('emergencyCloseDatabase');
-    assert.ok(logIdx >= 0 && closeIdx > logIdx, 'log line must precede the (now-conditional) close call');
+    const closeMatch = body.match(/emergencyCloseDatabase|terminateAfterFatalError/);
+    assert.ok(closeMatch, 'the escalation branch must still have a terminal DB path');
+    const closeIdx = closeMatch.index;
+    assert.ok(logIdx >= 0 && closeIdx > logIdx, 'log line must precede the (now-conditional) terminal call');
     const between = body.slice(logIdx, closeIdx);
     assert.match(
       between,
@@ -108,11 +116,100 @@ describe('unhandledRejection no longer unconditionally kills the database', () =
     );
   });
 
-  test('sibling terminal crash paths (SIGTERM/SIGINT/render-process-gone-loop-giveup) are unaffected — still call emergencyCloseDatabase directly', () => {
+  test('sibling terminal crash paths (SIGTERM/SIGINT/render-process-gone-loop-giveup) still close the database', () => {
     // This fix must be scoped to unhandledRejection specifically. Sanity-check
-    // the other genuinely-terminal paths still close the DB unconditionally
-    // (they either exit the process or are already gated to a give-up branch).
+    // the other genuinely-terminal paths still close the DB (they either exit
+    // the process directly or route through the terminal coordinator).
     assert.match(source, /for \(const sig of \['SIGTERM', 'SIGINT'\]/);
-    assert.match(source, /emergencyCloseDatabase\('render-process-gone-loop-giveup'\)/);
+    assert.match(source, /terminateAfterFatalError\('render-process-gone-loop-giveup', 1\)/);
+  });
+
+  // ── Added 2026-08-07 ──────────────────────────────────────────────────────
+  // The original bug — "the DB is closed but the process keeps running" — was
+  // never unique to unhandledRejection. Six paths had that shape. These pin the
+  // general invariant so it cannot come back through a different door.
+
+  test('every path that closes the database also ends the process', () => {
+    // terminateAfterFatalError() is the ONLY sanctioned way to close the DB
+    // from a handler that would otherwise keep running. Direct
+    // emergencyCloseDatabase() callers must be paths that exit on their own.
+    const sanctionedDirectCallers = [
+      "emergencyCloseDatabase('uncaughtException')",        // handler ends in terminateAfterFatalError
+      'emergencyCloseDatabase(sig)',                        // SIGTERM/SIGINT — exits immediately after
+      "emergencyCloseDatabase('render-process-gone')",      // guarded by isQuitting() — app is going away
+      "emergencyCloseDatabase('initializeApp-failed')",     // followed by terminateAfterFatalError
+      'emergencyCloseDatabase(why)',                        // the coordinator's own injected close
+      // Both added when the recoverable-event bug was fixed: Chromium respawns a
+      // dead GPU/utility child and the app keeps running, so these close only
+      // under appState.isQuitting() — the same sanctioned shape as
+      // render-process-gone above. The sibling test below proves the guard is
+      // actually there rather than taking this comment's word for it.
+      "emergencyCloseDatabase('child-process-gone')",
+      "emergencyCloseDatabase('gpu-process-crashed')",
+    ];
+    // Strip comments first — main.ts discusses emergencyCloseDatabase() at
+    // length in prose, and those mentions are not call sites.
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .map(line => line.replace(/\/\/.*$/, ''))
+      .join('\n');
+
+    const callSites = [...code.matchAll(/emergencyCloseDatabase\([^)]*\)/g)]
+      .map(m => m[0])
+      // Skip the declaration itself.
+      .filter(s => s !== 'emergencyCloseDatabase(reason: string)');
+
+    assert.ok(callSites.length > 0, 'the scan must actually find call sites (guards against a vacuous pass)');
+
+    for (const site of callSites) {
+      assert.ok(
+        sanctionedDirectCallers.includes(site),
+        `Unreviewed direct emergencyCloseDatabase call: ${site}\n` +
+        'Closing the database is irreversible (it nulls the singleton with no reopen ' +
+        'path). A handler that closes it and then keeps running leaves an interactive ' +
+        'app whose every write silently no-ops. Either route through ' +
+        'terminateAfterFatalError() or do not close the database on this path.',
+      );
+    }
+  });
+
+  test('recoverable process events must not destroy the database', () => {
+    // These handlers do NOT exit on the recoverable path, so they must never
+    // close the DB while the app keeps running. gpu-process-crashed in
+    // particular fires on routine Windows TDR driver resets; child-process-gone
+    // fires for any dead helper process.
+    //
+    // This asserted the *substring* `emergencyCloseDatabase('<reason>')` was
+    // absent, which became wrong the moment the bug was genuinely fixed:
+    // main.ts keeps the call but gates it behind `appState.isQuitting?.()`, so
+    // the DB closes only during a real teardown — where the child exodus is
+    // part of the quit. A substring scan cannot see a guard, so the CORRECT
+    // code failed the pin. Assert the guard, not the absence.
+    let checked = 0;
+    for (const reason of ['SIGHUP', 'child-process-gone', 'gpu-process-crashed']) {
+      const needle = `emergencyCloseDatabase('${reason}')`;
+      for (let at = source.indexOf(needle); at >= 0; at = source.indexOf(needle, at + needle.length)) {
+        checked++;
+        // Anchor on the enclosing handler registration, then require the
+        // nearest preceding `if (` to sit inside that handler AND gate on
+        // isQuitting. Drop the guard and the nearest `if (` no longer matches.
+        const handlerAt = Math.max(
+          source.lastIndexOf('app.on(', at),
+          source.lastIndexOf('process.on(', at),
+        );
+        const ifAt = source.lastIndexOf('if (', at);
+        assert.ok(
+          ifAt > handlerAt && /isQuitting/.test(source.slice(ifAt, at)),
+          `${reason} keeps the process alive, so emergencyCloseDatabase('${reason}') must ` +
+          'sit inside an appState.isQuitting() guard. Closing the database is irreversible ' +
+          '(it nulls the singleton with no reopen path), so an unguarded close turns a ' +
+          'routine child/GPU restart into silent, session-wide persistence loss.',
+        );
+      }
+    }
+    // Absence also satisfies the invariant, but all three reasons vanishing at
+    // once means the anchors drifted rather than the code getting safer.
+    assert.ok(checked > 0, 'the scan must find at least one call site (guards against a vacuous pass)');
   });
 });

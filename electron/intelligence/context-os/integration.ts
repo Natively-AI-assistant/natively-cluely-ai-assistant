@@ -206,34 +206,21 @@ export function contractBlocks(contract: Pick<TurnContextContract, 'enforcement'
   return Boolean(contract && contract.enforcement === 'enforce');
 }
 
-// ── Authority-contradiction guard (real-custom-mode-repair, Phase 4/7) ──────
+// ── Authority-contradiction guard — REMOVED (Slice 0, A6) ──────────────────
 //
-// The incident investigation found an apparent contradiction in the trace:
-// `sourceOwner=clarify` next to `finalAction=answer` on the same turn. Root
-// cause turned out to be a MISLEADING TRACE (a hardcoded provisional value
-// logged before the clarification decision ran — fixed at the ipcHandlers.ts
-// call site), not a genuine three-way authority disagreement — see
-// docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+// `assertNoAuthorityContradiction` and its `AuthorityContradictionCheck` type
+// lived here as a dev-only tripwire with zero production callers and zero test
+// coverage. 03_ROOT_CAUSES.md (RC8) and 05_COMPONENT_DISPOSITION.md (A6)
+// dispositioned it for deletion: it checked `sourceOwner === 'clarify'` next to
+// `finalAction === 'answer'`, a condition distinct from the one actually
+// implicated (RC1: finalAction hardcoded regardless of
+// evidenceCoverage.confidence), and the trace that motivated it turned out to
+// be a misleading hardcoded provisional value, fixed at the ipcHandlers.ts call
+// site.
 //
-// This assertion is a development/test-only tripwire against a REAL
-// regression of that class: it fires when enforcement is armed AND the
-// kernel decided `sourceOwner === 'clarify'` AND the caller nonetheless
-// recorded `finalAction === 'answer'` — i.e. a turn where Context OS
-// determined a clarification was required, enforcement was ON, and the
-// pipeline answered anyway. Never called in production hot paths; wire it
-// into tests and dev-only post-turn checks.
-export interface AuthorityContradictionCheck {
-  contract: Pick<TurnContextContract, 'sourceOwner' | 'enforcement'>;
-  finalAction: 'answer' | 'refuse_insufficient_evidence' | 'clarify' | 'fallback';
-}
-
-export function assertNoAuthorityContradiction(check: AuthorityContradictionCheck): void {
-  const { contract, finalAction } = check;
-  if (contract.enforcement === 'enforce' && contract.sourceOwner === 'clarify' && finalAction === 'answer') {
-    throw new Error(
-      '[CONTEXT-OS] authority contradiction: sourceOwner=clarify under enforce, but finalAction=answer. '
-      + 'A clarify decision under enforcement must never fall through to answer — see '
-      + 'docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md',
-    );
-  }
-}
+// The deletion was documented as done elsewhere (contextRoute.ts:152 says
+// "deleted Slice 0, A6") but the code was never actually removed, so
+// AssertNoAuthorityContradictionRemoved2026_07_25 has been failing on main.
+// The replacement is the broader evidence-pack validation in
+// evidencePackValidation.ts — see contextRoute.ts for why that check is the
+// right shape.

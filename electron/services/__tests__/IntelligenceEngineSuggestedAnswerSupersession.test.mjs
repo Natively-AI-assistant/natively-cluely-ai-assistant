@@ -35,6 +35,19 @@ const cjsRequire = createRequire(import.meta.url);
 
 const REAL_ANSWER = 'I owned the merchant settlement reconciliation pipeline end to end, leading a team of four across three product surfaces.';
 
+// Pick the AbortSignal BY TYPE, never by position.
+//
+// These stubs used `args.at(-1)`, which was the signal until WhatToAnswerLLM
+// gained a trailing `truncationSink?: { truncated: boolean }` parameter. After
+// that, `.at(-1)` returns the sink — an object with no `.aborted` — so both
+// tests read `undefined` and reported that supersession was broken when the
+// engine was aborting correctly all along.
+//
+// `find(a => a instanceof AbortSignal)` is what LLMHelper._streamChatTracked
+// itself does to locate the signal, so the stub now resolves it the same way
+// production does and cannot drift again when another parameter is appended.
+const signalFrom = (args) => args.find((a) => a instanceof AbortSignal);
+
 async function makeEngine() {
   const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
   const { SessionTracker } = cjsRequire(sessionPath);
@@ -142,7 +155,7 @@ test('a newer WTA request aborts the prior provider signal and suppresses its fi
 
   engine.whatToAnswerLLM = {
     async *generateStream(...args) {
-      const signal = args.at(-1);
+      const signal = signalFrom(args);
       receivedSignals.push(signal);
       if (receivedSignals.length === 1) {
         await new Promise((resolve) => setTimeout(resolve, 30));
@@ -173,7 +186,7 @@ test('reset aborts an in-flight WTA request without delivering a final answer', 
 
   engine.whatToAnswerLLM = {
     async *generateStream(...args) {
-      const signal = args.at(-1);
+      const signal = signalFrom(args);
       receivedSignals.push(signal);
       await new Promise((resolve) => setTimeout(resolve, 30));
       if (!signal.aborted) yield 'answer that reset must suppress';

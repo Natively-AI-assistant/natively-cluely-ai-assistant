@@ -2,6 +2,16 @@ name: Build Smoke
 
 on:
   pull_request:
+  # Main had NO per-commit signal: this workflow ran on pull_request only, so a
+  # PR whose Build Smoke failed could be merged and main itself was never
+  # re-checked. That is exactly how c2ad3133 landed a TS7005 that broke the
+  # FIRST build step — `Typecheck Electron main process` — and went unnoticed
+  # for three days while every subsequent PR inherited a red check it did not
+  # cause. With this trigger, a break is attributable to the commit that
+  # introduced it instead of to whoever opens the next PR.
+  push:
+    branches:
+      - main
   workflow_dispatch:
   # MUST live here, not on the job. `schedule` is not a valid job key, and an
   # unknown key makes GitHub reject the whole workflow at parse time — every run
@@ -9,7 +19,7 @@ on:
   # smoke-tested. Verified: three most recent runs each report total_count 0.
   #
   # Moving it made the workflow PARSE. Making it PASS additionally required the
-  # private `premium` submodule (electron/tsconfig.json includes
+  # private `premium` submodule (electron/tsconfig.premium-check.json includes
   # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
   # calls) — see the checkout steps below, which fetch it explicitly.
   #
@@ -59,7 +69,7 @@ jobs:
           persist-credentials: true
 
       # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
-      # that both build steps genuinely need: electron/tsconfig.json includes
+      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
       # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
       # calls. Without it every run dies at the first typecheck with
       #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
@@ -131,9 +141,62 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify-native-arch.js
 
-      - name: Typecheck Electron main process
+      # Real-execution proof that this platform's sqlite-vec binary loads and
+      # answers a vector query (2026-08-15). The Windows leg is the ONLY
+      # automated Windows this repo has, and vec0.dll had never been executed
+      # anywhere — the Windows pin (sqlite-vec-windows-x64) was verified from
+      # macOS as fetch + loader-name mapping only. BLOCKING on BOTH legs by
+      # design: VectorStore degrades to a JS-cosine fallback when the native
+      # extension is missing, which is exactly how a broken platform binary
+      # would otherwise ship green. Runs under Electron's ABI because
+      # postinstall builds better-sqlite3 for Electron, not system Node.
+      - name: Verify sqlite-vec native extension loads (vec0)
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: npx --no-install electron scripts/verify-sqlite-vec-load.mjs
+
+      # TypeScript 7 is now the PRIMARY type-checker: `typecheck:electron` runs
+      # node_modules/typescript7/bin/tsc. Emit is untouched — esbuild owns
+      # dist-electron and vite owns dist; TS 7 only checks.
+      #
+      # This runs on BOTH legs on purpose. TS 7 is a native Go binary shipped as
+      # per-platform optional dependencies (@typescript/typescript-darwin-arm64,
+      # -win32-x64, ...), so the Windows leg is the ONLY thing that proves the
+      # win32 binary resolves and runs — a macOS-only check would say nothing
+      # about it.
+      #
+      # ⚠️ EXPECTED RED until the two deferred findings are resolved
+      # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
+      # EvidenceResolver's DI port, and ModeHybridRetriever's genuinely-nullable
+      # reranker. Deliberately left BLOCKING rather than downgraded to
+      # continue-on-error — muting a real gate to hide two known type errors is
+      # exactly the loosening this migration is not allowed to do. TS 5.9.3 and
+      # TS 7.0.2 report byte-identical error lists here, so this is a deferral
+      # backlog, NOT a TS 7 incompatibility.
+      - name: Typecheck Electron main process (TypeScript 7)
         run: npm run typecheck:electron
 
+      # Coverage gate for the `premium/` submodule. tsconfig.json deliberately
+      # drops premium from its ROOT FILE SET so `strict` applies only to this
+      # repo's sources — which silently took 38 premium files (KnowledgeOrchestrator,
+      # StructuredExtractor, NegotiationEngine, LicenseManager, all of roleInsight/)
+      # out of type-checking entirely, because they are reached via untyped
+      # require() and nothing else checks them: premium/ has no tsconfig of its own.
+      # This runs them at the strictness they were written against.
+      - name: Typecheck premium submodule (TypeScript 7)
+        if: steps.submodule_token.outputs.available == 'true'
+        run: npm run typecheck:premium
+
+      # Insurance for one release cycle: if TS 7 ever diverges from the compiler
+      # this repo shipped on, this step is what tells us. Non-blocking because
+      # TS 7 is the source of truth now. `typescript` 5.x stays installed
+      # regardless — react-doctor (.husky/pre-commit, every commit by everyone),
+      # typescript-eslint and tap all cap below TS 7.
+      - name: Typecheck Electron main process with TypeScript 5 (non-blocking insurance)
+        continue-on-error: true
+        run: npm run typecheck:ts5:electron
+
+      # `npm run build` now type-checks the renderer with TS 7 before vite emits.
       - name: Build renderer
         run: npm run build
 
@@ -155,25 +218,65 @@ jobs:
       - name: Verify packaged local fallback assets (source mode)
         run: npm run verify:packaged-local-assets
 
-      # macOS-only FOR NOW — not by design. Measured on a Windows 11 host at the
-      # time this leg was added: `npm test` fails 139 of 2832, `test:intelligence`
-      # fails 3 of 957. Those are pre-existing Windows incompatibilities in the
-      # suites themselves (POSIX path assumptions, tsc-isolated-tree helpers,
-      # symlink fixtures), not regressions from the change that added this leg.
+      # Windows runs these ADVISORY (2026-08-10). Previously both steps were
+      # skipped outright on Windows, which meant the windows-latest leg reported
+      # green while running ZERO tests — its signal covered install and build
+      # only, and the matrix looked stronger than it was.
       #
-      # They are gated rather than shipped red on purpose: a check that fails on
-      # every PR regardless of its content trains reviewers to ignore the whole
-      # workflow, which would also destroy the macOS signal that already works.
+      # The original gate was deliberate, and its reasoning stands: measured on a
+      # Windows 11 host, `npm test` failed 139 of 2832 and `test:intelligence` 3
+      # of 957, all pre-existing Windows incompatibilities in the suites (POSIX
+      # path assumptions, tsc-isolated-tree helpers, symlink fixtures). Shipping
+      # that red on every PR trains reviewers to ignore the workflow and would
+      # destroy the macOS signal that already works.
       #
-      # TODO: fix the Windows failures in these suites and drop both `if:` gates.
-      # Track progress by running `npm test` on a Windows host — every suite that
-      # goes green shrinks the gap this comment describes.
+      # `continue-on-error` keeps both properties: the suites actually RUN on
+      # Windows so the gap is visible and measurable per-PR, while only macOS can
+      # fail the check. A Windows regression now shows up as a warning instead of
+      # being invisible.
+      #
+      # RE-MEASURED 2026-08-17 on main @ e701c809 (the first fully green run), by
+      # attributing each count to its own step in the Windows job log rather than
+      # trusting step conclusions — two of them carry continue-on-error, so their
+      # "success" proves nothing:
+      #
+      #     npm test              7540 tests,  41 fail   <- still advisory, below
+      #     test:intelligence      963 tests,   0 fail   <- now ENFORCING
+      #     test:lib               327 tests,   0 fail   <- already enforcing
+      #     test:scripts            20 tests,   0 fail   <- already enforcing
+      #
+      # So the old "139 of 2832 / 3 of 957" figures are superseded: the real
+      # Windows gap is 41 tests in ONE suite, and intelligence has closed
+      # completely. The TODO below is being worked off suite by suite as each
+      # goes green, which is what it asked for.
+      #
+      # TODO: fix the remaining 41 Windows failures in `npm test`, then drop its
+      # `continue-on-error` too and the leg is enforcing on both platforms.
       - name: Run Electron unit tests
-        if: runner.os == 'macOS'
+        continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
 
+      # The four test steps here are INDEPENDENT suites over disjoint globs, so
+      # each of the three below carries `!cancelled()`. Without it a failed step
+      # skips every later one, and on the macOS leg — the only enforcing leg —
+      # that meant one red suite suppressed the other three: `test:intelligence`
+      # had never once been measured in CI, because `npm test` failed on every
+      # run that ever reached it. (Windows was unaffected only because
+      # `continue-on-error` keeps its steps' conclusion green.)
+      #
+      # `!cancelled()` rather than `always()`: both keep a later suite running
+      # after an earlier one fails, but `always()` ALSO forces the step to run
+      # while the job is being cancelled, turning a cancel into a multi-minute
+      # wait. The job still fails if any suite fails — this only stops one
+      # failure from hiding the others' results.
+      # ENFORCING ON BOTH LEGS since 2026-08-17. This carried
+      # `continue-on-error: runner.os == 'Windows'` while Windows failed 3 of 957
+      # here; it now passes 963 of 963 on Windows (green on the two consecutive
+      # runs before this change landed), so the gate was muting a suite that no
+      # longer needs muting — and a muted step cannot report the regression it
+      # exists to catch.
       - name: Run intelligence unit tests
-        if: runner.os == 'macOS'
+        if: ${{ !cancelled() }}
         run: npm run test:intelligence
 
       # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
@@ -184,6 +287,7 @@ jobs:
       # mirror), so a real production-catalog regression fails CI, not just the
       # hand-maintained mirror.
       - name: Run src/lib unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:lib
 
       # Runs on BOTH legs by design. scripts/package-app.js and
@@ -193,6 +297,7 @@ jobs:
       # resolver / signal-table as parameters, so each leg exercises both
       # platform shapes rather than only its own.
       - name: Run build-script unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:scripts
 
   api-smoke:
@@ -224,7 +329,7 @@ jobs:
           persist-credentials: true
 
       # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
-      # that both build steps genuinely need: electron/tsconfig.json includes
+      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
       # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
       # calls. Without it every run dies at the first typecheck with
       #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'

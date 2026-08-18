@@ -1552,6 +1552,25 @@ export class ModeHybridRetriever {
             // Chunked inference — see RERANK_BATCH_SIZE for the crash-forensics
             // rationale. Each batch returns results with INDEXES RELATIVE TO THE
             // BATCH, so we offset by the batch start before merging.
+            // `reranker` is genuinely nullable here, and tsc was right to say so:
+            // with no test override AND getLocalReranker() returning null (it is
+            // wrapped in a try/catch that yields null), NOTHING assigns it. The
+            // loop below then reached `reranker.rerank(...)` and threw a
+            // TypeError, which the catch at the end of this method turned into
+            // "rerank escalation failed (keeping cosine order)" + `return null`.
+            //
+            // This makes that path explicit while preserving BOTH observable
+            // outcomes — same warning channel and prefix, same `return null`,
+            // and the telemetry block above still runs untouched. The one
+            // difference is the message tail: an explicit reason instead of a
+            // TypeError string. The guard cannot mask a narrower case, because
+            // `sorted.length < 2` already returned earlier, so poolTexts is
+            // never empty and the loop always executed at least once.
+            if (!reranker) {
+                console.warn('[ModeHybridRetriever] rerank escalation failed (keeping cosine order): no reranker available');
+                return null;
+            }
+
             const allResults: Array<{ index: number; score: number; originalIndex: number }> = [];
             for (let i = 0; i < poolTexts.length; i += RERANK_BATCH_SIZE) {
                 const batchTexts = poolTexts.slice(i, i + RERANK_BATCH_SIZE);

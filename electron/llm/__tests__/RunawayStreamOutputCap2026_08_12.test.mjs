@@ -28,9 +28,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   MAX_STREAM_OUTPUT_CHARS,
+  MAX_SUMMARY_OUTPUT_CHARS,
   LIVE_TOTAL_HARD_TIMEOUT_MS,
   LIVE_INTER_TOKEN_STALL_MS,
 } from '../../../dist-electron/electron/llm/index.js';
+import { LLMHelper } from '../../../dist-electron/electron/LLMHelper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const src = fs.readFileSync(path.resolve(__dirname, '../../LLMHelper.ts'), 'utf8');
@@ -134,7 +136,10 @@ describe('the cap covers EVERY public streaming entry point', () => {
   test('reaching the cap ends the stream by returning, never throwing', () => {
     // Same shape as a post-commit provider failure, so the consumer has one
     // way to observe "this stream stopped early" rather than two.
-    const start = src.indexOf('emittedChars > MAX_STREAM_OUTPUT_CHARS');
+    // `outputCeiling` since 2026-08-13: the ceiling is per-SURFACE (live vs
+    // long-form) rather than the single live constant, but the control flow
+    // this test guards is unchanged.
+    const start = src.indexOf('emittedChars > outputCeiling');
     assert.ok(start > 0, 'could not locate the cap check');
     // Strip line comments before asserting on control flow — the code comment
     // here contains the word "throw" while explaining why it must not throw.
@@ -157,9 +162,120 @@ describe('the cap covers EVERY public streaming entry point', () => {
     const start = src.indexOf('for await (const chunk of this._streamChatInner');
     const body = src.slice(start, start + 900);
     const yieldIdx = body.indexOf('yield dashReducer.reduce(chunk);');
-    const capIdx = body.indexOf('emittedChars > MAX_STREAM_OUTPUT_CHARS');
+    const capIdx = body.indexOf('emittedChars > outputCeiling');
     assert.ok(yieldIdx > 0 && capIdx > 0);
     assert.ok(yieldIdx < capIdx, 'the chunk must be yielded before the cap check');
+  });
+});
+
+// Code-review 2026-08-13. MAX_STREAM_OUTPUT_CHARS is calibrated from LIVE
+// what_to_answer answers (19 captured, p100 2530 chars). Applying it at
+// `streamChat` also applied it to `generateMeetingSummary`, whose output is a
+// legitimately long multi-section document — and because the cap ends the
+// stream by RETURNING, the summary path's `text.trim().length > 0` check passed
+// and a mid-sentence summary was persisted as complete.
+describe('the output ceiling is scoped to the surface it was sized for', () => {
+  test('a long-form ceiling exists and is larger than the live one', () => {
+    assert.ok(
+      MAX_SUMMARY_OUTPUT_CHARS > MAX_STREAM_OUTPUT_CHARS,
+      'the long-form ceiling must exceed the live one, or scoping it achieved nothing',
+    );
+  });
+
+  // BEHAVIOURAL, not source-text: drive the real generators over a stubbed
+  // inner stream, the same harness TruncatedAnswerNotStored uses. A source
+  // assertion cannot tell whether the scoping actually takes effect.
+  test('the SAME over-live-cap generation truncates on streamChat and survives on streamChatLongForm', async () => {
+    const CHUNK = 'x'.repeat(1000);
+    // Comfortably over the live cap, comfortably under the long-form one.
+    const total = MAX_STREAM_OUTPUT_CHARS + 9000;
+    const inner = async function* () {
+      for (let i = 0; i < total / CHUNK.length; i++) yield CHUNK;
+    };
+    const drain = async (method) => {
+      const fake = Object.create(LLMHelper.prototype);
+      fake._streamChatInner = inner;
+      const { stream, outcome } = LLMHelper.prototype[method].call(fake);
+      let chars = 0;
+      for await (const tok of stream) chars += tok.length;
+      return { chars, outcome };
+    };
+
+    const live = await drain('streamChatWithOutcome');
+    assert.equal(live.outcome.truncated, true, 'the live surface must still bound a runaway');
+    assert.equal(live.outcome.reason, 'output_cap_reached');
+    assert.ok(live.chars < total, 'the live surface must actually cut the stream short');
+
+    const longForm = await drain('streamChatLongForm');
+    assert.equal(longForm.outcome.truncated, false, 'a summary-sized generation must NOT be truncated');
+    assert.equal(longForm.chars, total, 'the long-form surface must deliver every character');
+  });
+
+  test('the long-form surface is still bounded — it is a raised ceiling, not a removed one', async () => {
+    const CHUNK = 'x'.repeat(10000);
+    const inner = async function* () {
+      // Past even the long-form ceiling: a genuine runaway must still be caught.
+      for (let i = 0; i < MAX_SUMMARY_OUTPUT_CHARS / CHUNK.length + 5; i++) yield CHUNK;
+    };
+    const fake = Object.create(LLMHelper.prototype);
+    fake._streamChatInner = inner;
+    const { stream, outcome } = LLMHelper.prototype.streamChatLongForm.call(fake);
+    let chars = 0;
+    for await (const tok of stream) chars += tok.length;
+    assert.equal(outcome.truncated, true, 'the long-form ceiling must still bound a true runaway');
+    assert.ok(chars <= MAX_SUMMARY_OUTPUT_CHARS + CHUNK.length, 'overshoot must stay within one chunk');
+  });
+
+  test('capOutput records truncation on the caller-owned state', async () => {
+    // streamChatWithGemini is consumed directly by RAGManager, so it cannot use
+    // the sentinel; the flag rides on the shared budget object instead. Without
+    // this the rotation loop logged a capped stream as "✅ completed successfully".
+    const state = { chars: 0 };
+    const inner = (async function* () {
+      for (let i = 0; i < MAX_STREAM_OUTPUT_CHARS / 1000 + 2; i++) yield 'y'.repeat(1000);
+    })();
+    const gen = LLMHelper.prototype.capOutput.call(Object.create(LLMHelper.prototype), inner, state, 'probe');
+    for await (const _ of gen) { /* drain */ }
+    assert.equal(state.truncated, true, 'capOutput must report truncation to its caller');
+  });
+
+  test('the ceiling is selected per surface, not hardcoded to the live cap', () => {
+    // Matches the SELECTION, not the whole assignment: the expression is now
+    // wrapped by the dev-only `testOutputCharCeiling() ?? (...)` switch
+    // (2026-08-14), which does not weaken this invariant — it is null in any
+    // packaged build and whenever the env var is unset. Pinning the entire
+    // right-hand side made this fail for a reason unrelated to what it guards.
+    assert.match(
+      src,
+      /profile === 'long_form' \? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS/,
+      'the per-surface ceiling selection was removed — batch callers are back on the live cap',
+    );
+  });
+
+  test('the dev-only ceiling override cannot apply in a packaged build', () => {
+    // The override sits in front of the per-surface selection, so its own gate
+    // is what keeps batch callers safe in production.
+    const fault = fs.readFileSync(path.resolve(__dirname, '../streamFaultInjection.ts'), 'utf8');
+    assert.match(fault, /return !app\.isPackaged/, 'the override must be disabled in a packaged build');
+  });
+
+  test('generateMeetingSummary uses the long-form entry point, not streamChat', () => {
+    const start = src.indexOf('ATTEMPT 0: Custom Provider');
+    assert.ok(start > 0, 'could not locate the custom-provider summary attempt');
+    const body = src.slice(start, start + 2400);
+    assert.match(body, /this\.streamChatLongForm\(/, 'the summary path must not inherit the live answer cap');
+  });
+
+  test('a truncated summary is not persisted as a complete one', () => {
+    const start = src.indexOf('ATTEMPT 0: Custom Provider');
+    const body = src.slice(start, start + 2400);
+    const truncCheck = body.indexOf('outcome.truncated');
+    const returnIdx = body.indexOf('return this.processResponse(text)');
+    assert.ok(truncCheck > 0, 'the summary path must observe the truncation outcome');
+    assert.ok(
+      truncCheck < returnIdx,
+      'the truncation check must precede the success return, or a partial summary is saved',
+    );
   });
 });
 

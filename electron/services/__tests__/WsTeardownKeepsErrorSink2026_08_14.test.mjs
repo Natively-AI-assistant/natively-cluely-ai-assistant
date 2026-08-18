@@ -47,14 +47,41 @@ test('no STT provider strips listeners and closes a ws without an error sink', (
   }
 });
 
-test('the former strip-then-close sites use safeDetachAndClose', () => {
-  for (const file of ['OpenAIStreamingSTT.ts', 'ElevenLabsStreamingSTT.ts', 'NativelyProSTT.ts']) {
+test('every former strip-then-close site keeps an error sink across the close', () => {
+  // The contract is that an 'error' listener survives the close, NOT that a
+  // particular function spells it. Two sites route through the shared helper.
+  //
+  // NativelyProSTT does not, deliberately: main's 21c4e22f had already fixed
+  // this site with fuller lifecycle machinery (this file's own header and
+  // wsSafeTeardown.ts's module doc both say so). Its inline version is the
+  // stronger of the two — it strips per-event instead of blanket-stripping,
+  // attaches error+close listeners that RELEASE EACH OTHER on close so a
+  // discarded socket does not retain a listener forever (these sockets are
+  // cycled every meeting, where the helper's permanent no-op sink accumulates),
+  // and it distinguishes CONNECTING/OPEN from CLOSING/CLOSED. Requiring it to
+  // adopt the helper would be a downgrade, so assert the invariant instead.
+  for (const file of ['OpenAIStreamingSTT.ts', 'ElevenLabsStreamingSTT.ts']) {
     const src = fs.readFileSync(path.join(audioDir, file), 'utf8');
     assert.ok(
       /safeDetachAndClose\(/.test(src),
       `${file}: expected safeDetachAndClose usage (F-201)`
     );
   }
+
+  const proSrc = fs.readFileSync(path.join(audioDir, 'NativelyProSTT.ts'), 'utf8');
+  const sinkIdx = proSrc.search(/dying\.on\(\s*'error'/);
+  const closeIdx = proSrc.search(/dying\.close\(\)/);
+  assert.ok(
+    sinkIdx >= 0,
+    'NativelyProSTT.ts: the detached socket must keep an error sink — ws@8 emits the abort error one '
+    + 'tick after close() on a CONNECTING socket, and a listener-less emit becomes an uncaughtException '
+    + 'that irreversibly closes the database (F-201).'
+  );
+  assert.ok(
+    closeIdx > sinkIdx,
+    'NativelyProSTT.ts: the error sink must be attached BEFORE close() — attaching it afterwards loses '
+    + 'the race with abortHandshake()\'s next-tick emit.'
+  );
 });
 
 test('safeDetachAndClose attaches the error sink between strip and close', () => {

@@ -24,24 +24,12 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import ReviewModal from "./ReviewModal"
-import { isMac } from "../utils/platformUtils"
 
-const PLATFORM = (() => {
-    const p = (typeof navigator !== "undefined" ? navigator.platform : "")?.toLowerCase() || ""
-    if (p.includes("mac")) return "macos" as const
-    if (p.includes("win")) return "windows" as const
-    if (p.includes("linux")) return "linux" as const
-    return "other" as const
-})()
-
-const APP_VERSION = (() => {
-    // Pull from window.electronAPI.getAppVersion if available; otherwise empty.
-    try {
-        return (window.electronAPI as any)?.appVersion || ""
-    } catch {
-        return ""
-    }
-})()
+// Provenance (platform, app version, hardware id) is derived in the MAIN
+// process by `review:submit` — see ipcHandlers.ts. This host used to sniff
+// navigator.platform and read a non-existent `electronAPI.appVersion` (always
+// "") and pass both down, but neither ever reached the API. Removed rather
+// than left as decoration.
 
 const FIRST_CHECK_DELAY_MS = 15_000
 const SUBSEQUENT_CHECK_DELAY_MS = 60_000  // re-check every minute in case the user lingers
@@ -263,9 +251,6 @@ const ReviewPromptHost: React.FC<ReviewPromptHostProps> = ({ paused, isOpen: isO
             onClose={onClose}
             onDismissLater={handleDismissLater}
             onDismissForever={handleDismissForever}
-            platform={PLATFORM}
-            appVersion={APP_VERSION}
-            hardwareId={undefined}
             submitReview={handleSubmit}
             updateTestimonial={handleTestimonial}
         />

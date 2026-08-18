@@ -183,8 +183,8 @@ function extractMethodBody(methodName) {
     return mainSource.slice(start, i - 1);
 }
 
-const endMeetingBody = extractMethodBody('endMeeting');
-const startMeetingBody = extractMethodBody('startMeeting');
+const endMeetingBody = extractMethodBody('endMeetingTransition');
+const startMeetingBody = extractMethodBody('startMeetingTransition');
 
 test('endMeeting NULLS both capture fields synchronously (forces serialized recreate path)', () => {
     assert.ok(

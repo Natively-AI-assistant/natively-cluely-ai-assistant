@@ -10,6 +10,8 @@ export { FollowUpLLM } from "./FollowUpLLM";
 export { FollowUpQuestionsLLM } from "./FollowUpQuestionsLLM";
 export { RecapLLM } from "./RecapLLM";
 export { WhatToAnswerLLM } from "./WhatToAnswerLLM";
+export { composeWtaSystemPrompt, ACTIVE_SKILL_HEADING } from "./wtaSystemPrompt";
+export type { ActiveSkillLike } from "./wtaSystemPrompt";
 export { shouldThrottleTrigger } from "./triggerGate";
 export type { TriggerGateInput } from "./triggerGate";
 export { clampResponse, validateResponse, reduceDashes, reduceDashesInChunk, StreamingDashReducer } from "./postProcessor";
@@ -112,7 +114,7 @@ export {
   LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
   LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS,
   LIVE_INTER_TOKEN_STALL_MS, BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS,
-  MAX_STREAM_OUTPUT_CHARS,
+  MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS,
   CODING_REGEN_ABORT_CHARS,
 } from "./liveDeadlines";
 export type { FollowUpContext, ResolvedFollowUp, FollowUpSurface } from "./FollowUpResolver";

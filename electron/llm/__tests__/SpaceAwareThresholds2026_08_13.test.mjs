@@ -106,8 +106,8 @@ async function captureTelemetry(runFn) {
   try { return { result: await runFn(), lines }; } finally { console.log = orig; }
 }
 
-test('telemetry fires in OBSERVE mode (flag OFF) with per-candidate cosine/boostSum/admitted', async () => {
-  delete process.env.NATIVELY_SEMANTIC_ADMISSION_GATE;
+test('telemetry fires in OBSERVE mode (kill switch env=off) with per-candidate cosine/boostSum/admitted', async () => {
+  process.env.NATIVELY_SEMANTIC_ADMISSION_GATE = 'off';
   const { result, lines } = await captureTelemetry(() =>
     getRelevantNodes('tell me things', [NODE], async () => [1, 0], {
       embeddingSpaceKey: 'gemini:gemini-embedding-2:768',
@@ -115,7 +115,7 @@ test('telemetry fires in OBSERVE mode (flag OFF) with per-candidate cosine/boost
   assert.equal(lines.length, 1, 'exactly one telemetry line per retrieval call');
   const payload = JSON.parse(lines[0].slice('[SemanticAdmission] '.length));
   assert.equal(payload.spaceKey, 'gemini:gemini-embedding-2:768');
-  assert.equal(payload.enforced, false, 'flag OFF → observe mode');
+  assert.equal(payload.enforced, false, 'kill switch → observe mode');
   assert.equal(payload.candidateCount, 1);
   const c = payload.candidates[0];
   assert.ok(Math.abs(c.cosine - 0.7) < 1e-4, `cosine logged (${c.cosine})`);
@@ -126,14 +126,14 @@ test('telemetry fires in OBSERVE mode (flag OFF) with per-candidate cosine/boost
   assert.equal(result.length, 1);
 });
 
-test('telemetry reflects enforcement when the gate is ON', async () => {
-  process.env.NATIVELY_SEMANTIC_ADMISSION_GATE = 'on';
+test('telemetry reflects enforcement at the DEFAULT (env unset — gate is ON since 2026-08-14)', async () => {
+  delete process.env.NATIVELY_SEMANTIC_ADMISSION_GATE;
   const { lines } = await captureTelemetry(() =>
     getRelevantNodes('tell me things', [NODE], async () => [1, 0], {
       embeddingSpaceKey: 'gemini:gemini-embedding-2:768',
     }));
   const payload = JSON.parse(lines[0].slice('[SemanticAdmission] '.length));
-  assert.equal(payload.enforced, true);
-  assert.equal(payload.floor, 0.55);
-  assert.equal(payload.candidates[0].admitted, true, 'cosine 0.7 ≥ floor 0.55');
+  assert.equal(payload.enforced, true, 'default is ON (kill-switch model)');
+  assert.equal(payload.floor, 0.69, 'calibrated gemini-768 floor');
+  assert.equal(payload.candidates[0].admitted, true, 'cosine 0.7 ≥ floor 0.69');
 });

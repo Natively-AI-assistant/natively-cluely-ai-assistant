@@ -67,7 +67,23 @@ describe('numeral equivalence', () => {
     assert.deepEqual(wordsOf("Green's function"), ['green', 'function']);
     assert.deepEqual(wordsOf("don't"), ['dont']);
     assert.deepEqual(wordsOf('a an the of'), ['the'], 'tokens of 1-2 chars are dropped');
-    assert.deepEqual(wordsOf('Mixed-Case Hyphen-Word'), ['mixed-case', 'hyphen-word']);
+    // Hyphenated words now emit the compound AND its parts. That is the deep-test
+    // D2 fix: the keep-set preserves hyphens, so `TECH-SMALL-CANARY-524` was ONE
+    // opaque token and "what is the small technical canary?" shared zero tokens
+    // with the line answering it — fts exactly 0.0000, unrecoverable by any
+    // threshold. Underscored identifiers never had the problem because `_` splits.
+    //
+    // Asserted as a PROPERTY rather than a literal array: the compound must
+    // survive (so retrieval by the full identifier keeps working — the parts are
+    // additive, never replacements) and each part must also be present. A literal
+    // list would break again the next time the tokenizer gains a form.
+    const hyphenTokens = wordsOf('Mixed-Case Hyphen-Word');
+    for (const expected of ['mixed-case', 'hyphen-word']) {
+      assert.ok(hyphenTokens.includes(expected), `compound token ${expected} must survive`);
+    }
+    for (const part of ['mixed', 'case', 'hyphen', 'word']) {
+      assert.ok(hyphenTokens.includes(part), `hyphen sub-token ${part} must be emitted`);
+    }
   });
 
   test('a bare year is not mangled', () => {

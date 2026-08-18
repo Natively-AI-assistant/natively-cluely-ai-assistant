@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, isModelAllowed, isOptInModelProvider, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -988,11 +988,12 @@ interface AipSwitchProps {
 
 /**
  * The shared .t-toggle / .t-toggle-thumb classes (defined in src/index.css)
- * own the literal reference geometry (88x40/52x32) AND colors/transitions
- * now. .aip-switch only supplies `zoom: 0.5` (-> a 44x20 track) and the
- * hit-target ::after — --aip-switch-off is repointed to the same shared
- * --toggle-off token, so it no longer diverges from the rest of the app's
- * switches.
+ * own colors, transitions, and press mechanics — .aip-switch supplies its
+ * own 44x20 box size and geometry variables (--toggle-inset/-thumb-w/-h/
+ * -travel/-grow), the reference shape's ratios applied to a 20px height,
+ * plus the hit-target ::after. --aip-switch-off is repointed to the same
+ * shared --toggle-off token, so it no longer diverges from the rest of the
+ * app's switches.
  *
  * `is-init`/`arm()` (via useToggleInit) is now inert: the CSS bounce
  * keyframe it used to gate was replaced by a plain transition, which
@@ -1163,6 +1164,14 @@ interface AipModelListProps {
     onSetDefault?: (modelId: string) => void;
     /** Ids present in `enabled` that the provider no longer offers. */
     staleIds?: string[];
+    /**
+     * Opt-in provider: an empty `enabled` means NOTHING is selected, not "all".
+     * Changes the count wording and lifts the "one must stay on" guard, which
+     * exists only to stop an un-check from silently re-lighting every row.
+     */
+    optIn?: boolean;
+    /** Tick/clear every currently VISIBLE row (filter + Previews applied). */
+    onBulkToggle?: (ids: string[], enable: boolean) => void;
     /** Set while a write is in flight so the header can report a failure. */
     error?: string | null;
     /** Re-run discovery against the provider API. */
@@ -1200,7 +1209,7 @@ const AIP_PREVIEW_RE = /preview|exp(erimental)?\b|-latest$|-\d{4}-\d{2}-\d{2}$|-
  */
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
-    onRefresh, refreshing, onFirstOpen,
+    onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -1213,8 +1222,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const idRef = useRef(`aip-models-${Math.random().toString(36).slice(2, 9)}`);
     const panelId = `${idRef.current}-panel`;
 
-    const isOn = (id: string) => enabled.length === 0 || enabled.includes(id);
-    const enabledCount = enabled.length === 0 ? models.length : enabled.length;
+    // Opt-in inverts the empty case: nothing is on until it is listed.
+    const isOn = (id: string) => optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
+    const enabledCount = (!optIn && enabled.length === 0) ? models.length : enabled.length;
 
     // Threshold keys off the UNFILTERED count. Keying it off visible rows would make
     // the filter field appear and vanish as you toggle Previews — exactly the jank
@@ -1263,7 +1273,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     // The sole remaining checked model is inert. Un-checking it would normalise the
     // allow-list to [] — which means ALL — so every row would re-light. To the user
     // that reads as "I unchecked one thing and everything turned back on".
-    const soleEnabled = enabled.length === 1 ? enabled[0] : null;
+    // Not applicable to an opt-in provider: there [] legitimately means "none",
+    // so clearing the last row is a normal outcome, not a trapdoor back to "all".
+    const soleEnabled = (!optIn && enabled.length === 1) ? enabled[0] : null;
 
     return (
         <>
@@ -1292,7 +1304,9 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                 {error
                     ? <AipBadge tone="danger" label={t('Not saved')} />
                     : <span className="aip-count shrink-0" aria-live="polite">
-                        {enabled.length === 0 ? `${t('All')} ${models.length}` : `${enabledCount} / ${models.length}`}
+                        {enabled.length === 0
+                            ? (optIn ? `${t('None selected')} · ${models.length}` : `${t('All')} ${models.length}`)
+                            : `${enabledCount} / ${models.length}`}
                       </span>}
                 <ChevronDown size={13} strokeWidth={1.75} className="aip-select-chevron" aria-hidden="true" />
             </button>
@@ -1325,9 +1339,54 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                     <Check size={9} strokeWidth={2.5} className="aip-chip-check" aria-hidden="true" />
                                     {t('Previews')}
                                 </button>
-                                {enabled.length > 0 && (
+                                {/* Reset means "back to no filter" = ALL, which is incoherent
+                                    for an opt-in provider — there Clear above is the real
+                                    control and this would just be a second, wrong-labelled one. */}
+                                {!optIn && enabled.length > 0 && (
                                     <button type="button" onClick={onReset} className="aip-btn aip-btn-sm shrink-0" title={t('Show all models again')}>
                                         {t('Reset')}
+                                    </button>
+                                )}
+                            </>
+                        )}
+                        {/* Deliberately OUTSIDE {showFilterBar}: that gate only opens above
+                            12 models, and bulk selection is not a big-catalogue luxury. On an
+                            OPT-IN list nothing is ticked until you tick it, so with a 4-model
+                            proxy these were the only controls that mattered and they were the
+                            ones being hidden.
+
+                            They act on the VISIBLE rows, so with 300+ models the filter scopes
+                            a family ("gpt" -> Select all); a button that ignored the filter
+                            would be a 300-model foot-gun sitting right next to it. With no
+                            filter typed, `visible` is everything — and a SELECTED model is
+                            never hidden by the Previews toggle (see the `listed` check), so
+                            Deselect all can always reach every selection. */}
+                        {onBulkToggle && visible.length > 0 && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => onBulkToggle(visible.map(m => m.id), true)}
+                                    className="aip-btn aip-btn-sm shrink-0"
+                                    title={query.trim() || hidePreviews
+                                        ? t('Select the models currently listed')
+                                        : t('Select every model')}
+                                >
+                                    {t('Select all')}
+                                </button>
+                                {/* "Deselect all", not "Clear": users reach for the symmetric
+                                    wording, and an asymmetric pair reads as two unrelated
+                                    actions. Both labels over-claim identically while a filter
+                                    is active, which the tooltips resolve. */}
+                                {enabledCount > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onBulkToggle(visible.map(m => m.id), false)}
+                                        className="aip-btn aip-btn-sm shrink-0"
+                                        title={query.trim() || hidePreviews
+                                            ? t('Deselect the models currently listed')
+                                            : t('Deselect every model')}
+                                    >
+                                        {t('Deselect all')}
                                     </button>
                                 )}
                             </>
@@ -1337,7 +1396,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 type="button"
                                 onClick={onRefresh}
                                 disabled={refreshing}
-                                className={`aip-btn aip-btn-sm shrink-0 ${showFilterBar ? '' : 'ml-auto'}`}
+                                className={`aip-btn aip-btn-sm shrink-0 ${showFilterBar || (onBulkToggle && visible.length > 0) ? '' : 'ml-auto'}`}
                                 title={t('Re-read the model list from this provider')}
                             >
                                 <RefreshCw size={11} strokeWidth={1.75} className={refreshing ? 'aip-spinner' : ''} />
@@ -1907,7 +1966,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [codexOauthInProgress, setCodexOauthInProgress] = useState(false);
 
     // --- Default Model ---
-    const [defaultModel, setDefaultModel] = useState<string>('gemini-3.6-flash');
+    const [defaultModel, setDefaultModel] = useState<string>('gemini-3.7-flash');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
@@ -2021,6 +2080,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
                     if (creds.deepseekPreferredModel) pm.deepseek = creds.deepseekPreferredModel;
+                    // Already prefixed on disk (`litellm/<model>`), which is the id the
+                    // LiteLLM model list renders — no re-prefixing here or the star lands
+                    // on no row at all.
+                    if (creds.litellmPreferredModel) pm.litellm = creds.litellmPreferredModel;
                     setDisabledProviders(Array.isArray(creds.disabledProviders) ? creds.disabledProviders : []);
                     setCloudEnabledModelsState(creds.cloudEnabledModels || {});
                     window.electronAPI?.getCloudFetchedModels?.()
@@ -2102,10 +2165,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // one decides what the user can pick, that one decides what routing will
     // accept. If they diverge, the picker offers models the router rejects.
     const isProviderEnabled = (provider: string) => !disabledProviders.includes(provider);
-    const isModelEnabled = (provider: string, modelId: string) => {
-        const allowList = cloudEnabledModels[provider] || [];
-        return allowList.length === 0 || allowList.includes(modelId);
-    };
+    const isModelEnabled = (provider: string, modelId: string) =>
+        isModelAllowed(provider, modelId, cloudEnabledModels[provider] || []);
 
     /**
      * The full model universe for a provider: presets ∪ persisted catalog ∪ every
@@ -2133,10 +2194,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // here so the allow-list stores the same `litellm/<model>` ids that
         // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
         // would make the two surfaces disagree and the filter would silently no-op.
-        if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, prettifyModelId(m)));
+        if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, litellmModelLabel(m)));
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
-        (cloudEnabledModels[provider] || []).forEach(id => push(id, prettifyModelId(id)));
+        // LiteLLM ids are proxy literals, so they take the segment label rather than
+        // prettifyModelId — which would render `litellm/openai/gpt-4o` as
+        // "Litellm/Openai/Gpt 4o".
+        (cloudEnabledModels[provider] || []).forEach(id =>
+            push(id, provider === 'litellm' ? litellmModelLabel(id) : prettifyModelId(id)));
         return out;
     }, [cloudFetchedModels, cloudEnabledModels, litellmModels]);
 
@@ -2182,7 +2247,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             litellmModels.forEach(model => {
                 const id = `litellm/${model}`;
                 if (!isModelEnabled('litellm', id)) return;
-                opts.push({ id, name: `${prettifyModelId(model)} (LiteLLM)` });
+                opts.push({ id, name: `${litellmModelLabel(model)} (LiteLLM)` });
             });
         }
         if (isProviderEnabled('custom')) {
@@ -2246,17 +2311,28 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const handleToggleModel = async (provider: string, modelId: string) => {
         const universe = effectiveModels(provider).map(m => m.id);
         const current = cloudEnabledModels[provider] || [];
+        const optIn = isOptInModelProvider(provider);
         // An empty allow-list means "all", so the first un-check has to materialise
         // the full set minus the one being removed. The set is the EFFECTIVE universe,
         // not just the presets — normalising against presets while the list also holds
         // fetched ids collapses at the wrong cardinality and wipes the selection.
-        const effective = current.length === 0 ? universe : current;
+        //
+        // For an OPT-IN provider empty already means "none", so there is nothing to
+        // materialise — the stored list IS the selection and starts empty.
+        const effective = optIn ? current : (current.length === 0 ? universe : current);
         const nextList = effective.includes(modelId)
             ? effective.filter(id => id !== modelId)
             : [...effective, modelId];
         // Everything selected → store [] (no filter). Never store "none": the UI keeps
         // the last remaining row inert so this branch is unreachable from a click.
-        const normalised = (nextList.length === 0 || nextList.length === universe.length) ? [] : nextList;
+        //
+        // Neither collapse may happen for an opt-in provider: [] means "none" there,
+        // so folding a full selection into [] would silently deselect everything, and
+        // un-checking the last model must be allowed to reach [] rather than being
+        // read as "all".
+        const normalised = optIn
+            ? nextList
+            : (nextList.length === 0 || nextList.length === universe.length) ? [] : nextList;
         const prev = cloudEnabledModels;
         setCloudEnabledModelsState(p => ({ ...p, [provider]: normalised }));
 
@@ -2276,6 +2352,56 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         } catch (e) {
             // Optimistic writes must revert. Leaving the UI showing a state the disk
             // does not have is worse than the write failing visibly.
+            console.error('Failed to persist enabled models:', e);
+            setCloudEnabledModelsState(prev);
+            setModelSaveError(p => ({ ...p, [provider]: true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, [provider]: false })), 4000);
+        }
+    };
+
+    /**
+     * Tick or clear a whole set of models at once.
+     *
+     * Exists because an opt-in provider can front 300+ models: selecting a family
+     * of them one checkbox at a time is not a real option. `ids` is whatever the
+     * list is CURRENTLY showing (filter + Previews applied), so "gpt" → Select all
+     * ticks the matches and leaves the other 290 alone.
+     *
+     * Shares handleToggleModel's normalisation rules exactly — including the
+     * opt-in carve-outs — so a bulk action can never reach a state a sequence of
+     * single clicks could not.
+     */
+    const handleBulkToggleModels = async (provider: string, ids: string[], enable: boolean) => {
+        if (ids.length === 0) return;
+        const universe = effectiveModels(provider).map(m => m.id);
+        const optIn = isOptInModelProvider(provider);
+        const current = cloudEnabledModels[provider] || [];
+        const effective = optIn ? current : (current.length === 0 ? universe : current);
+        const set = new Set(effective);
+        ids.forEach(id => { if (enable) set.add(id); else set.delete(id); });
+        // Rebuild through `universe` so the stored order stays the catalogue's
+        // order rather than click order — the default-move below takes [0].
+        const nextList = universe.filter(id => set.has(id));
+        const normalised = optIn
+            ? nextList
+            : (nextList.length === 0 || nextList.length === universe.length) ? [] : nextList;
+
+        const prev = cloudEnabledModels;
+        setCloudEnabledModelsState(p => ({ ...p, [provider]: normalised }));
+
+        // Same invariant handleToggleModel maintains: the default must never point
+        // outside the allow-list. A bulk clear can drop it, so move it here too.
+        const currentDefault = preferredModels[provider as keyof typeof preferredModels];
+        if (currentDefault && !isModelAllowed(provider, currentDefault, normalised) && normalised.length > 0) {
+            const moved = normalised[0];
+            setPreferredModels(p => ({ ...p, [provider]: moved }));
+            window.electronAPI?.setProviderPreferredModel?.(provider as any, moved)
+                .catch((e: unknown) => console.error('Failed to move default model:', e));
+        }
+        try {
+            const res = await window.electronAPI?.setCloudEnabledModels?.(provider, normalised);
+            if (res && res.success === false) throw new Error(res.error || 'save failed');
+        } catch (e) {
             console.error('Failed to persist enabled models:', e);
             setCloudEnabledModelsState(prev);
             setModelSaveError(p => ({ ...p, [provider]: true }));
@@ -2748,6 +2874,13 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 setLitellmApiKey('');
                 setLitellmMaxTokens('');
                 setLitellmModels([]);
+                // Main already dropped litellmPreferredModel with the rest of the
+                // config; mirror it here so a re-configure of the same proxy in this
+                // same session doesn't show a star pointing at the old catalogue.
+                setPreferredModels(prev => {
+                    const { litellm: _removed, ...rest } = prev;
+                    return rest;
+                });
             }
         } catch (e) {
             console.error('Failed to remove LiteLLM config:', e);
@@ -3491,15 +3624,24 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 Model dropdown gets all of them. Reuses the cloud providers'
                                 allow-list wholesale — `cloudEnabledModels` is keyed by provider
                                 string, so 'litellm' needs no dedicated store or IPC channel.
-                                No `onSetDefault`/`defaultId`: there is no litellmPreferredModel
-                                credential, and STANDARD_CLOUD_MODELS has no litellm pmKey, so a
-                                per-provider default would write a key nothing reads. */}
+                                `onSetDefault`/`defaultId` ride the same generic path: the value
+                                lives in litellmPreferredModel (prefixed, like every id here) and
+                                is read back by refreshRuntimeDefaultIfUnavailable(), which would
+                                otherwise install whichever model the proxy happens to list first
+                                when the active model becomes unavailable. */}
                             {hasStoredKey.litellm && (
                                 <AipModelList
                                     models={effectiveModels('litellm')}
                                     enabled={cloudEnabledModels['litellm'] || []}
                                     onToggle={(modelId) => handleToggleModel('litellm', modelId)}
                                     onReset={() => handleResetModels('litellm')}
+                                    defaultId={preferredModels['litellm']}
+                                    onSetDefault={(modelId) => handleSetDefaultModel('litellm', modelId)}
+                                    // A gateway fronts the upstream's whole catalogue (300+ is
+                                    // normal), so this list is opt-in: nothing reaches the model
+                                    // picker until it is ticked here.
+                                    optIn
+                                    onBulkToggle={(ids, enable) => handleBulkToggleModels('litellm', ids, enable)}
                                     error={modelSaveError['litellm'] ? 'save-failed' : null}
                                     refreshing={isRefreshingLitellm}
                                     onRefresh={handleRefreshLitellmModels}

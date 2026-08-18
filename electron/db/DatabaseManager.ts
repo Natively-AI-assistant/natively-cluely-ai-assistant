@@ -557,7 +557,7 @@ export class DatabaseManager {
                 // Only log on ACTUAL failure, not on the historic "vec0
                 // constructor error: At least one vector column is
                 // required" which we now explicitly do NOT raise.
-                console.error('[DatabaseManager] v3 migration failed unexpectedly (non-fatal, will be retried at v8/v9):', e?.message || e);
+                console.error('[DatabaseManager] v3 migration failed unexpectedly (non-fatal, will be retried at v8/v9):', (e as { message?: string })?.message || e);
             }
             this.db.pragma('user_version = 3');
         }
@@ -576,7 +576,7 @@ export class DatabaseManager {
                     this._lastLegacyCleanup = 0;
                 }
             } catch (e) {
-                console.error('[DatabaseManager] v4 migration failed (non-fatal):', e?.message || e);
+                console.error('[DatabaseManager] v4 migration failed (non-fatal):', (e as { message?: string })?.message || e);
             }
             this.db.pragma('user_version = 4');
         }
@@ -1363,7 +1363,60 @@ export class DatabaseManager {
             this.db.pragma('user_version = 26');
         }
 
-        // Version 26 → 27: REPAIR the page counts corrupted by v22 (F-701/F-702).
+        // Version 26 → 27: usage_outbox — durable queue for client-reported
+        // usage events (2026-08-14, Usage Ledger campaign 2).
+        //
+        // WHY A DURABLE QUEUE AND NOT fetch-and-forget.
+        //
+        // The events this carries are the ONLY evidence that a BYOK feature ran.
+        // When a customer uses their own provider key, the backend executes
+        // nothing and meters nothing, so an event dropped because the laptop was
+        // on a plane is not a gap in telemetry — it is the entire record of that
+        // session, gone. A fetch() that fails during a network blip loses it
+        // silently and forever.
+        //
+        // WHY IT LIVES HERE rather than in a JSON file or electron-store: this
+        // is where the app already keeps durable local state, it is already
+        // migrated, already WAL-checkpointed on shutdown, and already survives
+        // crash/sleep/restart. A second persistence engine would have to earn
+        // all of that again.
+        //
+        // NOTE ON `status`: 'delivered' rows are kept briefly rather than
+        // deleted on ACK, so a duplicate enqueue of the same event_id inside the
+        // compaction window is caught by the UNIQUE constraint instead of being
+        // re-sent. compactOutbox() removes them after 7 days.
+        if (version < 27) {
+            console.log('[DatabaseManager] Applying migration v26 → v27: usage_outbox');
+            this.db.exec(`
+                CREATE TABLE IF NOT EXISTS usage_outbox (
+                    event_id        TEXT PRIMARY KEY,
+                    layer           TEXT NOT NULL DEFAULT 'ledger',
+                    payload_json    TEXT NOT NULL,
+                    status          TEXT NOT NULL DEFAULT 'pending',
+                    attempt_count   INTEGER NOT NULL DEFAULT 0,
+                    next_retry_at   INTEGER NOT NULL DEFAULT 0,
+                    last_error      TEXT,
+                    created_at      INTEGER NOT NULL,
+                    delivered_at    INTEGER
+                );
+                CREATE INDEX IF NOT EXISTS usage_outbox_due_idx
+                    ON usage_outbox (status, next_retry_at);
+                CREATE INDEX IF NOT EXISTS usage_outbox_created_idx
+                    ON usage_outbox (created_at);
+            `);
+            this.db.pragma('user_version = 27');
+        }
+
+        // MERGE NOTE (2026-08-19): main's v26 → v27 (usage_outbox) and this
+        // branch's page-count repair BOTH claimed version 27. Whichever ran
+        // first would have stamped user_version = 27 and permanently suppressed
+        // the other — a user coming from main would never get the page-count
+        // repair, and a user from this branch would never get usage_outbox.
+        // main is the shared trunk, so it keeps 27 and this branch's two
+        // migrations were renumbered to 28 (page-count repair) and 29 (vec0
+        // cosine rebuild). This branch was never released, so no installed
+        // profile can be sitting on its old 27/28 numbering.
+        // Version 27 → 28: REPAIR the page counts corrupted by v22 (F-701/F-702).
         //
         // v22's Phase 1 seeded its recursive CTE from an inner
         // `FROM mode_reference_files`, which shadowed the outer UPDATE row and
@@ -1380,8 +1433,8 @@ export class DatabaseManager {
         // marker-bearing rows (not gated on IS NULL) precisely because the bad
         // values are non-NULL, and it is idempotent — re-running derives the
         // same counts.
-        if (version < 27) {
-            console.log('[DatabaseManager] Applying migration v26 → v27: Repair v22 page_count/extracted_page_count corruption');
+        if (version < 28) {
+            console.log('[DatabaseManager] Applying migration v27 → v28: Repair v22 page_count/extracted_page_count corruption');
             try {
                 const repaired = this.db.prepare(`
                     UPDATE mode_reference_files
@@ -1461,18 +1514,18 @@ export class DatabaseManager {
                       AND content LIKE '%[Page %]%'
                 `).run();
                 console.log(`[DatabaseManager] v27 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
-                this.db.pragma('user_version = 27');
+                this.db.pragma('user_version = 28');
             } catch (e) {
                 // R-05: this block deliberately swallows rather than re-throwing so
                 // the repair retries next launch. But `version` above is read ONCE
-                // into a const, so control fell straight into `if (version < 28)`
-                // with the stale snapshot (26); v28 then succeeded and stamped
-                // user_version = 28. On the next launch `version < 27` was false and
+                // into a const, so control fell straight into `if (version < 29)`
+                // with the stale snapshot (27); v29 then succeeded and stamped
+                // user_version = 29. On the next launch `version < 28` was false and
                 // the page-count repair NEVER ran again — the comment below was a
                 // false claim, and it was this commit's own v28 block that made it
-                // false. Re-reading the pragma would not help: 26 < 28 is still true.
+                // false. Re-reading the pragma would not help: 27 < 29 is still true.
                 // A swallowed failure must STOP the chain so the version stays put.
-                console.error('[DatabaseManager] v27 page-count repair failed (leaving version at 26 to retry next launch); '
+                console.error('[DatabaseManager] v27 page-count repair failed (leaving version at 27 to retry next launch); '
                     + 'skipping all later migrations this launch so the version is not stamped past it:', e);
                 return;
             }
@@ -1500,8 +1553,8 @@ export class DatabaseManager {
         // vec0 virtual tables cannot be ALTERed, so the metric change requires
         // a drop + recreate + backfill from the embedding BLOBs still held in
         // chunks / chunk_summaries.
-        if (version < 28) {
-            console.log('[DatabaseManager] Applying migration v27 → v28: rebuild vec0 tables with cosine distance');
+        if (version < 29) {
+            console.log('[DatabaseManager] Applying migration v28 → v29: rebuild vec0 tables with cosine distance');
             try {
                 let rebuilt = 0;
                 // R-08: enumerate the dimensions that actually EXIST, not just
@@ -1557,14 +1610,198 @@ export class DatabaseManager {
                     }
                 }
                 })();
-                console.log(`[DatabaseManager] v28: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
-                this.db.pragma('user_version = 28');
+                console.log(`[DatabaseManager] v29: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
+                this.db.pragma('user_version = 29');
             } catch (e) {
-                console.error('[DatabaseManager] v28 vec0 cosine rebuild failed (leaving version at 27 to retry next launch):', e);
+                console.error('[DatabaseManager] v29 vec0 cosine rebuild failed (leaving version at 28 to retry next launch):', e);
             }
         }
 
         console.log('[DatabaseManager] Migrations completed.');
+    }
+
+    // ============================================
+    // Usage outbox (v27) — durable queue for client-reported usage events
+    // ============================================
+    //
+    // Every method here is guarded and returns a neutral value when the database
+    // is unavailable. This queue must never be able to break the feature it is
+    // observing: a customer whose disk is full still gets to run a meeting.
+
+    /**
+     * Queue one event for delivery.
+     *
+     * INSERT OR IGNORE, not INSERT: enqueuing the same event_id twice is a
+     * no-op, so a retry loop in a caller cannot produce two rows for one logical
+     * event. That is the local half of the replay protection the server enforces
+     * with UNIQUE(event_id).
+     *
+     * Returns 'queued' | 'duplicate' | 'dropped' | 'unavailable'.
+     */
+    public enqueueUsageEvent(eventId: string, layer: 'ledger' | 'telemetry', payload: unknown, opts?: { maxRows?: number }): string {
+        if (!this.db) return 'unavailable';
+        try {
+            // Hard cap. An app that has been offline for a month, or whose
+            // licence has lapsed so every delivery 401s, must not grow this
+            // table without bound. Dropping the OLDEST undelivered event is the
+            // least-bad choice: recent activity is what a dispute is usually
+            // about, and the drop is counted so the loss is visible rather than
+            // silent.
+            const maxRows = opts?.maxRows ?? 10_000;
+            const total = (this.db.prepare(`SELECT COUNT(*) AS n FROM usage_outbox`).get() as any)?.n ?? 0;
+            if (total >= maxRows) {
+                // Make room for exactly one new row.
+                //
+                // ORDER MATTERS. `total` counts EVERY row, but delivered rows are
+                // deliberately retained for a 7-day support window and compaction
+                // only runs on a 6-hour timer — so in a normal desktop session the
+                // table fills with delivered rows. Evicting only `status != 'delivered'`
+                // (the previous behaviour) meant a table of 9,999 delivered rows
+                // destroyed the one live event on every insert, and once EVERY row
+                // was delivered there was no victim at all and the incoming event was
+                // dropped before the INSERT — permanently, for every later event.
+                // Both are the exact loss this file's header forbids.
+                //
+                // Delivered rows are already safely upstream, so reclaiming them
+                // costs nothing. An undelivered event is sacrificed only when no
+                // delivered row remains to give up.
+                const surplus = total - maxRows + 1;
+                const freed = this.db.prepare(`
+                    DELETE FROM usage_outbox WHERE event_id IN (
+                        SELECT event_id FROM usage_outbox
+                         WHERE status = 'delivered'
+                         ORDER BY created_at ASC LIMIT ?
+                    )
+                `).run(surplus).changes ?? 0;
+                if (freed < surplus) {
+                    const sacrificed = this.db.prepare(`
+                        DELETE FROM usage_outbox WHERE event_id IN (
+                            SELECT event_id FROM usage_outbox
+                             WHERE status != 'delivered'
+                             ORDER BY created_at ASC LIMIT ?
+                        )
+                    `).run(surplus - freed).changes ?? 0;
+                    // Losing an undelivered event IS the loss this queue exists to
+                    // prevent. It must never be silent — the previous code evicted
+                    // one and still returned 'queued', so nothing counted it.
+                    if (sacrificed > 0) {
+                        console.warn(`[DatabaseManager] usage_outbox at cap (${maxRows}) — discarded ${sacrificed} UNDELIVERED event(s) to enqueue a new one`);
+                    }
+                }
+                // Deliberately fall through to the INSERT even if nothing could be
+                // freed: bounding the table is worth less than the incoming event.
+            }
+            const res = this.db.prepare(`
+                INSERT OR IGNORE INTO usage_outbox (event_id, layer, payload_json, status, created_at, next_retry_at)
+                VALUES (?, ?, ?, 'pending', ?, 0)
+            `).run(eventId, layer, JSON.stringify(payload), Date.now());
+            return res.changes > 0 ? 'queued' : 'duplicate';
+        } catch (e: any) {
+            console.warn('[DatabaseManager] enqueueUsageEvent failed:', e?.message || e);
+            return 'unavailable';
+        }
+    }
+
+    /** Events due for delivery now, oldest first. */
+    public claimUsageOutboxBatch(limit = 100, now = Date.now()): Array<{ event_id: string; layer: string; payload: any; attempt_count: number }> {
+        if (!this.db) return [];
+        try {
+            const rows = this.db.prepare(`
+                SELECT event_id, layer, payload_json, attempt_count
+                  FROM usage_outbox
+                 WHERE status = 'pending' AND next_retry_at <= ?
+                 ORDER BY created_at ASC
+                 LIMIT ?
+            `).all(now, limit) as any[];
+            return rows.map((r) => ({
+                event_id: r.event_id,
+                layer: r.layer,
+                attempt_count: r.attempt_count,
+                payload: JSON.parse(r.payload_json),
+            }));
+        } catch (e: any) {
+            console.warn('[DatabaseManager] claimUsageOutboxBatch failed:', e?.message || e);
+            return [];
+        }
+    }
+
+    /** Mark delivered. Rows linger until compaction so a duplicate enqueue is caught. */
+    public markUsageEventsDelivered(eventIds: string[], now = Date.now()): void {
+        if (!this.db || eventIds.length === 0) return;
+        try {
+            const stmt = this.db.prepare(`UPDATE usage_outbox SET status = 'delivered', delivered_at = ?, last_error = NULL WHERE event_id = ?`);
+            const tx = this.db.transaction((ids: string[]) => { for (const id of ids) stmt.run(now, id); });
+            tx(eventIds);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] markUsageEventsDelivered failed:', e?.message || e);
+        }
+    }
+
+    /**
+     * Server said these are permanently unacceptable (schema rejection).
+     * Deleted rather than retried: a payload this server build refuses will be
+     * refused identically forever, and retrying it is how a queue wedges.
+     */
+    public dropUsageEvents(eventIds: string[]): void {
+        if (!this.db || eventIds.length === 0) return;
+        try {
+            const stmt = this.db.prepare(`DELETE FROM usage_outbox WHERE event_id = ?`);
+            const tx = this.db.transaction((ids: string[]) => { for (const id of ids) stmt.run(id); });
+            tx(eventIds);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] dropUsageEvents failed:', e?.message || e);
+        }
+    }
+
+    /** Record a failed attempt and schedule the next one. */
+    public markUsageEventsFailed(eventIds: string[], nextRetryAt: number, error: string): void {
+        if (!this.db || eventIds.length === 0) return;
+        try {
+            const msg = String(error || '').slice(0, 200);
+            const stmt = this.db.prepare(`
+                UPDATE usage_outbox
+                   SET attempt_count = attempt_count + 1, next_retry_at = ?, last_error = ?
+                 WHERE event_id = ?
+            `);
+            const tx = this.db.transaction((ids: string[]) => { for (const id of ids) stmt.run(nextRetryAt, msg, id); });
+            tx(eventIds);
+        } catch (e: any) {
+            console.warn('[DatabaseManager] markUsageEventsFailed failed:', e?.message || e);
+        }
+    }
+
+    /** Remove delivered rows older than the retention window (default 7 days). */
+    public compactUsageOutbox(olderThanMs = 7 * 24 * 60 * 60 * 1000, now = Date.now()): number {
+        if (!this.db) return 0;
+        try {
+            const res = this.db.prepare(
+                `DELETE FROM usage_outbox WHERE status = 'delivered' AND delivered_at IS NOT NULL AND delivered_at < ?`
+            ).run(now - olderThanMs);
+            return res.changes ?? 0;
+        } catch (e: any) {
+            console.warn('[DatabaseManager] compactUsageOutbox failed:', e?.message || e);
+            return 0;
+        }
+    }
+
+    /** Queue depth by status — the §20 `event_queue_depth` health metric. */
+    public getUsageOutboxStats(): { pending: number; delivered: number; total: number; oldestPendingAgeMs: number | null } {
+        if (!this.db) return { pending: 0, delivered: 0, total: 0, oldestPendingAgeMs: null };
+        try {
+            const rows = this.db.prepare(`SELECT status, COUNT(*) AS n FROM usage_outbox GROUP BY status`).all() as any[];
+            const byStatus = Object.fromEntries(rows.map((r) => [r.status, r.n]));
+            const oldest = this.db.prepare(
+                `SELECT MIN(created_at) AS t FROM usage_outbox WHERE status = 'pending'`
+            ).get() as any;
+            return {
+                pending: byStatus.pending ?? 0,
+                delivered: byStatus.delivered ?? 0,
+                total: rows.reduce((s, r) => s + r.n, 0),
+                oldestPendingAgeMs: oldest?.t ? Date.now() - oldest.t : null,
+            };
+        } catch {
+            return { pending: 0, delivered: 0, total: 0, oldestPendingAgeMs: null };
+        }
     }
 
     // ============================================
@@ -2292,7 +2529,7 @@ export class DatabaseManager {
                             insert.run(row.id, row.embedding);
                         } catch (err) {
                             // On mismatch (e.g. mixed 768 and 3072 dims), nullify to re-embed later
-                            this.db.prepare('UPDATE chunks SET embedding = NULL WHERE id = ?').run(row.id);
+                            this.db!.prepare('UPDATE chunks SET embedding = NULL WHERE id = ?').run(row.id);  // guarded at method entry; narrowing lost in catch
                         }
                     }
                 });
@@ -2318,7 +2555,7 @@ export class DatabaseManager {
                         try {
                             insert.run(row.id, row.embedding);
                         } catch (err) {
-                            this.db.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE id = ?').run(row.id);
+                            this.db!.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE id = ?').run(row.id);  // guarded at method entry; narrowing lost in catch
                         }
                     }
                 });

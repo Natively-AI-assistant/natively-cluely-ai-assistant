@@ -54,7 +54,15 @@ test('generateSuggestion sends mode context as user message content', () => {
   // The streaming providers receive suggestionContext as the 3rd (context) arg
   // and basePrompt as the 4th (systemPrompt) arg — context is NOT folded into the
   // system prompt. Two streaming branches (custom/curl provider + default client).
-  const streamChatMatches = generateSuggestionSource.match(/streamChat\(promptMessage, undefined, suggestionContext, basePrompt, true\)/g) ?? [];
+  // Matched on the ARGUMENT ORDER, not the entry-point NAME. The invariant this
+  // test exists to protect is "context is the 3rd arg, system prompt is the 4th"
+  // — which streaming API carries them is an implementation detail. Pinning the
+  // name broke on 2026-08-15 when both branches moved to streamChatWithOutcome
+  // (so a truncated suggestion fails loudly instead of returning a mid-sentence
+  // answer); the arg order was byte-identical and the invariant never lapsed.
+  const streamChatMatches = generateSuggestionSource.match(
+    /streamChat(?:WithOutcome|LongForm)?\(promptMessage, undefined, suggestionContext, basePrompt, true\)/g,
+  ) ?? [];
   assert.equal(streamChatMatches.length, 2, 'both streaming branches pass suggestionContext as user content + basePrompt as system prompt');
   // Codex/Gemini branch likewise passes suggestionContext as user content.
   assert.match(generateSuggestionSource, /chatWithGemini\(promptMessage, undefined, suggestionContext, true\)/);

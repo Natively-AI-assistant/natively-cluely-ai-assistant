@@ -14,6 +14,15 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
+    // TypeScript 7 no longer auto-includes every visible @types/* package, so the
+    // set has to be named explicitly (it was implicit under TS <=6).
+    //   node                    -> `process` + the NodeJS.* namespace
+    //   react-syntax-highlighter -> react-syntax-highlighter@16 ships NO .d.ts of its
+    //     own; the deep `dist/esm/*` imports are typed solely by the ambient
+    //     `declare module` blocks inside @types/react-syntax-highlighter@15.
+    // See docs/ts7-upgrade-audit.md §4.2. Types reached through `import` (react,
+    // react-dom, ws, three, ...) resolve normally and do not belong here.
+    "types": ["node", "react-syntax-highlighter"],
     "paths": {
       "@/*": ["./src/*"],
       "@hooks/*": ["./src/hooks/*"],

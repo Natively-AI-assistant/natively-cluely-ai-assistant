@@ -110,8 +110,11 @@ export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
  * redefining "healthy" as "passes the time-based checks", which is not what that
  * promise said. The real position: above this size an answer is treated as a
  * runaway, accepting that a legitimate answer that large is cut off. It is set
- * high enough (below) that no measured answer comes close, and it is
- * env-overridable for anyone who hits it.
+ * high enough (below) that no measured answer comes close.
+ *
+ * It is NOT env-overridable, despite this comment previously saying so
+ * (code-review 2026-08-14): there is no `process.env` read anywhere in this
+ * file. Raising it requires a code change.
  *
  * Live capture 2026-08-12 (what_to_answer): the model produced 8047 tokens /
  * 22871 chars over 61s before the SERVER aborted it. tfft was 2084ms and tokens
@@ -148,6 +151,28 @@ export const MAX_STREAM_OUTPUT_CHARS = 16000;
  * estimate; MAX_STREAM_OUTPUT_CHARS remains the outer runaway bound.
  */
 export const CODING_REGEN_ABORT_CHARS = 8000;
+
+/**
+ * The same runaway bound for BATCH generations that are legitimately long —
+ * today only `generateMeetingSummary`.
+ *
+ * MAX_STREAM_OUTPUT_CHARS above is calibrated from LIVE what_to_answer answers
+ * (19 captured, p100 2530 chars). A meeting summary is a different artifact: a
+ * structured multi-section document over a whole session, where 16k is a
+ * plausible LENGTH rather than 6x the p100. Because the cap ends the stream by
+ * RETURNING, `generateMeetingSummary`'s `text.trim().length > 0` check passed
+ * and a summary that stopped mid-sentence was persisted as complete
+ * (code-review 2026-08-13).
+ *
+ * Still a runaway bound, not a licence: a summary reaching 120k chars has
+ * stopped being a summary.
+ *
+ * NOT env-overridable — neither this nor MAX_STREAM_OUTPUT_CHARS reads
+ * process.env, despite that constant's doc claiming otherwise (code-review
+ * 2026-08-14 caught the claim being repeated here). Changing either requires a
+ * code change; an operator hitting the ceiling has no runtime lever.
+ */
+export const MAX_SUMMARY_OUTPUT_CHARS = 120000;
 
 const COMPLEX_TYPES = new Set<AnswerType>([
   'coding_question_answer', 'dsa_question_answer', 'system_design_answer', 'debugging_question_answer',

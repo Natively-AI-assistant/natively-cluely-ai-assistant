@@ -5,7 +5,7 @@ import type { WhisperModelId, WhisperModelInfo } from './types';
 // env is configured lazily via configureTransformersCache()
 // We import the type only here; the actual require() happens at runtime.
 
-const MODEL_CATALOG: WhisperModelInfo[] = [
+export const MODEL_CATALOG: WhisperModelInfo[] = [
   // ── Moonshine — streaming-native ASR. ~100× lower latency than Whisper Large v3.
   //     Encoder caching + decoder state reuse. English-only. Best choice for live use.
   { id: 'onnx-community/moonshine-tiny-ONNX', name: 'Moonshine Tiny',  sizeMb: 26,   speed: 'very-fast', accuracy: 'good',      multilingual: false, status: 'missing', streaming: true },
@@ -29,6 +29,38 @@ const MODEL_CATALOG: WhisperModelInfo[] = [
   //     sizeMb is the q8 download (1.3MB graph + 611MB weights). fp32 is 2.4GB;
   //     `model: 'q8'` in WHISPER_SAFE_DTYPE is what keeps us off that path.
   { id: 'onnx-community/parakeet-ctc-0.6b-ONNX', name: 'Parakeet CTC 0.6B', sizeMb: 583, speed: 'fast', accuracy: 'very-high', multilingual: false, status: 'missing', sessionLayout: 'single', externalDataFormat: true },
+
+  // ── Nemotron 3.5 ASR Streaming — NVIDIA cache-aware FastConformer-RNNT.
+  //     The ONLY model in this catalog with real streaming (chunked ONNX
+  //     inference with cross-call cache state), not the simulated polling
+  //     used for Whisper/Distil-Whisper/Moonshine/Parakeet. Multilingual
+  //     (40 locales, tiered — see nemotron/languageTable.ts for which are
+  //     exposed). Flat repo layout (no onnx/ subdir, no dtype suffix) — its
+  //     cache check is a dedicated branch below, not expectedOnnxFiles().
+  //
+  //     Previously hidden: true — real-model testing (task-11-report.md,
+  //     task-11-debug1-report.md, task-11-debug2-report.md) found this
+  //     export transcribed speech as an empty string (complete functional
+  //     failure). Root cause (task-11-fix1-report.md): the driving code
+  //     baked synthetic zero-padding into the encoder's leading 9
+  //     "pre_encode_cache" frames instead of real cross-chunk mel history
+  //     (melFrontend.ts/nemotronEngine.ts), plus a wrong `lang_id` value
+  //     (2947 — a vocab-token id, not a conditioning index). Both fixed:
+  //     NemotronEngine now carries a real raw-PCM lookback buffer across
+  //     chunk boundaries, and DEFAULT_LANG_ID is 0 (empirically verified).
+  //     The real go/no-go integration test now passes (77.8% word overlap
+  //     vs. the required 50%) — unhidden as a real, shippable fix.
+  {
+    id: 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4',
+    name: 'Nemotron 3.5 ASR Streaming',
+    sizeMb: 793,
+    speed: 'fast',
+    accuracy: 'high',
+    multilingual: true,
+    status: 'missing',
+    streaming: true,
+    sessionLayout: 'nemotron-rnnt',
+  },
 
   // ── Distil-Whisper — same architecture as Whisper, distilled to 1/2 layers,
   //     ~6× faster CPU/GPU at near-equivalent WER. English-only.
@@ -244,6 +276,21 @@ function expectedOnnxFiles(
   };
 }
 
+// Exported (not module-private) so downloadFiles.ts (Task 9) imports this same
+// list rather than maintaining a second copy that could drift out of sync.
+export const NEMOTRON_REQUIRED_FILES = [
+  'encoder.onnx', 'encoder.onnx.data',
+  'decoder.onnx', 'decoder.onnx.data',
+  'joint.onnx', 'joint.onnx.data',
+  'tokenizer.json', 'vocab.txt', 'tokenizer_config.json',
+] as const;
+
+function isNemotronModelCached(modelDir: string): boolean {
+  return NEMOTRON_REQUIRED_FILES.every(f => {
+    try { return fs.statSync(path.join(modelDir, f)).size > 0; } catch { return false; }
+  });
+}
+
 /**
  * Returns true when the cache contains the ONNX files the active dtype will
  * actually load. When `dtype` is omitted (legacy callers), falls back to a
@@ -260,6 +307,9 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
   const modelDir = path.join(cacheDir, modelIdToCacheDir(modelId));
   if (!fs.existsSync(modelDir)) return false;
 
+  const sessionLayout = MODEL_CATALOG.find(m => m.id === modelId)?.sessionLayout;
+  if (sessionLayout === 'nemotron-rnnt') return isNemotronModelCached(modelDir);
+
   if (!dtype) {
     try { return fs.readdirSync(modelDir).length > 0; } catch { return false; }
   }
@@ -275,7 +325,6 @@ export function isModelCached(modelId: WhisperModelId, dtype?: string | Record<s
   };
 
   const externalDataFormat = getModelExternalDataFormat(modelId);
-  const sessionLayout = MODEL_CATALOG.find(m => m.id === modelId)?.sessionLayout;
   const { encoder, encoderData, decoderOptions } = expectedOnnxFiles(dtype, externalDataFormat, sessionLayout);
   if (!present(encoder)) return false;
   // External-weight companion(s) of the encoder must exist too, else ORT aborts.
@@ -299,7 +348,7 @@ export function getAvailableModels(): WhisperModelInfo[] {
     const darwinMajor = parseInt(release.split('.')[0], 10);
     // Darwin 22 = macOS 13 Ventura. Darwin 21 = macOS 12 Monterey.
     if (Number.isNaN(darwinMajor) || darwinMajor < 22) {
-      return MODEL_CATALOG.map(m => ({
+      return MODEL_CATALOG.filter(m => !m.hidden).map(m => ({
         ...m,
         status: 'error' as const,
         errorMessage: 'Requires macOS 13 Ventura or later. Local models are not supported on macOS 12 (Monterey) or earlier.',
@@ -317,7 +366,7 @@ export function getAvailableModels(): WhisperModelInfo[] {
   } catch {
     dtype = undefined; // fall back to legacy directory-non-empty check
   }
-  return MODEL_CATALOG.map(m => ({
+  return MODEL_CATALOG.filter(m => !m.hidden).map(m => ({
     ...m,
     status: isModelCached(m.id, dtype) ? 'available' : 'missing',
   }));

@@ -181,8 +181,15 @@ describe('every text-path fall-through site consults the commit flag', () => {
     const starts = [...src.matchAll(/for \(let rotation = 0; rotation < MAX_FULL_ROTATIONS/g)]
       .map((m) => m.index);
     assert.ok(starts.length >= 1, 'could not locate any rotation loop');
+    // 6000, not 2000, and only for SELECTING which loop is the streaming one.
+    // The two rotation loops sit ~80k chars apart, so a generous window cannot
+    // pick the wrong one — whereas a tight one silently truncates the body and
+    // makes the guard assertion below unfindable. That is exactly what happened
+    // on 2026-08-15: an added line inside the guard pushed its `return;` to 2017
+    // chars past the loop start, one line beyond the window, and this test
+    // reported a missing guard that was in fact present and correct.
     const streamingLoops = starts
-      .map((i) => src.slice(i, i + 2000))
+      .map((i) => src.slice(i, i + 6000))
       .filter((body) => body.includes('yield*'));
     assert.equal(
       streamingLoops.length,
@@ -193,6 +200,21 @@ describe('every text-path fall-through site consults the commit flag', () => {
     // trackCommit may now be WRAPPED by capOutput (the total-output bound added
     // 2026-08-12), so match the delegation without assuming it is outermost.
     assert.match(loop, /this\.trackCommit\(provider\.execute\(\)/);
-    assert.match(loop, /if \(commit\.emitted\)[\s\S]{0,900}?return;/);
+    // Anchored at the guard and measured from there, rather than relying on the
+    // guard landing inside a fixed slice. The invariant is "a post-commit
+    // failure RETURNS (ending the stream) instead of continuing to the next
+    // provider and appending a second complete answer" — the distance from the
+    // guard to that return is incidental, and grows whenever anyone adds
+    // bookkeeping inside the branch.
+    const guardIdx = loop.indexOf('if (commit.emitted)');
+    assert.ok(guardIdx > 0, 'the streaming rotation loop lost its post-commit guard');
+    const afterGuard = loop.slice(guardIdx);
+    const returnIdx = afterGuard.indexOf('return;');
+    const continueIdx = afterGuard.indexOf('continue;');
+    assert.ok(returnIdx > 0, 'the post-commit guard must end the stream with a return');
+    assert.ok(
+      continueIdx === -1 || returnIdx < continueIdx,
+      'the guard must RETURN before any continue — continuing would append a second complete answer',
+    );
   });
 });

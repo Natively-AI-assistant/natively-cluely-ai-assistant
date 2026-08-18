@@ -19,9 +19,38 @@ describe('BUG-MODE-BLEEDING: Async post-call summary mode snapshot', () => {
 
     // Extract only the stopMeeting function body
     const stopStart = source.indexOf('public async stopMeeting');
-    const returnIdx = source.indexOf('return meetingId;', stopStart);
-    const stopSource = source.slice(stopStart, returnIdx + 'return meetingId;'.length);
     assert.ok(stopStart >= 0, 'stopMeeting should exist');
+    // Brace-match the body instead of slicing to `return meetingId;`.
+    // stopMeeting's return shape changed to an object
+    // (`return { meetingId, memoryEligibleCount };`), so that literal no longer
+    // exists — indexOf returned -1, the slice collapsed to ~15 characters, and
+    // the suite reported that the processAndSaveMeeting call was MISSING when
+    // the whole ordering it checks was intact (snapshot at :115, main reset at
+    // :128, save at :159).
+    // The body brace is the first `{` at paren-depth 0 AND angle-depth 0.
+    // A plain indexOf('{') lands inside the RETURN TYPE —
+    // `Promise<{ meetingId: string; memoryEligibleCount: number } | null>` —
+    // and depth-matching then closes on that object type, truncating the slice.
+    let bodyStart = -1;
+    let parenD = 0;
+    let angleD = 0;
+    for (let k = stopStart; k < source.length; k++) {
+      const ch = source[k];
+      if (ch === '(') parenD++;
+      else if (ch === ')') parenD--;
+      else if (ch === '<') angleD++;
+      else if (ch === '>') angleD--;
+      else if (ch === '{' && parenD === 0 && angleD === 0) { bodyStart = k; break; }
+    }
+    assert.ok(bodyStart >= 0, 'could not locate the stopMeeting body brace');
+    let depth = 1;
+    let end = bodyStart + 1;
+    for (; end < source.length && depth > 0; end++) {
+      const ch = source[end];
+      if (ch === '{') depth++;
+      else if (ch === '}') depth--;
+    }
+    const stopSource = source.slice(stopStart, end);
 
     // The mode snapshot capture must occur BEFORE the MAIN session.reset() —
     // the one that runs after all snapshots and before the async background

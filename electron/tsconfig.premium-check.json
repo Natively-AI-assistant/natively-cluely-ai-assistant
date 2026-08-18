@@ -1,0 +1,50 @@
+// Type-check coverage for the `premium/` submodule. CHECK-ONLY, like ./tsconfig.json.
+//
+// Why this exists — a coverage hole that a code review caught:
+// ./tsconfig.json drops `../premium/electron/**/*.ts` from its ROOT FILE SET so
+// that `strict: true` applies to this repository's own sources without forcing
+// strictness onto a separate private submodule (docs/ts7-upgrade-report.md §7.2,
+// option D). The consequence was under-stated at the time: "premium still
+// type-checks as a dependency, verified 0 x TS2307" is NOT true in the way it
+// reads. TS2307 is cannot-find-module — it proves imports RESOLVE, not that
+// files are CHECKED. Measured: the root file set went from 47 premium files to
+// 9, because only what an `import` pulls in stays in the program. The other 38
+// reach runtime through untyped `require()`, which pulls nothing into the
+// program at all — so KnowledgeOrchestrator.ts, StructuredExtractor.ts,
+// HeuristicExtractor.ts, NegotiationEngine.ts, LicenseManager.ts and the whole
+// roleInsight/ subsystem silently stopped being checked.
+//
+// `premium/` has no tsconfig of its own, so `npm run typecheck:electron` was the
+// only gate on it. This config restores that gate at the strictness premium was
+// actually written against (strict off, noImplicitAny on — the pre-migration
+// settings), which is why it reports zero errors today.
+//
+// Do NOT fold this back into ./tsconfig.json: that would re-impose `strict` on
+// the submodule, which is the 20-finding follow-up (a) that belongs in
+// natively-premium, not here.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The pre-migration strictness of this project — premium was never written
+    // against `strict`. Turning it on here is follow-up (a), in the other repo.
+    "strict": false,
+    "noImplicitAny": true
+  },
+  // ONLY premium is a root file. This repo's own electron/**/*.ts still enters
+  // the program as a DEPENDENCY of these files (so premium is checked against
+  // real types, not stubs), but its errors are not reported here — ./tsconfig.json
+  // owns that, at full `strict`. Re-listing electron/ here would re-check it at a
+  // DIFFERENT strictness and report 3 pre-existing TS7018s that `strict` does not
+  // produce, which is noise this gate must not emit.
+  "include": [
+    "../premium/electron/**/*.ts"
+  ],
+  // MUST be overridden, not inherited: ./tsconfig.json excludes "../premium/**",
+  // which would cancel the include above and leave this config with no inputs
+  // (TS18003) — a gate that silently checks nothing, which is the exact failure
+  // mode this file was added to fix.
+  "exclude": [
+    "db/seedDemo.ts",
+    "db/test-db.ts"
+  ]
+}

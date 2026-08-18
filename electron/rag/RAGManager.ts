@@ -278,11 +278,22 @@ export class RAGManager {
         const prompt = buildRAGPrompt(query, context.formattedContext, 'meeting', context.intent);
 
         // Stream response
-        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
+        const streamOutcome: { incomplete?: boolean } = {};
+        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
 
         for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
+        }
+        // F7 (code-review 2026-08-14): surface an incomplete stream to the
+        // reader. Without this, a capped or post-commit-failed stream ended
+        // normally, ipcHandlers sent rag:stream-complete, and the renderer
+        // finalized a mid-sentence bubble as a complete answer that then
+        // entered conversation state. The coda makes the truncation VISIBLE
+        // in the rendered/persisted answer (skipped on user abort — that is
+        // a cancellation, not a truncation).
+        if (streamOutcome.incomplete && !abortSignal?.aborted) {
+            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
         }
     }
 
@@ -309,11 +320,22 @@ export class RAGManager {
         const prompt = buildRAGPrompt(query, context.formattedContext, 'global', context.intent);
 
         // Stream response
-        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
+        const streamOutcome: { incomplete?: boolean } = {};
+        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
 
         for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
+        }
+        // F7 (code-review 2026-08-14): surface an incomplete stream to the
+        // reader. Without this, a capped or post-commit-failed stream ended
+        // normally, ipcHandlers sent rag:stream-complete, and the renderer
+        // finalized a mid-sentence bubble as a complete answer that then
+        // entered conversation state. The coda makes the truncation VISIBLE
+        // in the rendered/persisted answer (skipped on user abort — that is
+        // a cancellation, not a truncation).
+        if (streamOutcome.incomplete && !abortSignal?.aborted) {
+            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
         }
     }
 
@@ -436,9 +458,39 @@ export class RAGManager {
     }
 
     /**
+     * Whether this instance's connection can still serve statements. Mirrors
+     * VectorStore.isDatabaseUsable() — see that method for the full rationale.
+     */
+    private isDatabaseUsable(): boolean {
+        try {
+            return (this.db as any)?.open === true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Delete RAG data for a meeting
      */
     deleteMeetingData(meetingId: string): void {
+        // Shutdown guard: RAGManager holds a RAW better-sqlite3 handle
+        // (`this.db = config.db`), so after the fatal path's
+        // closeWithoutCheckpoint() this reference is a closed connection and
+        // every prepare() below would throw out of the driver. This method is
+        // called from the background meeting-teardown block, where a throw is
+        // caught but aborts the remaining teardown steps. Return one controlled,
+        // logged result instead of three separate driver failures.
+        //
+        // Defense in depth for the shutdown window only — nothing here reopens
+        // the database.
+        if (!this.isDatabaseUsable()) {
+            console.warn(
+                `[RAGManager] deleteMeetingData(${meetingId}): database is closed — skipping RAG cleanup. ` +
+                'Expected during fatal shutdown.'
+            );
+            return;
+        }
+
         // 1. Delete from vector store (chunks and summaries)
         this.vectorStore.deleteChunksForMeeting(meetingId);
         

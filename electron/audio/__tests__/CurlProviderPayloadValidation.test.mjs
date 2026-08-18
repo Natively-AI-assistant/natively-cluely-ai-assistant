@@ -63,7 +63,12 @@ test('curl provider save handlers validate renderer payloads before persistence'
       `BUG: ${channel} must use the shared payload validator.`,
     );
     assert.ok(
-      /if\s*\(\s*!validation\.ok\s*\)[\s\S]*return\s*\{\s*success:\s*false,\s*error:\s*validation\.error\s*\}/.test(body),
+      // Accept `(validation as any).error` as well as `validation.error`. Both
+      // handlers carry the cast — the validator returns a discriminated union
+      // and the narrowing after `!validation.ok` needed help — so the pin was
+      // failing on a type annotation while the behaviour it guards (reject with
+      // the validator's OWN message, before anything is persisted) was intact.
+      /if\s*\(\s*!validation\.ok\s*\)[\s\S]*return\s*\{\s*success:\s*false,\s*error:\s*(?:\(validation as any\)|validation)\.error\s*\}/.test(body),
       `BUG: ${channel} must reject invalid providers before saveCurlProvider.`,
     );
     assert.ok(

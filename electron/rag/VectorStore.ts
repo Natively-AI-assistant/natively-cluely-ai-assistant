@@ -61,6 +61,33 @@ export class VectorStore {
     }
 
     /**
+     * Whether this instance's connection can still serve statements.
+     *
+     * VectorStore is handed a RAW better-sqlite3 handle and keeps its own
+     * reference to it. When the fatal path runs emergencyCloseDatabase() ->
+     * closeWithoutCheckpoint(), DatabaseManager nulls ITS handle but ours is
+     * left pointing at a closed connection, so every prepare() throws
+     * `TypeError: The database connection is not open` straight out of the
+     * driver.
+     *
+     * We check the handle's own `open` flag rather than asking DatabaseManager,
+     * because this class's correctness depends on the connection it was
+     * actually given — a caller may legitimately construct it over a different
+     * connection (ModeContextRetriever and the real-SQLite tests both do).
+     *
+     * DEFENSE IN DEPTH ONLY — this never reopens anything. It exists so the
+     * shutdown window degrades into one logged no-op instead of a raw driver
+     * exception escaping an internal abstraction.
+     */
+    private isDatabaseUsable(): boolean {
+        try {
+            return this.db?.open === true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Detect if sqlite-vec is available (per-dimension vec0 tables must exist)
      */
     private detectVecSupport(): boolean {
@@ -305,6 +332,14 @@ export class VectorStore {
      * Delete all chunks for a meeting (removes from all tracked dimension tables)
      */
     deleteChunksForMeeting(meetingId: string): void {
+        if (!this.isDatabaseUsable()) {
+            console.warn(
+                `[VectorStore] deleteChunksForMeeting(${meetingId}): database is closed — skipping. ` +
+                'Expected during fatal shutdown; the rows are removed by ON DELETE CASCADE ' +
+                'or the next launch\'s cleanup.'
+            );
+            return;
+        }
         if (this.useNativeVec) {
             try {
                 const ids = this.db.prepare(
@@ -697,6 +732,13 @@ export class VectorStore {
      * are wiped so the new provider can embed them cleanly.
      */
     clearEmbeddingsForMeeting(meetingId: string): void {
+        if (!this.isDatabaseUsable()) {
+            console.warn(
+                `[VectorStore] clearEmbeddingsForMeeting(${meetingId}): database is closed — skipping. ` +
+                'Expected during fatal shutdown; the embeddings are re-derived on the next launch.'
+            );
+            return;
+        }
         // Wipe embedding blobs from chunks and summaries
         this.db.prepare('UPDATE chunks SET embedding = NULL WHERE meeting_id = ?').run(meetingId);
         this.db.prepare('UPDATE chunk_summaries SET embedding = NULL WHERE meeting_id = ?').run(meetingId);

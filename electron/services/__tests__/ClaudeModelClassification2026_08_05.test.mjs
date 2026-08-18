@@ -110,7 +110,7 @@ describe('BUG 2: every Claude model is visible to discovery', () => {
 
   test('other providers are unaffected', () => {
     assert.equal(classifyModel('gpt-5.4'), ModelFamily.OPENAI);
-    assert.equal(classifyModel('gemini-3.6-flash'), ModelFamily.GEMINI_FLASH);
+    assert.equal(classifyModel('gemini-3.7-flash'), ModelFamily.GEMINI_FLASH);
     assert.equal(classifyModel('gemini-3.1-pro-preview'), ModelFamily.GEMINI_PRO);
     assert.equal(classifyTextModel('llama-3.3-70b-versatile'), TextModelFamily.GROQ);
   });

@@ -121,15 +121,61 @@ export function buildWorkerInitMessage(modelId: string): WorkerInitMessage {
     } catch {
         useExternalDataFormat = undefined;
     }
+    // Routes the worker to the raw-ONNX Nemotron engine instead of the
+    // transformers.js pipeline() path. Best-effort like the lookups above —
+    // a failure here must never prevent the worker from starting; it just
+    // means the worker falls back to the default pipeline() path.
+    let sessionLayout: 'encoder-decoder' | 'single' | 'nemotron-rnnt' | undefined;
+    try {
+        const { MODEL_CATALOG } = require('./modelManager');
+        sessionLayout = MODEL_CATALOG.find((m: any) => m.id === modelId)?.sessionLayout;
+    } catch {
+        sessionLayout = undefined;
+    }
     return {
         type: 'init',
         modelId,
         cacheDir: getModelsDir(),
-        executionProviders,
+        // Nemotron opts OUT of the platform accelerator — see
+        // resolveNemotronExecutionProviders() for the measurements.
+        executionProviders: sessionLayout === 'nemotron-rnnt'
+            ? resolveNemotronExecutionProviders(executionProviders)
+            : executionProviders,
         dtype,
         expectedBytes,
         useExternalDataFormat,
+        sessionLayout,
     };
+}
+
+/**
+ * Nemotron (sessionLayout 'nemotron-rnnt') runs CPU-only, ignoring the
+ * platform accelerator every other model uses.
+ *
+ * The ['coreml','cpu'] default was tuned for Whisper/Distil — single
+ * encoder-decoder transformer graphs. Nemotron is a three-session RNN-T, and
+ * CoreML is a straight loss on it in BOTH directions. Measured on an M-series
+ * (10 cores / 4 performance), int4 export, 2.46s fixture, median of 3 after a
+ * warmup run, identical transcript in every configuration:
+ *
+ *   coreml+cpu   load 6436ms   infer 1158ms   RTF 0.470
+ *   cpu          load  363ms   infer  936ms   RTF 0.380
+ *
+ * CoreML costs ~6.1s of graph compilation at load and still runs inference
+ * ~24% slower. The reason is visible in the app's own startup log: CoreML
+ * partitions the encoder into 369 fragments (971 of 1891 nodes supported) and
+ * the 13-node decoder/joint graphs into 3 fragments each. Every fragment
+ * boundary is a CPU<->CoreML copy, and the RNN-T decode loop crosses them
+ * per symbol rather than once per chunk. This is the documented ORT failure
+ * mode for heavily-partitioned graphs, and it is why the upstream reference
+ * implementation of this exact export ships CPU-only ("no GPU required").
+ *
+ * `platformProviders` is accepted (not just ignored) so a platform that never
+ * offered an accelerator still gets its own list rather than a hardcoded one.
+ */
+export function resolveNemotronExecutionProviders(platformProviders: string[]): string[] {
+    const cpuOnly = platformProviders.filter(p => p === 'cpu');
+    return cpuOnly.length > 0 ? cpuOnly : ['cpu'];
 }
 
 /**

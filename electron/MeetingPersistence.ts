@@ -170,7 +170,7 @@ export class MeetingPersistence {
      * Heavy lifting: LLM Title, Summary, and DB Write
      */
     private async processAndSaveMeeting(
-        data: { transcript: TranscriptSegment[], usage: any[], startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
+        data: { transcript: TranscriptSegment[], usage: any[] | undefined, startTime: number, durationMs: number, context: string, memoryEligibleCount?: number },
         meetingId: string,
         // BUG-04 fix: accept metadata snapshot so calendar info is not lost after session.reset()
         metadata?: { title?: string; calendarEventId?: string; source?: 'manual' | 'calendar' } | null,

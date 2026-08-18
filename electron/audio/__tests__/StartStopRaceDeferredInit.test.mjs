@@ -9,7 +9,14 @@ const mainPath = path.resolve(__dirname, '../../../electron/main.ts');
 const mainSource = readFileSync(mainPath, 'utf8');
 
 function extractMethodBody(methodName) {
-  const methodRe = new RegExp(`public\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)[^{]*\\{`);
+  // Accepts any access modifier: the ordered start/stop bodies are `private
+  // async *Transition` methods, wrapped by thin public startMeeting/endMeeting
+  // entry points that delegate to the serialization queue.
+  // `[^{]*\{` stops at the first brace after the params — wrong when the return
+  // type is an object literal (`startCaptureChannels(...): { mic: boolean;
+  // system: boolean } {`), where that brace belongs to the TYPE. Allow at most
+  // one brace group between the params and the body.
+  const methodRe = new RegExp(`(?:public|private|protected)\\s+(?:async\\s+)?${methodName}\\s*\\([^)]*\\)\\s*(?::\\s*[^{;=]*(?:\\{[^{}]*\\}\\s*)?)?\\s*\\{`);
   const match = methodRe.exec(mainSource);
   assert.ok(match, `could not locate ${methodName}`);
   let i = match.index + match[0].length;
@@ -25,8 +32,8 @@ function extractMethodBody(methodName) {
   return mainSource.slice(start, i - 1);
 }
 
-const startMeetingBody = extractMethodBody('startMeeting');
-const endMeetingBody = extractMethodBody('endMeeting');
+const startMeetingBody = extractMethodBody('startMeetingTransition');
+const endMeetingBody = extractMethodBody('endMeetingTransition');
 
 test('meeting start captures a generation token and endMeeting invalidates it', () => {
   assert.ok(
@@ -79,18 +86,29 @@ test('deferred audio init aborts and destroys stale captures after awaited setup
       /if\s*\(\s*liveIndexingStartedByInit\s*\)\s*\{[\s\S]*this\.ragManager\?\.stopLiveIndexing\?\.\(\s*\)/.test(deferredInit),
     'BUG: stale deferred audio init must not stop STT/RAG work unless this stale init started it.',
   );
+  // The STT starts may sit inline, or behind the shared startCaptureChannels()
+  // helper (F-105 per-channel isolation). In the delegated form the ownership
+  // flags are assigned from the helper's return — which is STRICTLY better than
+  // the inline `= true`: the flag now records whether the channel actually
+  // started, so a stale init cannot stop an STT stream it never got running.
+  // Accept either, but in the delegated form prove the helper really starts
+  // both streams rather than trusting the assignment.
+  const inlineSttOwnership =
+    /this\.googleSTT\?\.start\s*\(\s*\);[\s\S]*systemSttStartedByInit\s*=\s*true/.test(deferredInit) &&
+    /this\.googleSTT_User\?\.start\s*\(\s*\);[\s\S]*userSttStartedByInit\s*=\s*true/.test(deferredInit);
+  const startChannelsBody = /this\.startCaptureChannels\(/.test(deferredInit)
+    ? extractMethodBody('startCaptureChannels')
+    : '';
+  const delegatedSttOwnership =
+    /=\s*this\.startCaptureChannels\(/.test(deferredInit) &&
+    /systemSttStartedByInit\s*=\s*\w+\.system/.test(deferredInit) &&
+    /userSttStartedByInit\s*=\s*\w+\.mic/.test(deferredInit) &&
+    /this\.googleSTT\?\.start\s*\(\s*\)/.test(startChannelsBody) &&
+    /this\.googleSTT_User\?\.start\s*\(\s*\)/.test(startChannelsBody);
   assert.ok(
-    // Since F-105 the STT/capture starts are delegated to
-    // startCaptureChannels(), which reports per-channel success; the deferred
-    // init assigns the ownership flags from that result. The invariant is
-    // unchanged (a flag is set iff THIS init started that resource) and is now
-    // strictly more accurate, since a channel that failed to start no longer
-    // claims ownership.
-    /startCaptureChannels\s*\([^)]*\)/.test(deferredInit) &&
-      /systemSttStartedByInit\s*=\s*channelsStarted\.system/.test(deferredInit) &&
-      /userSttStartedByInit\s*=\s*channelsStarted\.mic/.test(deferredInit) &&
+    (inlineSttOwnership || delegatedSttOwnership) &&
       /this\.ragManager\.startLiveIndexing\s*\([^)]*\);[\s\S]*liveIndexingStartedByInit\s*=\s*true/.test(deferredInit),
-    'BUG: deferred audio init must set STT/RAG ownership flags from the channel-start result.',
+    'BUG: deferred audio init must set STT/RAG ownership flags immediately after starting those resources.',
   );
   assert.ok(
     /await\s+this\.reconfigureAudio\s*\([^)]*\);[\s\S]*systemCaptureOwnedByInit\s*=\s*this\.systemAudioCapture;[\s\S]*microphoneCaptureOwnedByInit\s*=\s*this\.microphoneCapture;[\s\S]*if\s*\(\s*!isCurrentMeeting\s*\(\s*\)\s*\)\s*\{[\s\S]*abortStaleAudioInit\s*\(\s*\);[\s\S]*return;[\s\S]*\}/.test(deferredInit),

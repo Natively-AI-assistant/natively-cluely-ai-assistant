@@ -3,13 +3,13 @@ import path from 'node:path';
 import type { VisionBenchmarkModel } from './types';
 
 const DEFINITIONS = [
-  { label: 'Gemini 3.6 Flash', key: 'gemini-3.6-flash', env: 'NATIVELY_BENCHMARK_GEMINI_36_FLASH_MODEL' },
+  { label: 'Gemini 3.7 Flash', key: 'gemini-3.7-flash', env: 'NATIVELY_BENCHMARK_GEMINI_37_FLASH_MODEL' },
   { label: 'Gemini 3.1 Flash-Lite', key: 'gemini-3.1-flash-lite', env: 'NATIVELY_BENCHMARK_GEMINI_31_FLASH_LITE_MODEL' },
   { label: 'Gemini 3.5 Flash-Lite', key: 'gemini-3.5-flash-lite', env: 'NATIVELY_BENCHMARK_GEMINI_35_FLASH_LITE_MODEL' },
 ] as const;
 
 const REPOSITORY_MODELS: Record<string, string> = {
-  'gemini-3.6-flash': 'gemini-3.6-flash',
+  'gemini-3.7-flash': 'gemini-3.7-flash',
   'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite',
 };
 

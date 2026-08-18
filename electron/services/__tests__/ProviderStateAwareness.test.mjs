@@ -82,7 +82,7 @@ describe('Codex availability uses OAuth state, not only enabled config', () => {
   test('Codex CLI is NOT first in the structured-extraction ladder (2026-08-02 latency fix)', () => {
     // generateContentStructured documents an explicit latency policy: Gemini
     // Pro and MiniMax are excluded from document extraction *because* they are
-    // slow, leaving flash-lite -> 3.6-flash. Codex CLI then sat at Priority 0,
+    // slow, leaving flash-lite -> 3.7-flash. Codex CLI then sat at Priority 0,
     // ahead of all of them — a spawned-subprocess reasoning model measured at
     // 18-31s PER CALL on a real profile ingest. One résumé + JD upload makes
     // 6+ structured calls (2 extractions, 2 STAR batches, salary, company
@@ -102,7 +102,7 @@ describe('Codex availability uses OAuth state, not only enabled config', () => {
     const flashAt = structured.indexOf('buildGeminiProvider(GEMINI_FLASH_MODEL)');
 
     assert.ok(codexAt > 0, 'Codex must remain available as a structured-generation fallback');
-    assert.ok(flashLiteAt > 0 && flashAt > 0, 'the flash-lite -> 3.6-flash extraction cascade must still exist');
+    assert.ok(flashLiteAt > 0 && flashAt > 0, 'the flash-lite -> 3.7-flash extraction cascade must still exist');
     assert.ok(codexAt > flashLiteAt && codexAt > flashAt,
       'Codex CLI must be pushed onto the provider ladder AFTER the Gemini flash cascade — a document ingest must never block on it first');
   });

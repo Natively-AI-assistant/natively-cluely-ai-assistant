@@ -1018,6 +1018,12 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [selectedInput, setSelectedInput] = useState('');
     const [selectedOutput, setSelectedOutput] = useState('');
     const [micLevel, setMicLevel] = useState(0);
+    // System-audio half of the pre-meeting check (UX4). The mic meter alone only
+    // proves we can hear the USER; this one proves we are capturing the other
+    // side of the call, which is the half that silently fails (permission not
+    // granted, no loopback device, tap init refused).
+    const [systemAudioLevel, setSystemAudioLevel] = useState(0);
+    const [systemAudioError, setSystemAudioError] = useState<string | null>(null);
     const [useExperimentalSck, setUseExperimentalSck] = useState(false);
     // Most-recent device fallback notice. Populated by main process via
     // 'device-selection-applied' IPC when the saved device couldn't be opened
@@ -1549,6 +1555,21 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 setMicLevel(Math.max(0, Math.min(100, level * 100)));
             });
 
+            // The main process probes system audio in PARALLEL with the mic for the
+            // duration of the same test, so both meters are driven by the one
+            // startAudioTest() call below — there is no separate start/stop to make.
+            const unsubscribeSystemLevel = window.electronAPI?.onAudioTestSystemLevel?.((level) => {
+                setSystemAudioError(null);
+                setSystemAudioLevel(Math.max(0, Math.min(100, level * 100)));
+            });
+            // A system-audio failure is reported, never left as a flat bar. A silent
+            // zero reads as "quiet" when it actually means the tap could not start,
+            // which is precisely the confusion this meter exists to remove.
+            const unsubscribeSystemError = window.electronAPI?.onAudioTestSystemError?.((message) => {
+                setSystemAudioLevel(0);
+                setSystemAudioError(message || 'System audio could not be captured.');
+            });
+
             window.electronAPI?.startAudioTest(selectedInput).catch((error) => {
                 console.error("Error starting native microphone test:", error);
                 setMicLevel(0);
@@ -1556,10 +1577,14 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
             return () => {
                 unsubscribe?.();
+                unsubscribeSystemLevel?.();
+                unsubscribeSystemError?.();
                 window.electronAPI?.stopAudioTest?.().catch((error) => {
                     console.error("Error stopping native microphone test:", error);
                 });
                 setMicLevel(0);
+                setSystemAudioLevel(0);
+                setSystemAudioError(null);
             };
         }
 
@@ -1574,6 +1599,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             console.error("Error stopping native microphone test (guard=false):", error);
         });
         setMicLevel(0);
+        // Reset the system meter on the same guard-false path as the mic one, or a
+        // stale level/error from a previous test survives a tab switch.
+        setSystemAudioLevel(0);
+        setSystemAudioError(null);
     }, [isOpen, activeTab, selectedInput]);
 
     return (
@@ -3052,6 +3081,29 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         style={{ width: `${micLevel}%` }}
                                                     />
                                                 </div>
+                                            </div>
+
+                                            {/* System-audio meter, parallel to the mic meter above. Both run off
+                                                the same audio test; this one answers "will the app hear the person
+                                                I am talking to", which the mic meter cannot. */}
+                                            <div>
+                                                <div className="flex justify-between text-xs text-text-secondary mb-2 px-1">
+                                                    <span>{t('System Audio Level')}</span>
+                                                    {systemAudioError && (
+                                                        <span className="text-red-500" title={systemAudioError}>
+                                                            {t('Unavailable')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="h-1.5 bg-bg-input rounded-full overflow-hidden">
+                                                    <div
+                                                        className="h-full bg-green-500 transition-all duration-100 ease-out"
+                                                        style={{ width: `${systemAudioLevel}%` }}
+                                                    />
+                                                </div>
+                                                {systemAudioError && (
+                                                    <p className="text-xs text-red-500 mt-1 px-1">{systemAudioError}</p>
+                                                )}
                                             </div>
 
                                             <div className="h-px bg-border-subtle my-2" />
