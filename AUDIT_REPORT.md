@@ -53,6 +53,54 @@ Phase 1+2 line).
 1. **Forward-merge `main`.** This branch predates main's `21c4e22f`, which fixed the same ws crash class plus MeetingLifecycleQueue and FatalMainProcessCoordinator. My F-201 fix mitigates the crash locally but is not a substitute for that infrastructure.
 2. **The `premium` submodule pointer in the MAIN checkout is rewound** to a strict ancestor (uncommitted). None of this campaign's 44 commits touch any submodule pin — verified — but that working-tree state can silently drop merged work if committed.
 
+
+## ═══ SECOND PASS COMPLETE — every actionable finding processed (2026-08-18) ═══
+
+After the first pass (31 fixes) the user asked for the REMAINING findings. All of them
+have now been processed to a terminal state. Second-pass fixes:
+
+| Finding | Sev | What it was |
+|---|---|---|
+| F-502 | P1 | manual + phone chat never pinned the mode; phone also escapes the abort |
+| F-501 | P1 | Seminar Mode's strictness contract unreachable (templateType read off the wrong object) |
+| F-412 | P1 | topic-blind tier signal overrode the off-topic refusal gate |
+| F-705 | P2 | vec0 rows survived meeting delete (virtual tables get no FK cascade) |
+| F-703 | P2 | a corrupt settings.json was replaced by a one-key file on the next toggle |
+| F-706 | P2 | Windows mic permission hardcoded 'granted' |
+| F-414 | P2→P1 | live indexer dropped transcript (flush no-op AND high-water mark over-advance) |
+| F-503 | P2 | summary regeneration used another mode's note sections and identity |
+| F-305 | P2 | coding regen truncated at half the size of the artifact it requested |
+| F-304 | P2 | TurnPlanner fallback routed coding/doc questions as JD |
+| F-415 | P2 | embedding space never re-stamped after a mid-meeting provider fallback |
+| F-413 | P2 | OKF confidence boost admitted cards with zero query overlap |
+| F-704 | P2 | a restored profile silently DELETED current credentials |
+| F-708 | P3 | prerelease users could not take the matching stable |
+| F-707/709/710 | P3 | downgrade guard disabled; quit reason clobbered; captured update path ignored |
+| F-504/505 | P3 | dead unguarded deref; 'seminar' missing from two normalizers |
+| F-122 | P3 | RAG stream scope discriminator sent but never read |
+
+Two findings changed severity once reproduced: **F-414** turned out to have a second,
+worse cause (the tick advanced its high-water mark to the LIVE array length, so anything
+spoken during a tick was marked indexed without being chunked — on every tick, not just
+at stop), and **F-413**'s reported mechanism only applies on the scored path, because
+whole-document synthesis deliberately short-circuits.
+
+### Terminal, deliberately NOT fixed — with the reason
+- **F-602..F-606 (backend)** — production submodule handling auth/billing/rate limits, shared with another agent. Documented with patch directions.
+- **F-306 ProviderRouter** — wiring it changes which provider serves live traffic; cannot be validated without real provider failures. Status + its three latent defects now recorded in-code so passing tests stop implying it is live.
+- **F-704 key derivation** — real machine binding needs a try-new/fall-back-to-legacy/re-encrypt migration; getting it wrong loses users' API keys and a cross-machine restore cannot be tested here. The *data-loss* half was fixed.
+- **F-501 Link B (source badge)** — needs a product decision on what the badge says when evidence WAS found; mislabelling a grounded answer would be worse than silence.
+- **F-401 admission gate** — its tests have never passed; the flag-OFF contract needs the feature owner's intent.
+- **F-206 OpenAI coalescer** — needs a live OpenAI Realtime capture; DeepSeek cannot stand in.
+- **F-114 dev Windows zombie** — win32-only branch, not reproducible here; fix proposed.
+- **F-506** — lives behind the premium symlink.
+
+### Mistakes I made in this pass, and how they were caught
+1. **F-413's first repro tested the wrong path** (synthesis short-circuit) and showed no difference pre/post. Retargeted to the scored path, where the defect actually lives.
+2. **I briefly believed F-413's fix had not compiled** because grepping the bundle for the comment tag returned 0 — esbuild strips comments. Checking the emitted code showed it was there.
+3. **The F-707/709/710 repro initially skipped one check and passed another vacuously** (regex windows too narrow / too wide). Running it against the baseline — where a check should have failed and didn't — exposed both before I relied on it.
+4. **A baseline gap**: the pinned baseline came from `npm test`, which does not glob electron/intelligence/__tests__. Seven failures there looked like regressions and were not; they reproduce exactly at the baseline commit and are now pinned.
+
 ## Campaign status
 
 | Phase | Area | Status |
