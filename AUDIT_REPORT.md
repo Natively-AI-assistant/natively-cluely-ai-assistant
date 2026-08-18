@@ -202,7 +202,13 @@ Status: FOUND (explorer executed an empirical proof: an off-topic "Kyoto Protoco
 Area: OkfRetriever.ts:31/:132/:104 · OkfCardBuilder.ts:22-30 (nearly everything is 'high') · EvidenceAssembler.ts:52-54 · call site ipcHandlers.ts:4219 passes rawChunkText:''
 Status: FOUND. A high-confidence card clears the floor on its boost ALONE with zero overlap, so the hard-refusal tier can never fire at that call site. Feeds F-412.
 
-## F-414 [P2] LiveRAGIndexer "final flush" is a no-op when a tick is in flight → dropped transcript tail
+## F-414 [P2→P1 in effect] LiveRAGIndexer drops transcript — final flush no-ops AND the high-water mark over-advances
+Status: FOUND → CONFIRMED → REPRODUCED → ROOT-CAUSED → FIXED-VERIFIED
+Repro: scripts/audit/F-414-repro.mjs drives the REAL LiveRAGIndexer with a controllable slow embed step, parks a tick (without awaiting it — awaiting deadlocks the harness), feeds a tail while parked, then stops. PRE-FIX (baseline): 1 chunk stored, tail NOT indexed → exit 1. POST-FIX: 2 chunks, tail indexed → exit 0.
+SECOND DEFECT FOUND WHILE REPRODUCING (worse than the reported one): the tick advanced `indexedSegmentCount = this.allSegments.length` AT COMPLETION rather than to the slice point it processed. Because feedSegments() keeps appending during the ~90s a tick can be parked (ForegroundGate 30s + embed 30s primary + 30s fallback), every segment spoken DURING a tick was marked indexed without ever being chunked — on EVERY periodic tick, not just at stop. The reported stop() bug was only the most visible instance. Fixing the flush alone did NOT make the repro pass, which is how this surfaced.
+Fix: (1) the tick captures `sliceStart` and advances to `processedUpTo = sliceStart + newSegments.length` at all three advance sites; (2) the interval records the in-flight tick promise so stop() awaits it before flushing; (3) the final flush passes `force` to bypass MIN_NEW_SEGMENTS, which is a throughput optimisation for the periodic tick and was silently discarding 1-2 segment tails.
+Pin: electron/rag/__tests__/LiveIndexerFlushesTail2026_08_18.test.mjs (2/2 — behavioural tail-survives-parked-tick, plus a source assertion that no advance site may jump to the live array length).
+Regression check: rag suite, zero new failures vs baseline.
 Area: LiveRAGIndexer.ts:176 vs the isProcessing guard at :84; stop() then zeroes allSegments/indexedSegmentCount at :179-182
 Status: FOUND. The in-flight window is up to ~90s (ForegroundGate.waitUntilIdle 30s + embed 30s primary + 30s fallback), so "ask a question, then stop the meeting" routinely drops every segment since the tick's slice point. MIN_NEW_SEGMENTS=3 also applies to the final flush, so a meeting ending with 1-2 segments always loses them. The resumed tick can then leave hasIndexedChunks() true on a stopped indexer.
 
