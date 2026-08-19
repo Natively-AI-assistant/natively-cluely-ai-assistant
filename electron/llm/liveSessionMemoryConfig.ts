@@ -35,7 +35,8 @@
 //   3. settings opt-in true/false→ that value
 //   4. internal/dev/test/bench   → ON
 //   5. rollout percent           → bucketed ON/OFF (production gradual rollout)
-//   6. default                   → OFF
+//   6. default                   → ON (default_on since PI v3 W6d; see the
+//      final return below — the body of this file is the source of truth)
 //
 // Reads defensively (never throws). Privacy: this module only reads config — it
 // never touches resume/JD/transcript content. Logs are MARKER-ONLY.

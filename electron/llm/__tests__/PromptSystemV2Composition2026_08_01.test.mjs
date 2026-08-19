@@ -70,15 +70,20 @@ describe('cacheable prefix — stable core first', () => {
 });
 
 describe('size — v2 must be dramatically smaller than the legacy constants', () => {
-  // Budget raised 10k → 12k → 14k across the gated hardening + loss-mining rounds (confidentiality
-  // block, voice contract, silence gate, format examples — each fixing a
-  // measured benchmark failure). Still ≤ half the smallest mode-injected
-  // legacy prompt (23–45k on the WTA routes).
-  test('every cloud composition is under 16.5k chars (legacy mode-injected routes were 23–45k)', () => {
+  // Budget raised 10k → 12k → 14k → 16.5k across the gated hardening + loss-mining rounds
+  // (confidentiality block, voice contract, silence gate, format examples — each
+  // fixing a measured benchmark failure). 16.5k → 17.5k on 2026-08-18 for the
+  // TEMPLATE CONFORMANCE rule (~570 chars on coding-contract routes only): a code
+  // template supplied by the question — a LeetCode stub read off the screen, a
+  // signature the interviewer dictated — had no handling at all, so the answer was
+  // written against an entry point the user's editor did not have. The rule rides
+  // only the coding routes; the ceiling here is sales/code_hint at 16,872.
+  // Still ≤ half the smallest mode-injected legacy prompt (23–45k on the WTA routes).
+  test('every cloud composition is under 17.5k chars (legacy mode-injected routes were 23–45k)', () => {
     for (const mode of MODES) {
       for (const action of ACTIONS) {
         const p = v2.buildSystemPromptV2({ mode, action, tier: 'cloud' });
-        assert.ok(p.length < 16_500, `cloud/${mode}/${action} is ${p.length} chars`);
+        assert.ok(p.length < 17_500, `cloud/${mode}/${action} is ${p.length} chars`);
       }
     }
   });

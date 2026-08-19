@@ -124,10 +124,26 @@ test('hybrid retriever no longer short-circuits forceDocumentGrounding to lexica
 
 test('WhatToAnswerLLM retrieves by planned question, not whole transcript blob', () => {
   const src = read('electron/llm/WhatToAnswerLLM.ts');
+  // Pin updated 2026-08-19 (HDFC leak): the query is now derived ONCE by
+  // retrievalQueryPolicy.deriveRetrievalQuery — planned question first, then
+  // NON-assistant transcript lines, then captured screen text; never the raw
+  // transcript blob (whose only content on a blind turn is the assistant's
+  // own previous answer). The invariant this test protects is unchanged and
+  // strictly stronger: question-first, and the whole-blob fallback is gone.
   assert.match(
     src,
-    /const retrievalQuery = answerPlan\?\.question\?\.trim\(\) \|\| cleanedTranscript;/,
+    /extractedQuestion: answerPlan\?\.question,/,
     'WTA retrieval must use the latest/planned question as the primary query',
+  );
+  assert.match(
+    src,
+    /const retrievalQuery = retrievalQueryDecision\.query;/,
+    'WTA retrieval queries must come from the user-originated provenance policy',
+  );
+  assert.doesNotMatch(
+    src,
+    /const retrievalQuery = answerPlan\?\.question\?\.trim\(\) \|\| cleanedTranscript;/,
+    'the raw transcript-blob fallback (assistant self-echo, HDFC leak) must not return',
   );
   assert.doesNotMatch(
     src,

@@ -56,6 +56,18 @@ export interface ElectronAPI {
   dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void
   getRecognitionLanguages: () => Promise<Record<string, any>>
+  // Local Whisper model info — used by SettingsOverlay to restrict the
+  // Language / Accent selects to what the active local model accepts
+  // (models[] entries carry a `languageSupport` from modelLanguageSupport.ts).
+  // The model panel itself goes through its own `(window as any).electronAPI`
+  // cast, so only the two read APIs SettingsOverlay calls are declared here.
+  localWhisperGetModels?: () => Promise<{ models: any[]; activeModelId: string }>
+  localWhisperGetChannelConfig?: () => Promise<{
+    enabled: boolean
+    micModelId: string
+    systemModelId: string
+    globalModelId: string
+  }>
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>
   deleteScreenshot: (
     path: string
@@ -713,6 +725,26 @@ export interface ElectronAPI {
   onDomContextReceived: (
     callback: (dom: string, meta?: DomCaptureMeta, envelope?: ContextEnvelope) => void,
   ) => () => void;
+  // The Cmd/Ctrl+Shift+Y page capture fell back to a screenshot; the notice
+  // says why so the overlay can surface it. Mirrors PageCaptureFallbackNotice
+  // in electron/services/pageCaptureFallback.ts.
+  onPageCaptureFallback: (
+    callback: (notice: PageCaptureFallbackNotice) => void,
+  ) => () => void;
+  // A ⌘/Ctrl+Y page capture just started (in flight). The next answer request
+  // waits briefly for its delivery instead of racing past it.
+  onPageCaptureStarted: (callback: () => void) => () => void;
+}
+
+/**
+ * Why a page capture (Cmd/Ctrl+Shift+Y) fell back to a screenshot. Mirrors
+ * electron/services/pageCaptureFallback.ts (main is the canonical source).
+ */
+export interface PageCaptureFallbackNotice {
+  kind: 'not-connected' | 'needs-host-permission' | 'timeout' | 'no-tab' | 'error';
+  label: string;
+  detail: string;
+  reason: string;
 }
 
 /**

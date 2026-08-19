@@ -2818,8 +2818,28 @@ try {
             action: 'answer',
             tier: v2TierForPromptTier(this.getPromptTier()),
             // Universal coding contract: attach when the routed answer type is
-            // coding-shaped, regardless of the active mode (2026-08-02).
-            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+            // coding-shaped, regardless of the active mode (2026-08-02). The
+            // contract SHAPE, an explicit user format request, and a code
+            // template already present in the message ride along from the one
+            // shared resolver (.audit/coding-template-audit-2026-08-18.md).
+            ...(() => {
+              try {
+                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
+                // Attached-screenshot promotion (2026-08-19 channel audit): a
+                // message with an image whose text only points at it ("solve
+                // this", or nothing) is about the image; without this, a
+                // screenshotted coding problem sent through the legacy chat
+                // transport answered in prose. The contract's applicability
+                // boundary skips non-coding screenshots.
+                if (!resolved.codingTask
+                    && (imagePaths?.length ?? 0) > 0
+                    && (!message?.trim() || isDeicticAsk(message))) {
+                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+              } catch { return { codingTask: false }; }
+            })(),
           }) ?? systemPromptOverride;
     }
     v2BasePromptActive = isV2ComposedPrompt(systemPromptOverride);
@@ -5503,8 +5523,28 @@ let isMultimodal = !!(imagePaths?.length);
             action: 'answer',
             tier: v2TierForPromptTier(this.getPromptTier()),
             // Universal coding contract: attach when the routed answer type is
-            // coding-shaped, regardless of the active mode (2026-08-02).
-            codingTask: (() => { try { const { isCodingAnswerType } = require('./llm/AnswerPlanner'); return !!(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType)); } catch { return false; } })(),
+            // coding-shaped, regardless of the active mode (2026-08-02). The
+            // contract SHAPE, an explicit user format request, and a code
+            // template already present in the message ride along from the one
+            // shared resolver (.audit/coding-template-audit-2026-08-18.md).
+            ...(() => {
+              try {
+                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
+                // Attached-screenshot promotion (2026-08-19 channel audit): a
+                // message with an image whose text only points at it ("solve
+                // this", or nothing) is about the image; without this, a
+                // screenshotted coding problem sent through the legacy chat
+                // transport answered in prose. The contract's applicability
+                // boundary skips non-coding screenshots.
+                if (!resolved.codingTask
+                    && (imagePaths?.length ?? 0) > 0
+                    && (!message?.trim() || isDeicticAsk(message))) {
+                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+              } catch { return { codingTask: false }; }
+            })(),
           }) ?? systemPromptOverride;
         }
         callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
@@ -6368,6 +6408,15 @@ let isMultimodal = !!(imagePaths?.length);
         const { renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         const pack = _cog.evidencePack;
         if (!pack) throw new Error('governed turn missing canonical EvidencePack');
+        // Screenshot outranks a TEXT-evidence decline (2026-08-19): a
+        // refuse/clarify pack judges only the text universe; with user-attached
+        // pixels the honest move is dispatching so the model answers from the
+        // screenshot (the WTA govern block and manual chat's clarify
+        // short-circuit draw the same line — see refusalPolicy.ts).
+        const { declineYieldsToAttachedImages: _declineYieldsLLM } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        if (_declineYieldsLLM({ answerPolicy: pack.answerPolicy, hasAttachedImages: Boolean(imagePaths?.length) })) {
+          console.log('[CONTEXT-OS] text-evidence decline yields to attached screenshot(s) — dispatching with pixels');
+        } else {
         if (pack.answerPolicy === 'ask_clarification') {
           const { recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
           recordContextOsBenchmarkAudit({
@@ -6404,6 +6453,7 @@ let isMultimodal = !!(imagePaths?.length);
         // the EXACT same pack — Phase 9 identity requirement). A no-op
         // reassignment when `pack` already came from `_cog.evidencePack`.
         (_cog as any).evidencePack = pack;
+        } // end image-exemption else — exempted turns skip decline AND pack rendering
       }
     } catch (cogErr: any) {
       const governedContext = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
@@ -6539,7 +6589,22 @@ let isMultimodal = !!(imagePaths?.length);
         });
         cog.finalPromptValidation = finalPromptValidation;
         contextOsFinalPromptValidation = finalPromptValidation;
-        if (!finalPromptValidation.ok) {
+        // Screenshot outranks a DECLINE-class boundary refusal (2026-08-19,
+        // narrowed by code review): a refuse/clarify verdict judges the text
+        // universe only, and the upstream govern-block exemption deliberately
+        // lets those packs through — without this yield they would just be
+        // re-refused here. Every OTHER failure reason (structural manifest
+        // damage, a missing required family, and above all
+        // forbidden_evidence_rendered) still fails CLOSED with pixels
+        // attached: a source-isolation leak is not something a screenshot
+        // makes safe to dispatch. See boundaryDeclineYieldsToAttachedImages.
+        const { boundaryDeclineYieldsToAttachedImages: _boundaryYields } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        if (!finalPromptValidation.ok && _boundaryYields({
+          reason: finalPromptValidation.reason,
+          hasAttachedImages: Boolean(imagePaths?.length),
+        })) {
+          console.log('[CONTEXT-OS] decline-class boundary validation failure yields to attached screenshot(s) — dispatching with pixels');
+        } else if (!finalPromptValidation.ok) {
           recordContextOsBenchmarkAudit({
             contract: cog.contract,
             sourceAuthority: cog.modeSnapshot.sourceAuthority,

@@ -50,6 +50,8 @@ export type IntelligenceFlagKey =
   | 'profileTreeV2'                // Phase 4 — route identity through ProfileTreeService
   | 'contextRouterV2'              // Phase 6 — consult the consolidated ContextRouter
   | 'liveTranscriptBrain'          // Phase 7 — consult LiveTranscriptBrain
+  | 'questionLedgerShadow'         // WTA audit Phase 2 — QuestionLedger shadow/parity (observe-only)
+  | 'wtaClauseCoverageRepair'      // WTA audit Part 11 — focused append-only repair for uncovered clauses
   | 'promptAssemblerV2'            // Phase 9
   | 'answerDiversityGuard'         // Phase 5 — wire AnswerDiversityGuard into delivery
   | 'meetingMemoryV2'              // Phase 10
@@ -351,6 +353,8 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   profileTreeV2: { env: 'NATIVELY_PROFILE_TREE_V2', setting: 'profileTreeV2Enabled', default: false },
   contextRouterV2: { env: 'NATIVELY_CONTEXT_ROUTER_V2', setting: 'contextRouterV2Enabled', default: false },
   liveTranscriptBrain: { env: 'NATIVELY_LIVE_TRANSCRIPT_BRAIN', setting: 'liveTranscriptBrainEnabled', default: false },
+  questionLedgerShadow: { env: 'NATIVELY_QUESTION_LEDGER_SHADOW', setting: 'questionLedgerShadowEnabled', default: false },
+  wtaClauseCoverageRepair: { env: 'NATIVELY_WTA_CLAUSE_COVERAGE_REPAIR', setting: 'wtaClauseCoverageRepairEnabled', default: false },
   promptAssemblerV2: { env: 'NATIVELY_PROMPT_ASSEMBLER_V2', setting: 'promptAssemblerV2Enabled', default: false },
   answerDiversityGuard: { env: 'NATIVELY_ANSWER_DIVERSITY_GUARD', setting: 'answerDiversityGuardEnabled', default: false },
   meetingMemoryV2: { env: 'NATIVELY_MEETING_MEMORY_V2', setting: 'meetingMemoryV2Enabled', default: false },

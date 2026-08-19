@@ -247,6 +247,83 @@ const PROJECT_DRILLIN_RE = /^(?:ok(?:ay)?,?\s*|so,?\s*|and,?\s*)*(?:how (?:is|wa
 export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   const q = lc(ctx.latestQuestion);
   if (!q) return NONE;
+
+  // ── NARROWING REFINEMENTS & CORRECTIONS (WTA audit F2, 2026-08-18) ────────
+  // "I mean specifically consumer groups." / "And specifically the rebalancing
+  // problem?" narrow the PREVIOUS question to a sub-topic; "Sorry, I mean
+  // Kafka." corrects an entity in it. Neither shape matched any rule below, so
+  // the resolver returned NONE and IntelligenceEngine's 0.7 apply gate dropped
+  // the turn (and any SessionMemory-recalled entity) on the floor. These run
+  // BEFORE the 8-word cap because the anchoring markers ("specifically",
+  // "sorry, I mean") are explicit enough to stay precise on longer turns; they
+  // carry their own 14-word cap. Synthesis is deliberately mechanical — the
+  // previous question is restated with the focus attached — so the rewrite
+  // never fabricates content.
+  {
+    const raw = (ctx.latestQuestion || '').trim();
+    const refWords = raw.split(/\s+/).filter(Boolean).length;
+    const prevRaw = (ctx.previousQuestion || '').trim();
+    const NARROW_RE = /^(?:(?:and|but|so|okay|ok|sorry|yes|no)[,.!]?\s+)*(?:i\s+meant?\s+)?(?:(?:more\s+)?specifically|in\s+particular|particularly)[,]?\s+(?:about\s+)?(.+?)[?.!\s]*$/i;
+    const CORRECTION_RE = /^(?:(?:sorry|no|actually|wait)[,.!]?\s+)+i\s+meant?\s+(.+?)[?.!\s]*$/i;
+    if (refWords <= 14) {
+      const narrow = raw.match(NARROW_RE);
+      if (narrow && narrow[1]) {
+        const focus = narrow[1].trim();
+        if (prevRaw) {
+          return {
+            resolvedQuestion: `${prevRaw.replace(/[?.!\s]+$/, '')} — specifically, ${focus}?`,
+            resolvedAnswerType: ctx.previousAnswerType,
+            resolvedEntity: ctx.lastEntity,
+            confidence: 0.75,
+            reason: 'narrowing_refinement',
+          };
+        }
+        if (ctx.lastEntity) {
+          return {
+            resolvedQuestion: `Tell me more about ${ctx.lastEntity} — specifically, ${focus}.`,
+            resolvedAnswerType: ctx.previousAnswerType,
+            resolvedEntity: ctx.lastEntity,
+            confidence: 0.7,
+            reason: 'narrowing_refinement_entity',
+          };
+        }
+      }
+      const corr = raw.match(CORRECTION_RE);
+      if (corr && corr[1] && prevRaw) {
+        const focus = corr[1].trim();
+        if (focus.split(/\s+/).length <= 4) {
+          // Swap the LAST non-sentence-initial proper-noun-ish token of the
+          // previous question for the corrected one ("Why did you choose
+          // Redis?" + "Kafka" → "Why did you choose Kafka?").
+          let swapTarget: string | null = null;
+          const properRe = /\b[A-Z][A-Za-z0-9+#.]*\b/g;
+          let m: RegExpExecArray | null;
+          while ((m = properRe.exec(prevRaw)) !== null) {
+            if (m.index > 0) swapTarget = m[0];
+          }
+          if (swapTarget) {
+            const lastIdx = prevRaw.lastIndexOf(swapTarget);
+            const swapped = prevRaw.slice(0, lastIdx) + focus + prevRaw.slice(lastIdx + swapTarget.length);
+            return {
+              resolvedQuestion: swapped,
+              resolvedAnswerType: ctx.previousAnswerType,
+              resolvedEntity: focus,
+              confidence: 0.75,
+              reason: 'correction_entity_swap',
+            };
+          }
+        }
+        return {
+          resolvedQuestion: `${prevRaw.replace(/[?.!\s]+$/, '')} — I mean ${focus}?`,
+          resolvedAnswerType: ctx.previousAnswerType,
+          resolvedEntity: ctx.lastEntity,
+          confidence: 0.7,
+          reason: 'correction_no_swap',
+        };
+      }
+    }
+  }
+
   // Long, self-contained questions are not bare follow-ups.
   const wordCount = q.split(/\s+/).filter(Boolean).length;
   if (wordCount > 8) return NONE;
@@ -258,10 +335,18 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
     const skillMatch = skillRaw.match(SKILL_TOKEN_RE);
     if (skillMatch && prevWasSkill(ctx)) {
       const skill = skillMatch[0];
+      // WTA audit fix (wta_skill_054, 2026-08-18): keep the FULL shifted
+      // phrase — "and Python frameworks?" must resolve to "…Python
+      // frameworks", not collapse to the bare recognised token "python"
+      // (which silently broadens the question and answers the wrong thing).
+      // Re-match on the RAW question so entity casing survives into the
+      // rewrite; the cascade otherwise operates on the lowercased copy.
+      const rawShift = (ctx.latestQuestion || '').trim().match(TOPIC_SHIFT_RE);
+      const phrase = (rawShift ? rawShift[1] : skillRaw).trim().replace(/[?.!,\s]+$/, '');
       // Inherit the EXACT prior framing (rating vs experience) with the new skill.
       const wasRating = /\brate|out of (?:10|ten)|scale\b/.test(lc(ctx.previousQuestion));
       return {
-        resolvedQuestion: wasRating ? `Rate your ${skill} skills out of 10.` : `What is your experience with ${skill}?`,
+        resolvedQuestion: wasRating ? `Rate your ${phrase} skills out of 10.` : `What is your experience with ${phrase}?`,
         resolvedAnswerType: 'skill_experience_answer',
         resolvedSkill: skill,
         confidence: 0.9,
@@ -292,10 +377,20 @@ export function resolveFollowUp(ctx: FollowUpContext): ResolvedFollowUp {
   // 1b. PROJECT DRILL-IN: "how is it developed?", "that project?", "what stack?",
   //     "your role?" — about the project already on the table.
   if (PROJECT_DRILLIN_RE.test(q) && (ctx.lastEntity || prevWasProject(ctx))) {
+    // WTA audit fix (wta_project_041, 2026-08-18): when no entity resolved,
+    // a SPECIFIC drill-in ("What tech stack did you use there?") must keep
+    // its own words — the value of this rule is the project_followup type
+    // inheritance, and the old canned replacement ("Can you go deeper on
+    // that project?") threw away the actual ask. Only a truly bare fragment
+    // (≤3 words, e.g. "That project?") still expands to the generic rewrite.
+    const rawDrillin = (ctx.latestQuestion || '').trim();
+    const drillinWords = rawDrillin.split(/\s+/).filter(Boolean).length;
     return {
       resolvedQuestion: ctx.lastEntity
-        ? `${ctx.latestQuestion.replace(/\b(it|that|this)\b/i, ctx.lastEntity).trim()}`.replace(/\?*$/, '?')
-        : 'Can you go deeper on that project?',
+        ? `${rawDrillin.replace(/\b(it|that|this)\b/i, ctx.lastEntity).trim()}`.replace(/\?*$/, '?')
+        : drillinWords >= 4
+          ? rawDrillin.replace(/\?*$/, '?')
+          : 'Can you go deeper on that project?',
       resolvedAnswerType: 'project_followup_answer',
       resolvedEntity: ctx.lastEntity,
       confidence: 0.85,

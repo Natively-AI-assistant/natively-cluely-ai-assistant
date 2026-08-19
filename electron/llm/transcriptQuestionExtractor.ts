@@ -19,6 +19,11 @@
 // is derived from the transcript turns and generic question/role grammar.
 
 import { TranscriptTurn, cleanTranscript } from './transcriptCleaner';
+import {
+    SOCIAL_PLEASANTRY, WAIT_IDIOM,
+    CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT, SHORT_TOPIC_SHIFT,
+    QUESTION_MARK, INTERROGATIVE_LEAD, IMPERATIVE_ASK, scoreAskShape,
+} from './questionShapes';
 
 export type DetectedSpeaker = 'interviewer' | 'candidate' | 'unknown';
 
@@ -65,18 +70,29 @@ const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are y
 // confidence below the live gate so they don't trigger a suggestion on their own.
 // Anchored on the social TOPIC so a real question that merely contains the word
 // (e.g. "how did you architect the parking-lot allocation service?") is unaffected.
-const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bfind (us|the office|parking|the building|your way|this place)\s+(ok(ay)?|alright|all right)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\b(traffic|parking|weather|commute) (was|is|been)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
+// SOCIAL_PLEASANTRY: shared — see questionShapes.ts.
 
 // An imperative ask appearing ANYWHERE in the turn, not just sentence-initially.
 // INTERROGATIVE_LEAD is ^-anchored on purpose (it feeds confidence scoring), but
 // the answerability floor must not reject a genuine ask merely because it is
 // preceded by a clause: "One more question — tell me about levee." is the exact
 // shape campaign2 fix#5 (2026-07-17) was written to keep selecting.
-const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// IMPERATIVE_ASK: shared — see questionShapes.ts.
+
+// Wait/hold idioms (negative-benchmark neg_logistics_011, 2026-08-18): "give
+// me one second", "bear with me" are pause REQUESTS, not asks — but "give me"
+// sits in IMPERATIVE_ASK/INTERROGATIVE_LEAD, so "Give me one second, my other
+// monitor just died." scored 0.8 (0.95 under unavailable punctuation) and
+// cleared both live gates. Capped below the gates like SOCIAL_PLEASANTRY —
+// unless the turn also classifies as a substantive type (a real question can
+// follow the pause in the same breath). The lookahead keeps "give me a second
+// OPINION/chance/example…" out of the idiom.
+// WAIT_IDIOM: shared — see questionShapes.ts.
 
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
-const QUESTION_MARK = /\?/;
-const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// QUESTION_MARK / INTERROGATIVE_LEAD: shared — see questionShapes.ts (unified
+// with the shadow ledger's copies, code review 2026-08-19; definitions are
+// verbatim the ones that lived here, so live selection is unchanged).
 
 // Follow-up markers: the turn leans on a previously-mentioned thing.
 //
@@ -116,6 +132,33 @@ const WEAK_FOLLOW_UP_MARKERS = /\b(that|this|it|those|these|the (project|one|sys
 //     (role/company/job/quarter)
 const STRONG_FOLLOW_UP_MARKERS = /\b(you (just )?(said|mentioned)\b|\bmentioned (earlier|before)\b|\bsaid (earlier|before)\b|(going|coming) back to (that|this|it|what you (said|mentioned)|the (earlier|previous|last) (point|topic|question|thing))\b|the previous (point|topic|question|thing|example)( you (mentioned|said|brought up|raised))?\b|circling back|you (had )?(brought up|touched on|referenced))\b/i;
 const FOLLOW_UP_WORD_CAP = 14;
+
+// ── Clause-level interrogatives for UNPUNCTUATED providers (WTA audit
+// F9/Phase 3, 2026-08-18) ───────────────────────────────────────────────────
+// INTERROGATIVE_LEAD is ^-anchored by design, and on punctuating providers a
+// prefix clause is separated by a comma/period so the lead survives cleaning.
+// On a no-punctuation provider ("Soniox-class"), "Just to confirm, what
+// should I call you?" arrives as one flat "just to confirm what should i
+// call you" — the wh-lead sits MID-STRING, hasMark/hasLead both fail, and
+// the answerability floor caps the turn at 0.3, silently skipping profile
+// grounding (measured: 12 of the 102 selection-dataset cases cross below the
+// 0.6 gate this way). These patterns recover the interrogative CLAUSE
+// deterministically and are consulted ONLY when the turn's
+// punctuationSource === 'unavailable' — on punctuating providers the missing
+// '?'/comma stays real negative evidence.
+//   1. wh-word + auxiliary/degree word ("how strong is", "what should i",
+//      "how ready are", "why did you") anywhere in the turn.
+// CLAUSE_INTERROGATIVE: shared — see questionShapes.ts.
+//   2. auxiliary + second person ("can you", "did you", "are you") anywhere —
+//      the interviewer addressing the candidate interrogatively.
+// AUX_SECOND_PERSON: shared — see questionShapes.ts.
+//   3. a trailing wh-fragment ("…engineering-heavy why data"): why/what-about
+//      + a 1-2 word object at the very END of the turn.
+// TRAILING_WH_FRAGMENT: shared — see questionShapes.ts.
+//   4. a bare topic-shift fragment ("and sql", "and python frameworks") —
+//      "and" is too common for the anywhere rule, so the WHOLE turn must be
+//      the fragment (≤4 words).
+// SHORT_TOPIC_SHIFT: shared — see questionShapes.ts.
 
 // Demonstrative-only openers that strongly imply a follow-up ("can you explain that?").
 const DEMONSTRATIVE_FOLLOW_UP = /\b(explain|elaborate on|tell me more about|go deeper into|expand on)\s+(that|this|it|those|these)\b/i;
@@ -383,6 +426,16 @@ export function extractLatestQuestion(
     const latestQuestion = rawTextAt(chosenIdx) || scoringText;
     const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);
     const hasLead = INTERROGATIVE_LEAD.test(scoringText);
+    // F9: on providers that never guarantee punctuation, the absence of '?'
+    // (and of clause-separating commas) is NEUTRAL — see the clause patterns
+    // above and the confidence block below.
+    const punctuationUnavailable = chosen.punctuationSource === 'unavailable';
+    const hasClauseInterrogative = punctuationUnavailable && !hasMark && !hasLead && (
+        CLAUSE_INTERROGATIVE.test(scoringText)
+        || AUX_SECOND_PERSON.test(scoringText)
+        || TRAILING_WH_FRAGMENT.test(scoringText)
+        || (scoringText.split(/\s+/).length <= 4 && SHORT_TOPIC_SHIFT.test(scoringText))
+    );
 
     // Follow-up detection: demonstrative-only ask, a STRONG explicit backward-
     // reference marker (unambiguous regardless of sentence length), or a WEAK
@@ -409,6 +462,7 @@ export function extractLatestQuestion(
     // A weak demonstrative alone is not evidence of a question. Require real
     // interrogative or imperative shape, or an explicit backward reference.
     const isAnswerable = hasMark || hasLead
+        || hasClauseInterrogative
         || IMPERATIVE_ASK.test(scoringText)
         || DEMONSTRATIVE_FOLLOW_UP.test(scoringText)
         || STRONG_FOLLOW_UP_MARKERS.test(scoringText);
@@ -458,9 +512,27 @@ export function extractLatestQuestion(
     // Confidence: explicit '?' + interrogative lead is strongest. A bare
     // imperative ask ("tell me about your projects") with a lead but no '?' is
     // still high. A non-question interviewer statement we fell back to is low.
+    //
+    // Punctuation-provenance-aware scoring (WTA audit F9/Phase 3, 2026-08-18):
+    // whether a '?' CAN appear is a property of the STT provider, not the
+    // utterance — only Deepgram/Google/local models guarantee punctuation
+    // (see punctuationProvenance.ts). When the chosen turn is stamped
+    // 'unavailable', a missing mark is NEUTRAL: an interrogative lead alone
+    // scores like mark+lead. Measured before this fix (102-case selection
+    // dataset, punctuation-stripped): selection unchanged, but mean
+    // confidence fell 0.777 → 0.63 and 18 → 30 cases dropped below the live
+    // 0.6 grounding gate — ~12% of turns silently losing profile grounding
+    // on no-punctuation providers. ABSENT provenance (legacy writers, typed
+    // questions) keeps byte-identical legacy scoring — this branch only
+    // fires for segments stamped by the STT seam. Mirrors
+    // QuestionLedger.askShape so live and shadow scoring cannot drift.
+    // Core mark/lead scoring comes from the SHARED table (questionShapes.ts)
+    // so the shadow ledger cannot drift from it; the 0.4 baseline and the
+    // clause-interrogative recovery below are this selector's own tail.
     let confidence = 0.4;
-    if (hasMark && hasLead) confidence = 0.95;
-    else if (hasMark || hasLead) confidence = 0.8;
+    const coreConfidence = scoreAskShape({ hasMark, hasLead, punctuationSource: chosen.punctuationSource });
+    if (coreConfidence !== null) confidence = coreConfidence;
+    else if (hasClauseInterrogative) confidence = 0.75;
     if (questionType !== 'general' && confidence < 0.8) confidence = 0.7;
 
     // Social-pleasantry down-weight: a question-shaped chit-chat turn ("did you
@@ -470,6 +542,12 @@ export function extractLatestQuestion(
     // e.g. "...found us okay? Great — walk me through your last project."), in
     // which case classifyType already returned something other than 'general'.
     if (SOCIAL_PLEASANTRY.test(scoringText) && questionType === 'general') {
+        confidence = Math.min(confidence, 0.5);
+    }
+    // Wait/hold idiom cap (see WAIT_IDIOM above): same shape as the
+    // pleasantry down-weight — below both live gates unless a substantive
+    // classified type says a real ask shares the turn.
+    if (WAIT_IDIOM.test(scoringText) && questionType === 'general') {
         confidence = Math.min(confidence, 0.5);
     }
 

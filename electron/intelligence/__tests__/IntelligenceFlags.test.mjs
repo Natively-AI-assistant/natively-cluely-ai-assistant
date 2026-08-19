@@ -50,6 +50,9 @@ const ENV_KEYS = [
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
 // the rest remain additive/opt-in default OFF.
 const ALL_FLAG_KEYS = [
+  // WTA audit flags (2026-08-18, both default OFF — shadow/observe-only).
+  'questionLedgerShadow',
+  'wtaClauseCoverageRepair',
   'trace', 'durableMemoryWindow', 'profileTreeV2', 'contextRouterV2',
   'liveTranscriptBrain', 'promptAssemblerV2', 'answerDiversityGuard', 'meetingMemoryV2',
   'meetingSummaryV3', 'meetingModeAutoDetect', 'followUpDraftV2', 'speakerLabelsV1',

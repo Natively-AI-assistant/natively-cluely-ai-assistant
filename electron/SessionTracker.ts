@@ -49,6 +49,12 @@ export interface TranscriptSegment {
     confidence?: number;
     /** Where this segment came from. Absent = legacy/unknown writer (see TranscriptOrigin). */
     origin?: TranscriptOrigin;
+    /** STT provider id that produced this segment (WTA audit F9, additive). */
+    sttProvider?: string;
+    /** Punctuation provenance (WTA audit F9): 'unavailable' means the provider
+     *  never guaranteed punctuation — scoring must treat a missing '?' as
+     *  NEUTRAL, not negative. Absent = legacy writer (same neutral treatment). */
+    punctuationSource?: import('./llm/punctuationProvenance').PunctuationSource;
 }
 
 export interface SuggestionTrigger {
@@ -62,6 +68,10 @@ export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    /** STT provider id (WTA audit F9, additive; absent on legacy/assistant items). */
+    sttProvider?: string;
+    /** Punctuation provenance (WTA audit F9, additive; see TranscriptSegment). */
+    punctuationSource?: import('./llm/punctuationProvenance').PunctuationSource;
 }
 
 /**
@@ -305,7 +315,11 @@ export class SessionTracker {
         this.contextItems.push({
             role,
             text,
-            timestamp: segment.timestamp
+            timestamp: segment.timestamp,
+            // F9 provenance rides along when the seam supplied it (additive;
+            // legacy writers leave both undefined = neutral treatment).
+            ...(segment.sttProvider ? { sttProvider: segment.sttProvider } : {}),
+            ...(segment.punctuationSource ? { punctuationSource: segment.punctuationSource } : {}),
         });
 
         this.evictOldEntries();
@@ -513,15 +527,15 @@ export class SessionTracker {
 
     /**
      * DURABLE context window (Intelligence OS, 2026-06-12). Unlike `getContext()`,
-     * which reads `contextItems` — hard-evicted to `contextWindowDuration` (120s) on
+     * which reads `contextItems` — hard-evicted to `contextWindowDuration` (180s) on
      * EVERY final segment by `evictOldEntries()` — this reads `fullTranscript`, the
-     * session's persisted store that survives the 120s eviction. It exists to make
+     * session's persisted store that survives the 180s eviction. It exists to make
      * genuinely long-range recall possible: a project named at minute 1 is still
      * present at minute 62.
      *
      * WHY THIS METHOD EXISTS: `IntelligenceEngine.LIVE_MEMORY_WINDOW_SECONDS = 7200`
      * fed `getContext(7200)` into the long-range follow-up memory and assumed a 2h
-     * window. But `contextItems` can never hold more than ~120s, so that path
+     * window. But `contextItems` can never hold more than ~180s, so that path
      * silently saw at most the last two minutes — the long-range entity it was built
      * to recall had already been evicted. Pointing it at the durable store fixes the
      * bug for the common case (a multi-minute session under the compaction threshold).
@@ -530,7 +544,7 @@ export class SessionTracker {
      * evicts the OLDEST 500 raw segments into an epoch summary, so this returns only
      * the raw segments STILL RESIDENT — a minute-1 entity in a *very* long session can
      * still age out of the raw store into a summary. That's a far higher bar than the
-     * 120s `contextItems` eviction this fixes; for the full summary-prefixed view see
+     * 180s `contextItems` eviction this fixes; for the full summary-prefixed view see
      * `getFullSessionContext()`.
      *
      * @param lastSeconds Window size in seconds (default 7200 = 2h). `Infinity`

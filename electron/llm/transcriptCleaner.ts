@@ -6,6 +6,11 @@ export interface TranscriptTurn {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    /** Punctuation provenance (WTA audit F9, additive). 'unavailable' means
+     *  the STT provider never guaranteed punctuation, so question scoring
+     *  must treat a missing '?' as NEUTRAL. Absent = legacy writer (legacy
+     *  scoring applies unchanged). */
+    punctuationSource?: import('./punctuationProvenance').PunctuationSource;
 }
 
 /**
@@ -133,7 +138,10 @@ export function cleanTranscript(turns: TranscriptTurn[]): TranscriptTurn[] {
             cleaned.push({
                 role: turn.role,
                 text: cleanedText,
-                timestamp: turn.timestamp
+                timestamp: turn.timestamp,
+                // F9: provenance rides through cleaning so the extractor can
+                // score punctuation absence correctly for the CHOSEN turn.
+                ...(turn.punctuationSource ? { punctuationSource: turn.punctuationSource } : {}),
             });
         }
     }
