@@ -124,6 +124,13 @@ export function detectSuppliedCodeTemplate(question: string | undefined | null):
 const DEICTIC_ASK_RE =
   /\b(this|that|these|it|here|the above|the screen)\b/i;
 
+// The product's own trigger phrasings, BARE (2026-08-19): "What should I say?"
+// carries no demonstrative, but with a screen attached it can only mean the
+// screen. Anchored so "what should I say about my experience with Kafka" —
+// which names its own subject — never matches.
+const BARE_TRIGGER_ASK_RE =
+  /^\s*what\s+(?:should|do|would|can)\s+i\s+(?:say|answer|respond|reply)\s*[?.!]*\s*$/i;
+
 // Past-tense conversational frames ("how did that go", "was that ok") are
 // deictic by grammar and never a request to write code. Excluded so an editor
 // left open behind a sales call cannot promote small talk into a coding turn.
@@ -135,6 +142,7 @@ export function isDeicticAsk(question: string | undefined | null): boolean {
   const words = q.split(/\s+/).filter(Boolean).length;
   if (words > 12) return false;
   if (RETROSPECTIVE_FRAME_RE.test(q)) return false;
+  if (BARE_TRIGGER_ASK_RE.test(q)) return true;
   return DEICTIC_ASK_RE.test(q);
 }
 

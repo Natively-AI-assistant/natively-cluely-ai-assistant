@@ -512,6 +512,34 @@ describe('C6 — richer continuations inherit the prior answer, gated on it look
   });
 });
 
+describe('C7 — a repeat press on the same problem re-answers it (2026-08-19)', () => {
+  // Live repro: turn 1 (screenshot) produced the full six-section answer; the
+  // three FOLLOWING blind presses on the same LeetCode page produced commentary
+  // — the model agreeing with its own prior answer, which rode the prompt as
+  // conversation history while the intent classifier read the blind turn as
+  // follow_up. The fix: a promoted blind screen turn WITHHOLDS prior responses
+  // and carries an explicit repeat-press directive.
+  test('WhatToAnswerLLM withholds history and attaches the directive on promoted turns (source pins)', () => {
+    const src = fsReadFile('../WhatToAnswerLLM.ts');
+    assert.match(src, /promotedScreenCodingTurn = true/, 'the promotion flag is gone');
+    assert.match(src, /<repeat_press_directive>/, 'the repeat-press directive is gone');
+    assert.match(src, /!promotedScreenCodingTurn\s*&&\s*temporalContext\?\.hasRecentResponses/,
+      'prior responses are no longer withheld on promoted screen turns');
+  });
+
+  test('the bare trigger phrasings count as screen-directed', () => {
+    for (const q of ['What should I say?', 'what do i say', 'what can I answer?']) {
+      assert.equal(isDeicticAsk(q), true, `"${q}" missed`);
+    }
+  });
+
+  test('trigger phrasings WITH their own subject stay out', () => {
+    for (const q of ['What should I say about my experience with Kafka', 'what should I say to the recruiter about salary', 'what should I say in my intro']) {
+      assert.equal(isDeicticAsk(q), false, `"${q}" wrongly promoted`);
+    }
+  });
+});
+
 describe('resolver contract', () => {
   test('a non-coding answer type produces no signals at all', () => {
     const signals = resolveCodingPromptSignals({ answerType: 'behavioral_interview_answer', question: 'just give me the code' });

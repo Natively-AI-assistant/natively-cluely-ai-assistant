@@ -138,6 +138,26 @@ SCENARIOS.push(
   { ...SCENARIOS[3], id: 'CONTROL sales dashboard [chat attach]', chat: true, question: 'solve this' },
 );
 
+// REPEAT-PRESS VARIANTS (live repro 2026-08-19): the SAME page, blind trigger,
+// with the full prior six-section answer riding as conversation history. The app
+// produced commentary ("That's exactly right. The two-pointer strategy…") —
+// the model agreeing with itself instead of re-answering the screen.
+const PRIOR_FULL_ANSWER = `## Approach\nUse two pointers from both ends tracking max heights.\n\n## Code\n\`\`\`cpp\nclass Solution {\npublic:\n    int trap(vector<int>& height) { /* two-pointer */ return 0; }\n};\n\`\`\`\n\n## Complexity\n- Time: O(n)\n- Space: O(1)`;
+SCENARIOS.push({
+  ...SCENARIOS.find((x) => x.id === 'trapping rain water + python stub'),
+  id: 'trapping rain water [REPEAT press, DOM + history]',
+  dom: `42. Trapping Rain Water\nclass Solution:\n    def trap(self, height: List[int]) -> int:`,
+  question: '',
+  history: PRIOR_FULL_ANSWER,
+});
+SCENARIOS.push({
+  ...SCENARIOS.find((x) => x.id === 'CONTROL — a sales dashboard, not code'),
+  id: 'CONTROL sales dashboard [REPEAT press]',
+  dom: `Q3 Pipeline Dashboard\nClosed won: $1.24M\nWin rate: 31%`,
+  question: '',
+  history: 'You should lead with the win-rate improvement and anchor on the Northwind expansion.',
+});
+
 const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 async function ask(system, user, imageB64, attempt = 0) {
@@ -201,13 +221,22 @@ The attached image is the current screen. Treat visible code, problem statements
     chatSurface: s.chat || undefined,
     ...(BASELINE ? {} : signals),
   });
+  const promoted = !BASELINE && screenIsTheSubject && !resolved.codingTask;
+  // Mirror the app: a promoted blind screen turn WITHHOLDS history and adds the
+  // repeat-press directive; in --baseline the history rides and no directive.
+  const historyEvidence = (s.history && (BASELINE || !promoted))
+    ? [{ kind: 'meeting_memory', content: `Previous assistant answer:\n${s.history}`, source: 'assistant-history' }]
+    : [];
+  const REPEAT_DIRECTIVE = promoted
+    ? `\n\n<repeat_press_directive>\nThe user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, following the coding contract's full section shape — even if a previous answer in this conversation already covered it. Never respond with commentary on, agreement with, or a summary of an earlier answer.\n</repeat_press_directive>`
+    : '';
   const user = buildTurnContentV2({
-    evidence: [],
+    evidence: historyEvidence,
     currentTurn: [
       BASELINE ? OLD_INSTRUCTION : (s.dom ? SCREEN_DOM_INSTRUCTION : SCREEN_DIRECT_VISION_INSTRUCTION),
       s.dom ? `<captured_page>\n${s.dom}\n</captured_page>` : '',
       question || '(no transcript available — the screen is the subject)',
-    ].filter(Boolean).join('\n\n'),
+    ].filter(Boolean).join('\n\n') + REPEAT_DIRECTIVE,
   });
   if (!BASELINE) console.log(`      routed=${plan.answerType} codingTask=${signals.codingTask}`);
 

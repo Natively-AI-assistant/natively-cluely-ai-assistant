@@ -18,6 +18,7 @@ import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
 import { resolveCodingPromptSignals, isDeicticAsk } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
 import { isLayerAllowed } from "./contextRoute";
+import { deriveRetrievalQuery } from "./retrievalQueryPolicy";
 import { DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope } from "./ProviderRouter";
 import type { ActiveModeDocumentGroundingInfo } from "../services/ModesManager";
 import type { ModeRetrievalOptions } from "../services/ModeContextRetriever";
@@ -226,6 +227,64 @@ export class WhatToAnswerLLM {
                 .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
                 .join('\n\n');
             const hasScreenText = capturedScreenText.length > 0;
+            // Coding signals for this turn, resolved once (shape, explicit
+            // format, supplied template) through the one shared resolver so this
+            // surface cannot drift from the others carrying the same signals.
+            // See .audit/coding-template-audit-2026-08-18.md.
+            //
+            // `promotedScreenCodingTurn` is hoisted (not local to the closure)
+            // because packet assembly ALSO branches on it: a REPEAT press on the
+            // same problem degraded into commentary on the prior answer — see
+            // the repeat-press note at the assembler call below.
+            let promotedScreenCodingTurn = false;
+            const codingSignals = (() => {
+                const resolved = resolveCodingPromptSignals({
+                    answerType: answerPlan?.answerType,
+                    question: answerPlan?.question,
+                    // DOM capture AND OCR — a stub on a LeetCode page reaches us
+                    // as DOM text far more often than as pixels.
+                    surroundingText: capturedScreenText || undefined,
+                });
+                // SCREENSHOT + a question that POINTS AT THE SCREEN ("what should
+                // I say about this?", "how do I answer this", or nothing at all).
+                //
+                // The screen is the subject and the question carries no subject of
+                // its own, so whatever the planner routed it from text is not what
+                // the turn is about. Measured live: "What should I say about
+                // this?" over a Trapping Rain Water screenshot routes
+                // `profile_fact_answer` — the planner reads "what should I say"
+                // as a question about the user's own profile. An earlier gate on
+                // `unknown_answer` alone therefore missed it, which is why the
+                // same screenshot answered in prose one turn and in full six
+                // sections the next: only the turns where follow-up resolution
+                // happened to rewrite the question into a coding one got the
+                // contract. Hit or miss, exactly as reported.
+                //
+                // Attach the contract and let its own applicability boundary
+                // ignore a non-coding screen ("for conceptual, behavioral, or
+                // discussion turns, ignore it entirely").
+                const screenIsTheSubject = (hasAttachedImages || hasScreenText)
+                    && (!answerPlan?.question?.trim() || isDeicticAsk(answerPlan.question));
+                if (!resolved.codingTask && screenIsTheSubject) {
+                    promotedScreenCodingTurn = true;
+                    return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+            })();
+
+            // Retrieval-query provenance (HDFC leak, 2026-08-18): the mode-
+            // reference retrieval query must be USER-originated — extracted
+            // question, then non-assistant transcript lines, then captured
+            // screen text. A turn with none of these (blind press: no speech,
+            // no screenshot, no page text) disallows reference retrieval
+            // entirely; the old `question || cleanedTranscript` fallback fed
+            // the assistant's own previous answer back as the query, and the
+            // pool-relative retriever admitted an unrelated private document.
+            const retrievalQueryDecision = deriveRetrievalQuery({
+                extractedQuestion: answerPlan?.question,
+                transcriptWindow: cleanedTranscript,
+                capturedScreenText,
+            });
             if (hasAttachedImages) {
                 // NOTE: The vision fallback chain handles provider selection + retries.
                 // We no longer check selected-model capabilities here because the
@@ -258,6 +317,21 @@ ANSWER SHAPE: ${intentResult.answerShape}
             } else if (hasScreenText) {
                 // DOM capture / screen OCR: same instruction, different transport.
                 intentContextParts.push(SCREEN_DOM_INSTRUCTION);
+            }
+            // REPEAT-PRESS DIRECTIVE (live repro 2026-08-19). Pressing the
+            // trigger again on the SAME coding page, with no new question,
+            // produced short commentary on the previous answer — culminating in
+            // the model AGREEING WITH ITSELF ("That's exactly right. The
+            // two-pointer strategy…"): the prior six-section answer rides the
+            // prompt as conversation history, the intent classifier reads the
+            // blind turn as follow_up, and the contract's own applicability
+            // boundary lets a "discussion turn" skip the sections. A blind
+            // trigger on a problem IS a request for the full solution, every
+            // time — there is no question text that could mean anything else.
+            if (promotedScreenCodingTurn) {
+                intentContextParts.push(`<repeat_press_directive>
+The user triggered this action with a coding problem on screen and NO new question. That is a request for the COMPLETE solution to the on-screen problem, following the coding contract's full section shape — even if a previous answer in this conversation already covered it, and even if this looks like a follow-up. Never respond with commentary on, agreement with, or a summary of an earlier answer. Produce the full answer as if asked for the first time.
+</repeat_press_directive>`);
             }
             const intentContext = intentContextParts.length > 0
                 ? intentContextParts.join('\n\n')
@@ -293,7 +367,33 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // Skill mode owns the system prompt — skip the (potentially expensive
             // hybrid retrieval) mode-context block fetch entirely. A pre-resolved
             // governed packet likewise skips legacy/raw retrieval.
-            if (!activeSkill && !governedEvidencePack) {
+            if (!activeSkill && !governedEvidencePack && !retrievalQueryDecision.allowed) {
+                // No user-originated signal on this turn — mode-reference
+                // retrieval is disallowed (see retrievalQueryPolicy.ts). The
+                // turn proceeds without a mode-context block; downstream
+                // no-question handling owns the reply. Applies to document-
+                // grounded modes too: a blind press must not dump whichever
+                // document scores best against nothing.
+                console.warn('[WhatToAnswerLLM] mode-reference retrieval skipped: no user-originated query (blind turn)');
+                if (governedEvidenceResolutionStarted && initialContextOsGeneration) {
+                    // Governed turn: the H1 render below requires a pack, so
+                    // hand it the same empty pack the resolver-failure path
+                    // builds — a clean refuse/clarify with zero evidence
+                    // admitted (screenshots still outrank the text decline via
+                    // declineYieldsToAttachedImages).
+                    const { emptyEvidencePack } = require('../intelligence/context-os/evidencePack') as typeof import('../intelligence/context-os/evidencePack');
+                    governedEvidencePack = emptyEvidencePack({
+                        turnId: initialContextOsGeneration.contract.turnId,
+                        sourceOwner: initialContextOsGeneration.contract.sourceOwner,
+                        requestedProperty: initialContextOsGeneration.contract.requestedProperty,
+                        answerPolicy: initialContextOsGeneration.contract.sourceOwner === 'clarify'
+                            ? 'ask_clarification'
+                            : 'refuse_insufficient_evidence',
+                    });
+                    initialContextOsGeneration.evidencePack = governedEvidencePack;
+                }
+            }
+            if (!activeSkill && !governedEvidencePack && retrievalQueryDecision.allowed) {
                 try {
                     const modesManager = this.getModesManager();
                     // Phase 4 — prefer async hybrid retrieval (FTS + vector with
@@ -403,7 +503,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             const transcriptIsReferentOnly = isReferentOnly(_cog!.contract, 'live_transcript');
                             const resolution = await resolver.resolve({
                                 turnId: _cog!.contract.turnId,
-                                question: answerPlan?.question?.trim() || cleanedTranscript,
+                                question: retrievalQueryDecision.query,
                                 sourceContract: _cog!.contract,
                                 activeMode: { modeId: activeMode.id, modeUniqueId: activeMode.id },
                                 requestedProperty: _cog!.contract.requestedProperty,
@@ -451,7 +551,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             // Pass undefined tokenBudget when doc-grounded so the
                             // retriever auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET
                             // (3600). Explicit 1800 would bypass the != null guard.
-                            const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                            const retrievalQuery = retrievalQueryDecision.query;
                             const { value, timedOut } = await raceWithBudget(
                                 modesManager.buildRetrievedActiveModeContextBlockHybrid(
                                     retrievalQuery, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, allowRerank, retrievalOptions,
@@ -468,7 +568,7 @@ ANSWER SHAPE: ${intentResult.answerShape}
                             // excludeCustomContext (PI v3 W2): the mode's
                             // customContext is PINNED below — keep retrieval to
                             // reference files only so the text never ships twice.
-                            const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                            const retrievalQuery = retrievalQueryDecision.query;
                             modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(retrievalQuery, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                         }
 
@@ -480,13 +580,13 @@ ANSWER SHAPE: ${intentResult.answerShape}
                         // "dedicated Research Questions / Phases section" wins
                         // that chunk-level cosine systematically lost.
                         if (modeContextBlock && typeof modesManager.buildOkfAugmentedContextBlock === 'function' && forceDocumentGrounding) {
-                            const okfQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                            const okfQuery = retrievalQueryDecision.query;
                             modeContextBlock = modesManager.buildOkfAugmentedContextBlock(modeContextBlock, okfQuery, requestSnapshot?.modeUniqueId);
                         }
                         }
                     } else if (await this.llmHelper.canUseLocalFallback(false)) {
                         console.warn('[ScopeFallback] reference_files denied; local fallback available, routing via streamChat');
-                        const retrievalQuery = answerPlan?.question?.trim() || cleanedTranscript;
+                        const retrievalQuery = retrievalQueryDecision.query;
                         modeContextBlock = modesManager.buildRetrievedActiveModeContextBlock(retrievalQuery, cleanedTranscript, forceDocumentGrounding ? undefined : 1800, answerPlan?.answerType, true, requestSnapshot?.modeUniqueId, retrievalOptions);
                     } else {
                         console.warn('[ScopeFallback] reference_files denied; Ollama unavailable, omitting from context');
@@ -613,44 +713,6 @@ ANSWER SHAPE: ${intentResult.answerShape}
             // the formatting rules v2 replaces. An active SKILL block still
             // appends (skills are orthogonal to the mode/action contracts).
             // Flag off → legacy constants + suffix, byte-for-byte unchanged.
-            // Coding signals for this turn, resolved once (shape, explicit
-            // format, supplied template) through the one shared resolver so this
-            // surface cannot drift from the others carrying the same signals.
-            // See .audit/coding-template-audit-2026-08-18.md.
-            const codingSignals = (() => {
-                const resolved = resolveCodingPromptSignals({
-                    answerType: answerPlan?.answerType,
-                    question: answerPlan?.question,
-                    // DOM capture AND OCR — a stub on a LeetCode page reaches us
-                    // as DOM text far more often than as pixels.
-                    surroundingText: capturedScreenText || undefined,
-                });
-                // SCREENSHOT + a question that POINTS AT THE SCREEN ("what should
-                // I say about this?", "how do I answer this", or nothing at all).
-                //
-                // The screen is the subject and the question carries no subject of
-                // its own, so whatever the planner routed it from text is not what
-                // the turn is about. Measured live: "What should I say about
-                // this?" over a Trapping Rain Water screenshot routes
-                // `profile_fact_answer` — the planner reads "what should I say"
-                // as a question about the user's own profile. An earlier gate on
-                // `unknown_answer` alone therefore missed it, which is why the
-                // same screenshot answered in prose one turn and in full six
-                // sections the next: only the turns where follow-up resolution
-                // happened to rewrite the question into a coding one got the
-                // contract. Hit or miss, exactly as reported.
-                //
-                // Attach the contract and let its own applicability boundary
-                // ignore a non-coding screen ("for conceptual, behavioral, or
-                // discussion turns, ignore it entirely").
-                const screenIsTheSubject = (hasAttachedImages || hasScreenText)
-                    && (!answerPlan?.question?.trim() || isDeicticAsk(answerPlan.question));
-                if (!resolved.codingTask && screenIsTheSubject) {
-                    return { codingTask: true, codingTaskKind: 'dsa' as const };
-                }
-                return resolved;
-            })();
-
             const v2BasePrompt = resolveV2SystemPrompt({
                 action: 'what_to_say',
                 tier: v2TierForPromptTier(this.llmHelper.getPromptTier()),
@@ -740,7 +802,14 @@ ANSWER SHAPE: ${intentResult.answerShape}
                 modeTemplateType: 'active',
                 screenContext,
                 domContext: processedDomContext,
-                priorResponses: !documentGroundedCustomModeActiveForPrompt && temporalContext?.hasRecentResponses ? temporalContext.previousResponses : undefined,
+                // Prior responses are WITHHELD on a promoted blind screen turn:
+                // there is no question text they could disambiguate, and their
+                // only measured effect was pulling the model into agreeing with
+                // its own earlier answer instead of re-answering the screen
+                // (repeat-press repro 2026-08-19). Every other turn keeps them.
+                priorResponses: (!documentGroundedCustomModeActiveForPrompt
+                    && !promotedScreenCodingTurn
+                    && temporalContext?.hasRecentResponses) ? temporalContext.previousResponses : undefined,
                 intentContext,
                 retrievedModeContext: typedModeContext || undefined,
                 pinnedModeInstructions: pinnedModeInstructions || undefined,
