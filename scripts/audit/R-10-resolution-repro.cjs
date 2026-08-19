@@ -316,6 +316,47 @@ function mutableAmbiguousSetup() {
   fs.rmSync(userData, { recursive: true, force: true });
 }
 
+// 5g. The decrypt-fail counter must count ONCE per cold start on BOTH paths.
+//     Bumping unconditionally in the blocker-1b branch double-counted the
+//     non-prefer path (keyring read attempted AND failed, then re-attempted in
+//     the fallback catch), latching re-entry after 2 launches instead of 3.
+{
+  console.log('\n[R-10r] --- decrypt-fail counter: once per cold start ---');
+  const mkDead = (fallbackNewer) => {
+    const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'r10res-cnt-'));
+    const kp = path.join(userData, 'credentials.enc');
+    const fp = path.join(userData, 'credentials.fallback.enc');
+    fs.writeFileSync(kp, Buffer.from('NOT-A-KEYRING-BLOB'));
+    fs.writeFileSync(fp, Buffer.from('NOT-DECRYPTABLE-EITHER'));
+    const older = new Date(Date.now() - 60_000);
+    const newer = new Date();
+    fs.utimesSync(fp, fallbackNewer ? newer : older, fallbackNewer ? newer : older);
+    fs.utimesSync(kp, fallbackNewer ? older : newer, fallbackNewer ? older : newer);
+    return userData;
+  };
+  const counterOf = (dir) => {
+    try { return fs.readFileSync(path.join(dir, 'credentials.decryptfail'), 'utf8').trim(); } catch { return '<none>'; }
+  };
+
+  // PREFER path (fallback newer -> keyring read SKIPPED).
+  const preferDir = mkDead(true);
+  freshManager(preferDir, true);
+  check('prefer path: 1 boot -> counter 1     ', counterOf(preferDir), '1');
+  fs.rmSync(preferDir, { recursive: true, force: true });
+
+  // NON-prefer path (keyring newer -> read attempted, fails, then re-attempted
+  // in the fallback catch). This is the one that double-counted.
+  const normalDir = mkDead(false);
+  freshManager(normalDir, true);
+  check('normal path: 1 boot -> counter 1     ', counterOf(normalDir), '1');
+  const m2 = freshManager(normalDir, true);
+  check('  2 boots -> counter 2               ', counterOf(normalDir), '2');
+  check('  re-entry NOT latched at 2 boots    ', m2.needsCredentialReentry?.(), false);
+  const m3 = freshManager(normalDir, true);
+  check('  3 boots -> re-entry latched        ', m3.needsCredentialReentry?.(), true);
+  fs.rmSync(normalDir, { recursive: true, force: true });
+}
+
 console.log('');
 if (failures) {
   console.error(`[R-10r] FAIL: ${failures} assertion(s) failed — the resolution flow is not safe to ship.`);

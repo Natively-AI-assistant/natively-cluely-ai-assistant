@@ -1884,7 +1884,16 @@ export class CredentialsManager {
                             // newer-but-undecryptable fallback beside an undecryptable
                             // keyring refused writes on every boot FOREVER with the
                             // re-entry escape hatch permanently out of reach.
-                            const failures = this.bumpDecryptFailCount();
+                            // Count ONCE per cold start. The normal path already bumped
+                            // when it attempted the read itself (keyringReadFailed), so
+                            // bumping unconditionally here double-counted a single boot
+                            // and latched re-entry after 2 launches instead of 3 —
+                            // weakening a threshold that exists to protect a store that
+                            // may still come back. Only the PREFER path, which skips the
+                            // read and so never sets keyringReadFailed, needs this bump.
+                            const failures = keyringReadFailed
+                                ? this.readDecryptFailCount()
+                                : this.bumpDecryptFailCount();
                             this.reentryRequired = failures >= DECRYPT_FAIL_PERMANENT_THRESHOLD;
                             this.keyringUnreadable = true;
                             console.warn('[CredentialsManager] Neither credential store could be read '
