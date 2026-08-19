@@ -1363,3 +1363,66 @@ the spec's own safety clause ("until the user answers, keep the current
 non-destructive behaviour") holds regardless, and the settings panel is where
 key management already lives. Elevating it to a blocking startup modal is a UX
 decision left open.
+
+
+### §21.1 — Adversarial execution review of this pass (2026-08-19)
+
+Two reviewers were told to REFUTE by RUNNING the shipped entry points, not by
+reading. A third pass (`/code-review high`, static, full-branch) died on a
+session quota before producing any verdict — **that coverage is genuinely
+missing** and is not claimed below.
+
+**Credentials + resolution flow — 5 CONFIRMED defects, all fixed.**
+
+| Sev | Defect | Fix |
+|-----|--------|-----|
+| HIGH | `resolve('merge')` silently degenerated to fallback-only when the keyring became unreadable BETWEEN load and resolve (locked keychain, or `credentials.enc` corrupted after load). Keyring-only keys were dropped from the live session and — in the corruption variant — from every on-disk copy except a garbage snapshot, while reporting `ok` under a card that says "keep both". | merge's keyring side falls back to the in-memory LOAD-TIME union |
+| HIGH-MED | prefer-path + BOTH stores undecryptable was a PERMANENT write lockout: the `DECRYPT_FAIL` bump is gated on `keyringReadFailed`, which the prefer path never sets (it SKIPS the read), so `reentryRequired` could never latch and the escape hatch was unreachable forever. | the blocker-1b refusal branch feeds the same counter |
+| MED | `persist_failed` left a half-resolved session — flag cleared and memory swapped BEFORE the save, so the card vanished while disk stayed ambiguous and the next incidental save applied the choice unconfirmed, under UI copy reading "Nothing was changed". | resolution rolls back memory + flag on persist failure |
+| MED-LOW | a blocker-1b recovery proves the keyring readable but did not clear the failure history, so a later transient failure latched re-entry at an effective threshold of ONE. | recovery clears it |
+| LOW | `last4` of a ≤4-char value IS the value. | values ≤8 chars mask as `····` |
+
+Accepted, documented, NOT fixed (LOW): resolving while the keyring WRITE throws
+lands the winner in the fallback store with `ok:true` — nothing is lost
+(snapshots intact, the set migrates up on the next healthy boot), but the store
+differs from the user's literal choice.
+
+Refuted by that reviewer: double-resolution races, snapshot clobbering, and any
+damage to main's re-key / `reentryRequired` / decrypt-fail machinery through the
+merge — all held under execution.
+
+**Migrations, merge splices, bulk rewrite — NOTHING broken.** Real-SQLite
+execution of the renumbered chain (fresh install → 29; upgrade from 26 and from
+27; forced v28 failure leaves 27 and does NOT run v29, then retries; v29-alone
+failure leaves 28), the R-13 transaction proven to roll back with seeded vectors,
+both merge splices verified reachable/non-duplicated, and the pathToFileURL
+rewrite confirmed down to observing `file://` specifiers at runtime via a resolve
+hook. Residuals closed: stale renumber labels, a version-pinned repro anchor
+(R-05, the §18.1 trap again), and 13 older bare-path harnesses.
+
+**Mutation probes — the updated contract tests are NOT vacuous.** Each guarded
+defect was temporarily reverted and the corresponding test FAILED, then the
+source was restored (56/56 green): the tier disjunct back into `hasStrongEvidence`
+→ `OkfPhase0FalseRefusalGuard` fails; the closed-fence conjunct dropped →
+`CodingRegenCeiling` fails; the destructive `removeKeyringFile()` restored →
+`CredentialPersistenceBehavior` fails behaviourally against real disk I/O; the
+reap moved after the parent DELETE → `VecOrphansReaped` fails. This was the most
+likely way this campaign could have faked progress, and it did not.
+
+### §21.2 — A defect found in the FIX for a defect
+
+Self-review of the escape-hatch fix above, confirmed by execution before being
+treated as real: **one cold start bumped the decrypt-fail counter to 2.** The
+blocker-1b branch bumped unconditionally, but on the NON-prefer path the normal
+bump has already fired for that same boot (the read was attempted, failed, and is
+re-attempted in the fallback catch). That breaks the invariant documented three
+lines above the normal bump — "counted per COLD START, not per decrypt call" —
+and latched re-entry after 2 launches instead of 3, weakening the very threshold
+that keeps refusing writes while a store might still recover.
+
+The previous commit's scenarios passed because they exercised only the prefer
+path: **a coverage gap, not just a code bug.** Both paths are now pinned.
+
+Final verification: full suite **7725 / 7655 pass / 6 fail**, name-level diff vs
+`main` (7673/7598/11) shows **zero regressions**; all 13 repros green; credential
+suites 66/66; both TS7 typechecks clean.
