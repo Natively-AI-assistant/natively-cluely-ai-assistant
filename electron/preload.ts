@@ -1493,6 +1493,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
+  // R-10 resolution flow: ambiguous credential stores (names + last-4 only).
+  getAmbiguousCredentialStores: () => ipcRenderer.invoke('credentials:get-ambiguous-stores'),
+  resolveAmbiguousCredentialStores: (choice: 'keyring' | 'fallback' | 'merge') =>
+    ipcRenderer.invoke('credentials:resolve-ambiguous-stores', choice),
 
   // Permissions
   checkPermissions: () => ipcRenderer.invoke('permissions:check'),

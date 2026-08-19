@@ -7561,6 +7561,38 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Get stored API keys (masked for UI display)
+  // R-10 resolution flow (§19.1): let the settings UI surface the ambiguous
+  // two-store state and apply the user's choice. Summary carries key NAMES and
+  // last-4 only — never values.
+  safeHandle('credentials:get-ambiguous-stores', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getAmbiguousStoreSummary();
+    } catch (e) {
+      console.error('[IPC] credentials:get-ambiguous-stores error:', e);
+      return null;
+    }
+  });
+
+  safeHandle('credentials:resolve-ambiguous-stores', async (_event, choice: 'keyring' | 'fallback' | 'merge') => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const result = CredentialsManager.getInstance().resolveAmbiguousStores(choice);
+      if (result.ok) {
+        // The active credential set just changed wholesale — tell every window
+        // the same way an ordinary key edit does.
+        const { BrowserWindow } = require('electron');
+        for (const win of BrowserWindow.getAllWindows()) {
+          try { win.webContents.send('credentials-changed'); } catch { /* window closing */ }
+        }
+      }
+      return result;
+    } catch (e) {
+      console.error('[IPC] credentials:resolve-ambiguous-stores error:', e);
+      return { ok: false, error: 'internal_error' };
+    }
+  });
+
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');

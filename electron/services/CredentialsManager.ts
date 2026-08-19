@@ -317,6 +317,126 @@ export class CredentialsManager {
         return this.reentryRequired;
     }
 
+    // =========================================================================
+    // R-10 resolution flow (§19.1) — the user-facing exit from the ambiguous
+    // two-store state. While `credentialStoresAmbiguous` is set, the session
+    // runs from the union (fallback wins) and never writes to the keyring; the
+    // three methods below let the UI show what each store holds and apply the
+    // user's choice, ending the ambiguity deliberately instead of never.
+    // =========================================================================
+
+    /** Key name + last four characters — enough to recognise a key, never enough to use it. */
+    private static describeCredentialSet(set: StoredCredentials): { name: string; last4: string }[] {
+        return Object.entries(set)
+            .filter(([, v]) => typeof v === 'string' && (v as string).trim().length > 0)
+            .map(([name, v]) => ({ name, last4: (v as string).slice(-4) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    /** Read one store from disk WITHOUT touching this.credentials. Returns null if absent/unreadable. */
+    private readStoreForResolution(which: 'keyring' | 'fallback'): StoredCredentials | null {
+        try {
+            const raw = which === 'keyring'
+                ? safeStorage.decryptString(fs.readFileSync(CREDENTIALS_PATH))
+                : decryptCredentialBlob(fs.readFileSync(FALLBACK_PATH), this.getFallbackKey());
+            const parsed = JSON.parse(raw);
+            return (typeof parsed === 'object' && parsed !== null) ? parsed : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * What the resolution UI shows. `null` when there is nothing to resolve, so
+     * the renderer can poll this cheaply and render nothing in the normal case.
+     * Values are NEVER returned — names and last-4 only, and nothing is logged.
+     */
+    public getAmbiguousStoreSummary(): {
+        keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
+        fallback: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
+    } | null {
+        if (!this.credentialStoresAmbiguous) return null;
+        const mtime = (p: string): string | null => {
+            try { return new Date(fs.statSync(p).mtimeMs).toISOString(); } catch { return null; }
+        };
+        return {
+            keyring: {
+                keys: CredentialsManager.describeCredentialSet(this.readStoreForResolution('keyring') ?? {}),
+                mtimeIso: mtime(CREDENTIALS_PATH),
+            },
+            fallback: {
+                keys: CredentialsManager.describeCredentialSet(this.readStoreForResolution('fallback') ?? {}),
+                mtimeIso: mtime(FALLBACK_PATH),
+            },
+        };
+    }
+
+    /**
+     * Apply the user's choice and end the ambiguous state.
+     *
+     * 'keyring'  — the OS-keyring set wins.
+     * 'fallback' — the app-managed backup set wins.
+     * 'merge'    — union, fallback winning on conflict (today's implicit default,
+     *              made an explicit choice per the §19.1 spec).
+     *
+     * Destroys NOTHING: both files are snapshotted to *.superseded-<ts> BEFORE
+     * anything else happens, so even a wrong choice is recoverable by hand. Only
+     * then is the flag cleared and the winner persisted through the normal
+     * keyring path (which also re-emits the storage diagnostic so telemetry
+     * stops counting this install as fallback-mode).
+     */
+    public resolveAmbiguousStores(choice: 'keyring' | 'fallback' | 'merge'): { ok: boolean; error?: string } {
+        if (!this.credentialStoresAmbiguous) {
+            return { ok: false, error: 'not_ambiguous' };
+        }
+        if (choice !== 'keyring' && choice !== 'fallback' && choice !== 'merge') {
+            return { ok: false, error: 'invalid_choice' };
+        }
+        // Degraded guard (CredentialDegradedStoreGuard pins that every caller of
+        // saveCredentials() checks this). The two flags are mutually exclusive by
+        // construction today — the ambiguous path SKIPS the keyring read, and
+        // blocker-1b clears the ambiguity when it latches keyringUnreadable — but
+        // if a future path ever set both, resolving here would mutate memory and
+        // then have the save refused: exactly the divergence the guard forbids.
+        if (this.keyringUnreadable) {
+            return { ok: false, error: 'store_degraded' };
+        }
+        const keyringSet = this.readStoreForResolution('keyring');
+        const fallbackSet = this.readStoreForResolution('fallback');
+        if (choice === 'keyring' && !keyringSet) return { ok: false, error: 'keyring_unreadable' };
+        if (choice === 'fallback' && !fallbackSet) return { ok: false, error: 'fallback_unreadable' };
+
+        // 1) Snapshot BOTH stores first. copyFileSync, not rename: the ordering
+        //    can then never leave a window with zero on-disk copies, and the
+        //    normal save path below cleans up the originals it owns.
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        try {
+            if (fs.existsSync(CREDENTIALS_PATH)) fs.copyFileSync(CREDENTIALS_PATH, `${CREDENTIALS_PATH}.superseded-${stamp}`);
+            if (fs.existsSync(FALLBACK_PATH)) fs.copyFileSync(FALLBACK_PATH, `${FALLBACK_PATH}.superseded-${stamp}`);
+        } catch (snapErr) {
+            // No snapshot → no resolution. Refusing is the conservative branch:
+            // the session simply stays in the (safe, non-destructive) union mode.
+            console.error('[CredentialsManager] Could not snapshot the credential stores; leaving the ambiguous state unresolved:', (snapErr as Error)?.message ?? String(snapErr));
+            return { ok: false, error: 'snapshot_failed' };
+        }
+
+        // 2) Pick the winner and end the ambiguity.
+        this.credentials =
+            choice === 'keyring' ? (keyringSet as StoredCredentials)
+            : choice === 'fallback' ? (fallbackSet as StoredCredentials)
+            : { ...(keyringSet ?? {}), ...(fallbackSet ?? {}) };
+        this.credentialStoresAmbiguous = false;
+
+        // 3) Persist through the normal path (keyring branch now reachable again;
+        //    it also removes the now-redundant live fallback file).
+        const persisted = this.saveCredentials();
+        console.warn(`[CredentialsManager] Ambiguous credential stores resolved by user choice "${choice}" `
+            + `(${persisted ? 'persisted' : 'PERSIST FAILED — still running from the chosen set in memory'}). `
+            + `Both prior stores are preserved as *.superseded-${stamp}.`);
+        this.emitStorageStatusDiagnostic('startup');
+        return persisted ? { ok: true } : { ok: false, error: 'persist_failed' };
+    }
+
     /**
      * Provenance — "did THIS install write that file?"
      *

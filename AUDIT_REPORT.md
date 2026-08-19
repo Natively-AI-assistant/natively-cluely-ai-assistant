@@ -1135,7 +1135,7 @@ Four open questions were put to the owner. Answers and resulting actions:
 | **F-401** — flag-OFF contract for the semantic admission gate | **Flag OFF = observe only** | **No code change needed** — this branch already implements exactly that. The two "failing" tests were a symlink artifact, not a defect; see the CORRECTION in §18.3. |
 | **Next step** | **Land this branch** | Merge preparation below. |
 
-### §19.1 — Agreed spec for the R-10 startup prompt (NOT yet implemented)
+### §19.1 — Agreed spec for the R-10 resolution prompt (IMPLEMENTED 2026-08-19 — see §21)
 
 When `credentialStoresAmbiguous` is set at load:
 
@@ -1302,3 +1302,64 @@ the layer below it could not see:
 | CI | a typecheck error esbuild cannot see; a test that only passes where a submodule happens to be symlinked |
 
 A green local suite is evidence about the local environment, not about the change.
+
+---
+
+## §21 — Post-merge completion pass (2026-08-19)
+
+### The 22 pre-existing Windows bare-path imports (follow-up from §20.1) — FIXED
+
+Same defect as this campaign's own nine files, in tests it did not write:
+`await import(path.join(...))` → `D:\...` → `ERR_UNSUPPORTED_ESM_URL_SCHEME` →
+whole file lost at load, hidden by `continue-on-error`. All 22 now use
+`pathToFileURL(...).href`. Six other grep matches were inspected and excluded as
+already correct (their `dist()` helpers already wrap in `pathToFileURL`; two
+files hand-build `file://` behind a `path.sep` check). Behaviour-neutral where
+the tests already ran: 177/177 on macOS across all 28 files.
+
+Honesty note: fixing the LOAD error means these suites now actually EXECUTE on
+Windows for the first time. Genuinely platform-specific failures inside them
+were previously invisible and may now surface in the (still masked) Windows log
+— strictly better, but the masked count may not drop by the full 22 files.
+
+CI data point for the nine-file half (commit 8d45a118): the masked Windows
+failure count went 53 → 44 vs `main`'s 46, and the name-level "fails on this
+branch but not on main" diff is **empty** — zero Windows regressions.
+
+### The R-10 resolution flow (§19.1) — BUILT
+
+The ambiguous-stores state now has its deliberate exit:
+
+* `CredentialsManager.getAmbiguousStoreSummary()` — key **names + last-4 only**,
+  per store, with mtimes. `null` when nothing to resolve. Values never leave the
+  main process and are never logged.
+* `CredentialsManager.resolveAmbiguousStores('keyring' | 'fallback' | 'merge')` —
+  snapshots **both** files to `*.superseded-<ts>` BEFORE anything else (copy, not
+  rename, so no ordering window ever has zero on-disk copies; a snapshot failure
+  aborts the resolution and the session stays in the safe union mode). Then
+  clears the flag, persists the winner through the normal keyring path, and
+  re-emits the storage diagnostic so telemetry stops counting the install as
+  fallback-mode. Refuses while `keyringUnreadable` — a guard the existing
+  `CredentialDegradedStoreGuard` suite demanded structurally the moment the
+  method appeared, which is that suite working as designed.
+* IPC `credentials:get-ambiguous-stores` / `credentials:resolve-ambiguous-stores`
+  (broadcasts `credentials-changed` on success), preload + renderer types.
+* A warn-styled card at the top of **AI Providers settings** — where keys are
+  managed — with the three choices, per-store key lists, and the reversibility
+  note. Renders nothing in the normal case. The §19.1 "merge" option is exactly
+  today's implicit default, made an explicit choice.
+
+Verified by `scripts/audit/R-10-resolution-repro.cjs` (27 assertions): the
+summary leaks no values; each of the three choices ends with the expected
+keyring contents; a **post-resolution save goes to the keyring**, proving writes
+are no longer detoured; a **relaunch stays resolved** — the state genuinely ends,
+which is the property the whole flow exists for; both snapshots exist; resolution
+is refused when not ambiguous / on an invalid choice / while degraded. Credential
+suites 71/71. Both TS7 typechecks (electron + renderer) clean.
+
+Deviation from the §19.1 spec, stated: the spec said "modal before any
+credential-consuming feature runs". This ships as a settings card instead —
+the spec's own safety clause ("until the user answers, keep the current
+non-destructive behaviour") holds regardless, and the settings panel is where
+key management already lives. Elevating it to a blocking startup modal is a UX
+decision left open.

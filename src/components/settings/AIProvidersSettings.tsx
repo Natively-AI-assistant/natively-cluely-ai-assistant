@@ -1839,6 +1839,117 @@ interface AIProvidersSettingsProps {
     aiLangDropdownRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   R-10 resolution card (§19.1). Rendered only while the main process reports
+   two credential stores that cannot be ordered (a whole-profile restore left a
+   newer app-managed backup beside the OS-keyring file). Until the user answers,
+   the app runs from the union of both sets and refuses to overwrite either
+   file — safe, but every new key lands in the weaker app-managed store, so the
+   state should be ENDED deliberately, here, where keys are managed.
+   Shows key NAMES and last-4 only; the main process never sends values.
+   ═══════════════════════════════════════════════════════════════════════════ */
+type AmbiguousStores = {
+    keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
+    fallback: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
+};
+
+const AmbiguousStoresCard: React.FC = () => {
+    const t = useT();
+    const [stores, setStores] = useState<AmbiguousStores | null>(null);
+    const [busy, setBusy] = useState<'keyring' | 'fallback' | 'merge' | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        window.electronAPI?.getAmbiguousCredentialStores?.()
+            .then((v) => { if (!cancelled) setStores(v); })
+            .catch(() => { /* absent API (older main) → render nothing */ });
+        return () => { cancelled = true; };
+    }, []);
+
+    if (!stores) return null;
+
+    const resolve = async (choice: 'keyring' | 'fallback' | 'merge') => {
+        setBusy(choice);
+        setError(null);
+        try {
+            const res = await window.electronAPI?.resolveAmbiguousCredentialStores?.(choice);
+            if (res?.ok) {
+                setStores(null);   // state ended; the card disappears
+            } else {
+                setError(res?.error === 'snapshot_failed'
+                    ? t('Could not back up the current files first, so nothing was changed. Check disk space and try again.')
+                    : t('Could not apply the choice. Nothing was changed.'));
+            }
+        } catch {
+            setError(t('Could not apply the choice. Nothing was changed.'));
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : t('unknown time'));
+    const keyList = (keys: { name: string; last4: string }[]) => (
+        keys.length === 0
+            ? <span className="opacity-60">{t('(unreadable or empty)')}</span>
+            : keys.map((k) => `${k.name} (…${k.last4})`).join(', ')
+    );
+
+    return (
+        <div
+            className="flex flex-col gap-3 p-4 rounded-lg text-xs"
+            style={{ background: 'var(--aip-warn-bg)', border: '1px solid var(--aip-warn-border)' }}
+            data-testid="ambiguous-stores-card"
+        >
+            <div className="flex items-start gap-2">
+                <AlertCircle size={14} strokeWidth={1.75} className="shrink-0 mt-0.5" style={{ color: 'var(--aip-warn)' }} />
+                <div className="space-y-1">
+                    <div className="font-medium">{t('Two saved credential sets were found')}</div>
+                    <div className="opacity-80">
+                        {t('This usually happens after restoring a backup or migrating machines. Until you choose, both files are kept and new keys are saved to the weaker backup store.')}
+                    </div>
+                </div>
+            </div>
+            <div className="space-y-1 pl-6">
+                <div><span className="font-medium">{t('System keychain')}</span> ({when(stores.keyring.mtimeIso)}): {keyList(stores.keyring.keys)}</div>
+                <div><span className="font-medium">{t('App backup')}</span> ({when(stores.fallback.mtimeIso)}): {keyList(stores.fallback.keys)}</div>
+            </div>
+            <div className="flex flex-wrap gap-2 pl-6">
+                <button
+                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--aip-warn-border)' }}
+                    disabled={busy !== null}
+                    onClick={() => resolve('keyring')}
+                >
+                    {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
+                </button>
+                <button
+                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--aip-warn-border)' }}
+                    disabled={busy !== null}
+                    onClick={() => resolve('fallback')}
+                >
+                    {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
+                </button>
+                <button
+                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--aip-warn-border)' }}
+                    disabled={busy !== null}
+                    onClick={() => resolve('merge')}
+                >
+                    {busy === 'merge' ? t('Applying…') : t('Keep both (backup wins on conflict)')}
+                </button>
+            </div>
+            {error && <div className="pl-6 aip-danger-fg">{error}</div>}
+            <div className="pl-6 opacity-60">
+                {t('Whatever you pick, both current files are first copied aside, so this is reversible.')}
+            </div>
+        </div>
+    );
+};
+
+export const AmbiguousCredentialStoresCard = AmbiguousStoresCard;
+
 export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     aiResponseLanguage,
     availableAiLanguages,
@@ -3077,6 +3188,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
+            <AmbiguousStoresCard />
             {confirmCopy && (
                 <ConfirmDialog
                     open
