@@ -329,7 +329,10 @@ export class CredentialsManager {
     private static describeCredentialSet(set: StoredCredentials): { name: string; last4: string }[] {
         return Object.entries(set)
             .filter(([, v]) => typeof v === 'string' && (v as string).trim().length > 0)
-            .map(([name, v]) => ({ name, last4: (v as string).slice(-4) }))
+            // last4 of a short value IS the value. Mask anything ≤8 chars outright —
+            // real provider keys are far longer, so this only hides values whose
+            // disclosure would be total.
+            .map(([name, v]) => ({ name, last4: (v as string).trim().length > 8 ? (v as string).slice(-4) : '····' }))
             .sort((a, b) => a.name.localeCompare(b.name));
     }
 
@@ -405,6 +408,16 @@ export class CredentialsManager {
         const fallbackSet = this.readStoreForResolution('fallback');
         if (choice === 'keyring' && !keyringSet) return { ok: false, error: 'keyring_unreadable' };
         if (choice === 'fallback' && !fallbackSet) return { ok: false, error: 'fallback_unreadable' };
+        // Adversarial review 2026-08-19: 'merge' had NO readability guard, so a
+        // keychain locked (or a keyring file corrupted) between load and resolve
+        // made keyringSet null and the "union" silently degenerated to
+        // fallback-only — persisted over the keyring, dropping keyring-only keys
+        // from the live session while reporting ok and a UI that says "keep
+        // both". Fall back to the in-memory set: while ambiguous it holds the
+        // LOAD-TIME union (keyring ∪ fallback), so keyring-only keys survive a
+        // resolve-time read failure. Session edits are already in fallbackSet,
+        // which wins the spread.
+        const mergeKeyringBase: StoredCredentials = keyringSet ?? { ...this.credentials };
 
         // 1) Snapshot BOTH stores first. copyFileSync, not rename: the ordering
         //    can then never leave a window with zero on-disk copies, and the
@@ -420,21 +433,33 @@ export class CredentialsManager {
             return { ok: false, error: 'snapshot_failed' };
         }
 
-        // 2) Pick the winner and end the ambiguity.
+        // 2) Pick the winner and end the ambiguity. Keep the prior state so a
+        //    failed persist can ROLL BACK — without this, a persist_failed left
+        //    the flag cleared and memory swapped while disk stayed ambiguous:
+        //    the card vanished on remount, the save detour ended, and the next
+        //    incidental save applied the choice without confirmation, while the
+        //    UI had just said "Nothing was changed".
+        const priorCredentials = this.credentials;
         this.credentials =
             choice === 'keyring' ? (keyringSet as StoredCredentials)
             : choice === 'fallback' ? (fallbackSet as StoredCredentials)
-            : { ...(keyringSet ?? {}), ...(fallbackSet ?? {}) };
+            : { ...mergeKeyringBase, ...(fallbackSet ?? {}) };
         this.credentialStoresAmbiguous = false;
 
         // 3) Persist through the normal path (keyring branch now reachable again;
         //    it also removes the now-redundant live fallback file).
         const persisted = this.saveCredentials();
-        console.warn(`[CredentialsManager] Ambiguous credential stores resolved by user choice "${choice}" `
-            + `(${persisted ? 'persisted' : 'PERSIST FAILED — still running from the chosen set in memory'}). `
+        if (!persisted) {
+            this.credentials = priorCredentials;
+            this.credentialStoresAmbiguous = true;
+            console.warn(`[CredentialsManager] Resolving the ambiguous stores by "${choice}" could not be persisted; `
+                + 'rolled the session back to the ambiguous union. Nothing on disk changed except the two snapshots.');
+            return { ok: false, error: 'persist_failed' };
+        }
+        console.warn(`[CredentialsManager] Ambiguous credential stores resolved by user choice "${choice}". `
             + `Both prior stores are preserved as *.superseded-${stamp}.`);
         this.emitStorageStatusDiagnostic('startup');
-        return persisted ? { ok: true } : { ok: false, error: 'persist_failed' };
+        return { ok: true };
     }
 
     /**
@@ -1842,12 +1867,31 @@ export class CredentialsManager {
                                 recovered = true;
                                 console.warn('[CredentialsManager] The app-managed fallback could not be decrypted and carries no usable data; '
                                     + 'loaded the encrypted keyring instead. The unreadable fallback is left on disk and is ignored.');
+                                // The keyring was just PROVEN readable — same fact the
+                                // normal-path success clears the failure history on.
+                                // Without this, stale counts made the next transient
+                                // failure latch re-entry at an effective threshold of 1.
+                                this.clearDecryptFailCount();
                             }
                         } catch { /* keyring unreadable too — fall through to the refusal */ }
                         if (!recovered) {
+                            // The keyring genuinely failed a cold-start decrypt (we
+                            // tried it directly, and this branch only runs when the
+                            // keyring reported itself available) — so it must COUNT
+                            // toward DECRYPT_FAIL_PERMANENT_THRESHOLD. The normal bump
+                            // is gated on keyringReadFailed, which the prefer path never
+                            // sets because it SKIPS the read; without this bump, a
+                            // newer-but-undecryptable fallback beside an undecryptable
+                            // keyring refused writes on every boot FOREVER with the
+                            // re-entry escape hatch permanently out of reach.
+                            const failures = this.bumpDecryptFailCount();
+                            this.reentryRequired = failures >= DECRYPT_FAIL_PERMANENT_THRESHOLD;
                             this.keyringUnreadable = true;
-                            console.warn('[CredentialsManager] Neither credential store could be read. Saves are disabled this session so the '
-                                + 'existing keyring file is not overwritten with an empty set.');
+                            console.warn('[CredentialsManager] Neither credential store could be read '
+                                + `(keyring decrypt failure ${failures}/${DECRYPT_FAIL_PERMANENT_THRESHOLD}). `
+                                + (this.reentryRequired
+                                    ? 'Treating the stored credentials as unrecoverable; re-entry is now allowed.'
+                                    : 'Saves are disabled this session so the existing keyring file is not overwritten with an empty set.'));
                         }
                         this.credentialStoresAmbiguous = false;
                     }

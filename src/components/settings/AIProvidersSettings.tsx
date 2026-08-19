@@ -1861,10 +1861,17 @@ const AmbiguousStoresCard: React.FC = () => {
 
     useEffect(() => {
         let cancelled = false;
-        window.electronAPI?.getAmbiguousCredentialStores?.()
-            .then((v) => { if (!cancelled) setStores(v); })
-            .catch(() => { /* absent API (older main) → render nothing */ });
-        return () => { cancelled = true; };
+        const fetch = () => {
+            window.electronAPI?.getAmbiguousCredentialStores?.()
+                .then((v) => { if (!cancelled) setStores(v); })
+                .catch(() => { /* absent API (older main) → render nothing */ });
+        };
+        fetch();
+        // Re-fetch on credential changes so the card tracks reality: it must
+        // disappear if another window resolved the state, and a mount-only
+        // fetch would show stale data forever (adversarial review 2026-08-19).
+        const unsubscribe = window.electronAPI?.onCredentialsChanged?.(fetch);
+        return () => { cancelled = true; unsubscribe?.(); };
     }, []);
 
     if (!stores) return null;
