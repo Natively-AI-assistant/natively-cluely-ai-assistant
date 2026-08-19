@@ -39,6 +39,7 @@ import type { PunctuationSource } from './punctuationProvenance';
 import {
     SOCIAL_PLEASANTRY as PLEASANTRY, WAIT_IDIOM,
     CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT,
+    QUESTION_MARK, INTERROGATIVE_LEAD, IMPERATIVE_ASK, scoreAskShape,
 } from './questionShapes';
 
 export type DialogueAct =
@@ -108,11 +109,16 @@ export interface CandidateTurnInput {
     timestamp: number;
 }
 
-// ── shape signals (local copies of the extractor's shapes; the Phase-3
-// segmenter unifies these — drift here only affects the SHADOW ledger) ──────
-const QUESTION_MARK = /\?/;
-const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had)\b/i;
-const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// ── shape signals ───────────────────────────────────────────────────────────
+// QUESTION_MARK / INTERROGATIVE_LEAD / IMPERATIVE_ASK and the confidence table
+// are SHARED with the live extractor (questionShapes.ts) as of the 2026-08-19
+// code review. They used to be local copies and had drifted on three axes
+// (bare-mark score, unknown punctuation provenance, and the tell-me family
+// missing from the lead), which contaminated the ledger_parity /
+// ledger_divergence telemetry that decides whether this ledger gets promoted.
+// TASK_DIRECTIVE below stays ledger-LOCAL on purpose: it is a capability the
+// live extractor genuinely lacks, so divergence it produces is architecture —
+// exactly what the shadow exists to measure.
 // Task directives ("Solve Two Sum.", "Rate your Python skills out of 10.",
 // "Convince me…") — imperative-mood asks the tell-me family misses
 // (ledger-benchmark 2026-08-18: 9 of 10 no-ask windows). Anchored to the
@@ -225,6 +231,14 @@ export class QuestionLedger {
         const turnTerms = contentTerms(turn.text);
         const open = this.asks.filter(a =>
             (a.status === 'open' || a.status === 'partially_answered') && a.sourceTimestamp <= turn.timestamp);
+        // Snapshot of the fully-open asks BEFORE the overlap loop mutates any
+        // status. The single-ask fallback below keys off this (code review
+        // 2026-08-19): recomputing it afterwards over `this.asks` both lost
+        // the `sourceTimestamp <= turn.timestamp` guard above and let one
+        // reply close two asks — the loop answered ask A by term overlap,
+        // which left unrelated ask B as the "only" remaining open ask, and B
+        // was then closed with zero overlap.
+        const openAtEntry = open.filter(a => a.status === 'open');
         if (words.length >= 8) {
             for (const ask of open) {
                 const ov = overlapCount(contentTerms(ask.standaloneText), turnTerms);
@@ -245,14 +259,18 @@ export class QuestionLedger {
         // PARTIALLY answered — enough to stop outranking a fresh ask, honest
         // about possibly being an interrupted lead-in ("Sure, so at a high
         // level…"). A substantive reply (≥8 words) is answered.
-        const stillOpen = this.asks.filter(a => a.status === 'open');
-        if (stillOpen.length === 1) {
+        // "SINGLE open ask" means single at ENTRY: with two asks outstanding a
+        // reply is not unambiguously about either one, so no-echo crediting is
+        // not justified. If the overlap loop already credited that lone ask,
+        // its stronger verdict stands rather than being rewritten here.
+        if (openAtEntry.length === 1 && openAtEntry[0].status === 'open') {
+            const soleAsk = openAtEntry[0];
             if (words.length >= 8) {
-                stillOpen[0].status = 'answered';
-                stillOpen[0].confidence.state = 0.6;
+                soleAsk.status = 'answered';
+                soleAsk.confidence.state = 0.6;
             } else {
-                stillOpen[0].status = 'partially_answered';
-                stillOpen[0].confidence.state = 0.55;
+                soleAsk.status = 'partially_answered';
+                soleAsk.confidence.state = 0.55;
             }
         }
     }
@@ -335,16 +353,11 @@ export class QuestionLedger {
             const short = clause.split(/\s+/).length <= 5;
             return { isAsk: false, act: short ? 'backchannel' : 'statement', conf: 0.8 };
         }
-        // Punctuation-provenance-aware scoring (F9): a missing '?' is real
-        // evidence only when the provider guarantees punctuation. When it is
-        // 'unavailable' (Soniox/OpenAI/ElevenLabs/NativelyPro/REST) or
-        // unknown, an interrogative lead alone scores as high as mark+lead.
-        const punctuationGuaranteed = punctuation === 'provider_final' || punctuation === 'provider_interim';
-        let conf: number;
-        if (hasMark && hasLead) conf = 0.95;
-        else if (hasLead) conf = punctuationGuaranteed ? 0.8 : 0.95;
-        else if (hasMark) conf = 0.85;
-        else conf = 0.75; // imperative ask ("tell me about…")
+        // Punctuation-provenance-aware scoring (F9), via the SHARED table so
+        // the shadow and the live extractor cannot disagree by copy drift.
+        // …with this ledger's own tail: reaching here without mark/lead means
+        // an imperative/task-directive ask ("tell me about…", "Solve Two Sum.").
+        const conf = scoreAskShape({ hasMark, hasLead, punctuationSource: punctuation }) ?? 0.75;
         return { isAsk: true, act: hasImperative && !hasLead && !hasMark ? 'request' : 'question', conf };
     }
 

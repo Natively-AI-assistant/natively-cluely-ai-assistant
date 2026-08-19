@@ -1297,7 +1297,7 @@ try {
 import { CredentialsManager } from "./services/CredentialsManager"
 import { SettingsManager } from "./services/SettingsManager"
 import { PhoneMirrorService, shouldStartPhoneMirrorOnBoot } from "./services/PhoneMirrorService"
-import { describePageCaptureFallback, PAGE_CAPTURE_FALLBACK_CHANNEL } from "./services/pageCaptureFallback"
+import { describePageCaptureFallback, describeDoubleCaptureFailure, PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL } from "./services/pageCaptureFallback"
 import { setVerboseLoggingFlag } from "./verboseLog"
 import { ReleaseNotesManager } from "./update/ReleaseNotesManager"
 import { OllamaManager } from './services/OllamaManager'
@@ -1840,6 +1840,13 @@ export class AppState {
           // the gesture always does something. See natively-browser/README.md.
           let captured = false;
           let domFailureReason = '';
+          // Announce the in-flight capture so a fast follow-up ⌘Enter (the
+          // one-motion ⌘Y→Enter flow) waits for delivery instead of racing it.
+          this.sendToWindow(
+            this.windowHelper?.getOverlayWindow?.() ?? this.getMainWindow(),
+            PAGE_CAPTURE_STARTED_CHANNEL,
+            { at: Date.now() },
+          );
           try {
             const svc = PhoneMirrorService.getInstance();
             // MV3 race fix: the extension's service worker may have been idle-killed
@@ -1875,7 +1882,11 @@ export class AppState {
             // the extension wasn't connected / this site wasn't granted
             // (2026-08-18 report). The notice renders as a warn-tone status pill.
             const fallbackNotice = describePageCaptureFallback(domFailureReason);
-            this.sendToWindow(this.getMainWindow(), PAGE_CAPTURE_FALLBACK_CHANNEL, fallbackNotice);
+            // Target the OVERLAY window explicitly: the only listener lives in
+            // NativelyInterface, which mounts there — getMainWindow() returns
+            // the launcher in launcher mode, where the notice would be dropped
+            // (same reason /dom delivery resolves the overlay window).
+            const noticeWindow = () => this.windowHelper?.getOverlayWindow?.() ?? this.getMainWindow();
             // Both legs of this fallback can fail, and the screenshot's throw used
             // to propagate to the outer handler and mask the DOM reason entirely —
             // the user saw an unrelated "Failed to capture screen" (or, since that
@@ -1884,7 +1895,15 @@ export class AppState {
             // one click in the extension popup, not by screen-recording settings.
             try {
               await this.captureScreenAndProcess();
+              // Only now is "a screenshot was attached instead" true — sending
+              // the notice before the screenshot would lie when it also fails.
+              this.sendToWindow(noticeWindow(), PAGE_CAPTURE_FALLBACK_CHANNEL, fallbackNotice);
             } catch (shotErr: any) {
+              this.sendToWindow(
+                noticeWindow(),
+                PAGE_CAPTURE_FALLBACK_CHANNEL,
+                describeDoubleCaptureFailure(domFailureReason, shotErr, process.platform),
+              );
               // The extension reports an ungranted host as the outcome kind
               // 'needs-host-permission' (not Chrome's raw wording) — the shared
               // mapper matches both, so reuse it instead of a local regex that

@@ -115,6 +115,28 @@ export function detectSuppliedCodeTemplate(question: string | undefined | null):
   return false;
 }
 
+/**
+ * STRUCTURAL-only twin of detectSuppliedCodeTemplate: real code is present (a
+ * fenced block or a declaration header), not merely a word that also occurs in
+ * ordinary prose.
+ *
+ * Added by code review 2026-08-19. The phrase list above is deliberately
+ * inclusive because for an ALREADY-coding turn a false positive only produces
+ * a conditional directive ("if a template is supplied, use it"). The screen-
+ * stub PROMOTION below has no such tolerance: there a false positive converts
+ * a non-coding turn into a full coding contract plus an affirmative "a code
+ * template IS present — find it" instruction, so "Can you improve this
+ * template for my newsletter?" / "match the given signature in the contract"
+ * got the six-section DSA treatment and a hunt for a stub that never existed.
+ * The promotion's own comment already promises "a real signature or fenced
+ * block, not a phrase" — this is that promise in code.
+ */
+export function detectStructuralCodeTemplate(question: string | undefined | null): boolean {
+  const q = (question || '').trim();
+  if (!q) return false;
+  return FENCED_BLOCK_RE.test(q) || SIGNATURE_RE.test(q);
+}
+
 // A SHORT question whose subject is a demonstrative — the words a person uses
 // when the thing they mean is on the screen in front of them. Deliberately
 // requires the demonstrative to BE the subject: "how do I do this", "what goes
@@ -237,12 +259,29 @@ export function resolveCodingPromptSignals(input: {
    * stripped one (an answer missing the code).
    */
   priorCodingTurnExists?: boolean;
+  /**
+   * The CALLER already promoted this turn to the coding path (code review
+   * 2026-08-19). Manual chat resolves a prior coding problem for bare/
+   * continuation asks ("code?", "now optimize it") and flips its own
+   * isCodingChat, but the turn is still PLANNED follow_up_answer — so deriving
+   * codingTask from `answerType` alone returns false and the v2 system prompt
+   * silently drops the whole coding contract block for exactly those turns.
+   * `priorCodingTurnExists` cannot serve here: it gates continuation-only
+   * FORMATS and must stay orthogonal to whether this is a coding turn at all.
+   * Defaults false, so no surface changes behaviour without opting in.
+   */
+  codingTurnPromoted?: boolean;
 }): CodingPromptSignals {
   let codingTask = false;
   try {
     codingTask = !!(input.answerType && isCodingAnswerType(input.answerType as AnswerType));
   } catch {
     codingTask = false;
+  }
+  // A caller-side promotion is authoritative: it means the surface resolved a
+  // real prior coding problem for this turn and is attaching it as context.
+  if (!codingTask && input.codingTurnPromoted === true) {
+    codingTask = true;
   }
   // SCREEN-STUB PROMOTION (2026-08-18). A deictic ask with the problem visible
   // on screen — "how do I do this", "what goes here", "solve this one" — carries
@@ -265,8 +304,10 @@ export function resolveCodingPromptSignals(input: {
   //      returned code with no fence at all because no contract asked for one.
   //   2. the stub is on SCREEN and the question is a bare demonstrative.
   if (!codingTask) {
-    const stubInQuestion = detectSuppliedCodeTemplate(input.question);
-    const stubOnScreen = isDeicticAsk(input.question) && detectSuppliedCodeTemplate(input.surroundingText);
+    // STRUCTURAL detector only (code review 2026-08-19) — the promotion must
+    // see real code, per this block's own "not a phrase" promise above.
+    const stubInQuestion = detectStructuralCodeTemplate(input.question);
+    const stubOnScreen = isDeicticAsk(input.question) && detectStructuralCodeTemplate(input.surroundingText);
     if (stubInQuestion || stubOnScreen) {
       return {
         codingTask: true,

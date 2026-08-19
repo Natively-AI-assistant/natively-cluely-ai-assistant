@@ -9,6 +9,70 @@
 // Single source of truth; both consumers import from here. The Phase-3 E/I
 // segmenter eventually replaces the lot.
 
+// ── Core ask shapes + confidence (unified by code review 2026-08-19) ────────
+// These three regexes and the score table below were duplicated between the
+// live extractor and the shadow ledger, and had already drifted: the ledger
+// scored a bare '?' 0.85 vs the extractor's 0.8, treated UNKNOWN punctuation
+// provenance as 'unavailable' (0.95 vs 0.8), and its lead alternation was
+// missing the tell-me/walk-me/describe family the extractor folds in. Because
+// askShape confidence feeds rankActiveAsks, and the ledger_parity /
+// ledger_divergence telemetry is the stated evidence for promoting the ledger,
+// that skew meant the promotion metric was partly measuring copy drift instead
+// of the architectures it is supposed to compare. One definition, one table.
+
+/** Terminal/inline question mark. */
+export const QUESTION_MARK = /\?/;
+
+/**
+ * Interrogative lead in CLAUSE-INITIAL position: a wh-word, an auxiliary, or
+ * the "tell me about…" family that opens an ask without one. ^-anchored on
+ * purpose — it feeds confidence scoring, so a mid-sentence "what" ("tell me
+ * WHAT you did") must not read as a fresh interrogative.
+ *
+ * NOTE: deliberately NOT `INTERROGATIVE_LEAD_CORE ∪ IMPERATIVE_ASK` — the
+ * imperative family here omits "show me", which IMPERATIVE_ASK includes. That
+ * asymmetry is the live extractor's long-standing behaviour and is preserved
+ * verbatim; folding "show me" in would silently re-score every "show me your…"
+ * turn. Keep the two lists in this file so any future change is visible.
+ */
+export const INTERROGATIVE_LEAD =
+  /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+
+/** The "tell me about…" family, matched ANYWHERE — an imperative ask that may
+ *  sit after a discourse prefix. Superset of the lead's imperative alternates
+ *  (it also carries "show me"). */
+export const IMPERATIVE_ASK =
+  /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+
+/**
+ * The single ask-confidence table, shared by the live extractor and the shadow
+ * ledger.
+ *
+ * Punctuation provenance (F9) is honoured exactly one way: a missing '?' is
+ * real negative evidence only when the provider GUARANTEES punctuation, and
+ * "guaranteed" means the source is explicitly `unavailable` or not. An UNKNOWN
+ * provenance is treated as punctuating (the conservative reading), matching the
+ * live extractor and the ledger's own clause-recovery gate — which already
+ * required an explicit 'unavailable' while its scoring did not.
+ *
+ * Covers ONLY the mark/lead core — the part both callers genuinely share.
+ * Returns null when neither signal is present, because the tails legitimately
+ * differ (the extractor falls back to a 0.4 baseline plus a clause-interrogative
+ * recovery branch; the ledger falls back to an imperative-ask score). Unifying
+ * those would be a false equivalence, so each caller keeps its own.
+ */
+export function scoreAskShape(input: {
+  hasMark: boolean;
+  hasLead: boolean;
+  punctuationSource: string | undefined;
+}): number | null {
+  const punctuationUnavailable = input.punctuationSource === 'unavailable';
+  if (input.hasMark && input.hasLead) return 0.95;
+  if (input.hasLead && punctuationUnavailable) return 0.95;
+  if (input.hasMark || input.hasLead) return 0.8;
+  return null;
+}
+
 /** Social-pleasantry chit-chat that is question-shaped but not a substantive
  *  ask ("did you have any trouble finding parking?", "how was your weekend?").
  *  Anchored on the social TOPIC so a real question containing the word (e.g.

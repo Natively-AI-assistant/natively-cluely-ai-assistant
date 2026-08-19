@@ -168,7 +168,12 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
     // reused as-is, with no re-retrieval.
     assert.match(llmSrc, /let governedEvidencePack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =\s*initialContextOsGeneration\?\.govern\s*\?\s*\(initialContextOsGeneration\?\.evidencePack \?\? null\) : null/s,
       'WTA generation must begin with the coordinator-owned EvidencePack, gated on .govern');
-    assert.match(llmSrc, /if \(!activeSkill && !governedEvidencePack\) \{/,
+    // Pin updated 2026-08-19 (HDFC leak): the legacy branch is additionally
+    // gated on retrievalQueryDecision.allowed (retrievalQueryPolicy.ts) — a
+    // turn with no user-originated query skips legacy retrieval too. The
+    // governed-pack invariant is unchanged: !governedEvidencePack still
+    // guards the branch, so a resolved packet is never re-retrieved.
+    assert.match(llmSrc, /if \(!activeSkill && !governedEvidencePack && retrievalQueryDecision\.allowed\) \{/,
       'a resolved packet must skip the legacy document retrieval branch');
     assert.match(llmSrc, /const pack = governedEvidencePack \?\? _cog\.evidencePack/,
       'the rendered factual block must use that same packet identity');

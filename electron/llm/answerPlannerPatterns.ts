@@ -350,7 +350,15 @@ const SOURCE_CODE_EVIDENCE_PATTERNS = [
   // coding template to source_code_evidence_answer. The turn then got no coding
   // contract at all outside technical-interview mode. "your real/actual code"
   // with no lead-in is still caught by the dedicated pattern below.
-  /\b(what does|what'?s|whats|show me|tell me about)\s+(your|the natively|natively'?s)\s+(actual\s+|real\s+)?[\w ]*\bcode\b\s*(look|is|for|of)?/i,
+  // The lead-in alternation was widened 2026-08-19 (code review): making it
+  // mandatory correctly stopped "// your code here" from matching, but it also
+  // dropped the whole REQUEST-TO-SEE family ("can I see your code", "let me
+  // look at your code", "I want to see your code for the overlay"), which then
+  // routed to coding_question_answer — the generic coding path this pattern
+  // exists to keep them off, because it would fabricate a plausible-looking
+  // Natively snippet. Every added lead-in is an explicit speech act, so the
+  // bare-stub-comment case stays unmatched.
+  /\b(what does|what'?s|whats|show me|tell me about|can i see|could i see|can you show|could you show|let me see|let me look at|i want to see|i'?d like to see|i wanna see)\s+(your|the natively|natively'?s)\s+(actual\s+|real\s+)?[\w ]*\bcode\b\s*(look|is|for|of)?/i,
   /\byour (real|actual) code\b/i,
   // "repo-verifiable / github-verifiable snippet|code" — explicitly asks for code
   // that can be checked against the public repo; this IS a source-evidence request

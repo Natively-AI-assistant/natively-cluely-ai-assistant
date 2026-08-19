@@ -39,7 +39,7 @@ export {
   type BuildTurnContractInput,
 } from './SourceAuthorityKernel';
 export { PROPERTY_RULES, propertyRuleFor, textCanProveProperty } from './requestedProperty';
-export { packGovernsGeneration, sourceAuthorityPermitsRefusal, clarificationIsActionable } from './refusalPolicy';
+export { packGovernsGeneration, sourceAuthorityPermitsRefusal, clarificationIsActionable, declineYieldsToAttachedImages, boundaryDeclineYieldsToAttachedImages } from './refusalPolicy';
 export {
   EvidenceOrchestrator,
   parseModeSnippets,

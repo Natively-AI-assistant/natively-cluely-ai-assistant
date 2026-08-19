@@ -22,6 +22,7 @@ import { TranscriptTurn, cleanTranscript } from './transcriptCleaner';
 import {
     SOCIAL_PLEASANTRY, WAIT_IDIOM,
     CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT, SHORT_TOPIC_SHIFT,
+    QUESTION_MARK, INTERROGATIVE_LEAD, IMPERATIVE_ASK, scoreAskShape,
 } from './questionShapes';
 
 export type DetectedSpeaker = 'interviewer' | 'candidate' | 'unknown';
@@ -76,7 +77,7 @@ const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are y
 // the answerability floor must not reject a genuine ask merely because it is
 // preceded by a clause: "One more question — tell me about levee." is the exact
 // shape campaign2 fix#5 (2026-07-17) was written to keep selecting.
-const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|share|talk about|let'?s talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// IMPERATIVE_ASK: shared — see questionShapes.ts.
 
 // Wait/hold idioms (negative-benchmark neg_logistics_011, 2026-08-18): "give
 // me one second", "bear with me" are pause REQUESTS, not asks — but "give me"
@@ -89,8 +90,9 @@ const IMPERATIVE_ASK = /\b(tell me|walk me|describe|explain|give me|show me|shar
 // WAIT_IDIOM: shared — see questionShapes.ts.
 
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
-const QUESTION_MARK = /\?/;
-const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// QUESTION_MARK / INTERROGATIVE_LEAD: shared — see questionShapes.ts (unified
+// with the shadow ledger's copies, code review 2026-08-19; definitions are
+// verbatim the ones that lived here, so live selection is unchanged).
 
 // Follow-up markers: the turn leans on a previously-mentioned thing.
 //
@@ -524,10 +526,12 @@ export function extractLatestQuestion(
     // questions) keeps byte-identical legacy scoring — this branch only
     // fires for segments stamped by the STT seam. Mirrors
     // QuestionLedger.askShape so live and shadow scoring cannot drift.
+    // Core mark/lead scoring comes from the SHARED table (questionShapes.ts)
+    // so the shadow ledger cannot drift from it; the 0.4 baseline and the
+    // clause-interrogative recovery below are this selector's own tail.
     let confidence = 0.4;
-    if (hasMark && hasLead) confidence = 0.95;
-    else if (hasLead && punctuationUnavailable) confidence = 0.95;
-    else if (hasMark || hasLead) confidence = 0.8;
+    const coreConfidence = scoreAskShape({ hasMark, hasLead, punctuationSource: chosen.punctuationSource });
+    if (coreConfidence !== null) confidence = coreConfidence;
     else if (hasClauseInterrogative) confidence = 0.75;
     if (questionType !== 'general' && confidence < 0.8) confidence = 0.7;
 

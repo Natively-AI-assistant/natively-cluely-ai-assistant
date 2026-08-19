@@ -37,6 +37,7 @@ import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
 import { mintTurnId } from './llm/turnIdentity';
+import { deriveRetrievalQuery } from './llm/retrievalQueryPolicy';
 import { buildGracefulRetry } from './llm/manualProfileIntelligence';
 import { CodingStreamGate } from './llm/codingStreamGate';
 import { isCodeVerificationEnabled } from './llm/codeVerification/verificationEnabled';
@@ -1480,10 +1481,21 @@ export class IntelligenceEngine extends EventEmitter {
             ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
                 { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
             ));
-            // Query = resolved question; blob fallback only when nothing was
-            // extracted (mirrors WhatToAnswerLLM's own inline
-            // `answerPlan?.question?.trim() || cleanedTranscript`).
-            const wtaPrefetchQuery = (wtaResolvedQuestionForKicks || '').trim() || preparedTranscript;
+            // Retrieval-query provenance (HDFC leak, 2026-08-18): the prefetch
+            // query must be USER-originated — question, then non-assistant
+            // transcript lines, then captured screen text. The old blob
+            // fallback (`|| preparedTranscript`) fed the assistant's own
+            // previous answer back as the query on blind turns; a disallowed
+            // decision skips the prefetch entirely (mirrors WhatToAnswerLLM's
+            // inline gate on the same policy).
+            const wtaPrefetchDecision = deriveRetrievalQuery({
+                extractedQuestion: wtaResolvedQuestionForKicks,
+                transcriptWindow: preparedTranscript,
+                capturedScreenText: [options?.domContext, options?.screenContext?.ocrText]
+                    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+                    .join('\n\n'),
+            });
+            const wtaPrefetchQuery = wtaPrefetchDecision.query;
             // Provisional answerType for retrieval scoping (ModesManager uses
             // it to scope customContext). planAnswer here is the cheap regex
             // pass without intentResult — the canonical plan below may refine
@@ -1501,8 +1513,8 @@ export class IntelligenceEngine extends EventEmitter {
             // Governed document turns resolve through EvidenceResolver inside
             // WhatToAnswerLLM. Do not start the legacy prefetch in parallel: even
             // an ignored retrieval is an unauthorized competing evidence path.
-            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive
-                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval
+            const modeContextPromise: Promise<string> = options?.activeSkill || docGroundedEnforcementActive || !wtaPrefetchDecision.allowed
+                ? Promise.resolve('') // skill/governed-document mode skips legacy retrieval; blind turn (no user-originated query) skips it too
                 : (async () => {
                     try {
                         const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
@@ -3454,6 +3466,14 @@ export class IntelligenceEngine extends EventEmitter {
                 if (!isCoding && docGroundedEnforcementActive
                     && Boolean((snapshotModeInfo as any)?.hasReferenceFiles)
                     && isDocGroundedAnswerType(answerPlan.answerType)
+                    // Screenshot outranks the doc-grounded swap (2026-08-19):
+                    // with user-attached pixels the streamed answer is
+                    // legitimately grounded in the SCREENSHOT, so validating it
+                    // against document excerpts is a category error that can
+                    // REPLACE a correct answer with "I could not find that in
+                    // the retrieved sections of the document." Same line as
+                    // declineYieldsToAttachedImages (refusalPolicy.ts).
+                    && !(imagePaths?.length)
                     && this.currentGenerationId === generationId) {
                     const docQuestion = (answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
                     if (docQuestion) {

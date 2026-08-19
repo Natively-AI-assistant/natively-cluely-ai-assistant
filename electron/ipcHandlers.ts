@@ -1326,8 +1326,15 @@ export function initializeIpcHandlers(appState: AppState): void {
                 let bareCode = false;
                 if (isBareCodeRequest(v3Question) || isCodingContinuation(v3Question)) {
                   try {
-                    const lastAnywhere = (appState.getIntelligenceManager?.() as any)
-                      ?.getSessionTracker?.()?.getLastAssistantMessage?.();
+                    // IntelligenceManager exposes getLastAssistantMessage()
+                    // directly (it owns a PRIVATE SessionTracker and has no
+                    // getSessionTracker accessor) — the old chained form was a
+                    // phantom method that `as any` + optional chaining made
+                    // silently return undefined, so this whole guard was dead
+                    // code and every continuation was answered context-free.
+                    // No surface argument: "anywhere" is the point, so an
+                    // overlay answer can ground a chat follow-up.
+                    const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
                     bareCode = isBareCodeRequest(v3Question);
                     if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
                         && (bareCode || looksLikeCodingAnswer(lastAnywhere))) {
@@ -2130,8 +2137,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // personaBase guard above so the two chat paths cannot drift.
         if (isBareCodeRequest(message) || isCodingContinuation(message)) {
           try {
-            const lastAnywhere = (appState.getIntelligenceManager?.() as any)
-              ?.getSessionTracker?.()?.getLastAssistantMessage?.();
+            // Phantom-method fix (code review 2026-08-19): IntelligenceManager
+            // exposes getLastAssistantMessage() directly; getSessionTracker()
+            // does not exist, so the old chained form silently returned
+            // undefined and this guard never ran. See the V3 twin above.
+            const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
             const bare = isBareCodeRequest(message);
             if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
                 && (bare || looksLikeCodingAnswer(lastAnywhere))) {
@@ -2140,6 +2150,19 @@ export function initializeIpcHandlers(appState: AppState): void {
                 assistantAnswer: lastAnywhere,
               });
               codingFollowupResolved = true;
+              // Promote to the coding path (code review 2026-08-19). EVERY
+              // consumer of codingPriorProblemBlock sits inside
+              // `if (isCodingChat)` below, and a bare "code?" / "now optimize
+              // it" is planned follow_up_answer — so without this promotion
+              // the block was built and then silently dropped, making this
+              // guard a no-op for exactly the case it exists to fix. Mirrors
+              // the flag-gated recall block's promotion so the two cannot
+              // drift, and matches the V3 twin (which forces its coding task
+              // via `|| !!priorProblem`).
+              if (!isCodingChat) {
+                isCodingChat = true;
+                iTrace.noteContext({ source: 'conversation_history', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'coding_followup_prior_problem' });
+              }
               // Bare requests force code_only; richer continuations keep the
               // format the detector already derived (complexity_only / dry_run
               // / null for "make it iterative").
@@ -3371,6 +3394,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             // continuation-only formats stay suppressed and a "what's the
             // complexity" follow-up would be re-answered in full.
             priorCodingTurnExists: codingFollowupResolved,
+            // Restores the promotion the old `codingTask: isCodingChat`
+            // argument carried (code review 2026-08-19). A bare "code?" /
+            // "now optimize it" is PLANNED follow_up_answer, so answerType
+            // alone yields codingTask:false and promptSystemV2's
+            // coding_contract gate drops the block from the SYSTEM prompt
+            // even though the user-channel contract is attached below.
+            codingTurnPromoted: isCodingChat,
           }));
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
@@ -8301,7 +8331,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('local-whisper-get-models', async () => {
     try {
       const { getAvailableModels } = require('./audio/whisper/modelManager');
-      const models = getAvailableModels();
+      const { getLocalModelLanguageSupport } = require('./audio/whisper/modelLanguageSupport');
+      // languageSupport: which RECOGNITION_LANGUAGES keys each model accepts
+      // (verified against each model's official docs — see
+      // modelLanguageSupport.ts). The Settings UI uses it to restrict the
+      // Language options to the active model's set and to grey out the
+      // Language / Accent-Region selects when the model can't change them.
+      const models = getAvailableModels().map((m: any) => ({
+        ...m,
+        languageSupport: getLocalModelLanguageSupport(m.id),
+      }));
       const activeModelId = SettingsManager.getInstance().get('localWhisperModel') ?? '';
       return { models, activeModelId };
     } catch (e: any) {

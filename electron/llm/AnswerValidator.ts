@@ -797,8 +797,15 @@ const validateImplAnswer = (answer: string): AnswerValidationResult => {
     /\bimport\s+java\.|\bpublic\s+(?:static\s+)?(?:class|int|void|boolean|String)\b|#include\s*<|\bstd::|\busing\s+namespace\b|\bfunc\s+\w+\s*\(|\bfn\s+\w+\s*\(|\bpackage\s+main\b/.test(codeBlock.code);
   const isJsx = !looksStaticallyTypedNonJs && (
     /\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=/.test(codeBlock.code)
-    // A real element: `<Foo />`, `<Foo>` followed later by `</Foo>`, or `</Foo>`.
-    || /<[A-Z][A-Za-z0-9]*\s*\/>|<\/[A-Z][A-Za-z0-9]*>/.test(codeBlock.code)
+    // A real element: `<Foo />`, `<Foo attr={x} />`, or a closing `</Foo>`.
+    // Attributes are allowed between the name and `/>` (code review
+    // 2026-08-19): requiring `/>` to follow the name immediately missed every
+    // component that takes props — `<Clock time={now} />`, `<Button onClick={fn} />`
+    // — so an attribute-bearing JSX answer mis-fenced as ```python kept the
+    // wrong fence, which is the exact bug this repair exists for. The inner
+    // `[^<>]*` cannot span a tag boundary, so Java/C++ generics
+    // (`Stack<Character>`, `Map<Integer, Integer>`) stay excluded.
+    || /<[A-Z][A-Za-z0-9]*(?:\s[^<>]*?)?\s*\/>|<\/[A-Z][A-Za-z0-9]*>/.test(codeBlock.code)
   );
   // Note: codeBlock.language defaults to 'python' when the fence had no tag
   // (see extractFirstCodeBlock). Treat empty/undefined as "no tag" so an

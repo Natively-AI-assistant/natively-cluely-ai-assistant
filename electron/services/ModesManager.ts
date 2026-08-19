@@ -1521,6 +1521,12 @@ export class ModesManager {
     }
 
     public buildRetrievedActiveModeContextBlock(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, retrievalOptions?: ModeRetrievalOptions): string {
+        // Fail-closed on an empty query (HDFC leak, 2026-08-18): reference
+        // admission is pool-relative, so a queryless retrieval returns
+        // whichever chunk scores best against nothing — content the user never
+        // asked about. Every legitimate caller derives a user-originated query
+        // (retrievalQueryPolicy.ts) before reaching this choke point.
+        if (!query?.trim()) return '';
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
 
@@ -1570,6 +1576,11 @@ export class ModesManager {
      * this passthrough exists to prevent a future caller from reintroducing.
      */
     public async retrieveHybridRaw(mode: Mode, files: ModeReferenceFile[], options: RetrieveOptions): Promise<HybridContext> {
+        // Fail-closed on an empty query — same choke-point rule as the
+        // buildRetrievedActiveModeContextBlock* twins; see retrievalQueryPolicy.ts.
+        if (!options?.query?.trim()) {
+            return { formattedContext: '', chunks: [], usedFallback: true, usedHybrid: false };
+        }
         return this.modeContextRetriever.retrieveHybrid(mode, files, options);
     }
 
@@ -1581,6 +1592,9 @@ export class ModesManager {
      * never breaks. Telemetry distinguishes hybrid hits from lexical fallback.
      */
     public async buildRetrievedActiveModeContextBlockHybrid(query: string, transcript?: string, tokenBudget?: number, answerType?: AnswerType, excludeCustomContext?: boolean, pinnedModeId?: string, allowRerank?: boolean, retrievalOptions?: ModeRetrievalOptions): Promise<string> {
+        // Fail-closed on an empty query — same choke-point rule (and reason)
+        // as the sync twin above; see retrievalQueryPolicy.ts.
+        if (!query?.trim()) return '';
         const mode = this.resolveMode(pinnedModeId);
         if (!mode) return '';
         const files = this.getReferenceFiles(mode.id);
