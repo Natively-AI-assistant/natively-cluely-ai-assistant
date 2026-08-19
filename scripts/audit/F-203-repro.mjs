@@ -28,7 +28,7 @@
 import Module from 'node:module';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../dist-electron/electron/audio');
@@ -61,7 +61,7 @@ const fakeClient = {
   },
 };
 
-const { GoogleSTT } = await import(path.join(distRoot, 'GoogleSTT.js'));
+const { GoogleSTT } = await import(pathToFileURL(path.join(distRoot, 'GoogleSTT.js')).href);
 const stt = new GoogleSTT('audit');
 stt.on('error', () => {});
 stt.client = fakeClient; // swap transport, keep all real logic

@@ -80,7 +80,10 @@ check('v27 succeeding still lets v28 run       ', happy.after, 28);
 // Part 2 — anchor to the real source: v27's catch must not fall through.
 // ---------------------------------------------------------------------------
 const src = fs.readFileSync(SRC, 'utf8');
-const v27Idx = src.indexOf("v27 page-count repair failed");
+// Purpose-anchored, not version-pinned: the repair was renumbered once already
+// (v27 -> v28 when main's usage_outbox took 27) and a pinned number makes this
+// harness false-fail on correct code — the §18.1 pinned-identifier trap.
+const v27Idx = src.indexOf("page-count repair failed");
 if (v27Idx < 0) { console.error('[R-05] FAIL: v27 catch log not found in source'); process.exit(1); }
 // The catch block runs from the log line to its closing brace.
 const catchTail = src.slice(v27Idx, src.indexOf('\n        }', v27Idx));

@@ -13,10 +13,10 @@
 // profile_jd then profile_resume and never reference_files, and
 // seedCandidateBackground is switched ON for a coding question.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const { planTurn } = await import(path.resolve(__dirname, '../../dist-electron/electron/llm/TurnPlanner.js'));
+const { planTurn } = await import(pathToFileURL(path.resolve(__dirname, '../../dist-electron/electron/llm/TurnPlanner.js')).href);
 
 const availability = {
   hasReferenceFiles: true, hasProfileFacts: true, hasJobDescription: true,

@@ -11,11 +11,11 @@
 //
 // Drives the REAL queryOkfCards from the built bundle.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.resolve(__dirname, '../../dist-electron/electron/services/knowledge/OkfRetriever.js');
-const { queryOkfCards } = await import(dist);
+const { queryOkfCards } = await import(pathToFileURL(dist).href);
 
 const pack = {
   packVersion: 1,

@@ -13,11 +13,11 @@
 // Bug (F-302): useful flips on the whitespace token → the run is governed by
 // the longer inter-token stall guard and the fallback is skipped → exit 1.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../dist-electron/electron/llm');
-const { raceStreamWithDeadline } = await import(path.join(distRoot, 'liveDeadlines.js'));
+const { raceStreamWithDeadline } = await import(pathToFileURL(path.join(distRoot, 'liveDeadlines.js')).href);
 
 async function* whitespaceThenHang() {
   yield '\n\n';

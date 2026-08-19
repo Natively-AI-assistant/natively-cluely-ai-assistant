@@ -14,11 +14,11 @@
 // Drives the REAL groundingProfileFor via planTurn from the built bundle.
 // Expected (correct): a seminar contract yields the strict profile → exit 0.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distLlm = path.resolve(__dirname, '../../dist-electron/electron/llm');
-const { planTurn } = await import(path.join(distLlm, 'TurnPlanner.js'));
+const { planTurn } = await import(pathToFileURL(path.join(distLlm, 'TurnPlanner.js')).href);
 
 const availability = {
   hasReferenceFiles: true, hasProfileFacts: false, hasJobDescription: false,

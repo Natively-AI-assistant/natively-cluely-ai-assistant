@@ -23,7 +23,7 @@
 // Run: node scripts/audit/F-106-repro.mjs   (requires npm run build:electron)
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../dist-electron/electron/audio');
@@ -59,7 +59,7 @@ Module._load = function patched(request) {
   return origLoad.apply(this, arguments);
 };
 
-const { MicrophoneCapture } = await import(path.join(distRoot, 'MicrophoneCapture.js'));
+const { MicrophoneCapture } = await import(pathToFileURL(path.join(distRoot, 'MicrophoneCapture.js')).href);
 
 const cap = new MicrophoneCapture('audit-test-mic');
 cap.on('error', () => {}); // expected — keep the emitter from throwing

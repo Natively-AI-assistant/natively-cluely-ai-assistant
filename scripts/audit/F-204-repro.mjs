@@ -20,7 +20,7 @@
 // reconnect → exit 0. Bug (F-204): silently skipped → exit 1.
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../dist-electron/electron/audio');
@@ -34,7 +34,7 @@ Module._load = function patched(request) {
   return origLoad.apply(this, arguments);
 };
 
-const { NativelyProSTT } = await import(path.join(distRoot, 'NativelyProSTT.js'));
+const { NativelyProSTT } = await import(pathToFileURL(path.join(distRoot, 'NativelyProSTT.js')).href);
 const stt = new NativelyProSTT('audit-key', 'system');
 stt.on('error', () => {});
 

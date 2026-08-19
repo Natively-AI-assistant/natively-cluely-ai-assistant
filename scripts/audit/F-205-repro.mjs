@@ -20,7 +20,7 @@
 import Module from 'node:module';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../dist-electron/electron/audio');
@@ -34,7 +34,7 @@ Module._load = function patched(request) {
   return origLoad.apply(this, arguments);
 };
 
-const { LocalWhisperSTT } = await import(path.join(distRoot, 'LocalWhisperSTT.js'));
+const { LocalWhisperSTT } = await import(pathToFileURL(path.join(distRoot, 'LocalWhisperSTT.js')).href);
 
 // Shorten the real bound (readonly is a TS-only annotation).
 const BOUND = 400;

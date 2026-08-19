@@ -1513,7 +1513,7 @@ export class DatabaseManager {
                       AND page_count IS NOT NULL
                       AND content LIKE '%[Page %]%'
                 `).run();
-                console.log(`[DatabaseManager] v27 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
+                console.log(`[DatabaseManager] v28 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
                 this.db.pragma('user_version = 28');
             } catch (e) {
                 // R-05: this block deliberately swallows rather than re-throwing so
@@ -1525,13 +1525,13 @@ export class DatabaseManager {
                 // false claim, and it was this commit's own v28 block that made it
                 // false. Re-reading the pragma would not help: 27 < 29 is still true.
                 // A swallowed failure must STOP the chain so the version stays put.
-                console.error('[DatabaseManager] v27 page-count repair failed (leaving version at 27 to retry next launch); '
+                console.error('[DatabaseManager] v28 page-count repair failed (leaving version at 27 to retry next launch); '
                     + 'skipping all later migrations this launch so the version is not stamped past it:', e);
                 return;
             }
         }
 
-        // Version 27 → 28: rebuild the vec0 tables with distance_metric=cosine (F-410).
+        // Version 28 → 29: rebuild the vec0 tables with distance_metric=cosine (F-410).
         //
         // The tables were created without a distance metric, and sqlite-vec
         // defaults to L2. VectorStore then read that column as if it were a

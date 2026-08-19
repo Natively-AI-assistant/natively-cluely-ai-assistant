@@ -16,11 +16,11 @@
 // Expected (correct): a phone stream cannot take over a live desktop bubble.
 // Bug (F-303): it adopts it and truncates the desktop answer → exit 1.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { resolveChatStreamToken, resolveChatStreamDone } =
-  await import(path.resolve(__dirname, '../../src/lib/chatStreamGuard.mjs'));
+  await import(pathToFileURL(path.resolve(__dirname, '../../src/lib/chatStreamGuard.mjs')).href);
 
 let bad = false;
 const show = (label, o) => console.log(`  ${label}:`, JSON.stringify(o));
