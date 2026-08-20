@@ -219,12 +219,25 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
       'the EvidenceResolver block must resolve the pinned mode row');
   });
 
-  test('a deadline replaces an unseen sub-threshold provider fragment with the safe fallback', () => {
+  test('a deadline replaces an unseen sub-threshold FRAGMENT but keeps a COMPLETE short answer', () => {
     // `raceStreamWithDeadline` considers a response useful only at the same
     // safe-prefix threshold. A short provider fragment that then times out must
     // not bypass the fallback merely because fullAnswer is non-empty.
-    assert.match(body, /if \(fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS\) \{\s*const safe =/s,
-      'the timeout fallback must replace an unseen short provider fragment');
+    //
+    // CONTRACT REFINED 2026-08-19: length alone cannot tell a fragment ("Sure,")
+    // from a COMPLETE short answer ("Yes — lead with the AWS migration."). Both
+    // are sub-threshold; only the first is a non-answer. Reproduced through the
+    // real app: a provider that delivered a complete 34-char answer and then held
+    // the stream open had it DISCARDED after 32s and replaced. The length test is
+    // now ANDed with isCompleteShortAnswer (terminal mark AND >=5 words), so the
+    // fragment case this test was written for still falls through to the fallback.
+    assert.match(body, /fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS/,
+      'the sub-threshold length test must remain — it is what makes the fallback reachable');
+    assert.match(body, /&&\s*!isCompleteShortAnswer\(fullAnswer\)\)\s*\{\s*const safe =/s,
+      'a COMPLETE short answer must be exempt from the timeout substitution');
+    // Negative pin: the exemption must NARROW the fallback, never replace it.
+    assert.doesNotMatch(body, /if \(!isCompleteShortAnswer\(fullAnswer\)\)\s*\{\s*const safe =/s,
+      'the length test must not be dropped in favour of the completeness check alone');
   });
 
   test('a post-deadline exception is not mistaken for supersession', () => {
