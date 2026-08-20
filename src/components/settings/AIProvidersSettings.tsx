@@ -1031,7 +1031,7 @@ export const AipSwitch: React.FC<AipSwitchProps> = ({
 
 /** Per-provider brand hues for the monogram tile. */
 /**
- * The five cloud providers, in render order. One table drives all five cards — they
+ * The cloud providers, in render order. One table drives all cards — they
  * were 28 near-identical props copy-pasted five times, so a new prop meant five edits
  * and a missed one was invisible.
  */
@@ -1042,6 +1042,7 @@ export const CLOUD_PROVIDERS = [
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
     // Text-only; intentionally NOT part of the screenshot/vision fallback chain.
     { id: 'deepseek' as const, name: 'DeepSeek', placeholder: 'sk-...',     url: 'https://platform.deepseek.com/api_keys' },
+    { id: 'nvidia_nim' as const, name: 'NVIDIA NIM', placeholder: 'nvapi-...', url: 'https://build.nvidia.com/settings/api-keys' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
@@ -1051,6 +1052,7 @@ export const AIP_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }
     openai:   { mono: 'OA', brand: '#10A37F' },
     claude:   { mono: 'CL', brand: '#D97757' },
     deepseek: { mono: 'DS', brand: '#4D6BFE' },
+    nvidia_nim: { mono: 'NI', brand: '#76B900' },
     codex:    { mono: 'CX', brand: '#10A37F' },
     litellm:  { mono: 'LL', brand: '#8B5CF6' },
     ollama:   { mono: 'OL', brand: '#9CA3AF' },
@@ -1857,6 +1859,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [openaiApiKey, setOpenaiApiKey] = useState('');
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
+    const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
 
     // Binds the five key fields to the CLOUD_PROVIDERS table. The useState calls stay
     // separate (they are read individually elsewhere); this is only the lookup the
@@ -1867,6 +1870,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         openai: [openaiApiKey, setOpenaiApiKey],
         claude: [claudeApiKey, setClaudeApiKey],
         deepseek: [deepseekApiKey, setDeepseekApiKey],
+        nvidia_nim: [nvidiaNimApiKey, setNvidiaNimApiKey],
     };
 
     // --- LiteLLM proxy (OpenAI-compatible gateway: baseURL + optional virtual key) ---
@@ -2065,6 +2069,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         openai: creds.hasOpenaiKey,
                         claude: creds.hasClaudeKey,
                         deepseek: creds.hasDeepseekKey || false,
+                        nvidia_nim: creds.hasNvidiaNimKey || false,
                         litellm: creds.hasLitellmBaseURL || false,
                         natively: creds.hasNativelyKey || false
                     });
@@ -2080,6 +2085,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     if (creds.openaiPreferredModel) pm.openai = creds.openaiPreferredModel;
                     if (creds.claudePreferredModel) pm.claude = creds.claudePreferredModel;
                     if (creds.deepseekPreferredModel) pm.deepseek = creds.deepseekPreferredModel;
+                    if (creds.nvidia_nimPreferredModel) pm.nvidia_nim = creds.nvidia_nimPreferredModel;
                     // Already prefixed on disk (`litellm/<model>`), which is the id the
                     // LiteLLM model list renders — no re-prefixing here or the star lands
                     // on no row at all.
@@ -2815,6 +2821,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey(key);
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey(key);
+            if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey(key);
 
             if (result && result.success) {
                 setSavedStatus(prev => ({ ...prev, [provider]: true }));
@@ -2904,6 +2911,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (provider === 'claude') result = await window.electronAPI.setClaudeApiKey('');
             // @ts-ignore
             if (provider === 'deepseek') result = await window.electronAPI.setDeepseekApiKey('');
+            if (provider === 'nvidia_nim') result = await window.electronAPI.setNvidiaNimApiKey('');
 
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));

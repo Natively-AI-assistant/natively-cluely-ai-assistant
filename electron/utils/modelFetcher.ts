@@ -10,7 +10,7 @@ export interface ProviderModel {
     label: string;
 }
 
-type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek';
+type Provider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim';
 
 /**
  * Fetch available models from a provider's API.
@@ -31,9 +31,25 @@ export async function fetchProviderModels(
             return fetchGeminiModels(apiKey);
         case 'deepseek':
             return fetchDeepSeekModels(apiKey);
+        case 'nvidia_nim':
+            return fetchNvidiaNimModels(apiKey);
         default:
             throw new Error(`Unknown provider: ${provider}`);
     }
+}
+
+async function fetchNvidiaNimModels(apiKey: string): Promise<ProviderModel[]> {
+    const response = await axios.get('https://integrate.api.nvidia.com/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000,
+    });
+    // NVIDIA's catalogue is authoritative. Keep every model returned by the
+    // platform so users can choose newly published NIM models without waiting
+    // for an app release. Non-chat entries may be rejected by chat/completions,
+    // but they remain visible exactly as NVIDIA reports them.
+    return (response.data?.data || [])
+        .filter((m: any) => m?.id)
+        .map((m: any) => ({ id: `nvidia_nim/${m.id}`, label: m.id }))
+        .sort((a: ProviderModel, b: ProviderModel) => a.label.localeCompare(b.label));
 }
 
 // ─── OpenAI ──────────────────────────────────────────────────────────────────

@@ -123,6 +123,7 @@ const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
 const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
 // LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
 // Resolution order per request: (1) user manual override from Settings,
@@ -326,6 +327,7 @@ export class LLMHelper {
   // DeepSeek is OpenAI-compatible; reuse the OpenAI SDK with a custom baseURL.
   // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
   private _deepseekClient: OpenAI | null = null
+  private _nvidiaNimClient: OpenAI | null = null
   // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
@@ -341,6 +343,8 @@ export class LLMHelper {
   private set claudeClient(v: Anthropic | null) { this._claudeClient = v }
   private get deepseekClient(): OpenAI | null { return this.isProviderDisabled('deepseek') ? null : this._deepseekClient }
   private set deepseekClient(v: OpenAI | null) { this._deepseekClient = v }
+  private get nvidiaNimClient(): OpenAI | null { return this.isProviderDisabled('nvidia_nim') ? null : this._nvidiaNimClient }
+  private set nvidiaNimClient(v: OpenAI | null) { this._nvidiaNimClient = v }
   private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
   private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
 
@@ -381,6 +385,7 @@ export class LLMHelper {
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
+  private nvidiaNimApiKey: string | null = null
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -872,7 +877,7 @@ export class LLMHelper {
     console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, omitting from context`);
   }
 
-  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string) {
+  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string, nvidiaNimApiKey?: string) {
     this.useOllama = useOllama
 
     // Initialize rate limiters
@@ -911,6 +916,7 @@ export class LLMHelper {
       this.deepseekClient = new OpenAI({ apiKey: deepseekApiKey, baseURL: DEEPSEEK_BASE_URL })
       console.log(`[LLMHelper] DeepSeek client initialized with model: ${DEEPSEEK_MODEL}`)
     }
+    if (nvidiaNimApiKey) this.setNvidiaNimApiKey(nvidiaNimApiKey)
 
     if (useOllama) {
       this.ollamaUrl = ollamaUrl || "http://127.0.0.1:11434"
@@ -1032,6 +1038,15 @@ export class LLMHelper {
     this.deepseekPermanentlyDead = false;
     this.deepseekSkipWarned = false;
     console.log("[LLMHelper] DeepSeek API Key updated.");
+  }
+
+  public setNvidiaNimApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    this.nvidiaNimApiKey = trimmed || null;
+    this.nvidiaNimClient = trimmed ? new OpenAI({ apiKey: trimmed, baseURL: NVIDIA_NIM_BASE_URL }) : null;
+    this.textHealth.delete('nvidia_nim');
+    this.visionHealth.delete('nvidia_nim');
+    console.log(`[LLMHelper] NVIDIA NIM API Key ${trimmed ? 'updated' : 'cleared'}.`);
   }
 
   /**
@@ -1317,6 +1332,8 @@ export class LLMHelper {
   private isLiteLLMModel(modelId: string): boolean {
     return !!modelId && modelId.startsWith("litellm/");
   }
+
+  private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
 
   private getDeepseekMaxOutput(_modelId: string): number {
     return DEEPSEEK_MAX_OUTPUT_TOKENS;
@@ -3150,6 +3167,9 @@ let isMultimodal = !!(imagePaths?.length);
         // so pass images through when present and let the upstream model handle it.
         return await this.generateWithLiteLLM(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+        return await this.generateWithNvidiaNim(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
           return await this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths, openaiSystemPrompt);
@@ -3877,6 +3897,23 @@ let isMultimodal = !!(imagePaths?.length);
     );
 
     return response.choices[0]?.message?.content || "";
+  }
+
+  private async generateWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
+    this.assertOutboundScopes('nvidia_nim', userMessage, imagePaths);
+    await this.rateLimiters.nvidia_nim.acquire();
+    const model = this.currentModelId.replace('nvidia_nim/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: 'text', text: userMessage }];
+      for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
+      messages.push({ role: 'user', content });
+    } else messages.push({ role: 'user', content: userMessage });
+    const response = await this.withTimeout(this.withRetry(() => this.nvidiaNimClient!.chat.completions.create({ model, messages, max_tokens: 8192 })), 60000, `NVIDIA NIM (${model})`);
+    return response.choices[0]?.message?.content || '';
   }
 
   // The handler for cURL requests
@@ -6859,6 +6896,12 @@ let isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+      const nimSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      yield* this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      return;
+    }
+
     // LiteLLM (OpenAI-compatible proxy). The proxy decides vision support, so
     // images are forwarded through when present.
     if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
@@ -7814,6 +7857,24 @@ let isMultimodal = !!(imagePaths?.length);
     } finally {
       if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
     }
+  }
+
+  private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
+    this.assertOutboundScopes('nvidia_nim', userMessage, imagePaths);
+    await this.rateLimiters.nvidia_nim.acquire();
+    const model = this.currentModelId.replace('nvidia_nim/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: 'text', text: userMessage }];
+      for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
+      messages.push({ role: 'user', content });
+    } else messages.push({ role: 'user', content: userMessage });
+    const stream = await this.nvidiaNimClient.chat.completions.create({ model, messages, stream: true, max_tokens: 8192 }, { signal: abortSignal });
+    try { for await (const chunk of stream) { if (abortSignal?.aborted) return; const content = chunk.choices[0]?.delta?.content; if (content) yield content; } }
+    finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
 
   /**

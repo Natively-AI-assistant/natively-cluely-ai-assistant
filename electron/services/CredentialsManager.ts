@@ -59,7 +59,7 @@ export interface CurlProvider {
  * and setter build the key by concatenation, so adding a name here without the
  * field would silently read and write `undefined`.
  */
-export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm';
+export type PreferredModelProvider = 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm';
 
 export interface StoredCredentials {
     geminiApiKey?: string;
@@ -67,6 +67,7 @@ export interface StoredCredentials {
     openaiApiKey?: string;
     claudeApiKey?: string;
     deepseekApiKey?: string;
+    nvidiaNimApiKey?: string;
     litellmApiKey?: string;
     litellmBaseURL?: string;
     /** Manual output ceiling for LiteLLM-proxied models. Unset → Auto (per-model via /model/info). */
@@ -77,7 +78,8 @@ export interface StoredCredentials {
     defaultModel?: string;
     nativelyApiKey?: string;
     // STT Provider settings
-    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper';
+    sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper';
+    nvidiaNimSttModel?: string;
     groqSttApiKey?: string;
     groqSttModel?: string;
     openAiSttApiKey?: string;
@@ -101,6 +103,7 @@ export interface StoredCredentials {
     openaiPreferredModel?: string;
     claudePreferredModel?: string;
     deepseekPreferredModel?: string;
+    nvidia_nimPreferredModel?: string;
     /**
      * The LiteLLM model the user promoted to this provider's default, stored
      * PREFIXED (`litellm/<model>`) so it is the same id the picker, the
@@ -466,6 +469,8 @@ export class CredentialsManager {
         return this.credentials.deepseekApiKey;
     }
 
+    public getNvidiaNimApiKey(): string | undefined { return this.credentials.nvidiaNimApiKey; }
+
     /** Persisted loopback-scoped companion-extension token (stable across restarts). */
     public getPhoneMirrorToken(): string | undefined {
         return this.credentials.phoneMirrorToken;
@@ -520,7 +525,7 @@ export class CredentialsManager {
         return this.credentials.customProviders || [];
     }
 
-    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper' {
+    public getSttProvider(): 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper' {
         const provider = this.credentials.sttProvider || 'none';
         // Self-heal: if provider is 'none' but a Natively key exists, the user is in a
         // broken state (key cleared then re-entered via a path that skipped auto-promote,
@@ -542,6 +547,13 @@ export class CredentialsManager {
             return 'natively';
         }
         return provider;
+    }
+
+    public getNvidiaNimSttModel(): string { return this.credentials.nvidiaNimSttModel || 'nemotron-asr-streaming'; }
+    public setNvidiaNimSttModel(model: string): boolean {
+        if (this.refuseWriteWhileDegraded('set NVIDIA NIM STT model')) return false;
+        this.credentials.nvidiaNimSttModel = model || 'nemotron-asr-streaming';
+        return this.saveCredentials();
     }
 
     public getDeepgramApiKey(): string | undefined {
@@ -755,6 +767,14 @@ export class CredentialsManager {
         console.log('[CredentialsManager] DeepSeek API Key updated');
     }
 
+    public setNvidiaNimApiKey(key: string): void {
+        if (this.refuseWriteWhileDegraded('set NVIDIA NIM api key')) return;
+        const trimmed = (key || '').trim();
+        this.credentials.nvidiaNimApiKey = trimmed || undefined;
+        this.saveCredentials();
+        console.log('[CredentialsManager] NVIDIA NIM API Key updated');
+    }
+
     /**
      * Persist the loopback-scoped companion-extension token. Pass an empty string
      * to clear it (next start mints a fresh one). Only the PhoneMirrorService
@@ -825,7 +845,7 @@ export class CredentialsManager {
         return persisted;
     }
 
-    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'): boolean {
+    public setSttProvider(provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'): boolean {
         if (this.refuseWriteWhileDegraded('set stt provider')) return false;
         this.credentials.sttProvider = provider;
         const persisted = this.saveCredentials();
@@ -962,7 +982,7 @@ export class CredentialsManager {
      * renderer state — the masked pre-population regression from #318 was
      * caused by exactly that pattern. This getter is test-time only.
      */
-    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox'): string | undefined {
+    public getStoredSttKeyForProvider(provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim'): string | undefined {
         switch (provider) {
             case 'groq':       return this.credentials.groqSttApiKey;
             case 'openai':     return this.credentials.openAiSttApiKey;
@@ -971,6 +991,7 @@ export class CredentialsManager {
             case 'azure':      return this.credentials.azureApiKey;
             case 'ibmwatson':  return this.credentials.ibmWatsonApiKey;
             case 'soniox':     return this.credentials.sonioxApiKey;
+            case 'nvidia_nim': return this.credentials.nvidiaNimApiKey;
         }
     }
 
