@@ -3246,7 +3246,14 @@ export class DatabaseManager {
                     const ph = slice.map(() => '?').join(',');
                     try {
                         this.db!.prepare(`DELETE FROM ${table} WHERE ${column} IN (${ph})`).run(...slice);
-                    } catch (_) { /* dim table may not exist */ }
+                    } catch (e: any) {
+                        // R-20: getExistingVecDims() returns KNOWN_DIMS ∪ discovered, so on a
+                        // normal install most dims have no table and "no such table" is the
+                        // expected, harmless outcome. Swallowing EVERYTHING else too meant a
+                        // real reap failure was indistinguishable from that — the same silence
+                        // that let R-01 hide for a full campaign. Narrow it.
+                        if (!/no such table/i.test(String(e?.message ?? e))) throw e;
+                    }
                 }
             };
             for (const dim of dims) {
@@ -3254,7 +3261,14 @@ export class DatabaseManager {
                 if (summaryIds.length) deleteIn(`vec_summaries_${dim}`, 'summary_id', summaryIds);
             }
         } catch (e) {
-            console.warn(`[DatabaseManager] deleteVectorsForMeeting(${meetingId}) failed (non-fatal):`, e);
+            // R-20: R-12 wrapped this and the parent DELETE in one transaction so the
+            // meeting could not survive a failed reap. Swallowing here defeated that
+            // in the only direction that matters: the transaction saw no error and
+            // committed the DELETE anyway, leaving the meeting gone and its vectors
+            // orphaned in the vec0 tables — where they keep consuming KNN top-K slots
+            // that searchSimilarNative can no longer resolve back to `chunks`.
+            console.error(`[DatabaseManager] deleteVectorsForMeeting(${meetingId}) failed; aborting the delete:`, e);
+            throw e;
         }
     }
 
