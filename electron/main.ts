@@ -1222,6 +1222,7 @@ import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
 import { NativelyProSTT } from "./audio/NativelyProSTT"
+import { NvidiaNimStreamingSTT } from "./audio/NvidiaNimStreamingSTT"
 import { punctuationSourceFor } from "./llm/punctuationProvenance"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
@@ -1229,7 +1230,7 @@ import { DatabaseManager } from "./db/DatabaseManager"
 import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
-type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT) & {
+type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT) & {
   finalize?: () => void;
   setAudioChannelCount?: (count: number) => void;
   notifySpeechEnded?: () => void;
@@ -3201,6 +3202,16 @@ export class AppState {
         stt = new OpenAIStreamingSTT(apiKey, baseUrl);
       } else {
         console.warn(`[Main] No API key for OpenAI STT, falling back to GoogleSTT`);
+        stt = new GoogleSTT(speaker);
+      }
+    } else if (sttProvider === 'nvidia_nim') {
+      const key = CredentialsManager.getInstance().getNvidiaNimApiKey();
+      const model = CredentialsManager.getInstance().getNvidiaNimSttModel();
+      if (key) {
+        console.log(`[Main] Using NvidiaNimStreamingSTT for ${speaker} (${model})`);
+        stt = new NvidiaNimStreamingSTT(key, model);
+      } else {
+        console.warn(`[Main] No NVIDIA NIM API key for ${speaker}, falling back to GoogleSTT`);
         stt = new GoogleSTT(speaker);
       }
     } else if (sttProvider === 'groq' || sttProvider === 'azure' || sttProvider === 'ibmwatson') {
