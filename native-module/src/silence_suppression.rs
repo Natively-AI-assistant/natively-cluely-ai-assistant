@@ -91,14 +91,21 @@ impl SilenceSuppressionConfig {
     /// hardware DSP (like macOS Apple Silicon) sound "unnatural" to strict models (#128).
     pub fn for_microphone() -> Self {
         Self {
-            speech_threshold_rms: 100.0,
+            // Keep the RMS gate conservative, but do not run WebRTC VAD on
+            // microphone input. On Windows, normal laptop/headset speech can
+            // be rejected by the VAD after the device DSP has already reduced
+            // its level, producing only zero keepalives and the misleading
+            // "Microphone Is Silent" warning. STT providers perform their own
+            // speech detection; the adaptive RMS gate still suppresses a
+            // genuinely idle microphone.
+            speech_threshold_rms: 50.0,
             speech_hangover: Duration::from_millis(500), // increased from 150ms to prevent clipping trailing consonants (s, t, etc)
             silence_keepalive_interval: Duration::from_millis(100),
             adaptive_multiplier: 3.0,
             adaptive_min_floor: 20.0,
             ema_alpha: 0.02,
             native_sample_rate: 48000,
-            use_vad: true,
+            use_vad: false,
             vad_mode: VadMode::Quality,
         }
     }

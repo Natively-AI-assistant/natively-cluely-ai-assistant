@@ -3113,6 +3113,41 @@ export class AppState {
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
+  // A short debounce lets the STT provider deliver its final packet after the
+  // native system-audio VAD reports speech_ended. Without this trigger,
+  // transcripts were displayed but automatic interview answers never started.
+  private autoAnswerTimer: NodeJS.Timeout | null = null;
+
+  private scheduleAutoAnswerAfterInterviewerSpeech(): void {
+    if (!this.isMeetingActive) return;
+    if (this.autoAnswerTimer) clearTimeout(this.autoAnswerTimer);
+
+    this.autoAnswerTimer = setTimeout(() => {
+      this.autoAnswerTimer = null;
+      if (!this.isMeetingActive) return;
+
+      const lastQuestion = this.intelligenceManager.getLastInterviewerTurn()?.trim();
+      if (!lastQuestion) return;
+
+      // The planner still decides whether the utterance is answerable. A high
+      // STT confidence here reflects the native speech boundary, not a claim
+      // that every interviewer sentence is a question.
+      void this.intelligenceManager.handleSuggestionTrigger({
+        context: this.intelligenceManager.getFormattedContext(120),
+        lastQuestion,
+        confidence: 0.9,
+      }).catch((error) => {
+        console.warn('[Main] Automatic interviewer answer failed:', error);
+      });
+    }, 250);
+  }
+
+  private cancelAutoAnswer(): void {
+    if (this.autoAnswerTimer) {
+      clearTimeout(this.autoAnswerTimer);
+      this.autoAnswerTimer = null;
+    }
+  }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
@@ -3700,6 +3735,7 @@ export class AppState {
     capture.on('speech_ended', () => {
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.notifySpeechEnded?.();
+        this.scheduleAutoAnswerAfterInterviewerSpeech();
       }
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
@@ -5715,6 +5751,7 @@ export class AppState {
 
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
+    this.cancelAutoAnswer();
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown
@@ -6030,6 +6067,8 @@ export class AppState {
       await this._pendingTeardown?.catch((): void => {});
       return;
     }
+
+    this.cancelAutoAnswer();
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
