@@ -2,7 +2,7 @@
 // deliver a SHORT answer immediately, then hold the stream OPEN past the
 // live-path local first-useful deadline (LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS = 30s).
 import http from 'node:http';
-const SHORT = 'Yes — lead with the AWS migration.';   // 34 chars, well under 160
+const SHORT = process.env.FAKE_TEXT || 'Yes — lead with the AWS migration.';   // complete, 34 chars, under 160
 const HOLD_MS = Number(process.env.FAKE_HOLD_MS || 35000);
 const srv = http.createServer(async (req, res) => {
   if (req.url.startsWith('/api/tags')) {

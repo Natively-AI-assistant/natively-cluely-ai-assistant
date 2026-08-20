@@ -54,6 +54,34 @@ export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 7000;
  * the inter-token stall guard (unchanged) still protects against a mid-stream hang.
  */
 export const LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS = 30000;
+
+/**
+ * Is `text` a COMPLETE short answer, as opposed to a truncated fragment?
+ *
+ * The live path replaces a sub-threshold buffer with a canned "no answer" line
+ * when the first-useful deadline fires. That is right for an empty result, and
+ * right for the fragment case its own comment cites — a provider finalizing
+ * "Sure," after an 8s timeout, which was never visible and is not an answer.
+ *
+ * It is WRONG for a complete short answer. Measured through the real app: a
+ * provider that delivered "Yes — lead with the AWS migration." and then held the
+ * stream open had that answer DISCARDED after 32s and replaced, even though a
+ * correct answer existed from t=0. Length alone cannot separate the two cases,
+ * so this asks the question length was standing in for: does the text end like a
+ * finished utterance, and is there enough of it to be an answer at all?
+ *
+ * Deliberately conservative — a fragment misjudged as complete would paint half
+ * a sentence, which is worse than the canned line. Terminal punctuation AND a
+ * minimum word count must BOTH hold, so "Sure," (no terminal mark) and "Sure."
+ * (too short) both remain fragments.
+ */
+export function isCompleteShortAnswer(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  // Allow a closing quote/bracket to follow the terminal mark.
+  if (!/[.!?][)\]"'’”]*$/.test(t)) return false;
+  return t.split(/\s+/).filter(Boolean).length >= 5;
+}
 /**
  * Absolute ceiling on a live answer's first-useful token (the no-fallback budget).
  * Sits above the 7s first-useful cap so a MiniMax stream about to deliver at

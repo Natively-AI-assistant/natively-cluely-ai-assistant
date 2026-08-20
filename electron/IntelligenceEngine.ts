@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -2840,7 +2840,17 @@ export class IntelligenceEngine extends EventEmitter {
                 // the user, so do not let it bypass the latency fallback merely
                 // because it is non-empty (for example, finalizing "Sure," after
                 // an 8s first-useful timeout).
-                if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS) {
+                // A COMPLETE short answer must not be thrown away. The length test
+                // alone cannot tell "Sure," (the fragment case above) from
+                // "Yes — lead with the AWS migration." — both are under the
+                // threshold, but only one is a non-answer. Measured through the real
+                // app: a provider that delivered a complete 34-char answer and then
+                // held the stream open had it DISCARDED after 32s and replaced with
+                // the canned line, while a correct answer had existed since t=0.
+                // isCompleteShortAnswer requires terminal punctuation AND >=5 words,
+                // so the fragment case still falls through to the fallback.
+                if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS
+                    && !isCompleteShortAnswer(fullAnswer)) {
                     const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                         ? "I don't have enough context from the conversation to answer that yet."
                         : "The model did not produce an answer in time, so I won't guess from your profile.";
