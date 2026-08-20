@@ -31,6 +31,7 @@ export function resolveChatStreamToken(activeId, incomingId, activeSource, incom
   const cur = typeof activeId === 'number' ? activeId : null;
   const curSrc = normalizeSource(activeSource);
   const inSrc = normalizeSource(incomingSource);
+  const claimedSrc = claimOf(activeId, activeSource);
   if (typeof incomingId !== 'number') {
     // Backward-compatible path: no id on the wire → behave exactly as before.
     // Preserve the raw active source: with nothing adopted it stays null rather
@@ -38,6 +39,19 @@ export function resolveChatStreamToken(activeId, incomingId, activeSource, incom
     return { accept: true, activeId: cur, activeSource: cur === null ? null : curSrc };
   }
   if (cur === null) {
+    // R-17: a CLAIM is "surface known, id not yet" — the state the renderer
+    // enters the moment the user sends from a surface, before main has
+    // allocated that stream's id. Without it, F-303's surface scoping only
+    // protected a stream that had ALREADY adopted the bubble: a desktop turn
+    // typed while a phone turn was still streaming had nothing adopted, so the
+    // phone's next token won the empty slot and every desktop token was then
+    // rejected as cross-surface. The desktop answer was dropped in full and its
+    // `done` went unhonored, leaving a spinner that only Escape cleared.
+    // Clearing the refs alone cannot fix that: the phone is mid-stream and
+    // would simply re-adopt long before the desktop's first token arrives.
+    if (claimedSrc !== null && claimedSrc !== inSrc) {
+      return { accept: false, activeId: null, activeSource: claimedSrc };
+    }
     return { accept: true, activeId: incomingId, activeSource: inSrc };
   }
   // F-303: supersession is SURFACE-SCOPED. The desktop and phone-mirror paths
@@ -60,6 +74,19 @@ export function resolveChatStreamToken(activeId, incomingId, activeSource, incom
   }
   // incomingId < cur → an older, already-superseded stream is still emitting. Drop.
   return { accept: false, activeId: cur, activeSource: curSrc };
+}
+
+/**
+ * The surface holding a CLAIM, or null when none is held.
+ *
+ * A claim is "source set, id still null": the window between the user sending
+ * from a surface and main allocating that stream's id. An adopted stream (id
+ * present) is NOT a claim — it is handled by the surface-scoping rules above.
+ */
+function claimOf(activeId, activeSource) {
+  if (typeof activeId === 'number') return null;
+  if (typeof activeSource !== 'string' || !activeSource) return null;
+  return normalizeSource(activeSource);
 }
 
 /** Absent/unknown source means the legacy desktop path. */
@@ -102,6 +129,11 @@ export function resolveChatStreamDone(activeId, incomingId, activeSource, incomi
     // processing state. `release` is scoped to the local surface so a stale
     // same-surface done (handled below) cannot stop a live spinner.
     return { honor: false, activeId: cur, activeSource: curSrc, release: inSrc === 'desktop' };
+  }
+  // R-17: nor may it finalize a CLAIM. Honoring a phone `done` here would
+  // finalize the empty placeholder the desktop turn just reserved.
+  if (claimOf(activeId, activeSource) !== null && claimOf(activeId, activeSource) !== inSrc) {
+    return { honor: false, activeId: null, activeSource: normalizeSource(activeSource) };
   }
   if (cur === null || incomingId >= cur) {
     return { honor: true, activeId: null, activeSource: null, release: false };

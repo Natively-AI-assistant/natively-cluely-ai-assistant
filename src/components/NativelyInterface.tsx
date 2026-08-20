@@ -6049,6 +6049,14 @@ Instructions:
 Provide only the answer, nothing else.`;
           }
 
+          // R-17: claim the desktop surface BEFORE the round-trip. The stream's
+          // id does not exist until main allocates it, so without a claim a
+          // phone turn still streaming owns the guard and swallows this whole
+          // answer (see chatStreamGuard.mjs). Claiming also evicts that phone
+          // stream from the bubble, which is correct: the user just chose this
+          // surface. The desktop done/error handlers both clear it again.
+          chatStreamIdRef.current = null;
+          chatStreamSourceRef.current = 'desktop';
           requestStartTimeRef.current = Date.now();
           await window.electronAPI.streamGeminiChat(
             question,
@@ -6057,6 +6065,12 @@ Provide only the answer, nothing else.`;
             { skipSystemPrompt: true },
           );
         } catch (err) {
+          // R-17: a throw from invoke() never reaches the main process, so no
+          // gemini-stream-error follows and nothing else releases the claim we
+          // took above. Left set, it would pin the guard to 'desktop' and block
+          // every phone turn — the bug this fix removes, inverted.
+          chatStreamIdRef.current = null;
+          chatStreamSourceRef.current = null;
           setIsProcessing(false);
           setMessages((prev) => {
             const last = prev[prev.length - 1];
@@ -6215,6 +6229,10 @@ Provide only the answer, nothing else.`;
       }
 
       // Pass imagePath if attached, AND conversation context
+      // R-17: claim the desktop surface before the round-trip (see the note at
+      // the other streamGeminiChat call site).
+      chatStreamIdRef.current = null;
+      chatStreamSourceRef.current = 'desktop';
       requestStartTimeRef.current = Date.now();
       await window.electronAPI.streamGeminiChat(
         userText || 'Analyze this screenshot',
@@ -6222,6 +6240,9 @@ Provide only the answer, nothing else.`;
         conversationContextForSubmit, // Pass freshly-derived context so "answer this" works
       );
     } catch (err) {
+      // R-17: release the claim taken above — see the note at the other call site.
+      chatStreamIdRef.current = null;
+      chatStreamSourceRef.current = null;
       setIsProcessing(false);
       setMessages((prev) => {
         const last = prev[prev.length - 1];
