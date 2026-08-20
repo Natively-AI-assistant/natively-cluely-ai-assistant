@@ -232,6 +232,16 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
 
     const result = await orchestrate(req, input.retrieval);
 
+    // Overlay chat: a self-contained new question must not carry
+    // "Previous question:" in the prompt. Models re-answer that earlier
+    // question (reported 2026-08-20). Follow-ups that actually resolved a
+    // referent still get the summary. Caller-supplied conversationSummary
+    // (a live transcript window) is left alone. Other surfaces unchanged.
+    if (!input.conversationSummary && input.surface === 'manual-chat'
+        && result.trace.referentResolution?.applied !== true) {
+      convoSummary = undefined;
+    }
+
     // ── Outbound provider-data-scope filter ─────────────────────────────────
     // Settings > AI Providers > Privacy. Applied HERE — after retrieval, before
     // packing — because the composer writes its instructions against the

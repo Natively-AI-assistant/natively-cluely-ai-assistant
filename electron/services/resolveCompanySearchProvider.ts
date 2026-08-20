@@ -8,30 +8,44 @@
 
 import { TRIAL_SENTINEL_KEY } from '../config/constants';
 import { CredentialsManager } from './CredentialsManager';
-import type { SearchProvider } from '../../premium/electron/knowledge/CompanyResearchEngine';
+
+// Local stand-in for premium CompanyResearchEngine.SearchProvider. The public
+// tree has no premium/, so importing that module fails typecheck:electron.
+type SearchProvider = { search: (...args: unknown[]) => Promise<unknown> };
 
 export function resolveCompanySearchProvider(): SearchProvider | null {
-  const cm = CredentialsManager.getInstance();
+	const cm = CredentialsManager.getInstance();
 
-  const tavilyApiKey = cm.getTavilyApiKey();
-  if (tavilyApiKey) {
-    const {
-      TavilySearchProvider,
-    } = require('../../premium/electron/knowledge/TavilySearchProvider');
-    return new TavilySearchProvider(tavilyApiKey);
-  }
+	const tavilyApiKey = cm.getTavilyApiKey();
+	if (tavilyApiKey) {
+		try {
+			const {
+				TavilySearchProvider,
+			} = require('../../premium/electron/knowledge/TavilySearchProvider');
+			return new TavilySearchProvider(tavilyApiKey);
+		} catch {
+			/* premium module not available */
+		}
+	}
 
-  const nativelyKey = cm.getNativelyApiKey();
-  if (nativelyKey) {
-    const {
-      NativelySearchProvider,
-    } = require('../../premium/electron/knowledge/NativelySearchProvider');
-    // Pass the real trial token when the key is the __trial__ sentinel so the
-    // server can authenticate via x-trial-token instead of the invalid key.
-    const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
-    console.log('[CompanySearch] Using Natively API search (no Tavily key configured)');
-    return new NativelySearchProvider(nativelyKey, trialToken ?? undefined);
-  }
+	const nativelyKey = cm.getNativelyApiKey();
+	if (nativelyKey) {
+		try {
+			const {
+				NativelySearchProvider,
+			} = require('../../premium/electron/knowledge/NativelySearchProvider');
+			// Pass the real trial token when the key is the __trial__ sentinel so the
+			// server can authenticate via x-trial-token instead of the invalid key.
+			const trialToken =
+				nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
+			console.log(
+				'[CompanySearch] Using Natively API search (no Tavily key configured)',
+			);
+			return new NativelySearchProvider(nativelyKey, trialToken ?? undefined);
+		} catch {
+			/* premium module not available */
+		}
+	}
 
-  return null;
+	return null;
 }

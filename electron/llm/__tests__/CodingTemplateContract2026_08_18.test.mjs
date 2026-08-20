@@ -470,7 +470,7 @@ describe('C5 — channel audit: every screen transport reaches the contract (202
   test('chat V3 personaBase promotes an attached screenshot with a deictic ask', () => {
     const src = read('../../ipcHandlers.ts');
     assert.match(src, /imagePaths\?\.length \?\? 0\) > 0\s*&&\s*\(!v3Question\.trim\(\) \|\| require\('\.\/llm\/codingPromptSignals'\)\.isDeicticAsk\(v3Question\)/, 'chat V3 lost the screenshot promotion');
-    assert.match(src, /codingTask: codingTask \|\| codingSignals\.codingTask \|\| !!priorProblem/, 'the promoted codingTask is not fed into the composed prompt');
+    assert.match(src, /codingTask: skillWasExplicit\s*\?\s*codingTask \|\| codingSignals\.codingTask \|\| !!priorProblem/, 'the promoted codingTask is not fed into the composed prompt');
   });
 
   test('both legacy LLMHelper transports promote an attached screenshot', () => {

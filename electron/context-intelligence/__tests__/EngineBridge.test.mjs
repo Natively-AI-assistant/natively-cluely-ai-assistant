@@ -179,3 +179,44 @@ describe('the [V3] line exposes the real source state (2026-07-31)', () => {
     assert.ok(!lines[0].includes('CGPA/GPA'), 'the line must never leak profile content');
   });
 });
+
+describe('manual-chat does not re-answer a previous self-contained question', () => {
+  beforeEach(enable);
+
+  test('a new complete question does not carry Previous question in the prompt', async () => {
+    const sessionId = `sticky-${Date.now()}`;
+    const first = await buildV3Prompt({
+      surface: 'manual-chat',
+      question: 'Write a two-sum function',
+      scope: { sessionId },
+    });
+    assert.ok(first);
+    const second = await buildV3Prompt({
+      surface: 'manual-chat',
+      question: 'How does the Node.js event loop work?',
+      scope: { sessionId },
+    });
+    assert.ok(second);
+    assert.doesNotMatch(second.user, /Previous question:/,
+      'a self-contained new question must not reattach the earlier turn');
+    assert.match(second.user, /event loop/i);
+  });
+
+  test('a bare follow-up still sees the previous question', async () => {
+    const sessionId = `followup-${Date.now()}`;
+    const first = await buildV3Prompt({
+      surface: 'manual-chat',
+      question: 'What is a mutex?',
+      scope: { sessionId },
+    });
+    assert.ok(first);
+    const second = await buildV3Prompt({
+      surface: 'manual-chat',
+      question: 'Why?',
+      scope: { sessionId },
+    });
+    assert.ok(second);
+    assert.match(second.user, /Previous question:|mutex/i,
+      'a bare follow-up must still inherit the prior subject');
+  });
+});
