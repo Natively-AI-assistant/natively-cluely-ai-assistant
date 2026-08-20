@@ -49,6 +49,9 @@ import {
 // without intent this list forces an explicit update — it pins the public surface the
 // settings UI enumerates.
 const EXPECTED_KEYS = [
+  // WTA audit flags (2026-08-18, default OFF).
+  'questionLedgerShadow',
+  'wtaClauseCoverageRepair',
   'trace',
   'durableMemoryWindow',
   'profileTreeV2',
@@ -159,6 +162,8 @@ const DEFAULT_ON_KEYS = new Set([
 ]);
 
 const ALL_ENV_VARS = [
+  'NATIVELY_QUESTION_LEDGER_SHADOW',
+  'NATIVELY_WTA_CLAUSE_COVERAGE_REPAIR',
   'NATIVELY_INTELLIGENCE_TRACE',
   'NATIVELY_DURABLE_MEMORY_WINDOW',
   'NATIVELY_PROFILE_TREE_V2',

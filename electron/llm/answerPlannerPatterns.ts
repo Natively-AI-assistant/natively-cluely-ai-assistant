@@ -41,7 +41,8 @@ export // CI/CD and related devops terms (live-confirmed leak, 2026-07-27): "wha
 // match then injected profile context because the profile happens to contain
 // devops-adjacent terms. Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS
 // itself (not merged into the array above) — that array is also consulted
-// directly by the project_followup_answer negation guard below (~line 2535,
+// directly by the project_followup_answer negation guard in AnswerPlanner.ts
+// (search followUpHasProjectContext —
 // `!includesAny(textNoTechStack, TECHNICAL_SUBJECT_PATTERNS)`), and a code-
 // review pass confirmed live that merging it there misroutes genuine own-
 // project follow-ups ("how did you handle CI/CD?", "why did you choose
@@ -63,7 +64,8 @@ export // Software-engineering concept vocabulary (live-confirmed leak, 2026-07-
 // common OOP/design-pattern/testing/infra terms with the identical gap.
 // Deliberately kept OUT of TECHNICAL_SUBJECT_PATTERNS (same reason as
 // DEVOPS_CICD_PATTERNS above): that array also feeds the project_followup_answer
-// negation guard below (~line 2547), and merging there would misroute genuine
+// negation guard in AnswerPlanner.ts (the same followUpHasProjectContext
+// predicate), and merging there would misroute genuine
 // own-project follow-ups ("how did you apply dependency injection in your
 // project?") away from project_followup_answer/required. Consulted only by
 // isLikelyTechnicalConcept, which the negation guard does not use.
@@ -164,6 +166,19 @@ export const CODING_PATTERNS = [
   // skill_experience / jd_fit routing (benchmark 2026-06-05).
   /\b(write|implement|code|coding|program|snippet|function|script|reverse|sort|parse)\b[\w ,'-]*\b(javascript|typescript|python|java|c\+\+|sql|go|golang|rust)\b/i,
   /\bin (javascript|typescript|python|java|c\+\+|sql|golang|rust)\b[\w ,'-]*\b(write|code|implement|function|program)\b/i,
+  // BUILD / CREATE / MAKE, paired with a build-task OBJECT (2026-08-18).
+  // Measured: only "write a …" reliably routed to a coding type. "Build me a CSV
+  // parser in typescript" landed on project_answer (answered as a résumé project
+  // story), "Create a CSV parser" and "Make me a debounce utility" on
+  // unknown_answer — no coding contract at all, in any mode.
+  //
+  // The verbs are deliberately NOT bare. "build rapport", "create a deck", "make
+  // a decision", "build a relationship with the customer" are ordinary
+  // non-coding English and a bare verb here would repeat the `class`/`method`
+  // P0 documented at the top of this list. Each verb must be followed, within
+  // one short clause, by an object that is unambiguously software.
+  /\b(build|create|make|generate)\b[\w ,'-]{0,30}\b(component|hook|endpoint|route|middleware|controller|api|sdk|cli|script|utility|util|helper|parser|serializer|validator|logger|function|class|method|query|form|dashboard|scraper|crawler|migration|web ?app|webpage|web page)\b/i,
+  /\b(build|create|make|generate)\b[\w ,'-]{0,30}\b(in|using|with)\s+(javascript|typescript|python|java|c\+\+|sql|go|golang|rust|react|node\.?js|express|django|flask)\b/i,
   ...COMMON_CODING_PROBLEM_PATTERNS,
 ];
 
@@ -329,7 +344,21 @@ const SOURCE_CODE_EVIDENCE_PATTERNS = [
   // "what does your actual <X> code look like", "show me your <X> code", "your
   // real code for <X>" — asking about NATIVELY's own implementation. A source-
   // evidence request (must not fabricate), not a generic coding task.
-  /\b(what does |show me |whats )?(your|the natively|natively'?s)\s+(actual\s+|real\s+)?[\w ]*\bcode\b\s*(look|is|for|of)?/i,
+  // The lead-in is MANDATORY (2026-08-18). It was optional, so the pattern
+  // reduced to a bare "your code" anywhere in the text — and "// your code here",
+  // the most common starter-stub comment on LeetCode/HackerRank, routed a pasted
+  // coding template to source_code_evidence_answer. The turn then got no coding
+  // contract at all outside technical-interview mode. "your real/actual code"
+  // with no lead-in is still caught by the dedicated pattern below.
+  // The lead-in alternation was widened 2026-08-19 (code review): making it
+  // mandatory correctly stopped "// your code here" from matching, but it also
+  // dropped the whole REQUEST-TO-SEE family ("can I see your code", "let me
+  // look at your code", "I want to see your code for the overlay"), which then
+  // routed to coding_question_answer — the generic coding path this pattern
+  // exists to keep them off, because it would fabricate a plausible-looking
+  // Natively snippet. Every added lead-in is an explicit speech act, so the
+  // bare-stub-comment case stays unmatched.
+  /\b(what does|what'?s|whats|show me|tell me about|can i see|could i see|can you show|could you show|let me see|let me look at|i want to see|i'?d like to see|i wanna see)\s+(your|the natively|natively'?s)\s+(actual\s+|real\s+)?[\w ]*\bcode\b\s*(look|is|for|of)?/i,
   /\byour (real|actual) code\b/i,
   // "repo-verifiable / github-verifiable snippet|code" — explicitly asks for code
   // that can be checked against the public repo; this IS a source-evidence request

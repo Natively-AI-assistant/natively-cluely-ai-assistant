@@ -62,7 +62,7 @@ function buildDefaultShortcuts(): ShortcutConfig {
         toggleMousePassthrough: [mod, shift, 'B'],
         processScreenshots: [mod, 'Enter'],
         captureAndProcess: [mod, shift, 'Enter'],
-        capturePage: [mod, shift, 'Y'],
+        capturePage: [mod, 'Y'],
         resetCancel: [mod, 'R'],
         takeScreenshot: [mod, 'H'],
         selectiveScreenshot: [mod, shift, 'H']

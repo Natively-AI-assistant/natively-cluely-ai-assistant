@@ -23,6 +23,8 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
+import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
+import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
 import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
 import { mintTurnId } from './llm/turnIdentity';
@@ -48,7 +50,10 @@ import { CHAT_MODE_PROMPT } from './llm/prompts';
 // byte-for-byte the legacy behavior.
 function resolveManualChatBasePrompt(
   llmHelper?: { getPromptTier?: () => string } | null,
-  opts?: { codingTask?: boolean },
+  // Accepts the full CodingPromptSignals shape so every chat call site can hand
+  // over the resolver's output verbatim — contract shape, explicit format, and
+  // supplied template — instead of degrading it to a bare boolean.
+  opts?: import('./llm/codingPromptSignals').CodingPromptSignals,
 ): string {
   try {
     const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
@@ -58,6 +63,9 @@ function resolveManualChatBasePrompt(
       // Semantic coding activation: a coding turn gets the coding contract in
       // ANY mode (universal coding-answer contract, 2026-08-02).
       codingTask: opts?.codingTask,
+      codingTaskKind: opts?.codingTaskKind,
+      codingFormat: opts?.codingFormat,
+      suppliedTemplate: opts?.suppliedTemplate,
       // This is the TYPED chat panel — the one surface where the user reads
       // the answer instead of speaking it. Attaches the scannable chat layout
       // (lead sentence → labeled sections → quotable close); every live and
@@ -1295,13 +1303,99 @@ export function initializeIpcHandlers(appState: AppState): void {
               // Mirrors BridgeInput.personaBase in engine-bridge.ts.
               personaBase: ({ codingTask }: { codingTask: boolean }) => {
                 const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
-                return resolveV2SystemPrompt({
+                // BARE CODE REQUEST on the V3 path. The legacy handler's
+                // prior-problem recall lives ~500 lines below and this path
+                // `return null`s long before reaching it, so on the DEFAULT
+                // surface a bare "code?" arrived with no problem attached.
+                // Measured live twice: once it answered a different problem
+                // (binary search) with full confidence, once it replied "please
+                // provide the problem description". Same cause, both times.
+                //
+                // The answer the user is looking at is the subject. It rides the
+                // SYSTEM channel, like the legacy path's own contract block, so
+                // no evidence-scope filter can drop it.
+                // Extended 2026-08-19 from bare-code-only to EVERY coding
+                // continuation ("what's the complexity", "make it iterative",
+                // "dry run it"): after an overlay answer those had no prior
+                // problem either — only the bare-code case was bridged. A
+                // continuation inherits ONLY when the previous answer actually
+                // looks like a coding answer (looksLikeCodingAnswer), so
+                // "what's the complexity" typed after a sales answer cannot
+                // drag that answer in as a "prior coding problem".
+                let priorProblem = '';
+                let bareCode = false;
+                if (isBareCodeRequest(v3Question) || isCodingContinuation(v3Question)) {
+                  try {
+                    // IntelligenceManager exposes getLastAssistantMessage()
+                    // directly (it owns a PRIVATE SessionTracker and has no
+                    // getSessionTracker accessor) — the old chained form was a
+                    // phantom method that `as any` + optional chaining made
+                    // silently return undefined, so this whole guard was dead
+                    // code and every continuation was answered context-free.
+                    // No surface argument: "anywhere" is the point, so an
+                    // overlay answer can ground a chat follow-up.
+                    const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
+                    bareCode = isBareCodeRequest(v3Question);
+                    if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
+                        && (bareCode || looksLikeCodingAnswer(lastAnywhere))) {
+                      priorProblem = '\n\n' + buildPriorCodingBlockForV3({
+                        userMessage: '(the question answered just before this one)',
+                        assistantAnswer: lastAnywhere,
+                      });
+                    }
+                  } catch { /* guard only; never blocks the answer */ }
+                }
+                // Contract shape (DSA walkthrough vs implementation), explicit
+                // user format request, and a code template already present in
+                // the message — resolved once, shared with every other surface.
+                const codingSignals = (() => {
+                  try {
+                    const resolved = resolveCodingPromptSignals({
+                      answerType: planAnswer({
+                        question: v3Question,
+                        source: 'manual_input',
+                        speakerPerspective: 'user',
+                        activeMode: modeInfo ?? undefined,
+                      }).answerType,
+                      question: v3Question,
+                      // A recalled prior problem IS a prior coding turn: lets
+                      // the continuation-only formats (complexity_only /
+                      // dry_run_only) fire so "what's the complexity" gets the
+                      // analysis instead of a full re-solve.
+                      priorCodingTurnExists: !!priorProblem,
+                    });
+                    // ATTACHED-SCREENSHOT promotion, mirroring the WTA surface.
+                    // A chat message with an attached screenshot and a question
+                    // that points at it ("solve this", "what about this?", or
+                    // nothing) is about the IMAGE, not about whatever the text
+                    // router inferred — the pinned ScreenCodeAskCodingTask suite
+                    // documents that V3's own classifier never claims
+                    // CODING_TASK for screen asks, so without this the chat
+                    // surface was the last one still answering a screenshotted
+                    // coding problem in prose. The contract's applicability
+                    // boundary skips non-coding screenshots.
+                    if (!resolved.codingTask
+                        && (imagePaths?.length ?? 0) > 0
+                        && (!v3Question.trim() || require('./llm/codingPromptSignals').isDeicticAsk(v3Question))) {
+                      return { codingTask: true, codingTaskKind: 'dsa' } as import('./llm/codingPromptSignals').CodingPromptSignals;
+                    }
+                    return resolved;
+                  } catch { return { codingTask: false } as import('./llm/codingPromptSignals').CodingPromptSignals; }
+                })();
+                const base = resolveV2SystemPrompt({
                   action: 'answer',
                   tier: v2TierForPromptTier(llmHelper?.getPromptTier?.()),
                   activeMode: modeInfo,
-                  codingTask,
+                  codingTask: codingTask || codingSignals.codingTask || !!priorProblem,
+                  codingTaskKind: codingSignals.codingTaskKind,
+                  // A BARE code request forces code_only; a richer continuation
+                  // keeps whatever format the resolver derived (complexity_only,
+                  // dry_run_only, or none for "make it iterative").
+                  codingFormat: (priorProblem && bareCode) ? 'code_only' : codingSignals.codingFormat,
+                  suppliedTemplate: codingSignals.suppliedTemplate,
                   chatSurface: true,
                 });
+                return base ? base + priorProblem : base;
               },
             });
             // Null with the flag on = the bridge caught an error and ALREADY
@@ -2023,6 +2117,59 @@ export function initializeIpcHandlers(appState: AppState): void {
         let explicitCodingContract: ExplicitCodingContract = detectExplicitCodingContract(message);
         let codingPriorProblemBlock = '';
         let codingFollowupResolved = false;
+        // BARE CODE REQUEST — "code?", "show me the code" — deliberately NOT gated
+        // on conversationMemoryV2 (default OFF). This is not a memory FEATURE, it
+        // is a correctness guard.
+        //
+        // Live repro 2026-08-18: the overlay solved a Trapping Rain Water
+        // screenshot, the user typed "code?" in chat, and the answer was a
+        // complete, confident BINARY SEARCH solution. "code" matches
+        // CODING_PATTERNS, so the turn was routed coding and handed the full
+        // contract — with no problem attached, so the model chose one. Answering
+        // a different question with total confidence is worse than not answering.
+        //
+        // A bare code request has no subject of its own, so the answer the user
+        // is looking at IS the subject. SessionTracker's last assistant message
+        // is cross-surface, which is exactly what the chat-only memory below is
+        // not. Runs first; the flag-gated block then refines it when enabled.
+        // Extended 2026-08-19 to EVERY coding continuation, gated on the prior
+        // answer actually looking like a coding answer — mirrors the V3
+        // personaBase guard above so the two chat paths cannot drift.
+        if (isBareCodeRequest(message) || isCodingContinuation(message)) {
+          try {
+            // Phantom-method fix (code review 2026-08-19): IntelligenceManager
+            // exposes getLastAssistantMessage() directly; getSessionTracker()
+            // does not exist, so the old chained form silently returned
+            // undefined and this guard never ran. See the V3 twin above.
+            const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
+            const bare = isBareCodeRequest(message);
+            if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
+                && (bare || looksLikeCodingAnswer(lastAnywhere))) {
+              codingPriorProblemBlock = buildPriorCodingContextBlock({
+                userMessage: '(the question answered just before this one)',
+                assistantAnswer: lastAnywhere,
+              });
+              codingFollowupResolved = true;
+              // Promote to the coding path (code review 2026-08-19). EVERY
+              // consumer of codingPriorProblemBlock sits inside
+              // `if (isCodingChat)` below, and a bare "code?" / "now optimize
+              // it" is planned follow_up_answer — so without this promotion
+              // the block was built and then silently dropped, making this
+              // guard a no-op for exactly the case it exists to fix. Mirrors
+              // the flag-gated recall block's promotion so the two cannot
+              // drift, and matches the V3 twin (which forces its coding task
+              // via `|| !!priorProblem`).
+              if (!isCodingChat) {
+                isCodingChat = true;
+                iTrace.noteContext({ source: 'conversation_history', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'coding_followup_prior_problem' });
+              }
+              // Bare requests force code_only; richer continuations keep the
+              // format the detector already derived (complexity_only / dry_run
+              // / null for "make it iterative").
+              if (bare) explicitCodingContract = 'code_only';
+            }
+          } catch { /* guard only; never blocks the answer */ }
+        }
         {
           const looksLikeCodingFollowup = isCodingContinuation(message);
           const convMemOn = isIntelligenceFlagEnabled('conversationMemoryV2');
@@ -3239,7 +3386,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
-          : resolveManualChatBasePrompt(llmHelper, { codingTask: isCodingChat });
+          : resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({
+            answerType: answerPlan.answerType,
+            question: message,
+            // Manual chat is the ONE surface that knows whether a prior coding
+            // turn exists (conversation memory, resolved above). Without it the
+            // continuation-only formats stay suppressed and a "what's the
+            // complexity" follow-up would be re-answered in full.
+            priorCodingTurnExists: codingFollowupResolved,
+            // Restores the promotion the old `codingTask: isCodingChat`
+            // argument carried (code review 2026-08-19). A bare "code?" /
+            // "now optimize it" is PLANNED follow_up_answer, so answerType
+            // alone yields codingTask:false and promptSystemV2's
+            // coding_contract gate drops the block from the SYSTEM prompt
+            // even though the user-channel contract is attached below.
+            codingTurnPromoted: isCodingChat,
+          }));
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
         // (shapeDocumentGroundedSystemPrompt + buildDocumentGroundedUserContent),
@@ -8303,7 +8465,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('local-whisper-get-models', async () => {
     try {
       const { getAvailableModels } = require('./audio/whisper/modelManager');
-      const models = getAvailableModels();
+      const { getLocalModelLanguageSupport } = require('./audio/whisper/modelLanguageSupport');
+      // languageSupport: which RECOGNITION_LANGUAGES keys each model accepts
+      // (verified against each model's official docs — see
+      // modelLanguageSupport.ts). The Settings UI uses it to restrict the
+      // Language options to the active model's set and to grey out the
+      // Language / Accent-Region selects when the model can't change them.
+      const models = getAvailableModels().map((m: any) => ({
+        ...m,
+        languageSupport: getLocalModelLanguageSupport(m.id),
+      }));
       const activeModelId = SettingsManager.getInstance().get('localWhisperModel') ?? '';
       return { models, activeModelId };
     } catch (e: any) {
@@ -13036,7 +13207,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Best-effort — never break the phone path on the ownership check.
           if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
         }
-        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, { codingTask: !!(phoneRouteOptions?.answerType && isCodingAnswerType(phoneRouteOptions.answerType as any)) }), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung

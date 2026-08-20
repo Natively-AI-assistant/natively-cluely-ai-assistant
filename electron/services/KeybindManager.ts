@@ -30,7 +30,7 @@ export const DEFAULT_KEYBINDS: KeybindConfig[] = [
     // falls back to a screenshot when no extension/browser is reachable. Works
     // from any focused app (including the Natively overlay), which the old
     // Chrome-owned hotkey could not. See natively-browser/README.md.
-    { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Shift+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Shift+Y' },
+    { id: 'general:capture-dom', label: 'Capture Page / Screen (Browser)', accelerator: 'CommandOrControl+Y', isGlobal: true, defaultAccelerator: 'CommandOrControl+Y' },
 
     // Chat - Global shortcuts (work even when app is not focused - stealth mode)
     { id: 'chat:whatToAnswer', label: 'What to Answer', accelerator: 'CommandOrControl+1', isGlobal: true, defaultAccelerator: 'CommandOrControl+1' },

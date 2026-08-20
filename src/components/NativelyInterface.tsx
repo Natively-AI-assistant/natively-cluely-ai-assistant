@@ -387,8 +387,18 @@ interface Message {
   isStreaming?: boolean;
   hasScreenshot?: boolean;
   screenshotPreview?: string;
+  // Every attached screenshot's data-URL preview (screenshotPreview is the first
+  // one, kept for messages created before this field existed). The chat card
+  // renders these as thumbnails; without them a screenshot question showed only
+  // a "Screenshot attached" text label and the user never saw what was sent.
+  screenshotPreviews?: string[];
   // Synthetic user-role label pushed before a hotkey/button answer (e.g. "Recap") — excluded from LLM conversation-context building, same as a screenshot-question card.
   isQuickActionLabel?: boolean;
+  // Captured browser page context consumed by THIS question (title/url from the
+  // extension's capture meta). Renders a "Page attached · host — title" line on
+  // the card, mirroring the "Screenshot attached" label — without it the pill
+  // vanishes on use and nothing in the chat shows which page fed the answer.
+  pageContext?: { title?: string; url?: string };
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -873,6 +883,8 @@ const MessageRow = React.memo(
     renderMessageText,
   }: MessageRowProps) {
     const t = useT();
+    // Which attached screenshot (if any) is currently enlarged in this card.
+    const [expandedPreview, setExpandedPreview] = React.useState<number | null>(null);
     const isCodeMsg = msg.role === 'system' && (msg.isCode || msg.text.includes('```'));
     // bubbleMaxClass: user bubbles are tighter; system + code use the same width.
     const bubbleMaxClass =
@@ -923,12 +935,96 @@ const MessageRow = React.memo(
               </div>
             )}
             {msg.role === 'user' && msg.hasScreenshot && (
-              <div
-                className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}
-              >
-                <Image className="w-2.5 h-2.5" />
-                <span>{t('Screenshot attached')}</span>
-              </div>
+              /* Render the actual screenshots, not just a text label. Until
+                 2026-08-18 this card printed "Screenshot attached" and nothing
+                 else, so the user could never see what was actually sent with
+                 the question. `screenshotPreviews` carries every attachment;
+                 `screenshotPreview` is the pre-existing single-image field and
+                 is the fallback for messages created before that field. */
+              (() => {
+                const previews =
+                  msg.screenshotPreviews && msg.screenshotPreviews.length > 0
+                    ? msg.screenshotPreviews
+                    : msg.screenshotPreview
+                    ? [msg.screenshotPreview]
+                    : [];
+                if (previews.length === 0) {
+                  // Legacy/preview-less message: keep the old text affordance
+                  // rather than showing an empty frame.
+                  return (
+                    <div
+                      className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}
+                    >
+                      <Image className="w-2.5 h-2.5" />
+                      <span>{t('Screenshot attached')}</span>
+                    </div>
+                  );
+                }
+                const single = previews.length === 1;
+                const frameClass = `relative overflow-hidden rounded-[14px] border ${
+                  isLightTheme ? 'border-black/10 bg-black/[0.03]' : 'border-white/15 bg-white/[0.06]'
+                }`;
+                return (
+                  <div
+                    className={`mb-2 grid gap-1.5 ${single ? 'grid-cols-1' : 'grid-cols-2'}`}
+                  >
+                    {previews.map((src, idx) => {
+                      const isOpen = expandedPreview === idx;
+                      return (
+                        <button
+                          key={`${msg.id}-shot-${idx}`}
+                          type="button"
+                          onClick={() => setExpandedPreview(isOpen ? null : idx)}
+                          title={isOpen ? t('Shrink') : t('Enlarge')}
+                          className={`${frameClass} ${
+                            isOpen ? 'col-span-full' : ''
+                          } block w-full p-0 transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99] focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-400/60`}
+                          /* Fixed frame height keeps the bubble's layout (and the
+                             overlay's measured content height) stable while the
+                             data-URL decodes — a bare auto-height <img> would
+                             reflow the whole panel on load. */
+                          style={{ height: isOpen ? 240 : single ? 132 : 74 }}
+                        >
+                          <img
+                            src={src}
+                            alt={t('Attached screenshot')}
+                            draggable={false}
+                            className={`h-full w-full ${isOpen ? 'object-contain' : 'object-cover'} ${
+                              isOpen ? '' : 'object-top'
+                            }`}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()
+            )}
+            {/* Captured page context consumed by this question — the "Screenshot
+                attached" equivalent for browser captures (⌘/Ctrl+Shift+Y or
+                auto-attach). Shows host — title so the user can see WHICH page
+                fed the answer; the transient status pill vanished on use. */}
+            {msg.role === 'user' && msg.pageContext && (
+              (() => {
+                const host = hostnameFromUrl(msg.pageContext.url);
+                const title = msg.pageContext.title?.trim();
+                const label =
+                  host && title && title !== host
+                    ? `${host} — ${title}`
+                    : title || host || '';
+                return (
+                  <div
+                    className={`flex items-center gap-1 text-[10px] opacity-70 mb-1 border-b pb-1 ${isLightTheme ? 'border-black/10' : 'border-white/10'}`}
+                    title={msg.pageContext.url || title}
+                  >
+                    <Globe className="w-2.5 h-2.5 flex-shrink-0" />
+                    <span className="truncate max-w-[260px]">
+                      {t('Page attached')}
+                      {label ? ` · ${label}` : ''}
+                    </span>
+                  </div>
+                );
+              })()
             )}
             {/* Correction header: this message fixes an earlier wrong answer. */}
             {msg.role === 'system' && msg.isCorrection && (
@@ -1030,10 +1126,32 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     missing?: string[];
   } | null>(null);
 
+  // Why the last Cmd/Ctrl+Shift+Y page capture fell back to a screenshot
+  // (extension not connected, site not granted, timeout, …). Surfaced as a
+  // warn-tone status pill — previously the fallback was silent and the hotkey
+  // looked broken ("Screenshot attached" with no explanation, 2026-08-18).
+  const [captureFallback, setCaptureFallback] = useState<
+    import('../types/electron').PageCaptureFallbackNotice & { at: number } | null
+  >(null);
+
   // The structured capture (Smart Browser Context v2) that arrived with the last
   // page context, if any. Held in a ref so it survives re-renders and is consumed
   // once (cleared) when the answer request reads it.
   const capturedEnvelopeRef = useRef<import('../types/electron').ContextEnvelope | null>(null);
+
+  // Title/URL of the last capture (from the extension's DomCaptureMeta). A ref,
+  // not state: handleWhatToSay reads it right after the auto-context await, when
+  // a setPageContext from the IPC listener may not have flushed yet. Consumed
+  // (and cleared) together with capturedEnvelopeRef to stamp the question card's
+  // "Page attached" line.
+  const capturedMetaRef = useRef<{ title?: string; url?: string } | null>(null);
+
+  // Timestamp of a ⌘/Ctrl+Y capture currently IN FLIGHT (main announced it,
+  // delivery hasn't arrived yet). The one-motion flow — hold ⌘, tap Y then
+  // Enter — would otherwise race: handleWhatToSay reads lastCapturedDOM
+  // synchronously and the /dom POST can land a beat later. Cleared on
+  // delivery (onDomContextReceived) and on the screenshot-fallback notice.
+  const pendingPageCaptureAtRef = useRef<number | null>(null);
 
   // Multi-tab picker: when the user wants to choose which browser tab to capture
   // (e.g. the auto-pick grabbed the wrong one), we ask the extension for its open
@@ -1167,7 +1285,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Stash the structured envelope (Smart Browser Context v2) so handleWhatToSay
         // can thread it into the answer request alongside the legacy domContext string.
         capturedEnvelopeRef.current = envelope ?? null;
+        capturedMetaRef.current = meta?.title || meta?.url ? { title: meta?.title, url: meta?.url } : null;
+        pendingPageCaptureAtRef.current = null;
         if (typeof dom === 'string' && dom.trim().length > 0) {
+          // A page context arrived — retire any stale "fell back to screenshot"
+          // notice so the pills can't contradict each other.
+          setCaptureFallback(null);
           setPageContext({
             title: meta?.title?.trim() || hostnameFromUrl(meta?.url) || 'Captured page',
             url: meta?.url,
@@ -1192,6 +1315,42 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
     };
   }, []);
+
+  // Page capture → screenshot fallback notices from main (Cmd/Ctrl+Shift+Y).
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = window.electronAPI?.onPageCaptureFallback?.((notice) => {
+        if (!notice || typeof notice.label !== 'string') return;
+        pendingPageCaptureAtRef.current = null;
+        setCaptureFallback({ ...notice, at: Date.now() });
+      });
+    } catch (e) {
+      console.warn('[PageCapture] Failed to register onPageCaptureFallback listener:', e);
+    }
+    return () => {
+      try { unsub?.(); } catch (_) {}
+    };
+  }, []);
+
+  // Track in-flight ⌘/Ctrl+Y captures (see pendingPageCaptureAtRef).
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = window.electronAPI?.onPageCaptureStarted?.(() => {
+        pendingPageCaptureAtRef.current = Date.now();
+      });
+    } catch (_) { /* older preload without the channel */ }
+    return () => { try { unsub?.(); } catch (_) {} };
+  }, []);
+
+  // Auto-expire the fallback notice — it explains a one-off event, so it should
+  // not linger like the page-context pill (which arms the next answer).
+  useEffect(() => {
+    if (!captureFallback) return;
+    const timer = setTimeout(() => setCaptureFallback(null), 20_000);
+    return () => clearTimeout(timer);
+  }, [captureFallback]);
 
   // Auto-expire the captured page-context pill if it's never consumed. The DOM
   // itself is cleared on use (handleWhatToSay) or dismiss; this just stops the
@@ -4892,6 +5051,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Also merge in any screenshot from the capture-and-process shortcut that
     // arrived via pendingCaptureRef before the React state flush (React 18 fix).
     const pending = pendingCaptureRef.current;
+    // The question card's id — kept so the "Page attached" line can be stamped
+    // onto it below, once we know whether captured page context was consumed.
+    const questionCardId = genMessageId();
     let currentAttachments = attachedContext;
     if (pending && !currentAttachments.some((s) => s.path === pending.path)) {
       currentAttachments = [...currentAttachments, pending].slice(-5);
@@ -4903,11 +5065,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       setMessages((prev) => [
         ...prev,
         {
-          id: genMessageId(),
+          id: questionCardId,
           role: 'user',
           text: 'What should I say about this?',
           hasScreenshot: true,
           screenshotPreview: currentAttachments[0].preview,
+          screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
         },
       ]);
       // Scroll to bottom when user sends message
@@ -4919,7 +5082,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // never appears with no preceding "question" bubble.
       setMessages((prev) => [
         ...prev,
-        { id: genMessageId(), role: 'user', text: QUICK_ACTION_LABELS.what_to_say, isQuickActionLabel: true },
+        { id: questionCardId, role: 'user', text: QUICK_ACTION_LABELS.what_to_say, isQuickActionLabel: true },
       ]);
     }
 
@@ -4937,10 +5100,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // is nothing to attach, so the answer is never blocked. The captured DOM (if
       // any) arrives via onDomContextReceived → window.lastCapturedDOM, which we
       // re-read below — reusing the proven domContext seam.
+      // One-motion ⌘Y→Enter: if a manual capture is IN FLIGHT (⌘Y pressed a
+      // beat ago, /dom not yet delivered), wait for it — up to the desktop's
+      // own capture timeout — instead of racing past it. Delivery or the
+      // fallback notice clears the pending flag and ends the wait early.
+      const pendingAt = pendingPageCaptureAtRef.current;
+      if (pendingAt && Date.now() - pendingAt < 5000) {
+        const waitDeadline = Date.now() + 3000;
+        while (
+          pendingPageCaptureAtRef.current
+          && Date.now() < waitDeadline
+          && !(typeof (window as any).lastCapturedDOM === 'string' && (window as any).lastCapturedDOM.trim().length > 0)
+        ) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
       const hasManualContext =
         typeof (window as any).lastCapturedDOM === 'string' &&
         (window as any).lastCapturedDOM.trim().length > 0;
-      if (!hasManualContext) {
+      // Screenshot wins over AUTOMATIC page capture (2026-08-19): a screenshot
+      // is the user deliberately pointing at something; the auto-attach is a
+      // guess about the active browser tab. When both would ride the same
+      // request they can describe DIFFERENT content (screenshot of app A,
+      // active tab B) and always double-bill the same page when they agree —
+      // so with screenshots attached, skip the auto request entirely. Manual
+      // ⌘/Ctrl+Shift+Y captures are just as deliberate as a screenshot and
+      // still attach alongside (hasManualContext path unchanged).
+      if (!hasManualContext && currentAttachments.length === 0) {
         try {
           await window.electronAPI.phoneMirrorRequestAutoContext?.();
         } catch {
@@ -4963,15 +5149,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // once, alongside the legacy string, then cleared.
       const domContextEnvelope = domContext ? capturedEnvelopeRef.current ?? undefined : undefined;
 
+      // Title/URL of the consumed capture — read BEFORE the clears below.
+      const consumedPageMeta = domContext ? capturedMetaRef.current : null;
+
       // Clear the captured DOM immediately after reading it to ensure stale DOM context
       // from prior pages is never re-sent on subsequent requests.
       if (typeof (window as any).lastCapturedDOM === 'string') {
         (window as any).lastCapturedDOM = '';
       }
       capturedEnvelopeRef.current = null;
+      capturedMetaRef.current = null;
       // Retire the "Page context" pill the moment the context is actually consumed,
       // so the lifecycle reads: capture → pill appears → answer → pill disappears.
       if (domContext) setPageContext(null);
+
+      // Stamp the question card with the page that fed this answer — the pill
+      // above just vanished on consumption, so without this nothing in the chat
+      // ever showed WHICH page was attached (mirrors "Screenshot attached").
+      if (domContext) {
+        const pageMeta = consumedPageMeta ?? {};
+        setMessages((prev) =>
+          prev.map((m) => (m.id === questionCardId ? { ...m, pageContext: pageMeta } : m)),
+        );
+      }
 
       if (domContext) {
         console.debug(`[DOM Context] Forwarding captured active-tab DOM structure (${domContext.length} chars)`);
@@ -5188,6 +5388,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           text: 'Give me a code hint for this',
           hasScreenshot: true,
           screenshotPreview: currentAttachments[0].preview,
+          screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
         },
       ]);
       // Scroll to bottom when user sends message
@@ -5240,6 +5441,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           text: 'Brainstorm with this context',
           hasScreenshot: true,
           screenshotPreview: currentAttachments[0].preview,
+          screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
         },
       ]);
       // Scroll to bottom when user sends message
@@ -5778,6 +5980,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             text: question,
             hasScreenshot: currentAttachments.length > 0,
             screenshotPreview: currentAttachments[0]?.preview,
+            screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
           },
         ]);
 
@@ -5951,6 +6154,7 @@ Provide only the answer, nothing else.`;
         text: userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
         hasScreenshot: currentAttachments.length > 0,
         screenshotPreview: currentAttachments[0]?.preview,
+        screenshotPreviews: currentAttachments.map((a) => a.preview).filter(Boolean),
       },
     ]);
 
@@ -7455,7 +7659,7 @@ Provide only the answer, nothing else.`;
   // Suppressed: mode label pill is not required in the UI.
   // Suppressed: LLM privacy label pill is not required in the UI.
   // Suppressed: vision pill ("Vision: provider") is not required in the UI.
-  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext;
+  const hasStatusPill = shouldShowSttSummaryPill || !!pageContext || !!captureFallback;
   const statusPillBaseClass = `flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shadow-sm backdrop-blur-xl ${isLightTheme ? 'bg-white/55 border-black/10' : 'bg-black/20 border-white/10'}`;
 
   // Suppress the shell's scale/translate entry animation until it has rendered
@@ -7664,6 +7868,23 @@ Provide only the answer, nothing else.`;
                           }
                         } catch (_) {}
                       }}
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                )}
+                {captureFallback && (
+                  <div
+                    className={`${statusPillBaseClass} ${getStatusToneClass('warn')} pr-1.5`}
+                    title={captureFallback.detail}
+                  >
+                    <Image className="h-3 w-3 opacity-70" />
+                    <span className="max-w-[260px] truncate">{captureFallback.label}</span>
+                    <button
+                      type="button"
+                      aria-label={t('Dismiss page capture notice')}
+                      className="ml-0.5 rounded-full p-0.5 opacity-60 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity"
+                      onClick={() => setCaptureFallback(null)}
                     >
                       <X className="h-2.5 w-2.5" />
                     </button>
@@ -8397,7 +8618,7 @@ Provide only the answer, nothing else.`;
                           <img
                             src={ctx.preview}
                             alt={`Screenshot ${idx + 1}`}
-                            className={`h-10 w-auto rounded border ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
+                            className={`h-12 w-auto rounded-[10px] border object-cover shadow-sm ${isLightTheme ? 'border-black/15' : 'border-white/20'}`}
                           />
                           <button
                             onClick={() =>

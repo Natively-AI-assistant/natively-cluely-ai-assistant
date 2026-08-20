@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
+import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 
 /**
  * Metadata the companion extension sends with a captured page (drives the
@@ -2780,6 +2781,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('dom-context-received', subscription);
     return () => {
       ipcRenderer.removeListener('dom-context-received', subscription);
+    };
+  },
+  // Cmd/Ctrl+Shift+Y page capture fell back to a screenshot — the notice says
+  // why (extension not connected, site not granted, timeout, …) so the overlay
+  // can show it instead of the fallback happening silently.
+  // The ⌘/Ctrl+Y capture hotkey just started — an in-flight capture the next
+  // "What should I say?" should briefly wait for (one-motion ⌘Y→Enter).
+  onPageCaptureStarted: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on(PAGE_CAPTURE_STARTED_CHANNEL, subscription);
+    return () => {
+      ipcRenderer.removeListener(PAGE_CAPTURE_STARTED_CHANNEL, subscription);
+    };
+  },
+  onPageCaptureFallback: (callback: (notice: PageCaptureFallbackNotice) => void) => {
+    const subscription = (_: unknown, notice: PageCaptureFallbackNotice) => callback(notice);
+    ipcRenderer.on(PAGE_CAPTURE_FALLBACK_CHANNEL, subscription);
+    return () => {
+      ipcRenderer.removeListener(PAGE_CAPTURE_FALLBACK_CHANNEL, subscription);
     };
   },
 } as ElectronAPI);
