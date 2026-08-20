@@ -42,7 +42,10 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   write(chunk: Buffer) {
     if (!this.active) return;
     if (!this.stream) { this.buffer.push(chunk); return; }
-    try { this.stream.write({ audio_content: chunk }); } catch (e) { this.emit('error', e); }
+    // proto-loader is configured with keepCase:false below, so protobuf field
+    // names are camel-cased at runtime. Using audio_content here silently
+    // drops live PCM frames before they reach the NVIDIA Riva stream.
+    try { this.stream.write({ audioContent: chunk }); } catch (e) { this.emit('error', e); }
   }
 
   private connect() {
