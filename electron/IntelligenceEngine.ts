@@ -1434,15 +1434,36 @@ export class IntelligenceEngine extends EventEmitter {
                     const rankedAsks = this.questionLedgerShadow.rankActiveAsks(Date.now());
                     const topAsk = rankedAsks[0];
                     const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+                    const parityReason = topAsk && extractedQuestion.latestQuestion
+                        ? (norm(topAsk.standaloneText) === norm(extractedQuestion.latestQuestion)
+                            ? 'ledger_parity'
+                            : `ledger_divergence_open_${rankedAsks.length}`)
+                        : 'ledger_empty';
                     wtaTrace.noteContext({
                         source: 'question_ledger_shadow', trustLevel: 'low',
                         requested: true, retrieved: Boolean(topAsk), included: false,
-                        reason: topAsk && extractedQuestion.latestQuestion
-                            ? (norm(topAsk.standaloneText) === norm(extractedQuestion.latestQuestion)
-                                ? 'ledger_parity'
-                                : `ledger_divergence_open_${rankedAsks.length}`)
-                            : 'ledger_empty',
+                        reason: parityReason,
                     });
+                    // Live session A (2026-08-20) produced ZERO ledger telemetry
+                    // across 28 presses: noteContext only fills an in-memory
+                    // IntelligenceTrace whose toRecord() has no production
+                    // consumer, and piTelemetry buffers to a ring that prints
+                    // only under NATIVELY_PI_TELEMETRY_DEBUG. The shadow ran
+                    // correctly and was simply invisible, so the session
+                    // collected no promotion evidence. Emit a console line on
+                    // the same [TRACE:*] convention the LONGCTX marker already
+                    // uses (that one DID reach the log), gated by the shadow
+                    // flag so it costs nothing when the shadow is off.
+                    console.log('[TRACE:LEDGER] ledger_parity_check', JSON.stringify({
+                        reason: parityReason,
+                        openAsks: rankedAsks.length,
+                        ledgerTop: topAsk?.standaloneText ?? '',
+                        liveQuestion: extractedQuestion.latestQuestion || '',
+                        liveConfidence: extractedQuestion.confidence,
+                        ledgerAct: topAsk?.dialogueAct ?? null,
+                        ledgerRelation: topAsk?.relationToPrevious ?? null,
+                        relationshipConfidence: topAsk?.confidence?.relationship ?? null,
+                    }));
                 }
             } catch { /* shadow only — never affects the answer */ }
 

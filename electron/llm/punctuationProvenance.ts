@@ -30,10 +30,21 @@ export type PunctuationSource =
 // provider might punctuate by default" is not enough, because a wrong
 // 'provider_final' stamp licenses scoring to penalize a missing '?'.
 // Fail-safe direction: unknown/unlisted → 'unavailable' (neutral scoring).
+// MEASURED, not assumed (live shadow session A, 2026-08-20): what matters for
+// question detection is QUESTION MARKS specifically, not punctuation in
+// general. LocalWhisper was listed here on the reasoning that its output is
+// "model-punctuated" — and it is, for sentence punctuation: across that
+// session's 28 interviewer turns it emitted '.' or ',' on 15 (54%) but a '?'
+// on only 3 (11%). Stamping those turns 'provider_final' told the scorer a
+// missing '?' was real evidence of not-a-question AND suppressed the
+// clause-level recovery built for exactly this case, so 20 of 28 presses
+// scored 0.3, fell under the 0.6 profile-grounding gate, and answered with
+// no résumé (candidateProfileChars:0 on 23 of 28). A provider earns a place
+// in this set only by explicitly REQUESTING question-mark-bearing
+// punctuation, never by producing prose punctuation as a side effect.
 const PUNCTUATING_PROVIDERS = new Set<string>([
     'deepgram',       // smart_format: true (DeepgramStreamingSTT.ts)
     'google',         // enableAutomaticPunctuation: true (GoogleSTT.ts)
-    'local-whisper',  // Whisper/Moonshine/Nemotron output is model-punctuated
 ]);
 
 /**

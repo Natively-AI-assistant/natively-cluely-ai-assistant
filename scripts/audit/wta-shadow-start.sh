@@ -30,13 +30,17 @@ ln -sf "$FULL_LOG" "$LOG_DIR/latest-full.log"
 export NATIVELY_QUESTION_LEDGER_SHADOW="${NATIVELY_QUESTION_LEDGER_SHADOW:-1}"
 export NATIVELY_INTELLIGENCE_TRACE="${NATIVELY_INTELLIGENCE_TRACE:-1}"
 export NATIVELY_TRACE_LONGCTX="${NATIVELY_TRACE_LONGCTX:-1}"
+# piTelemetry buffers to an in-memory ring and prints ONLY under this flag —
+# without it wta_clause_coverage / wta_plan_divergence never reach the log
+# (live session A collected zero of both despite the shadow running fine).
+export NATIVELY_PI_TELEMETRY_DEBUG="${NATIVELY_PI_TELEMETRY_DEBUG:-true}"
 export MEASURE_LATENCY="${MEASURE_LATENCY:-true}"
 export PI_LATENCY_TRACE="${PI_LATENCY_TRACE:-true}"
 
 # The audio-tag noise filter (same pattern used by hand previously). The live
 # view and the .log file are filtered; the .full.log keeps EVERYTHING so STT
 # behavior can still be diagnosed after the fact.
-NOISE='\[STT\]|\[Audio\]|\[Nemotron\]|\[Deepgram\]|\[Whisper\]|\[AudioEngine\]|\[AudioCapture\]|\[StabilityHeartbeat\]'
+NOISE='\[STT\]|\[Audio\]|\[Nemotron\]|\[Deepgram\]|\[Whisper\]|\[AudioEngine\]|\[AudioCapture\]|\[StabilityHeartbeat\]|\[MicrophoneCapture\]|\[SystemAudioCapture\]|\[Microphone\]|\[CoreAudioTap\]|\[EmbeddingPipeline\]|\[KeybindManager\]|\[LiveRAGIndexer\]'
 
 cd "$(dirname "$0")/../.."
 
