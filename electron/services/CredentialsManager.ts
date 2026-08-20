@@ -544,6 +544,28 @@ export class CredentialsManager {
         return provider;
     }
 
+    /**
+     * True when the selected STT provider has the credentials it needs.
+     * When false, the audio pipeline runs without transcription.
+     */
+    public isSttConfigured(): boolean {
+        const provider = this.getSttProvider();
+        if (provider === 'none') return false;
+        if (provider === 'local-whisper') return true;
+        if (provider === 'google') {
+            return !!(this.credentials.googleServiceAccountPath || process.env.GOOGLE_APPLICATION_CREDENTIALS);
+        }
+        if (provider === 'natively') return !!this.credentials.nativelyApiKey;
+        if (provider === 'deepgram') return !!this.credentials.deepgramApiKey;
+        if (provider === 'soniox') return !!this.credentials.sonioxApiKey;
+        if (provider === 'elevenlabs') return !!this.credentials.elevenLabsApiKey;
+        if (provider === 'openai') return !!this.credentials.openAiSttApiKey;
+        if (provider === 'groq') return !!this.credentials.groqSttApiKey;
+        if (provider === 'azure') return !!this.credentials.azureApiKey;
+        if (provider === 'ibmwatson') return !!this.credentials.ibmWatsonApiKey;
+        return false;
+    }
+
     public getDeepgramApiKey(): string | undefined {
         return this.credentials.deepgramApiKey;
     }

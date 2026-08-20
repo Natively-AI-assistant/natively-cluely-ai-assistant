@@ -7836,6 +7836,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle("is-stt-configured", async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().isSttConfigured();
+    } catch {
+      return false;
+    }
+  });
+
   // Shared guard for STT key saves. Keys persist via the OS keyring or, when that is
   // unavailable, an app-managed encrypted fallback. The setter returns whether the
   // write ACTUALLY reached disk — we branch on that real result, NOT on a capability
