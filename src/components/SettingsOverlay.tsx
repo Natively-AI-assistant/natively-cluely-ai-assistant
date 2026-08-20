@@ -1036,9 +1036,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     } | null>(null);
 
     // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
-    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState('nemotron-asr-streaming');
-    const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper'>('none');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
     const [sttOpenaiKey, setSttOpenaiKey] = useState('');
@@ -1058,7 +1056,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [googleServiceAccountError, setGoogleServiceAccountError] = useState('');
     const [hasNativelyKey, setHasNativelyKey] = useState(initialHasNativelyKey);
     const [hasStoredSttGroqKey, setHasStoredSttGroqKey] = useState(false);
-    const [hasStoredNvidiaNimKey, setHasStoredNvidiaNimKey] = useState(false);
     const [hasStoredSttOpenaiKey, setHasStoredSttOpenaiKey] = useState(false);
     const [hasStoredDeepgramKey, setHasStoredDeepgramKey] = useState(false);
     const [hasStoredElevenLabsKey, setHasStoredElevenLabsKey] = useState(false);
@@ -1089,12 +1086,10 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                 // @ts-ignore
                 const creds = await window.electronAPI?.getStoredCredentials?.();
                 if (creds) {
-                    setSttProvider((creds.sttProvider || 'none') as any);
+                    setSttProvider(creds.sttProvider || 'none');
                     if (creds.groqSttModel) setGroqSttModel(creds.groqSttModel);
                     setGoogleServiceAccountPath(creds.googleServiceAccountPath);
                     setHasStoredSttGroqKey(creds.hasSttGroqKey);
-                    setHasStoredNvidiaNimKey(creds.hasNvidiaNimKey || false);
-                    if ((creds as any).nvidiaNimSttModel) setNvidiaNimSttModel((creds as any).nvidiaNimSttModel);
                     setHasStoredSttOpenaiKey(creds.hasSttOpenaiKey);
                     setHasStoredDeepgramKey(creds.hasDeepgramKey);
                     setHasStoredElevenLabsKey(creds.hasElevenLabsKey);
@@ -1145,7 +1140,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         return () => unsubscribe();
     }, []); // mount-once: isOpen is checked inside the callback
 
-    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper') => {
+    const handleSttProviderChange = async (provider: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'natively' | 'local-whisper') => {
         setSttProvider(provider);
         setIsSttDropdownOpen(false);
         setSttTestStatus('idle');
@@ -1158,7 +1153,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
-    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
+    const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox', key: string) => {
         if (!key.trim()) return;
         // Reject masked values returned by getStoredCredentials ("sk-...XXXX").
         // These are never valid API keys and every provider rejects them.
@@ -1196,8 +1191,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             if (provider === 'groq') {
                 // @ts-ignore
                 saveResult = await window.electronAPI?.setGroqSttApiKey?.(key.trim());
-            } else if (provider === 'nvidia_nim') {
-                saveResult = await window.electronAPI?.setNvidiaNimApiKey?.(key.trim());
             } else if (provider === 'openai') {
                 // @ts-ignore
                 saveResult = await window.electronAPI?.setOpenAiSttApiKey?.(key.trim());
@@ -1230,7 +1223,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             }
 
             if (provider === 'groq') setHasStoredSttGroqKey(true);
-            else if (provider === 'nvidia_nim') setHasStoredNvidiaNimKey(true);
             else if (provider === 'openai') setHasStoredSttOpenaiKey(true);
             else if (provider === 'elevenlabs') setHasStoredElevenLabsKey(true);
             else if (provider === 'azure') setHasStoredAzureKey(true);
@@ -2677,7 +2669,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <BrandMark provider="natively" />, neutralTile: true }] : []),
                                                             { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <BrandMark provider="google" />, neutralTile: true },
                                                             { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <BrandMark provider="groq" />, neutralTile: true },
-                                                            { id: 'nvidia_nim', label: 'NVIDIA NIM', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: 'Low-latency Nemotron / Parakeet streaming ASR', color: 'green', icon: <BrandMonogram name="NVIDIA" />, tileClassName: 'bg-[#76B900] text-black' },
                                                             { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <BrandMark provider="openai" />, neutralTile: true },
                                                             { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, desc: t('High-accuracy REST transcription'), color: 'purple', icon: <BrandMark provider="deepgram" />, neutralTile: true },
                                                             { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <BrandMark provider="elevenlabs" />, neutralTile: true },
@@ -2736,23 +2727,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 </div>
                                             )}
 
-                                            {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
-                                                <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">NVIDIA NIM Speech Model</label>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                        {[
-                                                            { id: 'nemotron-asr-streaming', label: 'Nemotron ASR Streaming', desc: 'Fastest English realtime ASR' },
-                                                            { id: 'nemotron-3.5-asr-streaming-multilingual', label: 'Nemotron 3.5 ASR', desc: 'Multilingual streaming ASR' },
-                                                            { id: 'parakeet-1.1b-rnnt-multilingual-asr', label: 'Parakeet 1.1B RNNT', desc: 'Multilingual streaming ASR' },
-                                                        ].map((m) => (
-                                                            <button key={m.id} onClick={async () => { setNvidiaNimSttModel(m.id); await window.electronAPI?.setNvidiaNimSttModel?.(m.id); }} className={`rounded-lg px-3 py-2.5 text-left ${nvidiaNimSttModel === m.id ? 'bg-accent-primary text-on-accent shadow-md' : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}>
-                                                                <span className="text-sm font-medium block">{m.label}</span><span className="text-[11px] opacity-70">{m.desc}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
                                             {/* Google Cloud Service Account */}
                                             {sttProvider === 'google' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
@@ -2795,7 +2769,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'natively' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
-                                                        {sttProvider === 'nvidia_nim' ? 'NVIDIA NIM' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
+                                                        {sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
                                                     </label>
                                                     {sttProvider === 'openai' && (
                                                         <p className="text-[10px] text-text-tertiary mb-1.5">
@@ -2806,8 +2780,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <input
                                                             type="password"
                                                             value={
-                                                            sttProvider === 'nvidia_nim' ? sttNvidiaNimKey
-                                                                    : sttProvider === 'groq' ? sttGroqKey
+                                                                sttProvider === 'groq' ? sttGroqKey
                                                                     : sttProvider === 'openai' ? sttOpenaiKey
                                                                         : sttProvider === 'elevenlabs' ? sttElevenLabsKey
                                                                             : sttProvider === 'azure' ? sttAzureKey
@@ -2816,8 +2789,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                                         : sttDeepgramKey
                                                             }
                                                             onChange={(e) => {
-                                                                if (sttProvider === 'nvidia_nim') setSttNvidiaNimKey(e.target.value);
-                                                                else if (sttProvider === 'groq') setSttGroqKey(e.target.value);
+                                                                if (sttProvider === 'groq') setSttGroqKey(e.target.value);
                                                                 else if (sttProvider === 'openai') setSttOpenaiKey(e.target.value);
                                                                 else if (sttProvider === 'elevenlabs') setSttElevenLabsKey(e.target.value);
                                                                 else if (sttProvider === 'azure') setSttAzureKey(e.target.value);
@@ -2826,9 +2798,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 else setSttDeepgramKey(e.target.value);
                                                             }}
                                                             placeholder={
-                                                                sttProvider === 'nvidia_nim'
-                                                                    ? (hasStoredNvidiaNimKey ? '••••••••••••' : 'Enter NVIDIA API key')
-                                                                    : sttProvider === 'groq'
+                                                                sttProvider === 'groq'
                                                                     ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))
                                                                     : sttProvider === 'openai'
                                                                         ? (hasStoredSttOpenaiKey ? '••••••••••••' : t('Enter OpenAI STT API key'))
@@ -2847,7 +2817,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <button
                                                             onClick={() => {
                                                                 const keyMap: Record<string, string> = {
-                                                                    nvidia_nim: sttNvidiaNimKey, groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
+                                                                    groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
                                                                     elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
                                                                     soniox: sttSonioxKey,
                                                                 };
@@ -2855,7 +2825,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }}
                                                             disabled={sttSaving || !(() => {
                                                                 const keyMap: Record<string, string> = {
-                                                                    nvidia_nim: sttNvidiaNimKey, groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
+                                                                    groq: sttGroqKey, openai: sttOpenaiKey, deepgram: sttDeepgramKey,
                                                                     elevenlabs: sttElevenLabsKey, azure: sttAzureKey, ibmwatson: sttIbmKey,
                                                                     soniox: sttSonioxKey,
                                                                 };

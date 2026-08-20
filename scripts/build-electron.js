@@ -131,10 +131,6 @@ if (WATCH) {
   }).catch(onFailure);
 } else {
   build(buildOptions).then(() => {
-    const protoSrc = path.resolve(rootDir, 'electron/audio/riva_asr.proto');
-    const protoDest = path.resolve(outDir, 'electron/audio/riva_asr.proto');
-    fs.mkdirSync(path.dirname(protoDest), { recursive: true });
-    fs.copyFileSync(protoSrc, protoDest);
     console.log(`[build-electron] Done in ${Date.now() - start}ms`);
   }).catch(onFailure);
 }
