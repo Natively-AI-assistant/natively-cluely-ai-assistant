@@ -34,6 +34,11 @@ export NATIVELY_TRACE_LONGCTX="${NATIVELY_TRACE_LONGCTX:-1}"
 # without it wta_clause_coverage / wta_plan_divergence never reach the log
 # (live session A collected zero of both despite the shadow running fine).
 export NATIVELY_PI_TELEMETRY_DEBUG="${NATIVELY_PI_TELEMETRY_DEBUG:-true}"
+# Log the ANSWER text itself. Session A recorded questions, routing and every
+# context size but not one word of what was actually said — the answer is an
+# event to the renderer and never reaches stdout — so "is it grounded?" could
+# not be answered from the log at all.
+export NATIVELY_TRACE_ANSWERS="${NATIVELY_TRACE_ANSWERS:-1}"
 export MEASURE_LATENCY="${MEASURE_LATENCY:-true}"
 export PI_LATENCY_TRACE="${PI_LATENCY_TRACE:-true}"
 

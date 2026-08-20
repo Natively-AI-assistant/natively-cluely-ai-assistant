@@ -4520,6 +4520,33 @@ export class IntelligenceEngine extends EventEmitter {
             // compatible with all existing consumers (code-hint, brainstorm,
             // legacy answerLLM, etc.).
             this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId);
+            // ANSWER VISIBILITY (live session A follow-up, 2026-08-21): the
+            // answer is delivered as an EVENT to the renderer and never
+            // touches stdout, so a session log records the question, the
+            // routing and every context size — but not a single word of what
+            // was actually said. That made "is the answer grounded?"
+            // unanswerable from a 516K log. Emit the answer alongside the
+            // grounding channels that produced it, on the same [TRACE:*]
+            // convention as LONGCTX/LEDGER, gated by NATIVELY_TRACE_ANSWERS
+            // (the shadow-session launcher sets it; default off elsewhere so
+            // normal runs never write answer text to disk).
+            try {
+                if (process.env.NATIVELY_TRACE_ANSWERS === '1') {
+                    console.log('[TRACE:ANSWER] wta_answer', JSON.stringify({
+                        question: question || extractedQuestion.latestQuestion || '',
+                        questionConfidence: extractedQuestion.confidence,
+                        answerType: answerPlan.answerType,
+                        profileContextPolicy: answerPlan.profileContextPolicy,
+                        // grounding channel that survives to the engine; the
+                        // reference-file/mode block size is already on the
+                        // adjacent prompt_assembled line (modeContextBlockChars),
+                        // so the pair reads as one record per press.
+                        candidateProfileChars: (candidateProfile || '').length,
+                        answerChars: finalWtaAnswer.length,
+                        answer: finalWtaAnswer,
+                    }));
+                }
+            } catch { /* logging only */ }
             try {
                 wtaTrace.setRouting({ source: 'what_to_answer', answerType: answerPlan.answerType });
                 wtaTrace.noteContext({ source: 'live_transcript', trustLevel: 'low', requested: true, retrieved: true, included: true, reason: 'wta_window' });
