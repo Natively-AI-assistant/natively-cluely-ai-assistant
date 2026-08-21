@@ -18,7 +18,7 @@ import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
-import { LocalWhisperModelPanel } from './LocalWhisperModelPanel';
+import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { isMac } from '../utils/platformUtils';
@@ -180,9 +180,12 @@ interface CustomSelectProps {
     options: MediaDeviceInfo[];
     onChange: (value: string) => void;
     placeholder?: string;
+    /** Greys the control out and blocks the dropdown — used when the active
+     *  local STT model doesn't accept this setting (see modelLanguageSupport). */
+    disabled?: boolean;
 }
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device" }) => {
+const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options, onChange, placeholder = "Select device", disabled = false }) => {
     const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = React.useRef<HTMLDivElement>(null);
@@ -210,14 +213,16 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, icon, value, options
 
             <div className="relative">
                 <button
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between hover:bg-bg-elevated transition-colors"
+                    onClick={() => !disabled && setIsOpen(!isOpen)}
+                    disabled={disabled}
+                    aria-disabled={disabled}
+                    className={`w-full bg-bg-input border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary flex items-center justify-between transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-bg-elevated'}`}
                 >
                     <span className="truncate pr-4">{selectedLabel}</span>
                     <ChevronDown size={14} className={`text-text-secondary transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
 
-                {isOpen && (
+                {isOpen && !disabled && (
                     <div className="absolute top-full left-0 w-full mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto animated fadeIn">
                         <div className="p-1 space-y-0.5">
                             {options.map((device) => (
@@ -659,6 +664,24 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [availableLanguages, setAvailableLanguages] = useState<Record<string, any>>({});
     const [autoDetectedLanguage, setAutoDetectedLanguage] = useState<string | null>(null);
 
+    // Active STT provider — declared here (not with the rest of the STT
+    // settings below) because the local-model language-capability effect and
+    // memo that follow depend on it.
+    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
+
+    // Local model language capability (local-whisper provider only).
+    // Per-model: which RECOGNITION_LANGUAGES keys the model accepts, whether
+    // language is changeable at all, and whether accent/region variants mean
+    // anything to it — computed main-side from each model's official docs
+    // (electron/audio/whisper/modelLanguageSupport.ts) and attached to
+    // local-whisper-get-models. Combined with the live channel config to
+    // restrict/grey the Language and Accent/Region selects below.
+    const [localModelSupport, setLocalModelSupport] = useState<Record<string, {
+        name: string;
+        support: { languageSelectable: boolean; accentSelectable: boolean; allowedLanguageKeys: string[] };
+    }> | null>(null);
+    const [localWhisperConfig, setLocalWhisperConfig] = useState<LocalWhisperChannelConfig | null>(null);
+
     // AI Response Language
     const [aiResponseLanguage, setAiResponseLanguage] = useState('English');
     const [availableAiLanguages, setAvailableAiLanguages] = useState<any[]>([]);
@@ -911,6 +934,64 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         loadLanguages();
     }, []);
 
+    // Load per-model language capability whenever the local provider is
+    // active. The channel config is ALSO pushed live by LocalWhisperModelPanel
+    // via onModelConfigChanged (the panel and these selects are on the same
+    // Settings page), so a model swap re-restricts the selects immediately.
+    useEffect(() => {
+        if (sttProvider !== 'local-whisper') return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const [modelsRes, cfgRes] = await Promise.all([
+                    window.electronAPI?.localWhisperGetModels?.(),
+                    window.electronAPI?.localWhisperGetChannelConfig?.(),
+                ]);
+                if (cancelled) return;
+                if (modelsRes?.models) {
+                    const map: Record<string, { name: string; support: any }> = {};
+                    for (const m of modelsRes.models) {
+                        if (m?.id && m.languageSupport) map[m.id] = { name: m.name ?? m.id, support: m.languageSupport };
+                    }
+                    setLocalModelSupport(map);
+                }
+                if (cfgRes) setLocalWhisperConfig(cfgRes);
+            } catch (err) {
+                console.error('[Settings] Failed to load local model language capability:', err);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [sttProvider]);
+
+    // Effective capability across the ACTIVE local model(s): in split mode the
+    // one global language setting feeds BOTH channels, so the offered set is
+    // the intersection of what mic and system models accept; accent stays
+    // enabled if ANY active model consumes regional variants (harmless to the
+    // others — they collapse variants to a plain language token).
+    // null → no restriction (cloud providers, or capability not loaded yet).
+    const localLanguageCapability = useMemo(() => {
+        if (sttProvider !== 'local-whisper' || !localModelSupport || !localWhisperConfig) return null;
+        const { enabled, micModelId, systemModelId, globalModelId } = localWhisperConfig;
+        const ids = Array.from(new Set(
+            (enabled ? [micModelId || globalModelId, systemModelId || globalModelId] : [globalModelId]).filter(Boolean)
+        ));
+        const entries = ids.map(id => localModelSupport[id]).filter(Boolean);
+        if (entries.length === 0) return null;
+        let allowedKeys = new Set<string>(entries[0].support.allowedLanguageKeys);
+        for (const e of entries.slice(1)) {
+            allowedKeys = new Set(e.support.allowedLanguageKeys.filter((k: string) => allowedKeys.has(k)));
+        }
+        const accentSelectable = entries.some(e => e.support.accentSelectable);
+        const englishOnlyNames = entries.filter(e => !e.support.languageSelectable).map(e => e.name);
+        // Locked when every offered key sits in one group (the English-only
+        // case) — a select with a single meaningful choice is greyed, not hidden.
+        const allowedGroups = new Set(
+            Array.from(allowedKeys).map(k => availableLanguages[k]?.group).filter(Boolean)
+        );
+        const languageSelectable = allowedGroups.size > 1;
+        return { allowedKeys, accentSelectable, languageSelectable, englishOnlyNames, modelNames: entries.map(e => e.name) };
+    }, [sttProvider, localModelSupport, localWhisperConfig, availableLanguages]);
+
     const handleLanguageChange = async (key: string) => {
         setRecognitionLanguage(key);
         setAutoDetectedLanguage(null);  // always reset — new session may detect a different language
@@ -924,15 +1005,26 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const handleGroupChange = (group: string) => {
         setSelectedSttGroup(group);
-        // Find default variant for this group (first one)
-        const firstVariant = Object.entries(availableLanguages).find(([_, lang]) => lang.group === group);
+        // Find default variant for this group (first one the active model accepts)
+        const firstVariant = Object.entries(availableLanguages).find(
+            ([key, lang]) => lang.group === group && isLanguageEntryAllowed(key)
+        );
         if (firstVariant) {
             handleLanguageChange(firstVariant[0]);
         }
     };
 
-    // Helper to get unique groups
-    const languageGroups = Array.from(new Set(Object.values(availableLanguages).map((l: any) => l.group)))
+    // Language keys the active STT backend accepts. Unrestricted for cloud
+    // providers; for local-whisper this is the active model's documented set.
+    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? null;
+    const isLanguageEntryAllowed = (key: string) => !allowedLanguageKeySet || allowedLanguageKeySet.has(key);
+
+    // Helper to get unique groups (restricted to what the active model accepts)
+    const languageGroups = Array.from(new Set(
+        Object.entries(availableLanguages)
+            .filter(([key]) => isLanguageEntryAllowed(key))
+            .map(([, l]: [string, any]) => l.group)
+    ))
         .sort((a, b) => {
             if (a === 'Auto') return -1;
             if (b === 'Auto') return 1;
@@ -941,10 +1033,31 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             return a.localeCompare(b);
         });
 
+    // The stored selection can name a language the newly-selected local model
+    // doesn't support (the setting is global across providers and is NOT
+    // rewritten when a model is picked). Display-only fallbacks: a locked
+    // (English-only) model shows English / United States — which IS what the
+    // pipeline does (the worker omits the language token for English-only
+    // checkpoints) — while an unsupported pick on a selectable model keeps
+    // showing the stored value alongside the warning hint below.
+    const languageLocked = localLanguageCapability ? !localLanguageCapability.languageSelectable : false;
+    // 'auto' is its own case, NOT an unsupported language. No local model has a
+    // real auto-detect mode with locale conditioning, but LocalWhisperSTT
+    // normalizes 'auto' to English rather than failing (see
+    // resolveAndApplyNemotronLanguage), so the honest message is "auto-detect
+    // is unavailable, English is used" — not "your language isn't supported".
+    const autoDetectUnavailable =
+        recognitionLanguage === 'auto' && !!allowedLanguageKeySet && !allowedLanguageKeySet.has('auto');
+    const storedLanguageUnsupported =
+        !!recognitionLanguage && recognitionLanguage !== 'auto'
+        && !!allowedLanguageKeySet && !allowedLanguageKeySet.has(recognitionLanguage);
+    const showsEnglishFallback = languageLocked && (storedLanguageUnsupported || autoDetectUnavailable);
+    const displayedSttGroup = showsEnglishFallback ? 'English' : selectedSttGroup;
+    const displayedRecognitionLanguage = showsEnglishFallback ? 'english-us' : recognitionLanguage;
+
     // Helper to get variants for current group
     const currentGroupVariants = Object.entries(availableLanguages)
-
-        .filter(([_, lang]) => lang.group === selectedSttGroup)
+        .filter(([key, lang]) => lang.group === displayedSttGroup && isLanguageEntryAllowed(key))
         .map(([key, lang]) => ({
             deviceId: key,
             label: lang.label,
@@ -1035,8 +1148,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         reason?: string;
     } | null>(null);
 
-    // STT Provider settings
-    const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
+    // NVIDIA NIM speech settings live beside the existing provider state.
     const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState('nemotron-asr-streaming');
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
@@ -2992,14 +3104,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {/* Local Whisper Model Panel */}
                                             {sttProvider === 'local-whisper' && (
-                                                <LocalWhisperModelPanel />
+                                                <LocalWhisperModelPanel onModelConfigChanged={setLocalWhisperConfig} />
                                             )}
 
-                                            {/* Recognition Language Family */}
+                                            {/* Recognition Language Family — options restricted to what the
+                                                active local model accepts (per its official docs); greyed out
+                                                entirely when the model is English-only and language cannot change. */}
                                             <CustomSelect
                                                 label={t("Language")}
                                                 icon={<Globe size={14} />}
-                                                value={selectedSttGroup}
+                                                value={displayedSttGroup}
                                                 options={languageGroups.map(g => ({
                                                     deviceId: g,
                                                     label: g,
@@ -3009,19 +3123,64 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 }))}
                                                 onChange={handleGroupChange}
                                                 placeholder={t("Select Language")}
+                                                disabled={languageLocked}
                                             />
 
-                                            {/* Variant/Accent Selector (Conditional) */}
+                                            {/* Variant/Accent Selector (Conditional) — greyed out when the
+                                                active local model's language conditioning is region-neutral
+                                                (Whisper-family) or fixed (English-only checkpoints). Only
+                                                Nemotron consumes regional variants. */}
                                             {currentGroupVariants.length > 1 && (
                                                 <div className="mt-3 animated fadeIn">
                                                     <CustomSelect
                                                         label={t("Accent / Region")}
                                                         icon={<MapPin size={14} />}
-                                                        value={recognitionLanguage}
+                                                        value={displayedRecognitionLanguage}
                                                         options={currentGroupVariants}
                                                         onChange={handleLanguageChange}
                                                         placeholder={t("Select Region")}
+                                                        disabled={!!localLanguageCapability && !localLanguageCapability.accentSelectable}
                                                     />
+                                                </div>
+                                            )}
+
+                                            {/* Local model capability notes */}
+                                            {localLanguageCapability && languageLocked && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {(localLanguageCapability.englishOnlyNames.length > 0
+                                                            ? localLanguageCapability.englishOnlyNames.join(', ')
+                                                            : t('The selected local model'))}
+                                                        {' '}{localLanguageCapability.accentSelectable
+                                                            ? t('supports English only — language is fixed for this model.')
+                                                            : t('supports English only — language and accent are fixed for this model.')}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {localLanguageCapability && !languageLocked && storedLanguageUnsupported && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                                                    <p className="text-xs text-amber-200/90">
+                                                        {`"${availableLanguages[recognitionLanguage]?.label ?? recognitionLanguage}" ${t("isn't supported by the selected local model — pick one of the listed languages.")}`}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {localLanguageCapability && !languageLocked && autoDetectUnavailable && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {t("This model has no auto-detect mode — English is transcribed unless you pick a language.")}
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {localLanguageCapability && !languageLocked && !storedLanguageUnsupported && !autoDetectUnavailable
+                                                && !localLanguageCapability.accentSelectable && currentGroupVariants.length > 1 && (
+                                                <div className="flex gap-2 items-center mt-2 px-1">
+                                                    <Info size={14} className="text-text-secondary shrink-0" />
+                                                    <p className="text-xs text-text-secondary">
+                                                        {t("This model doesn't distinguish accents or regions — only the language itself applies.")}
+                                                    </p>
                                                 </div>
                                             )}
 
