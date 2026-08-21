@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
-import path from 'path';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
+import { createNvcfStreamingRecognize } from './rivaProto';
 
 // Same ladder as DeepgramStreamingSTT / SonioxStreamingSTT so a flapping
 // network cannot drive an indefinite reconnect storm.
@@ -13,23 +13,79 @@ const RECONNECT_MAX_ATTEMPTS = 10;
 // here forever (~115 MB/hour) and none of it was ever sent.
 const MAX_BUFFERED_BYTES = 160 * 1024;
 
-export const NVIDIA_NIM_STT_MODELS = [
-  { id: 'nemotron-asr-streaming', label: 'Nemotron ASR Streaming (Fast English)' },
-  { id: 'nemotron-3.5-asr-streaming-multilingual', label: 'Nemotron 3.5 ASR Streaming (Multilingual)' },
-  { id: 'parakeet-1.1b-rnnt-multilingual-asr', label: 'Parakeet 1.1B RNNT (Multilingual)' },
+/**
+ * Language code Riva uses to select a multilingual model's auto-detect mode.
+ * NVIDIA's own client examples pass `--language-code multi` for the
+ * multilingual profiles; `language_code` is documented Required, so the empty
+ * string an earlier revision sent here was never a valid value.
+ */
+const MULTILINGUAL_LANGUAGE_CODE = 'multi';
+
+export const DEFAULT_NVIDIA_NIM_STT_MODEL = 'nemotron-asr-streaming';
+
+export interface NvidiaNimSttModel {
+  id: string;
+  label: string;
+  description: string;
+  /** NVCF function that hosts this model. */
+  functionId: string;
+  /** language_code sent when the user has not pinned a recognition language. */
+  languageCode: string;
+  /** Whether the model does its own language detection. */
+  multilingual: boolean;
+}
+
+/**
+ * The hosted speech models, and the SINGLE source of truth for them — the ipc
+ * validation list and the Settings picker both read this, so adding a model is
+ * one edit rather than three that can drift apart.
+ *
+ * The two Nemotron entries deliberately share one function-id: that NIM ships
+ * two profiles (`nvidia/nemotron-speech-streaming-en-0.6b`, English, and
+ * `nvidia/nemotron-3.5-asr-streaming-0.6b`, 40 language-locales), and
+ * language_code is what selects between them — which is exactly why sending an
+ * empty one collapsed both entries onto the same behaviour.
+ */
+export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
+  {
+    id: 'nemotron-asr-streaming',
+    label: 'Nemotron ASR Streaming',
+    description: 'Fastest English realtime ASR',
+    functionId: 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa',
+    languageCode: 'en-US',
+    multilingual: false,
+  },
+  {
+    id: 'nemotron-3.5-asr-streaming-multilingual',
+    label: 'Nemotron 3.5 ASR',
+    description: 'Multilingual streaming ASR (40 locales, auto-detect)',
+    functionId: 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa',
+    languageCode: MULTILINGUAL_LANGUAGE_CODE,
+    multilingual: true,
+  },
+  {
+    id: 'parakeet-1.1b-rnnt-multilingual-asr',
+    label: 'Parakeet 1.1B RNNT',
+    description: 'Multilingual streaming ASR',
+    functionId: '71203149-d3b7-4460-8231-1be2543a1fca',
+    languageCode: MULTILINGUAL_LANGUAGE_CODE,
+    multilingual: true,
+  },
 ] as const;
 
-const MODEL_CONFIG: Record<string, { functionId: string; language: string }> = {
-  'nemotron-asr-streaming': { functionId: 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa', language: 'en-US' },
-  'nemotron-3.5-asr-streaming-multilingual': { functionId: 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa', language: '' },
-  'parakeet-1.1b-rnnt-multilingual-asr': { functionId: '71203149-d3b7-4460-8231-1be2543a1fca', language: '' },
-};
+export const NVIDIA_NIM_STT_MODEL_CONFIG: Record<string, NvidiaNimSttModel> =
+  Object.fromEntries(NVIDIA_NIM_STT_MODELS.map((m) => [m.id, m]));
+
+export function isNvidiaNimSttModel(model: string): boolean {
+  return Object.prototype.hasOwnProperty.call(NVIDIA_NIM_STT_MODEL_CONFIG, model);
+}
 
 /** NVIDIA-hosted Riva/NIM low-latency streaming ASR. */
 export class NvidiaNimStreamingSTT extends EventEmitter {
   private apiKey: string;
   private model: string;
-  private language = 'en-US';
+  /** User-pinned recognition language; null means "let the model decide". */
+  private language: string | null = null;
   private sampleRate = 16000;
   private channels = 1;
   private active = false;
@@ -42,16 +98,27 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   // stream's late 'error'/'end' cannot null out its replacement.
   private generation = 0;
 
-  constructor(apiKey: string, model = 'nemotron-asr-streaming') {
-    super(); this.apiKey = apiKey; this.model = MODEL_CONFIG[model] ? model : 'nemotron-asr-streaming';
+  constructor(apiKey: string, model = DEFAULT_NVIDIA_NIM_STT_MODEL) {
+    super();
+    this.apiKey = apiKey;
+    this.model = isNvidiaNimSttModel(model) ? model : DEFAULT_NVIDIA_NIM_STT_MODEL;
   }
 
   setSampleRate(rate: number) { this.sampleRate = rate; }
   setAudioChannelCount(count: number) { this.channels = count; }
   setCredentials(_path: string) {}
   setRecognitionLanguage(key: string) {
-    if (key === 'auto') { this.language = ''; return; }
+    // 'auto' falls back to the model's own default, which for the multilingual
+    // profiles is Riva's 'multi' auto-detect code — NOT an empty string, which
+    // Riva rejects (language_code is documented Required).
+    if (key === 'auto') { this.language = null; return; }
     this.language = RECOGNITION_LANGUAGES[key]?.bcp47 || RECOGNITION_LANGUAGES[key]?.iso639 || this.language;
+  }
+
+  /** The language_code actually sent; never empty. */
+  private resolveLanguageCode(): string {
+    const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
+    return this.language || cfg.languageCode || 'en-US';
   }
   start() { if (this.active) return; this.active = true; this.reconnectAttempts = 0; this.connect(); }
   stop() {
@@ -113,17 +180,8 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   private connect() {
     const gen = ++this.generation;
     try {
-      const grpc = require('@grpc/grpc-js');
-      const loader = require('@grpc/proto-loader');
-      const proto = path.join(__dirname, 'audio', 'riva_asr.proto');
-      const def = loader.loadSync(proto, { keepCase: false, longs: String, enums: String, defaults: true, oneofs: true });
-      const pkg = grpc.loadPackageDefinition(def).nvidia.riva.asr;
-      const cfg = MODEL_CONFIG[this.model];
-      const metadata = new grpc.Metadata();
-      metadata.add('authorization', `Bearer ${this.apiKey.trim()}`);
-      metadata.add('function-id', cfg.functionId);
-      const client = new pkg.RivaSpeechRecognition('grpc.nvcf.nvidia.com:443', grpc.credentials.createSsl());
-      this.stream = client.streamingRecognize(metadata);
+      const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
+      this.stream = createNvcfStreamingRecognize(this.apiKey, cfg.functionId);
       this.stream.on('data', (response: any) => {
         // A response proves the session works; clear the backoff so a later
         // blip starts from 1s again instead of inheriting this session's count.
@@ -143,8 +201,10 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
         this.stream = null;
         if (this.active) this.scheduleReconnect();
       });
+      // Field names are camelCase because the proto loads with keepCase:false.
+      // An unrecognised key does not throw — it serializes to nothing.
       this.stream.write({ streamingConfig: { config: {
-        encoding: 'LINEAR_PCM', sampleRateHertz: this.sampleRate, languageCode: this.language || cfg.language,
+        encoding: 'LINEAR_PCM', sampleRateHertz: this.sampleRate, languageCode: this.resolveLanguageCode(),
         maxAlternatives: 1, enableAutomaticPunctuation: true, verbatimTranscripts: true,
       }, interimResults: true } });
       for (const chunk of this.buffer.splice(0)) this.stream.write({ audioContent: chunk });

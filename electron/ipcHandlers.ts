@@ -7866,7 +7866,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-nvidia-nim-stt-model', async (_, model: string) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      if (!['nemotron-asr-streaming', 'nemotron-3.5-asr-streaming-multilingual', 'parakeet-1.1b-rnnt-multilingual-asr'].includes(model)) {
+      // Single source of truth — see NVIDIA_NIM_STT_MODELS. A second hardcoded
+      // list here would silently reject models the picker already offers.
+      const { isNvidiaNimSttModel } = require('./audio/NvidiaNimStreamingSTT');
+      if (!isNvidiaNimSttModel(model)) {
         return { success: false, error: 'Unsupported NVIDIA NIM speech model' };
       }
       const cm = CredentialsManager.getInstance();
@@ -8134,31 +8137,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
 
         if (provider === 'nvidia_nim') {
-          try {
-            const grpc = require('@grpc/grpc-js');
-            const loader = require('@grpc/proto-loader');
-            const path = require('path');
-            const proto = path.join(__dirname, 'audio', 'riva_asr.proto');
-            const def = loader.loadSync(proto, { keepCase: false, longs: String, enums: String, defaults: true, oneofs: true });
-            const pkg = grpc.loadPackageDefinition(def).nvidia.riva.asr;
-            const metadata = new grpc.Metadata();
-            metadata.add('authorization', `Bearer ${apiKey.trim()}`);
-            metadata.add('function-id', 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa');
-            const client = new pkg.RivaSpeechRecognition('grpc.nvcf.nvidia.com:443', grpc.credentials.createSsl());
-            const stream = client.streamingRecognize(metadata);
-            await new Promise<void>((resolve, reject) => {
-              const timer = setTimeout(() => { try { stream.cancel(); } catch {} reject(new Error('NVIDIA NIM speech connection timed out')); }, 15000);
-              stream.once('error', (e: Error) => { clearTimeout(timer); reject(e); });
-              stream.once('data', () => { clearTimeout(timer); resolve(); });
-              stream.write({ streamingConfig: { config: { encoding: 'LINEAR_PCM', sampleRateHertz: 16000, languageCode: 'en-US', maxAlternatives: 1 }, interimResults: true } });
-              stream.write({ audioContent: Buffer.alloc(3200) });
-              stream.end();
-            });
-            try { stream.cancel(); } catch {}
-            return { success: true };
-          } catch (error: any) {
-            return { success: false, error: error?.details || error?.message || 'NVIDIA NIM speech connection failed' };
-          }
+          // Extracted so the settle-on-any-terminal-event logic is unit-testable
+          // (scripts/dev/riva-probe-check.cjs) instead of buried in this handler.
+          const { probeNvidiaNimStt } = require('./audio/nvidiaNimSttProbe');
+          const { CredentialsManager: CM } = require('./services/CredentialsManager');
+          // Probe the model the user actually selected — the models sit behind
+          // different NVCF function-ids, so testing a fixed one can pass while
+          // the selected model is unreachable.
+          return await probeNvidiaNimStt(apiKey, CM.getInstance().getNvidiaNimSttModel());
         } else if (provider === 'deepgram') {
           const WebSocket = require('ws');
           const token = apiKey.trim();
