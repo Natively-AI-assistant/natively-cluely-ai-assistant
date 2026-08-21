@@ -360,11 +360,7 @@ export class SonioxStreamingSTT extends EventEmitter {
                     console.log('[SonioxStreaming] Session finished');
                     // We don't stop entirely, just clear WS so it can lazily reconnect on next audio
                     if (ws !== this.ws) return; // F-203: don't clear a newer session's socket
-                    if (this.ws) {
-                        this.ws.close();
-                        this.ws = null;
-                        this.configSent = false;
-                    }
+                    this.closeFinishedSession();
                 }
             } catch (err) {
                 console.error('[SonioxStreaming] Parse error:', err);
@@ -444,6 +440,29 @@ export class SonioxStreamingSTT extends EventEmitter {
                 }
             }
         }, KEEPALIVE_INTERVAL_MS);
+    }
+
+    /**
+     * Tear down the socket for a session the server reported as FINISHED. We do
+     * not stop entirely — the next audio chunk lazily reconnects.
+     *
+     * CR-07: this used to be written inline as close() + `this.ws = null`, and
+     * nulling this.ws makes the socket's own 'close' event fail the F-203
+     * identity guard (`ws !== this.ws`), so the close handler returns BEFORE its
+     * clearKeepAlive(). That leaked one 5s interval per finished session for the
+     * life of the process. Clearing it here is the fix; keeping the sequence in
+     * ONE named place is what stops the two teardown paths drifting apart again.
+     *
+     * isConnecting is deliberately not touched: the 'open' handler has already
+     * cleared it by the time a session can finish, so the keep-alive is the only
+     * cleanup that early return actually skips.
+     */
+    private closeFinishedSession(): void {
+        if (!this.ws) return;
+        this.ws.close();
+        this.clearKeepAlive();
+        this.ws = null;
+        this.configSent = false;
     }
 
     private clearKeepAlive(): void {
