@@ -1503,3 +1503,86 @@ Confirmed by review but NOT yet reproduced or fixed; listed so they are not lost
 | CR-06 | LOW-MED | `DatabaseManager.ts:1531` | The v28 `return`-on-failure correctly stops the chain but permanently blocks v29's vec0 cosine rebuild, re-opening the mixed-metric hazard by another door. |
 | CR-07 | LOW | `SonioxStreamingSTT.ts:362` | The `finished` branch nulls `this.ws`, so the F-203 identity guard returns before `clearKeepAlive()` — an orphaned interval per finished session. |
 | CR-08 | LOW | `AIProvidersSettings.tsx:1865` | `api?.method?.().then()` throws synchronously when the method is absent; the `.catch` is on the same broken chain, so the documented "older main → render nothing" fallback would unmount the settings tree instead. |
+
+---
+
+## §23 — Closing out the static-review findings (CR-03 … CR-08)
+
+Six findings from the `/code-review high` pass, worked one at a time: confirm →
+reproduce → root-cause → fix → verify, each mutation-probed and followed by a
+full-suite run diffed by failing NAME. Zero regressions at every step.
+
+| ID | Sev | Outcome |
+|----|-----|---------|
+| CR-03 | HIGH | Fixed — plus two legs the review did not name. **Physical Windows verification still owed.** |
+| CR-04 | MED | Fixed — plus a broadcast the review did not name |
+| CR-05 | MED-LOW | Fixed — verified with real DeepSeek calls |
+| CR-06 | LOW-MED | Fixed — real SQLite, real migrations |
+| CR-07 | LOW | Fixed — root cause was duplicated teardown |
+| CR-08 | LOW | **NOT A DEFECT** — dismissed with evidence, invariant pinned |
+
+### §23.1 — What confirming-before-fixing actually bought
+
+Four of six findings were wrong in some direction, and none of that was visible
+from the report text alone:
+
+* **CR-08 does not exist.** The claim was that `api?.method?.().then(…)` throws
+  when the method is absent. Optional chaining short-circuits the ENTIRE chain,
+  so the expression evaluates to `undefined` and `.then` is never reached. The
+  documented fallback was correct as written, and the ~80 other uses of that
+  idiom across the renderer are equally safe. The tell was the count: an idiom
+  that crashed the settings tree would not have survived 80 call sites. No
+  production change; the semantics and the call-site shape are now pinned,
+  because the described crash DOES appear the moment someone hoists the method
+  into a temp variable.
+* **CR-03, CR-04, CR-05 were each broader than reported.** A Windows mic control
+  painted GREEN over a denied device (`PermissionsToaster` assumed the no-op
+  request succeeded). A privacy-mode change BROADCAST to every window over an
+  unchanged disk. A cold-loading local model given 7s instead of 30s on the
+  phone path. None of these were in the findings; all three surfaced while
+  reproducing what was.
+* **One claim inside CR-04 was wrong** — `migrateLegacySettings` is not a third
+  bypass; it runs only inside the successful-parse branch and is unreachable in
+  the degraded state. Left alone rather than "fixed".
+
+### §23.2 — Two fixes were the same bug wearing different faces
+
+**CR-06** gated a DATA repair on `user_version`, the SCHEMA counter. **CR-07**
+duplicated a teardown sequence in two places that then drifted apart. Both were
+repaired at the modelling level — separate the repair's state from the schema
+version; extract ONE named teardown — rather than at the symptom. Patching the
+symptom in either case would have left the next occurrence free to reappear.
+
+### §23.3 — Verification, and where "real API" does and does not apply
+
+DeepSeek was the correct instrument for exactly ONE finding. For CR-05 the
+result was decisive: with the first token withheld to the server's 10s cascade
+cutover, the old 7s deadline aborts at 7001ms with NO answer while the corrected
+13s deadline delivers 252 real characters at 10002ms.
+
+For the other five no LLM is in the failure path, so "real" meant real Electron
+`systemPreferences` through the real preload bridge, a real `EACCES` on a real
+settings file, real SQLite migrations on a real `natively.db`, and a real timer
+lifecycle. A DeepSeek call cannot verify a SQLite migration, and was not made to
+look as though it had.
+
+### §23.4 — Probes that tried to pass vacuously
+
+Two, both caught before they could certify anything:
+
+* `deepseek-v4-flash` emits `reasoning_content` BEFORE `content`, so a small
+  `max_tokens` budget is consumed entirely by reasoning and yields zero content
+  — which reads exactly like "the deadline aborted it". The probe now THROWS on
+  a contentless completion.
+* Plain `node` cannot load better-sqlite3 (built against Electron's ABI). The
+  CR-06 probe refused to run rather than report a pass, and its committed test
+  asserts the native module loaded.
+
+Also: with CR-07's bug restored the test HANGS instead of failing — the leaked
+interval keeps the runner's event loop alive, so the defect conceals its own
+detection. The same trap appeared in the CR-02 test. Both teardowns are now
+unconditional so a regression reports cleanly instead of timing out.
+
+Final state: full suite **8012 / 7939 pass / 9 fail**, failing names identical to
+`main`'s baseline in both directions; `test:lib` 338/338; `typecheck:electron`,
+`typecheck:ts7` and the production build all clean.
