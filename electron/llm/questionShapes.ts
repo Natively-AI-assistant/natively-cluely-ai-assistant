@@ -75,9 +75,13 @@ export function scoreAskShape(input: {
 
 /** Social-pleasantry chit-chat that is question-shaped but not a substantive
  *  ask ("did you have any trouble finding parking?", "how was your weekend?").
+ *  CONTRACTIONS matter: live session A spoke "How's your day going so far?" and
+ *  the un-contracted `how (was|is) your` alternation could not match it (it
+ *  required a space before the copula), so the cap never applied and the
+ *  pleasantry scored 0.95 — clearing both live gates.
  *  Anchored on the social TOPIC so a real question containing the word (e.g.
  *  "how did you architect the parking-lot allocation service?") is unaffected. */
-export const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bfind (us|the office|parking|the building|your way|this place)\s+(ok(ay)?|alright|all right)\b|\bhow (was|is|'?s) your (weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow (are|'?re) you (doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\b(traffic|parking|weather|commute) (was|is|been)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
+export const SOCIAL_PLEASANTRY = /\b(trouble |any (trouble|problem)s? )?(finding|find) (the office|us|parking|the parking|your way|this place|the building)\b|\bfind (us|the office|parking|the building|your way|this place)\s+(ok(ay)?|alright|all right)\b|\bhow(?:\s+(?:was|is)|\s*['’]?s)\s+your\s+(weekend|day|morning|week|commute|drive|trip|flight)\b|\bhow(?:\s+are|\s*['’]?re)\s+you\s+(doing|feeling|holding up)\b|\bhow'?s the weather\b|\bdid you (get|grab|have) (any |some )?(coffee|water|tea|lunch)\b|\b(traffic|parking|weather|commute) (was|is|been)\b|\bhow was the (traffic|commute|drive|trip|flight|parking)\b/i;
 
 /** Wait/hold idioms — pause REQUESTS, not asks ("give me one second", "bear
  *  with me"). The lookahead keeps "give me a second OPINION/chance/example…"
@@ -93,6 +97,39 @@ export const WAIT_IDIOM = /\b(give (me|us) (a|one|two|just a) (sec(ond)?s?|minut
 /** wh-word + auxiliary/degree word anywhere in the turn ("how strong is",
  *  "what should i", "how ready are", "why did you"). */
 export const CLAUSE_INTERROGATIVE = /\b(what|why|how|when|where|which|who|whose|whom)\s+(should|would|could|can|do|did|does|is|are|was|were|am|have|has|had|will|many|much|long|soon|often|strong|ready|good|comfortable|confident|familiar|experienced|about)\b/i;
+
+/**
+ * wh-word + a NOUN + auxiliary — the shape CLAUSE_INTERROGATIVE misses because
+ * an object sits between the wh-word and the verb ("What DATABASE is under
+ * it?", "Which APPROACH would you take?"). Live session A produced exactly
+ * this on an unpunctuated turn ("…more basic question first What database is
+ * under it") which scored 0.3 and lost profile grounding.
+ *
+ * Like its siblings this is consulted ONLY when punctuationSource is
+ * 'unavailable', where a missing '?' carries no evidential weight — the same
+ * pattern inside a punctuated statement ("I know what database is under it")
+ * keeps its terminal '.' and is judged on that.
+ */
+export const WH_NOUN_AUX = /\b(what|which|whose)\s+[\w'-]+\s+(is|are|was|were|do|did|does|will|would|should|can|could|has|have|had)\b/i;
+
+/**
+ * Task directives — imperative-mood asks that carry no '?', no clause-initial
+ * wh/aux lead, and no member of the tell-me IMPERATIVE_ASK family: "Rate your
+ * SQL out of ten", "Convince me you're right for this role", "Solve two sum".
+ *
+ * Anchored to the clause START (imperative position), a comma boundary
+ * ("…this is a data analyst role, connect it for me") or a SENTENCE boundary
+ * ("Let's do a quick exercise, nothing scary. Solve two sum.") so declarative
+ * uses of the same verbs ("We DESIGN for scale", "our team SOLVES these
+ * problems") do not match.
+ *
+ * Provenance-independent by design: an imperative directive is imperative
+ * whether or not the provider punctuates, so unlike the clause-recovery
+ * patterns above this one is consulted unconditionally. Shared because the
+ * shadow ledger found the gap first (9 of 10 of its no-ask windows) and live
+ * session A then proved the live extractor had the identical hole.
+ */
+export const TASK_DIRECTIVE = /(?:^|[,.!?]\s*)(?:(?:ok(?:ay)?|so|now|next|alright|great|please)[,.!]?\s+)*(?:please\s+)?(solve|write|implement|rate|rank|convince|design|build|debug|code|optimi[sz]e|refactor|estimate|compare|sketch|whiteboard|connect|reverse|check|find|print|sort)\b/i;
 
 /** auxiliary + second person anywhere ("can you", "did you", "are you"). */
 export const AUX_SECOND_PERSON = /\b(can|could|would|will|do|did|does|are|were|have|has)\s+you\b/i;

@@ -154,7 +154,33 @@ const SettingsPopup = () => {
         };
         loadProfile();
 
-        return () => window.removeEventListener('focus', handleFocus);
+        // Settings staleness fix (2026-08-21): this window mounts ONCE at app
+        // start and is hidden/shown afterwards, so the mount fetches above go
+        // stale. The focus handler never fires for the overlay-anchored
+        // popover (main shows it with showInactive()), so re-pull everything
+        // pull-based each time the main process shows the window. Broadcast-
+        // synced state (undetectable, groq mode, opacity, theme) already stays
+        // live via its own listeners.
+        // @ts-ignore
+        const unsubscribeShown = window.electronAPI?.onSettingsWindowShown?.(() => {
+            loadCredentials();
+            loadProfile();
+            try {
+                // Undetectable's INITIAL fetch is mount-only; its change
+                // listener only covers changes made while this window exists.
+                window.electronAPI?.getUndetectable?.().then((state: boolean) => setIsUndetectable(state));
+            } catch { /* non-fatal */ }
+            try {
+                (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+                    .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+                    .catch(() => { /* keep last known */ });
+            } catch { /* non-fatal */ }
+        });
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            unsubscribeShown?.();
+        };
     }, []);
 
     // Sync meeting interface theme from localStorage and main process

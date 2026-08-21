@@ -1997,7 +1997,7 @@ hindsight-api`}
                                 </h4>
                                 <ul className="text-[11px] text-text-secondary space-y-2 list-disc pl-4">
                                     <li>
-                                        <strong>Global Hotkey (Recommended):</strong> Press <kbd className="bg-bg-elevated px-1.5 py-0.5 rounded border text-[10.5px] border-border-subtle font-sans">{isMac ? '⌘' : 'Ctrl'}+Shift+Y</kbd> anywhere on your system. Natively pulls DOM context automatically; if the browser isn't active/reachable, it defaults to a screenshot automatically.
+                                        <strong>Global Hotkey (Recommended):</strong> Press <kbd className="bg-bg-elevated px-1.5 py-0.5 rounded border text-[10.5px] border-border-subtle font-sans">{isMac ? '⌘' : 'Ctrl'}+Y</kbd> anywhere on your system. Keep holding {isMac ? '⌘' : 'Ctrl'} and tap Enter to send the question in the same motion. Natively pulls DOM context automatically; if the browser isn't active/reachable, it defaults to a screenshot automatically.
                                     </li>
                                     <li>
                                         <strong>Manual Capture:</strong> Open the extension toolbar popup and click <strong>Capture this page</strong>.

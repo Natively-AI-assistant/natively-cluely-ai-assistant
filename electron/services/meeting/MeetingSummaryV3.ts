@@ -328,6 +328,44 @@ export function cleanMeetingTitle(
   return out;
 }
 
+// ── Answer-fragment title rejection (RC-7 adjacent, live session C 2026-08-21) ──
+// The length clamp above bounds SIZE, not SEMANTICS. Live rows from one session:
+//
+//   402 chars -> "Here's the C++ implementation"
+//   294 chars -> "cpp"
+//   185 chars -> "I'm sorry, but I don't have the full"
+//    60 chars -> "Return [0, 1] for the two numbers that"
+//
+// All are the model ANSWERING the transcript instead of naming it, clamped to a
+// first sentence. A rejected generated title is simply not applied — the
+// meeting keeps its default until the structured V3 summary title (usually
+// well-formed) lands, and user renames outrank both via user_titled.
+// Deliberately conservative: only clear answer/refusal shapes are rejected, so
+// a legitimate terse title ("Standup", "Sync with Dr. Patel") always passes.
+const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
+  // Answer openers: "Here's the…", "Here is what…"
+  /^here(?:'s|\s+is|\s+are)\b/i,
+  // Refusals / apologies: "I'm sorry…", "I don't have…", "Unfortunately…"
+  /^(?:i'?m sorry|sorry\b|i apologi[sz]e|i don'?t (?:have|know)|i can(?:no|')t|unfortunately)\b/i,
+  // Code-answer imperatives: "Return [0, 1] for the two numbers that…"
+  /^(?:return|print|output|write|implement|initialize)\b/i,
+  // Conversational acknowledgements: "Yes, that's right", "Okay, so…"
+  /^(?:yes|no|sure|okay|ok|yeah|yep)\b\s*[,.!]/i,
+];
+
+/** True when a GENERATED title reads as an answer fragment, not a name. */
+export function isAnswerFragmentTitle(title: string): boolean {
+  const t = String(title || '').trim();
+  if (!t) return false;
+  if (ANSWER_FRAGMENT_TITLE_RES.some((re) => re.test(t))) return true;
+  // A single all-lowercase token ("cpp") is an answer artifact — the 3-6-word
+  // title prompt never legitimately produces one, and user/calendar titles do
+  // not pass through this predicate.
+  const words = t.split(/\s+/);
+  if (words.length === 1 && t === t.toLowerCase() && /^[a-z0-9+#.]+$/.test(t)) return true;
+  return false;
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));

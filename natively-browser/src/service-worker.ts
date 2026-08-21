@@ -17,7 +17,7 @@ import { originPatternFromUrl } from './capture/originPattern';
 // Static, NOT a dynamic import: chrome.permissions.request must run inside the
 // popup's user-gesture window, and a dynamic import can resolve on a later
 // microtask than that window allows ("may only be called from a user gesture").
-import { requestOriginPermission } from './capture/permissions';
+import { requestOriginPermission, requestAllSitesPermission, hasAllSitesPermission } from './capture/permissions';
 
 const STORAGE_KEY = 'pairing';
 const PAIR_PROBE_DOM = '__pair_probe__';
@@ -753,11 +753,60 @@ function wsSend(obj: unknown): void {
   } catch (_) { /* socket gone */ }
 }
 
+/** Manifest default_title — restored when a grant nudge is cleared. */
+const DEFAULT_ACTION_TITLE = 'Natively — capture this page';
+
+/**
+ * Pure: the toolbar-badge nudge for a failed DESKTOP-PUSH capture, or null when
+ * the failure isn't user-fixable from the toolbar. Only needs-host-permission
+ * qualifies: chrome.permissions.request needs a user gesture the desktop hotkey
+ * can't provide, so the icon itself must pull the user in — the popup's Capture
+ * button then grants + retries in one click.
+ */
+export function badgeForCaptureOutcome(kind: string): { text: string; title: string } | null {
+  if (kind === 'needs-host-permission') {
+    return {
+      text: '!',
+      title: 'Natively needs access to this site — click, then press Capture once to grant it.',
+    };
+  }
+  return null;
+}
+
+/**
+ * Surface a hotkey capture failure on the toolbar icon: badge + title, and
+ * (Chrome 127+) try to open the popup outright so the grant is one click away.
+ * openPopup throws when the browser window isn't focused or a popup is already
+ * open — that's fine, the badge still marks the icon the desktop pill points at.
+ */
+function nudgeGrantViaAction(kind: string): void {
+  const badge = badgeForCaptureOutcome(kind);
+  if (!badge) return;
+  try {
+    void chrome.action.setBadgeText({ text: badge.text });
+    void chrome.action.setBadgeBackgroundColor?.({ color: '#f59e0b' });
+    void chrome.action.setTitle({ title: badge.title });
+  } catch (_) { /* badge is best-effort */ }
+  try {
+    void chrome.action.openPopup?.().catch(() => {});
+  } catch (_) { /* pre-127 or unfocused window */ }
+}
+
+/** Clear the grant nudge (a capture succeeded or the origin was granted). */
+function clearGrantNudge(): void {
+  try {
+    void chrome.action.setBadgeText({ text: '' });
+    void chrome.action.setTitle({ title: DEFAULT_ACTION_TITLE });
+  } catch (_) { /* best-effort */ }
+}
+
 async function handleCaptureDom(reqId: string, tabId?: number): Promise<void> {
   wsSend({ type: 'capture-ack', reqId, status: 'started' });
   try {
     const report = await captureActiveTab({ reqId, tabId });
     const ok = report.outcome.kind === 'success';
+    if (ok) clearGrantNudge();
+    else nudgeGrantViaAction(report.outcome.kind);
     // Send the descriptive message ("No active tab", "Cannot capture browser/
     // internal pages") when present, else the outcome kind — so the desktop log
     // shows WHY a capture failed rather than just "error".
@@ -864,6 +913,8 @@ type PopupMessage =
   | { type: 'autopair' }
   | { type: 'capture' }
   | { type: 'grant-host'; value: string }
+  | { type: 'grant-all-sites' }
+  | { type: 'all-sites-status' }
   | { type: 'status' }
   | { type: 'ws-status' }
   | { type: 'unpair' };
@@ -896,18 +947,35 @@ chrome.runtime.onMessage.addListener((msg: PopupMessage, _sender, sendResponse) 
         sendResponse(r);
         return;
       }
-      case 'capture':
-        sendResponse(await captureActiveTab());
+      case 'capture': {
+        const report = await captureActiveTab();
+        if (report.outcome.kind === 'success') clearGrantNudge();
+        sendResponse(report);
         return;
+      }
       case 'grant-host': {
         // The popup asks for ONE origin after a capture came back
         // needs-host-permission. chrome.permissions.request must run inside a
         // user gesture; the popup's click handler is that gesture, and the
         // gesture survives this round-trip because the popup awaits us.
         const origin = typeof msg.value === 'string' ? msg.value : '';
-        sendResponse(await requestOriginPermission(chrome.permissions, origin));
+        const granted = await requestOriginPermission(chrome.permissions, origin);
+        if ((granted as { granted?: boolean })?.granted) clearGrantNudge();
+        sendResponse(granted);
         return;
       }
+      case 'grant-all-sites': {
+        // One-time "Allow on all sites": a single prompt covering the broad
+        // optional_host_permissions patterns, so the desktop hotkey works on
+        // any site without per-site grants. Gesture comes from the popup click.
+        const r = await requestAllSitesPermission(chrome.permissions);
+        if (r.granted) clearGrantNudge();
+        sendResponse(r);
+        return;
+      }
+      case 'all-sites-status':
+        sendResponse({ granted: await hasAllSitesPermission(chrome.permissions) });
+        return;
       case 'status':
         sendResponse(await connectionStatus());
         return;

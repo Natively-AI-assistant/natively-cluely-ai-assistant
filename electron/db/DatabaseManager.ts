@@ -1399,6 +1399,18 @@ export class DatabaseManager {
             this.db.pragma('user_version = 27');
         }
 
+        // Version 27 → 28: user_titled flag on meetings (RC-7, 2026-08-21).
+        // A user rename was silently overwritten TWICE: by the post-call title
+        // generation in saveMeeting's final write, and unconditionally by
+        // replaceDetailedSummary when the deferred V3 summary landed. The flag
+        // is set by updateMeetingTitle (the one rename entry point) and makes
+        // every generated-title write yield to it.
+        if (version < 28) {
+            console.log('[DatabaseManager] Applying migration v27 → v28: meetings.user_titled');
+            try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
+            this.db.pragma('user_version = 28');
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 
@@ -2521,9 +2533,15 @@ export class DatabaseManager {
         }
 
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
+        // RC-7 (2026-08-21): INSERT OR REPLACE rewrites the whole row, so a
+        // user rename made while the row still said "Processing…" (the
+        // placeholder → final-save window can span a slow summary generation)
+        // was clobbered by the final save's generated title AND lost its
+        // user_titled stamp. Pre-read the flag and let the user's title win.
+        const readUserTitle = this.db.prepare(`SELECT title, COALESCE(user_titled, 0) AS user_titled FROM meetings WHERE id = ?`);
 
         const insertTranscript = this.db.prepare(`
             INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
@@ -2552,10 +2570,12 @@ export class DatabaseManager {
         });
 
         const runTransaction = this.db.transaction(() => {
-            // 1. Insert Meeting
+            // 1. Insert Meeting (a user-renamed row keeps its title — RC-7)
+            const existing = readUserTitle.get(meeting.id) as { title: string; user_titled: number } | undefined;
+            const userTitled = existing?.user_titled === 1;
             insertMeeting.run(
                 meeting.id,
-                meeting.title,
+                userTitled && existing?.title ? existing.title : meeting.title,
                 startTimeMs,
                 durationMs,
                 summaryJson,
@@ -2563,7 +2583,8 @@ export class DatabaseManager {
                 meeting.calendarEventId || null,
                 meeting.source || 'manual',
                 meeting.isProcessed ? 1 : 0,
-                meeting.summaryStatus || (meeting.isProcessed ? 'completed' : 'queued')
+                meeting.summaryStatus || (meeting.isProcessed ? 'completed' : 'queued'),
+                userTitled ? 1 : 0
             );
 
             // 2. Insert Transcript
@@ -2625,7 +2646,10 @@ export class DatabaseManager {
     public updateMeetingTitle(id: string, title: string): boolean {
         if (!this.db) return false;
         try {
-            const stmt = this.db.prepare('UPDATE meetings SET title = ? WHERE id = ?');
+            // RC-7: a rename is the USER's title. Stamp user_titled so the
+            // generated-title writers (saveMeeting's final write, the deferred
+            // replaceDetailedSummary) yield to it from now on.
+            const stmt = this.db.prepare('UPDATE meetings SET title = ?, user_titled = 1 WHERE id = ?');
             const info = stmt.run(title, id);
             return info.changes > 0;
         } catch (error) {
@@ -2714,7 +2738,13 @@ export class DatabaseManager {
             const newData = { ...existingData, detailedSummary };
             const jsonStr = JSON.stringify(newData);
             if (opts?.title && opts?.summaryStatus) {
-                const info = this.db.prepare('UPDATE meetings SET summary_json = ?, title = ?, summary_status = ? WHERE id = ?').run(jsonStr, opts.title, opts.summaryStatus, id);
+                // RC-7 (2026-08-21): the deferred V3 summary used to overwrite
+                // the title UNCONDITIONALLY — a user rename made even after the
+                // meeting ended was silently reverted whenever the detailed
+                // summary landed. A generated title never beats a user one.
+                const info = this.db.prepare(
+                    'UPDATE meetings SET summary_json = ?, title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END, summary_status = ? WHERE id = ?',
+                ).run(jsonStr, opts.title, opts.summaryStatus, id);
                 return info.changes > 0;
             }
             if (opts?.summaryStatus) {

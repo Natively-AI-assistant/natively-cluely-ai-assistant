@@ -122,21 +122,29 @@ describe('size — v2 must be dramatically smaller than the legacy constants', (
 });
 
 describe('coding contract preservation (validator-pinned public format)', () => {
-  test('technical-interview and code_hint routes carry the six-section contract', () => {
-    const ti = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'answer', tier: 'cloud' });
+  // RC-3 (session C, 2026-08-21): the mode-alone trigger is gone — the contract
+  // attaches semantically (codingTask from routing) or via a coding-shaped
+  // action (code_hint), never from technical-interview mode by itself. Live,
+  // the mode-alone leg put the DSA template into every turn of an interview
+  // and the model applied it to conceptual questions ("what's a semaphore?").
+  test('coding turns and code_hint routes carry the six-section contract', () => {
+    const ti = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'answer', tier: 'cloud', codingTask: true, codingTaskKind: 'dsa' });
     assert.ok(ti.includes('## Approach') && ti.includes('## Dry Run') && ti.includes('## Interviewer Follow-up Points'),
-      'technical-interview missing the validator-pinned coding contract');
+      'coding turn missing the validator-pinned coding contract');
     const ch = v2.buildSystemPromptV2({ mode: 'general', action: 'code_hint', tier: 'cloud' });
     assert.ok(ch.includes('## Approach'), 'code_hint missing the coding contract');
   });
 
-  test('non-coding routes do NOT carry the six-section contract', () => {
+  test('non-coding routes do NOT carry the six-section contract — technical-interview included', () => {
     const p = v2.buildSystemPromptV2({ mode: 'sales', action: 'what_to_say', tier: 'cloud' });
     assert.ok(!p.includes('## Interviewer Follow-up Points'));
+    const ti = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'answer', tier: 'cloud' });
+    assert.ok(!ti.includes('## Interviewer Follow-up Points'),
+      'technical-interview mode alone must no longer force the contract onto non-coding turns');
   });
 
   test('local tier uses the compact coding contract, same headings', () => {
-    const p = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'answer', tier: 'local' });
+    const p = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'answer', tier: 'local', codingTask: true, codingTaskKind: 'dsa' });
     assert.ok(p.includes('## Approach'), 'local coding contract missing headings');
   });
 });
@@ -577,8 +585,18 @@ describe('silence gate (action-scoped: monitoring may be silent, invoked actions
 });
 
 describe('coding-contract applicability boundary (run-4: 91/92 heading violations from technical-interview)', () => {
-  test('the contract states it applies ONLY to coding turns, prose otherwise', () => {
+  // RC-3 (session C, 2026-08-21): run-4's mitigation was a sentence INSIDE the
+  // always-present contract telling the model when not to use it — measured
+  // insufficient live (presses 24/76/80/81 shipped the scaffold anyway). The
+  // boundary is now structural: a non-coding turn does not carry the contract
+  // at all, and a coding turn still carries the applicability sentence.
+  test('a non-coding technical-interview turn carries NO contract at all', () => {
     const p = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'what_to_say', tier: 'cloud' });
+    assert.ok(!p.includes('<coding_contract>'));
+  });
+
+  test('a coding turn still states the contract applies ONLY to coding turns, prose otherwise', () => {
+    const p = v2.buildSystemPromptV2({ mode: 'technical-interview', action: 'what_to_say', tier: 'cloud', codingTask: true, codingTaskKind: 'dsa' });
     assert.ok(p.includes('This contract applies ONLY when the current turn asks for code'));
     assert.ok(p.includes('answer in plain spoken prose — no headings, no bullets, no section labels'));
   });

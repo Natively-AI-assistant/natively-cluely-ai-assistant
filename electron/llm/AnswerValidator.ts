@@ -738,6 +738,45 @@ export const hasUnrecoveredScaffoldContamination = (answerType: AnswerType, answ
   return detectAndExtractScaffoldMisfire(answerType, text) === null;
 };
 
+// ── RC-3 (live session C, 2026-08-21) ──────────────────────────────────────
+// Answer types whose legitimate content overlaps the LOOSE scaffold
+// fingerprint (Big-O / complexity notation is their actual subject), so the
+// regeneration repair may only fire on the STRICT signal below. Mirrors the
+// engine's TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION — which
+// used to exclude them from repair ENTIRELY, shipping "what's a semaphore?"
+// as a six-section DSA template with three literal "Not applicable,
+// conceptual question." sections while the detector was returning true.
+const STRICT_SCAFFOLD_SIGNAL_TYPES = new Set<AnswerType>([
+  'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
+]);
+
+/**
+ * STRICT scaffold signal: the coding contract's own unique headings
+ * ("## Dry Run", "## Technique / Data Structure / Algorithm Used") plus the
+ * ≥2-recognized-headings structure. Unlike the loose fingerprint, complexity
+ * notation alone can never trip this — a legitimate technical answer about
+ * Big-O discusses complexity but does not emit the contract's template
+ * headings.
+ */
+export const hasStrictCodingScaffoldSignal = (answer: string): boolean => {
+  const text = String(answer || '');
+  if (!text.trim()) return false;
+  const headingMatches = [...text.matchAll(new RegExp(SCAFFOLD_MISFIRE_HEADING_RE.source, 'gim'))];
+  return headingMatches.length >= 2 && CODING_SCAFFOLD_UNIQUE_HEADING_RE.test(text);
+};
+
+/**
+ * Single policy point for the engine's scaffold-regeneration repair: should a
+ * completed non-coding answer of this type be regenerated for scaffold
+ * contamination? Technical types require the strict signal; everything else
+ * keeps the historical loose eligibility.
+ */
+export const isScaffoldRegenerationEligible = (answerType: AnswerType, answer: string): boolean => {
+  if (!hasUnrecoveredScaffoldContamination(answerType, answer)) return false;
+  if (STRICT_SCAFFOLD_SIGNAL_TYPES.has(answerType)) return hasStrictCodingScaffoldSignal(answer);
+  return true;
+};
+
 export const validateAnswerStructure = (
   answerType: AnswerType,
   answer: string,
