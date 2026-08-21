@@ -17,24 +17,19 @@
 import { parentPort } from 'worker_threads';
 import { WhisperProgressAggregator } from './whisperProgressAggregator';
 import { getBoundedOnnxSessionOptions } from '../../utils/onnxThreadConfig';
-
-const LANG_MAP: Record<string, string | null> = {
-  'auto': null,
-  'en-US': 'english',
-  'en-GB': 'english',
-  'fr-FR': 'french',
-  'de-DE': 'german',
-  'es-ES': 'spanish',
-  'ja-JP': 'japanese',
-  'ko-KR': 'korean',
-  'zh-CN': 'chinese',
-  'zh-TW': 'chinese',
-  'pt-BR': 'portuguese',
-  'it-IT': 'italian',
-  'ru-RU': 'russian',
-  'ar': 'arabic',
-  'hi-IN': 'hindi',
-};
+// Shared language-capability module (also consumed by ipcHandlers for the
+// Settings UI). Replaces two hand-maintained tables that had both drifted:
+//  - LANG_MAP was keyed by BCP-47 tags ('en-US') while the host actually
+//    sends the app's internal settings key ('english-us' — LocalWhisperSTT
+//    forwards CredentialsManager.getSttLanguage() verbatim), so EVERY lookup
+//    missed and multilingual Whisper silently ran in auto-detect regardless
+//    of the user's language setting. resolveWhisperLanguage() accepts the
+//    internal key, plus BCP-47/iso639 tags for compatibility, and covers all
+//    30 RECOGNITION_LANGUAGES (the old map covered 13).
+//  - ENGLISH_ONLY_MODELS was a hand-typed id list that omitted Parakeet CTC
+//    (English-only per NVIDIA's model card). isEnglishOnlyLocalModel() is
+//    derived from MODEL_CATALOG's own `multilingual` flag instead.
+import { isEnglishOnlyLocalModel, resolveWhisperLanguage } from './modelLanguageSupport';
 
 let pipe: any = null;
 let loadedModelId = '';
@@ -175,26 +170,6 @@ async function updatePromptCache(promptText: string): Promise<void> {
     cachedPromptIds = null;
   }
 }
-
-// Distil-Whisper checkpoints have NO multilingual decoder. If the user picks
-// 'auto' or any non-English language, the worker will silently transcribe
-// non-English audio as phonetic English. Force language='english' so the
-// behaviour is at least documented and consistent.
-const ENGLISH_ONLY_MODELS = new Set([
-  // Moonshine — English-only by design
-  'onnx-community/moonshine-tiny-ONNX',
-  'onnx-community/moonshine-base-ONNX',
-  // Distil-Whisper — English-only checkpoints
-  'distil-whisper/distil-small.en',
-  'distil-whisper/distil-medium.en',
-  'distil-whisper/distil-large-v2',
-  'distil-whisper/distil-large-v3',
-  // Whisper .en variants
-  'Xenova/whisper-tiny.en',
-  'Xenova/whisper-base.en',
-  'Xenova/whisper-small.en',
-  'Xenova/whisper-medium.en',
-]);
 
 if (!parentPort) throw new Error('whisperWorker must be run as a Worker thread');
 
@@ -513,7 +488,7 @@ parentPort.on('message', async (msg: any) => {
       return;
     }
     try {
-      let language: string | null = LANG_MAP[msg.language] ?? null;
+      let language: string | null = resolveWhisperLanguage(msg.language);
       const streaming: boolean = !!msg.streaming;
 
       // English-only checkpoints (Distil-Whisper + .en variants) have no
@@ -535,7 +510,12 @@ parentPort.on('message', async (msg: any) => {
       //
       // Omitting them is not a downgrade: an English-only checkpoint can only
       // transcribe, and only in English, so there is nothing left to express.
-      const isEnglishOnly = ENGLISH_ONLY_MODELS.has(loadedModelId);
+      //
+      // Derived from MODEL_CATALOG's `multilingual` flag (modelLanguageSupport)
+      // rather than the previous hand-typed id set, which omitted Parakeet CTC
+      // — English-only per NVIDIA's model card, and a CTC pipeline with no
+      // decoder prompt to condition anyway.
+      const isEnglishOnly = isEnglishOnlyLocalModel(loadedModelId);
       if (isEnglishOnly) {
         language = null;
       }

@@ -210,7 +210,13 @@ describe('an English-only Whisper checkpoint is sent neither task nor language',
   });
 
   test('language is nulled for English-only models', () => {
-    assert.match(workerSrc, /const isEnglishOnly = ENGLISH_ONLY_MODELS\.has\(loadedModelId\);/);
+    // 2026-08-19: the guard's source moved from the worker's own hand-typed
+    // ENGLISH_ONLY_MODELS set to modelLanguageSupport.ts's catalog-derived
+    // isEnglishOnlyLocalModel() (the hand-typed set omitted Parakeet CTC).
+    // The behavior this suite pins — English-only checkpoints get language
+    // nulled and task stripped — is unchanged; only the anchor expression
+    // moved. ModelLanguageSupport.test.mjs covers the derivation itself.
+    assert.match(workerSrc, /const isEnglishOnly = isEnglishOnlyLocalModel\(loadedModelId\);/);
     assert.match(workerSrc, /if \(isEnglishOnly\) \{\s*\n\s*language = null;/);
   });
 

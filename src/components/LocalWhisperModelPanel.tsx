@@ -38,7 +38,7 @@ interface HardwareInfo {
     recommendedModel: string;
 }
 
-interface ChannelConfig {
+export interface ChannelConfig {
     enabled: boolean;
     micModelId: string;
     systemModelId: string;
@@ -208,7 +208,18 @@ function familyOf(model: ModelInfo): string {
     return (FAMILY_RULES.find((r) => r.test(model.name)) ?? FAMILY_RULES[FAMILY_RULES.length - 1]).id;
 }
 
-export function LocalWhisperModelPanel() {
+interface LocalWhisperModelPanelProps {
+    /**
+     * Fires whenever the model assignment changes — initial load, global model
+     * pick, per-channel pick, or the split toggle. SettingsOverlay uses it to
+     * recompute which recognition languages the ACTIVE local model(s) accept,
+     * so the Language / Accent selects below this panel stay restricted to
+     * what the model supports (see modelLanguageSupport.ts main-side).
+     */
+    onModelConfigChanged?: (cfg: ChannelConfig) => void;
+}
+
+export function LocalWhisperModelPanel({ onModelConfigChanged }: LocalWhisperModelPanelProps = {}) {
     const t = useT();
     const reduceMotion = useReducedMotion();
     const aipTheme = useResolvedTheme();
@@ -337,6 +348,25 @@ export function LocalWhisperModelPanel() {
         loadData();
     }, [loadData]);
 
+    // One place that tells the parent which model(s) are active, keyed on the
+    // COMMITTED config rather than fired from each mutator — so every path
+    // (initial load, auto-select, split toggle, per-channel pick) reports
+    // exactly what this panel settled on.
+    //
+    // The callback is held in a ref so it is NOT an effect dependency: a
+    // parent passing an inline arrow would otherwise change its identity on
+    // every render and re-fire this effect (and, when it was a `loadData`
+    // dependency, re-issue the whole model/hardware/download-state IPC batch)
+    // on each parent re-render.
+    const onModelConfigChangedRef = useRef(onModelConfigChanged);
+    useEffect(() => { onModelConfigChangedRef.current = onModelConfigChanged; });
+    useEffect(() => {
+        // Skip the pre-load placeholder: reporting all-empty ids would clear a
+        // capability the parent had already resolved from its own IPC read.
+        if (!config.globalModelId && !config.micModelId && !config.systemModelId) return;
+        onModelConfigChangedRef.current?.(config);
+    }, [config]);
+
     // Handle downloads
     useEffect(() => {
         const unsubProgress = electronAPI?.onLocalWhisperDownloadProgress?.((data: { modelId: string; progress: number }) => {
@@ -398,9 +428,14 @@ export function LocalWhisperModelPanel() {
         await loadData();
     };
 
+    // Every mutator uses the FUNCTIONAL form: two of these can fire before a
+    // re-render (flip Split, then immediately pick a channel model), and a
+    // `{ ...config }` spread off the render-time closure would silently drop
+    // the first update while the main process kept it — the two would then
+    // disagree about `enabled`. The parent is notified from the effect above,
+    // which sees the committed value rather than a locally-computed guess.
     const toggleDualChannel = async (enabled: boolean) => {
-        const newCfg = { ...config, enabled };
-        setConfig(newCfg);
+        setConfig(prev => ({ ...prev, enabled }));
         await electronAPI?.localWhisperSetChannelConfig?.({ enabled });
     };
 
