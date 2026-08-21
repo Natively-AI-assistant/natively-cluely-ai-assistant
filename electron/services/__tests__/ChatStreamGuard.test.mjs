@@ -68,26 +68,32 @@ describe('resolveChatStreamToken', () => {
   });
 });
 
+// CR-01 (2026-08-21): every branch now carries `release`, which tells the caller
+// to stop its OWN processing indicator without finalizing the active row. It is
+// pinned false on each path below deliberately — an honored done clears the
+// spinner through the normal path, and a stale same-surface done must leave the
+// live spinner alone. Only the cross-surface local done sets it (see
+// src/lib/__tests__/chatStreamGuardSurfaceScope2026_08_18.test.mjs).
 describe('resolveChatStreamDone', () => {
   test('no id → honor + clear (backward compat)', () => {
-    assert.deepEqual(resolveChatStreamDone(5, undefined), { honor: true, activeId: null, activeSource: null });
-    assert.deepEqual(resolveChatStreamDone(null, undefined), { honor: true, activeId: null, activeSource: null });
+    assert.deepEqual(resolveChatStreamDone(5, undefined), { honor: true, activeId: null, activeSource: null, release: false });
+    assert.deepEqual(resolveChatStreamDone(null, undefined), { honor: true, activeId: null, activeSource: null, release: false });
   });
 
   test('done for the active stream → honor + clear', () => {
-    assert.deepEqual(resolveChatStreamDone(5, 5), { honor: true, activeId: null, activeSource: null });
+    assert.deepEqual(resolveChatStreamDone(5, 5), { honor: true, activeId: null, activeSource: null, release: false });
   });
 
   test('done for a NEWER stream → honor + clear', () => {
-    assert.deepEqual(resolveChatStreamDone(5, 7), { honor: true, activeId: null, activeSource: null });
+    assert.deepEqual(resolveChatStreamDone(5, 7), { honor: true, activeId: null, activeSource: null, release: false });
   });
 
   test('stale done (older stream) is IGNORED, active id preserved', () => {
-    assert.deepEqual(resolveChatStreamDone(5, 3), { honor: false, activeId: 5, activeSource: 'desktop' });
+    assert.deepEqual(resolveChatStreamDone(5, 3), { honor: false, activeId: 5, activeSource: 'desktop', release: false });
   });
 
   test('done with no active id yet → honor (lets a fast-path no-id answer finalize)', () => {
-    assert.deepEqual(resolveChatStreamDone(null, 5), { honor: true, activeId: null, activeSource: null });
+    assert.deepEqual(resolveChatStreamDone(null, 5), { honor: true, activeId: null, activeSource: null, release: false });
   });
 });
 
