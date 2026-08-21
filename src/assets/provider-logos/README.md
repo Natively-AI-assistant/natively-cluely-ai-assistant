@@ -7,7 +7,7 @@ affiliation.
 
 ## Provenance
 
-Ten SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
+Twelve SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
 (MIT, © 2023 LobeHub — full text in `LICENSE` beside this file).
 
 ```
@@ -23,6 +23,7 @@ ibm.svg          ← ibm.svg
 elevenlabs.svg   ← elevenlabs.svg
 apple.svg        ← apple.svg
 microsoft.svg    ← microsoft-color.svg   (title corrected, see below)
+nvidia.svg       ← simple-icons v16.28.0 (CC0-1.0)
 ```
 
 The last four were added for the speech provider selector, and the variant taken
@@ -35,6 +36,11 @@ reproduce. See "Colour vs monochrome" below.
 under **CC0-1.0** — a different licence from the lobehub set, so its full text
 lives separately in `LICENSE.simple-icons`. Deepgram publishes no mark in the
 lobehub package.
+
+`nvidia.svg` also comes from [simple-icons][si] v16.28.0 and is normalized to
+`width="1em" height="1em" fill="currentColor"` for the shared inline renderer.
+Its published brand colour is NVIDIA green (`#76B900`), applied by
+`BRAND_COLORS`.
 
 ### The platform marks, and the Windows gap
 

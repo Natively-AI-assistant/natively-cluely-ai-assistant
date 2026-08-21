@@ -34,6 +34,7 @@ import ibmMark from '../../assets/provider-logos/ibm.svg?raw';
 // this registry stays a plain id→asset map with no platform logic in it.
 import appleMark from '../../assets/provider-logos/apple.svg?raw';
 import microsoftMark from '../../assets/provider-logos/microsoft.svg?raw';
+import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 // Our own app icon, for the Natively API row. Raster and full-colour, so it is a
 // URL rendered with <img> rather than inlined markup — there is no currentColor
 // in a PNG, so an <img> loses nothing.
@@ -54,6 +55,7 @@ export const BRAND_MARKS: Record<string, string> = {
     ibmwatson: ibmMark,
     apple: appleMark,
     microsoft: microsoftMark,
+    nvidia_nim: nvidiaMark,
 };
 
 /**
@@ -82,6 +84,7 @@ export const BRAND_MARK_IMAGES: Record<string, string> = {
 export const BRAND_COLORS: Record<string, string> = {
     // simple-icons v16.28.0, `Deepgram` → hex 13EF93.
     deepgram: '#13EF93',
+    nvidia_nim: '#76B900',
 };
 
 /**

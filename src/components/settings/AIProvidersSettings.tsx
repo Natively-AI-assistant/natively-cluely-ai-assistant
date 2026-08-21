@@ -23,6 +23,7 @@ import deepseekMark from '../../assets/provider-logos/deepseek.svg?raw';
 import groqMark from '../../assets/provider-logos/groq.svg?raw';
 import openaiMark from '../../assets/provider-logos/openai.svg?raw';
 import ollamaMark from '../../assets/provider-logos/ollama.svg?raw';
+import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 // LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
 // URL rather than inlined markup. No currentColor to resolve in a PNG, so <img>
 // loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
@@ -1096,6 +1097,7 @@ export const AIP_PROVIDER_LOGOS: Record<string, string> = {
     openai: openaiMark,
     codex: openaiMark,
     ollama: ollamaMark,
+    nvidia_nim: nvidiaMark,
 };
 
 interface AipProviderMarkProps {
