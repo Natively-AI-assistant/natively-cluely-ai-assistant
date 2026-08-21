@@ -55,3 +55,34 @@ test('same-surface supersession and id-less back-compat are preserved', () => {
   const legacyDone = resolveChatStreamDone(41, undefined, 'desktop', undefined);
   assert.equal(legacyDone.honor, true);
 });
+
+// ── CR-01 (code-review HIGH, 2026-08-21) ─────────────────────────────────────
+// F-303 was reasoned about in ONE direction: "a phone stream must not steal an
+// active desktop answer". The inverse hits the same branch — the user types on
+// the desktop while a phone-mirror answer streams — and NativelyInterface
+// returns on !honor BEFORE setIsProcessing(false), so the spinner never stops.
+test('a cross-surface done for the LOCAL surface releases the local spinner', () => {
+  // Phone answer streaming (adopted id 6); the user types here, stream id 7.
+  // A desktop done is untagged on the wire and normalizes to 'desktop'.
+  const d = resolveChatStreamDone(6, 7, 'phone', undefined);
+  assert.equal(d.honor, false, 'the phone stream still owns its row — do not finalize it');
+  assert.equal(d.release, true, 'but the request THIS surface started must release the spinner');
+  assert.equal(d.activeId, 6, 'the phone stream stays active');
+});
+
+test('a cross-surface done from the REMOTE surface does not release the local spinner', () => {
+  // Desktop answer streaming; a phone done arrives. Releasing here would stop a
+  // spinner that belongs to a still-running desktop answer.
+  const d = resolveChatStreamDone(6, 7, 'desktop', 'phone');
+  assert.equal(d.honor, false);
+  assert.notEqual(d.release, true, 'a remote done must never stop the local spinner');
+});
+
+test('a STALE same-surface done does not release the spinner', () => {
+  // id 5 is older than the active 6 on the same surface: a newer desktop stream
+  // is live and will deliver its own done. Releasing here would clear a spinner
+  // that is still legitimately running.
+  const d = resolveChatStreamDone(6, 5, 'desktop', 'desktop');
+  assert.equal(d.honor, false);
+  assert.notEqual(d.release, true, 'a superseded same-surface done must not stop the live spinner');
+});

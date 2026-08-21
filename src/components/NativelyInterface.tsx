@@ -5512,7 +5512,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         );
         chatStreamIdRef.current = doneDecision.activeId;
         chatStreamSourceRef.current = doneDecision.activeSource ?? null;
-        if (!doneDecision.honor) return;
+        if (!doneDecision.honor) {
+          // CR-01: a done we do not honor still ends the request THIS surface
+          // started. Without this the spinner runs forever whenever the user
+          // types while a phone-mirror answer is streaming.
+          if (doneDecision.release) setIsProcessing(false);
+          return;
+        }
         // finalText is set ONLY when the backend's coding validate→repair changed
         // the streamed answer — it authoritatively REPLACES the streamed row text
         // (in-place, by id) so the user sees the corrected six-section markdown.

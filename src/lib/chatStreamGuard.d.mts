@@ -12,7 +12,17 @@ export function resolveChatStreamDone(
   incomingId: number | null | undefined,
   activeSource?: string | null,
   incomingSource?: string | null,
-): { honor: boolean; activeId: number | null; activeSource: string | null };
+): {
+  honor: boolean;
+  activeId: number | null;
+  activeSource: string | null;
+  /**
+   * CR-01: set when the done is NOT honored but belongs to a request the LOCAL
+   * surface started. The caller must stop its own processing indicator without
+   * finalizing the active row, or the spinner runs forever.
+   */
+  release: boolean;
+};
 
 export function resolveLiveAnswerBatch(
   activeId: number | null | undefined,
