@@ -1426,3 +1426,80 @@ path: **a coverage gap, not just a code bug.** Both paths are now pinned.
 Final verification: full suite **7725 / 7655 pass / 6 fail**, name-level diff vs
 `main` (7673/7598/11) shows **zero regressions**; all 13 repros green; credential
 suites 66/66; both TS7 typechecks clean.
+
+---
+
+## §22 — Static review pass (`/code-review high`) and the WTA cooldown
+
+### §22.1 — The cooldown was silently dropping real turns
+
+The 3-second trigger cooldown existed to stop re-triggering on FRAGMENTS of one
+utterance as STT finalizes it. It was implemented as a blanket time gate, so a
+substantively DIFFERENT second question asked inside the window produced nothing
+at all — no pipeline ran, nothing was emitted, no signal reached the user.
+Measured through the real app over the natively backend: **2 of 6 back-to-back
+asks returned no answer**, and 1 of 6 in a 6-second-spaced arm.
+
+Fixed by comparing the incoming question against the one that stamped
+`lastTriggerTime` and staying silent only for the same utterance. Conservative
+by construction: absent question on either side ⇒ behaviour unchanged.
+
+Two things this surfaced that a naive implementation gets wrong:
+
+* **Stamp pairing.** SIX sites set `lastTriggerTime`; only one recorded the
+  question. An unpaired stamp leaves the pair stale and the comparison runs
+  against unrelated text. Five now stamp both. The sixth — the superseded-abort
+  path — deliberately does NOT, because that time belongs to the *superseding*
+  question; writing the dead speculative question there would overwrite fresh
+  with stale and make the next fragment of the live question compare as
+  "different" and double-generate.
+* **Threshold calibration.** `speculativeQuestionSimilarity` already strips stop
+  words and caps substitutions, so the 0.5 threshold sits in a wide empirical gap:
+  substitutions ("lead the migration" vs "lead the rollout") score 0.450, true
+  prefix completions 0.900, STT punctuation drift 1.000. Not a knife edge.
+
+Post-fix: back-to-back **6/6 answered**, spaced **6/6 answered**.
+
+### §22.2 — What the static pass found that the dynamic campaign did not
+
+The `/code-review high` pass over the merge commit returned **8 findings, 3 HIGH**.
+Two are notable because they are defects *in this campaign's own fixes* — the
+same failure mode as §21.2, caught by a different method:
+
+* **CR-02 (HIGH, fixed).** The R-03 session-identity guard in `LiveRAGIndexer`
+  compared `meetingId` VALUES — but the only production caller passes the literal
+  constant `'live-meeting-current'`. The comparison always held, so the guard
+  **could never fire**. A stale `stop()` therefore flushed into and tore down the
+  successor session, silently disabling live indexing for a whole meeting, and
+  its reset never cleared the timer (which by then belonged to the new session),
+  leaking a 30s interval for the life of the process. Identity is now a monotonic
+  token. Reproduced, fixed, and mutation-probed.
+
+* **CR-01 (HIGH, half fixed).** F-303 made supersession surface-scoped in BOTH
+  directions but was reasoned about in only one. The inverse — typing on the
+  desktop while a phone-mirror answer streams — strands the turn, and the
+  renderer returns on `!honor` BEFORE `setIsProcessing(false)`, so the spinner
+  never stops. The spinner half is fixed via a scoped `release` flag. The other
+  half (the desktop answer's tokens are dropped) is **not fixable at that layer**:
+  the renderer hosts ONE streaming row and `queueToken` appends into it, so
+  accepting the tokens would merge two answers into one bubble — exactly the
+  corruption F-303 was added to stop. Hosting two concurrent streams needs a
+  per-surface row, which is a product change, not a bug fix.
+
+**Method note.** A guard that cannot fire, and a guard applied in a direction
+nobody considered, are both invisible to reproduction-driven auditing: nothing
+misbehaves until a rare interleaving occurs, and the code *reads* correct. Static
+adversarial review found both. Neither method subsumes the other.
+
+### §22.3 — Still open from the static pass
+
+Confirmed by review but NOT yet reproduced or fixed; listed so they are not lost:
+
+| ID | Sev | Area | Claim |
+|----|-----|------|-------|
+| CR-03 | HIGH | `ipcHandlers.ts:11789` | win32 mic status now reports the real value, but no win32 path can ACT on a non-`granted` result — onboarding shows a toggle that can never go green. **Requires physical Windows verification.** |
+| CR-04 | MED | `SettingsManager.ts:263` | The R-15 degraded-store refusal guards only the generic `set()`; three other mutators still change memory and silently fail to persist. |
+| CR-05 | MED-LOW | `ipcHandlers.ts:13218` | F-301 fixed one of two `firstUsefulDeadlineMs` call sites; the phone-mirror path keeps the 7s cap and still aborts before the server's 10s cascade cutover. |
+| CR-06 | LOW-MED | `DatabaseManager.ts:1531` | The v28 `return`-on-failure correctly stops the chain but permanently blocks v29's vec0 cosine rebuild, re-opening the mixed-metric hazard by another door. |
+| CR-07 | LOW | `SonioxStreamingSTT.ts:362` | The `finished` branch nulls `this.ws`, so the F-203 identity guard returns before `clearKeepAlive()` — an orphaned interval per finished session. |
+| CR-08 | LOW | `AIProvidersSettings.tsx:1865` | `api?.method?.().then()` throws synchronously when the method is absent; the `.catch` is on the same broken chain, so the documented "older main → render nothing" fallback would unmount the settings tree instead. |
