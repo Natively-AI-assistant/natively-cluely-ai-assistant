@@ -31,27 +31,39 @@
  * @returns {{ usable: boolean, remedy: 'none'|'request'|'settings'|'policy' }}
  */
 export function classifyMicStatus(platform, status) {
-  // 'unknown' means GetDeviceAccessStatus could not resolve the state — NOT
-  // that it is denied. (Older Windows returns 'granted', per Electron's own
-  // typings, so 'unknown' is a genuine query failure on Win10/11.) F-706's
-  // stated intent is that a query failure must never LOCK a working machine out
-  // of capture, so treat it as usable and offer no dead-end remedy.
+  // 'unknown' is only the `default:` arm of Electron's ConvertDeviceAccessStatus
+  // — an enum value outside the four named ones — and is effectively unreachable
+  // for the microphone. A genuine query failure does NOT land here: both
+  // GetActivationFactory and CreateFromDeviceClass failures return
+  // DeviceAccessStatus_Allowed ('granted'), and a failed get_CurrentStatus leaves
+  // Unspecified ('not-determined'). So the win32 API fails OPEN, and treating an
+  // out-of-range value as usable simply matches that: never lock a working
+  // machine out over a status nobody can act on.
   if (status === 'granted' || status === 'unknown') {
     return { usable: true, remedy: 'none' };
   }
-  if (status === 'restricted') {
-    // Administrator/group policy. A Settings deep-link cannot change this.
-    return { usable: false, remedy: 'policy' };
-  }
-  // 'denied' | 'not-determined' | anything unrecognised.
+
   if (platform === 'darwin') {
+    // AVAuthorizationStatusRestricted: MDM or parental controls. Genuinely not
+    // user-fixable, so offering the Settings pane would be a dead end.
+    if (status === 'restricted') return { usable: false, remedy: 'policy' };
     // macOS can still prompt for 'not-determined'; once 'denied' the prompt is
     // suppressed and the user must use System Settings — but askForMediaAccess
     // resolves with the existing status rather than failing, and the caller
     // re-reads status afterwards, so 'request' is safe for both.
     return { usable: false, remedy: status === 'denied' ? 'settings' : 'request' };
   }
-  // win32 (and anything else): no programmatic request exists at all.
+
+  // win32 (and anything else): no programmatic request exists at all, so the
+  // privacy panel is the only remedy for EVERY non-granted status.
+  //
+  // 'restricted' must NOT be treated as policy here. Electron maps win32
+  // DeviceAccessStatus_DeniedBySystem to 'restricted', which is the DEVICE-level
+  // "Microphone access for this device" switch being off — the single most common
+  // Windows mic denial, and exactly what ms-settings:privacy-microphone fixes.
+  // Calling that "blocked by your organization" and disabling the button told the
+  // user something false and left them with no way forward — worse than the state
+  // this fix replaced. ('denied' is DeniedByUser, the per-app toggle; same panel.)
   return { usable: false, remedy: 'settings' };
 }
 

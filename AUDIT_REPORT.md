@@ -1586,3 +1586,81 @@ unconditional so a regression reports cleanly instead of timing out.
 Final state: full suite **8012 / 7939 pass / 9 fail**, failing names identical to
 `main`'s baseline in both directions; `test:lib` 338/338; `typecheck:electron`,
 `typecheck:ts7` and the production build all clean.
+
+---
+
+## §24 — Adversarial review of the CR-03…CR-08 fixes
+
+An independent `/code-review high` pass over `8e03a845..5649f297` returned four
+findings. **All four were real**, and the most serious was a bug introduced BY
+one of these fixes.
+
+### §24.1 — CR-03 was a bad fix on Windows
+
+Verified against Electron's own source
+(`shell/browser/api/electron_api_system_preferences_win.cc`,
+`ConvertDeviceAccessStatus`):
+
+```
+DeviceAccessStatus_DeniedBySystem -> "restricted"
+DeviceAccessStatus_DeniedByUser   -> "denied"
+```
+
+On win32 `restricted` is **DeniedBySystem** — the device-level "Microphone
+access for this device" switch, the most common Windows mic denial, and exactly
+what `ms-settings:privacy-microphone` fixes. The classifier returned
+`remedy:'policy'` for `restricted` BEFORE the platform check, so that user was
+shown "Microphone blocked by your organization" over a disabled button, with
+`allGranted` false and no path forward — **worse than the state the fix
+replaced**. `restricted` is now `policy` only on darwin (where it really is
+`AVAuthorizationStatusRestricted`: MDM/parental controls).
+
+**The mutation discipline could not have caught this.** The first version of
+`MicPermissionPolicy2026_08_22.test.mjs` ASSERTED `win32 restricted -> policy`,
+so the test encoded the bug and the mutation probe confirmed it faithfully. A
+test only checks what its author already believes; an independent reader is a
+different instrument, not a redundant one.
+
+### §24.2 — The `'unknown'` rationale was inverted
+
+Same source: `GetActivationFactory` and `CreateFromDeviceClass` failures both
+`return DeviceAccessStatus_Allowed` ("granted"), and a failed `get_CurrentStatus`
+leaves `Unspecified` ("not-determined"). The win32 API **fails open**, so
+`'unknown'` is NOT "a genuine query failure" as this report and the code comment
+claimed — it is only the `default:` arm for an enum value outside the four named
+ones, effectively unreachable for the microphone. The DECISION (treat as usable)
+is unchanged and harmless; the stated reason was wrong and is corrected in
+§23/§24 and in the code.
+
+Consequently the original CR-03 sub-claim — "'unknown' stranded the user in
+onboarding permanently" — describes a state that cannot occur.
+
+### §24.3 — CR-04 was incomplete at the window that matters
+
+`AIProvidersSettings.applyVisionMode` set local React state optimistically and
+ignored the IPC result. Once the handler correctly refuses on a degraded store
+AND (correctly) stops broadcasting, the `onScreenUnderstandingModeChanged`
+subscription that normally re-converges that component never fires — so the
+window the user is looking at showed `private_vision` while main and disk held
+`vision_first`. That is precisely the "a mode the app only THINKS it is in"
+hazard §23 called non-cosmetic, left live in the initiating window. It now rolls
+back on refusal, and on rejection (a path that awaiting the call introduced).
+
+### §24.4 — CR-06's one way to lose a retry
+
+If the pending-marker `SELECT` threw while `version >= 28`, the catch returned
+`false` and a recorded pending repair was silently forgotten — the single thing
+R-05 requires never happen. It now returns `true`: the repair is a pure
+idempotent UPDATE, so re-running it when none was owed costs one no-op
+statement, against dropping one that was owed.
+
+### §24.5 — What the review confirmed
+
+CR-05, CR-06, CR-07 sound, and CR-08's dismissal correct (independently verified:
+`?.` short-circuits the whole chain; v29 is the last migration; no runtime path
+reads `user_version`; the F-203 guard still precedes the extracted teardown; both
+`requestMicPermission` callers ignore the return, so `true -> false` is
+unobservable).
+
+Post-fix: suite **8014 / 7941 pass / 9 fail**, failing names identical to `main`'s
+baseline; `test:lib` 338/338; both typechecks and the production build clean.

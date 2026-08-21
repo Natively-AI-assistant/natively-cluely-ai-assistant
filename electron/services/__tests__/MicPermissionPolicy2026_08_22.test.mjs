@@ -29,21 +29,40 @@ describe('win32 — no per-app grant API exists, so every remedy must be reachab
     assert.equal(classifyMicStatus('win32', 'not-determined').remedy, 'settings');
   });
 
-  test("'unknown' is a query failure, not a denial — must stay usable", () => {
-    // Electron 43 declares 'unknown' in the return union. Older Windows returns
-    // 'granted', so 'unknown' on Win10/11 means GetDeviceAccessStatus could not
-    // resolve. F-706's own rationale: a query failure must never LOCK a working
-    // machine out of capture.
+  test("'unknown' must stay usable (the API fails OPEN, so it is not a denial)", () => {
+    // Corrected 2026-08-22: 'unknown' is NOT a query failure. Electron's win32
+    // GetDeviceAccessStatus returns DeviceAccessStatus_Allowed ('granted') when
+    // GetActivationFactory or CreateFromDeviceClass fail, and leaves Unspecified
+    // ('not-determined') when get_CurrentStatus fails. 'unknown' is only the
+    // `default:` arm for an enum value outside the four named ones — effectively
+    // unreachable. Treating it as usable matches an API that already fails open.
     const p = classifyMicStatus('win32', 'unknown');
     assert.equal(p.usable, true, "'unknown' must not strand a working machine in onboarding");
     assert.equal(p.remedy, 'none');
   });
 
-  test("restricted → policy, and NOT the settings panel (it cannot help)", () => {
+  test("restricted → settings, NOT policy (it is the DEVICE switch, not an admin)", () => {
+    // Electron maps win32 DeviceAccessStatus_DeniedBySystem to 'restricted'
+    // (shell/browser/api/electron_api_system_preferences_win.cc,
+    // ConvertDeviceAccessStatus). That is the "Microphone access for this device"
+    // switch being off — the most common Windows mic denial, and precisely what
+    // ms-settings:privacy-microphone fixes.
+    //
+    // The first version of this fix returned 'policy' here and the FIRST version
+    // of this test pinned that, so the test encoded the bug: the user was told
+    // their organization blocked the mic and handed a disabled button.
     const p = classifyMicStatus('win32', 'restricted');
     assert.equal(p.usable, false);
-    assert.equal(p.remedy, 'policy',
-      'administrator policy is not user-fixable; offering Settings would be a dead end');
+    assert.equal(p.remedy, 'settings',
+      'win32 restricted is the device-level switch — the privacy panel DOES fix it');
+  });
+
+  test('every non-granted win32 status has a reachable remedy', () => {
+    for (const status of ['denied', 'not-determined', 'restricted']) {
+      const p = classifyMicStatus('win32', status);
+      assert.equal(p.remedy, 'settings',
+        `win32/${status} must route to the privacy panel — it is the only remedy on Windows`);
+    }
   });
 
   test('granted → usable, nothing to do', () => {
@@ -66,6 +85,14 @@ describe('darwin — unchanged behaviour, so the fix cannot regress macOS', () =
 
   test('granted → usable', () => {
     assert.equal(classifyMicStatus('darwin', 'granted').usable, true);
+  });
+
+  test('restricted IS policy on darwin (AVAuthorizationStatusRestricted = MDM)', () => {
+    // Unlike win32, macOS 'restricted' really is MDM/parental controls and the
+    // Settings pane cannot change it — so the platform split is load-bearing.
+    const p = classifyMicStatus('darwin', 'restricted');
+    assert.equal(p.usable, false);
+    assert.equal(p.remedy, 'policy');
   });
 
   test('the darwin panel URI targets the Microphone pane', () => {

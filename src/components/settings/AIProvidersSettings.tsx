@@ -2128,7 +2128,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // stored field, which the enum deliberately does not have.
     const requiredBeforeLocalOnly = useRef<boolean | null>(null);
 
-    const applyVisionMode = (localOnly: boolean, required: boolean) => {
+    const applyVisionMode = async (localOnly: boolean, required: boolean) => {
+        // Snapshot what a refused write has to be rolled back TO. Both of these
+        // are mutated below, so capture before, not after.
+        const previousMode = screenUnderstandingMode;
+        const previousRequiredBefore = requiredBeforeLocalOnly.current;
+
         let effectiveRequired = required;
         if (localOnly && !visionLocalOnly) {
             // Entering local-only: stash what "Require" really was, since the
@@ -2142,7 +2147,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
         const mode = localOnly ? 'private_vision' : (effectiveRequired ? 'vision_only' : 'vision_first');
         setScreenUnderstandingMode(mode);
-        window.electronAPI?.setScreenUnderstandingMode?.(mode);
+
+        // CR-04 follow-up: the handler refuses when the settings store is degraded
+        // and — correctly — no longer broadcasts, so the
+        // onScreenUnderstandingModeChanged subscription that normally re-converges
+        // this component never fires. Setting local state optimistically and
+        // ignoring the result therefore left THIS window showing a privacy mode
+        // that was never saved, while main and disk held the old one. On a setting
+        // whose copy promises "cloud vision is never called", a mode the UI only
+        // THINKS it is in is not cosmetic. Roll back on refusal.
+        try {
+            const res = await window.electronAPI?.setScreenUnderstandingMode?.(mode);
+            if (res && res.success === false) {
+                setScreenUnderstandingMode(previousMode);
+                requiredBeforeLocalOnly.current = previousRequiredBefore;
+                console.warn('[AIProviders] screen-understanding mode was not saved:', res.error);
+            }
+        } catch (e) {
+            // Now that this is awaited, a rejected IPC would surface as an
+            // unhandled rejection from an onChange handler. A failed write must
+            // roll the switch back for the same reason a refused one does.
+            setScreenUnderstandingMode(previousMode);
+            requiredBeforeLocalOnly.current = previousRequiredBefore;
+            console.warn('[AIProviders] screen-understanding mode write failed:', e);
+        }
     };
 
     // Where a disabled scope's data actually goes. Must match ENFORCEMENT

@@ -1461,10 +1461,16 @@ export class DatabaseManager {
                 const row = this.db.prepare('SELECT value FROM app_state WHERE key = ?')
                     .get(PAGE_COUNT_REPAIR_PENDING_KEY) as { value?: string } | undefined;
                 return row?.value === '1';
-            } catch {
-                // app_state has existed since v6; if it is somehow unreadable, do not
-                // invent work — the version gate above still covers first application.
-                return false;
+            } catch (e) {
+                // The ONE place this design could lose a retry: if the marker cannot
+                // be read we cannot tell "no repair owed" from "repair owed but
+                // unreadable", and R-05's requirement is that a failed repair is
+                // never forgotten. The repair is a pure idempotent UPDATE, so
+                // re-running it when none was owed costs one no-op statement —
+                // strictly cheaper than dropping one that WAS owed.
+                console.warn('[DatabaseManager] could not read the page-count repair marker; '
+                    + 're-running the repair rather than risk forgetting a pending one:', e);
+                return true;
             }
         })();
 
