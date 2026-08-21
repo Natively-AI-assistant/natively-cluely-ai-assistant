@@ -1,4 +1,4 @@
-import { NVIDIA_NIM_STT_MODEL_CONFIG, DEFAULT_NVIDIA_NIM_STT_MODEL } from './NvidiaNimStreamingSTT';
+import { NVIDIA_NIM_STT_MODEL_CONFIG, DEFAULT_NVIDIA_NIM_STT_MODEL } from './nvidiaNimSttModels';
 import { createNvcfStreamingRecognize } from './rivaProto';
 
 const PROBE_TIMEOUT_MS = 15000;

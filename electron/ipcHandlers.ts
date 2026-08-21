@@ -7868,7 +7868,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       // Single source of truth — see NVIDIA_NIM_STT_MODELS. A second hardcoded
       // list here would silently reject models the picker already offers.
-      const { isNvidiaNimSttModel } = require('./audio/NvidiaNimStreamingSTT');
+      const { isNvidiaNimSttModel } = require('./audio/nvidiaNimSttModels');
       if (!isNvidiaNimSttModel(model)) {
         return { success: false, error: 'Unsupported NVIDIA NIM speech model' };
       }

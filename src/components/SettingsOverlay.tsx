@@ -39,6 +39,9 @@ import { ProfileVisualizer, PremiumUpgradeModal } from '../premium';
 import GlassEffectLayer from './ui/GlassEffectLayer';
 import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import icon from './icon.png';
+// Shared with the main process so the picker cannot offer a model the ipc
+// validator rejects. Pure data module — no node/electron imports.
+import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL } from '../../electron/audio/nvidiaNimSttModels';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -1149,7 +1152,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     } | null>(null);
 
     // NVIDIA NIM speech settings live beside the existing provider state.
-    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState('nemotron-asr-streaming');
+    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
@@ -2852,13 +2855,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
                                                     <label className="text-xs font-medium text-text-secondary mb-2.5 block">NVIDIA NIM Speech Model</label>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                        {[
-                                                            { id: 'nemotron-asr-streaming', label: 'Nemotron ASR Streaming', desc: 'Fastest English realtime ASR' },
-                                                            { id: 'nemotron-3.5-asr-streaming-multilingual', label: 'Nemotron 3.5 ASR', desc: 'Multilingual streaming ASR' },
-                                                            { id: 'parakeet-1.1b-rnnt-multilingual-asr', label: 'Parakeet 1.1B RNNT', desc: 'Multilingual streaming ASR' },
-                                                        ].map((m) => (
+                                                        {NVIDIA_NIM_STT_MODELS.map((m) => (
                                                             <button key={m.id} onClick={async () => { setNvidiaNimSttModel(m.id); await window.electronAPI?.setNvidiaNimSttModel?.(m.id); }} className={`rounded-lg px-3 py-2.5 text-left ${nvidiaNimSttModel === m.id ? 'bg-accent-primary text-on-accent shadow-md' : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}>
-                                                                <span className="text-sm font-medium block">{m.label}</span><span className="text-[11px] opacity-70">{m.desc}</span>
+                                                                <span className="text-sm font-medium block">{m.label}</span><span className="text-[11px] opacity-70">{m.description}</span>
                                                             </button>
                                                         ))}
                                                     </div>
