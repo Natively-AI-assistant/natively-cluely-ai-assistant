@@ -68,6 +68,33 @@ const isSensitive = (chunk: string): boolean => SENSITIVE_RE.test(chunk) || MONE
 const isLikelyDirective = (chunk: string): boolean =>
   chunk.length <= PINNED_MAX_CHARS && PINNED_DIRECTIVE_RE.test(chunk.trim());
 
+// ── FORMAT DIRECTIVES (RC-2, live session C 2026-08-21) ────────────────────
+// An OUTPUT-FORMAT directive is an instruction about how the assistant's
+// answers should be produced (language, length, style) — as opposed to a FACT
+// to be woven into an answer. The coding-forbidden gate below exists to keep
+// FACTS out of self-contained algorithm answers; a format directive cannot
+// contaminate one, and coding turns are exactly where it matters ("ALL the
+// technical code should be in Cpp" reached zero coding answers live — every
+// coding press emitted Python).
+//
+// Shape: a deontic/imperative signal + a reference to the assistant's OUTPUT,
+// kept short (long paragraphs are notes, not directives). Sensitive chunks are
+// classified sensitive BEFORE this ever runs, so a salary "directive" can
+// never ride this lane.
+const FORMAT_DIRECTIVE_MAX_CHARS = 200;
+const DIRECTIVE_DEONTIC_RE = /\b(should|must|always|never|only|regardless|please)\b/i;
+const DIRECTIVE_IMPERATIVE_OPEN_RE = /^(answer|respond|reply|use|write|code|solve|keep|prefer|avoid|give|explain|speak|output|format)\b/i;
+const DIRECTIVE_OUTPUT_SUBJECT_RE = /\b(code|coding|answers?|responses?|repl(?:y|ies)|outputs?|solutions?|explanations?|questions?|words?|sentences?|bullet(?:\s+points?)?|language|format|style|spanish|english|french|german|hindi|malayalam)\b/i;
+
+/** True when the chunk is an output-format directive (see block comment). */
+export const isFormatDirective = (chunk: string): boolean => {
+  const t = (chunk || '').trim();
+  if (!t || t.length > FORMAT_DIRECTIVE_MAX_CHARS) return false;
+  if (isSensitive(t)) return false;
+  const deontic = DIRECTIVE_DEONTIC_RE.test(t) || DIRECTIVE_IMPERATIVE_OPEN_RE.test(t);
+  return deontic && DIRECTIVE_OUTPUT_SUBJECT_RE.test(t);
+};
+
 /**
  * Split a raw custom-context blob into chunks. Prefers blank-line separated
  * paragraphs; if there are none, falls back to bullet/newline lines so a flat
@@ -155,10 +182,23 @@ export const selectCustomContextForAnswer = (
   const excluded: CustomContextSelection['excluded'] = [];
 
   if (CUSTOM_CONTEXT_FORBIDDEN_TYPES.has(answerType)) {
-    if (classified.pinned.length) excluded.push({ category: 'pinned', reason: 'forbidden_for_answer_type' });
-    if (classified.searchable.length) excluded.push({ category: 'searchable', reason: 'forbidden_for_answer_type' });
+    // RC-2 (session C, 2026-08-21): OUTPUT-FORMAT directives survive the gate
+    // for coding/technical types — they are instructions about the answer's
+    // shape, not facts that could contaminate a self-contained artifact, and
+    // coding turns are exactly where they matter (live: "ALL the technical
+    // code should be in Cpp" reached zero coding answers; every one emitted
+    // Python). identity_answer keeps the historical full block: a scripted
+    // self-intro has no use for a coding-language directive.
+    const directives = answerType === 'identity_answer'
+      ? []
+      : [...classified.pinned, ...classified.searchable].filter(c => isFormatDirective(c.text));
+    const directiveTexts = new Set(directives.map(c => c.text));
+    const pinnedDropped = classified.pinned.some(c => !directiveTexts.has(c.text));
+    const searchableDropped = classified.searchable.some(c => !directiveTexts.has(c.text));
+    if (pinnedDropped) excluded.push({ category: 'pinned', reason: 'forbidden_for_answer_type' });
+    if (searchableDropped) excluded.push({ category: 'searchable', reason: 'forbidden_for_answer_type' });
     if (classified.sensitive.length) excluded.push({ category: 'sensitive', reason: 'forbidden_for_answer_type' });
-    return { included: [], excluded, sensitiveIncluded: false };
+    return { included: directives, excluded, sensitiveIncluded: false };
   }
 
   const included: CustomContextChunk[] = [...classified.pinned, ...classified.searchable];

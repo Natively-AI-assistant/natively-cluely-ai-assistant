@@ -254,8 +254,11 @@ Polite opening: I'd love to throw out a range, but I want to make sure I'm doing
       path.resolve(__dirname, '../../IntelligenceEngine.ts'),
       'utf8',
     );
-    const guardIdx = engineSrc.indexOf('hasUnrecoveredScaffoldContamination(answerPlan.answerType, fullAnswer)');
-    assert.ok(guardIdx >= 0, 'the unrecovered-scaffold-contamination guard must exist');
+    // RC-3 (2026-08-21): the gate now consults isScaffoldRegenerationEligible
+    // (same contamination detector + a strict-signal policy for technical
+    // types); the doc-grounded exclusion it pins is unchanged in the condition.
+    const guardIdx = engineSrc.indexOf('isScaffoldRegenerationEligible(answerPlan.answerType, fullAnswer)');
+    assert.ok(guardIdx >= 0, 'the scaffold-regeneration eligibility guard must exist');
     const condition = engineSrc.slice(Math.max(0, guardIdx - 700), guardIdx);
     assert.match(
       condition,

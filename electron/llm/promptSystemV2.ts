@@ -283,7 +283,7 @@ RIGHT: speak naturally with what is actually grounded, and leave out the specifi
 </human_voice>
 
 <length>
-Match the answer to the moment: a simple reply is 1 or 2 sentences; a normal live answer 30 to 75 words; a grounded story or real tradeoff 80 to 160 words. Code, system design, notes, and multi part questions may be longer and structured. Explicit length or format requests override these defaults. When shortening, keep the direct answer, its supporting fact, and any material uncertainty; cut introductions, repetition, reassurance, and optional examples first. Stop once the question is answered.
+Match the answer to the moment: a simple reply is 1 or 2 sentences; a normal live answer 30 to 75 words; a grounded story or real tradeoff 80 to 160 words. Longer, structured output is allowed only when the turn explicitly asks for it: code, a full design walkthrough, notes, or a genuinely multi part question. A conceptual or experience question is never that — answer it inside the bands above even in a technical interview. Explicit length or format requests override these defaults. When shortening, keep the direct answer, its supporting fact, and any material uncertainty; cut introductions, repetition, reassurance, and optional examples first. Stop once the question is answered.
 </length>`;
 
 const LOCAL_CORE = `You are Natively, a live conversation assistant by Evin John. Follow the active mode and action.
@@ -553,22 +553,30 @@ The user deliberately invoked this action, so always produce its output. ${NO_AC
 </silence_gate>`;
 }
 
-// Routes whose output can legitimately be a full coding answer. These get the
+// Actions whose output can legitimately be a full coding answer. These get the
 // validator-pinned six-section contract (the tested public product format —
 // see codingContract.ts + AnswerValidator's scaffold repair) appended so v2
 // never fights the deterministic validator.
-const CODING_CONTRACT_MODES: ReadonlySet<PromptSystemV2Mode> = new Set(['technical-interview']);
 const CODING_CONTRACT_ACTIONS: ReadonlySet<PromptSystemV2Action> = new Set(['code_hint']);
 
 function codingContractBlock(input: BuildSystemPromptV2Input, tier: PromptTierV2): string {
-    // UNIVERSAL SEMANTIC ACTIVATION: the contract attaches when the mode or
-    // action is coding-shaped (legacy behavior, kept) OR when the caller's
-    // routing classified the current turn as a coding task (`codingTask`) —
-    // so a coding question receives a developer-quality answer in EVERY mode,
-    // current or future, not only Technical Interview. Detection itself stays
-    // with the existing deterministic router (AnswerPlanner), never re-derived
-    // here from text.
-    if (!CODING_CONTRACT_MODES.has(input.mode) && !CODING_CONTRACT_ACTIONS.has(input.action) && !input.codingTask) return '';
+    // SEMANTIC ACTIVATION ONLY (RC-3, live session C 2026-08-21): the contract
+    // attaches when the caller's routing classified THIS turn as a coding task
+    // (`codingTask` — triple-sourced in resolveCodingPromptSignals from
+    // answerType routing, caller-side promotion, and structural stub
+    // detection) or when the action itself is coding-shaped (code_hint).
+    //
+    // The historical CODING_CONTRACT_MODES leg — technical-interview mode
+    // alone forcing the contract — is gone: it appended the six-section DSA
+    // template to EVERY turn of an interview (small talk included; measured
+    // live as byte-identical prompts with codingTask on and off), and the
+    // model then applied it to conceptual questions ("what's a semaphore?")
+    // inconsistently. A coding question still receives the contract in EVERY
+    // mode via `codingTask`; a non-coding turn no longer carries it anywhere.
+    // validateAnswerStructure enforces sections only for coding answer types,
+    // where codingTask is true by construction from the same
+    // isCodingAnswerType source — prompt and validator cannot diverge.
+    if (!CODING_CONTRACT_ACTIONS.has(input.action) && !input.codingTask) return '';
 
     const local = tier === 'local';
     const conformance = local ? CODING_TEMPLATE_CONFORMANCE_TINY : CODING_TEMPLATE_CONFORMANCE;

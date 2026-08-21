@@ -118,7 +118,7 @@ export {
   MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS,
 } from "./liveDeadlines";
 export type { FollowUpContext, ResolvedFollowUp, FollowUpSurface } from "./FollowUpResolver";
-export { renderCodingAnswerMarkdown, repairCodingAnswer, repairCodingMarkdown, validateAnswerStructure, validateCodingMarkdown, buildCodingScaffold, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination } from "./AnswerValidator";
+export { renderCodingAnswerMarkdown, repairCodingAnswer, repairCodingMarkdown, validateAnswerStructure, validateCodingMarkdown, buildCodingScaffold, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, hasStrictCodingScaffoldSignal, isScaffoldRegenerationEligible } from "./AnswerValidator";
 export type { AnswerValidationResult, CodingAnswer } from "./AnswerValidator";
 export { validateProfileOutput, buildProfileRepairInstruction, stripProfileTokensFromCoding, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES } from "./ProfileOutputValidator";
 export type { ProfileValidationResult, ProfileViolation, ProfileViolationCode, ProfileValidationInput, CandidateSanitizeResult, AssistantVoiceSanitizeResult } from "./ProfileOutputValidator";

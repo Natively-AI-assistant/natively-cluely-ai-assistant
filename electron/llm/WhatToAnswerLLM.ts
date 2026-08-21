@@ -620,10 +620,27 @@ The user triggered this action with a coding problem on screen and NO new questi
             // getActiveModePinnedInstructions (salary/pricing notes can't leak
             // into non-negotiation answers). Skill mode owns its prompt — skip.
             let pinnedModeInstructions = '';
-            if (!activeSkill && (!answerPlan || isLayerAllowed(answerPlan, 'custom_context'))) {
+            // RC-2 (session C, 2026-08-21): the isLayerAllowed(answerPlan,
+            // 'custom_context') pre-gate here made the user's Real-time prompt
+            // unreachable on every technical answer type — the instructions were
+            // never even FETCHED, so an output-format directive ("code in C++")
+            // could not survive to exactly the turns it was written for.
+            // getActiveModePinnedInstructions already scopes per answer type via
+            // selectCustomContextForAnswer, which is the stricter, per-chunk
+            // gate: on coding/technical types it now returns ONLY format
+            // directives and still drops factual notes and sensitive chunks.
+            // Skill mode owns its prompt — still skipped. Document-grounded
+            // custom modes bypass per-chunk scoping inside
+            // getActiveModePinnedInstructions (they return the RAW blob), so for
+            // them the legacy isLayerAllowed pre-gate is kept byte-for-byte —
+            // only the scoped path changes.
+            if (!activeSkill) {
                 try {
                     const modesManager = this.getModesManager();
-                    pinnedModeInstructions = modesManager.getActiveModePinnedInstructions?.(answerPlan?.answerType, requestSnapshot?.modeUniqueId) || '';
+                    const docGroundedRaw = modesManager.getActiveModeDocumentGroundingInfo?.(requestSnapshot?.modeUniqueId)?.documentGroundedCustomModeActive === true;
+                    if (!docGroundedRaw || !answerPlan || isLayerAllowed(answerPlan, 'custom_context')) {
+                        pinnedModeInstructions = modesManager.getActiveModePinnedInstructions?.(answerPlan?.answerType, requestSnapshot?.modeUniqueId) || '';
+                    }
                 } catch (_err: any) {
                     // ModesManager unavailable — already warned above.
                 }
@@ -897,9 +914,15 @@ The user triggered this action with a coding problem on screen and NO new questi
                         // "let&apos;s talk..." is right there in userMessage). Check both the raw
                         // and escaped forms so this real R8 regression gate
                         // (short-session-smoke.cjs) can't false-negative on ordinary punctuation.
+                        // Case-insensitive (2026-08-21): transcript turns are
+                        // lower-cased in the prompt; the old case-sensitive
+                        // check produced 40 pure-casing false alarms in one
+                        // live session. NOTE this line still describes the V1
+                        // packet — see the prompt_dispatched trace at the
+                        // dispatch point for what was actually sent.
                         answerPlanQuestionSurvivesInPrompt: answerPlan?.question
-                            ? (packet.userMessage.includes(answerPlan.question.trim())
-                                || packet.userMessage.includes(escapeUserContent(answerPlan.question.trim())))
+                            ? (packet.userMessage.toLowerCase().includes(answerPlan.question.trim().toLowerCase())
+                                || packet.userMessage.toLowerCase().includes(escapeUserContent(answerPlan.question.trim()).toLowerCase()))
                             : null,
                         userMessageTail: packet.userMessage.slice(-800),
                         systemPromptTail: finalPromptOverride.slice(-400),
@@ -1015,6 +1038,29 @@ The user triggered this action with a coding problem on screen and NO new questi
             // carrier and V3 is default ON, so `??` never fell through.
             const _wtaSystemPrompt = composeWtaSystemPrompt(_v3p?.system, finalPromptOverride, activeSkill);
             if (_v3p) console.log('[WhatToAnswerLLM] V3 prompt in effect (Phase 6 wiring)');
+            // INSTRUMENTATION FIX (session C forensics, 2026-08-21): the
+            // prompt_assembled trace above describes the V1 packet, which is
+            // DISCARDED whenever V3 (or the v2 turn envelope) composed this
+            // turn — live, its systemPromptChars disagreed with the dispatch
+            // line on 150/152 presses and every forensic conclusion drawn from
+            // it about the sent prompt was unsound. This line records what is
+            // actually dispatched, with a case-insensitive survive check (the
+            // old check was case-sensitive against a lower-cased transcript:
+            // 40 of its 147 live "false" verdicts were pure casing artifacts).
+            if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
+                try {
+                    const _q = (answerPlan?.question || '').trim();
+                    const _lcUser = _wtaUserMessage.toLowerCase();
+                    console.log('[TRACE:LONGCTX] prompt_dispatched', JSON.stringify({
+                        promptSource: _v3p ? 'v3' : (_v2TurnUser ? 'v2_turn' : 'v1_packet'),
+                        systemPromptChars: _wtaSystemPrompt.length,
+                        userMessageChars: _wtaUserMessage.length,
+                        answerPlanQuestionSurvivesInPrompt: _q
+                            ? (_lcUser.includes(_q.toLowerCase()) || _lcUser.includes(escapeUserContent(_q).toLowerCase()))
+                            : null,
+                    }));
+                } catch { /* logging only */ }
+            }
             // v3Owned: when the V3 prompt is in effect, the Context OS govern
             // block in LLMHelper must NOT substitute its EvidencePack for the
             // composed user prompt — that spliced two governance layers into one
