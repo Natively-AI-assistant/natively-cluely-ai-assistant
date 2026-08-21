@@ -5876,7 +5876,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!['vision_first', 'vision_only', 'private_vision'].includes(mode)) {
         return { success: false, error: 'invalid_mode' };
       }
-      SettingsManager.getInstance().setScreenUnderstandingMode(mode);
+      // CR-04: report the REAL outcome. A refused write used to return success
+      // AND broadcast the change, so every renderer switched mode while disk
+      // still held the old value and the app reverted on restart.
+      if (!SettingsManager.getInstance().setScreenUnderstandingMode(mode)) {
+        return { success: false, error: 'settings_store_degraded' };
+      }
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('screen-understanding-mode-changed', mode);
@@ -6173,7 +6178,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (level !== 'off' && level !== 'standard' && level !== 'verbose') {
         return { ok: false, error: 'invalid_level' };
       }
-      SettingsManager.getInstance().setContextDebugLevel(level);
+      // CR-04: a refused write used to be reported as success.
+      if (!SettingsManager.getInstance().setContextDebugLevel(level)) {
+        return { ok: false, error: 'settings_store_degraded' };
+      }
       // Effective config is re-read per turn, so this applies to the next
       // question without a restart. Env override (if set) still wins.
       return { ok: true };

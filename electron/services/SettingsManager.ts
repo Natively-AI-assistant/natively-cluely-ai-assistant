@@ -229,7 +229,13 @@ export class SettingsManager {
         return this.settings[key];
     }
 
-    public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
+    /**
+     * @returns true when the value was persisted; false when the store is
+     * degraded and the write was refused. CR-04: callers that report success to
+     * the renderer must check this — several used to report success while disk
+     * was unchanged, so the setting silently reverted on restart.
+     */
+    public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): boolean {
         // R-15: when the store is degraded, saveSettings() refuses. Mutating
         // in-memory first left the process believing the write succeeded while
         // disk still held the old value — and roughly fifteen IPC handlers report
@@ -237,10 +243,11 @@ export class SettingsManager {
         // and disk cannot disagree.
         if (this.settingsUnreadable) {
             console.warn(`[SettingsManager] Refusing to set "${String(key)}": the settings store is degraded this session (see the quarantine warning at startup).`);
-            return;
+            return false;
         }
         this.settings[key] = value;
         this.saveSettings();
+        return true;
     }
 
     // Resolved screen-understanding mode with default and runtime validation.
@@ -260,20 +267,31 @@ export class SettingsManager {
         return 'off';
     }
 
-    public setContextDebugLevel(level: ContextDebugLevelSetting): void {
+    /**
+     * CR-04: this used to mutate `this.settings` directly and then call
+     * saveSettings(), which REFUSES when the store is degraded — so memory and
+     * disk diverged, the IPC handler reported success, and the setting reverted
+     * on restart. The R-15 guard lives in set(); go through it.
+     * @returns false when the write was refused.
+     */
+    public setContextDebugLevel(level: ContextDebugLevelSetting): boolean {
         if (!(VALID_CONTEXT_DEBUG_LEVELS as readonly string[]).includes(level)) {
             throw new Error(`[SettingsManager] Invalid contextDebugLevel: ${level}`);
         }
-        this.settings.contextDebugLevel = level;
-        this.saveSettings();
+        return this.set('contextDebugLevel', level);
     }
 
-    public setScreenUnderstandingMode(mode: ScreenUnderstandingMode): void {
+    /**
+     * CR-04: same bypass as setContextDebugLevel. Worse here, because the IPC
+     * handler also BROADCASTS screen-understanding-mode-changed to every window
+     * — so the whole UI switched mode while disk still held the old value.
+     * @returns false when the write was refused.
+     */
+    public setScreenUnderstandingMode(mode: ScreenUnderstandingMode): boolean {
         if (!(VALID_SCREEN_UNDERSTANDING_MODES as readonly string[]).includes(mode)) {
             throw new Error(`[SettingsManager] Invalid screenUnderstandingMode: ${mode}`);
         }
-        this.settings.screenUnderstandingMode = mode;
-        this.saveSettings();
+        return this.set('screenUnderstandingMode', mode);
     }
 
     public getTechnicalInterviewVisionFirst(): boolean {
