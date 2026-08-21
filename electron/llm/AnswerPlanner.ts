@@ -671,7 +671,11 @@ export const isStealthEvasionQuestion = (question: string): boolean => {
   // see this overlay?") always keeps verb and object in the same sentence.
   // Branch (a) above deliberately stays whole-string — explicit evasion intent
   // is a strong signal and over-coverage there is the documented safety posture.
-  for (const sentence of t.split(/[.?!…]+/)) {
+  // Newlines count as sentence boundaries too: an UNPUNCTUATED transcript
+  // (local STT emits no punctuation) would otherwise be one giant "sentence"
+  // and reopen the cross-match this scoping exists to close (review pass,
+  // 2026-08-22).
+  for (const sentence of t.split(/[.?!…\n]+/)) {
     if (!STEALTH_SOFT_VISIBILITY_RE.test(sentence)) continue;
     // require the object to be an interviewer/proctor/screen-share (not a bare
     // "monitor" hardware word) so "does it work with a second monitor" is safe.
