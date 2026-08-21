@@ -24,6 +24,10 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   private active = false;
   private stream: any = null;
   private buffer: Buffer[] = [];
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private reconnectAttempts = 0;
+  private closing = false;
+  private readonly maxBufferedChunks = 250;
 
   constructor(apiKey: string, model = 'nemotron-asr-streaming') {
     super(); this.apiKey = apiKey; this.model = MODEL_CONFIG[model] ? model : 'nemotron-asr-streaming';
@@ -36,12 +40,35 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     if (key === 'auto') { this.language = ''; return; }
     this.language = RECOGNITION_LANGUAGES[key]?.bcp47 || RECOGNITION_LANGUAGES[key]?.iso639 || this.language;
   }
-  start() { if (this.active) return; this.active = true; this.connect(); }
-  stop() { this.active = false; this.buffer = []; try { this.stream?.end(); } catch {} this.stream = null; }
-  finalize() { try { this.stream?.end(); } catch {} }
+  start() {
+    if (this.active) return;
+    this.active = true;
+    this.closing = false;
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
+  stop() {
+    this.active = false;
+    this.closing = true;
+    this.buffer = [];
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    try { this.stream?.end(); } catch {}
+    this.stream = null;
+  }
+  finalize() {
+    this.closing = true;
+    try { this.stream?.end(); } catch {}
+  }
   write(chunk: Buffer) {
     if (!this.active) return;
-    if (!this.stream) { this.buffer.push(chunk); return; }
+    if (!this.stream) {
+      // Keep only a short live-audio window while the provider reconnects.
+      // This prevents an outage from growing memory without bound.
+      if (this.buffer.length >= this.maxBufferedChunks) this.buffer.shift();
+      this.buffer.push(chunk);
+      return;
+    }
     // proto-loader is configured with keepCase:false below, so protobuf field
     // names are camel-cased at runtime. Using audio_content here silently
     // drops live PCM frames before they reach the NVIDIA Riva stream.
@@ -67,13 +94,26 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
           if (alt?.transcript) this.emit('transcript', { text: alt.transcript, isFinal: !!result.isFinal, confidence: alt.confidence || 1 });
         }
       });
-      this.stream.on('error', (error: Error) => { this.stream = null; if (this.active) this.emit('error', error); });
-      this.stream.on('end', () => { this.stream = null; });
+      this.stream.on('error', (error: Error) => this.handleDisconnect(error));
+      this.stream.on('end', () => this.handleDisconnect());
       this.stream.write({ streamingConfig: { config: {
         encoding: 'LINEAR_PCM', sampleRateHertz: this.sampleRate, languageCode: this.language || cfg.language,
         maxAlternatives: 1, enableAutomaticPunctuation: true, verbatimTranscripts: true,
       }, interimResults: true } });
       for (const chunk of this.buffer.splice(0)) this.stream.write({ audioContent: chunk });
-    } catch (error) { this.stream = null; this.emit('error', error); }
+    } catch (error) { this.handleDisconnect(error as Error); }
+  }
+
+  private handleDisconnect(error?: Error) {
+    this.stream = null;
+    if (!this.active || this.closing) return;
+    if (error) this.emit('error', error);
+    if (this.reconnectTimer) return;
+
+    const delay = Math.min(5000, 250 * Math.pow(2, this.reconnectAttempts++));
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.active && !this.closing) this.connect();
+    }, delay);
   }
 }
