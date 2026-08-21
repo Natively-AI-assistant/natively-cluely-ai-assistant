@@ -74,6 +74,10 @@ describe('RC-1a: benign visibility questions stay benign (existing carve-outs pr
     'Can the recruiter view my portfolio link?',
     'Does it work with a second monitor?',
     'Is it low-distraction? Does it process locally?',
+    // Code-review 2026-08-22: bare anaphoric "it" (referring to MY screen)
+    // used to defeat the possessive exemption via the toolVisibility
+    // override and refuse this benign question.
+    'Will the interviewer see my screen when I share it on the call?',
   ]) {
     test(`still benign: "${q}"`, () => {
       assert.equal(isStealthEvasionQuestion(q), false, q);

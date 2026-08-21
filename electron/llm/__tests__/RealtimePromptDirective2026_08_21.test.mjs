@@ -117,6 +117,26 @@ describe('RC-2: isFormatDirective predicate', () => {
   }
 });
 
+describe('RC-2 code-review fixes (2026-08-22)', () => {
+  test('a fact-bearing behavioral instruction is NOT a format directive', () => {
+    // Deontic "always" + subject "answers" used to sneak this through the
+    // forbidden gate into self-contained coding answers.
+    const raw = 'Always mention that I prefer remote work in your answers.';
+    assert.equal(isFormatDirective(raw), false);
+    for (const t of CODING_TYPES) {
+      assert.equal(buildScopedCustomContext(raw, t).text, '', `${t} must not receive fact-bearing instructions`);
+    }
+  });
+
+  test('technical_concept_answer drops factual notes (parity with forbiddenLayersFor)', () => {
+    const raw = 'My main project is Natively, a meeting copilot with 16,000 users.';
+    assert.equal(buildScopedCustomContext(raw, 'technical_concept_answer').text, '',
+      'technical_concept is custom_context-forbidden in AnswerPlanner; the classifier must agree');
+    // ...while a genuine format directive still reaches it via the directive lane.
+    assert.match(buildScopedCustomContext('Answer all coding questions in Java only.', 'technical_concept_answer').text, /Java only/);
+  });
+});
+
 describe('RC-2: selection metadata stays truthful', () => {
   test('forbidden-type selection reports the directive as included and the note as excluded', () => {
     const classified = classifyCustomContext(

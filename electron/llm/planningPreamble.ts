@@ -35,8 +35,17 @@ const PLANNING_SENTENCE_RES: RegExp[] = [
   // interviewer's move. A candidate never says this aloud.
   /^(?:since|so|okay,?\s*so|now,?\s*)?\s*the interviewer (?:is|was|'s|seems|keeps?|just)\s+(?:asking|pushing|probing|looking|trying|wanting|testing|drilling|really)/i,
   // Self-directed answer planning: "I should answer…", "I'll answer with…",
-  // "Let me answer…", "I need to address…", "this should go deeper…".
-  /\bI (?:should|need to|will|'ll|want to|am going to|'m going to)\s+(?:answer|respond|address|focus|frame|structure|keep|go deeper|describe (?:what|how))/i,
+  // "Let me answer…". Code-review 2026-08-22, two fixes in one:
+  //   1. the old alternation required a SPACE before the contraction
+  //      ("I 'll"), so "I'll answer…" — a documented live-leak shape — could
+  //      never match;
+  //   2. it was unanchored with content-capable verbs (address/focus/keep/
+  //      describe), so a legitimate opener like "In this role I will address
+  //      scalability by…" was silently deleted. Now anchored to the sentence
+  //      start (with an optional short discourse lead-in) and restricted to
+  //      verbs that are about ANSWERING itself, never about the subject
+  //      matter.
+  /^(?:(?:so|okay|now|first|alright|and),?\s+)?I(?:'ll|'m going to|\s+(?:should|will|need to|want to|am going to))\s+(?:answer|respond|reply|frame|structure|go deeper)\b/i,
   /^let me answer\b/i,
   // Meta-references to the material as material: "the résumé shows me as…",
   // "the prior assistant turn already established…".
@@ -62,11 +71,15 @@ export interface PlanningPreambleResult {
 }
 
 /**
- * Split prose into sentences, preserving trailing whitespace with each piece so
- * rejoining the keepers reproduces the original spacing.
+ * Split prose into alternating [sentence, separator, sentence, separator, …]
+ * pieces (sentences at even indexes). The separators are CAPTURED so that
+ * rejoining the survivors reproduces the original spacing byte-for-byte —
+ * code-review 2026-08-22: the previous split consumed the separators and the
+ * survivors were re-joined with single spaces, flattening every paragraph
+ * break in a repaired answer into one run-on paragraph.
  */
-const splitSentences = (text: string): string[] =>
-  text.split(/(?<=[.!?…])\s+/);
+const splitSentenceParts = (text: string): string[] =>
+  text.split(/((?<=[.!?…])\s+)/);
 
 /**
  * Strip the answer's leading run of planning sentences. Fenced code at the top
@@ -79,13 +92,16 @@ export function stripPlanningPreamble(answer: string): PlanningPreambleResult {
     return { text: original, repaired: false, removedSentences: 0 };
   }
 
-  const sentences = splitSentences(trimmed);
+  const parts = splitSentenceParts(trimmed);
+  // Sentences sit at even indexes; separators (captured whitespace) at odd.
   let cut = 0;
-  while (cut < sentences.length && isPlanningSentence(sentences[cut])) cut++;
+  while (cut * 2 < parts.length && isPlanningSentence(parts[cut * 2])) cut++;
 
   if (cut === 0) return { text: original, repaired: false, removedSentences: 0 };
 
-  const rest = sentences.slice(cut).join(' ').replace(/^["'\s]+/, (m) => m.replace(/^\s+/, '')).trim();
+  // Drop the stripped sentences AND their trailing separators; everything
+  // after keeps its original spacing (paragraph breaks included).
+  const rest = parts.slice(cut * 2).join('').replace(/^["']+/, '').trim();
   if (!rest) {
     // Everything was planning — nothing left to say. Fail open.
     return { text: original, repaired: false, removedSentences: 0 };

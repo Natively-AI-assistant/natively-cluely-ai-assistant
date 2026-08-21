@@ -2644,7 +2644,30 @@ export class IntelligenceEngine extends EventEmitter {
             // below is a SAFETY NET that only replaces the row if the streamed
             // answer actually violated the contract. (Fixes the buffering
             // regression where coding answers froze for the whole generation.)
-            const isCoding = !isSpeculative && isCodingAnswerType(answerPlan.answerType);
+            // PROMOTED SCREEN-CODING TURN (code-review 2026-08-22): a blind or
+            // deictic press over on-screen code keeps its routed NON-coding
+            // answerType while WhatToAnswerLLM promotes the prompt to the full
+            // coding contract. The engine's stream/scaffold machinery keyed only
+            // on the answerType, so a promoted turn's CORRECT six-section answer
+            // was (a) fully stream-held by the RC-4 heading hold — zero paints
+            // for the whole generation — and then (b) regenerated away by the
+            // scaffold repair. Consult the SAME shared predicate WhatToAnswerLLM
+            // uses, so both sides always agree on what this turn is.
+            const wtaPromotedScreenCoding = (() => {
+                try {
+                    const { isPromotedScreenCodingTurn } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                    const _screenTextForPromotion = [options?.domContext, options?.screenContext?.ocrText]
+                        .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+                        .join('\n\n');
+                    return isPromotedScreenCodingTurn({
+                        alreadyCoding: isCodingAnswerType(answerPlan.answerType),
+                        question: answerPlan.question,
+                        hasImages: (imagePaths?.length ?? 0) > 0,
+                        screenText: _screenTextForPromotion || undefined,
+                    });
+                } catch { return false; }
+            })();
+            const isCoding = !isSpeculative && (isCodingAnswerType(answerPlan.answerType) || wtaPromotedScreenCoding);
             const codingGate = isCoding ? new CodingStreamGate() : null;
             // Suppress the hidden <verification_spec> from the live stream so it
             // never flashes in the UI (it trails the six sections). The raw
@@ -2839,14 +2862,19 @@ export class IntelligenceEngine extends EventEmitter {
                                     question: answerPlan.question,
                                     surroundingText: _screenText || undefined,
                                 });
-                                // Screenshot/capture promotion, mirroring WhatToAnswerLLM:
-                                // when screen content is present and the question points at
-                                // the screen (or there is none), the routed type is not what
-                                // the turn is about — attach the contract and let its own
-                                // applicability boundary skip non-coding screens.
-                                const _screenIsSubject = ((imagePaths?.length ?? 0) > 0 || _screenText.length > 0)
-                                    && (!answerPlan.question?.trim() || require('./llm/codingPromptSignals').isDeicticAsk(answerPlan.question));
-                                const _promoted = !codingSignals.codingTask && _screenIsSubject;
+                                // Screenshot/capture promotion — the SAME shared
+                                // predicate WhatToAnswerLLM and the engine's
+                                // stream/scaffold gates consult (code-review
+                                // 2026-08-22: three hand-rolled copies had
+                                // diverged; captured TEXT now requires a real
+                                // structural code template, images still promote).
+                                const _promoted = !codingSignals.codingTask
+                                    && require('./llm/codingPromptSignals').isPromotedScreenCodingTurn({
+                                        alreadyCoding: false,
+                                        question: answerPlan.question,
+                                        hasImages: (imagePaths?.length ?? 0) > 0,
+                                        screenText: _screenText || undefined,
+                                    });
                                 return resolveV2SystemPrompt({
                                     action: 'answer',
                                     tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
@@ -3346,6 +3374,9 @@ export class IntelligenceEngine extends EventEmitter {
                 'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
             ]);
             if (!isCodingAnswerType(answerPlan.answerType)
+                // A promoted screen-coding turn's six sections ARE the answer
+                // (code-review 2026-08-22) — never "extract" prose out of them.
+                && !wtaPromotedScreenCoding
                 && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)) {
                 const extracted = detectAndExtractScaffoldMisfire(answerPlan.answerType, fullAnswer);
                 if (extracted) {
@@ -3451,6 +3482,10 @@ export class IntelligenceEngine extends EventEmitter {
                 && fullAnswer
                 && scaffoldQuestion.trim()
                 && !isCodingAnswerType(answerPlan.answerType)
+                // A promoted screen-coding turn's scaffold is the CORRECT shape
+                // (code-review 2026-08-22) — regeneration would replace a right
+                // coding answer with a non-coding rewrite.
+                && !wtaPromotedScreenCoding
                 && !isDocGroundedAnswerType(answerPlan.answerType)
                 && isScaffoldRegenerationEligible(answerPlan.answerType, fullAnswer)
                 && this.currentGenerationId === generationId) {

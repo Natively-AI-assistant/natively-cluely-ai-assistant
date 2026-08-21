@@ -15,7 +15,7 @@ import { beginTrace, commitTrace } from "../intelligence/IntelligenceTrace";
 import { DOM_CONTEXT_MAX_CHARS } from "../config/constants";
 import { checkAnswerForCodeBugs } from "./CodeSanityCheck";
 import { formatAnswerPlanForPrompt, isCodingAnswerType } from "./AnswerPlanner";
-import { resolveCodingPromptSignals, isDeicticAsk } from "./codingPromptSignals";
+import { resolveCodingPromptSignals, isDeicticAsk, isPromotedScreenCodingTurn } from "./codingPromptSignals";
 import type { AnswerPlan, AnswerType } from "./AnswerPlanner";
 import { isLayerAllowed } from "./contextRoute";
 import { deriveRetrievalQuery } from "./retrievalQueryPolicy";
@@ -263,9 +263,21 @@ export class WhatToAnswerLLM {
                 // Attach the contract and let its own applicability boundary
                 // ignore a non-coding screen ("for conceptual, behavioral, or
                 // discussion turns, ignore it entirely").
-                const screenIsTheSubject = (hasAttachedImages || hasScreenText)
-                    && (!answerPlan?.question?.trim() || isDeicticAsk(answerPlan.question));
-                if (!resolved.codingTask && screenIsTheSubject) {
+                // Code-review 2026-08-22: promotion now goes through the ONE
+                // shared predicate (codingPromptSignals.isPromotedScreenCodingTurn).
+                // The inline version promoted on ANY captured text — a CRM
+                // dashboard or JD page made a blind press a full DSA turn. The
+                // shared predicate requires a structural code template in
+                // captured TEXT (images still promote — pixels can't be
+                // inspected), and the engine's scaffold stream-hold/regeneration
+                // gates consult the same predicate so they can never destroy a
+                // promoted turn's correct six-section answer.
+                if (isPromotedScreenCodingTurn({
+                    alreadyCoding: resolved.codingTask === true,
+                    question: answerPlan?.question,
+                    hasImages: hasAttachedImages,
+                    screenText: capturedScreenText || undefined,
+                })) {
                     promotedScreenCodingTurn = true;
                     return { codingTask: true, codingTaskKind: 'dsa' as const };
                 }

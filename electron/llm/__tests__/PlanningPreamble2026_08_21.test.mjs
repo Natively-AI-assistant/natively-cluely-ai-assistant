@@ -73,3 +73,29 @@ describe('RC-6: legitimate content is never touched', () => {
     assert.equal(r.text, allPlanning);
   });
 });
+
+describe('RC-6 code-review fixes (2026-08-22)', () => {
+  test('contractions match: "I\'ll answer…" is stripped (the old regex required "I \'ll")', () => {
+    const leaked = "I'll answer with the Natively story since it is the strongest example. "
+      + 'The Rust audio layer was the hardest part of the whole build.';
+    const r = stripPlanningPreamble(leaked);
+    assert.equal(r.repaired, true);
+    assert.match(r.text, /^The Rust audio layer/);
+  });
+
+  test('anchored: "In this role I will address scalability…" is real content and survives', () => {
+    const legit = 'In this role I will address scalability by sharding the write path. '
+      + 'Reads stay on the replica set.';
+    const r = stripPlanningPreamble(legit);
+    assert.equal(r.repaired, false);
+    assert.equal(r.text, legit);
+  });
+
+  test('paragraph breaks survive a repair (the old rejoin flattened them)', () => {
+    const leaked = 'The interviewer is pushing for one concrete example. '
+      + 'First paragraph of the real answer.\n\nSecond paragraph stays separate.';
+    const r = stripPlanningPreamble(leaked);
+    assert.equal(r.repaired, true);
+    assert.match(r.text, /^First paragraph of the real answer\.\n\nSecond paragraph stays separate\.$/);
+  });
+});

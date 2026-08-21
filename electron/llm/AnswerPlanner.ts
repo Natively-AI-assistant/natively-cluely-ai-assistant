@@ -688,7 +688,13 @@ export const isStealthEvasionQuestion = (question: string): boolean => {
     // ...UNLESS the same sentence ALSO aims a visibility verb at the TOOL
     // itself ("if I share my screen on the call, will they detect the tool?") —
     // then the possessive is incidental and the tool-visibility ask wins.
-    const toolVisibility = /\b(see|sees|notice\w*|detect\w*|spot|catch\w*|find)\b[^.?!]{0,40}\b(the (?:tool|app|overlay|window|ui)|natively|nativley|it)\b/.test(sentence);
+    // Code-review 2026-08-22: bare "it" removed from the tool-noun set —
+    // an anaphoric "it" ("will they see my screen when I share it?") sat
+    // within 40 chars of the verb and overrode the possessive exemption,
+    // refusing a benign question. An explicit tool noun is required; a
+    // genuine "will they detect it?" with a possessive nearby is the
+    // benign shape, and without one, branch (b)'s object test still fires.
+    const toolVisibility = /\b(see|sees|notice\w*|detect\w*|spot|catch\w*|find)\b[^.?!]{0,40}\b(the (?:tool|app|overlay|window|ui)|natively|nativley)\b/.test(sentence);
     if (candidatePossessiveVisibility && !toolVisibility) continue;
     return true;
   }
