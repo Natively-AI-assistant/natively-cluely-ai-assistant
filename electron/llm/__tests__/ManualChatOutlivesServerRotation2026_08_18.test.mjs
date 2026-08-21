@@ -76,3 +76,54 @@ test('the manual-chat call site passes the server-cascade flag', () => {
   assert.ok(/isUsingNativelyServerCascade\?\.\(\)/.test(src),
     'viaServerCascade must be derived from the LLMHelper route predicate');
 });
+
+// ── CR-05 (code-review, 2026-08-21) ──────────────────────────────────────────
+// F-301 fixed ONE of the two firstUsefulDeadlineMs call sites. The phone-mirror
+// chat path passed NEITHER route flag, so it always took the 7s cloud cap —
+// aborting 3s before the server's rotation on the cascade route, and giving a
+// cold-loading local model 7s instead of 30s. F-301's rationale is
+// surface-agnostic; the phone is a live streaming surface with the same server
+// behind it.
+//
+// Verified end-to-end with REAL DeepSeek streams in
+// scripts/audit/CR-05-phone-deadline-live.mjs: with the first token withheld to
+// the 10s cutover, the 7s deadline aborts at 7001ms with NO answer while the
+// 13s cascade deadline delivers 252 real characters at 10002ms.
+test('the phone-mirror call site passes BOTH route flags', () => {
+  const src = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
+  // Strip comments before matching: a previous fix in this campaign moved a
+  // source-anchored test's target by writing the searched-for text INTO a
+  // comment. Anchor on real code only.
+  const codeOnly = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  assert.ok(
+    /firstUsefulDeadlineMs\(\s*'general_meeting_answer'\s*,\s*phoneUsingLocalLlm\s*,\s*phoneViaServerCascade\s*\)/.test(codeOnly),
+    'the phone-mirror handler must pass isLocal AND viaServerCascade into firstUsefulDeadlineMs (CR-05)',
+  );
+  assert.ok(
+    /phoneViaServerCascade\s*=\s*llmHelper\.isUsingNativelyServerCascade\?\.\(\)\s*===\s*true/.test(codeOnly),
+    'phone viaServerCascade must come from the same LLMHelper route predicate as manual chat',
+  );
+  assert.ok(
+    /phoneUsingLocalLlm\s*=\s*llmHelper\.isUsingOllama\(\)\s*\|\|\s*llmHelper\.isUsingCodexCli\(\)/.test(codeOnly),
+    'phone isLocal must be derived the same way as manual chat, or a cold local load aborts at 7s',
+  );
+
+  // The defect itself: a flagless call on the phone path.
+  assert.ok(
+    !/firstUsefulDeadlineMs\(\s*'general_meeting_answer'\s*\)/.test(codeOnly),
+    'no call site may take the flagless 7s default for a live streaming surface (CR-05)',
+  );
+});
+
+test('the phone deadline actually exceeds the server rotation budget', () => {
+  const budget = serverBudget();
+  // What the phone path resolves to on each route, post-fix.
+  assert.ok(firstUsefulDeadlineMs('general_meeting_answer', false, true) > budget,
+    'cascade route: the phone must outlive the rotation that would rescue the turn');
+  assert.equal(firstUsefulDeadlineMs('general_meeting_answer', true, false), 30000,
+    'local route: a cold-loading model needs the long budget on the phone path too');
+  // And the pre-fix value is on the wrong side of the cutover — this is the bug.
+  assert.ok(firstUsefulDeadlineMs('general_meeting_answer') < budget,
+    'the flagless default aborts BEFORE the cutover, which is why it lost the turn');
+});

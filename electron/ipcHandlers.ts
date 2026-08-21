@@ -13245,9 +13245,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
         // provider must never block it forever. Uses the standard chat first-useful
         // budget; an inter-token stall guard protects long answers.
+        //
+        // CR-05: this passed NEITHER route flag, so it always took the 7s cloud
+        // cap. Both defaults are wrong here for the same reasons the manual-chat
+        // site documents, and the rationale is surface-agnostic:
+        //   • viaServerCascade — the natively-api server cuts over to the next
+        //     provider at AI_TTFT_BUDGET_MS (10s). Aborting at 7s tore the HTTP
+        //     request down 3s BEFORE the rescue, producing exactly the "did not
+        //     produce an answer in time" outcome F-301 exists to eliminate.
+        //   • isLocal — a local model cold-loads its weights (8-12s for a 7-9B)
+        //     before the first token, so 7s aborted every cold local generation
+        //     on the phone path to zero tokens.
+        const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+        const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer'),
+          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {
