@@ -63,6 +63,13 @@ export interface Meeting {
     summaryStatus?: SummaryStatus;
 }
 
+/**
+ * CR-06: marks the v28 page-count DATA repair as still owed. It is deliberately
+ * NOT the schema `user_version`: the repair changes no schema, so a failure must
+ * not hold later SCHEMA migrations (notably v29's vec0 cosine rebuild) hostage.
+ */
+const PAGE_COUNT_REPAIR_PENDING_KEY = 'pending_page_count_repair_v28';
+
 export class DatabaseManager {
     private static instance: DatabaseManager;
     private db: Database.Database | null = null;
@@ -1433,7 +1440,35 @@ export class DatabaseManager {
         // marker-bearing rows (not gated on IS NULL) precisely because the bad
         // values are non-NULL, and it is idempotent — re-running derives the
         // same counts.
-        if (version < 28) {
+        // CR-06: this repair is gated on `user_version`, the SCHEMA counter, but it
+        // changes no schema — it is pure UPDATE over mode_reference_files, and it is
+        // idempotent. Conflating the two is the actual modelling error: when the
+        // repair failed, the (correct-in-isolation) `return` below also blocked v29's
+        // vec0 cosine rebuild FOREVER on that profile, while ensureVecTableForDim
+        // keeps creating every NEW dimension table as cosine — leaving one database
+        // with mixed metrics read through a single `similarity = 1 - distance` and
+        // one shared minSimilarity. That is the exact hazard v29 exists to remove,
+        // reached through a different door.
+        //
+        // So the two are separated: the schema version advances (safe — no schema
+        // change here), and the repair records its own pending flag in app_state and
+        // retries on later launches until it succeeds. R-05's requirement is
+        // preserved (a failed repair is never forgotten); what changes is that a
+        // failed DATA repair no longer holds the SCHEMA chain hostage.
+        const pageRepairPending = (() => {
+            if (version < 28) return true;
+            try {
+                const row = this.db.prepare('SELECT value FROM app_state WHERE key = ?')
+                    .get(PAGE_COUNT_REPAIR_PENDING_KEY) as { value?: string } | undefined;
+                return row?.value === '1';
+            } catch {
+                // app_state has existed since v6; if it is somehow unreadable, do not
+                // invent work — the version gate above still covers first application.
+                return false;
+            }
+        })();
+
+        if (pageRepairPending) {
             console.log('[DatabaseManager] Applying migration v27 → v28: Repair v22 page_count/extracted_page_count corruption');
             try {
                 const repaired = this.db.prepare(`
@@ -1514,7 +1549,10 @@ export class DatabaseManager {
                       AND content LIKE '%[Page %]%'
                 `).run();
                 console.log(`[DatabaseManager] v28 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
-                this.db.pragma('user_version = 28');
+                // Succeeded — clear any pending marker from an earlier failed launch.
+                try {
+                    this.db.prepare('DELETE FROM app_state WHERE key = ?').run(PAGE_COUNT_REPAIR_PENDING_KEY);
+                } catch { /* the repair itself is what matters */ }
             } catch (e) {
                 // R-05: this block deliberately swallows rather than re-throwing so
                 // the repair retries next launch. But `version` above is read ONCE
@@ -1525,10 +1563,24 @@ export class DatabaseManager {
                 // false claim, and it was this commit's own v28 block that made it
                 // false. Re-reading the pragma would not help: 27 < 29 is still true.
                 // A swallowed failure must STOP the chain so the version stays put.
-                console.error('[DatabaseManager] v28 page-count repair failed (leaving version at 27 to retry next launch); '
-                    + 'skipping all later migrations this launch so the version is not stamped past it:', e);
-                return;
+                // CR-06: record the repair as still-pending in its OWN marker rather
+                // than stalling the schema chain. It retries on every later launch
+                // until it succeeds; v29 is no longer blocked behind it.
+                try {
+                    this.db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)')
+                        .run(PAGE_COUNT_REPAIR_PENDING_KEY, '1');
+                    console.error('[DatabaseManager] v28 page-count repair failed; marked pending and will retry on the next launch. '
+                        + 'Later migrations still run — this repair changes no schema:', e);
+                } catch (markErr) {
+                    // Could not even record the marker, so the retry would be lost.
+                    // THEN the original behaviour is right: stop, leave the version
+                    // put, and let the whole block run again next launch.
+                    console.error('[DatabaseManager] v28 page-count repair failed AND its pending marker could not be written; '
+                        + 'leaving version at 27 and skipping later migrations so the repair is not forgotten:', e, markErr);
+                    return;
+                }
             }
+            if (version < 28) this.db.pragma('user_version = 28');
         }
 
         // Version 28 → 29: rebuild the vec0 tables with distance_metric=cosine (F-410).
