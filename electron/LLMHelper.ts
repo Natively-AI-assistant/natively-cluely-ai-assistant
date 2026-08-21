@@ -124,6 +124,9 @@ const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
+// Requested ceiling; see createNvidiaNimCompletion for why it is a request and
+// not a guarantee (NVIDIA exposes no per-model output budget to look up).
+const NVIDIA_NIM_MAX_OUTPUT_TOKENS = 8192
 const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
 // LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
 // Resolution order per request: (1) user manual override from Settings,
@@ -1334,6 +1337,50 @@ export class LLMHelper {
   }
 
   private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
+
+  /**
+   * NVIDIA NIM output ceiling.
+   *
+   * Unlike LiteLLM (whose /model/info exposes a per-model budget, see
+   * resolveLitellmMaxTokens), NVIDIA's /v1/models returns only id/object/
+   * created/owned_by — there is no ceiling to look up. The model list is
+   * fetched wholesale from the catalogue, so the user can select a model whose
+   * ceiling is below this default, and a fixed max_tokens then 400s EVERY
+   * request for that model with no path to recovery.
+   *
+   * So: ask for NVIDIA_NIM_MAX_OUTPUT_TOKENS, and if the server rejects the
+   * request because of it, retry once letting the server apply the model's own
+   * default. Message-shape-agnostic on purpose — it keys off the 400 plus a
+   * mention of the parameter, not off one vendor phrasing.
+   */
+  private isNvidiaNimMaxTokensRejection(error: any): boolean {
+    const status = error?.status ?? error?.response?.status;
+    if (status !== 400 && status !== 422) return false;
+    const text = [
+      error?.message,
+      error?.error?.message,
+      error?.response?.data?.message,
+      error?.response?.data?.detail,
+      typeof error?.response?.data?.error === 'string' ? error.response.data.error : error?.response?.data?.error?.message,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return text.includes('max_tokens') || text.includes('max tokens') || text.includes('maximum tokens');
+  }
+
+  /**
+   * Run an NVIDIA NIM completion, dropping max_tokens and retrying once if the
+   * model's ceiling is lower than what we asked for.
+   */
+  private async createNvidiaNimCompletion(request: any, options?: any): Promise<any> {
+    const client = this.nvidiaNimClient;
+    if (!client) throw new Error('NVIDIA NIM client not initialized');
+    try {
+      return await client.chat.completions.create({ ...request, max_tokens: NVIDIA_NIM_MAX_OUTPUT_TOKENS }, options);
+    } catch (error: any) {
+      if (!this.isNvidiaNimMaxTokensRejection(error)) throw error;
+      console.warn(`[LLMHelper] NVIDIA NIM rejected max_tokens=${NVIDIA_NIM_MAX_OUTPUT_TOKENS} for ${request?.model}; retrying with the model's own ceiling`);
+      return await client.chat.completions.create(request, options);
+    }
+  }
 
   private getDeepseekMaxOutput(_modelId: string): number {
     return DEEPSEEK_MAX_OUTPUT_TOKENS;
@@ -3912,7 +3959,7 @@ let isMultimodal = !!(imagePaths?.length);
       for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
-    const response = await this.withTimeout(this.withRetry(() => this.nvidiaNimClient!.chat.completions.create({ model, messages, max_tokens: 8192 })), 60000, `NVIDIA NIM (${model})`);
+    const response = await this.withTimeout(this.withRetry(() => this.createNvidiaNimCompletion({ model, messages })), 60000, `NVIDIA NIM (${model})`);
     return response.choices[0]?.message?.content || '';
   }
 
@@ -7872,7 +7919,7 @@ let isMultimodal = !!(imagePaths?.length);
       for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
-    const stream = await this.nvidiaNimClient.chat.completions.create({ model, messages, stream: true, max_tokens: 8192 }, { signal: abortSignal });
+    const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal });
     try { for await (const chunk of stream) { if (abortSignal?.aborted) return; const content = chunk.choices[0]?.delta?.content; if (content) yield content; } }
     finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
