@@ -133,6 +133,10 @@ export interface IntelligenceModeEvents {
     // must drop the open scaffold row so the user never sees a permanent
     // "Working on…" card (REPORT C1 follow-up — orphaned-scaffold fix).
     'suggested_answer_discard': (reason: string) => void;
+    // Emitted when the planner deliberately declines to answer a trigger (e.g.
+    // the same utterance arriving twice inside the cooldown window). Without it a
+    // skip is indistinguishable from a failure — nothing runs and nothing is said.
+    'suggestion_skipped': (info: { reason: string; question: string; confidence: number }) => void;
     // Verified-code-execution (background, after the answer is shown). 'verified'
     // fires when the shown code passed N executed test cases (renderer shows a
     // small "✓ verified" badge). 'correction' fires when the shown code FAILED
@@ -229,6 +233,12 @@ export class IntelligenceEngine extends EventEmitter {
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
+    /**
+     * The question that stamped `lastTriggerTime`. Lets the cooldown distinguish a
+     * restated FRAGMENT of the same utterance (throttle) from a genuinely new
+     * question (answer). Null ⇒ the cooldown behaves exactly as it always has.
+     */
+    private lastTriggerQuestion: string | null = null;
 
     // Speculative inference: start LLM on high-confidence interviewer partials
     private speculativeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -689,6 +699,18 @@ export class IntelligenceEngine extends EventEmitter {
         const plannerDecision = await this.planSuggestionTrigger(trigger);
         if (plannerDecision.kind === 'silent') {
             console.log('[IntelligenceEngine] Planner stayed silent', { reason: plannerDecision.reason, confidence: plannerDecision.confidence });
+            // A throttled turn used to end here with NO signal of any kind: no
+            // pipeline ran, nothing was emitted, and the caller could not tell a
+            // deliberate skip from a failure. Surface the decision so a UI (or a
+            // test) can distinguish "we chose not to answer this" from "nothing
+            // happened". Emission only — no behaviour change to the skip itself.
+            try {
+                this.emit('suggestion_skipped', {
+                    reason: plannerDecision.reason,
+                    question: trigger.lastQuestion ?? '',
+                    confidence: plannerDecision.confidence,
+                });
+            } catch { /* a listener must never break the trigger path */ }
             return;
         }
 
@@ -708,6 +730,7 @@ export class IntelligenceEngine extends EventEmitter {
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
                     console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
+                    this.lastTriggerQuestion = trigger.lastQuestion ?? null;
                     return;
                 }
                 console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
@@ -750,6 +773,7 @@ export class IntelligenceEngine extends EventEmitter {
             now: Date.now(),
             lastTriggerTime: this.lastTriggerTime,
             cooldownMs: this.triggerCooldown,
+            lastTriggerQuestion: this.lastTriggerQuestion ?? undefined,
         });
     }
 
@@ -921,6 +945,7 @@ export class IntelligenceEngine extends EventEmitter {
         // is reserved for the real trigger. We stamp it only on successful completion.
         if (!isSpeculative) {
             this.lastTriggerTime = now;
+            this.lastTriggerQuestion = question ?? null;
         }
         // Record the question text so handleSuggestionTrigger can do Jaccard comparison.
         // Bound expiry even while the stream is running so stale speculative
@@ -1113,6 +1138,7 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
                     this.lastTriggerTime = Date.now();
+                    this.lastTriggerQuestion = question ?? null;
                     this.setMode('idle');
                     return answer || buildGracefulRetry(question);
                 }
@@ -3030,6 +3056,12 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeTextExpiry = Infinity;
                     // Stamp lastTriggerTime so the real trigger that caused this abort
                     // doesn't allow a rapid second trigger within the cooldown window.
+                    // Deliberately does NOT stamp lastTriggerQuestion: this time
+                    // belongs to the SUPERSEDING question, which already recorded
+                    // itself. Writing the aborted speculative question here would
+                    // overwrite fresh text with dead text, and the next fragment of
+                    // the live question would then compare as "different" and
+                    // double-generate.
                     this.lastTriggerTime = Date.now();
                 }
                 if (this.whatToAnswerCancellationToken === whatToAnswerCancellationToken) {
@@ -4029,6 +4061,7 @@ export class IntelligenceEngine extends EventEmitter {
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.lastTriggerTime = Date.now();
+                this.lastTriggerQuestion = question ?? null;
                 this.setMode('idle');
                 return null;
             }
@@ -4362,6 +4395,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             if (isSpeculative) {
                 this.lastTriggerTime = Date.now();
+                this.lastTriggerQuestion = question ?? null;
                 this.speculativeTextExpiry = this.lastTriggerTime + this.triggerCooldown + 500;
                 this.setMode('idle');
                 return fullAnswer;

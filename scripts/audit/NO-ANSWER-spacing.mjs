@@ -27,7 +27,15 @@ const FULL = [
   { speaker: 'interviewer', text: 'And the datastore?' },
   { speaker: 'user', text: 'PostgreSQL, with Redis for caching.' },
 ];
-const Q = 'Which datastore did we use?';
+const QS_DIFFERENT = [
+  'Which datastore did we use?',
+  'How many engineers were on the team?',
+  'Did we migrate to AWS?',
+  'What did we use for caching?',
+  'Did I lead the migration myself?',
+  'When did the migration happen?',
+];
+const Q = QS_DIFFERENT[0];
 const REPS = 6;
 
 const app = await electron.launch({ args: ['dist-electron/electron/main.js'], env, timeout: 90000 });
@@ -48,7 +56,7 @@ const run = async (label, gapMs) => {
   for (let i = 1; i <= REPS; i++) {
     if (i > 1 && gapMs) await sleep(gapMs);
     const t0 = Date.now();
-    const r = await R('__e2e__:ask', { question: Q, timeoutMs: 60000, priorTurns: FULL }).catch(() => null);
+    const r = await R('__e2e__:ask', { question: QS_DIFFERENT[i % QS_DIFFERENT.length], timeoutMs: 60000, priorTurns: FULL }).catch(() => null);
     const ms = Date.now() - t0;
     const nd = r?.noDecision === true;
     if (nd) noDecision++; else if (r?.success) answered++;
@@ -58,7 +66,7 @@ const run = async (label, gapMs) => {
   return noDecision;
 };
 
-const backToBack = await run('BACK-TO-BACK (as the earlier probes ran)', 0);
+const backToBack = await run('BACK-TO-BACK, DIFFERENT questions (the fix target)', 0);
 const spaced = await run('SPACED', 6000);
 
 console.log('\n=== conclusion ===');

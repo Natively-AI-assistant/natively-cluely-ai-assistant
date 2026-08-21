@@ -70,6 +70,9 @@ export class IntelligenceManager extends EventEmitter {
     private forwardEngineEvents(): void {
         const events = [
             'assist_update', 'suggested_answer', 'suggested_answer_token', 'suggested_answer_discard',
+            // Planner declined to answer a trigger (cooldown dedup) — forwarded so
+            // a skip is observable rather than silent.
+            'suggestion_skipped',
             // Verified code execution (background): ✓ badge + corrected message.
             'code_verified', 'code_correction',
             'refined_answer', 'refined_answer_token',
