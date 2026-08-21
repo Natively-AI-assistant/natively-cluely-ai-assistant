@@ -1502,6 +1502,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Permissions
   checkPermissions: () => ipcRenderer.invoke('permissions:check'),
   requestMicPermission: () => ipcRenderer.invoke('permissions:request-mic'),
+  openMicSettings: () => ipcRenderer.invoke('permissions:open-mic-settings'),
 
   // Free Trial
   startTrial: () => ipcRenderer.invoke('trial:start'),

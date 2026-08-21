@@ -217,8 +217,14 @@ export interface ElectronAPI {
   } | null>;
   resolveAmbiguousCredentialStores: (choice: 'keyring' | 'fallback' | 'merge') => Promise<{ ok: boolean; error?: string }>;
   // Permissions
-  checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'; screen: 'granted'|'denied'|'not-determined'|'restricted'; platform: string }>
+  // CR-03: 'unknown' is in Electron 43's declared return union for
+  // getMediaAccessStatus and win32 can return it. Omitting it here made the
+  // renderer's `as PermStatus` cast unsound.
+  checkPermissions:     () => Promise<{ microphone: 'granted'|'denied'|'not-determined'|'restricted'|'unknown'; screen: 'granted'|'denied'|'not-determined'|'restricted'|'unknown'; platform: string }>
+  /** Resolves false off darwin: no platform but macOS can grant programmatically. */
   requestMicPermission: () => Promise<boolean>
+  /** Opens the OS microphone privacy panel. The only remedy on win32. */
+  openMicSettings:      () => Promise<{ ok: boolean; reason?: string }>
 
   // Free Trial
   startTrial:     () => Promise<{ ok: boolean; hasToken?: boolean; started_at?: string; expires_at?: string; expired?: boolean; already_used?: boolean; converted_to?: string | null; usage?: { ai: number; stt_seconds: number; search: number }; limits?: { duration_ms: number; ai_requests: number; stt_minutes: number; search_requests: number }; error?: string; status?: number }>

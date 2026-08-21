@@ -2,6 +2,7 @@
 
 import * as crypto from 'crypto';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -11797,11 +11798,34 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('permissions:request-mic', async () => {
-    if (process.platform !== 'darwin') return true;
+    // CR-03: askForMediaAccess is documented @platform darwin and is a no-op
+    // elsewhere. Returning a bare `true` off darwin told the renderer the grant
+    // SUCCEEDED, so the Windows onboarding re-read an unchanged 'denied' and
+    // presented a control that could never turn green. Report honestly: false
+    // means "this platform cannot grant programmatically" — the caller's remedy
+    // is permissions:open-mic-settings.
+    if (process.platform !== 'darwin') return false;
     try {
       return await systemPreferences.askForMediaAccess('microphone');
     } catch {
       return false;
+    }
+  });
+
+  // CR-03: on win32 there is NO per-app grant API — the privacy panel is the
+  // only remedy, and before this the renderer had no way to reach it (its
+  // settings link early-returned for non-darwin). The platform decision lives in
+  // src/lib/micPermissionPolicy so main and renderer cannot disagree about which
+  // platforms have a reachable panel.
+  safeHandle('permissions:open-mic-settings', async () => {
+    const uri = micSettingsUri(process.platform);
+    if (!uri) return { ok: false, reason: 'no-settings-panel' };
+    try {
+      await shell.openExternal(uri);
+      return { ok: true };
+    } catch (e: any) {
+      console.warn('[IPC] permissions:open-mic-settings failed:', e?.message || e);
+      return { ok: false, reason: 'open-failed' };
     }
   });
 
