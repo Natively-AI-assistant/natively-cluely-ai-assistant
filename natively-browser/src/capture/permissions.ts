@@ -104,6 +104,45 @@ export async function requestOriginPermission(
   }
 }
 
+/**
+ * The broad match patterns declared in `optional_host_permissions`. Requesting
+ * them is the one-time "Allow on all sites" flow (2026-08-18): a single user
+ * gesture + a single Chrome prompt, after which the desktop Cmd/Ctrl+Shift+Y
+ * hotkey can capture ANY site with no per-site grants. Strictly opt-in — the
+ * default remains per-site grants via requestOriginPermission above.
+ */
+export const ALL_SITES_ORIGINS = ['https://*/*', 'http://*/*'];
+
+/**
+ * Request blanket host access (both broad patterns in ONE prompt). MUST run
+ * inside a user gesture (the popup's click handler). Denial is not an error —
+ * per-site grants keep working exactly as before.
+ */
+export async function requestAllSitesPermission(api: PermissionsApi): Promise<PermissionResult> {
+  const origins = ALL_SITES_ORIGINS;
+  try {
+    const already = await api.contains({ origins });
+    if (already) return { granted: true, alreadyHad: true };
+    const granted = await api.request({ origins });
+    return {
+      granted,
+      alreadyHad: false,
+      reason: granted ? undefined : 'user denied all-sites permission',
+    };
+  } catch {
+    return { granted: false, alreadyHad: false, reason: 'permission request failed' };
+  }
+}
+
+/** True if blanket host access is currently granted. */
+export async function hasAllSitesPermission(api: PermissionsApi): Promise<boolean> {
+  try {
+    return await api.contains({ origins: ALL_SITES_ORIGINS });
+  } catch {
+    return false;
+  }
+}
+
 /** True if the coding host permissions are currently granted. */
 export async function hasCodingHostPermissions(
   api: PermissionsApi,
