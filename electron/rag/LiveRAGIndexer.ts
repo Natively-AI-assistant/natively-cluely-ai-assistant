@@ -19,6 +19,15 @@ export class LiveRAGIndexer {
     private vectorStore: VectorStore;
     private embeddingPipeline: EmbeddingPipeline;
     private meetingId: string | null = null;
+    /**
+     * CR-02: identity of the CURRENT session. `meetingId` cannot serve this
+     * purpose — the only production caller passes the literal constant
+     * 'live-meeting-current' (electron/main.ts), so comparing meetingId VALUES
+     * across an overlapping start/stop always compares equal and the guard is
+     * inert. A monotonic token distinguishes session N from session N+1.
+     */
+    private sessionSeq = 0;
+    private sessionToken = 0;   // 0 = no session
     private timer: ReturnType<typeof setInterval> | null = null;
     private allSegments: RawSegment[] = [];
     private indexedSegmentCount = 0;  // High-water mark: segments already chunked
@@ -54,6 +63,7 @@ export class LiveRAGIndexer {
         }
 
         this.meetingId = meetingId;
+        this.sessionToken = ++this.sessionSeq;
         this.allSegments = [];
         this.indexedSegmentCount = 0;
         this.chunkCounter = 0;
@@ -109,10 +119,11 @@ export class LiveRAGIndexer {
 
         this.isProcessing = true;
         const meetingId = this.meetingId;
+        const sessionToken = this.sessionToken;
 
         // R-03(1a): register ONLY a tick that actually reached the body, so
         // stop() awaits the parked work rather than an already-settled no-op.
-        const running = this.runTick(meetingId).finally(() => {
+        const running = this.runTick(meetingId, sessionToken).finally(() => {
             this.isProcessing = false;
             if (this.inFlightTick === running) this.inFlightTick = null;
         });
@@ -130,11 +141,11 @@ export class LiveRAGIndexer {
      * all. Baseline's `= this.allSegments.length` self-clamped to the live array
      * and recovered on the next feed, so an unguarded write is a REGRESSION.
      */
-    private stillOwns(meetingId: string): boolean {
-        return this.isActive && this.meetingId === meetingId;
+    private stillOwns(sessionToken: number): boolean {
+        return this.isActive && this.sessionToken === sessionToken;
     }
 
-    private async runTick(meetingId: string): Promise<void> {
+    private async runTick(meetingId: string, sessionToken: number): Promise<void> {
         try {
             // 1. Get only new segments
             // F-414: capture the slice point and advance the high-water mark
@@ -151,14 +162,14 @@ export class LiveRAGIndexer {
             // 2. Preprocess
             const cleaned = preprocessTranscript(newSegments);
             if (cleaned.length === 0) {
-                if (this.stillOwns(meetingId)) this.indexedSegmentCount = processedUpTo;
+                if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
                 return;
             }
 
             // 3. Chunk with offset index
             const chunks = chunkTranscript(meetingId, cleaned);
             if (chunks.length === 0) {
-                if (this.stillOwns(meetingId)) this.indexedSegmentCount = processedUpTo;
+                if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
                 return;
             }
 
@@ -207,7 +218,7 @@ export class LiveRAGIndexer {
                 } catch (err) {
                     console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId}:`, err);
                 }
-                if (this.stillOwns(meetingId)) this.indexedChunkCount += embeddedCount;
+                if (this.stillOwns(sessionToken)) this.indexedChunkCount += embeddedCount;
                 console.log(`[LiveRAGIndexer] Embedded ${embeddedCount}/${chunkIds.length} chunks (${this.indexedChunkCount} total with embeddings)`);
             } else {
                 console.log('[LiveRAGIndexer] Embedding pipeline not ready, chunks saved without embeddings');
@@ -216,7 +227,7 @@ export class LiveRAGIndexer {
             // 6. Advance high-water mark — to what this tick actually
             //    processed (see the sliceStart note above), not to the live
             //    length, so segments appended mid-tick are picked up next time.
-            if (this.stillOwns(meetingId)) this.indexedSegmentCount = processedUpTo;
+            if (this.stillOwns(sessionToken)) this.indexedSegmentCount = processedUpTo;
 
         } catch (err) {
             console.error('[LiveRAGIndexer] Processing error:', err);
@@ -233,7 +244,7 @@ export class LiveRAGIndexer {
         // ~90s on an in-flight tick. Capture which session we are stopping so a
         // late resumption cannot flush into, or tear down, a meeting that started
         // in the meantime.
-        const stopping = this.meetingId;
+        const stopping = this.sessionToken;
 
         console.log(`[LiveRAGIndexer] Stopping for meeting ${this.meetingId}`);
 
@@ -250,13 +261,13 @@ export class LiveRAGIndexer {
         if (this.inFlightTick) {
             try { await this.inFlightTick; } catch { /* the tick logs its own errors */ }
         }
-        if (this.meetingId === stopping) {
+        if (this.sessionToken === stopping) {
             await this.tick(true);
         }
 
-        if (this.meetingId !== stopping) {
+        if (this.sessionToken !== stopping) {
             console.warn(
-                `[LiveRAGIndexer] stop(${stopping}) resumed after ${this.meetingId} had already started — `
+                `[LiveRAGIndexer] stop(session ${stopping}) resumed after session ${this.sessionToken} had already started — `
                 + 'skipping the reset so the new session is not torn down.'
             );
             return;
@@ -265,6 +276,7 @@ export class LiveRAGIndexer {
         const meetingId = this.meetingId;
         this.isActive = false;
         this.meetingId = null;
+        this.sessionToken = 0;
         this.allSegments = [];
         this.indexedSegmentCount = 0;
         this.chunkCounter = 0;
