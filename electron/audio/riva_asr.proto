@@ -1,5 +1,22 @@
 syntax = "proto3";
 
+// Minimal subset of NVIDIA Riva's ASR service, sufficient for hosted
+// (NVCF) streaming recognition.
+//
+// FIELD NUMBERS ARE THE WIRE CONTRACT — they must match upstream exactly, and
+// names must not be trusted to convey meaning. The numbers below are copied
+// from github.com/nvidia-riva/common (riva/proto/riva_asr.proto), which NVIDIA's
+// own model cards point at ("Proto files can be downloaded from Riva gRPC Proto
+// files and compiled to target language"). Renumbering silently reroutes a
+// value onto a different setting: an earlier revision of this file numbered
+// enable_automatic_punctuation as 5, which is upstream's `profanity_filter`, so
+// asking for punctuation actually switched on profanity masking. Gaps here are
+// deliberate — they are upstream fields this client does not send, and leaving
+// the numbers unused keeps every field we DO send on its correct slot.
+//
+// Verified by scripts/dev/riva-wire-check.cjs, which serializes with this file
+// and decodes with the upstream one.
+
 package nvidia.riva.asr;
 
 service RivaSpeechRecognition {
@@ -7,25 +24,51 @@ service RivaSpeechRecognition {
 }
 
 message RecognitionConfig {
-  enum AudioEncoding { ENCODING_UNSPECIFIED = 0; LINEAR_PCM = 1; FLAC = 2; MULAW = 3; ALAW = 4; OGGOPUS = 5; }
+  // Mirrors nvidia.riva.AudioEncoding in upstream riva_audio.proto. Only the
+  // numeric value travels, so declaring it here is wire-equivalent.
+  enum AudioEncoding {
+    ENCODING_UNSPECIFIED = 0;
+    LINEAR_PCM = 1;
+    FLAC = 2;
+    MULAW = 3;
+    OGGOPUS = 4;
+    ALAW = 20;
+  }
   AudioEncoding encoding = 1;
   int32 sample_rate_hertz = 2;
   string language_code = 3;
   int32 max_alternatives = 4;
-  bool enable_automatic_punctuation = 5;
-  string model = 6;
-  bool verbatim_transcripts = 7;
+  // 5 = profanity_filter, 6 = speech_contexts — not sent by this client.
+  int32 audio_channel_count = 7;
+  // 8 = enable_word_time_offsets — not sent by this client.
+  bool enable_automatic_punctuation = 11;
+  // 12 = enable_separate_recognition_per_channel, 13 = model — not sent.
+  bool verbatim_transcripts = 14;
 }
 
-message StreamingRecognitionConfig { RecognitionConfig config = 1; bool interim_results = 2; }
-message StreamingRecognizeRequest {
-  StreamingRecognitionConfig streaming_config = 1;
-  bytes audio_content = 2;
+message StreamingRecognitionConfig {
+  RecognitionConfig config = 1;
+  bool interim_results = 2;
 }
-message SpeechRecognitionAlternative { string transcript = 1; float confidence = 2; }
+
+message StreamingRecognizeRequest {
+  oneof streaming_request {
+    StreamingRecognitionConfig streaming_config = 1;
+    bytes audio_content = 2;
+  }
+}
+
+message SpeechRecognitionAlternative {
+  string transcript = 1;
+  float confidence = 2;
+}
+
 message StreamingRecognitionResult {
   repeated SpeechRecognitionAlternative alternatives = 1;
   bool is_final = 2;
   float stability = 3;
 }
-message StreamingRecognizeResponse { repeated StreamingRecognitionResult results = 1; }
+
+message StreamingRecognizeResponse {
+  repeated StreamingRecognitionResult results = 1;
+}

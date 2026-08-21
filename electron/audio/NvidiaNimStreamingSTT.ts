@@ -42,7 +42,7 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   write(chunk: Buffer) {
     if (!this.active) return;
     if (!this.stream) { this.buffer.push(chunk); return; }
-    try { this.stream.write({ audio_content: chunk }); } catch (e) { this.emit('error', e); }
+    try { this.stream.write({ audioContent: chunk }); } catch (e) { this.emit('error', e); }
   }
 
   private connect() {
