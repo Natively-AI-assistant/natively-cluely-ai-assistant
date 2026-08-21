@@ -1,11 +1,21 @@
-// Entitlement-shape guard for the issue #322 forward-stability fix.
+// Entitlement-shape guard — INVERTED 2026-08-19.
 //
-// The macOS keychain item "Natively Safe Storage" (Electron safeStorage / Chromium OSCrypt)
-// is ACL-bound to the binary's code signature unless a stable keychain-access-groups
-// entitlement scopes it to a team group. Dropping that entitlement — or a Team-ID / appId
-// typo — silently reintroduces #322 on the NEXT re-sign, and nothing else in CI would catch
-// it (the .app isn't signed in unit CI). This pure-text test pins the entitlement shape so a
-// regression fails fast in code review, with no signing required.
+// This file used to REQUIRE `keychain-access-groups` in build/entitlements.mac.plist (issue #322
+// forward-stability, commit 0a1fd18e). That entitlement is RESTRICTED: macOS only honours it when
+// the signed bundle embeds a matching provisioning profile. Signed 2.8.6 shipped with
+// `provisioningProfile=none`, AMFI rejected the binary at exec with
+// `AppleMobileFileIntegrityError Code=-413 "No matching profile found"`, and the app could not
+// launch at all — while spctl, `codesign --verify --deep --strict` and `stapler validate` all
+// still reported the bundle as perfect, and no crash report was written.
+//
+// So the guard now pins the OPPOSITE: the entitlement must stay ABSENT until a Developer ID
+// provisioning profile is actually embedded. Re-adding it alone ships an unlaunchable app, and
+// nothing else in CI would catch that (unit CI never signs or executes the .app).
+//
+// To legitimately re-add it: register an App ID for com.electron.meeting-notes with Keychain
+// Sharing, generate a Developer ID provisioning profile, set `mac.provisioningProfile` in
+// electron-builder.signed.cjs, verify a signed build LAUNCHES, then update this test.
+// Background: MACOS_LAUNCH_FAILURE_2026-08-19.md.
 //
 // Run via: node --test electron/services/__tests__/KeychainEntitlement.test.mjs
 
@@ -18,42 +28,60 @@ import fs from 'node:fs';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const TOP = path.join(repoRoot, 'build/entitlements.mac.plist');
 const INHERIT = path.join(repoRoot, 'build/entitlements.mac.inherit.plist');
+const BUILDER = path.join(repoRoot, 'electron-builder.signed.cjs');
 
-// Must match electron-builder.signed.cjs (Team ID) + package.json build.appId.
-const EXPECTED_GROUP = 'BJM29W3UQ6.com.electron.meeting-notes';
+// Comments in these files legitimately mention the entitlement by name; only a real
+// <key>…</key> declaration is a launch-breaking regression.
+const DECLARED = /<key>\s*keychain-access-groups\s*<\/key>/;
 
-test('top-level entitlements declare the exact keychain-access-group', () => {
-  const xml = fs.readFileSync(TOP, 'utf8');
-  assert.ok(xml.includes('<key>keychain-access-groups</key>'),
-    'build/entitlements.mac.plist must declare keychain-access-groups (issue #322 forward-stability)');
-  assert.ok(xml.includes(`<string>${EXPECTED_GROUP}</string>`),
-    `keychain-access-groups must contain exactly ${EXPECTED_GROUP} (TeamID.appId — a typo silently reintroduces #322)`);
+test('top-level entitlements do NOT declare keychain-access-groups', () => {
+  assert.ok(!DECLARED.test(fs.readFileSync(TOP, 'utf8')),
+    'build/entitlements.mac.plist must NOT declare keychain-access-groups: it is a restricted, ' +
+    'profile-requiring entitlement and without an embedded provisioning profile AMFI kills the ' +
+    'app at exec (POSIX 163 "Launchd job spawn failed"). See MACOS_LAUNCH_FAILURE_2026-08-19.md.');
 });
 
-test('the group prefix matches the Team ID configured in the signed builder', () => {
-  const builder = fs.readFileSync(path.join(repoRoot, 'electron-builder.signed.cjs'), 'utf8');
-  const teamId = EXPECTED_GROUP.split('.')[0];
-  assert.ok(builder.includes(teamId),
-    `electron-builder.signed.cjs must reference Team ID ${teamId} so the signing identity can honor the keychain group`);
+test('helper (inherit) entitlements do NOT declare keychain-access-groups', () => {
+  assert.ok(!DECLARED.test(fs.readFileSync(INHERIT, 'utf8')),
+    'build/entitlements.mac.inherit.plist must NOT declare keychain-access-groups');
 });
 
-test('the group appId matches package.json build.appId', () => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-  const appId = pkg?.build?.appId;
-  const groupAppId = EXPECTED_GROUP.split('.').slice(1).join('.');
-  assert.equal(groupAppId, appId,
-    'the keychain-access-group appId segment must equal package.json build.appId');
+test('no provisioning profile is configured, matching the entitlement set we sign with', () => {
+  // The two must move together. If mac.provisioningProfile is ever added, the restricted
+  // entitlement becomes legal again — and this test is the reminder to revisit it deliberately
+  // rather than have the pair drift apart in either direction.
+  const builder = fs.readFileSync(BUILDER, 'utf8');
+  const configuresProfile = /^\s*provisioningProfile\s*:/m.test(builder);
+  assert.equal(configuresProfile, false,
+    'electron-builder.signed.cjs configures mac.provisioningProfile — if that is intentional, ' +
+    're-evaluate keychain-access-groups and update this test together with it');
 });
 
-test('helper (inherit) entitlements do NOT carry the keychain group', () => {
-  // safeStorage runs in the main process only — helpers must not widen their keychain surface.
-  const inherit = fs.readFileSync(INHERIT, 'utf8');
-  assert.ok(!inherit.includes('keychain-access-groups'),
-    'entitlements.mac.inherit.plist must NOT include keychain-access-groups (main-process-only capability)');
+test('the signed build still bakes nativelySigned for the auto-update path', () => {
+  // keychainGroupEntitled was removed alongside the entitlement (it existed only to prove the
+  // entitlement shipped). nativelySigned is unrelated and must survive.
+  const builder = fs.readFileSync(BUILDER, 'utf8');
+  assert.ok(builder.includes('nativelySigned'),
+    'electron-builder.signed.cjs must keep nativelySigned in extraMetadata');
+  // Match a real property assignment, not the word appearing in the explanatory comment
+  // that replaced it — a substring check here would fail on its own documentation.
+  assert.ok(!/^\s*keychainGroupEntitled\s*:/m.test(builder),
+    'keychainGroupEntitled must not be assigned in extraMetadata: it advertised an entitlement ' +
+    'we no longer ship');
 });
 
-test('the build bakes keychainGroupEntitled so telemetry can prove the entitlement shipped', () => {
-  const builder = fs.readFileSync(path.join(repoRoot, 'electron-builder.signed.cjs'), 'utf8');
-  assert.ok(builder.includes('keychainGroupEntitled'),
-    'electron-builder.signed.cjs must bake keychainGroupEntitled into extraMetadata for field telemetry');
-});
+// AMFI parses the entitlements XML with a stricter parser than plutil. A `--` sequence inside an
+// XML comment is illegal, and `plutil -lint` accepts it while codesign fails with
+// "Failed to parse entitlements: AMFIUnserializeXML: syntax error" and SILENTLY LEAVES THE OLD
+// SIGNATURE IN PLACE. Hit for real on 2026-08-19 by a comment containing a `codesign` flag list.
+for (const [label, file] of [['top-level', TOP], ['inherit', INHERIT]]) {
+  test(`${label} entitlements contain no '--' inside XML comments (AMFI parser is strict)`, () => {
+    const xml = fs.readFileSync(file, 'utf8');
+    for (const body of xml.match(/<!--[\s\S]*?-->/g) ?? []) {
+      const inner = body.slice(4, -3);
+      assert.ok(!inner.includes('--'),
+        `illegal '--' inside an XML comment in ${path.basename(file)} — AMFI rejects it and ` +
+        `codesign then keeps the previous signature:\n${inner.split('\n').find(l => l.includes('--'))}`);
+    }
+  });
+}
