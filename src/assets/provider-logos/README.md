@@ -7,7 +7,7 @@ affiliation.
 
 ## Provenance
 
-Ten SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
+Thirteen SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
 (MIT, © 2023 LobeHub — full text in `LICENSE` beside this file).
 
 ```
@@ -23,6 +23,7 @@ ibm.svg          ← ibm.svg
 elevenlabs.svg   ← elevenlabs.svg
 apple.svg        ← apple.svg
 microsoft.svg    ← microsoft-color.svg   (title corrected, see below)
+nvidia.svg       ← nvidia-color.svg
 ```
 
 The last four were added for the speech provider selector, and the variant taken
@@ -30,6 +31,16 @@ differs per brand on purpose: `googlecloud` and `azure` are the upstream
 `-color` files because those brands ARE multicolour, while `ibm` and
 `elevenlabs` exist upstream only as monochrome, which is also how those brands
 reproduce. See "Colour vs monochrome" below.
+
+`nvidia.svg` serves BOTH surfaces — the Nvidia Nim card in AI Providers and the
+Nvidia Nim row in the speech selector. The `-color` variant is taken (as for
+`gemini`) because NVIDIA's mark is green, not monochrome: upstream ships the
+fill hardcoded as `#74B71B`, so it needs no `BRAND_COLORS` entry and renders
+identically in both themes. It arrives already `1em`-sized, so unlike
+`deepgram.svg` it needed no local modification.
+
+Before this file existed the provider rendered an `NI` monogram, which the
+speech-selector coverage test flagged as an unrecorded fallback.
 
 `deepgram.svg` comes from [simple-icons][si] v16.28.0, which licenses its icons
 under **CC0-1.0** — a different licence from the lobehub set, so its full text

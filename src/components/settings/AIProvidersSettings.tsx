@@ -23,6 +23,7 @@ import deepseekMark from '../../assets/provider-logos/deepseek.svg?raw';
 import groqMark from '../../assets/provider-logos/groq.svg?raw';
 import openaiMark from '../../assets/provider-logos/openai.svg?raw';
 import ollamaMark from '../../assets/provider-logos/ollama.svg?raw';
+import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 // LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
 // URL rather than inlined markup. No currentColor to resolve in a PNG, so <img>
 // loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
@@ -1042,7 +1043,7 @@ export const CLOUD_PROVIDERS = [
     { id: 'claude'   as const, name: 'Claude',   placeholder: 'sk-ant-...', url: 'https://console.anthropic.com/settings/keys' },
     // Text-only; intentionally NOT part of the screenshot/vision fallback chain.
     { id: 'deepseek' as const, name: 'DeepSeek', placeholder: 'sk-...',     url: 'https://platform.deepseek.com/api_keys' },
-    { id: 'nvidia_nim' as const, name: 'NVIDIA NIM', placeholder: 'nvapi-...', url: 'https://build.nvidia.com/settings/api-keys' },
+    { id: 'nvidia_nim' as const, name: 'Nvidia Nim', placeholder: 'nvapi-...', url: 'https://build.nvidia.com/settings/api-keys' },
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
@@ -1052,7 +1053,9 @@ export const AIP_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }
     openai:   { mono: 'OA', brand: '#10A37F' },
     claude:   { mono: 'CL', brand: '#D97757' },
     deepseek: { mono: 'DS', brand: '#4D6BFE' },
-    nvidia_nim: { mono: 'NI', brand: '#76B900' },
+    // Mark is vendored (nvidia.svg), so `mono` is only a safety net; `brand`
+    // still drives the tile wash. Hex is NVIDIA green as shipped in the mark.
+    nvidia_nim: { mono: 'NV', brand: '#76B900' },
     codex:    { mono: 'CX', brand: '#10A37F' },
     litellm:  { mono: 'LL', brand: '#8B5CF6' },
     ollama:   { mono: 'OL', brand: '#9CA3AF' },
@@ -1096,6 +1099,7 @@ export const AIP_PROVIDER_LOGOS: Record<string, string> = {
     openai: openaiMark,
     codex: openaiMark,
     ollama: ollamaMark,
+    nvidia_nim: nvidiaMark,
 };
 
 interface AipProviderMarkProps {

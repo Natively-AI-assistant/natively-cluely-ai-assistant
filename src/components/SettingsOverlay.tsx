@@ -1151,7 +1151,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         reason?: string;
     } | null>(null);
 
-    // NVIDIA NIM speech settings live beside the existing provider state.
+    // Nvidia Nim speech settings live beside the existing provider state.
     const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
@@ -2792,7 +2792,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             ...(hasNativelyKey ? [{ id: 'natively', label: 'Natively API', badge: 'Saved' as const, desc: t('Managed transcription via Natively backend'), color: 'blue', icon: <BrandMark provider="natively" />, neutralTile: true }] : []),
                                                             { id: 'google', label: 'Google Cloud', badge: googleServiceAccountPath ? 'Saved' : null, desc: t('gRPC streaming via Service Account'), color: 'blue', icon: <BrandMark provider="google" />, neutralTile: true },
                                                             { id: 'groq', label: 'Groq Whisper', badge: hasStoredSttGroqKey ? 'Saved' : null, desc: t('Ultra-fast REST transcription'), color: 'orange', icon: <BrandMark provider="groq" />, neutralTile: true },
-                                                            { id: 'nvidia_nim', label: 'NVIDIA NIM', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: 'Low-latency Nemotron / Parakeet streaming ASR', color: 'green', icon: <BrandMonogram name="NVIDIA" />, tileClassName: 'bg-[#76B900] text-black' },
+                                                            { id: 'nvidia_nim', label: 'Nvidia Nim', badge: hasStoredNvidiaNimKey ? 'Saved' : null, desc: t('Low-latency Nemotron / Parakeet streaming ASR'), color: 'green', icon: <BrandMark provider="nvidia_nim" />, neutralTile: true },
                                                             { id: 'openai', label: 'OpenAI Whisper', badge: hasStoredSttOpenaiKey ? 'Saved' : null, desc: t('OpenAI-compatible Whisper API'), color: 'green', icon: <BrandMark provider="openai" />, neutralTile: true },
                                                             { id: 'deepgram', label: 'Deepgram Nova-3', badge: hasStoredDeepgramKey ? 'Saved' : null, desc: t('High-accuracy REST transcription'), color: 'purple', icon: <BrandMark provider="deepgram" />, neutralTile: true },
                                                             { id: 'elevenlabs', label: 'ElevenLabs Scribe', badge: hasStoredElevenLabsKey ? 'Saved' : null, desc: t('Scribe v2 Realtime API'), color: 'teal', icon: <BrandMark provider="elevenlabs" />, neutralTile: true },
@@ -2853,7 +2853,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">NVIDIA NIM Speech Model</label>
+                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                         {NVIDIA_NIM_STT_MODELS.map((m) => (
                                                             <button key={m.id} onClick={async () => { setNvidiaNimSttModel(m.id); await window.electronAPI?.setNvidiaNimSttModel?.(m.id); }} className={`rounded-lg px-3 py-2.5 text-left ${nvidiaNimSttModel === m.id ? 'bg-accent-primary text-on-accent shadow-md' : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}>
@@ -2906,7 +2906,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                             {sttProvider !== 'google' && sttProvider !== 'local-whisper' && sttProvider !== 'natively' && sttProvider !== 'none' && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4 space-y-3">
                                                     <label className="text-xs font-medium text-text-secondary block">
-                                                        {sttProvider === 'nvidia_nim' ? 'NVIDIA NIM' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
+                                                        {sttProvider === 'nvidia_nim' ? 'Nvidia Nim' : sttProvider === 'groq' ? 'Groq' : sttProvider === 'openai' ? 'OpenAI STT' : sttProvider === 'elevenlabs' ? 'ElevenLabs' : sttProvider === 'azure' ? 'Azure' : sttProvider === 'ibmwatson' ? 'IBM Watson' : sttProvider === 'soniox' ? 'Soniox' : 'Deepgram'} API Key
                                                     </label>
                                                     {sttProvider === 'openai' && (
                                                         <p className="text-[10px] text-text-tertiary mb-1.5">
@@ -2938,7 +2938,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             }}
                                                             placeholder={
                                                                 sttProvider === 'nvidia_nim'
-                                                                    ? (hasStoredNvidiaNimKey ? '••••••••••••' : 'Enter NVIDIA API key')
+                                                                    ? (hasStoredNvidiaNimKey ? '••••••••••••' : t('Enter Nvidia Nim API key'))
                                                                     : sttProvider === 'groq'
                                                                     ? (hasStoredSttGroqKey ? '••••••••••••' : t('Enter Groq API key'))
                                                                     : sttProvider === 'openai'
