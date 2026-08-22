@@ -789,6 +789,24 @@ export const AIP_CSS = `
    or active, not for things that merely have the caret. Shares .aip-field's token so
    the two focus treatments cannot drift apart. */
 .aip-input:focus { border-color: var(--aip-input-border-focus); }
+/* ...and the border must be the ONLY indicator, which means suppressing the panel's
+   global ":focus-visible" accent outline here, exactly as ".aip-field > .aip-input"
+   already does. Two reasons, both of which this rule was previously only half
+   winning — the brightened border was applied but the accent outline still painted
+   on top of it:
+     CLIPPING. The models filter sits directly inside ".aip-reveal > div", which
+     carries overflow:hidden for the collapse animation. An outline at
+     "outline-offset: 2px" is drawn 4px OUTSIDE the border box, and the filter is
+     flex-1 with its left edge flush to that clip box — so the ring's left arc was
+     sliced off square while the right stayed round.
+     GRAMMAR. ":focus-visible" matches POINTER focus on text inputs, so a 2px solid
+     accent rectangle fired on every click into the field, not on keyboard nav —
+     the same "alarm around a field you merely clicked into" the .aip-field comment
+     above rejects.
+   Keyboard affordance is not lost: --aip-input-border-focus is tuned per theme to
+   clear SC 1.4.11's 3:1, which is what the outline was there to guarantee. Nothing
+   paints outside the border box now, so no ancestor's overflow can clip it. */
+.aip-root .aip-input:focus-visible { outline: none; }
 .aip-input[data-mono='true'] { font-family: var(--aip-mono); font-size:11.5px; }
 textarea.aip-input { height:auto; padding:10px; line-height:1.5; resize:none; }
 select.aip-input { cursor:pointer; }
