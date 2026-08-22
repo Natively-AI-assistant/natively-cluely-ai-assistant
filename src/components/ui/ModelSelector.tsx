@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Plus } from 'lucide-react';
+import { ChevronDown, Check, Cloud, Terminal, Server, Plus } from 'lucide-react';
 import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { useT } from '../../i18n';
+import { ProviderMark } from './ProviderMark';
 
 interface ModelSelectorProps {
     currentModel: string;
@@ -159,7 +160,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                     cloudModels.map((m, idx) => {
                                         const prevProvider = idx > 0 ? cloudModels[idx - 1].provider : null;
                                         const showDivider = prevProvider && prevProvider !== m.provider;
-                                        const icon = m.provider === 'gemini' ? <Monitor size={14} /> : <Cloud size={14} />;
+                                        // Real brand mark per provider. This used to be
+                                        // `provider === 'gemini' ? <Monitor/> : <Cloud/>`, so every
+                                        // Nvidia Nim, OpenAI, Claude, DeepSeek and Groq row shipped
+                                        // with a generic cloud glyph and no brand at all — and even
+                                        // Gemini got a monitor icon rather than its own mark.
+                                        const icon = <ProviderMark provider={m.provider} size={14} fallback={<Cloud size={14} />} />;
                                         return (
                                             <React.Fragment key={m.id}>
                                                 {showDivider && <div className="h-px bg-border-subtle my-1" />}
