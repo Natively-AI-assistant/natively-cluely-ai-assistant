@@ -287,6 +287,19 @@ import {
   INITIAL_BUFFER_MS,
   STREAM_RENDER_CONFIG,
 } from '../lib/textRevealPacing.mjs';
+import {
+  createRevealHistory,
+  resetRevealHistory,
+  pushRevealSample,
+  revealTimeForIndex,
+  animatedTailStart,
+  remainingFadeMs,
+  splitIntoWordRuns,
+  GIST_CHIP_FADE_MS,
+  WORD_FADE_DURATION_MS,
+  MAX_ANIMATED_WORDS,
+  REVEAL_WORD_CLASS,
+} from '../lib/textRevealAnimation.mjs';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { vividDarkCodeTheme, VIVID_DARK_LINE_NUMBER_COLOR } from '../lib/codeTheme';
@@ -3591,7 +3604,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // the pacer's revealedLen — so any queued-but-not-yet-revealed text is
   // always shown in full, instantly, the moment a stream ends (this matters
   // MORE now than under the old model: a done event can arrive with
-  // thousands of chars still unrevealed at a 180 char/s display cap). The
+  // thousands of chars still unrevealed at a 400 char/s display cap). The
   // reveal only paces what's shown WHILE a stream is actively open.
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -3787,7 +3800,135 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // the streaming DOM node. Synchronous — called from revealTick (inside its
   // rAF) and once from registerStreamingNode (on mount, outside any rAF, to
   // avoid a blank frame between mount and the next tick).
-  const paintRevealedNow = useCallback(() => {
+  // Per-frame reveal-timestamp history feeding the word materialization
+  // animation (src/lib/textRevealAnimation.mjs). Reset alongside the pacer
+  // on every new msgId — see ensureRevealTicker.
+  const revealHistoryRef = useRef(createRevealHistory());
+  // When the gist chip first appeared in THIS stream, so its one-shot
+  // materialization can be resumed via negative delay across the innerHTML
+  // rebuild that happens every frame (same technique as the words). Null
+  // until a gist line actually streams in; reset per stream.
+  const gistFirstSeenRef = useRef<number | null>(null);
+  // Reduced-motion only: whether the one-shot block cross-fade has been armed
+  // for this stream. Armed on the first paint that has content, so the class
+  // is added exactly once and the animation is not restarted every frame.
+  const blockFadeArmedRef = useRef(false);
+
+  /**
+   * Wrap the trailing, still-animating words of the just-painted markdown in
+   * spans carrying a negative animation-delay, so each word fades+unblurs in
+   * as it appears. See textRevealAnimation.mjs for why the timeline is owned
+   * by CSS rather than computed per frame here.
+   *
+   * Runs on the rendered DOM rather than the markdown source because that is
+   * the only place the words actually exist: `**bold**` is four source
+   * characters longer than the word it renders to. That makes the source
+   * index derived below an APPROXIMATION (rendered-tail offset counted back
+   * from revealedLen) — off by however many markdown markers fall inside the
+   * ~260ms window. A few characters of skew shifts a word's delay by a
+   * handful of milliseconds, which is imperceptible; nothing downstream
+   * depends on the index being exact.
+   *
+   * The skew is larger in one specific case: `total` counts only the text
+   * this walker ACCEPTS (the gist chip and any pre block are rejected),
+   * while revealedLen counts every source character including those. While a
+   * trailing [[GIST]] line is streaming, the derived source index therefore
+   * runs behind by roughly the chip's length. Both failure modes are inert:
+   * an index past the newest sample returns null, and an index that skews
+   * too far back yields an age >= the fade duration. Either way the word is
+   * simply left as plain text — never mispainted, never held invisible.
+   */
+  const animateRevealedTail = useCallback((node: HTMLDivElement, revealedLen: number, nowMs: number) => {
+    const history = revealHistoryRef.current;
+    const tailStart = animatedTailStart(history, nowMs, revealedLen, WORD_FADE_DURATION_MS);
+    const tailChars = revealedLen - tailStart;
+    if (tailChars <= 0) return;
+
+    // Collect candidate text nodes in document order. The gist chip is
+    // EXCLUDED: paintRevealedNow appends it after the body HTML, so a naive
+    // walk from the end would spend the whole animation window on the chip's
+    // summary text instead of the prose tail. PRE is excluded too — code
+    // should not shimmer.
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, {
+      acceptNode(textNode) {
+        const parent = (textNode as Text).parentElement;
+        if (parent?.closest('.overlay-gist-chip, pre')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const textNodes: Text[] = [];
+    let total = 0;
+    for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+      const t = n as Text;
+      textNodes.push(t);
+      total += t.data.length;
+    }
+    if (total === 0) return;
+
+    // Rendered-text offset at which the animated tail begins.
+    const renderedTailStart = Math.max(0, total - tailChars);
+
+    // Build the replacements first, then apply — mutating mid-walk would
+    // invalidate the offsets computed against the original node list.
+    const edits: Array<{ target: Text; fragment: DocumentFragment }> = [];
+    let wordBudget = MAX_ANIMATED_WORDS;
+    let cursor = total;
+
+    // Walk backwards so the word budget is spent on the NEWEST words: during
+    // a burst drain the tail can be wider than the budget, and the words that
+    // matter are the ones that just landed.
+    for (let i = textNodes.length - 1; i >= 0 && wordBudget > 0; i--) {
+      const textNode = textNodes[i];
+      const nodeStart = cursor - textNode.data.length;
+      cursor = nodeStart;
+      if (nodeStart + textNode.data.length <= renderedTailStart) break; // fully settled
+
+      const runs = splitIntoWordRuns(textNode.data);
+      const fragment = document.createDocumentFragment();
+      // Decide every run's fate before building the fragment: the budget is
+      // spent newest-first (backwards), but the fragment must be assembled in
+      // document order.
+      let runOffset = 0;
+      const decisions = runs.map((run) => {
+        const start = nodeStart + runOffset;
+        runOffset += run.text.length;
+        return { run, start, delayMs: null as number | null };
+      });
+      let animatedHere = 0;
+      for (let d = decisions.length - 1; d >= 0 && wordBudget > 0; d--) {
+        const dec = decisions[d];
+        if (!dec.run.isWord) continue;
+        if (dec.start < renderedTailStart) continue; // settled — leave as plain text
+        const sourceIndex = revealedLen - (total - dec.start);
+        if (sourceIndex < 0) continue; // skew ran past the start of the answer
+        const revealedAt = revealTimeForIndex(history, sourceIndex);
+        if (revealedAt === null) continue; // predates retained history: settled
+        const age = nowMs - revealedAt;
+        if (age >= WORD_FADE_DURATION_MS || age < 0) continue;
+        dec.delayMs = -age;
+        wordBudget--;
+        animatedHere++;
+      }
+      if (animatedHere === 0) continue;
+
+      for (const dec of decisions) {
+        if (dec.delayMs === null) {
+          fragment.appendChild(document.createTextNode(dec.run.text));
+        } else {
+          const span = document.createElement('span');
+          span.className = REVEAL_WORD_CLASS;
+          span.style.animationDelay = `${dec.delayMs}ms`;
+          span.textContent = dec.run.text;
+          fragment.appendChild(span);
+        }
+      }
+      edits.push({ target: textNode, fragment });
+    }
+
+    for (const edit of edits) edit.target.replaceWith(edit.fragment);
+  }, []);
+
+  const paintRevealedNow = useCallback((nowMs?: number) => {
     const node = streamingNodeRef.current;
     if (!node) return;
     const revealed = streamingTextRef.current.slice(0, revealPacerRef.current.revealedLen);
@@ -3817,7 +3958,36 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
       : '';
     node.innerHTML = DOMPurify.sanitize(rawHtml + gistHtml);
-  }, []);
+    const now = nowMs ?? performance.now();
+
+    // Materialize the trailing words (opacity+blur). Skipped under reduced
+    // motion: tickPacer's reducedMotion branch reveals the entire arrived
+    // text in ONE tick, so every word would carry the same timestamp and the
+    // whole block would flash in as a single unit — louder than no animation
+    // at all, and exactly what the preference asks us not to do. What
+    // replaces it is the single block cross-fade armed below.
+    if (!prefersReducedMotionRef.current) {
+      animateRevealedTail(node, revealPacerRef.current.revealedLen, now);
+    } else if (!blockFadeArmedRef.current) {
+      blockFadeArmedRef.current = true;
+      node.classList.add('natively-reveal-block-fade');
+    }
+
+    // The gist chip is rebuilt by the innerHTML write above like everything
+    // else, so a plain CSS animation on it would restart every frame and it
+    // would sit permanently at its first keyframe. Resume it by the same
+    // negative-delay rule the words use. The inline delay doubles as the
+    // selector hook (.overlay-gist-chip[style*="animation-delay"]) so a
+    // finalized, non-streaming chip never animates.
+    if (revealedGist) {
+      if (gistFirstSeenRef.current === null) gistFirstSeenRef.current = now;
+      const age = now - gistFirstSeenRef.current;
+      if (age < GIST_CHIP_FADE_MS) {
+        const chip = node.querySelector<HTMLElement>('.overlay-gist-chip');
+        if (chip) chip.style.animationDelay = `${-Math.max(0, age)}ms`;
+      }
+    }
+  }, [animateRevealedTail]);
 
   // Mode-aware paint sink's "code" branch: same cursor-over-accumulated-text
   // shape as commitRagText (see ragRevealTick below — the existing, hardened
@@ -3852,6 +4022,28 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // revealTickerMsgIdRef/streamingMsgIdRef rather than closing over a msgId
   // captured at schedule time, so it can't act on stale state if something
   // reassigns those refs between one frame's schedule and fire.
+  // The stream's final visual handoff, in one place: drop the imperative
+  // refs and commit the finished row through React. Extracted so the
+  // fade-hold path below and the immediate path seal identically — two
+  // copies of this teardown would be a latent source of drift.
+  const sealPendingStream = useCallback((pending: { msgId: string; intent: string; text: string }) => {
+    pendingFinalizeRef.current = null;
+    if (pendingFinalizeTimeoutRef.current !== null) {
+      clearTimeout(pendingFinalizeTimeoutRef.current);
+      pendingFinalizeTimeoutRef.current = null;
+    }
+    streamingNodeRef.current = null;
+    streamingTextRef.current = '';
+    streamingMsgIdRef.current = null;
+    streamingIntentRef.current = null;
+    streamingRenderModeRef.current = 'imperative';
+    if (streamingCodeRafRef.current !== null) {
+      cancelAnimationFrame(streamingCodeRafRef.current);
+      streamingCodeRafRef.current = null;
+    }
+    setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+  }, []);
+
   const revealTick = useCallback((ts: number) => {
     streamingRafRef.current = null; // this frame's slot consumed
     const msgId = revealTickerMsgIdRef.current;
@@ -3872,6 +4064,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const prevLen = pacer.revealedLen;
     tickPacer(pacer, fullText, ts, deltaMs, { reducedMotion: prefersReducedMotionRef.current });
     if (pacer.revealedLen !== prevLen) {
+      // Record WHEN these characters became visible, before painting — the
+      // paint reads this history back to derive each new word's fade offset.
+      pushRevealSample(revealHistoryRef.current, ts, pacer.revealedLen, WORD_FADE_DURATION_MS);
       // Mode-aware paint sink: prose paints straight into the imperative DOM
       // node; code commits the same paced-prefix shape through React state
       // (there is no DOM ref for the react-code branch — it renders via
@@ -3884,7 +4079,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (streamingRenderModeRef.current === 'react-code') {
         commitRevealedCodeText(msgId, fullText.slice(0, pacer.revealedLen));
       } else {
-        paintRevealedNow();
+        paintRevealedNow(ts);
       }
     }
     // Caught up to everything that has arrived: stop rescheduling instead of
@@ -3909,26 +4104,45 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // cursor, per the design brief).
       const pending = pendingFinalizeRef.current;
       if (pending && pending.msgId === msgId) {
-        pendingFinalizeRef.current = null;
-        if (pendingFinalizeTimeoutRef.current !== null) {
-          clearTimeout(pendingFinalizeTimeoutRef.current);
-          pendingFinalizeTimeoutRef.current = null;
+        // Let the closing words finish materializing before handing the row
+        // to React. The seal swaps this imperative node for React-rendered
+        // plain text, which would cut any still-running word fade dead —
+        // and the final word is the one the reader is most likely looking
+        // straight at. The hold is at most WORD_FADE_DURATION_MS and only
+        // ever delays the visual seal: the text on screen is already
+        // complete and unchanged throughout, and no cursor or thinking dot
+        // is showing at this point (both are gated on empty text), so
+        // nothing lingers — which is what the "seal at the exact instant
+        // the last character is revealed" rule was protecting against.
+        const holdMs = prefersReducedMotionRef.current
+          ? 0
+          : remainingFadeMs(revealHistoryRef.current, ts, pacer.revealedLen, WORD_FADE_DURATION_MS);
+        if (holdMs > 0) {
+          // Re-arm the shared timeout as the seal trigger. pendingFinalizeRef
+          // deliberately STAYS set: every stream teardown/supersede path
+          // already clears both it and this timeout together, so a new
+          // answer arriving mid-hold discards this seal exactly as it would
+          // have discarded the safety-net one.
+          if (pendingFinalizeTimeoutRef.current !== null) {
+            clearTimeout(pendingFinalizeTimeoutRef.current);
+          }
+          pendingFinalizeTimeoutRef.current = setTimeout(() => {
+            pendingFinalizeTimeoutRef.current = null;
+            const stillPending = pendingFinalizeRef.current;
+            // Re-check rather than closing over `pending`: the same guard the
+            // safety-net timeouts use. If a new stream claimed the refs
+            // during the hold, this seal is stale and must not fire.
+            if (!stillPending || stillPending.msgId !== msgId) return;
+            sealPendingStream(stillPending);
+          }, holdMs);
+          return;
         }
-        streamingNodeRef.current = null;
-        streamingTextRef.current = '';
-        streamingMsgIdRef.current = null;
-        streamingIntentRef.current = null;
-        streamingRenderModeRef.current = 'imperative';
-        if (streamingCodeRafRef.current !== null) {
-          cancelAnimationFrame(streamingCodeRafRef.current);
-          streamingCodeRafRef.current = null;
-        }
-        setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
+        sealPendingStream(pending);
       }
       return;
     }
     streamingRafRef.current = requestAnimationFrame(revealTick);
-  }, [paintRevealedNow, commitRevealedCodeText]);
+  }, [paintRevealedNow, commitRevealedCodeText, sealPendingStream]);
 
   // Ensure the reveal ticker is running for `msgId`. A new msgId resets the
   // pacer to a fresh state (see createPacerState — starts the initial
@@ -3951,6 +4165,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       }
       revealPacerRef.current = pacer;
       revealLastTsRef.current = null;
+      // MUST be reset in lockstep with the pacer: the history is indexed by
+      // character offset, and offsets restart at 0 for a new answer. Carrying
+      // the previous answer's samples over would hand this stream's opening
+      // words either a stale (already-expired) timestamp or, worse, a future
+      // one — holding real text invisible.
+      resetRevealHistory(revealHistoryRef.current);
+      // Same lockstep reason as the history: these are per-stream one-shots.
+      // A carried-over gist timestamp would leave the next answer's chip
+      // permanently past its animation (or, if the clock ran backwards,
+      // stuck invisible), and a carried-over armed flag would skip the
+      // reduced-motion cross-fade for every answer after the first.
+      gistFirstSeenRef.current = null;
+      blockFadeArmedRef.current = false;
       paintRevealedNow();
     }
     if (streamingRafRef.current === null) {

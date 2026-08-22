@@ -32,12 +32,15 @@
 // ── Configuration (tune here) ───────────────────────────────────────────────
 // v2: character-based rate (the token/chars-per-token estimate from v1 added
 // an indirection this spec doesn't need — chars/sec is specified directly).
-// 180 chars/sec ≈ 45 tokens/sec — raised from 120 (≈30 tok/s, the middle of
-// the 20-40 tok/s UI display-speed band) per explicit request for a faster
-// cap. Above the commonly-cited band's upper edge; the initial buffer,
-// word/punctuation-aware boundaries, and deferred-completion behavior all
-// still apply unchanged at this rate.
-export const MAX_REVEAL_CHARACTERS_PER_SECOND = 180;
+// 400 chars/sec ≈ 100 tokens/sec (~4 chars/token) — raised from 240 (≈60
+// tok/s), itself raised from 180 and originally 120 (≈30 tok/s, the middle
+// of the 20-40 tok/s UI display-speed band), per explicit request each time.
+// Now 2.5x the upper edge of that band: at this rate a 400-character answer
+// is fully on screen in one second, so the cap only binds on genuinely fast
+// providers mid-burst and the reveal reads as "quick" rather than "paced".
+// Everything else still applies unchanged — the initial buffer, word and
+// punctuation-aware boundaries, and deferred completion.
+export const MAX_REVEAL_CHARACTERS_PER_SECOND = 400;
 export const INITIAL_BUFFER_MS = 80;
 export const INITIAL_BUFFER_CHAR_THRESHOLD = 12;
 // Informational only — the render loop is driven by real rAF timestamps
@@ -74,8 +77,14 @@ export const STREAM_RENDER_CONFIG = {
 // no burst on release. Not part of the v2 spec's explicit config list, but
 // not contradicted by it either — kept from v1 since it measurably improves
 // reading feel and is already built/tested.
-export const SENTENCE_END_PAUSE_MS = 140; // . ! ?
-export const CLAUSE_PAUSE_MS = 70; // , ; :
+// Rescaled with the rate cap on every change (180 -> 240 -> 400 chars/sec).
+// These are absolute wall-clock holds, so leaving them fixed would make them
+// proportionally LONGER relative to a faster drip — the original 140ms was
+// worth 25 characters of reveal time at 180 c/s but would be 56 at 400,
+// turning a steady cadence with breaths into a staccato one. Rescaling keeps
+// the rhythm that was tuned at the original rate; only the speed changes.
+export const SENTENCE_END_PAUSE_MS = 63; // . ! ?
+export const CLAUSE_PAUSE_MS = 31; // , ; :
 
 // Derived shorthand for the per-frame math below (deltaMs is in
 // milliseconds).

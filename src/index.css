@@ -2584,6 +2584,95 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
+/* ── Streaming word materialization ────────────────────────────────────────
+   Each newly revealed word (see src/lib/textRevealAnimation.mjs) is wrapped
+   in a span carrying these animations plus a NEGATIVE animation-delay equal
+   to how long ago it was revealed — so the browser renders the correct frame
+   immediately and finishes on its own, even though paintRevealedNow rebuilds
+   these nodes every frame and the rAF ticker stops between tokens.
+
+   TWO animations, not one, because opacity and blur should not settle
+   together. Opacity finishes in 90ms — the word is PRESENT and legible
+   almost at once, so nothing is ever waiting to be read. Blur takes the full
+   160ms on a gentler curve, so the word sharpens after it arrives. That
+   ordering is what separates "resolving into focus" from a plain crossfade;
+   sharing one curve makes presence and sharpness land at the same instant,
+   which is correct but characterless.
+
+   Both durations MUST match WORD_OPACITY_DURATION_MS / WORD_FADE_DURATION_MS
+   in that module — the negative delay indexes into these timelines.
+
+   Deliberately opacity + blur ONLY — no transform, no display change.
+   `filter` applies to non-replaced inline elements and costs no layout, so
+   the spans can be added and removed every frame without ever reflowing the
+   text. A translateY would have needed `display: inline-block`, which alters
+   line-breaking — meaning text could shift by a pixel at the moment a word
+   settled and its span was unwrapped. */
+@keyframes reveal-word-opacity {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes reveal-word-blur {
+  from { filter: blur(2px); }
+  to   { filter: blur(0); }
+}
+
+.reveal-word {
+  animation:
+    /* Presence: strong ease-out. Emil's curve — the built-in `ease-out` is
+       too weak to read as intentional this short. */
+    reveal-word-opacity 90ms cubic-bezier(0.23, 1, 0.32, 1) forwards,
+    /* Focus: the iOS curve (Ionic's drawer easing). Eases in gently and
+       settles firmly, so the blur clears evenly across the whole window
+       instead of dumping most of its travel in the first few frames the way
+       a strong ease-out would. */
+    reveal-word-blur 160ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  /* Guards the un-animated frame: if a span is ever created before the
+     animation applies, it must not paint at opacity 0. */
+  opacity: 1;
+}
+
+/* The trailing gist chip is excluded from the per-word walk, so it gets its
+   own single materialization — otherwise it snaps in under a paragraph that
+   arrived smoothly. Slower and softer than a word: it is a summary settling
+   into place, not text being read as it lands. */
+@keyframes reveal-gist-in {
+  from { opacity: 0; filter: blur(3px); }
+  to   { opacity: 1; filter: blur(0); }
+}
+
+.overlay-gist-chip[style*="animation-delay"] {
+  animation: reveal-gist-in 220ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+/* Reduced motion (WCAG 2.3.3, and Apple's own guidance): gentler, not none.
+   tickPacer's reducedMotion branch drops the whole answer in a single frame,
+   so there is no per-word timing to honour — every word would share one
+   timestamp and the block would flash as a unit. The per-word wrapping is
+   skipped in JS; what replaces it is one short opacity cross-fade on the
+   block, which is the recommended non-vestibular equivalent. Blur and
+   stagger are dropped entirely. */
+@keyframes reveal-block-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.natively-reveal-block-fade {
+  animation: reveal-block-in 140ms ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-word {
+    animation: none;
+    opacity: 1;
+    filter: none;
+  }
+  .overlay-gist-chip[style*="animation-delay"] {
+    animation: reveal-block-in 140ms ease forwards;
+  }
+}
+
 /* Bottom gist chip: the trailing [[GIST]] line — five-to-eight-word
    essence, never spoken — rendered as a small summary pill under the
    answer body. */
