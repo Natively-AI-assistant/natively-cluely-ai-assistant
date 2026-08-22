@@ -199,21 +199,32 @@ export class LiveRAGIndexer {
                     const { embeddings, space, provider, dimensions } = await this.embeddingPipeline.getEmbeddingsWithFallback(
                         indexedChunks.map((chunk) => chunk.text)
                     );
+                    // R-16b: the two awaits above park up to ~90s. If a newer session
+                    // claimed the indexer meanwhile, these chunk rows were already
+                    // purged by startLiveIndexing's F-411 delete, so storing them
+                    // writes vec0 rows resolving to nothing — and the stamps below
+                    // would describe THIS session's provider on the NEXT session's
+                    // meeting row (the live id is a constant, so it addresses both).
+                    if (!this.stillOwns(sessionToken)) {
+                        console.warn(
+                            `[LiveRAGIndexer] discarding a parked embedding batch for ${meetingId}: `
+                            + 'a newer live session owns the indexer.'
+                        );
+                        return;
+                    }
+                    // R-21: settle the meeting's embedding space BEFORE storing this
+                    // batch. Re-stamping now discards the old space's vectors, so
+                    // doing it afterwards would wipe the batch we just wrote.
+                    if (provider && space && dimensions
+                        && this.vectorStore.restampMeetingSpaceOnChange?.(meetingId, provider, dimensions, space)) {
+                        this.indexedChunkCount = 0;  // every prior chunk just lost its vector
+                    }
                     for (let i = 0; i < chunkIds.length && i < embeddings.length; i++) {
                         this.vectorStore.storeEmbedding(chunkIds[i], embeddings[i]);
                         embeddedCount++;
                     }
                     if (embeddedCount > 0 && provider && space && dimensions) {
                         this.vectorStore.stampMeetingSpaceIfUnset(meetingId, provider, dimensions, space);
-                        // F-415: the comment above is true WITHIN a batch, but not
-                        // ACROSS ticks. If a later tick falls back to a different
-                        // provider, the meeting is already stamped and
-                        // stampMeetingSpaceIfUnset is a no-op — so the row keeps
-                        // claiming the old space while these chunks are in the new
-                        // one, and the query-time space filter then excludes the
-                        // meeting entirely (zero live results precisely when the
-                        // cloud provider is down). Re-stamp on an actual change.
-                        this.vectorStore.restampMeetingSpaceOnChange?.(meetingId, provider, dimensions, space);
                     }
                 } catch (err) {
                     console.warn(`[LiveRAGIndexer] Failed to embed live chunk batch for ${meetingId}:`, err);
