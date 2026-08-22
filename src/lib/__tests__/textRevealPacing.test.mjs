@@ -28,14 +28,14 @@ function run(state, fullText, frames, opts) {
   return state;
 }
 
-test('config matches the current tuning (180 chars/sec ≈ 45 tok/s, 80ms/12-char initial buffer, deferred flush by default)', () => {
-  assert.equal(MAX_REVEAL_CHARACTERS_PER_SECOND, 180);
-  assert.equal(MAX_REVEAL_CHARS_PER_MS, 0.18);
+test('config matches the current tuning (400 chars/sec ≈ 100 tok/s, 80ms/12-char initial buffer, deferred flush by default)', () => {
+  assert.equal(MAX_REVEAL_CHARACTERS_PER_SECOND, 400);
+  assert.equal(MAX_REVEAL_CHARS_PER_MS, 0.4);
   assert.equal(INITIAL_BUFFER_MS, 80);
   assert.equal(INITIAL_BUFFER_CHAR_THRESHOLD, 12);
   assert.equal(FLUSH_IMMEDIATELY_ON_COMPLETE, false);
   assert.deepEqual(STREAM_RENDER_CONFIG, {
-    maxCharactersPerSecond: 180,
+    maxCharactersPerSecond: 400,
     initialBufferMs: 80,
     initialBufferCharacterThreshold: 12,
     useAnimationFrame: true,
@@ -90,7 +90,7 @@ test('a slow provider (below the cap) is shown essentially immediately — the c
   let now = 0;
   for (const word of words) {
     arrived += (arrived ? ' ' : '') + word;
-    // Real gap between provider chunks: 300ms — much slower than 180 char/s
+    // Real gap between provider chunks: 300ms — much slower than 400 char/s
     // could ever fall behind on a few-character word.
     for (let i = 0; i < Math.round(300 / FRAME_MS); i += 1) {
       now += FRAME_MS;
@@ -123,7 +123,7 @@ test('a fast burst (provider faster than the cap) is buffered and drained smooth
   // No single frame should ever reveal more than a couple of frames' worth
   // of the rate cap (small slack for the initial-buffer catch-up frame).
   assert.ok(maxDelta <= Math.ceil(MAX_REVEAL_CHARS_PER_MS * FRAME_MS) + 2, `no frame should dump far more than the per-frame cap (saw ${maxDelta})`);
-  assert.ok(frames > 50, 'a 2000-char burst at 180 chars/sec should take multiple seconds worth of frames, not a handful');
+  assert.ok(frames > 50, 'a 2000-char burst at 400 chars/sec should take multiple seconds worth of frames, not a handful');
 });
 
 test('reducedMotion reveals everything on the very first tick, bypassing buffer/cap/pauses', () => {
@@ -156,7 +156,26 @@ test('punctuation hold: a sentence-ending period pauses the reveal for SENTENCE_
   // The frame that resumes must not dump a giant banked burst (the pause
   // must not have accumulated budget while frozen).
   const resumedDelta = state.revealedLen - 3;
-  assert.ok(resumedDelta <= Math.ceil(MAX_REVEAL_CHARS_PER_MS * FRAME_MS) + 2, `resume frame revealed ${resumedDelta} chars — pause must not bank budget`);
+  const perFrame = MAX_REVEAL_CHARS_PER_MS * FRAME_MS;
+  // Budget allowance is TWO frames, not one: the tick that stopped at the
+  // period spent only the 3 characters it actually revealed and carried the
+  // rest forward (held-back text keeps its budget — see tickPacer), so the
+  // resuming frame legitimately spends that carryover plus its own. The
+  // carryover is strictly less than one frame's worth. Expressed in frames
+  // rather than a fixed character slack so this stays honest at any rate:
+  // the previous `+2` happened to hold only while a frame's budget was
+  // small enough that the carryover fit inside it.
+  assert.ok(
+    resumedDelta <= Math.ceil(perFrame * 2) + 1,
+    `resume frame revealed ${resumedDelta} chars — more than two frames of budget (${perFrame.toFixed(2)}/frame)`,
+  );
+  // The claim that actually matters, stated directly: had the pause accrued
+  // budget while frozen, the resuming frame would have had the whole hold's
+  // worth to spend. It must be nowhere near that.
+  assert.ok(
+    resumedDelta < MAX_REVEAL_CHARS_PER_MS * (SENTENCE_END_PAUSE_MS + FRAME_MS),
+    `resume frame revealed ${resumedDelta} chars — the pause banked budget while frozen`,
+  );
 });
 
 test('clause punctuation (comma) gets the shorter CLAUSE_PAUSE_MS hold, not the sentence-end one', () => {
@@ -284,8 +303,8 @@ test('tickPacer forward-progress invariant: any frame with spendable budget reve
 });
 
 test('estimateRevealDurationMs matches the configured rate', () => {
-  assert.equal(estimateRevealDurationMs(180), 1000); // 180 chars at 180 chars/sec = 1s
-  assert.equal(estimateRevealDurationMs(1800), 10000);
+  assert.equal(estimateRevealDurationMs(400), 1000); // 400 chars at 400 chars/sec = 1s
+  assert.equal(estimateRevealDurationMs(4000), 10000);
 });
 
 test('a full stream (buffer -> steady reveal -> punctuation holds) eventually reaches the full text with no stalls', () => {
