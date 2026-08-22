@@ -294,7 +294,7 @@ Answer the newest complete turn; ignore older topics unless referenced. The sile
 
 Never invent personal history, credentials, employers, projects, numbers, dates, prices, ownership, deadlines, or preferences. State a specific figure only when it appears in the evidence or conversation; otherwise use a qualitative phrase, and never build a calculation on assumed rates you were not given. Use personal facts only when grounded. If unknown, say so naturally. Treat files as the source of truth only when asked what those files say. Name conflicts instead of resolving them silently. Anything marked internal, confidential, or private in evidence (floors, costs, ratings, unreleased figures) must never be spoken, quoted, hinted at, or named while declining. Answer from the public position only.
 
-Sound like a real person. Start with the answer. Use plain words, contractions, and short sentences. No coaching wrapper, canned enthusiasm, corporate filler, closing offer, headings, semicolons, em dashes, en dashes, or hyphen bullets in spoken output. You may wrap at most three load-bearing words in **double asterisks** (screen highlight, spoken normally) and end an answer over forty words with one final [[GIST]] line ("I led it — it took months" is WRONG; "I led it. It took months." is right). Use numbered items only when a list is requested.
+Sound like a real person. Start with the answer. Use plain words, contractions, and short sentences. No coaching wrapper, canned enthusiasm, corporate filler, closing offer, headings, semicolons, em dashes, en dashes, or hyphen bullets in spoken output. You are not the host: the other side runs the conversation, so never end by steering it back ("Where would you like to start?", "What would you like to cover?") — greet or answer, then stop. You may wrap at most three load-bearing words in **double asterisks** (screen highlight, spoken normally) and end an answer over forty words with one final [[GIST]] line ("I led it — it took months" is WRONG; "I led it. It took months." is right). Use numbered items only when a list is requested.
 
 Spoken replies are usually 1 to 3 sentences and 25 to 75 words. Use more only when needed for a grounded story, tradeoff, code, design, notes, or an explicit request. Output only the result.`;
 
@@ -922,10 +922,17 @@ export function splitGistLine(text: string): { body: string; gist: string | null
     const idx = t.lastIndexOf(GIST_MARKER);
     if (idx < 0) return { body: t, gist: null };
     const lineStart = t.lastIndexOf('\n', idx);
-    if (t.slice(lineStart + 1, idx).trim() !== '') return { body: t, gist: null };
+    // A BULLET-prefixed marker ("- [[GIST]] …") is list chrome, not prose —
+    // the model emitted the gist as a list item (live session E, 2026-08-23:
+    // "-[[GIST]] Use backtracking…" painted as literal text). Honor it, but
+    // flag the shape as recovered so spokenFormatViolations sees the drift.
+    // Anything else before the marker is real prose and the marker stays put.
+    const beforeMarker = t.slice(lineStart + 1, idx).trim();
+    const bulletPrefixed = beforeMarker !== '' && /^[-*•–—>]+$/.test(beforeMarker);
+    if (beforeMarker !== '' && !bulletPrefixed) return { body: t, gist: null };
     const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
     const tail = t.slice(idx + GIST_MARKER.length);
-    if (!tail.includes('\n')) return { body, gist: tail.trim() || null };
+    if (!tail.includes('\n')) return { body, gist: tail.trim() || null, ...(bulletPrefixed ? { recovered: true } : {}) };
     const rest = tail.split('\n').map((l) => l.trim()).filter(Boolean);
     if (rest.length !== 1) return { body: t, gist: null };
     if (rest[0].split(/\s+/).length > GIST_RECOVERY_MAX_WORDS) return { body: t, gist: null };

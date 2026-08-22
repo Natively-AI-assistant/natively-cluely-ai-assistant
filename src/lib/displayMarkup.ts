@@ -44,10 +44,17 @@ export function splitGistLine(text: string): GistSplit {
   const idx = t.lastIndexOf(GIST_MARKER);
   if (idx < 0) return { body: t, gist: null };
   const lineStart = t.lastIndexOf('\n', idx);
-  if (t.slice(lineStart + 1, idx).trim() !== '') return { body: t, gist: null };
+  // A BULLET-prefixed marker ("- [[GIST]] …", "* [[GIST]] …") is list chrome,
+  // not prose — the model emitted the gist as a list item (live session E,
+  // 2026-08-23: "-[[GIST]] Use backtracking…" painted as literal text). Honor
+  // it, but flag the shape as recovered so the format lint sees the drift.
+  // Anything else before the marker is real prose and the marker stays put.
+  const beforeMarker = t.slice(lineStart + 1, idx).trim();
+  const bulletPrefixed = beforeMarker !== '' && /^[-*•–—>]+$/.test(beforeMarker);
+  if (beforeMarker !== '' && !bulletPrefixed) return { body: t, gist: null };
   const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
   const tail = t.slice(idx + GIST_MARKER.length);
-  if (!tail.includes('\n')) return { body, gist: tail.trim() || null };
+  if (!tail.includes('\n')) return { body, gist: tail.trim() || null, ...(bulletPrefixed ? { recovered: true } : {}) };
   const rest = tail.split('\n').map((l) => l.trim()).filter(Boolean);
   if (rest.length !== 1) return { body: t, gist: null };
   if (rest[0].split(/\s+/).length > RECOVERY_MAX_WORDS) return { body: t, gist: null };
@@ -71,7 +78,8 @@ export function splitGistLineStreaming(text: string): GistSplit {
   if (full.gist !== null) return full;
   const t = (text || '').replace(/\s+$/, '');
   const lineStart = t.lastIndexOf('\n');
-  const lastLine = t.slice(lineStart + 1).trimStart();
+  // Bullet glyphs before a partial marker ("- [[GI") are hidden the same way.
+  const lastLine = t.slice(lineStart + 1).trimStart().replace(/^[-*•–—>]+\s*/, '');
   if (lastLine && GIST_MARKER.startsWith(lastLine)) {
     return { body: t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, ''), gist: null };
   }

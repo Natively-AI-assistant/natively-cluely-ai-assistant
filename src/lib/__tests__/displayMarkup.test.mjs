@@ -28,6 +28,21 @@ describe('splitGistLine', () => {
     assert.deepEqual(splitGistLine('No gist here.'), { body: 'No gist here.', gist: null });
   });
 
+  test('bullet-prefixed marker is honored as the gist (live session E, 2026-08-23)', () => {
+    const r = splitGistLine('The answer body.\n-[[GIST]] Use backtracking to build valid parentheses.');
+    assert.equal(r.gist, 'Use backtracking to build valid parentheses.');
+    assert.equal(r.body, 'The answer body.');
+    assert.equal(r.recovered, true, 'the bullet shape is prompt drift — lint must see it');
+    const spaced = splitGistLine('Body.\n- [[GIST]] Two pointers from both ends');
+    assert.equal(spaced.gist, 'Two pointers from both ends');
+  });
+
+  test('streaming: a bullet-prefixed partial marker never flashes', () => {
+    const r = splitGistLineStreaming('Body.\n- [[GI');
+    assert.equal(r.body, 'Body.');
+    assert.equal(r.gist, null);
+  });
+
   test('marker mid-line is malformed and stays visible', () => {
     assert.equal(splitGistLine('text [[GIST]] inline').gist, null);
   });

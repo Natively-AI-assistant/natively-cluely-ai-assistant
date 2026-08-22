@@ -4008,6 +4008,28 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             }
 
+            // STEERING-TAIL STRIP (live session D, 2026-08-23): on a SMALL-TALK
+            // press (greeting/pleasantry), drop a trailing host-style closer
+            // ("Where would you like to start?") — the other side runs the
+            // conversation. Narrow by construction: only small-talk turns enter,
+            // and only a whole trailing sentence matching a known steering shape
+            // is removed. Fails open when stripping would empty the reply.
+            if (!isSpeculative && fullAnswer && !isCodingAnswerType(answerPlan.answerType)) {
+                try {
+                    const { isSmallTalkTurn, stripSteeringTail } = require('./llm/steeringTail') as typeof import('./llm/steeringTail');
+                    const smallTalkSource = question || answerPlan.question || extractedQuestion.latestQuestion || '';
+                    if (isSmallTalkTurn(smallTalkSource)) {
+                        const st = stripSteeringTail(fullAnswer);
+                        if (st.repaired) {
+                            fullAnswer = st.text;
+                            trace.mark('repair_used', { reason: 'steering_tail_stripped' });
+                        }
+                    }
+                } catch (stErr: any) {
+                    console.warn('[IntelligenceEngine] steering-tail guard skipped:', stErr?.message || stErr);
+                }
+            }
+
             // Release 2026-06-07c: FINAL candidate-answer sanitizer on the WTA path —
             // strip an assistant-meta tail ("as an AI assistant", "I'm Natively", "I
             // can't share") from a candidate-voice answer.
