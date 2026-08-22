@@ -8132,10 +8132,40 @@ html[data-platform="linux"] body {
     --toggle-inset: 2.4px; --toggle-thumb-w: 31.2px; --toggle-thumb-h: 19.2px;
     --toggle-travel: 16.8px; --toggle-grow: 2.4px;
 }
+/* `sm` is the one variant pinned by WIDTH rather than by row height, because
+   its only consumer is the quick-settings popup (SettingsPopup.tsx), a FIXED
+   180px BrowserWindow (SettingsWindowHelper.createWindow) whose rows are
+   `justify-between` icon+label / toggle. Measured in that exact 180px box in
+   the app's real inherited font (`--font-system`, i.e. SF Pro on macOS — NOT
+   Inter; the html/body/#root rule below overrides Tailwind's font-sans) at
+   500 12px: 148px of row content width, and the widest labels need 147.7px
+   ("Fast Response") and 152.4px ("Interview Mode") beside a 39.6px track — so
+   BOTH rows wrapped to two lines (48px tall instead of 30) and the track
+   itself got flex-squashed to 37.9px. Against a 30px track the worst row
+   needs 142.8px and every row stays single-line, with 5px of slack for
+   Windows' Segoe UI metrics. 30px is also what the JSX has always declared
+   (`w-[30px]`); the aspect-preserving 39.6px silently overrode it.
+
+   Values below are the canonical 88x40/4/52x32/28/4 shape scaled UNIFORMLY by
+   30/88 = 0.34091 — so unlike `lg`/`xs` (which pin height and let width grow)
+   this one matches the reference on EVERY ratio including the two that read
+   as "shape": track 2.20:1 and knob 1.63:1. Deriving it from the 18px row
+   height instead gave a 1.23:1 knob — visibly rounder than every other toggle
+   in the app. Verified side by side against `lg` at 4x. */
 .t-toggle.t-toggle-sm {
-    width: 39.6px; height: 18px;
-    --toggle-inset: 1.8px; --toggle-thumb-w: 23.4px; --toggle-thumb-h: 14.4px;
-    --toggle-travel: 12.6px; --toggle-grow: 1.8px;
+    width: 30px; height: 13.64px;
+    --toggle-inset: 1.36px; --toggle-thumb-w: 17.73px; --toggle-thumb-h: 10.91px;
+    --toggle-travel: 9.55px; --toggle-grow: 1.36px;
+}
+/* The uniform scale costs height (13.64px vs the 18px the row used to give
+   it), so restore the click target without painting anything: a transparent
+   ::after bleeding 4px past every edge makes the hit box 38x21.6. The thumb
+   is a child <span>, so this pseudo-element is free. */
+.t-toggle.t-toggle-sm::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 999px;
 }
 .t-toggle.t-toggle-xs {
     width: 35.2px; height: 16px;
@@ -8172,16 +8202,17 @@ html[data-platform="linux"] body {
 .t-toggle[data-on="true"]:not(:disabled):active .t-toggle-thumb {
     transform: translateX(calc(var(--toggle-travel) - var(--toggle-grow)));
 }
-/* Opt out of the shared fill when a panel paints its own knob. This rule
-   exists because `background`/`box-shadow` above sit AFTER `@tailwind
-   utilities` in this file, so at equal specificity they beat a `bg-black` /
-   `shadow-sm` utility on the element — a Tailwind class alone cannot recolour
-   the thumb. The quick-settings popup needs a theme-INVERTED knob (black on
-   dark), so it adds this class and supplies both properties itself. */
-.t-toggle-thumb.t-toggle-thumb-custom {
-    background: none;
-    box-shadow: none;
-}
+/* NOTE: there used to be a `.t-toggle-thumb.t-toggle-thumb-custom { background:
+   none; box-shadow: none }` opt-out here, so the quick-settings popup could
+   paint a theme-INVERTED (black-on-dark) knob via a Tailwind class. It could
+   not work, and made the popup's knobs INVISIBLE: that selector is (0,2,0)
+   and lands after `@tailwind utilities`, so it beat the caller's own
+   `.bg-black` (0,1,0) too — and `background: none` resets background-color to
+   `transparent`. Verified in a browser against the compiled stylesheet: the
+   thumb computed to `rgba(0, 0, 0, 0)`. The popup now uses the shared thumb
+   like every other toggle, which is also what the `--toggle-*` contract above
+   asks for. Do not reintroduce a per-panel knob colour with a utility class;
+   a panel that genuinely needs one must set the custom property. */
 @media (prefers-reduced-motion: reduce) {
     .t-toggle-thumb { transition: none !important; }
 }

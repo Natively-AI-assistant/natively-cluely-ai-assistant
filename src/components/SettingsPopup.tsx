@@ -14,21 +14,30 @@ import {
 import { useToggleInit } from './settings/useToggleInit';
 
 /**
- * The quick-settings popup's switch (`sm` variant: the shared .t-toggle
- * rule's literal 88x40/52x32 reference shape at `zoom: 0.45` — a 39.6x18
- * track, matching the original 18px row height). Same shared `.t-toggle`
- * contract as the main settings panels — colors, curves, and press
- * character match every other toggle in the app exactly, by construction
- * (same design, smaller zoom). Two things are deliberately local:
+ * The quick-settings popup's switch (`sm` variant: a 30x13.64 track — the
+ * canonical toggle scaled uniformly to the width this 180px popup can afford,
+ * so track AND knob keep the reference proportions; see the
+ * `.t-toggle.t-toggle-sm` comment in index.css). Same shared `.t-toggle`
+ * contract as the main settings panels: track colours, thumb fill, curves, and press
+ * character all come from index.css, so this reads identically to every other
+ * toggle in the app. Only the `active:scale-[0.92]` press feedback on the
+ * whole button is local, layered on top of (not replacing) the shared thumb's
+ * own press-squish.
  *
- *  - The knob is theme-INVERTED here (black on dark, white on light), which is
- *    the opposite of the shared `.t-toggle-thumb` tinted default. A Tailwind
- *    class alone CANNOT do this: the shared rule sits after `@tailwind
- *    utilities` in index.css, so at equal specificity it beats `bg-black`.
- *    Hence `t-toggle-thumb-custom`, which clears the shared fill so
- *    `knobClassName` takes effect.
- *  - `active:scale-[0.92]` press feedback on the whole button, layered on top
- *    of (not replacing) the shared thumb's own press-squish.
+ * The knob is deliberately NOT overridden here. An earlier version passed a
+ * `knobClassName` (`bg-black` on dark) through a `t-toggle-thumb-custom`
+ * opt-out class; that opt-out outranked the caller's own utility and reset
+ * background-color to transparent, so every knob in this popup rendered
+ * INVISIBLE — the reported "toggles look wrong in the meeting overlay's
+ * settings". Track classes still flow through `onClassName`/`offClassName`,
+ * but note that only their box-shadow (the ON glow) and `glass-toggle-track`
+ * survive the cascade — the shared `--toggle-on`/`--toggle-off` fills win
+ * over their `bg-*` utility on purpose (see the `:root` block in index.css).
+ *
+ * `shrink-0` matters: this popup is a fixed 180px window, and without it the
+ * flex row squashes the track while the absolutely-positioned thumb keeps its
+ * full width. The box itself (width/height/padding) is owned entirely by
+ * index.css — utilities here would only lose to it on specificity and drift.
  *
  * `useToggleInit()` is currently inert — see useToggleInit's docstring; the
  * CSS bounce it used to arm was replaced by a plain transition.
@@ -38,13 +47,11 @@ const PopupToggle: React.FC<{
     onChange: () => void;
     label: string;
     disabled?: boolean;
-    /** Track classes when on — accent for most, inverted for Undetectable. */
+    /** Track classes when on — only the box-shadow glow survives the cascade. */
     onClassName: string;
-    /** Track classes when off. */
+    /** Track classes when off — carries `glass-toggle-track` for glass themes. */
     offClassName: string;
-    /** Theme-inverted knob fill. */
-    knobClassName: string;
-}> = ({ checked, onChange, label, disabled = false, onClassName, offClassName, knobClassName }) => {
+}> = ({ checked, onChange, label, disabled = false, onClassName, offClassName }) => {
     const toggleInit = useToggleInit();
     return (
         <button
@@ -55,9 +62,9 @@ const PopupToggle: React.FC<{
             aria-label={label}
             disabled={disabled}
             onClick={() => { toggleInit.arm(); onChange(); }}
-            className={`t-toggle t-toggle-sm w-[30px] h-[18px] rounded-full p-[1.5px] flex items-center active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
+            className={`t-toggle t-toggle-sm shrink-0 active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
         >
-            <span className={`t-toggle-thumb t-toggle-thumb-custom ${knobClassName}`} aria-hidden="true" />
+            <span className="t-toggle-thumb" aria-hidden="true" />
         </button>
     );
 };
@@ -350,7 +357,6 @@ const SettingsPopup = () => {
         ? 'border-white/10 bg-white/5 text-slate-400 glass-shortcut-key'
         : 'border-black/10 bg-black/[0.04] text-slate-600 glass-shortcut-key';
     const defaultToggleTrackClass = isDarkBg ? 'bg-white/10 glass-toggle-track' : 'bg-black/[0.22] glass-toggle-track';
-    const toggleKnobClass = isDarkBg ? 'bg-black shadow-sm' : 'bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]';
 
     // Real per-theme panel material — same computation NativelyInterface uses
     // for its own shell (NativelyInterface.tsx ~1531-1537) and ResizeToggle
@@ -414,7 +420,6 @@ const SettingsPopup = () => {
                             ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]'
                             : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]'}
                         offClassName={defaultToggleTrackClass}
-                        knobClassName={toggleKnobClass}
                     />
                 </div>
 
@@ -438,7 +443,6 @@ const SettingsPopup = () => {
                         }}
                         onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
                         offClassName={defaultToggleTrackClass}
-                        knobClassName={toggleKnobClass}
                     />
                 </div>
 
@@ -463,7 +467,6 @@ const SettingsPopup = () => {
                         }}
                         onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
                         offClassName={defaultToggleTrackClass}
-                        knobClassName={toggleKnobClass}
                     />
                 </div>
 
@@ -500,7 +503,6 @@ const SettingsPopup = () => {
                         }}
                         onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
                         offClassName={defaultToggleTrackClass}
-                        knobClassName={toggleKnobClass}
                     />
                 </div>
 
@@ -528,9 +530,8 @@ const SettingsPopup = () => {
                                     await window.electronAPI?.profileSetMode?.(newState);
                                 } catch (e) { console.error(e); }
                             }}
-                            onClassName="bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]"
+                            onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
                             offClassName={defaultToggleTrackClass}
-                            knobClassName={toggleKnobClass}
                         />
                     </div>
                 )}
