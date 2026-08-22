@@ -2060,6 +2060,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on every frame (correct at every in-between width — no clip/scale/transform).
   // Only HEIGHT flows to the OS, via the ResizeObserver / reportShellSize (and
   // a rate-limited channel during the tween).
+  const savedCustomWidth = (() => {
+    try {
+      const value = Number(localStorage.getItem('natively_custom_overlay_width'));
+      return Number.isFinite(value) && value >= 360 && value <= 2500 ? value : null;
+    } catch { return null; }
+  })();
+  const savedCustomHeight = (() => {
+    try {
+      const value = Number(localStorage.getItem('natively_custom_overlay_height'));
+      return Number.isFinite(value) && value >= 180 && value <= 2500 ? value : null;
+    } catch { return null; }
+  })();
+
   const SHELL_WIDTH_COLLAPSED = 600;
   const SHELL_WIDTH_EXPANDED = 732;
   // The OS overlay window's FIXED width. MUST equal
@@ -2068,7 +2081,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // window edge-to-edge when expanded; the old 780 gutter existed only for
   // the resize toggle, which now has its own aux window).
   const OVERLAY_WINDOW_WIDTH = SHELL_WIDTH_EXPANDED;
-  const shellWidth = useMotionValue(SHELL_WIDTH_COLLAPSED);
+  const shellWidth = useMotionValue(savedCustomWidth || SHELL_WIDTH_COLLAPSED);
+  const customOverlayHeightRef = useRef<number | null>(savedCustomHeight);
+  const [customOverlayHeight, setCustomOverlayHeight] = useState<number | null>(savedCustomHeight);
   // Vertical budget cap for the chat scroll area. Default Infinity = "not yet
   // measured / unbounded", so the width-derived aesthetic max applies until we
   // know the display height. measureVerticalCap (below) sets the real value:
@@ -2084,17 +2099,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // spring runs (widthDerivedScrollMax: 320px collapsed → 560px expanded), so the
   // visible chat region tracks the panel size frame-for-frame. This is a motion
   // value bound to a style, so it updates without a React re-render.
-  const scrollMaxH = useTransform([shellWidth, verticalCap], ([w, cap]: number[]) =>
-    // Pass the real collapsed/expanded panel widths so the 320→560 scroll-height
-    // ramp reaches its max at the actual expanded width (732), not the default 780.
-    Math.min(
-      widthDerivedScrollMax(w, {
-        collapsedWidth: SHELL_WIDTH_COLLAPSED,
-        expandedWidth: SHELL_WIDTH_EXPANDED,
-      }),
-      cap,
-    ),
-  );
+  const scrollMaxH = useTransform([shellWidth, verticalCap], ([w, cap]: number[]) => {
+    const baseMax = customOverlayHeight
+      ? Math.max(200, customOverlayHeight - 160)
+      : widthDerivedScrollMax(w, {
+          collapsedWidth: SHELL_WIDTH_COLLAPSED,
+          expandedWidth: SHELL_WIDTH_EXPANDED,
+        });
+    return Math.min(baseMax, cap);
+  });
   // NOTE: the resize toggle and the TopPill no longer render in this window at
   // all — each lives in its OWN tiny BrowserWindow (see
   // WindowHelper.createOverlayAuxWindows + OverlayAuxWindows.tsx), positioned
@@ -2380,12 +2393,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // clock — the startup shake. Layout height is immune to descendant
     // transforms, so genuine content growth still flows through while the
     // entry flourish stays purely compositor-side.
-    // The OS window is a FIXED WIDTH (OVERLAY_WINDOW_WIDTH = 732) and never
-    // width-resizes — ALWAYS report that fixed width, never the live
-    // in-between CSS shell width. setOverlayDimensionsAnchored therefore sees
-    // widthDelta 0 on every call: a pure height-only, top-anchored resize.
-    const width = OVERLAY_WINDOW_WIDTH;
-    const height = contentRef.current.offsetHeight;
+    const width = Math.round(shellWidth.get()) || OVERLAY_WINDOW_WIDTH;
+    const height = customOverlayHeightRef.current || contentRef.current.offsetHeight;
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
@@ -2404,7 +2413,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       window.electronAPI?.updateContentDimensions({ width, height });
     }
     syncStreamingHeightBaseline(height);
-  }, [attachedContext.length, OVERLAY_WINDOW_WIDTH, syncStreamingHeightBaseline]);
+  }, [attachedContext.length, OVERLAY_WINDOW_WIDTH, shellWidth, syncStreamingHeightBaseline]);
 
   // Compute the vertical budget cap for the chat scroll area and push it into
   // the `verticalCap` motion value (which scrollMaxH mins against the
@@ -2551,16 +2560,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const resizeOverlayWindow = useCallback(
     (height: number) => {
       if (height <= 0) return;
-      // Width is ALWAYS the fixed window width → widthDelta 0 in the main
-      // process; this collapses to a pure height-only resize.
+      const width = Math.round(shellWidth.get()) || OVERLAY_WINDOW_WIDTH;
+      const targetHeight = customOverlayHeightRef.current || height;
       const api = window.electronAPI as any;
       if (api?.updateContentDimensionsCentered) {
-        api.updateContentDimensionsCentered({ width: OVERLAY_WINDOW_WIDTH, height });
+        api.updateContentDimensionsCentered({ width, height: targetHeight });
       } else {
-        window.electronAPI?.updateContentDimensions({ width: OVERLAY_WINDOW_WIDTH, height });
+        window.electronAPI?.updateContentDimensions({ width, height: targetHeight });
       }
     },
-    [OVERLAY_WINDOW_WIDTH],
+    [OVERLAY_WINDOW_WIDTH, shellWidth],
   );
 
   // Height channel used by the ResizeObserver WHILE a message is actively
@@ -2818,6 +2827,64 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     manualWidthOverrideRef.current = target;
     startTransition(target);
   }, [shellWidth, startTransition, SHELL_WIDTH_COLLAPSED, SHELL_WIDTH_EXPANDED]);
+
+  // Free-form resize handles. Pointer events are used as the single input
+  // path so Windows does not start duplicate pointer/mouse drag sessions.
+  const isResizingRef = useRef(false);
+  const handleResizePointerDown = useCallback(
+    (direction: 'se' | 'sw' | 'e' | 'w' | 's', e: React.PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = Math.round(shellWidth.get()) || SHELL_WIDTH_COLLAPSED;
+      const startH = contentRef.current?.offsetHeight ?? 400;
+      isResizingRef.current = true;
+      heightReportSuppressedUntilRef.current = Date.now() + 100000;
+
+      const move = (event: PointerEvent) => {
+        if (!isResizingRef.current) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        const maxW = Math.max(732, (window.screen?.availWidth || 1920) - 40);
+        const maxH = Math.max(360, (window.screen?.availHeight || 1080) - 40);
+        const nextW = Math.max(360, Math.min(maxW, startW + (direction === 'w' || direction === 'sw' ? -dx : dx)));
+        const nextH = direction === 'se' || direction === 'sw' || direction === 's'
+          ? Math.max(180, Math.min(maxH, startH + dy))
+          : startH;
+        shellWidth.set(nextW);
+        manualWidthOverrideRef.current = nextW;
+        customOverlayHeightRef.current = nextH;
+        setCustomOverlayHeight(nextH);
+        const api = window.electronAPI as any;
+        api?.updateContentDimensionsCentered?.({ width: Math.round(nextW), height: Math.round(nextH) });
+      };
+
+      const end = () => {
+        if (!isResizingRef.current) return;
+        isResizingRef.current = false;
+        heightReportSuppressedUntilRef.current = 0;
+        window.removeEventListener('pointermove', move, true);
+        window.removeEventListener('pointerup', end, true);
+        window.removeEventListener('pointercancel', end, true);
+        const finalW = Math.round(shellWidth.get());
+        const finalH = customOverlayHeightRef.current || startH;
+        try {
+          localStorage.setItem('natively_custom_overlay_width', String(finalW));
+          localStorage.setItem('natively_custom_overlay_height', String(finalH));
+        } catch {}
+        const api = window.electronAPI as any;
+        api?.updateContentDimensionsCentered?.({ width: finalW, height: finalH });
+      };
+
+      window.addEventListener('pointermove', move, { passive: false, capture: true });
+      window.addEventListener('pointerup', end, { capture: true });
+      window.addEventListener('pointercancel', end, { capture: true });
+    },
+    [SHELL_WIDTH_COLLAPSED, shellWidth],
+  );
 
   // ── Aux-window bridge ─────────────────────────────────────────────────────
   // The TopPill and resize toggle live in their own BrowserWindows. Broadcast
@@ -8783,7 +8850,7 @@ Provide only the answer, nothing else.`;
                   )}
                 </AnimatePresence>
                 <div
-                  className={`flex flex-nowrap justify-center items-center gap-1.5 px-4 pb-3 overflow-x-hidden ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
+                  className={`flex flex-wrap justify-center items-center gap-1.5 px-4 pb-3 max-w-full overflow-visible ${rollingTranscript && showTranscript ? 'pt-1' : 'pt-3'}`}
                 >
                 <button
                   onClick={handleWhatToSay}
@@ -9068,9 +9135,10 @@ Provide only the answer, nothing else.`;
 
                   {/* Custom Rich Placeholder */}
                   {!inputValue && (
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none text-[13px] overlay-text-muted">
-                      <span>{t('Ask anything on screen or conversation, or')}</span>
-                      <div className="flex items-center gap-1 opacity-80">
+                    <div className="absolute inset-x-3 top-1/2 -translate-y-1/2 min-w-0 overflow-hidden whitespace-nowrap pointer-events-none text-[13px] overlay-text-muted">
+                      <span className="overlay-input-placeholder-full inline-flex items-center gap-1.5">
+                        <span>{t('Ask anything on screen or conversation, or')}</span>
+                      <span className="flex items-center gap-1 opacity-80">
                         {(
                           shortcuts.selectiveScreenshot || [getModifierSymbol('cmd'), 'Shift', 'H']
                         ).map((key, i) => (
@@ -9084,8 +9152,10 @@ Provide only the answer, nothing else.`;
                             </kbd>
                           </React.Fragment>
                         ))}
-                      </div>
+                      </span>
                       <span>{t('for selective screenshot')}</span>
+                      </span>
+                      <span className="overlay-input-placeholder-compact">{t('Ask anything…')}</span>
                     </div>
                   )}
 
@@ -9244,6 +9314,39 @@ Provide only the answer, nothing else.`;
                   </button>
                 </div>
               </div>
+
+              {/* Multi-direction resize handles: the renderer changes the
+                  panel width/height; the native overlay remains stable. */}
+              <div
+                data-resize-handle="e"
+                className="resize-handle absolute top-4 bottom-4 right-0 z-50 w-4 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('e', e)}
+                title={t('Drag to resize width')}
+              />
+              <div
+                data-resize-handle="w"
+                className="resize-handle absolute top-4 bottom-4 left-0 z-50 w-4 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('w', e)}
+                title={t('Drag to resize width')}
+              />
+              <div
+                data-resize-handle="s"
+                className="resize-handle absolute bottom-0 left-8 right-8 z-50 h-4 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('s', e)}
+                title={t('Drag to resize height')}
+              />
+              <div
+                data-resize-handle="sw"
+                className="resize-handle absolute bottom-0 left-0 z-50 h-8 w-8 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('sw', e)}
+                title={t('Drag to resize')}
+              />
+              <div
+                data-resize-handle="se"
+                className="resize-handle absolute bottom-0 right-0 z-50 h-9 w-9 no-drag touch-none"
+                onPointerDown={(e) => handleResizePointerDown('se', e)}
+                title={t('Drag to resize')}
+              />
             </motion.div>
           </motion.div>
       {/* end always-mounted shell */}
