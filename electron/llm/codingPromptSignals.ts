@@ -168,6 +168,40 @@ export function isDeicticAsk(question: string | undefined | null): boolean {
   return DEICTIC_ASK_RE.test(q);
 }
 
+// ── screen-coding promotion (single source of truth) ────────────────────────
+//
+// Code-review 2026-08-22, two confirmed findings with one root: the
+// screen-is-the-subject promotion was hand-rolled divergently at three call
+// sites (WhatToAnswerLLM's contract promotion, IntelligenceEngine's V3
+// personaBase callback, and — implicitly, by NOT knowing about it — the
+// engine's scaffold stream-hold/regeneration gates). Two consequences:
+//   1. The text-channel promotion skipped the structural-code check this
+//      module's own screen-stub promotion requires, so ANY captured page
+//      (a CRM dashboard, a job description) promoted a blind/deictic press
+//      to a full DSA contract.
+//   2. The engine's scaffold machinery could not see the promotion, so a
+//      promoted turn's CORRECT six-section answer was first fully
+//      stream-held and then regenerated away.
+// One exported predicate, consulted everywhere, fixes both divergences.
+//
+// Images still promote without inspection — pixels cannot be structurally
+// checked client-side, and the original live defect ("screenshot attached but
+// code not generated") was image-based. Captured TEXT must contain a real
+// structural code template (a signature or fenced block, not a phrase).
+export function isPromotedScreenCodingTurn(input: {
+  /** The routed turn is already coding-shaped — promotion is moot. */
+  alreadyCoding: boolean;
+  question?: string | null;
+  hasImages: boolean;
+  screenText?: string | null;
+}): boolean {
+  if (input.alreadyCoding) return false;
+  const q = (input.question || '').trim();
+  if (q && !isDeicticAsk(q)) return false;
+  if (input.hasImages) return true;
+  return detectStructuralCodeTemplate(input.screenText);
+}
+
 // ── build-task detection ────────────────────────────────────────────────────
 //
 // `coding_question_answer` is NOT a synonym for "implementation task". It is the

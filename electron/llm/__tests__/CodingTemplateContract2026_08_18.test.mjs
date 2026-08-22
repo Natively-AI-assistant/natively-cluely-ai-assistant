@@ -457,14 +457,19 @@ describe('C5 — channel audit: every screen transport reaches the contract (202
   test('WhatToAnswerLLM unions domContext + OCR and gates on images OR screen text', () => {
     const src = read('../WhatToAnswerLLM.ts');
     assert.match(src, /\[domContext, screenContext\?\.ocrText\]/, 'WTA lost the channel union');
-    assert.match(src, /hasAttachedImages \|\| hasScreenText/, 'WTA promotion keys on a single transport again');
+    // Review 2026-08-22: promotion is now the ONE shared predicate (with a
+    // structural-text requirement); the union + image-OR-text gating live
+    // inside its inputs.
+    assert.match(src, /isPromotedScreenCodingTurn\(\{/, 'WTA promotion no longer consults the shared predicate');
+    assert.match(src, /hasImages: hasAttachedImages/, 'WTA promotion lost the image channel');
+    assert.match(src, /screenText: capturedScreenText/, 'WTA promotion lost the captured-text channel');
     assert.match(src, /SCREEN_DOM_INSTRUCTION/, 'the DOM-capture screen instruction is gone');
   });
 
   test('IntelligenceEngine V3 personaBase unions domContext + OCR and promotes deictic screen turns', () => {
     const src = read('../../IntelligenceEngine.ts');
     assert.match(src, /\[options\?\.domContext, options\?\.screenContext\?\.ocrText\]/, 'IE personaBase lost the channel union');
-    assert.match(src, /_screenIsSubject/, 'IE personaBase lost the screen promotion');
+    assert.match(src, /isPromotedScreenCodingTurn\(\{/, 'IE lost the shared screen promotion');
   });
 
   test('chat V3 personaBase promotes an attached screenshot with a deictic ask', () => {

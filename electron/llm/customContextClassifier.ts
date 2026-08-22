@@ -87,10 +87,18 @@ const DIRECTIVE_IMPERATIVE_OPEN_RE = /^(answer|respond|reply|use|write|code|solv
 const DIRECTIVE_OUTPUT_SUBJECT_RE = /\b(code|coding|answers?|responses?|repl(?:y|ies)|outputs?|solutions?|explanations?|questions?|words?|sentences?|bullet(?:\s+points?)?|language|format|style|spanish|english|french|german|hindi|malayalam)\b/i;
 
 /** True when the chunk is an output-format directive (see block comment). */
+// A chunk that TELLS the assistant to inject content ("Always mention that I
+// prefer remote work in your answers") is a FACT-bearing behavioral
+// instruction, not a format directive — admitting it through the forbidden
+// gate contaminates self-contained coding answers with personal facts
+// (code-review 2026-08-22, verified against the built classifier).
+const DIRECTIVE_CONTENT_BEARING_RE = /\b(mention|highlight|emphasi[sz]e|bring up|say that|state that|note that|point out|reference|cite|talk about|include (?:that|my|the fact))\b|\bmy\b|\bme\b/i;
+
 export const isFormatDirective = (chunk: string): boolean => {
   const t = (chunk || '').trim();
   if (!t || t.length > FORMAT_DIRECTIVE_MAX_CHARS) return false;
   if (isSensitive(t)) return false;
+  if (DIRECTIVE_CONTENT_BEARING_RE.test(t)) return false;
   const deontic = DIRECTIVE_DEONTIC_RE.test(t) || DIRECTIVE_IMPERATIVE_OPEN_RE.test(t);
   return deontic && DIRECTIVE_OUTPUT_SUBJECT_RE.test(t);
 };
@@ -154,6 +162,13 @@ const CUSTOM_CONTEXT_FORBIDDEN_TYPES = new Set<AnswerType>([
   'system_design_answer',
   'debugging_question_answer',
   'identity_answer',
+  // Code-review 2026-08-22: technical_concept_answer is in AnswerPlanner's
+  // custom_context-forbidden group (forbiddenLayersFor), but was missing
+  // here. Since the RC-2 fix made this classifier the sole gate on the
+  // scoped fetch path, the omission let the full pinned+searchable blob ride
+  // the system prompt on "what's a semaphore?"-class turns. Directives still
+  // pass via the directive lane; facts are dropped, restoring parity.
+  'technical_concept_answer',
 ]);
 
 export interface CustomContextSelection {

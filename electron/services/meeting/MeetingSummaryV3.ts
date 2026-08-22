@@ -351,6 +351,9 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   /^(?:return|print|output|write|implement|initialize)\b/i,
   // Conversational acknowledgements: "Yes, that's right", "Okay, so…"
   /^(?:yes|no|sure|okay|ok|yeah|yep)\b\s*[,.!]/i,
+  // Complexity notation is answer vocabulary, never a meeting name
+  // ("The two-pointer approach solves this in O(n) time." — review 2026-08-22).
+  /\bO\([^)]{1,12}\)/,
 ];
 
 /** True when a GENERATED title reads as an answer fragment, not a name. */

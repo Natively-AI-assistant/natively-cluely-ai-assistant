@@ -71,6 +71,33 @@ test('RC-4: a scaffold-opening stream paints NOTHING until the provider stream i
   assert.ok(final && final.length > 0, 'a final answer must still be delivered');
 });
 
+test('review 2026-08-22: a PROMOTED screen-coding turn streams via the coding gate and is never regenerated', async () => {
+  // A deictic press over on-screen code keeps a non-coding answerType while
+  // the prompt is promoted to the coding contract. The engine's gates now
+  // consult the same shared predicate: the six-section answer must (a) still
+  // paint during the stream (codingGate, not the RC-4 hold) and (b) never
+  // trigger the scaffold-regeneration second LLM call.
+  const { engine, state } = await makeEngine(SCAFFOLD_ANSWER);
+  const regenCalls = [];
+  engine.llmHelper.streamChat = (...args) => { regenCalls.push(args); return (async function* () { yield 'rewrite'; })(); };
+  const paintsDuringStream = [];
+  engine.on('suggested_answer_token', (token) => {
+    if (!state.streamDone) paintsDuringStream.push(token);
+  });
+  let final = null;
+  engine.on('suggested_answer', (answer) => { final = answer; });
+
+  await engine.runWhatShouldISay('how do I solve this?', 0.9, undefined, {
+    skipCooldown: true,
+    domContext: 'class Solution:\n    def twoSum(self, nums, target):\n        pass',
+  });
+
+  assert.ok(paintsDuringStream.length > 0,
+    'a promoted coding answer must stream (the hold treating it as a misfire was the confirmed finding)');
+  assert.equal(regenCalls.length, 0, 'the scaffold regeneration must not fire on a promoted turn');
+  assert.match(final ?? '', /## Approach/, 'the six-section answer is the CORRECT shape here and must survive');
+});
+
 test('RC-4: a clean prose stream still paints live (no lost streaming)', async () => {
   const { engine, state } = await makeEngine(CLEAN_ANSWER);
   const paintsDuringStream = [];

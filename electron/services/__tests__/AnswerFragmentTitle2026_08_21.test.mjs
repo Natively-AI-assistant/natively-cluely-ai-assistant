@@ -30,6 +30,7 @@ describe('answer-shaped generated titles are rejected', () => {
     'Sorry, I need the full question',
     "I don't have the actual question here",
     'Okay, so the main idea is',
+    'The two-pointer approach solves this in O(n) time',
   ]) {
     test(`rejected: "${t}"`, () => assert.equal(isAnswerFragmentTitle(t), true, t));
   }

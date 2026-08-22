@@ -129,7 +129,7 @@ export const WH_NOUN_AUX = /\b(what|which|whose)\s+[\w'-]+\s+(is|are|was|were|do
  * shadow ledger found the gap first (9 of 10 of its no-ask windows) and live
  * session A then proved the live extractor had the identical hole.
  */
-export const TASK_DIRECTIVE = /(?:^|[,.!?]\s*)(?:(?:ok(?:ay)?|so|now|next|alright|great|please)[,.!]?\s+)*(?:please\s+)?(solve|write|implement|rate|rank|convince|design|build|debug|code|optimi[sz]e|refactor|estimate|compare|sketch|whiteboard|connect|reverse|check|find|print|sort)\b/i;
+export const TASK_DIRECTIVE = /(?:^|[,.!?]\s*)(?:(?:ok(?:ay)?|so|now|next|alright|great|please)[,.!]?\s+)*(?:please\s+)?(solve|write|implement|rate|rank|convince|design|build|debug|code|optimi[sz]e|refactor|estimate|compare|sketch|whiteboard|connect|reverse|check|find|print|sort(?!\s+of\b)|merge|compute|calculate|invert|traverse)\b/i;
 
 /** auxiliary + second person anywhere ("can you", "did you", "are you"). */
 export const AUX_SECOND_PERSON = /\b(can|could|would|will|do|did|does|are|were|have|has)\s+you\b/i;

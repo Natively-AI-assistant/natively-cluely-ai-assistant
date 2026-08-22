@@ -3,7 +3,7 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     ids: string[];
     names: string[];
     descs: string[];
-    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel';
+    pmKey: 'geminiPreferredModel' | 'openaiPreferredModel' | 'claudePreferredModel' | 'groqPreferredModel' | 'deepseekPreferredModel' | 'nvidia_nimPreferredModel';
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
@@ -39,6 +39,13 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
         names: ['DeepSeek V4 Flash', 'DeepSeek V4 Pro'],
         descs: ['Fast • Text-only', 'Reasoning • Text-only'],
         pmKey: 'deepseekPreferredModel'
+    },
+    nvidia_nim: {
+        hasKeyCheck: (creds) => !!creds?.hasNvidiaNimKey,
+        ids: ['nvidia_nim/meta/llama-3.1-8b-instruct', 'nvidia_nim/z-ai/glm4.7'],
+        names: ['Llama 3.1 8B (NVIDIA NIM)', 'GLM 4.7 (NVIDIA NIM)'],
+        descs: ['NVIDIA hosted', 'Reasoning • NVIDIA hosted'],
+        pmKey: 'nvidia_nimPreferredModel'
     },
 };
 
