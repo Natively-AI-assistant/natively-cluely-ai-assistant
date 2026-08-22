@@ -2248,11 +2248,29 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
  */
 export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   if (plan.answerStyle && plan.answerStyle !== 'default') return '';
+  // Coding output owns its own length (the contract's sections + code).
+  if (isCodingAnswerType(plan.answerType)) return '';
   const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question);
-  if (tier !== 'SPOKEN_SHORT') return '';
+  if (tier !== 'SPOKEN_SHORT') {
+    // Sessions D/E (2026-08-23): tiers outside SPOKEN_SHORT used to emit NO
+    // length line at all — a debugging/system-design answer ran unbounded on
+    // exactly the questions that tempt the model to enumerate. These tiers
+    // legitimately run longer than the short bands, so they get the product's
+    // outer ceiling (45s ≈ 130 words) instead of a band.
+    // Wording chosen by paired live A/B (3 runs, DeepSeek, the live D-15
+    // debugging question): "up to about 45s… hard ceiling" averaged 155w;
+    // this cap-first framing with a stop instruction averaged 131w — on
+    // target. "Cut whole branches, not adjectives" is what actually shrinks
+    // an enumerating answer.
+    return 'LENGTH LIMIT: at most 130 words (~45 seconds spoken) — a hard cap, not a target. This is a LIVE interview answer, not an essay: give the strongest path, two or three concrete steps, and stop — the interviewer will ask for more if they want it. Do not enumerate every possibility. If your draft runs past 130 words, cut whole branches, not adjectives. Only an explicit ask for code, a document, or a step-by-step walkthrough lifts the cap.';
+  }
   const band = classifyShortBand(plan.answerType, plan.answerStyle, plan.question);
   const t = shortBandTargetWords(band);
-  return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number.`;
+  // The "aim for" phrasing alone was overshot ~50-100% live (sessions D/E:
+  // 124w against a 60w band, 106w against 85). The band stays the target;
+  // the ceiling sentence gives the model a hard number to cut against.
+  const ceiling = Math.round(t.max * 1.25);
+  return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number. Hard ceiling: never go past ${ceiling} words — if your draft runs longer, cut examples and caveats, keep the point.`;
 };
 
 export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {
