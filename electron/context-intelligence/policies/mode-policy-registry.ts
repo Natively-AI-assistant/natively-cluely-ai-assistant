@@ -18,7 +18,7 @@
 
 import type { SourceType, GroundingPolicy } from '../contracts/types';
 
-/** The eight built-in modes. `thesis` and `coding-interview` are deliberately
+/** The nine built-in modes. `thesis` and `coding-interview` are deliberately
  *  absent: they do not exist in this codebase (verified across all DB
  *  migrations) and are served by `seminar` and `technical-interview`. */
 export type ModeId =
@@ -29,11 +29,14 @@ export type ModeId =
   | 'looking-for-work'
   | 'technical-interview'
   | 'lecture'
-  | 'seminar';
+  | 'seminar'
+  // 9th built-in (2026-08-23): support / call-center.
+  | 'call-center';
 
 export const MODE_IDS: readonly ModeId[] = [
   'general', 'sales', 'recruiting', 'team-meet',
   'looking-for-work', 'technical-interview', 'lecture', 'seminar',
+  'call-center',
 ] as const;
 
 export interface CapabilityPolicy {
@@ -152,6 +155,25 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 600, 800, 400),
     citations: 'HIDDEN',
+  },
+
+  'call-center': {
+    id: 'call-center', version: '1.0.0', name: 'Call Center',
+    purpose: 'Resolve customer support issues: diagnose, fix on the call, or escalate cleanly.',
+    // Product docs / runbooks are the authority on a support call; the live
+    // transcript carries the customer's actual symptoms. No profile hydration:
+    // the agent's own resume/JD can never describe a customer's account.
+    allowedSourceTypes: ['REFERENCE_FILE', 'MEETING_TRANSCRIPT', 'CONVERSATION_STATE', 'SCREEN_CONTEXT'],
+    sourcePriorities: { REFERENCE_FILE: 1, MEETING_TRANSCRIPT: 2 },
+    profileSources: [],
+    groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
+    // Policies, prices, refunds and timelines are product claims: they require
+    // evidence and must never be generated (mirrors the mode prompt's "never
+    // promise what the context does not authorize").
+    personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
+    meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    citations: 'OPTIONAL',
   },
 
   sales: {

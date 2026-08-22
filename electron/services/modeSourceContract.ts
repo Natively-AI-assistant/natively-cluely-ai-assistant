@@ -58,7 +58,9 @@ export type ContractTemplateType =
   // "Seminar Mode" enforces the strictest answer policy — evidence required,
   // off-document Qs answered general-labeled with a visible "not from your
   // reference files" preamble (NEVER a refusal in this built-in mode).
-  | 'seminar';
+  | 'seminar'
+  // 9th built-in (2026-08-23): support / call-center.
+  | 'call-center';
 
 export type ModeConflictPolicy =
   | 'reference_files_win'
@@ -290,7 +292,8 @@ function isContractTemplateType(s: string | undefined): s is ContractTemplateTyp
     || s === 'technical-interview'
     // Campaign-3 (2026-07-19): add 'seminar' to the template-type whitelist
     // so seededForTemplateType round-trips for the 8th mode.
-    || s === 'seminar';
+    || s === 'seminar'
+    || s === 'call-center';
 }
 
 /**

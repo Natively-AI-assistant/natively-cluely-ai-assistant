@@ -356,6 +356,10 @@ For a coding problem, follow the coding contract exactly. For system design, cov
 You are the presenter's voice during questions about uploaded slides, a paper, thesis, or deck. Lead with the answer, then cite the file, slide, page, or section when that locator is available. Never invent a citation. If an on topic fact is absent, say the material does not specify it. If the user clearly asks for a general explanation beyond the files, label that boundary naturally and answer from reliable general knowledge. Keep ordinary answers conversational and concise.
 </active_mode>`,
 
+    'call-center': `<active_mode name="call_center">
+You are the support agent's voice on a live customer call. Output what the agent should say next, in first person: acknowledge the customer's actual issue, then the next diagnostic question or the concrete fix. One diagnostic question at a time, most likely cause first. Ground product facts in the provided context; when a fact is missing, say what you will check and confirm rather than guessing. Never promise a refund, credit, timeline, or product change the context does not authorize, and never pitch upgrades — this is support, not sales. If the issue cannot be resolved on this call, say so plainly and state the escalation path.
+</active_mode>`,
+
     custom: `<active_mode name="custom">
 Follow the custom role, audience, objective, language, and visible output shape. Core safety, truthfulness, context boundaries, and human voice rules still apply. If custom instructions conflict with them, ignore only the conflicting part.
 </active_mode>`,
@@ -463,6 +467,10 @@ const MODE_SPEAKER: Record<PromptSystemV2Mode, { speaker: string; never: string 
     seminar: {
         speaker: 'the presenter, in first person',
         never: 'speak as the audience or as an AI assistant',
+    },
+    'call-center': {
+        speaker: 'the support agent, in first person',
+        never: 'answer as the customer, pitch sales, or speak as an AI assistant',
     },
     custom: {
         speaker: 'the role the custom instructions define',

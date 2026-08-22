@@ -40,9 +40,9 @@ export class MeetingSummaryReducer {
     const sections = buildSections(params.modeNoteSections || [], atoms);
     const timeline = buildTimeline(atoms, decisions, actionItems, risks);
     // "Summary" (rendered at the top of the notes) = outcome-first, grounded, no filler.
-    const tldr = buildSummary(decisions, actionItems, risks, atoms, sections);
+    const tldr = buildSummary(decisions, actionItems, risks, atoms, sections, params.modeTemplateType);
     const whatChanged = buildWhatChanged(atoms, decisions).slice(0, 6);
-    const overview = buildOverview(tldr, atoms, decisions);
+    const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType);
     const actionConfidence = deriveActionConfidence(actionItems);
     const transcriptCoverage = Math.max(0, Math.min(1, typeof params.transcriptCoverage === 'number' ? params.transcriptCoverage : (params.normalizedTranscript.totalChars > 0 ? 1 : 0)));
     const warnings = [...params.normalizedTranscript.qualityWarnings];
@@ -155,18 +155,75 @@ function buildWhatChanged(atoms: ChunkMeetingAtoms[], decisions: DecisionItem[])
   return dedupeStrings(candidates).slice(0, 6);
 }
 
+// The mode's DEFINING sections, in priority order — the content that makes this
+// mode's headline Summary read differently from every other mode's. buildSummary
+// leads with the first non-empty bullet from the first matching section, so a
+// technical interview's Summary opens with the hiring signal / problem, a
+// lecture's with its study summary, a sales call's with buying signals — not a
+// generic first-chunk brief. Titles must match TEMPLATE_NOTE_SECTIONS
+// (ModesManager.ts) — buildSections carries those titles into
+// summary.sections verbatim. Unknown/custom modes fall through to the generic
+// shape (their custom sections still render below).
+const MODE_HEADLINE_SECTIONS: Record<string, string[]> = {
+  'technical-interview': ['Hiring signal', 'Problem discussed', 'Approach'],
+  lecture: ['Study summary', 'Core concepts'],
+  sales: ['Buying signals', 'Pain points', 'Next steps'],
+  recruiting: ['Role fit', 'Candidate profile'],
+  'team-meet': ['Progress since last sync', 'Blockers'],
+  'looking-for-work': ['Role fit', 'Next steps'],
+  seminar: ['Core concepts', 'Open questions'],
+  'call-center': ['Customer issue', 'Resolution'],
+};
+
+const CONFIDENCE_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const rankConfidence = (c?: string): number => CONFIDENCE_RANK[c || ''] ?? 1;
+
 // Outcome-first Summary, built deterministically from the already-grounded reduced content.
-// 3–5 lines: purpose → key decisions → most important next step → top risk (only if nothing
-// else carried the meeting). Zero new information. Returns [] (empty Summary) rather than
+// 3–5 lines: mode-defining lead → purpose → key decisions → most important next step →
+// high-severity risk. Zero new information. Returns [] (empty Summary) rather than
 // boilerplate when there is genuinely no grounded outcome — honest beats filler.
-function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[], atoms: ChunkMeetingAtoms[], sections: MeetingNoteSection[]): string[] {
+//
+// Selection quality (review 2026-08-23 — the previous version was a positional
+// grab: chunk 1's brief, the first 2 decisions CHronologically, actionItems[0],
+// risk only as filler — so a critical decision at minute 45, the 3rd action
+// item, or a high-severity mid-meeting risk never reached the headline even
+// though the pipeline had already computed confidence/severity for them):
+//   - decisions ranked by confidence (stable among equals, so chronology still
+//     breaks ties);
+//   - the next step prefers explicit over inferred, then confidence;
+//   - a HIGH-severity risk is always included, not just as filler;
+//   - the lead line comes from the active mode's defining section.
+function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[], atoms: ChunkMeetingAtoms[], sections: MeetingNoteSection[], modeTemplateType?: string | null): string[] {
   const out: string[] = [];
-  const purpose = atoms.map(a => a.brief).find(Boolean) || sections.find(s => s.bullets.length)?.bullets[0]?.text;
+
+  // Mode-defining lead: the first non-empty bullet of the mode's top section.
+  const headlineTitles = MODE_HEADLINE_SECTIONS[modeTemplateType || ''] || [];
+  for (const title of headlineTitles) {
+    const sec = sections.find(sect => sect.title === title && sect.bullets.length > 0);
+    const bullet = sec?.bullets[0]?.text?.trim();
+    if (bullet) { out.push(bullet); break; }
+  }
+
+  const purpose = atoms.map(a => a.brief).find(Boolean) || sections.find(sect => sect.bullets.length)?.bullets[0]?.text;
   if (purpose) out.push(purpose);
-  out.push(...decisions.slice(0, 2).map(d => d.text));
-  const a = actionItems[0];
+
+  const rankedDecisions = decisions
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => rankConfidence(x.d.confidence) - rankConfidence(y.d.confidence) || x.i - y.i);
+  out.push(...rankedDecisions.slice(0, 2).map(({ d }) => d.text));
+
+  const rankedActions = actionItems
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => (x.a.explicitness === 'explicit' ? 0 : 1) - (y.a.explicitness === 'explicit' ? 0 : 1)
+      || rankConfidence(x.a.confidence) - rankConfidence(y.a.confidence)
+      || x.i - y.i);
+  const a = rankedActions[0]?.a;
   if (a) out.push(`${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` by ${a.deadline}` : ''}`);
-  if (out.length < 2 && risks[0]) out.push(risks[0].text);
+
+  const highRisk = risks.find(r => r.severity === 'high');
+  if (highRisk) out.push(highRisk.text);
+  else if (out.length < 2 && risks[0]) out.push(risks[0].text);
+
   return dedupeStrings(out).slice(0, 5);
 }
 
@@ -174,13 +231,26 @@ function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risk
 // Stitches the chunk briefs (the chronological arc of the meeting) into a paragraph, then
 // folds in the headline decisions so it reads as a quick recap of the ENTIRE meeting rather
 // than just the first two summary bullets. Capped to ~400 words.
-function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[]): string {
+function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[], sections: MeetingNoteSection[] = [], modeTemplateType?: string | null): string {
   const briefs = dedupeStrings(atoms.map(a => a.brief).filter(Boolean));
   const parts: string[] = [];
   if (briefs.length) parts.push(briefs.join(' '));
   else if (summary.length) parts.push(summary.join(' '));
-  const topDecisions = decisions.slice(0, 3).map(d => d.text);
+  // Confidence-ranked, mirroring buildSummary (review 2026-08-23).
+  const topDecisions = decisions
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => rankConfidence(x.d.confidence) - rankConfidence(y.d.confidence) || x.i - y.i)
+    .slice(0, 3).map(({ d }) => d.text);
   if (topDecisions.length) parts.push(`Key decisions: ${topDecisions.join('; ')}.`);
+  // Mode-defining close, so the overview paragraph also reads in the mode's
+  // own terms (a technical interview ends on the hiring signal, a lecture on
+  // its study summary) instead of always generic decisions.
+  const headlineTitles = MODE_HEADLINE_SECTIONS[modeTemplateType || ''] || [];
+  for (const title of headlineTitles) {
+    const sec = sections.find(sect => sect.title === title && sect.bullets.length > 0);
+    const bullet = sec?.bullets[0]?.text?.trim();
+    if (bullet && !parts.some(pp => pp.includes(bullet))) { parts.push(`${title}: ${bullet}`); break; }
+  }
   const text = parts.join(' ').replace(/\s+/g, ' ').trim();
   const words = text.split(/\s+/);
   return words.length > 400 ? words.slice(0, 400).join(' ') : text;
