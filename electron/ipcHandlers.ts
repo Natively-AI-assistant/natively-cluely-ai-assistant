@@ -5800,6 +5800,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-auto-answer-enabled', async () => {
+    return appState.getAutoAnswerEnabled();
+  });
+
+  safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
+    appState.setAutoAnswerEnabled(enabled);
+    return { success: true };
+  });
+
   safeHandle('get-code-verification', async () => {
     // Default OFF: code verification is currently disabled. Only true when the
     // user has explicitly opted in via Settings → General or env override.

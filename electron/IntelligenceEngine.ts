@@ -690,6 +690,29 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
+     * Gate for the AUTOMATIC post-question trigger (Settings > General → Auto
+     * Answer). Both halves matter, and neither is enforced downstream:
+     *
+     *  - Mode: `runWhatShouldISay` opens with
+     *    `whatToAnswerCancellationToken.abort('superseded')`, so an auto-trigger
+     *    arriving while a manual What-to-Answer press is still streaming would
+     *    kill the answer the user explicitly asked for. 'idle'/'assist' are the
+     *    same states `maybeSpeculate` treats as free.
+     *  - Cooldown: `planSuggestionTrigger` runs `classifyIntent` — a regex pass
+     *    then a zero-shot ONNX classifier — BEFORE `planNextAssistantAction`
+     *    applies this same cooldown and returns `silent: cooldown`. Checking it
+     *    first means the classifier isn't paid for on a turn that cannot answer.
+     *
+     * Manual presses deliberately do NOT consult this: they pass `skipCooldown`
+     * and are allowed to supersede.
+     */
+    canAutoAnswer(): boolean {
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return false;
+        if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return false;
+        return true;
+    }
+
+    /**
      * Handle suggestion trigger from native audio service
      * This is the primary auto-trigger path
      */

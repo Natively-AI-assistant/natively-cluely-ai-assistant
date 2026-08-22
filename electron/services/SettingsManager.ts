@@ -19,6 +19,11 @@ export interface AppSettings {
     // while idle. Off by default — the hotkey's existing behavior is unchanged
     // until the user opts in from Settings > General.
     ambientChatEnabled?: boolean;
+    // Automatic answers after the interviewer finishes a question. Off by
+    // default: until the user opts in from Settings > General, an answer is
+    // produced only by the What-to-Answer hotkey, exactly as before. The
+    // trigger itself lives in AppState.scheduleAutoAnswer().
+    autoAnswerEnabled?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
