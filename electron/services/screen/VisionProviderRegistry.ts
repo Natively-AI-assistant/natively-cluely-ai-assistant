@@ -19,6 +19,7 @@ import type {
   VisionMode,
 } from './VisionProviderFallbackChain';
 import { CredentialsManager } from '../CredentialsManager';
+import { GROQ_PRIMARY_MODEL } from '../../llm/groqModels';
 
 export interface VisionProviderBuildInputs {
   mode: VisionMode;
@@ -153,9 +154,13 @@ function geminiPro(creds: CredentialsManager, _inputs: VisionProviderBuildInputs
 function groqScout(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
   const apiKey = creds.getGroqApiKey();
   return {
+    // The `groq_scout` id is a stable key (health tracking, telemetry, the
+    // provider-order tests) and stays even though Scout itself is gone. The
+    // model id is derived, not repeated — a second literal is how the NEXT
+    // retirement gets missed in one of the two places.
     id: 'groq_scout',
-    displayName: 'Groq Llama-4 Scout',
-    modelId: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    displayName: `Groq (${GROQ_PRIMARY_MODEL})`,
+    modelId: GROQ_PRIMARY_MODEL,
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,

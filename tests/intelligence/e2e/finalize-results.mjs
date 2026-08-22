@@ -36,7 +36,7 @@ const uncontended = llm.filter((r) => (r.total_time_ms || 0) < 4000).map((r) => 
 const band = (b) => { const set = clean.filter((r) => r.difficulty === b); return { count: set.length, pass: set.filter((r) => r.pass).length, passRate: set.length ? ((100 * set.filter((r) => r.pass).length) / set.length).toFixed(1) + '%' : 'n/a' }; };
 
 const meta = {
-  phase: PHASE, model: results.find((r) => r.model)?.model || 'meta-llama/llama-4-scout-17b-16e-instruct', provider: 'groq',
+  phase: PHASE, model: results.find((r) => r.model)?.model || 'qwen/qwen3.6-27b', provider: 'groq',
   note: data.meta?.partial ? 'Run stopped early after free-tier Groq TPM exhaustion saturated the tail with deadline-empties (no new model signal). Scored on captured clean rows.' : 'complete',
   totalRowsAttempted: results.length, clean: clean.length,
   providerUnavailable: providerEmpty.length, providerUnavailableRate: ((100 * providerEmpty.length) / results.length).toFixed(1) + '%',

@@ -515,7 +515,7 @@ export class ProviderRouter {
         // Default: Groq for speed (most bang for buck on free tier)
         return {
             provider: 'groq',
-            model: 'llama-3.3-70b-versatile',
+            model: 'qwen/qwen3.6-27b',
             reason: 'default routing: Groq (fastest free tier)'
         };
     }
@@ -568,7 +568,7 @@ export class ProviderRouter {
     private getDefaultModel(provider: string): string {
         const models: Record<string, string> = {
             'gemini': 'gemini-3.7-flash',
-            'groq': 'llama-3.3-70b-versatile',
+            'groq': 'qwen/qwen3.6-27b',
             'openai': 'gpt-5.4',
             'claude': 'claude-sonnet-4-6',
             'deepseek': 'deepseek-v4-flash',

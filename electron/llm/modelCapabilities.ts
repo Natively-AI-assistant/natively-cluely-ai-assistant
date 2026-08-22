@@ -52,13 +52,37 @@ function isCloudIdentifier(id: string): boolean {
 }
 
 // Large Groq-hosted models we trust like cloud.
+//
+// The llama/mixtral entries are ids Groq has since retired; they stay because a
+// LiteLLM gateway or self-host can still serve them. The qwen size list did NOT
+// cover qwen3.6-27b (Groq's current flagship, and the default since the Llama
+// retirements) — a 27b model is not in {32b,72b,110b}, so it fell through to the
+// "unknown" branch below. Match Groq's current ids by name rather than by
+// guessing a parameter count out of the string.
 function isLargeGroqModel(id: string): boolean {
   const s = id.toLowerCase();
   if (s.includes('llama-3.3-70b') || s.includes('llama-3.1-70b') || s.includes('llama3-70b')) return true;
   if (s.includes('mixtral-8x7b') || s.includes('mixtral-8x22b')) return true;
-  if (s.includes('qwen') && /\b(32b|72b|110b)\b/.test(s)) return true;
+  if (s.includes('qwen') && /\b(27b|32b|72b|110b)\b/.test(s)) return true;
+  if (s.startsWith('openai/gpt-oss-') || s.startsWith('groq/compound')) return true;
   return false;
 }
+
+/**
+ * Groq-hosted models that accept image input.
+ *
+ * Exactly one, as of 2026-08-23: qwen3.6-27b. Groq retired llama-4-scout (its
+ * previous vision model) on 2026-07-17 and shipped no like-for-like successor.
+ *
+ * This must be checked explicitly. The Groq branch of getModelCapabilities()
+ * hardcoded `supportsImages: false`, and LLMHelper gates the vision path on that
+ * flag — so a Groq id that genuinely takes images was refused before the request
+ * was ever built.
+ */
+// Single source: groqModels.ts (code-review 2026-08-23 — this fact was
+// encoded in four uncoordinated places; a vision-model swap that missed one
+// silently re-armed the "Groq vision refused" bug).
+import { groqSupportsImages } from './groqModels';
 
 // Parse parameter size from an Ollama model id like "llama3.1:8b" or "qwen2.5-coder:14b".
 // Returns the size in billions of parameters, or null if not detected.
@@ -136,7 +160,7 @@ export function getModelCapabilities(modelId: string, isOllama: boolean): ModelC
       promptBudgetTokens: b.system,
       outputBudgetTokens: b.output,
       supportsXmlTags: true,
-      supportsImages: false,
+      supportsImages: groqSupportsImages(id),
       name: id,
     };
   }

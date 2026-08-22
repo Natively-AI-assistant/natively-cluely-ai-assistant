@@ -17,7 +17,10 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
-export const EVAL_MODEL = process.env.GROQ_EVAL_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+// Default matches GROQ_PRIMARY_MODEL (electron/llm/groqModels.ts). The old
+// default, llama-4-scout, was shut down 2026-07-17 — every eval 404'd unless
+// GROQ_EVAL_MODEL was set (code-review 2026-08-23).
+export const EVAL_MODEL = process.env.GROQ_EVAL_MODEL || 'qwen/qwen3.6-27b';
 export const GROQ_BASE = 'https://api.groq.com/openai/v1';
 
 export function maskKey(key) {
