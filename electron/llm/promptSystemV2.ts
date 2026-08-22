@@ -929,7 +929,20 @@ export function splitGistLine(text: string): { body: string; gist: string | null
     // Anything else before the marker is real prose and the marker stays put.
     const beforeMarker = t.slice(lineStart + 1, idx).trim();
     const bulletPrefixed = beforeMarker !== '' && /^[-*•–—>]+$/.test(beforeMarker);
-    if (beforeMarker !== '' && !bulletPrefixed) return { body: t, gist: null };
+    if (beforeMarker !== '' && !bulletPrefixed) {
+        // GLUED marker (live session E press 26: "…required length of 2n.
+        // [[GIST]] Use backtracking…" — no newline before the marker).
+        // Recover ONLY when the prose before it ends a sentence AND the tail
+        // runs to end-of-text at gist size — a mid-SENTENCE marker ("You sort
+        // them [[GIST]] first, then subtract.") still stays visible so real
+        // prose is never eaten.
+        const tailToEnd = t.slice(idx + GIST_MARKER.length);
+        const gluedRecoverable = /[.!?…:]$/.test(beforeMarker)
+            && !tailToEnd.includes('\n')
+            && tailToEnd.trim().split(/\s+/).filter(Boolean).length <= GIST_RECOVERY_MAX_WORDS;
+        if (!gluedRecoverable) return { body: t, gist: null };
+        return { body: t.slice(0, idx).replace(/\s+$/, ''), gist: tailToEnd.trim() || null, recovered: true };
+    }
     const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
     const tail = t.slice(idx + GIST_MARKER.length);
     if (!tail.includes('\n')) return { body, gist: tail.trim() || null, ...(bulletPrefixed ? { recovered: true } : {}) };
