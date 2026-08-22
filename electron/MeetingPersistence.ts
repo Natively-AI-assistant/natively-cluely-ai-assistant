@@ -302,7 +302,14 @@ export class MeetingPersistence {
                 // never reach here — this branch is skipped when metadata.title
                 // is set — so their length is left alone.
                 const cleanedTitle = cleanMeetingTitle(generatedTitle);
-                if (cleanedTitle && isAnswerFragmentTitle(cleanedTitle)) {
+                // Catch-all (session E, 2026-08-23): a raw first LINE over 200
+                // chars is the model answering the transcript, whatever the
+                // clamp salvages from it ("ral backend for every keystroke"
+                // came from a 450-char line). A real title attempt — even a
+                // verbose one with reasoning underneath — keeps its first line
+                // short.
+                const rawFirstLine = cleanString(String(generatedTitle ?? '').split(/\r?\n/).find(l => l.trim()) ?? '');
+                if (cleanedTitle && (isAnswerFragmentTitle(cleanedTitle) || rawFirstLine.length > 200)) {
                     // RC-7 adjacent (2026-08-21): the model answered the
                     // transcript instead of naming it ("Here's the C++
                     // implementation", "cpp"). Keep the default title; the

@@ -354,6 +354,19 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   // Complexity notation is answer vocabulary, never a meeting name
   // ("The two-pointer approach solves this in O(n) time." — review 2026-08-22).
   /\bO\([^)]{1,12}\)/,
+  // ── Session E live misses (2026-08-23) ────────────────────────────────
+  // First-person answer speech: "I'll switch the solution to C++". A meeting
+  // name never opens with "I " / "I'…" ("I/O Performance Review" is safe —
+  // no space or apostrophe after the I).
+  /^i(?:['’]|\s)/i,
+  // "<language> code <verb>…" describes an answer, it doesn't name a meeting
+  // ("Python code also uses the same backtracking approach"). Verb-anchored
+  // so "Legacy Code Review" stays a valid title.
+  /\bcode (?:also\s+|just\s+)?(?:uses|is|does|works|runs|solves|looks)\b/i,
+  // Malayalam first/second-person pronouns — answer speech in any language
+  // ("ഞാൻ ഇംഗ്ലീഷിൽ സംസാരിക്കാൻ വന്നതാണ്…"). Bare includes: \b is unreliable
+  // outside ASCII. Extend per-script as other languages show up.
+  /ഞാൻ|ഞങ്ങൾ|നിങ്ങൾ|എനിക്ക്/u,
 ];
 
 /** True when a GENERATED title reads as an answer fragment, not a name. */
@@ -366,6 +379,13 @@ export function isAnswerFragmentTitle(title: string): boolean {
   // not pass through this predicate.
   const words = t.split(/\s+/);
   if (words.length === 1 && t === t.toLowerCase() && /^[a-z0-9+#.]+$/.test(t)) return true;
+  // An ENTIRELY-lowercase multi-word Latin title is a truncation fragment
+  // ("ral backend for every keystroke" — the clamp caught a line mid-word,
+  // session E 2026-08-23). Generated titles are Title Case; requiring at
+  // least one ASCII lowercase letter keeps caseless scripts (Malayalam)
+  // out of this rule, and any uppercase anywhere ("iOS Migration Kickoff")
+  // passes.
+  if (words.length >= 2 && /[a-z]/.test(t) && !/[A-Z]/.test(t)) return true;
   return false;
 }
 

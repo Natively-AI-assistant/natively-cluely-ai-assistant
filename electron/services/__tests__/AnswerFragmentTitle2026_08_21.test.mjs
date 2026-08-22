@@ -31,6 +31,15 @@ describe('answer-shaped generated titles are rejected', () => {
     "I don't have the actual question here",
     'Okay, so the main idea is',
     'The two-pointer approach solves this in O(n) time',
+    // Session E live misses (2026-08-23): first-person answer speech, a
+    // "<language> code …" description, a mid-word truncation fragment, and
+    // Malayalam answer sentences (first/second-person pronouns) — none are
+    // meeting names.
+    "I'll switch the solution to C++",
+    'Python code also uses the same backtracking approach',
+    'ral backend for every keystroke',
+    'ഞാൻ ഇംഗ്ലീഷിൽ സംസാരിക്കാൻ വന്നതാണ്, പക്ഷേ നിങ്ങൾ മലയാളത്തിൽ',
+    'നിങ്ങൾ ചോദിക്കുന്നത് എന്താണെന്ന് വ്യക്തമല്ല',
   ]) {
     test(`rejected: "${t}"`, () => assert.equal(isAnswerFragmentTitle(t), true, t));
   }
@@ -45,6 +54,8 @@ describe('legitimate titles pass', () => {
     'Q3 Planning',
     'Tragic Kingdom Retro', // capitalized multi-word stays
     "Sam's 1:1",
+    'iOS Migration Kickoff',
+    'Backtracking Deep-Dive',
   ]) {
     test(`kept: "${t}"`, () => assert.equal(isAnswerFragmentTitle(t), false, t));
   }
