@@ -1176,7 +1176,7 @@ interface AipModelListProps {
      * exists only to stop an un-check from silently re-lighting every row.
      */
     optIn?: boolean;
-    /** Tick/clear every currently VISIBLE row (filter + Previews applied). */
+    /** Tick/clear every currently VISIBLE row (typed filter applied). */
     onBulkToggle?: (ids: string[], enable: boolean) => void;
     /** Set while a write is in flight so the header can report a failure. */
     error?: string | null;
@@ -1192,10 +1192,8 @@ interface AipModelListProps {
     onFirstOpen?: () => void;
 }
 
-/** Above this many models, a filter field and the Previews toggle appear. */
+/** Above this many models, a filter field appears. */
 const AIP_MODEL_FILTER_THRESHOLD = 12;
-/** Preview/experimental/date-stamped variants — matched on the ID, never the label. */
-const AIP_PREVIEW_RE = /preview|exp(erimental)?\b|-latest$|-\d{4}-\d{2}-\d{2}$|-\d{2}-\d{2}$/i;
 
 /**
  * The model allow-list: a summary row that discloses a vertical list.
@@ -1220,7 +1218,6 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const t = useT();
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
-    const [hidePreviews, setHidePreviews] = useState(models.length > AIP_MODEL_FILTER_THRESHOLD);
     const [activeIndex, setActiveIndex] = useState(0);
     const firstOpenFired = useRef(false);
     const listRef = useRef<HTMLDivElement>(null);
@@ -1232,22 +1229,20 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     const isOn = (id: string) => optIn ? enabled.includes(id) : (enabled.length === 0 || enabled.includes(id));
     const enabledCount = (!optIn && enabled.length === 0) ? models.length : enabled.length;
 
-    // Threshold keys off the UNFILTERED count. Keying it off visible rows would make
-    // the filter field appear and vanish as you toggle Previews — exactly the jank
-    // the threshold exists to prevent.
+    // Threshold keys off the UNFILTERED count. Keying it off visible rows would
+    // make the filter field appear and vanish as you type — exactly the jank the
+    // threshold exists to prevent.
     const showFilterBar = models.length > AIP_MODEL_FILTER_THRESHOLD;
 
+    // Every model the provider reports is listed. The typed filter is the ONLY
+    // thing that can hide a row — there is deliberately no category the UI
+    // suppresses on the user's behalf, so a model that exists upstream is always
+    // reachable here.
     const visible = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return models.filter(m => {
-            // An allow-listed model is NEVER hidden by a view filter, or the visible
-            // list would disagree with the count in the header.
-            const listed = enabled.length > 0 && enabled.includes(m.id);
-            if (hidePreviews && !listed && AIP_PREVIEW_RE.test(m.id)) return false;
-            if (!q) return true;
-            return m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q);
-        });
-    }, [models, query, hidePreviews, enabled]);
+        if (!q) return models;
+        return models.filter(m => m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q));
+    }, [models, query]);
 
     const moveTo = useCallback((index: number) => {
         if (visible.length === 0) return;
@@ -1335,16 +1330,6 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                     className="aip-input flex-1"
                                     data-mono="true"
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setHidePreviews(v => !v)}
-                                    aria-pressed={hidePreviews}
-                                    className="aip-chip shrink-0"
-                                    title={t('Hide preview, experimental and dated variants')}
-                                >
-                                    <Check size={9} strokeWidth={2.5} className="aip-chip-check" aria-hidden="true" />
-                                    {t('Previews')}
-                                </button>
                                 {/* Reset means "back to no filter" = ALL, which is incoherent
                                     for an opt-in provider — there Clear above is the real
                                     control and this would just be a second, wrong-labelled one. */}
@@ -1364,8 +1349,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                             They act on the VISIBLE rows, so with 300+ models the filter scopes
                             a family ("gpt" -> Select all); a button that ignored the filter
                             would be a 300-model foot-gun sitting right next to it. With no
-                            filter typed, `visible` is everything — and a SELECTED model is
-                            never hidden by the Previews toggle (see the `listed` check), so
+                            filter typed, `visible` is every model the provider reports, so
                             Deselect all can always reach every selection. */}
                         {onBulkToggle && visible.length > 0 && (
                             <>
@@ -1373,7 +1357,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                     type="button"
                                     onClick={() => onBulkToggle(visible.map(m => m.id), true)}
                                     className="aip-btn aip-btn-sm shrink-0"
-                                    title={query.trim() || hidePreviews
+                                    title={query.trim()
                                         ? t('Select the models currently listed')
                                         : t('Select every model')}
                                 >
@@ -1388,7 +1372,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                         type="button"
                                         onClick={() => onBulkToggle(visible.map(m => m.id), false)}
                                         className="aip-btn aip-btn-sm shrink-0"
-                                        title={query.trim() || hidePreviews
+                                        title={query.trim()
                                             ? t('Deselect the models currently listed')
                                             : t('Deselect every model')}
                                     >
@@ -2520,7 +2504,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
      *
      * Exists because an opt-in provider can front 300+ models: selecting a family
      * of them one checkbox at a time is not a real option. `ids` is whatever the
-     * list is CURRENTLY showing (filter + Previews applied), so "gpt" → Select all
+     * list is CURRENTLY showing (typed filter applied), so "gpt" → Select all
      * ticks the matches and leaves the other 290 alone.
      *
      * Shares handleToggleModel's normalisation rules exactly — including the
