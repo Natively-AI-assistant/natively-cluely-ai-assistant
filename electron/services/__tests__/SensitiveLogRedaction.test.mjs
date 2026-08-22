@@ -39,7 +39,10 @@ test('IntelligenceEngine logs interim transcript metadata without text snippets'
   const source = read('electron/IntelligenceEngine.ts');
 
   assert.match(source, /Speculative inference fired on interim`, \{ length: text\.length, confidence \}/);
-  assert.match(source, /Injecting interim transcript`, \{ length: lastInterim\.text\.length \}/);
+  // RC-1 guard (2026-08-21): the injection now logs the resolver's verdict —
+  // still lengths + reason only, never the transcript text itself.
+  assert.match(source, /Injecting interim transcript`, \{ length: verdict\.text\.length, rawLength: lastInterim\.text\.length, reason: verdict\.reason \}/);
+  assert.match(source, /Interim injection skipped`, \{ rawLength: lastInterim\.text\.length, reason: verdict\.reason \}/);
   assert.doesNotMatch(source, /console\.log[\s\S]{0,120}substring\(/);
 });
 

@@ -658,6 +658,7 @@ interface ElectronAPI {
   onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
+  onSettingsWindowShown: (callback: () => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
@@ -2203,6 +2204,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('undetectable-changed', subscription);
     return () => {
       ipcRenderer.removeListener('undetectable-changed', subscription);
+    };
+  },
+
+  // Settings staleness fix (2026-08-21): the settings window is created once at
+  // app start and only hidden/shown afterwards, so mount-time fetches go stale.
+  // The focus-refresh path never fires for the overlay-anchored popover — it is
+  // shown with showInactive(). This event fires on EVERY show, both paths.
+  onSettingsWindowShown: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('settings-window-shown', subscription);
+    return () => {
+      ipcRenderer.removeListener('settings-window-shown', subscription);
     };
   },
 

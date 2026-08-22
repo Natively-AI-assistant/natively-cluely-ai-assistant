@@ -1,13 +1,13 @@
 // CR-06 (code-review, 2026-08-21) — REAL SQLite, REAL migrations.
 //
-// The v28 page-count repair changes NO schema (pure UPDATE over
+// The v29 page-count repair changes NO schema (pure UPDATE over
 // mode_reference_files, documented idempotent) but was gated on `user_version`,
-// the SCHEMA counter. R-05 correctly made a failed v28 `return` so the version is
-// not stamped past it — but that also blocked v29's vec0 cosine rebuild FOREVER
+// the SCHEMA counter. R-05 correctly made a failed v29 `return` so the version is
+// not stamped past it — but that also blocked v30's vec0 cosine rebuild FOREVER
 // on that profile, while ensureVecTableForDim keeps creating every NEW dimension
 // table as cosine. One database, mixed metrics, all read through a single
 // `similarity = 1 - distance` against one shared minSimilarity threshold — the
-// exact hazard v29 exists to remove, reached through a different door.
+// exact hazard v30 exists to remove, reached through a different door.
 //
 // Schema version and data repair are now separate: the version advances, and the
 // repair records its own app_state marker and retries until it succeeds.
@@ -39,7 +39,7 @@ const { DatabaseManager } = require(path.join(root, 'dist-electron/electron/db/D
 const Database = require(path.join(root, 'node_modules/better-sqlite3'));
 const sqliteVec = require(path.join(root, 'node_modules/sqlite-vec'));
 
-const MARKER = 'pending_page_count_repair_v28';
+const MARKER = 'pending_page_count_repair';
 const dbPath = path.join(userData, 'natively.db');
 
 const openManager = () => { DatabaseManager.instance = undefined; return DatabaseManager.getInstance(); };
@@ -65,18 +65,18 @@ before(() => {
   if (!available) { mgr.close?.(); return; }
   mgr.close();
 
-  // Rewind to v27 and make the v28 repair genuinely fail: drop the column it
+  // Rewind to v28 and make the v29 repair genuinely fail: drop the column it
   // writes, so its UPDATE throws. A real failure, not a stubbed one.
   let db = raw();
   db.exec('ALTER TABLE mode_reference_files DROP COLUMN extracted_page_count');
-  db.pragma('user_version = 27');
+  db.pragma('user_version = 28');
   for (const { name } of vecTables(db)) db.exec(`DROP TABLE IF EXISTS ${name}`);
   db.exec('CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks_768 USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[768])');
   db.prepare('DELETE FROM app_state WHERE key = ?').run(MARKER);
   assert.equal(vecTables(db).every((t) => !t.cosine), true, 'precondition: the vec table must start at L2');
   db.close();
 
-  openManager().close();                       // launch with a FAILING v28
+  openManager().close();                       // launch with a FAILING v29
   db = raw();
   afterFailedRepair = {
     version: db.pragma('user_version', { simple: true }),
@@ -107,11 +107,11 @@ describe('a failed DATA repair must not block the SCHEMA chain', () => {
   });
 
   test('the schema version advances past it', () => {
-    assert.ok(afterFailedRepair.version >= 29,
-      `user_version stalled at ${afterFailedRepair.version}; v29 is blocked and the database keeps mixed vec0 metrics`);
+    assert.ok(afterFailedRepair.version >= 30,
+      `user_version stalled at ${afterFailedRepair.version}; v30 is blocked and the database keeps mixed vec0 metrics`);
   });
 
-  test('v29 ran: the vec0 tables were rebuilt to cosine', () => {
+  test('v30 ran: the vec0 tables were rebuilt to cosine', () => {
     assert.ok(afterFailedRepair.vec.length > 0, 'no vec0 tables found — the check would be vacuous');
     assert.equal(afterFailedRepair.vec.every((t) => t.cosine), true,
       `mixed metrics remain: ${JSON.stringify(afterFailedRepair.vec)}`);
@@ -124,6 +124,6 @@ describe('the deferred repair still runs eventually', () => {
   });
 
   test('the schema version does not regress', () => {
-    assert.ok(afterRetry.version >= 29);
+    assert.ok(afterRetry.version >= 30);
   });
 });

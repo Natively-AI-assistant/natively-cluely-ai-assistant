@@ -18,6 +18,8 @@ const pairBtn = $<HTMLButtonElement>('pairBtn');
 const connectBtn = $<HTMLButtonElement>('connectBtn');
 const captureBtn = $<HTMLButtonElement>('captureBtn');
 const unpairBtn = $<HTMLButtonElement>('unpairBtn');
+const allSitesBtn = $<HTMLButtonElement>('allSitesBtn');
+const allSitesHint = $<HTMLElement>('allSitesHint');
 const msg = $('msg');
 
 function send<R>(message: unknown): Promise<R> {
@@ -172,6 +174,22 @@ captureBtn.addEventListener('click', async () => {
   if (report.outcome.kind === 'unauthorized') await refreshStatus();
 });
 
+// One-time blanket grant: a single Chrome prompt covering https://*/* +
+// http://*/* (declared in optional_host_permissions), after which the desktop
+// hotkey captures ANY site — no per-site grants. This click is the required
+// user gesture; the gesture survives the SW round-trip because we await it.
+allSitesBtn.addEventListener('click', async () => {
+  allSitesBtn.disabled = true;
+  const r = await send<{ granted: boolean; alreadyHad?: boolean }>({ type: 'grant-all-sites' });
+  allSitesBtn.disabled = false;
+  if (r?.granted) {
+    setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites — the hotkey now works everywhere.', 'ok');
+    await refreshAllSites();
+  } else {
+    setMsg('Not granted — per-site capture still works.', 'warn');
+  }
+});
+
 unpairBtn.addEventListener('click', async () => {
   await send({ type: 'unpair' });
   setMsg('Unpaired.', '');
@@ -183,3 +201,16 @@ pairInput.addEventListener('keydown', (e) => {
 });
 
 void refreshStatus();
+void refreshAllSites();
+
+/** Hide the all-sites button once granted; show the explainer while offered. */
+async function refreshAllSites(): Promise<void> {
+  try {
+    const r = await send<{ granted: boolean }>({ type: 'all-sites-status' });
+    const granted = !!r?.granted;
+    allSitesBtn.classList.toggle('hidden', granted);
+    allSitesHint.classList.toggle('hidden', granted);
+  } catch {
+    /* leave defaults */
+  }
+}

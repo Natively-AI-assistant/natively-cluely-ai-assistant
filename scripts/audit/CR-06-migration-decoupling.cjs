@@ -70,18 +70,18 @@ const check = (label, ok, detail = '') => {
   const startVersion = db.pragma('user_version', { simple: true });
   console.log(`fresh database is at user_version=${startVersion}`);
 
-  // 2. Rewind to 27 and BREAK the v28 repair the way the review described (a row
+  // 2. Rewind to 28 and BREAK the v28 repair the way the review described (a row
   //    shape the repair's SQL cannot handle). Dropping the column the repair
   //    writes makes its UPDATE throw — a real failure, not a stubbed one.
   db.exec('ALTER TABLE mode_reference_files DROP COLUMN extracted_page_count');
-  db.pragma('user_version = 27');
+  db.pragma('user_version = 28');
   // Put the vec tables back to the pre-v29 state so we can see whether v29 runs.
   for (const { name } of vecMetric(db)) db.exec(`DROP TABLE IF EXISTS ${name}`);
   db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks_768 USING vec0(chunk_id TEXT PRIMARY KEY, embedding float[768])");
-  db.prepare('DELETE FROM app_state WHERE key = ?').run('pending_page_count_repair_v28');
+  db.prepare('DELETE FROM app_state WHERE key = ?').run('pending_page_count_repair');
   const before = vecMetric(db);
   db.close();
-  console.log(`rewound to user_version=27; vec tables before: ${JSON.stringify(before)}`);
+  console.log(`rewound to user_version=28; vec tables before: ${JSON.stringify(before)}`);
 
   // 3. Re-open: v28 must FAIL, and v29 must still run.
   console.log('\n--- launch with a failing v28 repair ---');
@@ -90,7 +90,7 @@ const check = (label, ok, detail = '') => {
 
   db = raw();
   const version = db.pragma('user_version', { simple: true });
-  const pending = db.prepare('SELECT value FROM app_state WHERE key = ?').get('pending_page_count_repair_v28');
+  const pending = db.prepare('SELECT value FROM app_state WHERE key = ?').get('pending_page_count_repair');
   const after = vecMetric(db);
   db.close();
 
@@ -99,8 +99,8 @@ const check = (label, ok, detail = '') => {
   console.log(`  vec tables after     : ${JSON.stringify(after)}`);
 
   check('the failed DATA repair recorded a pending marker', pending?.value === '1');
-  check('the SCHEMA chain advanced past the failed data repair', version >= 29, `user_version=${version}`);
-  check('v29 ran: vec0 tables are cosine, not L2',
+  check('the SCHEMA chain advanced past the failed data repair', version >= 30, `user_version=${version}`);
+  check('v30 ran: vec0 tables are cosine, not L2',
     after.length > 0 && after.every((t) => t.cosine),
     JSON.stringify(after));
 
@@ -114,12 +114,12 @@ const check = (label, ok, detail = '') => {
   mgr.close();
 
   db = raw();
-  const pending2 = db.prepare('SELECT value FROM app_state WHERE key = ?').get('pending_page_count_repair_v28');
+  const pending2 = db.prepare('SELECT value FROM app_state WHERE key = ?').get('pending_page_count_repair');
   const version2 = db.pragma('user_version', { simple: true });
   db.close();
   console.log(`  pending marker: ${JSON.stringify(pending2)}   user_version: ${version2}`);
   check('the deferred repair RETRIED on a later launch and cleared its marker', pending2 === undefined);
-  check('the schema version did not regress', version2 >= 29);
+  check('the schema version did not regress', version2 >= 30);
 
   fs.rmSync(userData, { recursive: true, force: true });
   console.log(failures === 0

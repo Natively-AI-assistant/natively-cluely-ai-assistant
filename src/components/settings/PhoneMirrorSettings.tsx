@@ -530,7 +530,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               <div className="text-text-secondary text-xs mt-1 leading-relaxed">
                 Pair the companion extension to send the active tab to the desktop.{' '}
                 <kbd className="px-1 py-0.5 rounded bg-bg-main border border-border-subtle font-mono text-[10px]">
-                  {isMac ? '⌘' : 'Ctrl'}+Shift+Y
+                  {isMac ? '⌘' : 'Ctrl'}+Y
                 </kbd>{' '}
                 to capture manually.
               </div>

@@ -64,13 +64,11 @@ module.exports = {
   extraMetadata: {
     ...(base.extraMetadata || {}),
     nativelySigned: true,
-    // Field-verifiable proof that the keychain-access-group entitlement shipped
-    // in THIS build. The entitlement only takes effect at signing time and no
-    // unit CI signs the .app, so without a value baked into the package there is
-    // no way to tell a build that carries it from one that silently lost it —
-    // and losing it reintroduces issue #322 on the next re-sign. Diagnostics can
-    // read this back from a real install.
-    keychainGroupEntitled: 'BJM29W3UQ6.com.electron.meeting-notes',
+    // NOTE: `keychainGroupEntitled` used to be baked here to prove the
+    // keychain-access-groups entitlement shipped. That entitlement was removed on
+    // 2026-08-19 — it is restricted/profile-requiring and, with no embedded
+    // provisioning profile, AMFI refused to exec the signed app at all. See
+    // MACOS_LAUNCH_FAILURE_2026-08-19.md and build/entitlements.mac.plist.
   },
   // afterSign: notarize the .app via scripts/notarize.js, which adds STAPLE-RETRY
   // recovery for the Apple CDN ticket-propagation race (Error 65). We do NOT use

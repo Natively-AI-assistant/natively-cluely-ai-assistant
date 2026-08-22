@@ -272,3 +272,39 @@ describe('arbitrary-origin capture (2026-08-02 hotkey defect)', () => {
     assert.ok(!(manifest.permissions ?? []).includes('<all_urls>'));
   });
 });
+
+// 2026-08-18: one-time "Allow on all sites" — a single prompt covering the
+// broad optional_host_permissions patterns so the desktop hotkey works on any
+// site without per-site grants. Must be opt-in, never widen what's requested,
+// and degrade gracefully on denial.
+describe('requestAllSitesPermission', () => {
+  test('requests exactly the two broad patterns declared in the manifest', async () => {
+    const { requestAllSitesPermission, ALL_SITES_ORIGINS } = await import(pathToFileURL(modPath).href);
+    assert.deepEqual(ALL_SITES_ORIGINS, ['https://*/*', 'http://*/*']);
+    let seen = null;
+    const api = {
+      async contains() { return false; },
+      async request(p) { seen = p.origins; return true; },
+    };
+    const r = await requestAllSitesPermission(api);
+    assert.equal(r.granted, true);
+    assert.deepEqual(seen, ALL_SITES_ORIGINS);
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../manifest.json'), 'utf8'));
+    for (const o of ALL_SITES_ORIGINS) {
+      assert.ok(manifest.optional_host_permissions.includes(o), `${o} must be declared optional`);
+    }
+  });
+
+  test('already-granted short-circuits without prompting; denial resolves gracefully', async () => {
+    const { requestAllSitesPermission, hasAllSitesPermission } = await import(pathToFileURL(modPath).href);
+    let requested = 0;
+    const grantedApi = { async contains() { return true; }, async request() { requested++; return true; } };
+    const r1 = await requestAllSitesPermission(grantedApi);
+    assert.deepEqual({ granted: r1.granted, alreadyHad: r1.alreadyHad, requested }, { granted: true, alreadyHad: true, requested: 0 });
+    assert.equal(await hasAllSitesPermission(grantedApi), true);
+    const deniedApi = { async contains() { return false; }, async request() { return false; } };
+    const r2 = await requestAllSitesPermission(deniedApi);
+    assert.equal(r2.granted, false);
+    assert.match(r2.reason, /denied/);
+  });
+});

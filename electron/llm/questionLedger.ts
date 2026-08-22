@@ -38,7 +38,7 @@ import { resolveFollowUpOrClarify } from './FollowUpResolver';
 import type { PunctuationSource } from './punctuationProvenance';
 import {
     SOCIAL_PLEASANTRY as PLEASANTRY, WAIT_IDIOM,
-    CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT,
+    CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT, TASK_DIRECTIVE,
     QUESTION_MARK, INTERROGATIVE_LEAD, IMPERATIVE_ASK, scoreAskShape,
 } from './questionShapes';
 
@@ -116,15 +116,11 @@ export interface CandidateTurnInput {
 // (bare-mark score, unknown punctuation provenance, and the tell-me family
 // missing from the lead), which contaminated the ledger_parity /
 // ledger_divergence telemetry that decides whether this ledger gets promoted.
-// TASK_DIRECTIVE below stays ledger-LOCAL on purpose: it is a capability the
-// live extractor genuinely lacks, so divergence it produces is architecture —
-// exactly what the shadow exists to measure.
-// Task directives ("Solve Two Sum.", "Rate your Python skills out of 10.",
-// "Convince me…") — imperative-mood asks the tell-me family misses
-// (ledger-benchmark 2026-08-18: 9 of 10 no-ask windows). Anchored to the
-// clause START (imperative position) or a comma boundary ("…analyst role,
-// connect it for me") so declarative uses ("We design for scale") don't match.
-const TASK_DIRECTIVE = /(?:^|,\s*)(?:(?:ok(?:ay)?|so|now|next|alright|great|please)[,.!]?\s+)*(?:please\s+)?(solve|write|implement|rate|rank|convince|design|build|debug|code|optimi[sz]e|refactor|estimate|compare|sketch|whiteboard|connect|reverse|check|find|print|sort)\b/i;
+// TASK_DIRECTIVE was ledger-local until live session A (2026-08-20) proved the
+// live extractor had the identical gap — "Rate your SQL out of ten",
+// "Convince me you're right for this role" and "Solve two sum" all scored 0.3
+// there and lost profile grounding. It is now SHARED (questionShapes.ts), so
+// this capability is no longer a source of ledger/extractor divergence.
 const CORRECTION_LEAD = /^(?:(?:sorry|no|actually|wait)[,.!]?\s+)+i\s+meant?\b/i;
 // Discourse/backchannel prefixes that precede a real ask in the same breath
 // ("That makes sense, but why…", "Sorry, before that — why…"). Stripped

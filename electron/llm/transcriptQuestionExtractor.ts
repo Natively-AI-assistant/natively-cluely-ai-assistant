@@ -22,6 +22,7 @@ import { TranscriptTurn, cleanTranscript } from './transcriptCleaner';
 import {
     SOCIAL_PLEASANTRY, WAIT_IDIOM,
     CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT, SHORT_TOPIC_SHIFT,
+    WH_NOUN_AUX, TASK_DIRECTIVE,
     QUESTION_MARK, INTERROGATIVE_LEAD, IMPERATIVE_ASK, scoreAskShape,
 } from './questionShapes';
 
@@ -434,8 +435,16 @@ export function extractLatestQuestion(
         CLAUSE_INTERROGATIVE.test(scoringText)
         || AUX_SECOND_PERSON.test(scoringText)
         || TRAILING_WH_FRAGMENT.test(scoringText)
+        || WH_NOUN_AUX.test(scoringText)
         || (scoringText.split(/\s+/).length <= 4 && SHORT_TOPIC_SHIFT.test(scoringText))
     );
+    // Task directives ("Rate your SQL out of ten", "Convince me you're right
+    // for this role", "Solve two sum") are imperative asks with no '?', no
+    // clause-initial lead and no tell-me phrase. Unlike the clause-recovery
+    // patterns this is provenance-INDEPENDENT: an imperative is imperative
+    // whether or not the provider punctuates. Live session A (2026-08-20):
+    // these scored 0.3 and lost the résumé on every press.
+    const hasTaskDirective = TASK_DIRECTIVE.test(scoringText);
 
     // Follow-up detection: demonstrative-only ask, a STRONG explicit backward-
     // reference marker (unambiguous regardless of sentence length), or a WEAK
@@ -463,6 +472,7 @@ export function extractLatestQuestion(
     // interrogative or imperative shape, or an explicit backward reference.
     const isAnswerable = hasMark || hasLead
         || hasClauseInterrogative
+        || hasTaskDirective
         || IMPERATIVE_ASK.test(scoringText)
         || DEMONSTRATIVE_FOLLOW_UP.test(scoringText)
         || STRONG_FOLLOW_UP_MARKERS.test(scoringText);
@@ -533,6 +543,7 @@ export function extractLatestQuestion(
     const coreConfidence = scoreAskShape({ hasMark, hasLead, punctuationSource: chosen.punctuationSource });
     if (coreConfidence !== null) confidence = coreConfidence;
     else if (hasClauseInterrogative) confidence = 0.75;
+    else if (hasTaskDirective) confidence = 0.75;
     if (questionType !== 'general' && confidence < 0.8) confidence = 0.7;
 
     // Social-pleasantry down-weight: a question-shaped chit-chat turn ("did you
@@ -541,13 +552,23 @@ export function extractLatestQuestion(
     // substantive classified type (a real question bundled after the pleasantry,
     // e.g. "...found us okay? Great — walk me through your last project."), in
     // which case classifyType already returned something other than 'general'.
-    if (SOCIAL_PLEASANTRY.test(scoringText) && questionType === 'general') {
+    //
+    // 'follow_up' counts as non-substantive here (live session A, 2026-08-20):
+    // "How's your day going so far? I know it's evening over in Kochi" set
+    // isFollowUp, which short-circuits classifyType to 'follow_up', so the cap
+    // was skipped and small talk scored 0.95 — clearing BOTH the grounding and
+    // the speculative gate. 'follow_up' is a STRUCTURAL label, not a
+    // substantive topic, so it must not act as the escape hatch that only a
+    // real classified topic (identity/profile/jd/negotiation/behavioral/
+    // technical) was meant to open.
+    const nonSubstantiveType = questionType === 'general' || questionType === 'follow_up';
+    if (SOCIAL_PLEASANTRY.test(scoringText) && nonSubstantiveType) {
         confidence = Math.min(confidence, 0.5);
     }
     // Wait/hold idiom cap (see WAIT_IDIOM above): same shape as the
     // pleasantry down-weight — below both live gates unless a substantive
     // classified type says a real ask shares the turn.
-    if (WAIT_IDIOM.test(scoringText) && questionType === 'general') {
+    if (WAIT_IDIOM.test(scoringText) && nonSubstantiveType) {
         confidence = Math.min(confidence, 0.5);
     }
 

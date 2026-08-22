@@ -8,7 +8,7 @@ import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
-import { cleanMeetingTitle, cleanString } from './services/meeting/MeetingSummaryV3';
+import { cleanMeetingTitle, cleanString, isAnswerFragmentTitle } from './services/meeting/MeetingSummaryV3';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
 import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
 import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
@@ -302,7 +302,14 @@ export class MeetingPersistence {
                 // never reach here — this branch is skipped when metadata.title
                 // is set — so their length is left alone.
                 const cleanedTitle = cleanMeetingTitle(generatedTitle);
-                if (cleanedTitle) {
+                if (cleanedTitle && isAnswerFragmentTitle(cleanedTitle)) {
+                    // RC-7 adjacent (2026-08-21): the model answered the
+                    // transcript instead of naming it ("Here's the C++
+                    // implementation", "cpp"). Keep the default title; the
+                    // structured V3 summary title updates it later, and a user
+                    // rename outranks both via user_titled.
+                    console.warn(`[MeetingPersistence] Generated title rejected as answer fragment: "${cleanedTitle}"`);
+                } else if (cleanedTitle) {
                     if (cleanedTitle !== cleanString(generatedTitle)) {
                         console.warn(`[MeetingPersistence] Generated title clamped: ${cleanString(generatedTitle).length} chars -> "${cleanedTitle}"`);
                     }

@@ -602,18 +602,22 @@ export class SessionTracker {
     getContextWithInterim(lastSeconds: number = 120): ContextItem[] {
         const contextItems = [...this.getContext(lastSeconds)];
 
+        // RC-1 (session C, 2026-08-21): same resolver as the WTA injection site
+        // in IntelligenceEngine — a cumulative provider interim (measured up to
+        // 10K chars) must never be appended whole; only its novel tail is.
         const lastInterim = this.lastInterimInterviewer;
         if (lastInterim && lastInterim.text.trim().length > 0) {
-            const lastItem = contextItems[contextItems.length - 1];
-            const isDuplicate = lastItem &&
-                lastItem.role === 'interviewer' &&
-                (lastItem.text === lastInterim.text ||
-                    Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
-
-            if (!isDuplicate) {
+            const { resolveInterimInjection } = require('./llm/interimInjectionGuard') as typeof import('./llm/interimInjectionGuard');
+            const verdict = resolveInterimInjection({
+                interim: { text: lastInterim.text, timestamp: lastInterim.timestamp },
+                recentInterviewerFinals: contextItems.filter(item => item.role === 'interviewer'),
+                lastContextItem: contextItems[contextItems.length - 1] ?? null,
+                now: Date.now(),
+            });
+            if (verdict.action === 'inject') {
                 contextItems.push({
                     role: 'interviewer',
-                    text: lastInterim.text,
+                    text: verdict.text,
                     timestamp: lastInterim.timestamp,
                 });
             }

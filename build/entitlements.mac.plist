@@ -34,37 +34,34 @@
     <true/>
 
     <!--
-      KEYCHAIN ACCESS GROUP — issue #322 forward-stability.
+      KEYCHAIN ACCESS GROUP — REMOVED 2026-08-19. DO NOT RE-ADD WITHOUT A PROFILE.
 
-      Electron safeStorage (Chromium OSCrypt) stores its key as a generic-password
-      item, "Natively Safe Storage", in the login keychain. Without a stable access
-      group that item's ACL is bound to the CONCRETE signing context that created
-      it, so a later re-sign (new certificate, changed entitlement set, moving from
-      an unsigned build to a signed one) can make safeStorage.decryptString() throw
-      on an item this same app wrote. That is issue #322: keys that "show as invalid
-      after restart".
+      `keychain-access-groups` is a RESTRICTED (profile-requiring) entitlement. macOS only
+      honours it when the signed bundle embeds a matching provisioning profile. This build signs
+      with `provisioningProfile=none`, so AMFI rejected the binary at exec:
 
-      TeamID.appId — BJM29W3UQ6 (electron-builder.signed.cjs) + com.electron.meeting-notes
-      (package.json build.appId). A typo in either half silently reintroduces #322,
-      which is why KeychainEntitlement.test.mjs pins all three against their sources.
+        amfid: ... not valid: AppleMobileFileIntegrityError Code=-413 "No matching profile found"
+        kernel AMFI: Code has restricted entitlements, but the validation of its code
+          signature failed.  Unsatisfied Entitlements:
+        kernel: proc NNNN: load code signature error 4 for file "Natively"
 
-      MIGRATION RISK, STATED PLAINLY: adding an entitlement changes the signature.
-      The first launch after the release that carries this may itself be the
-      signing-context change that fails to decrypt the OLD item. The recovery path
-      added alongside it is what makes that survivable rather than terminal — the
-      store is preserved, three failed cold starts escalate to needsCredentialReentry
-      rather than an unrecoverable empty state, and the app-managed fallback is
-      re-keyed when provenance proves the keyring file is foreign. It still MUST be
-      verified on a signed, notarized build against a machine holding a pre-existing
-      "Natively Safe Storage" item before it ships.
+      The kernel kills the process before dyld runs, so NOTHING catches this: no crash report is
+      written, and `spctl -a`, a strict deep `codesign` verify and `stapler validate` all keep
+      reporting the bundle as perfect. 2.8.6 signed, notarized and stapled cleanly and still could
+      not launch — `open` reported only `RBSRequestErrorDomain Code=5` / POSIX 163 "Launchd job
+      spawn failed". Proven by A/B: two copies of an identical trivial binary signed with the same
+      Developer ID identity, differing ONLY by this entitlement — the one carrying it is SIGKILLed
+      (exit 137), the other runs. See MACOS_LAUNCH_FAILURE_2026-08-19.md.
 
-      Helpers do NOT get this: safeStorage runs in the main process only, and
-      entitlements.mac.inherit.plist is asserted to omit it.
+      This does NOT resolve issue #322; it restores the 2.8.5 status quo. The recovery path
+      (three failed cold starts escalate to needsCredentialReentry rather than an unrecoverable
+      empty state) is untouched and remains the mitigation. Re-adding this entitlement REQUIRES
+      registering an App ID for com.electron.meeting-notes with Keychain Sharing, generating a
+      Developer ID provisioning profile, and wiring mac.provisioningProfile in
+      electron-builder.signed.cjs — and that route carries its own reported risk of a
+      login-keychain prompt on every launch (electron/electron#47341), so it must be verified on a
+      signed build BEFORE it ships. KeychainEntitlement.test.mjs pins the absence.
     -->
-    <key>keychain-access-groups</key>
-    <array>
-        <string>BJM29W3UQ6.com.electron.meeting-notes</string>
-    </array>
 
     <!--
       INTENTIONALLY OMITTED (verified against Apple docs + codebase audit, 2026-05-29):

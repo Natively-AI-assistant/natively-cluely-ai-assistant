@@ -663,16 +663,35 @@ export const isStealthEvasionQuestion = (question: string): boolean => {
   if (/\b(use|using|run|running)\s+(it|this|natively|nativley|the (?:app|tool|overlay))\b/.test(t)
     && /\b(without (?:them|the interviewer|anyone|him|her|people|him\/her) (?:know|notic|see|find|realiz|realis)\w*|secretly|covertly|on the (?:sly|dl|down[- ]?low)|so (?:nobody|no one|they) (?:know|notic|see)\w*|undetect\w*|without being (?:caught|seen|noticed))\b/.test(t)) return true;
   // (b) soft visibility verb aimed at an interview/proctor/screen-share object.
-  // EXCLUDE a candidate-possessive object ("will the interviewer see MY code/
-  // portfolio/answer/screen?") — that's a benign visibility question, not an ask to
-  // hide the TOOL. Only fire when there's no "my/mine" object the candidate owns
-  // (code-review 2026-06-07 false-positive-refusal fix).
-  const candidatePossessiveVisibility = /\b(see|view|notice|read|watch)\b[^.?!]{0,30}\bmy\b/.test(t)
-    || /\bmy (code|portfolio|answer|screen|solution|work|repo|link|profile)\b/.test(t);
-  if (hasObject && STEALTH_SOFT_VISIBILITY_RE.test(t) && !candidatePossessiveVisibility
+  // SENTENCE-SCOPED (RC-1a, live session C 2026-08-21): the verb and the object
+  // must co-occur in ONE sentence. Tested whole-string, a long multi-question
+  // turn paired "the call" from the interviewer's opener with "noticeably" from
+  // a performance question ~700 chars later, routing 17 real technical answers
+  // into the safe-decline contract. A genuine stealth ask ("can the interviewer
+  // see this overlay?") always keeps verb and object in the same sentence.
+  // Branch (a) above deliberately stays whole-string — explicit evasion intent
+  // is a strong signal and over-coverage there is the documented safety posture.
+  // Newlines count as sentence boundaries too: an UNPUNCTUATED transcript
+  // (local STT emits no punctuation) would otherwise be one giant "sentence"
+  // and reopen the cross-match this scoping exists to close (review pass,
+  // 2026-08-22).
+  for (const sentence of t.split(/[.?!…\n]+/)) {
+    if (!STEALTH_SOFT_VISIBILITY_RE.test(sentence)) continue;
     // require the object to be an interviewer/proctor/screen-share (not a bare
     // "monitor" hardware word) so "does it work with a second monitor" is safe.
-    && /\b(interview\w*|proctor\w*|invigilat\w*|recruiter|examiner|screen[- ]?shar\w*|screenshar\w*|share my screen|sharing my screen|the (?:call|meeting|assessment|exam|test))\b/.test(t)) return true;
+    if (!/\b(interview\w*|proctor\w*|invigilat\w*|recruiter|examiner|screen[- ]?shar\w*|screenshar\w*|share my screen|sharing my screen|the (?:call|meeting|assessment|exam|test))\b/.test(sentence)) continue;
+    // EXCLUDE a candidate-possessive object ("will the interviewer see MY code/
+    // portfolio/answer/screen?") — a benign visibility question, not an ask to
+    // hide the TOOL (code-review 2026-06-07 false-positive-refusal fix)...
+    const candidatePossessiveVisibility = /\b(see|view|notice|read|watch)\b[^.?!]{0,30}\bmy\b/.test(sentence)
+      || /\bmy (code|portfolio|answer|screen|solution|work|repo|link|profile)\b/.test(sentence);
+    // ...UNLESS the same sentence ALSO aims a visibility verb at the TOOL
+    // itself ("if I share my screen on the call, will they detect the tool?") —
+    // then the possessive is incidental and the tool-visibility ask wins.
+    const toolVisibility = /\b(see|sees|notice\w*|detect\w*|spot|catch\w*|find)\b[^.?!]{0,40}\b(the (?:tool|app|overlay|window|ui)|natively|nativley|it)\b/.test(sentence);
+    if (candidatePossessiveVisibility && !toolVisibility) continue;
+    return true;
+  }
   return false;
 };
 
@@ -2212,6 +2231,24 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
   `Cover the same substance — lead with the direct answer, ground every claim, close naturally. ` +
   `Never print "Speakable Final Answer", "Direct Answer", "The Honest Gap", "Short Fit Summary", or any other label.`;
 
+/**
+ * The adaptive per-turn LENGTH directive as a bare line ('' when the plan's
+ * speakability tier doesn't warrant one). Extracted (RC-5, session C
+ * 2026-08-21) so the V3 prompt path can deliver it too: V3's composed user
+ * message replaces the whole <answer_contract>, and with it the only length
+ * target the model ever saw — measured live, 73/85 answers overshot the
+ * contract's own 60-word target (median 155, p90 310) because no per-turn
+ * length line was delivered at all on V3-owned turns.
+ */
+export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
+  if (plan.answerStyle && plan.answerStyle !== 'default') return '';
+  const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question);
+  if (tier !== 'SPOKEN_SHORT') return '';
+  const band = classifyShortBand(plan.answerType, plan.answerStyle, plan.question);
+  const t = shortBandTargetWords(band);
+  return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number.`;
+};
+
 export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {
   const verificationBlock = (includeVerificationSpec && isCodingAnswerType(plan.answerType))
     ? `\n\n${CODING_VERIFICATION_INSTRUCTION}`
@@ -2280,15 +2317,8 @@ export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationS
   // cue — SPOKEN_FULL / STRUCTURED_FULL and explicit styles own their own length, so emit
   // nothing for them (additive, non-conflicting). Prompt-guidance only; the deterministic
   // trimmer is unchanged.
-  let lengthDirective = '';
-  if (!plan.answerStyle || plan.answerStyle === 'default') {
-    const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question);
-    if (tier === 'SPOKEN_SHORT') {
-      const band = classifyShortBand(plan.answerType, plan.answerStyle, plan.question);
-      const t = shortBandTargetWords(band);
-      lengthDirective = `\n\nLENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number.`;
-    }
-  }
+  const _lengthLine = renderLengthDirectiveForPlan(plan);
+  const lengthDirective = _lengthLine ? `\n\n${_lengthLine}` : '';
   // Speakable-by-default (manual regression 2026-06-12): scaffolded profile
   // templates become internal thinking structure; the rendered answer is
   // natural prose unless the user explicitly asked for structure.

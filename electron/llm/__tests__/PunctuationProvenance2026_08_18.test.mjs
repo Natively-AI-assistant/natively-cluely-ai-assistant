@@ -34,8 +34,15 @@ describe('punctuationSourceFor: provider capability map', () => {
     ['deepgram', false, 'provider_interim'],
     ['google', true, 'provider_final'],
     ['google', false, 'provider_interim'],
-    ['local-whisper', true, 'provider_final'],
-    ['local-whisper', false, 'provider_interim'],
+    // REVISED after live shadow session A (2026-08-20). This pair originally
+    // expected provider_final/provider_interim on the reasoning that Whisper
+    // output is "model-punctuated". Live measurement falsified it: across 28
+    // interviewer turns LocalWhisper emitted '.' or ',' on 15 (54%) but a '?'
+    // on only 3 (11%). Question detection keys on question marks specifically,
+    // so the punctuating stamp suppressed clause recovery and pushed 20 of 28
+    // presses to 0.3 — under the 0.6 grounding gate, résumé dropped.
+    ['local-whisper', true, 'unavailable'],
+    ['local-whisper', false, 'unavailable'],
     // Providers with unconfigured/unguaranteed punctuation → unavailable
     // (scoring must treat a missing '?' as NEUTRAL for these, never negative)
     ['soniox', true, 'unavailable'],

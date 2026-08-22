@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Natively Companion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Official companion extension for Natively. Securely sends active tab content to your local workspace on demand.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvXiNEU3gKhfDitCs6yRT5YYNfe2j+AEUsKPbO9igNHCvvpgXAjNXqL8U+tCgZNoOflFduXMN27EhV5WsYtrGiBM4Be6DO8bxjmmNHkmsnFOsW5NeLMpwdOfUtV9peOv+J0Oztys/YuMBT8SHOKmBUK2/B4vxiWxEyuPKGkfAQ5a/6MQZnygDwTaVtQSiP0H58aOcZxsKjSKceplSM1MdgmXL/VKOsp+mtTdxWO29zC61RwEn/mupx7Srh/JDU6F9dICkviL3Sahltoer3xRkBls1exR66vOBLqqbedDLcQBuGX8p8UXxbH7e7zs1QzJhGSol/E1qmyg1SJ8uhzgAnQIDAQAB",
   "minimum_chrome_version": "114",

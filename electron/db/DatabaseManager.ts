@@ -68,7 +68,7 @@ export interface Meeting {
  * NOT the schema `user_version`: the repair changes no schema, so a failure must
  * not hold later SCHEMA migrations (notably v29's vec0 cosine rebuild) hostage.
  */
-const PAGE_COUNT_REPAIR_PENDING_KEY = 'pending_page_count_repair_v28';
+const PAGE_COUNT_REPAIR_PENDING_KEY = 'pending_page_count_repair';
 
 export class DatabaseManager {
     private static instance: DatabaseManager;
@@ -1414,6 +1414,25 @@ export class DatabaseManager {
             this.db.pragma('user_version = 27');
         }
 
+        // Version 27 → 28: user_titled flag on meetings (RC-7, 2026-08-21).
+        // A user rename was silently overwritten TWICE: by the post-call title
+        // generation in saveMeeting's final write, and unconditionally by
+        // replaceDetailedSummary when the deferred V3 summary landed. The flag
+        // is set by updateMeetingTitle (the one rename entry point) and makes
+        // every generated-title write yield to it.
+        if (version < 28) {
+            console.log('[DatabaseManager] Applying migration v27 → v28: meetings.user_titled');
+            try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
+            this.db.pragma('user_version = 28');
+        }
+
+        // MERGE NOTE (2026-08-23): SECOND renumbering. main advanced and claimed
+        // 28 for meetings.user_titled — a real ALTER TABLE — while this branch's
+        // page-count repair also sat on 28. Whichever stamped first would have
+        // permanently suppressed the other. main is the shared trunk, so it keeps
+        // 28 and this branch moved to 29 (page-count repair) and 30 (vec0 cosine
+        // rebuild). Neither number was ever released, so no installed profile can
+        // be sitting on the old numbering.
         // MERGE NOTE (2026-08-19): main's v26 → v27 (usage_outbox) and this
         // branch's page-count repair BOTH claimed version 27. Whichever ran
         // first would have stamped user_version = 27 and permanently suppressed
@@ -1456,7 +1475,7 @@ export class DatabaseManager {
         // preserved (a failed repair is never forgotten); what changes is that a
         // failed DATA repair no longer holds the SCHEMA chain hostage.
         const pageRepairPending = (() => {
-            if (version < 28) return true;
+            if (version < 29) return true;
             try {
                 const row = this.db.prepare('SELECT value FROM app_state WHERE key = ?')
                     .get(PAGE_COUNT_REPAIR_PENDING_KEY) as { value?: string } | undefined;
@@ -1475,7 +1494,7 @@ export class DatabaseManager {
         })();
 
         if (pageRepairPending) {
-            console.log('[DatabaseManager] Applying migration v27 → v28: Repair v22 page_count/extracted_page_count corruption');
+            console.log('[DatabaseManager] Applying migration v28 → v29: Repair v22 page_count/extracted_page_count corruption');
             try {
                 const repaired = this.db.prepare(`
                     UPDATE mode_reference_files
@@ -1554,28 +1573,29 @@ export class DatabaseManager {
                       AND page_count IS NOT NULL
                       AND content LIKE '%[Page %]%'
                 `).run();
-                console.log(`[DatabaseManager] v28 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
+                console.log(`[DatabaseManager] v29 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
                 // Succeeded — clear any pending marker from an earlier failed launch.
                 try {
                     this.db.prepare('DELETE FROM app_state WHERE key = ?').run(PAGE_COUNT_REPAIR_PENDING_KEY);
                 } catch { /* the repair itself is what matters */ }
             } catch (e) {
-                // R-05: this block deliberately swallows rather than re-throwing so
-                // the repair retries next launch. But `version` above is read ONCE
-                // into a const, so control fell straight into `if (version < 29)`
-                // with the stale snapshot (27); v29 then succeeded and stamped
-                // user_version = 29. On the next launch `version < 28` was false and
-                // the page-count repair NEVER ran again — the comment below was a
-                // false claim, and it was this commit's own v28 block that made it
-                // false. Re-reading the pragma would not help: 27 < 29 is still true.
-                // A swallowed failure must STOP the chain so the version stays put.
-                // CR-06: record the repair as still-pending in its OWN marker rather
-                // than stalling the schema chain. It retries on every later launch
-                // until it succeeds; v29 is no longer blocked behind it.
+                // R-05 found the original hazard here: this block swallows rather
+                // than re-throwing so the repair retries next launch, but `version`
+                // is read ONCE into a const, so control fell straight through to the
+                // NEXT migration with the stale snapshot — which then succeeded and
+                // stamped a version past this one, so the repair never ran again.
+                // Re-reading the pragma does not help; the stale const is the point.
+                //
+                // CR-06 removes the conflict instead of stalling the chain: this
+                // repair changes no schema, so the version may advance while the
+                // repair itself is recorded as still-owed in its own marker and
+                // retried on every later launch. R-05's requirement — a failed
+                // repair is never forgotten — is preserved by the marker, not by
+                // freezing user_version.
                 try {
                     this.db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)')
                         .run(PAGE_COUNT_REPAIR_PENDING_KEY, '1');
-                    console.error('[DatabaseManager] v28 page-count repair failed; marked pending and will retry on the next launch. '
+                    console.error('[DatabaseManager] page-count repair failed; marked pending and will retry on the next launch. '
                         + 'Later migrations still run — this repair changes no schema:', e);
                 } catch (markErr) {
                     // Could not even record the marker, so the retry would be lost.
@@ -1586,7 +1606,7 @@ export class DatabaseManager {
                     return;
                 }
             }
-            if (version < 28) this.db.pragma('user_version = 28');
+            if (version < 29) this.db.pragma('user_version = 29');
         }
 
         // Version 28 → 29: rebuild the vec0 tables with distance_metric=cosine (F-410).
@@ -1611,8 +1631,8 @@ export class DatabaseManager {
         // vec0 virtual tables cannot be ALTERed, so the metric change requires
         // a drop + recreate + backfill from the embedding BLOBs still held in
         // chunks / chunk_summaries.
-        if (version < 29) {
-            console.log('[DatabaseManager] Applying migration v28 → v29: rebuild vec0 tables with cosine distance');
+        if (version < 30) {
+            console.log('[DatabaseManager] Applying migration v29 → v30: rebuild vec0 tables with cosine distance');
             try {
                 let rebuilt = 0;
                 // R-08: enumerate the dimensions that actually EXIST, not just
@@ -1675,10 +1695,10 @@ export class DatabaseManager {
                     }
                 }
                 })();
-                console.log(`[DatabaseManager] v29: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
-                this.db.pragma('user_version = 29');
+                console.log(`[DatabaseManager] v30: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
+                this.db.pragma('user_version = 30');
             } catch (e) {
-                console.error('[DatabaseManager] v29 vec0 cosine rebuild failed (leaving version at 28 to retry next launch):', e);
+                console.error('[DatabaseManager] v30 vec0 cosine rebuild failed (leaving version at 29 to retry next launch):', e);
             }
         }
 
@@ -2804,9 +2824,15 @@ export class DatabaseManager {
         }
 
         const insertMeeting = this.db.prepare(`
-            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO meetings (id, title, start_time, duration_ms, summary_json, created_at, calendar_event_id, source, is_processed, summary_status, user_titled)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
+        // RC-7 (2026-08-21): INSERT OR REPLACE rewrites the whole row, so a
+        // user rename made while the row still said "Processing…" (the
+        // placeholder → final-save window can span a slow summary generation)
+        // was clobbered by the final save's generated title AND lost its
+        // user_titled stamp. Pre-read the flag and let the user's title win.
+        const readUserTitle = this.db.prepare(`SELECT title, COALESCE(user_titled, 0) AS user_titled FROM meetings WHERE id = ?`);
 
         const insertTranscript = this.db.prepare(`
             INSERT INTO transcripts (meeting_id, speaker, content, timestamp_ms)
@@ -2835,10 +2861,12 @@ export class DatabaseManager {
         });
 
         const runTransaction = this.db.transaction(() => {
-            // 1. Insert Meeting
+            // 1. Insert Meeting (a user-renamed row keeps its title — RC-7)
+            const existing = readUserTitle.get(meeting.id) as { title: string; user_titled: number } | undefined;
+            const userTitled = existing?.user_titled === 1;
             insertMeeting.run(
                 meeting.id,
-                meeting.title,
+                userTitled && existing?.title ? existing.title : meeting.title,
                 startTimeMs,
                 durationMs,
                 summaryJson,
@@ -2846,7 +2874,8 @@ export class DatabaseManager {
                 meeting.calendarEventId || null,
                 meeting.source || 'manual',
                 meeting.isProcessed ? 1 : 0,
-                meeting.summaryStatus || (meeting.isProcessed ? 'completed' : 'queued')
+                meeting.summaryStatus || (meeting.isProcessed ? 'completed' : 'queued'),
+                userTitled ? 1 : 0
             );
 
             // 2. Insert Transcript
@@ -2908,7 +2937,10 @@ export class DatabaseManager {
     public updateMeetingTitle(id: string, title: string): boolean {
         if (!this.db) return false;
         try {
-            const stmt = this.db.prepare('UPDATE meetings SET title = ? WHERE id = ?');
+            // RC-7: a rename is the USER's title. Stamp user_titled so the
+            // generated-title writers (saveMeeting's final write, the deferred
+            // replaceDetailedSummary) yield to it from now on.
+            const stmt = this.db.prepare('UPDATE meetings SET title = ?, user_titled = 1 WHERE id = ?');
             const info = stmt.run(title, id);
             return info.changes > 0;
         } catch (error) {
@@ -2997,7 +3029,13 @@ export class DatabaseManager {
             const newData = { ...existingData, detailedSummary };
             const jsonStr = JSON.stringify(newData);
             if (opts?.title && opts?.summaryStatus) {
-                const info = this.db.prepare('UPDATE meetings SET summary_json = ?, title = ?, summary_status = ? WHERE id = ?').run(jsonStr, opts.title, opts.summaryStatus, id);
+                // RC-7 (2026-08-21): the deferred V3 summary used to overwrite
+                // the title UNCONDITIONALLY — a user rename made even after the
+                // meeting ended was silently reverted whenever the detailed
+                // summary landed. A generated title never beats a user one.
+                const info = this.db.prepare(
+                    'UPDATE meetings SET summary_json = ?, title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END, summary_status = ? WHERE id = ?',
+                ).run(jsonStr, opts.title, opts.summaryStatus, id);
                 return info.changes > 0;
             }
             if (opts?.summaryStatus) {

@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -1165,24 +1165,35 @@ export class IntelligenceEngine extends EventEmitter {
             const contextItems = this.session.getContext(180);
             trace.mark('transcript_window_loaded', { turns: contextItems.length });
 
-            // Inject latest interim transcript if available
+            // Inject latest interim transcript if available.
+            // RC-1 (session C, 2026-08-21): guarded by resolveInterimInjection —
+            // the STT relay was observed sending CUMULATIVE interims (21 ->
+            // 10,126 chars over one session) and the old exact-equality/1s guard
+            // let the whole-session blob be appended as the newest turn, which
+            // extractLatestQuestion then returned verbatim as "the question"
+            // (86/86 injected presses). The resolver cuts the interim to its
+            // novel tail against recent finals, caps length, and skips stale ones.
             const lastInterim = this.session.getLastInterimInterviewer();
             if (lastInterim && lastInterim.text.trim().length > 0) {
-                const lastItem = contextItems[contextItems.length - 1];
-                const isDuplicate = lastItem &&
-                    lastItem.role === 'interviewer' &&
-                    (lastItem.text === lastInterim.text || Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
-
-                if (!isDuplicate) {
-                    console.log(`[IntelligenceEngine] Injecting interim transcript`, { length: lastInterim.text.length });
+                const { resolveInterimInjection } = require('./llm/interimInjectionGuard') as typeof import('./llm/interimInjectionGuard');
+                const verdict = resolveInterimInjection({
+                    interim: { text: lastInterim.text, timestamp: lastInterim.timestamp },
+                    recentInterviewerFinals: contextItems.filter(item => item.role === 'interviewer'),
+                    lastContextItem: contextItems[contextItems.length - 1] ?? null,
+                    now: Date.now(),
+                });
+                if (verdict.action === 'inject') {
+                    console.log(`[IntelligenceEngine] Injecting interim transcript`, { length: verdict.text.length, rawLength: lastInterim.text.length, reason: verdict.reason });
                     contextItems.push({
                         role: 'interviewer',
-                        text: lastInterim.text,
+                        text: verdict.text,
                         timestamp: lastInterim.timestamp,
                         // F9: the interim carries provider punctuation provenance
                         // from the STT seam (provider_interim / unavailable).
                         ...(lastInterim.punctuationSource ? { punctuationSource: lastInterim.punctuationSource } : {}),
                     });
+                } else {
+                    console.log(`[IntelligenceEngine] Interim injection skipped`, { rawLength: lastInterim.text.length, reason: verdict.reason });
                 }
             }
 
@@ -1471,15 +1482,36 @@ export class IntelligenceEngine extends EventEmitter {
                     const rankedAsks = this.questionLedgerShadow.rankActiveAsks(Date.now());
                     const topAsk = rankedAsks[0];
                     const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+                    const parityReason = topAsk && extractedQuestion.latestQuestion
+                        ? (norm(topAsk.standaloneText) === norm(extractedQuestion.latestQuestion)
+                            ? 'ledger_parity'
+                            : `ledger_divergence_open_${rankedAsks.length}`)
+                        : 'ledger_empty';
                     wtaTrace.noteContext({
                         source: 'question_ledger_shadow', trustLevel: 'low',
                         requested: true, retrieved: Boolean(topAsk), included: false,
-                        reason: topAsk && extractedQuestion.latestQuestion
-                            ? (norm(topAsk.standaloneText) === norm(extractedQuestion.latestQuestion)
-                                ? 'ledger_parity'
-                                : `ledger_divergence_open_${rankedAsks.length}`)
-                            : 'ledger_empty',
+                        reason: parityReason,
                     });
+                    // Live session A (2026-08-20) produced ZERO ledger telemetry
+                    // across 28 presses: noteContext only fills an in-memory
+                    // IntelligenceTrace whose toRecord() has no production
+                    // consumer, and piTelemetry buffers to a ring that prints
+                    // only under NATIVELY_PI_TELEMETRY_DEBUG. The shadow ran
+                    // correctly and was simply invisible, so the session
+                    // collected no promotion evidence. Emit a console line on
+                    // the same [TRACE:*] convention the LONGCTX marker already
+                    // uses (that one DID reach the log), gated by the shadow
+                    // flag so it costs nothing when the shadow is off.
+                    console.log('[TRACE:LEDGER] ledger_parity_check', JSON.stringify({
+                        reason: parityReason,
+                        openAsks: rankedAsks.length,
+                        ledgerTop: topAsk?.standaloneText ?? '',
+                        liveQuestion: extractedQuestion.latestQuestion || '',
+                        liveConfidence: extractedQuestion.confidence,
+                        ledgerAct: topAsk?.dialogueAct ?? null,
+                        ledgerRelation: topAsk?.relationToPrevious ?? null,
+                        relationshipConfidence: topAsk?.confidence?.relationship ?? null,
+                    }));
                 }
             } catch { /* shadow only — never affects the answer */ }
 
@@ -2775,6 +2807,39 @@ export class IntelligenceEngine extends EventEmitter {
                         // classified the turn; a keyword list disagreeing with it
                         // silently drops the coding contract.
                         codingTask: isCodingAnswerType(answerPlan.answerType),
+                        // RC-2 Block 3 (session C, 2026-08-21): the V3 system
+                        // prompt REPLACES the legacy finalPromptOverride
+                        // (wtaSystemPrompt.ts drops it whenever V3 composed), so
+                        // the user's Real-time prompt — whose only legacy carrier
+                        // was <custom_instructions> inside that override — was
+                        // discarded on every V3 turn. The composer has carried a
+                        // realtimeInstruction channel end-to-end since it was
+                        // built (prompt-composer.ts renderRealtime ->
+                        // <presentation_instruction>), with zero callers. Wire
+                        // it: same per-answer-type scoping as the legacy path,
+                        // so directives survive coding turns and factual/
+                        // sensitive chunks stay gated.
+                        realtimeInstruction: (() => {
+                            const parts: string[] = [];
+                            try {
+                                const { ModesManager } = require('./services/ModesManager');
+                                const pinned = ModesManager.getInstance().getActiveModePinnedInstructions?.(answerPlan.answerType, snapshotModeInfo?.id) || '';
+                                if (pinned) parts.push(pinned);
+                            } catch { /* pinned instructions unavailable — length line below still rides */ }
+                            // RC-5 (session C, 2026-08-21): the V3 user message
+                            // replaces the whole <answer_contract>, and with it
+                            // the only per-turn LENGTH target the model ever saw
+                            // (measured: 73/85 live answers overshot 60 words,
+                            // median 155). Ride the adaptive length line on the
+                            // same presentation channel — length/delivery is
+                            // exactly what <presentation_instruction> is for.
+                            try {
+                                const { renderLengthDirectiveForPlan } = require('./llm/AnswerPlanner') as typeof import('./llm/AnswerPlanner');
+                                const lengthLine = renderLengthDirectiveForPlan(answerPlan);
+                                if (lengthLine) parts.push(lengthLine);
+                            } catch { /* length directive is best-effort */ }
+                            return parts.length ? parts.join('\n\n') : undefined;
+                        })(),
                         // CODING CONTRACT ON THE V3 PATH (live regression, 2026-08-11).
                         // `_v3.system` REPLACES the v2 base prompt below
                         // (WhatToAnswerLLM.ts:813), and the V3 composer has no coding
@@ -2900,6 +2965,20 @@ export class IntelligenceEngine extends EventEmitter {
             let emittedStreamingToken = false;
             let streamingTokenBuffer = '';
             const STREAMING_SAFE_PREFIX_CHARS = 160;
+            // RC-4 (session C, 2026-08-21): scaffold-aware stream hold for
+            // NON-coding turns. Live, 23 presses streamed a "## Approach…"
+            // template draft to the screen and then visibly REPLACED it with
+            // the post-repair rewrite (23/23 final answers differed from the
+            // streamed raw; 17 shrank below 60%). A spoken-answer turn that
+            // opens with a markdown heading is wrong-shaped no matter which
+            // repair later fixes it — so when the first characters of the
+            // stream are a heading, HOLD all token paints and let the final
+            // (repaired) emit be the first thing the user sees. Clean answers
+            // decide `false` on their first chunk and stream exactly as
+            // before. The deadline driver's isUsefulYet reads fullAnswer, not
+            // the emit state, so holding cannot trip a provider timeout.
+            let scaffoldStreamHoldDecided = false;
+            let scaffoldStreamHold = false;
 
             // ── LIVE LATENCY GUARDRAIL (Phase 9) ───────────────────────────────
             // Full-JIT policy: provider stalls/failures may not be repaired with
@@ -2966,6 +3045,21 @@ export class IntelligenceEngine extends EventEmitter {
                         }
                     } else {
                         streamingTokenBuffer += token;
+                        // RC-4: decide the hold once, on the first visible
+                        // characters. A leading markdown heading on a spoken
+                        // (non-coding) answer is the scaffold-misfire shape —
+                        // hold every paint and deliver only the repaired final.
+                        if (!scaffoldStreamHoldDecided) {
+                            const seen = streamingTokenBuffer.trimStart();
+                            if (seen.length >= 4) {
+                                scaffoldStreamHoldDecided = true;
+                                scaffoldStreamHold = /^#{1,3}\s/.test(seen);
+                                if (scaffoldStreamHold) {
+                                    trace.mark('repair_used', { reason: 'scaffold_stream_hold', answerType: answerPlan.answerType });
+                                }
+                            }
+                        }
+                        if (scaffoldStreamHold) return;
                         if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
                             && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
                             // Prompt System v2: a misfired "[[NO_ACTION]] real
@@ -3402,13 +3496,23 @@ export class IntelligenceEngine extends EventEmitter {
             // would skip repairs that had a perfectly good `question` or
             // `answerPlan.question` available.
             const scaffoldQuestion = question || answerPlan.question || extractedQuestion.latestQuestion || lastInterviewerTurn || '';
+            // RC-3 (session C, 2026-08-21): the regeneration gate now consults
+            // isScaffoldRegenerationEligible instead of excluding the technical
+            // types outright. Live, "what's a semaphore?" shipped the full
+            // six-section DSA template while hasUnrecoveredScaffoldContamination
+            // was returning TRUE — the old blanket exclusion threw the
+            // detector's verdict away. Technical types are eligible only under
+            // the STRICT signal (the contract's unique headings), preserving
+            // the false-positive protection the exclusion existed for
+            // (complexity vocabulary is legitimate content there). The
+            // EXTRACTION gate above keeps the historical exclusion set: its
+            // loose fingerprint is the one that misfires on real content.
             if (!isSpeculative
                 && fullAnswer
                 && scaffoldQuestion.trim()
                 && !isCodingAnswerType(answerPlan.answerType)
-                && !TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION.has(answerPlan.answerType)
                 && !isDocGroundedAnswerType(answerPlan.answerType)
-                && hasUnrecoveredScaffoldContamination(answerPlan.answerType, fullAnswer)
+                && isScaffoldRegenerationEligible(answerPlan.answerType, fullAnswer)
                 && this.currentGenerationId === generationId) {
                 try {
                     if (process.env.NATIVELY_TRACE_LONGCTX === '1') {
@@ -3902,6 +4006,31 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             } catch (profileRepairErr: any) {
                 console.warn('[IntelligenceEngine] profile repair failed (non-fatal):', profileRepairErr?.message || profileRepairErr);
+            }
+
+            // RC-6 (session C, 2026-08-21): strip a leading PLANNING PREAMBLE —
+            // the model narrating its own deliberation ("Since the interviewer
+            // is asking… I should answer in my own voice…") before the real
+            // spoken answer. Live presses 5/13/20/47 shipped this verbatim, and
+            // press 5 leaked résumé figures inside the meta-commentary; every
+            // existing guard (scaffold detector, candidate sanitizer,
+            // assistant-voice misfire) was measured a no-op on the exact text.
+            // Runs for every non-coding type — the leak appeared across
+            // follow_up/project_link/ethical_usage — and fails open when
+            // stripping would empty the answer. Coding answers are skipped:
+            // their sections are structured content, and RC-3 removed the
+            // template from the turns where this leak rode it.
+            if (!isSpeculative && fullAnswer && !isCodingAnswerType(answerPlan.answerType)) {
+                try {
+                    const { stripPlanningPreamble } = require('./llm/planningPreamble') as typeof import('./llm/planningPreamble');
+                    const pre = stripPlanningPreamble(fullAnswer);
+                    if (pre.repaired) {
+                        fullAnswer = pre.text;
+                        trace.mark('repair_used', { reason: 'planning_preamble_stripped', removedSentences: pre.removedSentences });
+                    }
+                } catch (preErr: any) {
+                    console.warn('[IntelligenceEngine] planning-preamble guard skipped:', preErr?.message || preErr);
+                }
             }
 
             // Release 2026-06-07c: FINAL candidate-answer sanitizer on the WTA path —
@@ -4561,6 +4690,33 @@ export class IntelligenceEngine extends EventEmitter {
             // compatible with all existing consumers (code-hint, brainstorm,
             // legacy answerLLM, etc.).
             this.emit('suggested_answer', finalWtaAnswer, question || 'What to Answer', confidence, generationId);
+            // ANSWER VISIBILITY (live session A follow-up, 2026-08-21): the
+            // answer is delivered as an EVENT to the renderer and never
+            // touches stdout, so a session log records the question, the
+            // routing and every context size — but not a single word of what
+            // was actually said. That made "is the answer grounded?"
+            // unanswerable from a 516K log. Emit the answer alongside the
+            // grounding channels that produced it, on the same [TRACE:*]
+            // convention as LONGCTX/LEDGER, gated by NATIVELY_TRACE_ANSWERS
+            // (the shadow-session launcher sets it; default off elsewhere so
+            // normal runs never write answer text to disk).
+            try {
+                if (process.env.NATIVELY_TRACE_ANSWERS === '1') {
+                    console.log('[TRACE:ANSWER] wta_answer', JSON.stringify({
+                        question: question || extractedQuestion.latestQuestion || '',
+                        questionConfidence: extractedQuestion.confidence,
+                        answerType: answerPlan.answerType,
+                        profileContextPolicy: answerPlan.profileContextPolicy,
+                        // grounding channel that survives to the engine; the
+                        // reference-file/mode block size is already on the
+                        // adjacent prompt_assembled line (modeContextBlockChars),
+                        // so the pair reads as one record per press.
+                        candidateProfileChars: (candidateProfile || '').length,
+                        answerChars: finalWtaAnswer.length,
+                        answer: finalWtaAnswer,
+                    }));
+                }
+            } catch { /* logging only */ }
             try {
                 wtaTrace.setRouting({ source: 'what_to_answer', answerType: answerPlan.answerType });
                 wtaTrace.noteContext({ source: 'live_transcript', trustLevel: 'low', requested: true, retrieved: true, included: true, reason: 'wta_window' });
