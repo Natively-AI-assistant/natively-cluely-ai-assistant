@@ -2754,6 +2754,18 @@ body {
   cursor: default;
 }
 
+.overlay-shell-surface {
+  container-type: inline-size;
+  container-name: overlay-shell;
+}
+
+.overlay-input-placeholder-compact { display: none; }
+
+@container overlay-shell (max-width: 560px) {
+  .overlay-input-placeholder-full { display: none; }
+  .overlay-input-placeholder-compact { display: inline; }
+}
+
 .drag-region {
   -webkit-app-region: drag;
 }
