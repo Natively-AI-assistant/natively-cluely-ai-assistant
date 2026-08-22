@@ -641,6 +641,8 @@ export interface ElectronAPI {
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  getAutoAnswerEnabled: () => Promise<boolean>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;

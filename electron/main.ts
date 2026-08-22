@@ -1218,6 +1218,7 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
+import { evaluateAutoAnswerGate } from "./intelligence/autoAnswerGate"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
@@ -1434,6 +1435,7 @@ export class AppState {
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
   private _ambientChatEnabled: boolean = false;
+  private _autoAnswerEnabled: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
   // session. Reset on every reconfigureAudio / new pipeline build so the next
   // first-chunk handler reads the freshly-detected native rate.
@@ -1489,7 +1491,8 @@ export class AppState {
     this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
-    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}`);
+    this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
+    console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}, autoAnswerEnabled=${this._autoAnswerEnabled}`);
 
     // Context Intelligence debug logging (Developer settings). Bind the level
     // reader + log directory once; precedence (env > setting) and the
@@ -3152,6 +3155,90 @@ export class AppState {
   private _audioTestStarting = false;               // P2-12: in-flight guard against concurrent calls
   private googleSTT: STTProvider | null = null; // Interviewer
   private googleSTT_User: STTProvider | null = null; // User
+  // ── AUTO ANSWER (Settings > General, default OFF) ────────────────────────
+  // `handleSuggestionTrigger` — the method IntelligenceEngine documents as
+  // "the primary auto-trigger path" — had no production caller: the only call
+  // site was the __e2e__:ask harness. The speculative prefetch that runs on
+  // interviewer PARTIALS never reaches the UI by design (runWhatShouldISay
+  // returns silently when `speculative`), it only warms a cache that
+  // handleSuggestionTrigger was supposed to consume. So automatic answers were
+  // dead in production and every answer came from the hotkey.
+  //
+  // The trigger is a FINAL interviewer transcript, NOT the native VAD's
+  // `speech_ended`. Driving it off the VAD fires `speech_hangover` (600 ms for
+  // system audio) + debounce after the audio stops, and `getLastInterviewerTurn()`
+  // only ever returns a FINAL turn (SessionTracker.addTranscript returns null on
+  // !final). For the REST providers `speech_ended` is what *starts* the upload
+  // (RestSTT.notifySpeechEnded), so the final cannot exist yet by construction,
+  // and streaming providers lose the race intermittently. Firing with a stale
+  // turn is worse than not firing: handleSuggestionTrigger Jaccard-compares it
+  // against the in-flight speculative run, rejects on the mismatch, bumps
+  // currentGenerationId — cancelling the correctly-prefetched answer — and then
+  // generates one for the PREVIOUS question.
+  private autoAnswerTimer: NodeJS.Timeout | null = null;
+  // The turn already dispatched. The planner's 3 s cooldown alone would let a
+  // stable last-turn be re-answered every time the cooldown lapsed.
+  private lastAutoAnsweredQuestion: string | null = null;
+  // Long enough for a multi-segment question ("Tell me about a time..." /
+  // "...where you disagreed with your manager") to coalesce into one trigger;
+  // each new final restarts it.
+  private static readonly AUTO_ANSWER_DEBOUNCE_MS = 900;
+
+  private scheduleAutoAnswer(): void {
+    if (!this._autoAnswerEnabled) return;
+    // The transcript handler also runs during the post-Stop drain window
+    // (`_isDraining`); a meeting that is over must not produce a new answer.
+    if (!this.isMeetingActive) return;
+
+    const generation = this._meetingGeneration;
+    if (this.autoAnswerTimer) clearTimeout(this.autoAnswerTimer);
+
+    this.autoAnswerTimer = setTimeout(() => {
+      this.autoAnswerTimer = null;
+      // Every remaining guard lives in evaluateAutoAnswerGate so it is reachable
+      // from a test. The engine half — mode + cooldown — matters because
+      // `runWhatShouldISay` aborts any live What-to-Answer stream with
+      // 'superseded': without it an auto-trigger would kill the answer the user
+      // just requested by hand. The cooldown is consulted HERE rather than left
+      // to the planner because planSuggestionTrigger runs the zero-shot ONNX
+      // intent classifier BEFORE planNextAssistantAction applies that cooldown,
+      // so the classification would be paid for and thrown away.
+      const decision = evaluateAutoAnswerGate({
+        enabled: this._autoAnswerEnabled,
+        meetingActive: this.isMeetingActive,
+        generationAtSchedule: generation,
+        generationNow: this._meetingGeneration,
+        lastQuestion: this.intelligenceManager.getLastInterviewerTurn(),
+        lastAnsweredQuestion: this.lastAutoAnsweredQuestion,
+        engineAccepting: this.intelligenceManager.canAutoAnswer(),
+      });
+      if (!decision.dispatch) {
+        if (this._verboseLogging) console.log(`[Main] Auto Answer skipped: ${decision.reason}`);
+        return;
+      }
+      const lastQuestion = decision.question;
+      this.lastAutoAnsweredQuestion = lastQuestion;
+
+      // The planner still decides whether the turn is answerable at all; this
+      // confidence reflects a completed STT final, not a claim that every
+      // interviewer sentence is a question.
+      void this.intelligenceManager.handleSuggestionTrigger({
+        context: this.intelligenceManager.getFormattedContext(120),
+        lastQuestion,
+        confidence: 0.9,
+      }).catch((error) => {
+        console.warn('[Main] Automatic interviewer answer failed:', error);
+      });
+    }, AppState.AUTO_ANSWER_DEBOUNCE_MS);
+  }
+
+  private cancelAutoAnswer(): void {
+    if (this.autoAnswerTimer) {
+      clearTimeout(this.autoAnswerTimer);
+      this.autoAnswerTimer = null;
+    }
+    this.lastAutoAnsweredQuestion = null;
+  }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
     const { CredentialsManager } = require('./services/CredentialsManager');
@@ -3344,6 +3431,13 @@ export class AppState {
         sttProvider: effectiveSttId,
         punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
       });
+
+      // Auto Answer (Settings > General, default OFF): a FINAL interviewer
+      // turn is the trigger — see scheduleAutoAnswer() for why the native
+      // VAD's speech_ended is the wrong seam for this.
+      if (segment.isFinal && speaker === 'interviewer') {
+        this.scheduleAutoAnswer();
+      }
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
@@ -5754,6 +5848,7 @@ export class AppState {
 
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
+    this.cancelAutoAnswer();
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown
@@ -6069,6 +6164,8 @@ export class AppState {
       await this._pendingTeardown?.catch((): void => {});
       return;
     }
+
+    this.cancelAutoAnswer();
     // Cover the window between here and `_pendingTeardown` assignment, during which
     // the new in-flight-audio-init await below yields the event loop.
     this._endMeetingInFlight = true;
@@ -7461,6 +7558,19 @@ export class AppState {
     this._ambientChatEnabled = enabled;
     SettingsManager.getInstance().set('ambientChatEnabled', enabled);
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
+  }
+
+  public getAutoAnswerEnabled(): boolean {
+    return this._autoAnswerEnabled;
+  }
+
+  public setAutoAnswerEnabled(enabled: boolean): void {
+    this._autoAnswerEnabled = enabled;
+    SettingsManager.getInstance().set('autoAnswerEnabled', enabled);
+    // Drop anything already armed: turning the toggle off mid-meeting must not
+    // let one more auto-answer land a second later.
+    if (!enabled) this.cancelAutoAnswer();
+    console.log(`[AppState] autoAnswerEnabled set to ${enabled}`);
   }
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {

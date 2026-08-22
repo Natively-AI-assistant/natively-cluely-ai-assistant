@@ -189,6 +189,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.handleSuggestionTrigger(trigger);
     }
 
+    /** Mode + cooldown gate for the Auto Answer trigger. See IntelligenceEngine.canAutoAnswer. */
+    canAutoAnswer(): boolean {
+        return this.engine.canAutoAnswer();
+    }
+
     // ============================================
     // Mode Executors (delegates to engine)
     // ============================================

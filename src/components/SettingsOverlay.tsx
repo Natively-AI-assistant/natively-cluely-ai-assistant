@@ -555,6 +555,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
     const [verboseLogging, setVerboseLogging] = useState(false);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
+    const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
     const [showVerboseToast, setShowVerboseToast] = useState(false);
     const [codeVerification, setCodeVerification] = useState(false);
@@ -573,6 +574,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getDisguise?.().then(setDisguiseMode).catch(() => { });
             window.electronAPI?.getVerboseLogging?.().then(setVerboseLogging).catch(() => { });
             window.electronAPI?.getAmbientChatEnabled?.().then(setAmbientChatEnabled).catch(() => { });
+            window.electronAPI?.getAutoAnswerEnabled?.().then(setAutoAnswerEnabled).catch(() => { });
             window.electronAPI?.getCodeVerification?.().then((v) => setCodeVerification(v === true)).catch(() => { });
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
@@ -2014,6 +2016,29 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             window.electronAPI?.setAmbientChatEnabled?.(newState);
                                                         }}
                                                         className={ambientChatEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                    />
+                                                </div>
+
+                                                {/* Auto Answer */}
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                            <Zap size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Answer automatically when the interviewer finishes a question, instead of waiting for the hotkey')}</p>
+                                                        </div>
+                                                    </div>
+                                                    <SettingsToggle
+                                                        checked={autoAnswerEnabled}
+                                                        label={t('Auto Answer')}
+                                                        onChange={() => {
+                                                            const newState = !autoAnswerEnabled;
+                                                            setAutoAnswerEnabled(newState);
+                                                            window.electronAPI?.setAutoAnswerEnabled?.(newState);
+                                                        }}
+                                                        className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
 
