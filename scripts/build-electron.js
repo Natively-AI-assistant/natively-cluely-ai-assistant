@@ -121,9 +121,28 @@ const onFailure = (err) => {
   process.exit(1);
 };
 
+// Non-JS assets esbuild does not know about. These must be copied on EVERY
+// build path — a one-off copy in the non-watch branch left `npm run watch`
+// (after a clean) with a dist-electron that has no .proto, so NVIDIA speech
+// died at runtime with an ENOENT pointing at the missing file rather than at
+// the build.
+const ASSETS = [
+  { from: 'electron/audio/riva_asr.proto', to: 'electron/audio/riva_asr.proto' },
+];
+
+const copyAssets = () => {
+  for (const asset of ASSETS) {
+    const src = path.resolve(rootDir, asset.from);
+    const dest = path.resolve(outDir, asset.to);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+  }
+};
+
 if (WATCH) {
   context(buildOptions).then(async (ctx) => {
     await ctx.watch();
+    copyAssets();
     // Deliberately no timing here: ctx.watch() returns once the watcher is armed,
     // and esbuild runs the first build asynchronously after that — printing an
     // elapsed time would report context setup, not a completed build.
@@ -131,6 +150,7 @@ if (WATCH) {
   }).catch(onFailure);
 } else {
   build(buildOptions).then(() => {
+    copyAssets();
     console.log(`[build-electron] Done in ${Date.now() - start}ms`);
   }).catch(onFailure);
 }

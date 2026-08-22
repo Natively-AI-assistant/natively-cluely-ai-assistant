@@ -168,6 +168,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (modelId === 'natively') return 'natively';
         if (modelId.startsWith('codex-cli')) return 'codex-cli';
         if (modelId.startsWith('litellm/')) return 'litellm';
+        if (modelId.startsWith('nvidia_nim/')) return 'nvidia_nim';
         if (modelId.startsWith('ollama-')) return 'ollama';
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
         if (isKnownGroqModel(modelId)) return 'groq';
@@ -219,6 +220,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
+        if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
@@ -6661,6 +6663,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-nvidia-nim-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = cm.getNvidiaNimApiKey() !== normalizedKey;
+      cm.setNvidiaNimApiKey(normalizedKey);
+      appState.processingHelper.getLLMHelper().setNvidiaNimApiKey(normalizedKey);
+      await appState.reconfigureSttProvider();
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -7635,6 +7656,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
+        hasNvidiaNimKey: hasKey(creds.nvidiaNimApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
@@ -7643,6 +7665,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
+        nvidiaNimSttModel: creds.nvidiaNimSttModel || 'nemotron-asr-streaming',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
         hasSttGroqKey: hasKey(creds.groqSttApiKey),
         hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
@@ -7671,6 +7694,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        nvidia_nimPreferredModel: creds.nvidia_nimPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
@@ -7684,6 +7708,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
+        hasNvidiaNimKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -7718,7 +7743,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -7730,6 +7755,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') key = cm.getOpenaiApiKey();
           else if (provider === 'claude') key = cm.getClaudeApiKey();
           else if (provider === 'deepseek') key = cm.getDeepseekApiKey();
+          else if (provider === 'nvidia_nim') key = cm.getNvidiaNimApiKey();
         }
 
         if (!key) {
@@ -7767,7 +7793,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'litellm', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -7795,6 +7821,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'azure'
         | 'ibmwatson'
         | 'soniox'
+        | 'nvidia_nim'
         | 'natively'
         | 'local-whisper',
     ) => {
@@ -7834,6 +7861,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       return 'none';
     }
+  });
+
+  safeHandle('set-nvidia-nim-stt-model', async (_, model: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      // Single source of truth — see NVIDIA_NIM_STT_MODELS. A second hardcoded
+      // list here would silently reject models the picker already offers.
+      const { isNvidiaNimSttModel } = require('./audio/nvidiaNimSttModels');
+      if (!isNvidiaNimSttModel(model)) {
+        return { success: false, error: 'Unsupported NVIDIA NIM speech model' };
+      }
+      const cm = CredentialsManager.getInstance();
+      const persisted = cm.setNvidiaNimSttModel(model);
+      if (!persisted) return { success: false, error: 'Could not save NVIDIA NIM speech model' };
+      await appState.reconfigureSttProvider();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
   });
 
   // Shared guard for STT key saves. Keys persist via the OS keyring or, when that is
@@ -8067,7 +8112,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'test-stt-connection',
     async (
       _,
-      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
       apiKey: string,
       region?: string,
     ) => {
@@ -8091,7 +8136,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { success: false, error: 'Invalid region' };
         }
 
-        if (provider === 'deepgram') {
+        if (provider === 'nvidia_nim') {
+          // Extracted so the settle-on-any-terminal-event logic is unit-testable
+          // (scripts/dev/riva-probe-check.cjs) instead of buried in this handler.
+          const { probeNvidiaNimStt } = require('./audio/nvidiaNimSttProbe');
+          const { CredentialsManager: CM } = require('./services/CredentialsManager');
+          // Probe the model the user actually selected — the models sit behind
+          // different NVCF function-ids, so testing a fixed one can pass while
+          // the selected model is unreachable.
+          return await probeNvidiaNimStt(apiKey, CM.getInstance().getNvidiaNimSttModel());
+        } else if (provider === 'deepgram') {
           const WebSocket = require('ws');
           const token = apiKey.trim();
           return await new Promise<{ success: boolean; error?: string }>((resolve) => {
@@ -8576,7 +8630,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -8587,6 +8641,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
           else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
           else if (provider === 'deepseek') apiKey = creds.getDeepseekApiKey();
+          else if (provider === 'nvidia_nim') apiKey = creds.getNvidiaNimApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -8665,6 +8720,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               timeout: 15000,
             },
           );
+        }
+        else if (provider === 'nvidia_nim') {
+          response = await axios.post('https://integrate.api.nvidia.com/v1/chat/completions', {
+            model: 'meta/llama-3.1-8b-instruct', messages: [{ role: 'user', content: 'Hello' }], max_tokens: 10,
+          }, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000 });
         }
 
         if (response && (response.status === 200 || response.status === 201)) {
