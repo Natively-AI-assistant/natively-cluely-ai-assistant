@@ -339,7 +339,14 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 
             // Set up RAG streaming listeners (RAF-batched to avoid per-token re-renders)
             streamBuffer.reset();
+            // F-122: see GlobalChatOverlay — the rag:stream-* channels are shared
+            // by three scopes and main tags every payload, but no consumer read
+            // the tag. Accept only this meeting's stream.
+            const isThisMeeting = (d: any) =>
+                d?.global !== true && d?.live !== true
+                && (d?.meetingId == null || d.meetingId === meetingContext?.id);
             const tokenCleanup = window.electronAPI?.onRAGStreamChunk((data: { chunk: string }) => {
+                if (!isThisMeeting(data)) return;
                 setChatState('streaming_response');
                 streamBuffer.appendToken(data.chunk, (content) => {
                     setMessages(prev => prev.map(msg =>
@@ -350,7 +357,8 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 });
             });
 
-            const doneCleanup = window.electronAPI?.onRAGStreamComplete(() => {
+            const doneCleanup = window.electronAPI?.onRAGStreamComplete((data?: any) => {
+                if (data && !isThisMeeting(data)) return;   // F-122
                 // Final commit — flush any remaining buffered content
                 const finalContent = streamBuffer.getBufferedContent();
                 setMessages(prev => prev.map(msg =>
@@ -366,6 +374,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             });
 
             const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
+                if (!isThisMeeting(data)) return;   // F-122
                 console.error('[MeetingChat] RAG stream error:', data.error);
                 setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                 setErrorMessage("Couldn't get a response. Please try again.");

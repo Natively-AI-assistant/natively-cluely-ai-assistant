@@ -39,7 +39,7 @@ import assert from 'node:assert/strict';
 import net from 'node:net';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
@@ -58,7 +58,7 @@ Module._load = function patchedLoad(request) {
     return origLoad.apply(this, arguments);
 };
 
-const { NativelyProSTT } = await import(path.join(distRoot, 'NativelyProSTT.js'));
+const { NativelyProSTT } = await import(pathToFileURL(path.join(distRoot, 'NativelyProSTT.js')).href);
 
 /** A TCP server that accepts but never upgrades — clients stay in CONNECTING. */
 async function stalledServer() {

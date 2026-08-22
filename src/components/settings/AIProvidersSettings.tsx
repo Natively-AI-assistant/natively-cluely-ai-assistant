@@ -1841,6 +1841,124 @@ interface AIProvidersSettingsProps {
     aiLangDropdownRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   R-10 resolution card (§19.1). Rendered only while the main process reports
+   two credential stores that cannot be ordered (a whole-profile restore left a
+   newer app-managed backup beside the OS-keyring file). Until the user answers,
+   the app runs from the union of both sets and refuses to overwrite either
+   file — safe, but every new key lands in the weaker app-managed store, so the
+   state should be ENDED deliberately, here, where keys are managed.
+   Shows key NAMES and last-4 only; the main process never sends values.
+   ═══════════════════════════════════════════════════════════════════════════ */
+type AmbiguousStores = {
+    keyring: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
+    fallback: { keys: { name: string; last4: string }[]; mtimeIso: string | null };
+};
+
+const AmbiguousStoresCard: React.FC = () => {
+    const t = useT();
+    const [stores, setStores] = useState<AmbiguousStores | null>(null);
+    const [busy, setBusy] = useState<'keyring' | 'fallback' | 'merge' | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        const fetch = () => {
+            window.electronAPI?.getAmbiguousCredentialStores?.()
+                .then((v) => { if (!cancelled) setStores(v); })
+                .catch(() => { /* absent API (older main) → render nothing */ });
+        };
+        fetch();
+        // Re-fetch on credential changes so the card tracks reality: it must
+        // disappear if another window resolved the state, and a mount-only
+        // fetch would show stale data forever (adversarial review 2026-08-19).
+        const unsubscribe = window.electronAPI?.onCredentialsChanged?.(fetch);
+        return () => { cancelled = true; unsubscribe?.(); };
+    }, []);
+
+    if (!stores) return null;
+
+    const resolve = async (choice: 'keyring' | 'fallback' | 'merge') => {
+        setBusy(choice);
+        setError(null);
+        try {
+            const res = await window.electronAPI?.resolveAmbiguousCredentialStores?.(choice);
+            if (res?.ok) {
+                setStores(null);   // state ended; the card disappears
+            } else {
+                setError(res?.error === 'snapshot_failed'
+                    ? t('Could not back up the current files first, so nothing was changed. Check disk space and try again.')
+                    : t('Could not apply the choice. Nothing was changed.'));
+            }
+        } catch {
+            setError(t('Could not apply the choice. Nothing was changed.'));
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : t('unknown time'));
+    const keyList = (keys: { name: string; last4: string }[]) => (
+        keys.length === 0
+            ? <span className="opacity-60">{t('(unreadable or empty)')}</span>
+            : keys.map((k) => `${k.name} (…${k.last4})`).join(', ')
+    );
+
+    return (
+        <div
+            className="flex flex-col gap-3 p-4 rounded-lg text-xs"
+            style={{ background: 'var(--aip-warn-bg)', border: '1px solid var(--aip-warn-border)' }}
+            data-testid="ambiguous-stores-card"
+        >
+            <div className="flex items-start gap-2">
+                <AlertCircle size={14} strokeWidth={1.75} className="shrink-0 mt-0.5" style={{ color: 'var(--aip-warn)' }} />
+                <div className="space-y-1">
+                    <div className="font-medium">{t('Two saved credential sets were found')}</div>
+                    <div className="opacity-80">
+                        {t('This usually happens after restoring a backup or migrating machines. Until you choose, both files are kept and new keys are saved to the weaker backup store.')}
+                    </div>
+                </div>
+            </div>
+            <div className="space-y-1 pl-6">
+                <div><span className="font-medium">{t('System keychain')}</span> ({when(stores.keyring.mtimeIso)}): {keyList(stores.keyring.keys)}</div>
+                <div><span className="font-medium">{t('App backup')}</span> ({when(stores.fallback.mtimeIso)}): {keyList(stores.fallback.keys)}</div>
+            </div>
+            <div className="flex flex-wrap gap-2 pl-6">
+                <button
+                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--aip-warn-border)' }}
+                    disabled={busy !== null}
+                    onClick={() => resolve('keyring')}
+                >
+                    {busy === 'keyring' ? t('Applying…') : t('Keep system keychain')}
+                </button>
+                <button
+                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--aip-warn-border)' }}
+                    disabled={busy !== null}
+                    onClick={() => resolve('fallback')}
+                >
+                    {busy === 'fallback' ? t('Applying…') : t('Keep app backup')}
+                </button>
+                <button
+                    className="px-3 py-1.5 rounded-md border text-xs font-medium disabled:opacity-50"
+                    style={{ borderColor: 'var(--aip-warn-border)' }}
+                    disabled={busy !== null}
+                    onClick={() => resolve('merge')}
+                >
+                    {busy === 'merge' ? t('Applying…') : t('Keep both (backup wins on conflict)')}
+                </button>
+            </div>
+            {error && <div className="pl-6 aip-danger-fg">{error}</div>}
+            <div className="pl-6 opacity-60">
+                {t('Whatever you pick, both current files are first copied aside, so this is reversible.')}
+            </div>
+        </div>
+    );
+};
+
+export const AmbiguousCredentialStoresCard = AmbiguousStoresCard;
+
 export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     aiResponseLanguage,
     availableAiLanguages,
@@ -2014,7 +2132,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // stored field, which the enum deliberately does not have.
     const requiredBeforeLocalOnly = useRef<boolean | null>(null);
 
-    const applyVisionMode = (localOnly: boolean, required: boolean) => {
+    const applyVisionMode = async (localOnly: boolean, required: boolean) => {
+        // Snapshot what a refused write has to be rolled back TO. Both of these
+        // are mutated below, so capture before, not after.
+        const previousMode = screenUnderstandingMode;
+        const previousRequiredBefore = requiredBeforeLocalOnly.current;
+
         let effectiveRequired = required;
         if (localOnly && !visionLocalOnly) {
             // Entering local-only: stash what "Require" really was, since the
@@ -2028,7 +2151,30 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
         const mode = localOnly ? 'private_vision' : (effectiveRequired ? 'vision_only' : 'vision_first');
         setScreenUnderstandingMode(mode);
-        window.electronAPI?.setScreenUnderstandingMode?.(mode);
+
+        // CR-04 follow-up: the handler refuses when the settings store is degraded
+        // and — correctly — no longer broadcasts, so the
+        // onScreenUnderstandingModeChanged subscription that normally re-converges
+        // this component never fires. Setting local state optimistically and
+        // ignoring the result therefore left THIS window showing a privacy mode
+        // that was never saved, while main and disk held the old one. On a setting
+        // whose copy promises "cloud vision is never called", a mode the UI only
+        // THINKS it is in is not cosmetic. Roll back on refusal.
+        try {
+            const res = await window.electronAPI?.setScreenUnderstandingMode?.(mode);
+            if (res && res.success === false) {
+                setScreenUnderstandingMode(previousMode);
+                requiredBeforeLocalOnly.current = previousRequiredBefore;
+                console.warn('[AIProviders] screen-understanding mode was not saved:', res.error);
+            }
+        } catch (e) {
+            // Now that this is awaited, a rejected IPC would surface as an
+            // unhandled rejection from an onChange handler. A failed write must
+            // roll the switch back for the same reason a refused one does.
+            setScreenUnderstandingMode(previousMode);
+            requiredBeforeLocalOnly.current = previousRequiredBefore;
+            console.warn('[AIProviders] screen-understanding mode write failed:', e);
+        }
     };
 
     // Where a disabled scope's data actually goes. Must match ENFORCEMENT
@@ -3085,6 +3231,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
+            <AmbiguousStoresCard />
             {confirmCopy && (
                 <ConfirmDialog
                     open

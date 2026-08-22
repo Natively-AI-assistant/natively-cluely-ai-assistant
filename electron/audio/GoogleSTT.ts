@@ -356,7 +356,18 @@ export class GoogleSTT extends EventEmitter {
 
         console.log(`[GoogleSTT/${this.label}] Creating gRPC stream (rate=${this.sampleRateHertz}Hz, ch=${this.audioChannelCount}, lang=${this.languageCode})...`);
 
-        this.stream = this.client
+        // F-203: bind the instance to a local so every STATE-MUTATING handler
+        // can verify it still owns `this.stream` before touching shared state.
+        // Without this, the synchronous stop()+start() restarts (setSampleRate
+        // — which main.ts triggers on the first audio chunk of every meeting —
+        // setAudioChannelCount, setRecognitionLanguage, and the 270s proactive
+        // restart) let the DESTROYED stream's async 'close'/'end' run
+        // `this.stream = null` against the freshly-created stream, orphaning it
+        // (open, never ended) and pushing writes into the lazy-reconnect path
+        // so a third stream opens. Mirrors NativelyProSTT's documented
+        // `guard(ws === this.ws)` pattern. Live-reproduced in
+        // scripts/audit/F-203-repro.mjs.
+        const stream: any = this.client
             .streamingRecognize({
                 config: {
                     encoding: this.encoding,
@@ -371,6 +382,7 @@ export class GoogleSTT extends EventEmitter {
                 interimResults: true,
             })
             .on('error', (err: Error) => {
+                if (stream !== this.stream) return; // F-203 stale-stream guard
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
@@ -414,12 +426,14 @@ export class GoogleSTT extends EventEmitter {
                 this.emit('error', err);
             })
             .on('end', () => {
+                if (stream !== this.stream) return; // F-203 stale-stream guard
                 console.log(`[GoogleSTT/${this.label}] Stream ended server-side (idle timeout)`);
                 this.isConnecting = false;
                 this.isStreaming = false;
                 this.stream = null;
             })
             .on('close', () => {
+                if (stream !== this.stream) return; // F-203 stale-stream guard
                 console.log(`[GoogleSTT/${this.label}] Stream closed server-side`);
                 this.isConnecting = false;
                 this.isStreaming = false;
@@ -442,6 +456,12 @@ export class GoogleSTT extends EventEmitter {
                     }
                 }
             });
+
+        // Publish the new stream only after its handlers are attached. The
+        // 'data' handler is deliberately NOT identity-guarded: it mutates no
+        // connection state, and a late final transcript is still real user
+        // speech that should reach the transcript.
+        this.stream = stream;
 
         // gRPC streams are writable immediately — no handshake needed.
         const bufferedCount = this.buffer.length;

@@ -2,6 +2,7 @@
 
 import * as crypto from 'crypto';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -25,7 +26,7 @@ import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
 import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
@@ -3466,6 +3467,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             {
               answerType: answerPlan.answerType,
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
+              // F-502: the t0-pinned mode. streamContextPolicy documents this as
+              // the defence against a mid-request `modes:set-active` leaking a
+              // different mode's documents into an answer whose contract is
+              // scoped to the first mode — but only the WTA path ever set it, so
+              // every mode read inside streamChat after an await resolved the
+              // LIVE singleton instead.
+              pinnedModeId: manualActiveMode?.id ?? null,
               // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
               // from THIS manual-chat conversation's own last answer, never a
               // WTA/phone-mirror turn that happened to write the shared
@@ -3622,11 +3630,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           // fallback line below. Codex CLI shares the cold-load profile
           // (subprocess spawn → codex CLI loads the model → first delta).
           const usingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+          // F-301: on the natively-api route the server rotates providers at
+          // 10s; give it room to rescue the turn instead of aborting at 7s.
+          const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
           let manualFirstUseful = false;
           let manualSuperseded = false;
           await raceStreamWithDeadline({
             stream: stream as AsyncGenerator<string>,
-            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm),
+            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -3643,7 +3654,20 @@ export function initializeIpcHandlers(appState: AppState): void {
               try { myController?.abort(); } catch { /* noop */ }
             },
             onToken: (token: string) => {
-              manualFirstUseful = true;
+              // F-302: "useful" must mean USER-USEFUL CONTENT, not "a token
+              // object arrived". raceStreamWithDeadline forwards every yielded
+              // value unfiltered, so a leading "\n\n" used to flip this flag —
+              // which (a) swapped the 7s first-useful budget for the 8s
+              // inter-token stall guard, and (b) made the blank-answer fallback
+              // below unreachable for a whitespace-only response, committing an
+              // EMPTY bubble. Every other call site in the repo already uses a
+              // content threshold (>=5/8/10 chars); this primary manual-chat
+              // path was the sole outlier.
+              // R-09: concatenate THEN trim once — trimming each side separately
+              // loses the interior whitespace ("a b" + " c" counted 4, not 5).
+              if ((fullResponse + token).trim().length >= 5) {
+                manualFirstUseful = true;
+              }
               // First token back from the provider — the gap from
               // provider_request_started is pre-work + provider TTFT (the real cost).
               chatTrace.markFirstUseful({ via: codingGate ? 'gated' : 'stream' });
@@ -3769,12 +3793,41 @@ export function initializeIpcHandlers(appState: AppState): void {
                   stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
                   firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
                   isUsefulYet: () => regen.length >= 10,
-                  shouldAbort: () => regen.length > 4000,
+                  shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
                   onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                 });
                 const regenTrim = regen.trim();
-                if (regenTrim.length >= 20 && /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(regenTrim)) {
+                // F-305: a closed code fence is NOT proof the answer is whole.
+                // shouldAbort cuts this regen at 4000 chars while liveDeadlines
+                // sizes the very artifact it asks for — a six-section coding
+                // answer — at ~8000, so a correct answer whose fence closes
+                // early (## Approach, fenced code, then ## Complexity / ## Edge
+                // cases) is routinely truncated mid-sentence AFTER the fence.
+                // The old test passed on that truncation and then atomically
+                // REPLACED the streamed row with it, so the user's final answer
+                // ended mid-word. The sibling regen ~80 lines below already
+                // guards with checkCodeCompleteness; use the same bar here.
+                //
+                // R-06: that change REPLACED the closed-fence test instead of ADDING
+                // to it, which made the gate strictly WEAKER. extractFencedCodeBlocks
+                // requires a CLOSING fence, so an answer with no fences — or with an
+                // unterminated one — yields zero blocks and checkCodeCompleteness
+                // returns ok:true vacuously. Two regressions followed:
+                //   - another meta-reply (>=20 chars, no code at all) was accepted,
+                //     directly violating the invariant stated at the top of this block
+                //     ("only accept if the regen actually contains a code fence; never
+                //     overwrite with another meta-reply") and emitting a bogus
+                //     retry-succeeded telemetry event;
+                //   - raising CODING_REGEN_ABORT_CHARS to 8000 made the unclosed-fence
+                //     case REACHABLE: when shouldAbort fires mid-code-block the regen
+                //     ends on a dangling fence, and accepting it atomically replaces
+                //     the streamed answer with one whose fence never closes, so
+                //     markdown swallows everything after it.
+                // Both bars are required: the fence must close AND its contents must
+                // be complete.
+                const regenHasClosedFence = /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(regenTrim);
+                if (regenTrim.length >= 20 && regenHasClosedFence && checkCodeCompleteness(regenTrim).ok) {
                   fullResponse = regenTrim;
                   finalText = regenTrim;
                   // Re-strip <verification_spec>: the regen prompt includes the
@@ -3849,7 +3902,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
                   firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
                   isUsefulYet: () => regen.length >= 10,
-                  shouldAbort: () => regen.length > 4000,
+                  shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
                   onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                 });
@@ -4633,7 +4686,37 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // confident/synthesis-tier verdict, OR'd in as an additional
                   // signal. matchedHighSignalEntity is a whole-entity hit that
                   // is also present in the retrieved context.
-                  const hasStrongEvidence = hasRealEvidence || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence;
+                  // F-412: the tier signal is deliberately NOT consulted here.
+                  //
+                  // EvidenceAssembler.computeTier is TOPIC-BLIND — it returns
+                  // tier 2 for ANY synthesis-classified question as soon as the
+                  // pack yields >=1 card, and OkfRetriever's type boost still
+                  // clears the score floor with ZERO query-word overlap (that is
+                  // its purpose: surface the one `result` card for a `result`
+                  // question worded differently). R-04 narrowed this — confidence
+                  // ALONE no longer admits on the document path — but a card can
+                  // still be admitted without any topical overlap, so the tier
+                  // remains topic-blind. As an independent disjunct it therefore
+                  // made the off-topic gate above unable to veto anything: an
+                  // off-topic synthesis question ("What is the key takeaway for
+                  // the Kyoto Protocol?" against a robotics thesis) produced
+                  // hasEntityEvidence=false yet still repaired, discarding an
+                  // honest "not in the document" refusal and re-prompting the
+                  // model with a stronger-synthesis instruction — the exact
+                  // hallucination pressure this gate exists to prevent.
+                  //
+                  // HONESTY NOTE (self-review): the first version of this fix
+                  // wrote `|| (isTier1Or2Evidence && hasEntityEvidence)` and
+                  // described the tier as a "corroborating signal". That was
+                  // false. `hasRealEvidence` IS `hasEntityEvidence` (see its
+                  // assignment above), so that disjunct could only ever be true
+                  // when the first disjunct had already fired — provably dead
+                  // code. The real, and correct, effect is that the tier no
+                  // longer participates at all; the expression now says so.
+                  // isTier1Or2Evidence is still COMPUTED above and reported in
+                  // the diagnostic below, which is where its value belongs.
+                  const hasStrongEvidence =
+                    hasRealEvidence || Boolean(matchedHighSignalEntity);
                   // GOVERNANCE INTEGRITY (2026-07-13): when EvidenceResolver
                   // GOVERNED this turn and its typed pack's policy is an explicit
                   // refusal, that decision is authoritative — it already ran
@@ -4667,6 +4750,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                       tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
                       matchedHighSignalEntity: matchedHighSignalEntity || null,
+                      // F-412: reported for explainability only — the tier is
+                      // topic-blind and deliberately does NOT gate this decision.
+                      isTier1Or2Evidence,
                     });
                     piTelemetry.emit('pi_doc_grounded_false_refusal_repair_attempted', {
                       isSystemOwnRefusalPhrase,
@@ -4683,6 +4769,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                       wholeNameHit,
                       tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
+                      isTier1Or2Evidence,
                     });
                   }
                 }
@@ -5791,7 +5878,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!['vision_first', 'vision_only', 'private_vision'].includes(mode)) {
         return { success: false, error: 'invalid_mode' };
       }
-      SettingsManager.getInstance().setScreenUnderstandingMode(mode);
+      // CR-04: report the REAL outcome. A refused write used to return success
+      // AND broadcast the change, so every renderer switched mode while disk
+      // still held the old value and the app reverted on restart.
+      if (!SettingsManager.getInstance().setScreenUnderstandingMode(mode)) {
+        return { success: false, error: 'settings_store_degraded' };
+      }
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('screen-understanding-mode-changed', mode);
@@ -6088,7 +6180,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (level !== 'off' && level !== 'standard' && level !== 'verbose') {
         return { ok: false, error: 'invalid_level' };
       }
-      SettingsManager.getInstance().setContextDebugLevel(level);
+      // CR-04: a refused write used to be reported as success.
+      if (!SettingsManager.getInstance().setContextDebugLevel(level)) {
+        return { ok: false, error: 'settings_store_degraded' };
+      }
       // Effective config is re-read per turn, so this applies to the next
       // question without a restart. Env override (if set) still wins.
       return { ok: true };
@@ -7053,13 +7148,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
-      // Get hardware ID for HWID-binding
-      let hwid = 'unavailable';
+      // Get hardware ID for HWID-binding.
+      //
+      // F-601: this MUST be a real per-machine identity. LicenseManager
+      // returns the literal string 'unavailable' when the native module
+      // failed to load (its own JSDoc scopes that value to "display to the
+      // user for support purposes"), and the trial row is keyed
+      // `hwid text NOT NULL UNIQUE` server-side. Sending the sentinel makes
+      // every machine with a broken native module collide on ONE
+      // free_trials row: the server's idempotent re-issue branch hands back
+      // a valid signed trial token for a STRANGER's trial, exposing their
+      // usage counters and billing every request against their quota.
+      // Fail closed instead — a trial that cannot be bound to this machine
+      // must not be started.
+      let hwid = '';
       try {
         const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        hwid = LicenseManager.getInstance().getHardwareId() || 'unavailable';
+        hwid = LicenseManager.getInstance().getHardwareId() || '';
       } catch {
-        /* LicenseManager not available — fall back */
+        /* LicenseManager not available — handled by the guard below */
+      }
+      if (!hwid || hwid === 'unavailable') {
+        console.error('[Trial] Refusing to start a trial without a real hardware id (native module unavailable).');
+        return { ok: false, error: 'hardware_id_unavailable' };
       }
 
       const res = await fetch('https://api.natively.software/v1/trial/start', {
@@ -7642,6 +7753,38 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Get stored API keys (masked for UI display)
+  // R-10 resolution flow (§19.1): let the settings UI surface the ambiguous
+  // two-store state and apply the user's choice. Summary carries key NAMES and
+  // last-4 only — never values.
+  safeHandle('credentials:get-ambiguous-stores', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getAmbiguousStoreSummary();
+    } catch (e) {
+      console.error('[IPC] credentials:get-ambiguous-stores error:', e);
+      return null;
+    }
+  });
+
+  safeHandle('credentials:resolve-ambiguous-stores', async (_event, choice: 'keyring' | 'fallback' | 'merge') => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const result = CredentialsManager.getInstance().resolveAmbiguousStores(choice);
+      if (result.ok) {
+        // The active credential set just changed wholesale — tell every window
+        // the same way an ordinary key edit does.
+        const { BrowserWindow } = require('electron');
+        for (const win of BrowserWindow.getAllWindows()) {
+          try { win.webContents.send('credentials-changed'); } catch { /* window closing */ }
+        }
+      }
+      return result;
+    } catch (e) {
+      console.error('[IPC] credentials:resolve-ambiguous-stores error:', e);
+      return { ok: false, error: 'internal_error' };
+    }
+  });
+
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -11698,16 +11841,59 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { microphone: mic, screen, platform: 'darwin' };
     }
-    // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
+    // F-706: Windows 10/11 DOES expose a queryable microphone privacy state —
+    // Electron's own typings document getMediaAccessStatus('microphone') as
+    // @platform win32,darwin, and note the global setting that controls it.
+    // Reporting a hardcoded 'granted' meant that with the per-app or global
+    // microphone toggle off, onboarding never prompted, the launcher's
+    // permission check stayed green, and capture silently yielded nothing with
+    // no diagnosable cause. Screen capture has no equivalent Windows gate, so
+    // 'granted' remains correct there.
+    if (process.platform === 'win32') {
+      let microphone: string = 'granted';
+      try {
+        // Any non-'granted' value (denied / restricted / not-determined) must
+        // surface; fall back to 'granted' only if the API itself is unavailable,
+        // so a query failure can never LOCK a working machine out of capture.
+        microphone = systemPreferences.getMediaAccessStatus('microphone') || 'granted';
+      } catch {
+        microphone = 'granted';
+      }
+      return { microphone, screen: 'granted', platform: 'win32' };
+    }
+    // Linux: no queryable per-app permission model here.
     return { microphone: 'granted', screen: 'granted', platform: process.platform };
   });
 
   safeHandle('permissions:request-mic', async () => {
-    if (process.platform !== 'darwin') return true;
+    // CR-03: askForMediaAccess is documented @platform darwin and is a no-op
+    // elsewhere. Returning a bare `true` off darwin told the renderer the grant
+    // SUCCEEDED, so the Windows onboarding re-read an unchanged 'denied' and
+    // presented a control that could never turn green. Report honestly: false
+    // means "this platform cannot grant programmatically" — the caller's remedy
+    // is permissions:open-mic-settings.
+    if (process.platform !== 'darwin') return false;
     try {
       return await systemPreferences.askForMediaAccess('microphone');
     } catch {
       return false;
+    }
+  });
+
+  // CR-03: on win32 there is NO per-app grant API — the privacy panel is the
+  // only remedy, and before this the renderer had no way to reach it (its
+  // settings link early-returned for non-darwin). The platform decision lives in
+  // src/lib/micPermissionPolicy so main and renderer cannot disagree about which
+  // platforms have a reachable panel.
+  safeHandle('permissions:open-mic-settings', async () => {
+    const uri = micSettingsUri(process.platform);
+    if (!uri) return { ok: false, reason: 'no-settings-panel' };
+    try {
+      await shell.openExternal(uri);
+      return { ok: true };
+    } catch (e: any) {
+      console.warn('[IPC] permissions:open-mic-settings failed:', e?.message || e);
+      return { ok: false, reason: 'open-failed' };
     }
   });
 
@@ -12937,9 +13123,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // strip prior-assistant turns from the snapshot (topic-collapse), and block
       // an invalid answer from being saved (contamination loop).
       let phoneDocGrounded = false;
+      // F-502: pin the mode id at t0 as well. phoneDocGrounded is captured here,
+      // BEFORE the awaits, but every mode read inside streamChat resolved the
+      // LIVE ModesManager singleton — so a `modes:set-active` landing mid-request
+      // made retrieval read a DIFFERENT mode's documents than the contract this
+      // turn was planned against. The phone surface is the worse half: unlike
+      // desktop it never registers in _chatStreamsBySender, so modes:set-active
+      // does not abort it either.
+      let phonePinnedModeId: string | null = null;
       try {
         const { ModesManager } = require('./services/ModesManager');
-        phoneDocGrounded = ModesManager.getInstance().getActiveModeInfo()?.documentGroundedCustomModeActive === true;
+        const phoneModeInfo = ModesManager.getInstance().getActiveModeInfo();
+        phoneDocGrounded = phoneModeInfo?.documentGroundedCustomModeActive === true;
+        phonePinnedModeId = phoneModeInfo?.id ?? null;
       } catch { /* mode unavailable — treat as non-doc-grounded */ }
 
       // Doc-grounded strict-isolation (audit #3, 2026-07-05): mirror the
@@ -13007,6 +13203,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             phoneRouteOptions = {
               answerType: phonePlan?.answerType || 'unknown_answer',
               forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
+              // F-502: t0-pinned mode — see phonePinnedModeId above.
+              pinnedModeId: phonePinnedModeId,
             };
           }
         } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
@@ -13088,8 +13286,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch);
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
-            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId });
-            win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId, source: 'phone' });
+            win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
             intelligenceManager.addAssistantMessage(clarify, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, clarify);
             if (isIntelligenceFlagEnabled('trace')) {
@@ -13107,9 +13305,22 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
         // provider must never block it forever. Uses the standard chat first-useful
         // budget; an inter-token stall guard protects long answers.
+        //
+        // CR-05: this passed NEITHER route flag, so it always took the 7s cloud
+        // cap. Both defaults are wrong here for the same reasons the manual-chat
+        // site documents, and the rationale is surface-agnostic:
+        //   • viaServerCascade — the natively-api server cuts over to the next
+        //     provider at AI_TTFT_BUDGET_MS (10s). Aborting at 7s tore the HTTP
+        //     request down 3s BEFORE the rescue, producing exactly the "did not
+        //     produce an answer in time" outcome F-301 exists to eliminate.
+        //   • isLocal — a local model cold-loads its weights (8-12s for a 7-9B)
+        //     before the first token, so 7s aborted every cold local generation
+        //     on the phone path to zero tokens.
+        const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+        const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer'),
+          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {
@@ -13124,7 +13335,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { phoneMirror.publishToken(String(myStreamId), token); } catch (_) {}
             // streamId lets the desktop renderer drop tokens from a superseded
             // chat stream (audit finding #3); backward-compatible optional arg.
-            win?.webContents.send('gemini-stream-token', token, { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-token', token, { streamId: myStreamId, source: 'phone' });
             full += token;
           },
           onCleanup: () => { try { phoneController.abort(); } catch { /* noop */ } },
@@ -13134,7 +13345,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             phoneMirror.publishDone(String(myStreamId), full);
           } catch (_) {}
-          win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+          win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
           // Document-grounded: block a greeting/empty answer from SessionTracker
           // so it can't contaminate the next turn (same backstop as the desktop
           // path, minus the regenerate — the phone surface keeps it simple).

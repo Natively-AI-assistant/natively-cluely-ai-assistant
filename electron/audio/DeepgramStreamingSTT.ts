@@ -180,13 +180,26 @@ export class DeepgramStreamingSTT extends EventEmitter {
                 ...(this.diarize ? { diarize: true } : {}),
             });
 
+            // F-203: identity guard. restartStream() does a synchronous
+            // stop()+start() without detaching listeners, so the OLD
+            // connection's events would otherwise run against the NEW one:
+            // flipping isOpen/isConnecting for the wrong connection,
+            // registering a SECOND Transcript listener on the live connection
+            // (every final emitted twice into handleTranscript and the RAG
+            // feed), and clearing the live keepalive timers so Deepgram
+            // idle-closes it. Mirrors NativelyProSTT's documented pattern.
+            const live = this.live;
+
             this.live.on(LiveTranscriptionEvents.Open, () => {
+                if (live !== this.live) return; // F-203 stale-connection guard
                 this.isConnecting = false;
                 this.isOpen = true;
                 console.log('[DeepgramStreaming] Connected');
 
-                // Register Transcript inside Open per SDK README pattern
-                this.live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
+                // Register Transcript inside Open per SDK README pattern.
+                // Bound to the captured `live` so a stale Open can never add a
+                // duplicate listener to the current connection.
+                live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
                     try {
                         const alt = data.channel?.alternatives?.[0];
                         const transcript = alt?.transcript;
@@ -241,11 +254,13 @@ export class DeepgramStreamingSTT extends EventEmitter {
             });
 
             this.live.on(LiveTranscriptionEvents.Error, (err: any) => {
+                if (live !== this.live) return; // F-203 stale-connection guard
                 console.error('[DeepgramStreaming] Error:', err);
                 this.emit('error', err instanceof Error ? err : new Error(String(err)));
             });
 
             this.live.on(LiveTranscriptionEvents.Close, (event: any) => {
+                if (live !== this.live) return; // F-203 stale-connection guard
                 const code = event?.code ?? 'unknown';
                 const reason = event?.reason || '(empty)';
                 console.log(`[DeepgramStreaming] Closed (code=${code}, reason=${reason})`);

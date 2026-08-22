@@ -273,7 +273,7 @@ import {
   splitStreamingCodeLines,
 } from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
-import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch } from '../lib/chatStreamGuard.mjs';
+import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -3414,6 +3414,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       console.log('[NativelyInterface] Resetting session state...');
       window.electronAPI?.cancelChatStream?.();
       chatStreamIdRef.current = null;
+      chatStreamSourceRef.current = null;
       requestStartTimeRef.current = null;
       setMessages([]);
       eagerCodeExpansionHoldRef.current = false;
@@ -3732,6 +3733,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on one channel from both the desktop and phone-mirror paths; this lets us drop
   // tokens/done from a superseded stream. null = no id adopted yet (back-compat).
   const chatStreamIdRef = useRef<number | null>(null);
+  // F-303: the surface that owns the currently-adopted chat stream ('desktop'
+  // or 'phone'). Supersession is scoped to a surface because both paths
+  // allocate stream ids from ONE shared counter in the main process.
+  const chatStreamSourceRef = useRef<string | null>(null);
   // Active LIVE-ANSWER generation id (audit finding #3, full). The live what-to-
   // answer path streams on `intelligence-token-batch` (kind='suggested_answer')
   // keyed only on intent, so two back-to-back live answers share the same intent
@@ -4352,6 +4357,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const cancelActiveChatStream = useCallback(() => {
     window.electronAPI?.cancelChatStream?.();
     chatStreamIdRef.current = null;
+    chatStreamSourceRef.current = null;
     requestStartTimeRef.current = null;
     setIsProcessing(false);
     flushToken();
@@ -5483,8 +5489,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // without a streamId (back-compat) are always accepted.
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token, meta) => {
-        const decision = resolveChatStreamToken(chatStreamIdRef.current, meta?.streamId);
+        const decision = resolveChatStreamToken(
+          chatStreamIdRef.current, meta?.streamId,
+          chatStreamSourceRef.current, (meta as any)?.source,
+        );
         chatStreamIdRef.current = decision.activeId;
+        chatStreamSourceRef.current = decision.activeSource ?? null;
         if (!decision.accept) return;
         queueToken('chat', token);
       }),
@@ -5496,9 +5506,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // Ignore a done from a superseded stream (audit finding #3) so it can't
         // tear down a newer stream's row. A done without a streamId is honored
         // (back-compat). On an honored done we clear the adopted id.
-        const doneDecision = resolveChatStreamDone(chatStreamIdRef.current, data?.streamId);
+        const doneDecision = resolveChatStreamDone(
+          chatStreamIdRef.current, data?.streamId,
+          chatStreamSourceRef.current, (data as any)?.source,
+        );
         chatStreamIdRef.current = doneDecision.activeId;
-        if (!doneDecision.honor) return;
+        chatStreamSourceRef.current = doneDecision.activeSource ?? null;
+        if (!doneDecision.honor) {
+          // CR-01: a done we do not honor still ends the request THIS surface
+          // started. Without this the spinner runs forever whenever the user
+          // types while a phone-mirror answer is streaming.
+          if (doneDecision.release) setIsProcessing(false);
+          return;
+        }
         // finalText is set ONLY when the backend's coding validate→repair changed
         // the streamed answer — it authoritatively REPLACES the streamed row text
         // (in-place, by id) so the user sees the corrected six-section markdown.
@@ -5633,7 +5653,23 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // source:'phone-mirror' and no streamId; a desktop failure carries the
         // originating streamId — drop it unless it matches the adopted stream.
         // Untagged errors keep the legacy behavior exactly.
-        if (meta?.source === 'phone-mirror') return;
+        if (meta?.source === 'phone-mirror') {
+          // R-02: this branch deliberately keeps a phone failure out of the
+          // desktop UI, but it must still RELEASE the stream guard. Phone
+          // tokens are tagged source:'phone' (ipcHandlers.ts:12814) while this
+          // error is tagged 'phone-mirror' (:12851), and a provider that throws
+          // AFTER committing tokens never sends a `done` — so a phone turn that
+          // failed mid-answer left the guard pinned to the phone surface
+          // forever. Every later DESKTOP stream was then rejected as a
+          // cross-surface supersession (accept:false / honor:false): no text at
+          // all and a spinner that never stopped, until the user hit Escape.
+          // Releasing is safe here because this phone stream is definitively over.
+          if (resolveChatStreamSurfaceError(chatStreamSourceRef.current, meta.source).release) {
+            chatStreamIdRef.current = null;
+            chatStreamSourceRef.current = null;
+          }
+          return;
+        }
         if (typeof meta?.streamId === 'number'
           && chatStreamIdRef.current !== null
           && meta.streamId !== chatStreamIdRef.current) return;
@@ -5644,6 +5680,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // next stream starts clean (audit finding #3). Safe today because ids are
         // monotonic, but keeps token/done/error ref management consistent.
         chatStreamIdRef.current = null;
+      chatStreamSourceRef.current = null;
         setMessages((prev) => {
           // Append error to the current message or add new one?
           // Let's add a new error block if the previous one confusing,

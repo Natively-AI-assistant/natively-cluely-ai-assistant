@@ -8618,6 +8618,21 @@ let isMultimodal = !!(imagePaths?.length);
     );
   }
 
+  /**
+   * True when this turn routes through natively-api's SEQUENTIAL server-side
+   * provider cascade (`${NATIVELY_API_URL}/v1/chat`) rather than straight to a
+   * provider.
+   *
+   * F-301: the client's first-useful deadline must stay ABOVE the server's
+   * AI_TTFT_BUDGET_MS (10s) on this route, because the server's cutover to the
+   * next provider is the thing that actually RESCUES a slow turn — the client
+   * can only give up. Callers use this to pick the deadline; see
+   * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli().
+   */
+  public isUsingNativelyServerCascade(): boolean {
+    return this.currentModelId === 'natively';
+  }
+
   public async getOllamaModels(): Promise<string[]> {
     const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
 

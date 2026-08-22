@@ -72,8 +72,26 @@ test('ipcHandlers: repair gate does NOT depend on a retrieval-score threshold', 
   assert.ok(!ipcHandlersSrc.includes('DOC_GROUNDED_REPAIR_MIN_TOP_SCORE'), 'must not gate on raw retrieval score');
 });
 
-test('ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity OR tier; shouldRepair uses it directly', () => {
-  assert.match(ipcHandlersSrc, /const hasStrongEvidence = hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\) \|\| isTier1Or2Evidence;/);
+test('ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity (NOT tier); shouldRepair uses it directly', () => {
+  // CONTRACT CHANGED 2026-08-19 (audit F-412, owner-confirmed). The tier was
+  // removed from this gate. EvidenceAssembler.computeTier is TOPIC-BLIND — it
+  // returns tier 2 for ANY synthesis-classified question the moment the pack
+  // yields >=1 card, and OkfRetriever admits cards on a question-TYPE match with
+  // zero query-word overlap. As an independent disjunct the tier therefore made
+  // the off-topic veto unable to veto anything: an off-topic synthesis question
+  // ("key takeaway for the Kyoto Protocol" against a robotics thesis) produced
+  // hasEntityEvidence=false yet still repaired — discarding an honest "not in the
+  // document" refusal and re-prompting the model to synthesize harder, which is
+  // the hallucination pressure this gate exists to prevent.
+  //
+  // The tier is still COMPUTED and reported in the decision diagnostics, which is
+  // where a topic-blind signal belongs. Pinned negatively too, so the disjunct
+  // cannot be reintroduced silently.
+  assert.match(ipcHandlersSrc, /const hasStrongEvidence =\s*hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\);/);
+  assert.ok(
+    !/hasStrongEvidence =[^;]*isTier1Or2Evidence/.test(ipcHandlersSrc),
+    'the topic-blind tier must not gate the false-refusal repair',
+  );
   // `&& !governedRefusal` was ADDED after this pin was written: a Context-OS
   // governed refusal is authoritative and must never be "repaired" into an
   // answer. The pin accepts the extra conjunct — it only ever meant to assert
