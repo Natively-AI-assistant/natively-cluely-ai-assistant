@@ -16,6 +16,7 @@
 // substantive turns never enter this path.
 
 import { SOCIAL_PLEASANTRY } from './questionShapes';
+import { splitGistLine, GIST_MARKER } from './promptSystemV2';
 
 /** Greeting shapes SOCIAL_PLEASANTRY deliberately does not cover (it is a
  *  commute/weather/how-are-you list). "Hey Even, good to meet you." was the
@@ -55,8 +56,18 @@ export interface SteeringTailResult {
  */
 export function stripSteeringTail(answer: string): SteeringTailResult {
   const original = String(answer ?? '');
-  let t = original.trim();
-  if (!t || t.startsWith('```')) return { text: original, repaired: false };
+  const trimmed = original.trim();
+  if (!trimmed || trimmed.startsWith('```')) return { text: original, repaired: false };
+
+  // Code-review 2026-08-23: a trailing [[GIST]] line made this a NO-OP — the
+  // gist line became the "last sentence", matched no steering shape, and the
+  // closer shipped on every >40-word small-talk reply (the prompt contract
+  // mandates a gist there). Split the gist off first, strip the closer from
+  // the BODY, then reattach the gist on its own line (splitGistLine only
+  // honors a marker that starts a line, so it must never be joined inline).
+  const { body, gist } = splitGistLine(trimmed);
+  let t = body.trim();
+  if (!t) return { text: original, repaired: false };
 
   let repaired = false;
   for (let pass = 0; pass < 2; pass++) {
@@ -68,5 +79,6 @@ export function stripSteeringTail(answer: string): SteeringTailResult {
     t = rest;
     repaired = true;
   }
-  return repaired ? { text: t, repaired } : { text: original, repaired: false };
+  if (!repaired) return { text: original, repaired: false };
+  return { text: gist ? `${t}\n${GIST_MARKER} ${gist}` : t, repaired: true };
 }

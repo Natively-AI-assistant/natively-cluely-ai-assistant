@@ -66,6 +66,22 @@ describe('stripSteeringTail', () => {
     assert.equal(r.repaired, false);
   });
 
+  test('a trailing [[GIST]] line no longer shields the closer (code-review 2026-08-23)', () => {
+    const r = stripSteeringTail('Hey, great to meet you too. Thanks for the time. Where would you like to start?\n[[GIST]] Greeting back');
+    assert.equal(r.repaired, true);
+    assert.doesNotMatch(r.text, /Where would you like to start\?/);
+    // the gist is reattached on its OWN line so splitGistLine still honors it
+    assert.match(r.text, /\n\[\[GIST\]\] Greeting back$/);
+    assert.match(r.text, /^Hey, great to meet you too\. Thanks for the time\.\n/);
+  });
+
+  test('a gist-carrying reply with NO closer is returned untouched', () => {
+    const original = 'Doing well, thanks for asking.\n[[GIST]] Doing well';
+    const r = stripSteeringTail(original);
+    assert.equal(r.repaired, false);
+    assert.equal(r.text, original);
+  });
+
   test('two stacked closers both go', () => {
     const r = stripSteeringTail('Great to meet you too. How can I help you today? Where would you like to start?');
     assert.equal(r.repaired, true);

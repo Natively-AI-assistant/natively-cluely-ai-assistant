@@ -381,12 +381,33 @@ export function isAnswerFragmentTitle(title: string): boolean {
   if (words.length === 1 && t === t.toLowerCase() && /^[a-z0-9+#.]+$/.test(t)) return true;
   // An ENTIRELY-lowercase multi-word Latin title is a truncation fragment
   // ("ral backend for every keystroke" — the clamp caught a line mid-word,
-  // session E 2026-08-23). Generated titles are Title Case; requiring at
-  // least one ASCII lowercase letter keeps caseless scripts (Malayalam)
-  // out of this rule, and any uppercase anywhere ("iOS Migration Kickoff")
-  // passes.
-  if (words.length >= 2 && /[a-z]/.test(t) && !/[A-Z]/.test(t)) return true;
+  // session E 2026-08-23). Generated titles are Title Case; any uppercase
+  // anywhere ("iOS Migration Kickoff") passes. Code-review 2026-08-23: the
+  // rule requires EVERY word to carry an ASCII letter — a mixed-script title
+  // ("പ്രോജക്ട് sync review") has caseless words that can never satisfy the
+  // Title Case expectation, so it must not be judged by it.
+  if (words.length >= 2 && !/[A-Z]/.test(t) && words.every((w) => /[a-z]/.test(w))) return true;
   return false;
+}
+
+/**
+ * Catch-all for a GENERATED title whose source text is an ANSWER, whatever
+ * the clamp salvages from it: after stripping code fences and the [[GIST]]
+ * tail (the same pre-cleaning cleanMeetingTitle applies), a first content
+ * line over 200 chars is the model answering the transcript — a real title
+ * attempt, even a verbose one with reasoning underneath, keeps its first
+ * line short. Code-review 2026-08-23: the first version of this rule lived
+ * at the call site and measured the RAW first line, so a fence-wrapped
+ * answer ("```\n<450-char explanation>\n```") measured 3 chars and walked
+ * straight past it.
+ */
+export function isAnswerShapedGeneration(rawGenerated: unknown): boolean {
+  let text = String(rawGenerated ?? '').replace(NUL_RE, '');
+  const gistAt = text.indexOf('[[GIST]]');
+  if (gistAt >= 0) text = text.slice(0, gistAt);
+  text = text.replace(FENCE_RE, '');
+  const firstLine = text.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? '';
+  return firstLine.length > 200;
 }
 
 function clamp(value: number, min: number, max: number): number {

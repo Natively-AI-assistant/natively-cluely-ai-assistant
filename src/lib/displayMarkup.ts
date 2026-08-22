@@ -78,8 +78,17 @@ export function splitGistLineStreaming(text: string): GistSplit {
   if (full.gist !== null) return full;
   const t = (text || '').replace(/\s+$/, '');
   const lineStart = t.lastIndexOf('\n');
-  // Bullet glyphs before a partial marker ("- [[GI") are hidden the same way.
-  const lastLine = t.slice(lineStart + 1).trimStart().replace(/^[-*•–—>]+\s*/, '');
+  // Bullet glyphs before a partial marker ("- [[GI") are hidden the same way —
+  // but ONLY once the remainder shows the double bracket. Code-review
+  // 2026-08-23: stripping first meant a genuine streamed list item starting
+  // with a single '[' ("- [MDN](…)") was mistaken for a marker prefix and
+  // flickered out for a frame. A bare "[" as its own line (no bullet) keeps
+  // the pre-existing hide behavior.
+  const rawLastLine = t.slice(lineStart + 1).trimStart();
+  const stripped = rawLastLine.replace(/^[-*•–—>]+\s*/, '');
+  const lastLine = stripped === rawLastLine
+    ? rawLastLine
+    : (stripped.startsWith('[[') ? stripped : '');
   if (lastLine && GIST_MARKER.startsWith(lastLine)) {
     return { body: t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, ''), gist: null };
   }

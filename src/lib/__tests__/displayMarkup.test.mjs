@@ -37,6 +37,18 @@ describe('splitGistLine', () => {
     assert.equal(spaced.gist, 'Two pointers from both ends');
   });
 
+  test('streaming: a genuine list item starting with "[" is NOT hidden (code-review 2026-08-23)', () => {
+    const r = splitGistLineStreaming('Body.\n- [MDN](https://mdn.io)');
+    assert.match(r.body, /- \[MDN\]/, 'a markdown link bullet must keep painting');
+    const partial = splitGistLineStreaming('Body.\n- [');
+    assert.match(partial.body, /- \[$/, '"- [" alone is a link-in-progress, not a marker prefix');
+  });
+
+  test('streaming: a bare "[" line (no bullet) keeps the pre-existing hide behavior', () => {
+    const r = splitGistLineStreaming('Body.\n[');
+    assert.equal(r.body, 'Body.');
+  });
+
   test('streaming: a bullet-prefixed partial marker never flashes', () => {
     const r = splitGistLineStreaming('Body.\n- [[GI');
     assert.equal(r.body, 'Body.');
