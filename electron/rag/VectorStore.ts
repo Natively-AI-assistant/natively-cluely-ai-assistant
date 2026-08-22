@@ -488,12 +488,31 @@ export class VectorStore {
         try {
             const row = this.db.prepare('SELECT embedding_space AS s FROM meetings WHERE id = ?').get(meetingId) as any;
             if (!row || row.s == null || row.s === space) return false;
-            this.db.prepare(
-                'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ?'
-            ).run(providerName, dimensions, space, meetingId);
-            console.warn(`[VectorStore] Meeting ${meetingId} embedding space changed ${row.s} -> ${space} (mid-meeting provider fallback); re-stamped.`);
+            // R-21: re-stamping alone left every chunk embedded under the OLD space
+            // in place while the meeting row claimed the new one. The query-time
+            // filter is meeting-level, so a same-dimension provider then scored
+            // stale-space vectors against new-space queries, and a different-
+            // dimension one produced hidden orphans (the re-index sweep's
+            // `embedding_space IS NOT NULL AND != ?` is false once re-stamped).
+            // The queued path has always cleared before switching providers —
+            // EmbeddingPipeline.activateMeetingFallback → clearEmbeddingsForMeeting.
+            //
+            // Both halves are ONE unit: clearEmbeddingsForMeeting() nulls
+            // embedding_space on its way through, so failing between it and the
+            // UPDATE would leave some dims cleared and no stamp at all — worse than
+            // the state this method was called to repair.
+            this.db.transaction(() => {
+                this.clearEmbeddingsForMeeting(meetingId);
+                this.db.prepare(
+                    'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ?'
+                ).run(providerName, dimensions, space, meetingId);
+            })();
+            console.warn(`[VectorStore] Meeting ${meetingId} embedding space changed ${row.s} -> ${space} (mid-meeting provider fallback); cleared the old-space vectors and re-stamped.`);
             return true;
         } catch (e) {
+            // Rolled back: the meeting still claims the OLD space and still has its
+            // old-space vectors — consistent, and the pre-R-21 behaviour.
+            console.warn(`[VectorStore] restampMeetingSpaceOnChange(${meetingId}) failed and was rolled back:`, e);
             return false;
         }
     }
