@@ -1699,6 +1699,14 @@ export class DatabaseManager {
                 this.db.pragma('user_version = 30');
             } catch (e) {
                 console.error('[DatabaseManager] v30 vec0 cosine rebuild failed (leaving version at 29 to retry next launch):', e);
+                // R-22: stop here, as v28/v29 do. v30 is currently the LAST
+                // migration, so falling through is harmless TODAY — which is
+                // precisely why it would not stay harmless: the next migration
+                // added below would run and stamp user_version past a v30 that
+                // never applied, and `version < 30` would be false forever after.
+                // That is R-05 verbatim, and R-05 only became reachable because
+                // an earlier block was written this same way.
+                return;
             }
         }
 
