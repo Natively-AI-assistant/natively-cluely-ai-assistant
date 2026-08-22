@@ -37,7 +37,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import Module from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -69,7 +69,7 @@ try {
 const opts = skipReason ? { skip: skipReason } : {};
 
 const { VectorStore } = await import(
-    path.join(repoRoot, 'dist-electron/electron/rag/VectorStore.js'));
+    pathToFileURL(path.join(repoRoot, 'dist-electron/electron/rag/VectorStore.js')).href);
 
 const MEETING = 'rag-guard-meeting';
 
@@ -168,7 +168,7 @@ test('the guard keys off availability, so real errors on an OPEN database still 
 test('RAGManager.deleteMeetingData is guarded at the boundary too', opts, async () => {
     // RAGManager holds its own raw handle and is the entry point the meeting
     // teardown block actually calls (main.ts: ragManager.deleteMeetingData).
-    const { RAGManager } = await import(path.join(repoRoot, 'dist-electron/electron/rag/RAGManager.js'));
+    const { RAGManager } = await import(pathToFileURL(path.join(repoRoot, 'dist-electron/electron/rag/RAGManager.js')).href);
     const { db, dir } = makeIsolatedDb();
 
     const mgr = new RAGManager({ db, dbPath: path.join(dir, 'natively.db'), extPath: '' });

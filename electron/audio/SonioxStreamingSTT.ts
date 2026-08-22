@@ -234,7 +234,19 @@ export class SonioxStreamingSTT extends EventEmitter {
         // TLS+upgrade handshake at 15s. See dnsHelpers.ts.
         this.ws = new WebSocket(SONIOX_WEBSOCKET_URL, streamingStttWsOptions() as any);
 
+        // F-203: identity guard. stop() does not detach listeners and
+        // scheduleRestart()/setSampleRate()/setRecognitionLanguage() do a
+        // synchronous stop()+start(), so the OLD socket's async 'close' would
+        // otherwise run against the NEW session: null out the live `this.ws`
+        // (write() can no longer reach it), clear the new keepalive, and — on
+        // a normal 1000 close — set isActive=false, which silently drops every
+        // subsequent chunk with no 'error' emitted and no banner (total silent
+        // death until a manual Stop/Start). Mirrors NativelyProSTT's
+        // documented `guard(ws === this.ws)` pattern.
+        const ws = this.ws;
+
         this.ws.on('open', () => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             // Guard: stop() may have been called while the WS handshake was in flight.
             // shouldReconnect is set to false by stop() before ws is nulled, so it's a
             // reliable signal that we should abort here without crashing.
@@ -347,11 +359,8 @@ export class SonioxStreamingSTT extends EventEmitter {
                 if (msg.finished) {
                     console.log('[SonioxStreaming] Session finished');
                     // We don't stop entirely, just clear WS so it can lazily reconnect on next audio
-                    if (this.ws) {
-                        this.ws.close();
-                        this.ws = null;
-                        this.configSent = false;
-                    }
+                    if (ws !== this.ws) return; // F-203: don't clear a newer session's socket
+                    this.closeFinishedSession();
                 }
             } catch (err) {
                 console.error('[SonioxStreaming] Parse error:', err);
@@ -359,11 +368,13 @@ export class SonioxStreamingSTT extends EventEmitter {
         });
 
         this.ws.on('error', (err: Error) => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             console.error('[SonioxStreaming] WebSocket error:', err.message);
             this.emit('error', err);
         });
 
         this.ws.on('close', (code: number, reason: Buffer) => {
+            if (ws !== this.ws) return; // F-203 stale-socket guard
             // Null out the ws reference immediately to prevent stale reuse
             this.ws = null;
             this.isConnecting = false;
@@ -429,6 +440,29 @@ export class SonioxStreamingSTT extends EventEmitter {
                 }
             }
         }, KEEPALIVE_INTERVAL_MS);
+    }
+
+    /**
+     * Tear down the socket for a session the server reported as FINISHED. We do
+     * not stop entirely — the next audio chunk lazily reconnects.
+     *
+     * CR-07: this used to be written inline as close() + `this.ws = null`, and
+     * nulling this.ws makes the socket's own 'close' event fail the F-203
+     * identity guard (`ws !== this.ws`), so the close handler returns BEFORE its
+     * clearKeepAlive(). That leaked one 5s interval per finished session for the
+     * life of the process. Clearing it here is the fix; keeping the sequence in
+     * ONE named place is what stops the two teardown paths drifting apart again.
+     *
+     * isConnecting is deliberately not touched: the 'open' handler has already
+     * cleared it by the time a session can finish, so the keep-alive is the only
+     * cleanup that early return actually skips.
+     */
+    private closeFinishedSession(): void {
+        if (!this.ws) return;
+        this.ws.close();
+        this.clearKeepAlive();
+        this.ws = null;
+        this.configSent = false;
     }
 
     private clearKeepAlive(): void {

@@ -48,8 +48,8 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     nvidia_nim: {
         hasKeyCheck: (creds) => !!creds?.hasNvidiaNimKey,
         ids: ['nvidia_nim/meta/llama-3.1-8b-instruct', 'nvidia_nim/z-ai/glm4.7'],
-        names: ['Llama 3.1 8B (NVIDIA NIM)', 'GLM 4.7 (NVIDIA NIM)'],
-        descs: ['NVIDIA hosted', 'Reasoning • NVIDIA hosted'],
+        names: ['Llama 3.1 8B (Nvidia Nim)', 'GLM 4.7 (Nvidia Nim)'],
+        descs: ['Nvidia hosted', 'Reasoning • Nvidia hosted'],
         pmKey: 'nvidia_nimPreferredModel'
     },
 };

@@ -86,10 +86,37 @@ impl SilenceSuppressionConfig {
         }
     }
 
-    /// Create config for microphone (standard).
-    /// Uses Normal VAD mode instead of Aggressive because built-in microphones with heavy
-    /// hardware DSP (like macOS Apple Silicon) sound "unnatural" to strict models (#128).
+    /// Create config for microphone.
+    ///
+    /// PLATFORM SPLIT on stage 2. On macOS the WebRTC VAD stays ON and uses
+    /// Quality mode rather than Aggressive, because built-in microphones with
+    /// heavy hardware DSP (Apple Silicon) sound "unnatural" to strict models
+    /// (#128) — it is the only stage that rejects typing, fans and other
+    /// non-speech, and it also keeps interviewer audio bleeding from the
+    /// speakers back into the mic out of the user's own transcript.
+    ///
+    /// On Windows it is OFF: device DSP routinely pulls normal laptop/headset
+    /// speech below what the VAD will accept, so the gate never opens, the
+    /// channel emits only zero keepalives, and the user sees the misleading
+    /// "Microphone Is Silent" warning. Cloud STT providers run their own
+    /// speech detection, and the adaptive RMS gate below still suppresses a
+    /// genuinely idle microphone.
+    ///
+    /// Note on `speech_threshold_rms`: it is only the INITIAL
+    /// `adaptive_threshold`. The suppressor starts in `Suppressed`, so the
+    /// first non-speech frame overwrites it with
+    /// `max(noise_floor_ema * adaptive_multiplier, adaptive_min_floor)` — with
+    /// `noise_floor_ema` seeded at `adaptive_min_floor`, that is ~59 within one
+    /// frame. Lowering this value therefore does NOT lower the gate; the live
+    /// knobs are `adaptive_min_floor` and `adaptive_multiplier`.
     pub fn for_microphone() -> Self {
+        Self::for_microphone_on(cfg!(target_os = "windows"))
+    }
+
+    /// `for_microphone` with the platform decision injected, so a test on
+    /// EITHER host can exercise BOTH branches. A suite that only covers the
+    /// branch its own OS compiles is not coverage for a platform split.
+    pub fn for_microphone_on(is_windows: bool) -> Self {
         Self {
             speech_threshold_rms: 100.0,
             speech_hangover: Duration::from_millis(500), // increased from 150ms to prevent clipping trailing consonants (s, t, etc)
@@ -98,7 +125,7 @@ impl SilenceSuppressionConfig {
             adaptive_min_floor: 20.0,
             ema_alpha: 0.02,
             native_sample_rate: 48000,
-            use_vad: true,
+            use_vad: !is_windows,
             vad_mode: VadMode::Quality,
         }
     }
@@ -442,5 +469,70 @@ mod tests {
         // Another silent frame should NOT trigger speech_ended again
         let (_, ended) = suppressor.process(&silent_frame);
         assert!(!ended, "Speech_ended should only fire once per transition");
+    }
+
+    /// The mic VAD split is platform-scoped on purpose: Windows device DSP
+    /// starves the VAD ("Microphone Is Silent"), while macOS needs stage 2 to
+    /// reject typing/fans and speaker bleed. A global flip would silently take
+    /// noise rejection away from macOS, so assert BOTH branches here rather
+    /// than only whichever one this build happens to compile.
+    #[test]
+    fn test_microphone_vad_is_platform_scoped() {
+        // BOTH branches, from whichever host runs the suite.
+        assert!(
+            !SilenceSuppressionConfig::for_microphone_on(true).use_vad,
+            "Windows mic must bypass the WebRTC VAD (device DSP starves it)"
+        );
+        assert!(
+            SilenceSuppressionConfig::for_microphone_on(false).use_vad,
+            "non-Windows mic must keep the WebRTC VAD (typing/fan/bleed rejection)"
+        );
+
+        // The live constructor agrees with the branch this build compiled for.
+        assert_eq!(
+            SilenceSuppressionConfig::for_microphone().use_vad,
+            !cfg!(target_os = "windows")
+        );
+
+        // Everything EXCEPT use_vad is shared — the split must not drift into a
+        // second, silently divergent microphone tuning.
+        let win = SilenceSuppressionConfig::for_microphone_on(true);
+        let mac = SilenceSuppressionConfig::for_microphone_on(false);
+        assert_eq!(win.speech_threshold_rms, mac.speech_threshold_rms);
+        assert_eq!(win.speech_hangover, mac.speech_hangover);
+        assert_eq!(win.adaptive_multiplier, mac.adaptive_multiplier);
+        assert_eq!(win.adaptive_min_floor, mac.adaptive_min_floor);
+        assert_eq!(win.ema_alpha, mac.ema_alpha);
+
+        // System audio is VAD-free on every platform (#127); not part of this split.
+        assert!(!SilenceSuppressionConfig::for_system_audio().use_vad);
+    }
+
+    /// Guards the comment on for_microphone(): the initial speech_threshold_rms
+    /// is NOT the gate. One non-speech frame replaces it with the adaptive
+    /// value, which is HIGHER than a "lowered" initial of 50 — the reason the
+    /// 100 -> 50 edit this replaced could not have had the effect it claimed.
+    #[test]
+    fn test_initial_threshold_is_superseded_by_adaptive() {
+        let mut suppressor = SilenceSuppressor::new(SilenceSuppressionConfig {
+            speech_threshold_rms: 50.0,
+            native_sample_rate: 16000,
+            ..SilenceSuppressionConfig::for_microphone()
+        });
+        assert_eq!(suppressor.adaptive_threshold, 50.0, "seeded from the initial value");
+
+        let silent_frame: Vec<i16> = vec![0; 320];
+        let _ = suppressor.process(&silent_frame);
+
+        let expected = (20.0_f32 * 0.98) * 3.0; // ema decays from adaptive_min_floor toward 0
+        assert!(
+            (suppressor.adaptive_threshold - expected).abs() < 0.5,
+            "adaptive threshold {} should have replaced the initial 50.0",
+            suppressor.adaptive_threshold
+        );
+        assert!(
+            suppressor.adaptive_threshold > 50.0,
+            "the adaptive gate sits ABOVE a 'lowered' initial value"
+        );
     }
 }

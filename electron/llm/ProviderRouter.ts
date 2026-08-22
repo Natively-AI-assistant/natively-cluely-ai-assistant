@@ -381,6 +381,36 @@ const QUALITY_PROVIDERS = ['claude', 'openai', 'gemini_pro'];
 // Local providers (for privacy mode)
 const LOCAL_PROVIDERS = ['ollama', 'custom'];
 
+/**
+ * ⚠ STATUS (F-306, audit 2026-08-18): NOT WIRED INTO PRODUCTION.
+ *
+ * `ProviderRouter` is constructed once (LLMHelper) and then never used:
+ * selectProvider / recordSuccess / recordFailure / getProviderHealth have ZERO
+ * production call sites, and every CircuitBreaker method is reachable only from
+ * __tests__. Those tests exercise the class directly and pass, so CI gives no
+ * signal that the component is inert — which is exactly how it stayed inert.
+ *
+ * Consequence to be aware of before trusting this file: there is NO
+ * provider-level health tracking anywhere in the live cascade. The only real
+ * breaker is LLMHelper.rateLimitCircuit, which is keyed per MODEL, per process,
+ * and trips only on consecutive 429s — never on 5xx, timeouts, socket resets or
+ * first-useful-deadline aborts. A provider that is timing out is therefore
+ * re-attempted on every turn, and getProviderHealth() would report every
+ * provider 'healthy' forever because nothing calls recordFailure.
+ *
+ * Deliberately left unwired by the audit rather than switched on: enabling it
+ * changes which provider serves live traffic, and that cannot be validated
+ * without exercising real provider failures. Wiring it (or deleting it) is a
+ * product decision — see AUDIT_REPORT.md.
+ *
+ * Known issues inside the class, listed so nobody wires it as-is:
+ *   - half-open admits unbounded calls (halfOpenCalls is only incremented in
+ *     recordFailure);
+ *   - 'deepseek' appears in filterHealthyProviders' list but in none of
+ *     VISION_PROVIDERS / LOW_LATENCY_PROVIDERS / QUALITY_PROVIDERS /
+ *     modePreferences, so selectProvider can never return it;
+ *   - the all-down branch returns 'gemini' regardless of its open breaker.
+ */
 export interface CircuitBreakerConfig {
     threshold: number;        // failures before opening
     resetTimeout: number;      // ms before trying again (half-open)

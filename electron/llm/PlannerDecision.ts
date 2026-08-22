@@ -1,4 +1,15 @@
 import { ConversationIntent, IntentResult } from './IntentClassifier';
+import { speculativeQuestionSimilarity } from './speculativeSimilarity';
+
+/**
+ * Jaccard above which two trigger questions are treated as the SAME utterance
+ * for cooldown purposes. Deliberately LOW: the higher this is, the more turns
+ * bypass the cooldown, so a low value keeps the throttle close to its original
+ * behaviour and only lets CLEARLY different questions through. Restated
+ * fragments of one question score well above this; two different questions
+ * ("how many engineers" vs "which datastore") score near zero.
+ */
+const SAME_UTTERANCE_SIMILARITY = 0.5;
 
 export type PlannerDecisionKind = 'silent' | 'answer' | 'clarify' | 'recap' | 'follow_up_questions' | 'brainstorm';
 
@@ -13,6 +24,12 @@ export interface PlannerInput {
     now?: number;
     lastTriggerTime?: number;
     cooldownMs?: number;
+    /**
+     * The question that stamped `lastTriggerTime`. Lets the cooldown tell a
+     * restated fragment of the same utterance (throttle it) from a genuinely new
+     * question (answer it). Absent ⇒ the cooldown behaves exactly as before.
+     */
+    lastTriggerQuestion?: string;
 }
 
 export interface PlannerDecision {
@@ -59,7 +76,25 @@ export function planNextAssistantAction(input: PlannerInput): PlannerDecision {
     }
 
     if (!input.hasImages && now - lastTriggerTime < cooldownMs) {
-        return { kind: 'silent', reason: 'cooldown', confidence };
+        // The cooldown exists to stop re-triggering on FRAGMENTS of the SAME
+        // utterance as STT finalizes it — not to rate-limit the conversation.
+        // Silencing a substantively DIFFERENT question loses a real turn with no
+        // signal to the user: measured through the real app, a second question
+        // asked inside the window simply produced nothing, no pipeline ran, and
+        // nothing was shown. This throttle has caused a user-facing P0 once
+        // already (TriggerGate.test.mjs — it swallowed manual presses until
+        // skipCooldown was added); a silently dropped follow-up is the same
+        // class of failure.
+        //
+        // Conservative by construction: with no previous question recorded, or
+        // no current one, behaviour is UNCHANGED (still silent).
+        const prevQ = (input.lastTriggerQuestion ?? '').trim();
+        const currQ = (input.triggerQuestion ?? '').trim();
+        const sameUtterance = !prevQ || !currQ
+            || speculativeQuestionSimilarity(prevQ, currQ) >= SAME_UTTERANCE_SIMILARITY;
+        if (sameUtterance) {
+            return { kind: 'silent', reason: 'cooldown', confidence };
+        }
     }
 
     if (confidence < 0.5 && !input.hasImages) {

@@ -648,8 +648,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           });
           return;
         }
+        // F-601 follow-up: `hardware_id_unavailable` had no mapping, so the raw
+        // snake_case code was shown to the user verbatim. It means the same thing
+        // to a user as invalid_hwid — the device ID could not be read — so it gets
+        // the same actionable message.
         const msg =
-          res?.error === 'invalid_hwid'
+          res?.error === 'invalid_hwid' || res?.error === 'hardware_id_unavailable'
             ? 'Could not read device ID. Restart the app and try again.'
             : res?.error || 'Could not start trial. Try again.';
         setTrialError(msg);

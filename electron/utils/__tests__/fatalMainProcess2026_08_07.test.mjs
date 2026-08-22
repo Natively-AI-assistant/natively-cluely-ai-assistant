@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/utils');
@@ -26,7 +26,7 @@ Module._load = function patchedLoad(request) {
     return origLoad.apply(this, arguments);
 };
 
-const { FatalMainProcessCoordinator } = await import(path.join(distRoot, 'fatalMainProcess.js'));
+const { FatalMainProcessCoordinator } = await import(pathToFileURL(path.join(distRoot, 'fatalMainProcess.js')).href);
 
 /** Records every close/exit/log the coordinator performs. */
 function spyDeps(overrides = {}) {

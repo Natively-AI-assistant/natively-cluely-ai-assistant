@@ -10,7 +10,7 @@ import React from 'react';
 //
 // Two kinds of mark live here and the difference is deliberate:
 //
-//   FULL-COLOUR (googlecloud, azure) — hardcoded fills, vendored from the
+//   FULL-COLOUR (googlecloud, azure, nvidia_nim) — hardcoded fills, vendored from the
 //   upstream `-color` variants. They look identical in both themes.
 //
 //   MONOCHROME (openai, groq, elevenlabs, ibm, deepgram) — `fill="currentColor"`,
@@ -29,6 +29,7 @@ import deepgramMark from '../../assets/provider-logos/deepgram.svg?raw';
 import elevenlabsMark from '../../assets/provider-logos/elevenlabs.svg?raw';
 import azureMark from '../../assets/provider-logos/azure.svg?raw';
 import ibmMark from '../../assets/provider-logos/ibm.svg?raw';
+import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 // Platform marks, for the Local Models row — the models run on THIS machine, so
 // the host OS is the identity. Which one renders is decided at the call site, so
 // this registry stays a plain id→asset map with no platform logic in it.
@@ -52,6 +53,7 @@ export const BRAND_MARKS: Record<string, string> = {
     elevenlabs: elevenlabsMark,
     azure: azureMark,
     ibmwatson: ibmMark,
+    nvidia_nim: nvidiaMark,
     apple: appleMark,
     microsoft: microsoftMark,
 };

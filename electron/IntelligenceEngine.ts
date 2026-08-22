@@ -10,7 +10,7 @@ import {
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
     AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
-    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
+    extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
@@ -133,6 +133,10 @@ export interface IntelligenceModeEvents {
     // must drop the open scaffold row so the user never sees a permanent
     // "Working on…" card (REPORT C1 follow-up — orphaned-scaffold fix).
     'suggested_answer_discard': (reason: string) => void;
+    // Emitted when the planner deliberately declines to answer a trigger (e.g.
+    // the same utterance arriving twice inside the cooldown window). Without it a
+    // skip is indistinguishable from a failure — nothing runs and nothing is said.
+    'suggestion_skipped': (info: { reason: string; question: string; confidence: number }) => void;
     // Verified-code-execution (background, after the answer is shown). 'verified'
     // fires when the shown code passed N executed test cases (renderer shows a
     // small "✓ verified" badge). 'correction' fires when the shown code FAILED
@@ -229,6 +233,12 @@ export class IntelligenceEngine extends EventEmitter {
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
+    /**
+     * The question that stamped `lastTriggerTime`. Lets the cooldown distinguish a
+     * restated FRAGMENT of the same utterance (throttle) from a genuinely new
+     * question (answer). Null ⇒ the cooldown behaves exactly as it always has.
+     */
+    private lastTriggerQuestion: string | null = null;
 
     // Speculative inference: start LLM on high-confidence interviewer partials
     private speculativeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -680,6 +690,29 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     /**
+     * Gate for the AUTOMATIC post-question trigger (Settings > General → Auto
+     * Answer). Both halves matter, and neither is enforced downstream:
+     *
+     *  - Mode: `runWhatShouldISay` opens with
+     *    `whatToAnswerCancellationToken.abort('superseded')`, so an auto-trigger
+     *    arriving while a manual What-to-Answer press is still streaming would
+     *    kill the answer the user explicitly asked for. 'idle'/'assist' are the
+     *    same states `maybeSpeculate` treats as free.
+     *  - Cooldown: `planSuggestionTrigger` runs `classifyIntent` — a regex pass
+     *    then a zero-shot ONNX classifier — BEFORE `planNextAssistantAction`
+     *    applies this same cooldown and returns `silent: cooldown`. Checking it
+     *    first means the classifier isn't paid for on a turn that cannot answer.
+     *
+     * Manual presses deliberately do NOT consult this: they pass `skipCooldown`
+     * and are allowed to supersede.
+     */
+    canAutoAnswer(): boolean {
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return false;
+        if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return false;
+        return true;
+    }
+
+    /**
      * Handle suggestion trigger from native audio service
      * This is the primary auto-trigger path
      */
@@ -689,6 +722,18 @@ export class IntelligenceEngine extends EventEmitter {
         const plannerDecision = await this.planSuggestionTrigger(trigger);
         if (plannerDecision.kind === 'silent') {
             console.log('[IntelligenceEngine] Planner stayed silent', { reason: plannerDecision.reason, confidence: plannerDecision.confidence });
+            // A throttled turn used to end here with NO signal of any kind: no
+            // pipeline ran, nothing was emitted, and the caller could not tell a
+            // deliberate skip from a failure. Surface the decision so a UI (or a
+            // test) can distinguish "we chose not to answer this" from "nothing
+            // happened". Emission only — no behaviour change to the skip itself.
+            try {
+                this.emit('suggestion_skipped', {
+                    reason: plannerDecision.reason,
+                    question: trigger.lastQuestion ?? '',
+                    confidence: plannerDecision.confidence,
+                });
+            } catch { /* a listener must never break the trigger path */ }
             return;
         }
 
@@ -708,6 +753,7 @@ export class IntelligenceEngine extends EventEmitter {
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
                     console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
+                    this.lastTriggerQuestion = trigger.lastQuestion ?? null;
                     return;
                 }
                 console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
@@ -750,6 +796,7 @@ export class IntelligenceEngine extends EventEmitter {
             now: Date.now(),
             lastTriggerTime: this.lastTriggerTime,
             cooldownMs: this.triggerCooldown,
+            lastTriggerQuestion: this.lastTriggerQuestion ?? undefined,
         });
     }
 
@@ -921,6 +968,7 @@ export class IntelligenceEngine extends EventEmitter {
         // is reserved for the real trigger. We stamp it only on successful completion.
         if (!isSpeculative) {
             this.lastTriggerTime = now;
+            this.lastTriggerQuestion = question ?? null;
         }
         // Record the question text so handleSuggestionTrigger can do Jaccard comparison.
         // Bound expiry even while the stream is running so stale speculative
@@ -1020,7 +1068,18 @@ export class IntelligenceEngine extends EventEmitter {
                 groundingProfile: rawSnapshotSourceContract.groundingProfile
                     ? Object.freeze({ ...rawSnapshotSourceContract.groundingProfile })
                     : undefined,
-                templateType: rawSnapshotSourceContract.templateType,
+                // F-501: read the template from the MODE, not the contract.
+                // ModeSourceContract has no `templateType` field at all (only
+                // `seededForTemplateType`), so this always resolved to
+                // undefined and TurnPlanner's `sourceContract?.templateType
+                // === 'seminar'` check could never be true — leaving Seminar
+                // Mode's entire strictness contract (evidence required + the
+                // "Not in your reference files" preamble) unreachable. The real
+                // value is one object away, on the mode info this contract was
+                // snapshotted from. Falls back to the contract field so a
+                // future contract that DOES carry one still wins nothing less.
+                templateType: (snapshotModeInfo as any)?.templateType
+                    ?? rawSnapshotSourceContract.templateType,
             })
             : null;
         const meetingMarker = this.currentSessionId
@@ -1102,6 +1161,7 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeText = null;
                     this.speculativeTextExpiry = Infinity;
                     this.lastTriggerTime = Date.now();
+                    this.lastTriggerQuestion = question ?? null;
                     this.setMode('idle');
                     return answer || buildGracefulRetry(question);
                 }
@@ -2106,7 +2166,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // profile_question / jd_question (founder §2.5). A
                     // general-kind question (salary, unroutable, "why hire you"
                     // when no profile match) MUST NOT auto-seed a bio dump.
-                    const seedCandidateBackground = _c3TurnPlan.answerDirectives.seedCandidateBackground;
+                    // F-504: the unguarded `_c3TurnPlan.answerDirectives` deref that
+                    // used to sit here was DEAD (never read — the live consumer below
+                    // optional-chains its own copy) and was the one place that could
+                    // throw when the TurnPlanner dynamic import failed and left
+                    // _c3TurnPlan null. That TypeError was swallowed by the outer
+                    // catch, discarding the whole JIT profile-evidence block and
+                    // leaving candidateProfile empty — the defensive fallback
+                    // destroying the grounding it exists to protect.
                     if ((resume || jd) && (identityQ || IntelligenceEngine.shouldJitForAnswerType(jitAnswerType))) {
                         const { selectManualProfileEvidence } = await import('./llm/manualProfileIntelligence');
                         const evidence = selectManualProfileEvidence({
@@ -3098,7 +3165,17 @@ export class IntelligenceEngine extends EventEmitter {
                 // the user, so do not let it bypass the latency fallback merely
                 // because it is non-empty (for example, finalizing "Sure," after
                 // an 8s first-useful timeout).
-                if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS) {
+                // A COMPLETE short answer must not be thrown away. The length test
+                // alone cannot tell "Sure," (the fragment case above) from
+                // "Yes — lead with the AWS migration." — both are under the
+                // threshold, but only one is a non-answer. Measured through the real
+                // app: a provider that delivered a complete 34-char answer and then
+                // held the stream open had it DISCARDED after 32s and replaced with
+                // the canned line, while a correct answer had existed since t=0.
+                // isCompleteShortAnswer requires terminal punctuation AND >=5 words,
+                // so the fragment case still falls through to the fallback.
+                if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS
+                    && !isCompleteShortAnswer(fullAnswer)) {
                     const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                         ? "I don't have enough context from the conversation to answer that yet."
                         : "The model did not produce an answer in time, so I won't guess from your profile.";
@@ -3124,6 +3201,12 @@ export class IntelligenceEngine extends EventEmitter {
                     this.speculativeTextExpiry = Infinity;
                     // Stamp lastTriggerTime so the real trigger that caused this abort
                     // doesn't allow a rapid second trigger within the cooldown window.
+                    // Deliberately does NOT stamp lastTriggerQuestion: this time
+                    // belongs to the SUPERSEDING question, which already recorded
+                    // itself. Writing the aborted speculative question here would
+                    // overwrite fresh text with dead text, and the next fragment of
+                    // the live question would then compare as "different" and
+                    // double-generate.
                     this.lastTriggerTime = Date.now();
                 }
                 if (this.whatToAnswerCancellationToken === whatToAnswerCancellationToken) {
@@ -4187,6 +4270,7 @@ export class IntelligenceEngine extends EventEmitter {
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.lastTriggerTime = Date.now();
+                this.lastTriggerQuestion = question ?? null;
                 this.setMode('idle');
                 return null;
             }
@@ -4520,6 +4604,7 @@ export class IntelligenceEngine extends EventEmitter {
 
             if (isSpeculative) {
                 this.lastTriggerTime = Date.now();
+                this.lastTriggerQuestion = question ?? null;
                 this.speculativeTextExpiry = this.lastTriggerTime + this.triggerCooldown + 500;
                 this.setMode('idle');
                 return fullAnswer;

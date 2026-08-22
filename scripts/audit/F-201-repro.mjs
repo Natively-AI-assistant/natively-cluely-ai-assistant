@@ -23,7 +23,7 @@
 import Module from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -67,7 +67,7 @@ process.on('uncaughtException', (err) => {
   uncaught.push(String(err?.message ?? err));
 });
 
-const { OpenAIStreamingSTT } = await import(path.join(distRoot, 'OpenAIStreamingSTT.js'));
+const { OpenAIStreamingSTT } = await import(pathToFileURL(path.join(distRoot, 'OpenAIStreamingSTT.js')).href);
 const stt = new OpenAIStreamingSTT('sk-audit-fake-key');
 stt.on('error', () => {}); // instance-level errors are expected and fine
 stt.start();

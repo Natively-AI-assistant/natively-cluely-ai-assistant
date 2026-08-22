@@ -468,6 +468,55 @@ export class VectorStore {
      * makes them searchable in-session (search filters on space) and keeps them
      * out of the "unknown-space" re-index sweep. Idempotent; only sets when NULL.
      */
+    /**
+     * Re-stamp a meeting's embedding space after a MID-MEETING provider
+     * promotion (F-415).
+     *
+     * stampMeetingSpaceIfUnset is a no-op once the column is set, so the live
+     * indexer — which stamps on its FIRST successful tick — could never record
+     * a later fallback. The meeting then claimed the old space while newer
+     * chunks were in the new one, and the query-time space filter excluded the
+     * meeting entirely: zero live-RAG results exactly when the cloud provider
+     * is down and the fallback exists to help. The queued path handles this via
+     * activateMeetingFallback → clearEmbeddingsForMeeting; the live path had no
+     * equivalent.
+     *
+     * Only rewrites when the space actually CHANGED, so the common case stays a
+     * single no-op UPDATE.
+     */
+    restampMeetingSpaceOnChange(meetingId: string, providerName: string, dimensions: number, space: string): boolean {
+        try {
+            const row = this.db.prepare('SELECT embedding_space AS s FROM meetings WHERE id = ?').get(meetingId) as any;
+            if (!row || row.s == null || row.s === space) return false;
+            // R-21: re-stamping alone left every chunk embedded under the OLD space
+            // in place while the meeting row claimed the new one. The query-time
+            // filter is meeting-level, so a same-dimension provider then scored
+            // stale-space vectors against new-space queries, and a different-
+            // dimension one produced hidden orphans (the re-index sweep's
+            // `embedding_space IS NOT NULL AND != ?` is false once re-stamped).
+            // The queued path has always cleared before switching providers —
+            // EmbeddingPipeline.activateMeetingFallback → clearEmbeddingsForMeeting.
+            //
+            // Both halves are ONE unit: clearEmbeddingsForMeeting() nulls
+            // embedding_space on its way through, so failing between it and the
+            // UPDATE would leave some dims cleared and no stamp at all — worse than
+            // the state this method was called to repair.
+            this.db.transaction(() => {
+                this.clearEmbeddingsForMeeting(meetingId);
+                this.db.prepare(
+                    'UPDATE meetings SET embedding_provider = ?, embedding_dimensions = ?, embedding_space = ? WHERE id = ?'
+                ).run(providerName, dimensions, space, meetingId);
+            })();
+            console.warn(`[VectorStore] Meeting ${meetingId} embedding space changed ${row.s} -> ${space} (mid-meeting provider fallback); cleared the old-space vectors and re-stamped.`);
+            return true;
+        } catch (e) {
+            // Rolled back: the meeting still claims the OLD space and still has its
+            // old-space vectors — consistent, and the pre-R-21 behaviour.
+            console.warn(`[VectorStore] restampMeetingSpaceOnChange(${meetingId}) failed and was rolled back:`, e);
+            return false;
+        }
+    }
+
     stampMeetingSpaceIfUnset(meetingId: string, providerName: string, dimensions: number, space: string): void {
         try {
             this.db.prepare(

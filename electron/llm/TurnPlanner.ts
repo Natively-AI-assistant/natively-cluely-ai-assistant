@@ -261,8 +261,22 @@ export function mapAnswerTypeToQuestionKind(answerType: string | null | undefine
 // MUST stay in sync with AnswerPlanner's IDENTITY_PATTERNS / JD_*_CUE_RE so
 // a route through the planner is equivalent to a route through AnswerPlanner.
 const RE_IDENTITY = /\b(what(?:'s| is)?\s+(my|your|his|her)\s+name\b|who\s+am\s+i\b|tell\s+me\s+about\s+yourself\b|introduce\s+(yourself|urself|myself|me)\b|walk\s+me\s+through\s+(your|my)\s+(background|experience|resume|cv|career|journey|profile)\b)/i;
-const RE_JD_SUMMARY = /\b(this|the)\s+(job|role|position|posting|listing|opening)\b/i;
+// R-07: this must mirror the framing gate resolveJdSourceType actually uses —
+// AnswerPlanner's JD_REFERENCE_CUE_RE — not a narrower noun phrase. The previous
+// value had NO alternative for a bare "JD" or for "job description", so
+// "What are the key responsibilities in this JD?" fell through to `general` and
+// lost JD grounding entirely, which is worse than landing in the wrong family.
+const RE_JD_SUMMARY = /\bjd\b|\b(this|the)\s+(job\s*description|role|position|job|posting|listing|opening|vacancy)\b|\bjob\s*description\b|\bfor\s+(this|the)\s+(role|position|job)\b/i;
 const RE_JD_REQUIREMENTS = /\b(require(?:d|ment|ments)?|responsibilit(?:y|ies)|qualifications?|must[- ]haves?|duties)\b/i;
+// R-07: split, because only the WRITE-VERB half is a JD veto in AnswerPlanner.
+// hasWriteCodeVerb (AnswerPlanner:1605) is /\b(write|implement|code|program|solve)\b/;
+// promoting the whole of RE_CODING above the JD gate vetoed JD on words
+// AnswerPlanner never vetoes on, so "What are the requirements for this system
+// design role?" and "Tell me about the algorithm experience required for this
+// position" were routed to the coding family. The topic half is still a coding
+// signal — it just must not outrank an explicit JD framing.
+const RE_CODING_WRITE_VERB = /\b(write|implement|code|program|solve)\b/i;
+const RE_CODING_TOPIC = /\b(coding[- ]?interview|dsa|algorithm(?:ic)?|big[- ]?o|system[- ]?design|debug(ging)?)\b/i;
 const RE_CODING = /\b(write|implement|code|coding[- ]?interview|dsa|algorithm(?:ic)?|big[- ]?o|system[- ]?design|debug(ging)?)\b/i;
 const RE_DOC = /\b(according\s+to\s+(the|this)\s+(doc|file|paper|deck|notes?|transcript)|in\s+(the|this)\s+(doc|file|paper|deck)|summar(?:i[sz]e|ise)\s+(the|this)\s+(doc|file|paper|deck))\b/i;
 
@@ -278,10 +292,26 @@ function deriveQuestionKind(input: TurnPlanInput): { kind: QuestionKind; reason:
   const q = (input.question || '').trim();
   if (!q) return { kind: 'general', reason: 'empty_question' };
   if (RE_IDENTITY.test(q)) return { kind: 'profile_question', reason: 'regex_identity' };
-  if (RE_JD_REQUIREMENTS.test(q)) return { kind: 'jd_question', reason: 'regex_jd_requirements' };
-  if (RE_JD_SUMMARY.test(q)) return { kind: 'jd_question', reason: 'regex_jd_summary' };
-  if (RE_CODING.test(q)) return { kind: 'coding_question', reason: 'regex_coding' };
+  // F-304: mirror AnswerPlanner's two gates around the JD cue, and check
+  // coding/doc FIRST. This fallback claimed to "stay in sync with
+  // AnswerPlanner's IDENTITY_PATTERNS / JD_*_CUE_RE" but had neither of
+  // resolveJdSourceType's guards:
+  //   1. a coding verb ALWAYS vetoes the JD route (AnswerPlanner:1374), and
+  //   2. no JD framing => no JD route (AnswerPlanner:1394).
+  // RE_JD_REQUIREMENTS matches the bare words required/qualifications/duties
+  // anywhere, so "Write a function that returns the required buffer size" was
+  // routed jd_question — probing profile_jd/profile_resume, never
+  // reference_files, and switching ON seedCandidateBackground for a coding
+  // question. AnswerPlanner routes the identical text to the coding family.
+  // Only the write-verb half vetoes JD, matching AnswerPlanner's hasWriteCodeVerb.
+  if (RE_CODING_WRITE_VERB.test(q)) return { kind: 'coding_question', reason: 'regex_coding' };
   if (RE_DOC.test(q)) return { kind: 'doc_question', reason: 'regex_doc' };
+  const jdFramed = RE_JD_SUMMARY.test(q);
+  if (RE_JD_REQUIREMENTS.test(q) && jdFramed) return { kind: 'jd_question', reason: 'regex_jd_requirements' };
+  if (jdFramed) return { kind: 'jd_question', reason: 'regex_jd_summary' };
+  // Topic-only coding words apply AFTER the JD gate, so an explicitly JD-framed
+  // question is never stolen by "algorithm"/"system design"/"debug".
+  if (RE_CODING_TOPIC.test(q)) return { kind: 'coding_question', reason: 'regex_coding_topic' };
   return { kind: 'general', reason: 'regex_general' };
 }
 

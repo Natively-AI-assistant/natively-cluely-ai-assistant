@@ -54,6 +54,34 @@ export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 7000;
  * the inter-token stall guard (unchanged) still protects against a mid-stream hang.
  */
 export const LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS = 30000;
+
+/**
+ * Is `text` a COMPLETE short answer, as opposed to a truncated fragment?
+ *
+ * The live path replaces a sub-threshold buffer with a canned "no answer" line
+ * when the first-useful deadline fires. That is right for an empty result, and
+ * right for the fragment case its own comment cites — a provider finalizing
+ * "Sure," after an 8s timeout, which was never visible and is not an answer.
+ *
+ * It is WRONG for a complete short answer. Measured through the real app: a
+ * provider that delivered "Yes — lead with the AWS migration." and then held the
+ * stream open had that answer DISCARDED after 32s and replaced, even though a
+ * correct answer existed from t=0. Length alone cannot separate the two cases,
+ * so this asks the question length was standing in for: does the text end like a
+ * finished utterance, and is there enough of it to be an answer at all?
+ *
+ * Deliberately conservative — a fragment misjudged as complete would paint half
+ * a sentence, which is worse than the canned line. Terminal punctuation AND a
+ * minimum word count must BOTH hold, so "Sure," (no terminal mark) and "Sure."
+ * (too short) both remain fragments.
+ */
+export function isCompleteShortAnswer(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t) return false;
+  // Allow a closing quote/bracket to follow the terminal mark.
+  if (!/[.!?][)\]"'’”]*$/.test(t)) return false;
+  return t.split(/\s+/).filter(Boolean).length >= 5;
+}
 /**
  * Absolute ceiling on a live answer's first-useful token (the no-fallback budget).
  * Sits above the 7s first-useful cap so a MiniMax stream about to deliver at
@@ -138,6 +166,21 @@ export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;
 export const MAX_STREAM_OUTPUT_CHARS = 16000;
 
 /**
+ * Abort ceiling for a coding REGENERATION (the meta-reply retry and the
+ * completeness retry).
+ *
+ * F-305: both regens used a hardcoded 4000, which is HALF the size this file
+ * already measures for the very artifact their prompt asks for — "a six-section
+ * coding answer with multiple code blocks, ~8000" (see MAX_STREAM_OUTPUT_CHARS
+ * above). A correct answer therefore got cut mid-sentence, and because the
+ * meta-retry accepted on nothing more than "length >= 20 and some closed code
+ * fence", that truncation was accepted and atomically REPLACED the streamed
+ * row — the user's final answer ended mid-word. Sized to the documented
+ * estimate; MAX_STREAM_OUTPUT_CHARS remains the outer runaway bound.
+ */
+export const CODING_REGEN_ABORT_CHARS = 8000;
+
+/**
  * The same runaway bound for BATCH generations that are legitimately long —
  * today only `generateMeetingSummary`.
  *
@@ -173,8 +216,21 @@ const COMPLEX_TYPES = new Set<AnswerType>([
  * far longer LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS regardless of answer type. The
  * caller passes llmHelper.isUsingOllama(). Defaults false (cloud) for back-compat.
  */
-export function firstUsefulDeadlineMs(answerType: AnswerType, isLocal: boolean = false): number {
+export function firstUsefulDeadlineMs(
+  answerType: AnswerType,
+  isLocal: boolean = false,
+  viaServerCascade: boolean = false,
+): number {
   if (isLocal) return LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS;
+  // F-301: on the natively-api route the SERVER runs a sequential cascade and
+  // cuts over to the next provider at AI_TTFT_BUDGET_MS (10s). Aborting at the
+  // 7s provider cap tore down the HTTP request 3s BEFORE that rescue could
+  // happen, so the user got "The model did not produce an answer in time" on a
+  // turn the server was about to deliver. This is the same ordering invariant
+  // LIVE_TOTAL_HARD_TIMEOUT_MS documents — it had only ever been applied to
+  // the WTA path, never to manual chat, which is the path its own rationale
+  // describes. Reuse that constant so the two cannot drift apart.
+  if (viaServerCascade) return LIVE_TOTAL_HARD_TIMEOUT_MS;
   return COMPLEX_TYPES.has(answerType)
     ? LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS
     : LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS;

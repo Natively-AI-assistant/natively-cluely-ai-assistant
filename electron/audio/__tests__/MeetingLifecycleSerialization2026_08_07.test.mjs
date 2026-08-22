@@ -21,11 +21,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
-const { MeetingLifecycleQueue } = await import(path.join(distRoot, 'meetingLifecycleQueue.js'));
+const { MeetingLifecycleQueue } = await import(pathToFileURL(path.join(distRoot, 'meetingLifecycleQueue.js')).href);
 
 /** A promise you resolve/reject by hand, so tests control transition timing. */
 function deferred() {

@@ -479,7 +479,7 @@ test('PR #370: keyring-throws save leaves NO stale credentials.enc on disk', () 
     'a successful fallback save must unlink any pre-existing stale credentials.enc');
 });
 
-test('PR #370: loadCredentials detects stale-keyring state via mtime and unlinks before read', () => {
+test('R-10: a newer fallback is PREFERRED but never unlinks the keyring (was PR #370 unlink)', () => {
   const env = makeEnv();
 
   // Pre-populate BOTH stores with mtimes that make the fallback strictly newer
@@ -497,13 +497,23 @@ test('PR #370: loadCredentials detects stale-keyring state via mtime and unlinks
   // Keyring reports available (the normal macOS/healthy-Windows state).
   env.state.keyringAvailable = true;
 
-  // Cold-start: loadCredentials must detect the mtime inversion and unlink the
-  // stale keyring BEFORE attempting to decrypt it (otherwise it would either
-  // corrupt the credential set or shadow the fallback).
-  freshManager(env);
+  // CONTRACT CHANGED 2026-08-19 (audit R-10). PR #370 unlinked the keyring here.
+  // That is a data-loss bug: mtime cannot tell "a fallback save whose cleanup
+  // failed" from "a whole-profile restore dropped an OLD fallback beside CURRENT
+  // keyring credentials" (Time Machine, Migration Assistant, synced AppData). In
+  // the restore case the unlink silently destroyed the user's live API keys, with
+  // no error. Provenance does not rescue it either — a whole-profile restore
+  // carries the provenance record along with the blobs.
+  //
+  // Note this fixture's own fallback is 'garbage-encrypted-blob', i.e. it does
+  // NOT decrypt. Unlinking the keyring therefore left the user with nothing at
+  // all. The keyring must survive, and its contents must load.
+  const mgr = freshManager(env);
 
-  assert.ok(!fs.existsSync(keyringPath),
-    'a keyring older than the fallback must be unlinked before load attempts to decrypt it');
+  assert.ok(fs.existsSync(keyringPath),
+    'the keyring must be PRESERVED — an undecryptable fallback is no evidence it is stale');
+  assert.equal(mgr.getAllCredentials().deepgramApiKey, 'OLD-STALE-VALUE',
+    'an unreadable fallback must fall back to the keyring rather than leaving the user empty');
 });
 
 test('PR #370: loadCredentials does NOT discard a fresh keyring when fallback is older (legitimate round-trip)', () => {

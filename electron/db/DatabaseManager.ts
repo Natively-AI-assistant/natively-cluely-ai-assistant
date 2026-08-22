@@ -63,6 +63,13 @@ export interface Meeting {
     summaryStatus?: SummaryStatus;
 }
 
+/**
+ * CR-06: marks the v28 page-count DATA repair as still owed. It is deliberately
+ * NOT the schema `user_version`: the repair changes no schema, so a failure must
+ * not hold later SCHEMA migrations (notably v29's vec0 cosine rebuild) hostage.
+ */
+const PAGE_COUNT_REPAIR_PENDING_KEY = 'pending_page_count_repair';
+
 export class DatabaseManager {
     private static instance: DatabaseManager;
     private db: Database.Database | null = null;
@@ -1179,10 +1186,18 @@ export class DatabaseManager {
                                     )
                                     ELSE NULL
                                 END
-                            FROM mode_reference_files
-                            WHERE mode_reference_files.id = mode_reference_files.id
-                              AND page_count IS NULL
-                              AND content LIKE '%[Page %]%'
+                            -- F-701: there is deliberately NO inner FROM here.
+                            -- An inner FROM mode_reference_files re-opens the
+                            -- table and SHADOWS the outer UPDATE row, which made
+                            -- the old self-equality correlation predicate a
+                            -- tautology over that inner instance — so the
+                            -- subquery was UNCORRELATED and MAX(page_num)
+                            -- returned the largest page number in the WHOLE
+                            -- table, written into every row (a 3-page document
+                            -- reporting 6 pages). A seed with no FROM is a
+                            -- single-row SELECT whose content column binds to the
+                            -- row being updated, which is the correlation this
+                            -- migration always intended.
                         UNION ALL
                             SELECT
                                 substr(rest, instr(rest, '[Page ') + 6),
@@ -1418,6 +1433,290 @@ export class DatabaseManager {
         try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
         if (version < 28) {
             this.db.pragma('user_version = 28');
+        }
+
+        // MERGE NOTE (2026-08-23): SECOND renumbering. main advanced and claimed
+        // 28 for meetings.user_titled — a real ALTER TABLE — while this branch's
+        // page-count repair also sat on 28. Whichever stamped first would have
+        // permanently suppressed the other. main is the shared trunk, so it keeps
+        // 28 and this branch moved to 29 (page-count repair) and 30 (vec0 cosine
+        // rebuild). Neither number was ever released, so no installed profile can
+        // be sitting on the old numbering.
+        // MERGE NOTE (2026-08-19): main's v26 → v27 (usage_outbox) and this
+        // branch's page-count repair BOTH claimed version 27. Whichever ran
+        // first would have stamped user_version = 27 and permanently suppressed
+        // the other — a user coming from main would never get the page-count
+        // repair, and a user from this branch would never get usage_outbox.
+        // main is the shared trunk, so it keeps 27 and this branch's two
+        // migrations were renumbered to 28 (page-count repair) and 29 (vec0
+        // cosine rebuild). This branch was never released, so no installed
+        // profile can be sitting on its old 27/28 numbering.
+        // Version 27 → 28: REPAIR the page counts corrupted by v22 (F-701/F-702).
+        //
+        // v22's Phase 1 seeded its recursive CTE from an inner
+        // `FROM mode_reference_files`, which shadowed the outer UPDATE row and
+        // made its correlation predicate a tautology. The subquery was
+        // therefore uncorrelated and wrote the LARGEST page number in the whole
+        // table into EVERY marker-bearing row — a 3-page document reporting 6
+        // pages. It could not self-heal, because `page_count IS NULL` was false
+        // on any re-run. v22 also never set extracted_page_count on those rows
+        // (Phase 2 was gated on the same predicate Phase 1 had just falsified),
+        // so the extraction-coverage signal was silently absent.
+        //
+        // This repair re-derives both values from the [Page N] markers, which
+        // are ground truth for marker-bearing content. It is unconditional over
+        // marker-bearing rows (not gated on IS NULL) precisely because the bad
+        // values are non-NULL, and it is idempotent — re-running derives the
+        // same counts.
+        // CR-06: this repair is gated on `user_version`, the SCHEMA counter, but it
+        // changes no schema — it is pure UPDATE over mode_reference_files, and it is
+        // idempotent. Conflating the two is the actual modelling error: when the
+        // repair failed, the (correct-in-isolation) `return` below also blocked v29's
+        // vec0 cosine rebuild FOREVER on that profile, while ensureVecTableForDim
+        // keeps creating every NEW dimension table as cosine — leaving one database
+        // with mixed metrics read through a single `similarity = 1 - distance` and
+        // one shared minSimilarity. That is the exact hazard v29 exists to remove,
+        // reached through a different door.
+        //
+        // So the two are separated: the schema version advances (safe — no schema
+        // change here), and the repair records its own pending flag in app_state and
+        // retries on later launches until it succeeds. R-05's requirement is
+        // preserved (a failed repair is never forgotten); what changes is that a
+        // failed DATA repair no longer holds the SCHEMA chain hostage.
+        const pageRepairPending = (() => {
+            if (version < 29) return true;
+            try {
+                const row = this.db.prepare('SELECT value FROM app_state WHERE key = ?')
+                    .get(PAGE_COUNT_REPAIR_PENDING_KEY) as { value?: string } | undefined;
+                return row?.value === '1';
+            } catch (e) {
+                // The ONE place this design could lose a retry: if the marker cannot
+                // be read we cannot tell "no repair owed" from "repair owed but
+                // unreadable", and R-05's requirement is that a failed repair is
+                // never forgotten. The repair is a pure idempotent UPDATE, so
+                // re-running it when none was owed costs one no-op statement —
+                // strictly cheaper than dropping one that WAS owed.
+                console.warn('[DatabaseManager] could not read the page-count repair marker; '
+                    + 're-running the repair rather than risk forgetting a pending one:', e);
+                return true;
+            }
+        })();
+
+        if (pageRepairPending) {
+            console.log('[DatabaseManager] Applying migration v28 → v29: Repair v22 page_count/extracted_page_count corruption');
+            try {
+                const repaired = this.db.prepare(`
+                    UPDATE mode_reference_files
+                    SET page_count = (
+                        WITH RECURSIVE cte_pages(rest, page_num) AS (
+                            SELECT
+                                substr(content, instr(content, '[Page ') + 6),
+                                CASE
+                                    WHEN instr(content, '[Page ') > 0
+                                    THEN CAST(
+                                        substr(
+                                            content,
+                                            instr(content, '[Page ') + 6,
+                                            instr(substr(content, instr(content, '[Page ') + 6), ']') - 1
+                                        ) AS INTEGER
+                                    )
+                                    ELSE NULL
+                                END
+                        UNION ALL
+                            SELECT
+                                substr(rest, instr(rest, '[Page ') + 6),
+                                CASE
+                                    WHEN instr(rest, '[Page ') > 0
+                                    THEN CAST(
+                                        substr(
+                                            rest,
+                                            instr(rest, '[Page ') + 6,
+                                            instr(substr(rest, instr(rest, '[Page ') + 6), ']') - 1
+                                        ) AS INTEGER
+                                    )
+                                    ELSE NULL
+                                END
+                            FROM cte_pages
+                            WHERE instr(rest, '[Page ') > 0
+                            LIMIT 5000
+                        )
+                        SELECT MAX(page_num) FROM cte_pages WHERE page_num IS NOT NULL
+                    )
+                    -- R-11: scope the re-derive to rows v22 could actually have
+                    -- corrupted. v22 Phase 1 ran WHERE page_count IS NULL AND
+                    -- content LIKE '%[Page %]%' and set ONLY page_count — it never
+                    -- wrote extracted_page_count. The ingestion path writes the two
+                    -- TOGETHER (pageCount from data.total, extractedPageCount from
+                    -- data.pages). So extracted_page_count IS NULL is the signature
+                    -- of a row v22 touched, and its presence is the signature of a
+                    -- row that came from ingestion and must be left alone.
+                    --
+                    -- Without this scope the re-derive was unconditional and
+                    -- DOWNGRADED correct values: on the extractor's timeout path
+                    -- (SafeDocumentTextExtractor withTimeout -> parser.destroy())
+                    -- data.pages is partial while data.total is the true count, so a
+                    -- document with a correct page_count of 10 and an honest 3/10
+                    -- coverage signal was rewritten to 3/3 — destroying the value AND
+                    -- erasing the coverage gap it encoded, which ModeContextRetriever
+                    -- consumes as ingested-page coverage.
+                    WHERE content LIKE '%[Page %]%'
+                      AND extracted_page_count IS NULL
+                `).run();
+                // Mirror the ingestion path (ipcHandlers writes pageCount and
+                // extractedPageCount together) for rows still missing the
+                // extraction figure.
+                //
+                // R-11: scoped to MARKER-BEARING rows. Unscoped, this reached rows
+                // v22 never touched and fabricated 100% extraction coverage for
+                // documents from which zero page-level text was extracted — a PDF
+                // whose data.pages came back empty has page_count from data.total but
+                // extractedPageCount undefined -> NULL, and this wrote page_count
+                // into it. A marker-less row now keeps NULL, an honest "unknown",
+                // rather than claiming full coverage. (A scanned PDF with
+                // extracted_page_count = 0 was already safe: `?? null` preserves 0
+                // and the IS NULL guard skips it.)
+                const filled = this.db.prepare(`
+                    UPDATE mode_reference_files
+                    SET extracted_page_count = page_count
+                    WHERE extracted_page_count IS NULL
+                      AND page_count IS NOT NULL
+                      AND content LIKE '%[Page %]%'
+                `).run();
+                console.log(`[DatabaseManager] v29 repair: re-derived ${repaired.changes} marker-bearing rows, filled ${filled.changes} extracted_page_count values`);
+                // Succeeded — clear any pending marker from an earlier failed launch.
+                try {
+                    this.db.prepare('DELETE FROM app_state WHERE key = ?').run(PAGE_COUNT_REPAIR_PENDING_KEY);
+                } catch { /* the repair itself is what matters */ }
+            } catch (e) {
+                // R-05 found the original hazard here: this block swallows rather
+                // than re-throwing so the repair retries next launch, but `version`
+                // is read ONCE into a const, so control fell straight through to the
+                // NEXT migration with the stale snapshot — which then succeeded and
+                // stamped a version past this one, so the repair never ran again.
+                // Re-reading the pragma does not help; the stale const is the point.
+                //
+                // CR-06 removes the conflict instead of stalling the chain: this
+                // repair changes no schema, so the version may advance while the
+                // repair itself is recorded as still-owed in its own marker and
+                // retried on every later launch. R-05's requirement — a failed
+                // repair is never forgotten — is preserved by the marker, not by
+                // freezing user_version.
+                try {
+                    this.db.prepare('INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)')
+                        .run(PAGE_COUNT_REPAIR_PENDING_KEY, '1');
+                    console.error('[DatabaseManager] page-count repair failed; marked pending and will retry on the next launch. '
+                        + 'Later migrations still run — this repair changes no schema:', e);
+                } catch (markErr) {
+                    // Could not even record the marker, so the retry would be lost.
+                    // THEN the original behaviour is right: stop, leave the version
+                    // put, and let the whole block run again next launch.
+                    console.error('[DatabaseManager] v28 page-count repair failed AND its pending marker could not be written; '
+                        + 'leaving version at 27 and skipping later migrations so the repair is not forgotten:', e, markErr);
+                    return;
+                }
+            }
+            if (version < 29) this.db.pragma('user_version = 29');
+        }
+
+        // Version 28 → 29: rebuild the vec0 tables with distance_metric=cosine (F-410).
+        //
+        // The tables were created without a distance metric, and sqlite-vec
+        // defaults to L2. VectorStore then read that column as if it were a
+        // cosine distance (`similarity = 1 - vecRow.distance`) and every
+        // consumer thresholded the result as a cosine in [-1,1]: minSimilarity
+        // 0.25, MEETING_MIN_SIMILARITY 0.3, MEETING_RAG_MIN_SIMILARITY. For
+        // unit vectors L2 = sqrt(2-2cos), so a 0.25 floor silently demanded
+        // cos >= 0.719; for NON-unit vectors it is worse still — a vector with
+        // identical direction but twice the magnitude scores 0.0 and is
+        // dropped outright (measured). The JS fallback computes true cosine and
+        // applies the SAME floor, so the two paths disagreed sharply on
+        // identical data — and every existing test forces the JS path, which is
+        // why the shipped native path was never covered.
+        //
+        // Ranking order is unaffected for normalized vectors (L2 is monotonic
+        // in cosine), which is why this degraded recall silently rather than
+        // producing visibly wrong output.
+        //
+        // vec0 virtual tables cannot be ALTERed, so the metric change requires
+        // a drop + recreate + backfill from the embedding BLOBs still held in
+        // chunks / chunk_summaries.
+        if (version < 30) {
+            console.log('[DatabaseManager] Applying migration v29 → v30: rebuild vec0 tables with cosine distance');
+            try {
+                let rebuilt = 0;
+                // R-08: enumerate the dimensions that actually EXIST, not just
+                // KNOWN_DIMS ([768, 1536, 3072]). LocalEmbeddingProvider — the
+                // offline fallback — is 384-d, so vec_chunks_384 is a real, shipped
+                // table on any install that has ever embedded locally. Iterating
+                // KNOWN_DIMS left it on L2 forever: the drop skipped it, and the
+                // later re-create is `CREATE VIRTUAL TABLE IF NOT EXISTS`, a silent
+                // no-op on a surviving table whose persisted DDL carries no
+                // distance_metric. The result was MIXED metrics under one shared
+                // `similarity = 1 - distance` and one shared threshold — on unit
+                // vectors L2 = sqrt(2-2cos), so a 0.25 floor silently demanded
+                // cos >= 0.719 on precisely the provider used when the cloud is down.
+                // getExistingVecDims() returns KNOWN_DIMS union the discovered ones
+                // and its own docstring warns about this exact case; it must be
+                // captured BEFORE the drop loop, or discovery finds nothing.
+                const dimsToRebuild = this.getExistingVecDims();
+                // R-13: the drop and the backfill must be ONE unit. v28 was not
+                // transactional, so a crash after the drop loop but during the
+                // rebuild left the vec0 tables EXISTING BUT EMPTY — and both
+                // detectVecSupport (VectorStore.ts:66) and hasVecExtension
+                // (:2388) probe with `SELECT count(*) ... LIMIT 1`, which SUCCEEDS
+                // on an empty table. useNativeVec stayed true, searchSimilarNative
+                // returned [] on zero rows, and there is no JS fallback on an empty
+                // result (only on a throw) — a silent, total RAG blackout with no
+                // error anywhere. Verified for this build that vec0 DROP TABLE does
+                // roll back (3 rows dropped inside a tx, 3 rows present after abort),
+                // so the wrap is sound rather than assumed.
+                // R-13 follow-up: capture a non-null local. TypeScript does not carry
+                // the enclosing method's `this.db` narrowing INTO the arrow function, so
+                // every use inside the transaction was TS2531 "Object is possibly null"
+                // (CI typecheck caught this; esbuild does not typecheck, so the local
+                // build was green). runMigrations() already returns early when this.db
+                // is null, so the local is genuinely non-null here.
+                const db = this.db;
+                db.transaction(() => {
+                for (const dim of dimsToRebuild) {
+                    db.exec(`DROP TABLE IF EXISTS vec_chunks_${dim};`);
+                    db.exec(`DROP TABLE IF EXISTS vec_summaries_${dim};`);
+                }
+                this.ensuredDims.clear();
+                for (const dim of dimsToRebuild) {
+                    this.ensureVecTableForDim(dim); // now emits distance_metric=cosine
+                    const bytes = dim * 4;
+                    const chunkIns = db.prepare(
+                        `INSERT OR REPLACE INTO vec_chunks_${dim}(chunk_id, embedding) VALUES (?, ?)`
+                    );
+                    for (const row of db.prepare(
+                        `SELECT id, embedding FROM chunks WHERE embedding IS NOT NULL AND length(embedding) = ?`
+                    ).iterate(bytes) as Iterable<any>) {
+                        try { chunkIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
+                    }
+                    const sumIns = db.prepare(
+                        `INSERT OR REPLACE INTO vec_summaries_${dim}(summary_id, embedding) VALUES (?, ?)`
+                    );
+                    for (const row of db.prepare(
+                        `SELECT id, embedding FROM chunk_summaries WHERE embedding IS NOT NULL AND length(embedding) = ?`
+                    ).iterate(bytes) as Iterable<any>) {
+                        try { sumIns.run(BigInt(row.id), row.embedding); rebuilt++; } catch { /* skip unusable row */ }
+                    }
+                }
+                })();
+                console.log(`[DatabaseManager] v30: rebuilt vec0 indexes with cosine distance (${rebuilt} vectors re-inserted)`);
+                this.db.pragma('user_version = 30');
+            } catch (e) {
+                console.error('[DatabaseManager] v30 vec0 cosine rebuild failed (leaving version at 29 to retry next launch):', e);
+                // R-22: stop here, as v28/v29 do. v30 is currently the LAST
+                // migration, so falling through is harmless TODAY — which is
+                // precisely why it would not stay harmless: the next migration
+                // added below would run and stamp user_version past a v30 that
+                // never applied, and `version < 30` would be false forever after.
+                // That is R-05 verbatim, and R-05 only became reachable because
+                // an earlier block was written this same way.
+                return;
+            }
         }
 
         console.log('[DatabaseManager] Migrations completed.');
@@ -2397,13 +2696,13 @@ export class DatabaseManager {
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_chunks_${dim} USING vec0(
                     chunk_id INTEGER PRIMARY KEY,
-                    embedding float[${dim}]
+                    embedding float[${dim}] distance_metric=cosine
                 );
             `);
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS vec_summaries_${dim} USING vec0(
                     summary_id INTEGER PRIMARY KEY,
-                    embedding float[${dim}]
+                    embedding float[${dim}] distance_metric=cosine
                 );
             `);
             this.ensuredDims.add(dim);
@@ -2903,13 +3202,90 @@ export class DatabaseManager {
         if (!this.db) return false;
 
         try {
-            const stmt = this.db.prepare('DELETE FROM meetings WHERE id = ?');
-            const info = stmt.run(id);
+            // F-705: reap the vec0 rows FIRST. `vec_chunks_*`/`vec_summaries_*`
+            // are USING vec0 VIRTUAL tables, and SQLite virtual tables carry no
+            // foreign keys — an ON DELETE CASCADE from `meetings` can never
+            // reach them. VectorStore's own delete paths already issue explicit
+            // DELETEs for exactly this reason, but deleteMeeting/clearAllData
+            // never call into it, so every deleted meeting left its vectors
+            // behind. Orphans then consume slots in the KNN top-K
+            // (searchSimilarNative silently drops ids it cannot resolve back to
+            // `chunks`), degrading recall monotonically with every deletion.
+            // Must run BEFORE the parent DELETE, while the chunk ids are still
+            // resolvable.
+            // R-12: the vector reap and the parent DELETE must be one unit. Ordering
+            // the reap first is required (the chunk ids must still resolve), but with
+            // no transaction a failure of the parent DELETE left the vectors gone and
+            // the meeting present. This was inert only while R-01 meant nothing was
+            // ever deleted; fixing R-01 makes it reachable.
+            const info = this.db.transaction((meetingId: string) => {
+                this.deleteVectorsForMeeting(meetingId);
+                return this.db!.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId);
+            })(id);
             console.log(`[DatabaseManager] Deleted meeting ${id}. Changes: ${info.changes}`);
             return info.changes > 0;
         } catch (error) {
             console.error(`[DatabaseManager] Failed to delete meeting ${id}:`, error);
             return false;
+        }
+    }
+
+    /**
+     * Delete the vec0 index rows belonging to a meeting (F-705).
+     *
+     * vec0 virtual tables cannot participate in foreign-key cascades, so this
+     * has to be explicit. Resolves chunk/summary ids through the ordinary
+     * tables, so it MUST be called before the parent row is removed. Best-effort
+     * per dimension: a dimension table may legitimately not exist.
+     */
+    public deleteVectorsForMeeting(meetingId: string): void {
+        if (!this.db) return;
+        try {
+            const dims = this.getExistingVecDims();
+            if (!dims.length) return;
+            const chunkIds = (this.db.prepare('SELECT id FROM chunks WHERE meeting_id = ?')
+                .all(meetingId) as any[]).map((r) => r.id);
+            // R-01: chunk_summaries is keyed per-MEETING — (id, meeting_id UNIQUE,
+            // summary_text, embedding, created_at). There is no `chunk_id` column and
+            // no migration adds one, so the previous `JOIN chunks c ON c.id = cs.chunk_id`
+            // threw at prepare() time. That prepare sits outside the per-dim loop and
+            // inside the outer try, so the throw unwound past the per-dim catches into
+            // the outer catch — which only warns. The chunk deletes below were never
+            // reached and this function reaped nothing. Matches VectorStore.ts:676/725.
+            const summaryIds = (this.db.prepare('SELECT id FROM chunk_summaries WHERE meeting_id = ?')
+                .all(meetingId) as any[]).map((r) => r.id);
+            // SQLite caps bound parameters (measured 32766 in this build), so delete in
+            // batches rather than building one placeholder per chunk.
+            const BATCH = 500;
+            const deleteIn = (table: string, column: string, ids: number[]) => {
+                for (let i = 0; i < ids.length; i += BATCH) {
+                    const slice = ids.slice(i, i + BATCH);
+                    const ph = slice.map(() => '?').join(',');
+                    try {
+                        this.db!.prepare(`DELETE FROM ${table} WHERE ${column} IN (${ph})`).run(...slice);
+                    } catch (e: any) {
+                        // R-20: getExistingVecDims() returns KNOWN_DIMS ∪ discovered, so on a
+                        // normal install most dims have no table and "no such table" is the
+                        // expected, harmless outcome. Swallowing EVERYTHING else too meant a
+                        // real reap failure was indistinguishable from that — the same silence
+                        // that let R-01 hide for a full campaign. Narrow it.
+                        if (!/no such table/i.test(String(e?.message ?? e))) throw e;
+                    }
+                }
+            };
+            for (const dim of dims) {
+                if (chunkIds.length) deleteIn(`vec_chunks_${dim}`, 'chunk_id', chunkIds);
+                if (summaryIds.length) deleteIn(`vec_summaries_${dim}`, 'summary_id', summaryIds);
+            }
+        } catch (e) {
+            // R-20: R-12 wrapped this and the parent DELETE in one transaction so the
+            // meeting could not survive a failed reap. Swallowing here defeated that
+            // in the only direction that matters: the transaction saw no error and
+            // committed the DELETE anyway, leaving the meeting gone and its vectors
+            // orphaned in the vec0 tables — where they keep consuming KNN top-K slots
+            // that searchSimilarNative can no longer resolve back to `chunks`.
+            console.error(`[DatabaseManager] deleteVectorsForMeeting(${meetingId}) failed; aborting the delete:`, e);
+            throw e;
         }
     }
 
@@ -2958,6 +3334,13 @@ export class DatabaseManager {
             // but SQLite handles cascades). Using a transaction ensures we never
             // end up in a half-cleared state if one statement fails.
             this.db.transaction(() => {
+                // F-705: vec0 virtual tables take no part in FK cascades, so a
+                // full wipe has to clear them explicitly too — otherwise
+                // "clear all data" left every embedding vector on disk.
+                for (const dim of this.getExistingVecDims()) {
+                    try { this.db!.exec(`DELETE FROM vec_chunks_${dim}`); } catch (_) { /* table may not exist */ }
+                    try { this.db!.exec(`DELETE FROM vec_summaries_${dim}`); } catch (_) { /* table may not exist */ }
+                }
                 this.db!.exec('DELETE FROM embedding_queue');
                 this.db!.exec('DELETE FROM chunk_summaries');
                 this.db!.exec('DELETE FROM chunks');
