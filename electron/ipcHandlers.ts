@@ -77,6 +77,7 @@ function resolveManualChatBasePrompt(
   return CHAT_MODE_PROMPT;
 }
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
+import { extractLatestPriorAssistantTurn, isTranscriptBoundManualQuestion, shouldAutoAttachManualTranscriptContext } from './llm/manualTranscriptContextPolicy';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
@@ -2887,7 +2888,19 @@ export function initializeIpcHandlers(appState: AppState): void {
           console.log('[IPC] Answer-contract enforced; rolling context excluded', {
             answerType: answerPlan.answerType,
           });
-        } else if (!context && autoContextSnapshot) {
+        } else if (!context && autoContextSnapshot && isRefinementFollowUp(message)
+            && !isTranscriptBoundManualQuestion(message)
+            && (!turnContract || turnContract.memoryReadPolicy.allowPriorAssistantFacts)) {
+          // A refinement needs the answer it is editing, not the full rolling
+          // meeting transcript. ConversationMemoryV2 supplies this when enabled;
+          // this bounded snapshot fallback preserves default-off behavior while
+          // keeping unrelated ME/INTERVIEWER turns isolated.
+          const priorAssistant = extractLatestPriorAssistantTurn(autoContextSnapshot);
+          if (priorAssistant) {
+            context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
+            console.log('[IPC] Injected latest prior assistant answer for manual refinement; rolling transcript excluded');
+          }
+        } else if (!context && autoContextSnapshot && shouldAutoAttachManualTranscriptContext(message, answerPlan)) {
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
           // strip prior ASSISTANT turns from the rolling snapshot before it
           // becomes the prompt context. A previously-emitted answer (e.g.
@@ -2925,6 +2938,18 @@ export function initializeIpcHandlers(appState: AppState): void {
               `[IPC] Auto-injected 100s context for gemini-chat-stream (${context.length} chars${snapshotForContext !== autoContextSnapshot ? ', prior-assistant turns stripped for document-grounded mode' : ''})`,
             );
           }
+        } else if (!context && autoContextSnapshot) {
+          console.log('[IPC] Skipped 100s transcript context for standalone manual chat', {
+            answerType: answerPlan.answerType,
+          });
+          iTrace.noteContext({
+            source: 'live_transcript',
+            trustLevel: 'medium',
+            requested: answerPlan.requiredContextLayers.includes('live_transcript'),
+            retrieved: true,
+            included: false,
+            reason: 'manual_standalone_question',
+          });
         }
         // MANUAL REGRESSION FIX (release 2026-06-08): for ANY profile-required
         // candidate answer type (jd_fit / skill / behavioral / project / experience /
@@ -12871,37 +12896,43 @@ export function initializeIpcHandlers(appState: AppState): void {
       const phoneMirror = PhoneMirrorService.getInstance();
       const intelligenceManager = appState.getIntelligenceManager();
 
-      // Document-grounded custom mode (audit 2026-06-27): the phone chat path is
-      // a SECOND ungated entry — it captures the rolling snapshot and saves the
-      // answer just like gemini-chat-stream. Mirror the doc-grounded gates here:
-      // strip prior-assistant turns from the snapshot (topic-collapse), and block
-      // an invalid answer from being saved (contamination loop).
-      let phoneDocGrounded = false;
+      let phoneActiveMode: import('./llm/modeProfiles').ActiveModeInfo | null = null;
       try {
         const { ModesManager } = require('./services/ModesManager');
-        phoneDocGrounded = ModesManager.getInstance().getActiveModeInfo()?.documentGroundedCustomModeActive === true;
-      } catch { /* mode unavailable — treat as non-doc-grounded */ }
+        phoneActiveMode = ModesManager.getInstance().getActiveModeInfo();
+      } catch {
+        /* mode prior unavailable; keep phone planning mode-blind */
+      }
+      const phoneDocGrounded = phoneActiveMode?.documentGroundedCustomModeActive === true;
 
-      // Doc-grounded strict-isolation (audit #3, 2026-07-05): mirror the
-      // desktop chat's gate (ipcHandlers.ts:1438) — when the active mode is
-      // doc-grounded AND docGroundedStrictIsolation is enabled, the phone-chat
-      // path must NOT inject Hindsight live recall. Today the phone path
-      // never consults Hindsight at all, so this is a no-op defensive check
-      // that pins the behavior for when a future implementation adds Hindsight
-      // here. The skip is the same condition as the desktop path so the
-      // two surfaces stay symmetric on the doc-grounded path.
-      const { isIntelligenceFlagEnabled } = require('./intelligence/intelligenceFlags');
-      const phoneDocGroundedSkipRecall = phoneDocGrounded
-        && isIntelligenceFlagEnabled('docGroundedStrictIsolation');
+      const phoneAnswerPlan = planAnswer({
+        question: message,
+        source: 'manual_input',
+        speakerPerspective: 'user',
+        activeMode: phoneActiveMode,
+      });
 
       // Capture rolling context BEFORE adding the new user message — same ordering
       // as gemini-chat-stream so Recap / Follow Up / What to Answer see phone turns.
+      // Keep it off standalone phone chat questions for the same isolation reason
+      // as desktop manual chat.
       let context: string | undefined;
       try {
         const snap = intelligenceManager.getFormattedContext(100);
-        if (snap && snap.trim().length > 0) {
+        if (snap && snap.trim().length > 0 && isRefinementFollowUp(message)
+            && !isTranscriptBoundManualQuestion(message) && !phoneDocGrounded) {
+          const priorAssistant = extractLatestPriorAssistantTurn(snap);
+          if (priorAssistant) {
+            context = `PRIOR ANSWER IN THIS CONVERSATION (the user wants you to EDIT this exact answer, not produce a new one):\nPrevious answer:\n${priorAssistant}\n\nApply the user's new instruction ("${message}") to THAT answer — keep the same facts, change only what was asked. Do not start over or re-list everything.`;
+            console.log('[PhoneMirror] Injected latest prior assistant answer for refinement; rolling transcript excluded');
+          }
+        } else if (snap && snap.trim().length > 0 && shouldAutoAttachManualTranscriptContext(message, phoneAnswerPlan)) {
           context = phoneDocGrounded ? stripPriorAssistantTurns(snap) : snap;
           if (phoneDocGrounded && context.trim().length === 0) context = undefined;
+        } else if (snap && snap.trim().length > 0) {
+          console.log('[PhoneMirror] Skipped 100s transcript context for standalone manual chat', {
+            answerType: phoneAnswerPlan.answerType,
+          });
         }
       } catch (ctxErr) {
         console.warn('[PhoneMirror] Failed to capture pre-turn context:', ctxErr);
@@ -12932,24 +12963,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Without this, the mode-suffix skip-gate (CHAT_MODE_PROMPT is a "universal
         // override") suppresses injection for non-custom regular modes like
         // lecture/team-meet + a sales question over phone (audit #2, 2026-07-05).
-        let phoneRouteOptions: StreamRouteOptions | undefined;
-        let phonePlanForOwnership: any = null;
-        try {
-          const llmMod = require('./llm');
-          if (typeof llmMod.planAnswer === 'function') {
-            const phonePlan = llmMod.planAnswer({
-              question: message,
-              source: 'manual_input',
-              speakerPerspective: 'user',
-              activeMode: (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })(),
-            });
-            phonePlanForOwnership = phonePlan;
-            phoneRouteOptions = {
-              answerType: phonePlan?.answerType || 'unknown_answer',
-              forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
-            };
-          }
-        } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
+        const phoneRouteOptions: StreamRouteOptions = {
+          answerType: phoneAnswerPlan.answerType,
+          forbiddenContextLayers: phoneAnswerPlan.forbiddenContextLayers,
+        };
+        const phonePlanForOwnership = phoneAnswerPlan;
 
         // SOURCE-OWNERSHIP GATE (2026-07-06): the phone-mirror path mirrors the
         // desktop chat and is a second answer surface. It has no deterministic
@@ -12967,7 +12985,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           const { resolveSourceOwnership, buildSourceSwitchClarification } = require('./llm/sourceOwnership');
           const { resolveTurnSourceDecision } = require('./llm/turnSourceDecision') as typeof import('./llm/turnSourceDecision');
           const { resolveExplicitSourceRequest: _pResolveSwitch, resolveExplicitSourceRequests: _pResolveSwitches } = require('./intelligence/context-os/explicitSourceSwitch') as typeof import('./intelligence/context-os/explicitSourceSwitch');
-          const _pMode = (() => { try { return require('./services/ModesManager').ModesManager.getInstance().getActiveModeInfo?.(); } catch { return null; } })();
+          const _pMode = phoneActiveMode;
           const _pOrch = llmHelper.getKnowledgeOrchestrator?.();
           const _pHasProfile = Boolean(_pOrch?.activeResume?.structured_data);
           const _pHasJd = Boolean((_pOrch as any)?.activeJD?.structured_data);
