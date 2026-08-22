@@ -810,6 +810,19 @@ export const AIP_CSS = `
    clear SC 1.4.11's 3:1, which is what the outline was there to guarantee. Nothing
    paints outside the border box now, so no ancestor's overflow can clip it. */
 .aip-root .aip-input:focus-visible { outline: none; }
+
+/* Same clip box, the other half of the toolbar. The buttons beside the filter
+   (Refresh, Select all, Reset…) sit in the same overflow:hidden row, and the
+   last one is flush with its right edge — so the outward outline loses its
+   right arc exactly as the input lost its left one.
+   Buttons are NOT given the input's treatment: ":focus-visible" does not match
+   pointer clicks on a <button>, so here the accent ring is real keyboard
+   affordance and removing it would cost a11y for no reason. It is drawn INSIDE
+   the border box instead, which is how ".aip-field-seg" and ".aip-tab" already
+   solve this — 0,4,0 to beat ".aip-root :focus-visible" (0,2,0).
+   Rows inside ".aip-models-well" need no such rule: its padding:4px already
+   leaves room for the 2px offset + 2px outline. */
+.aip-root .aip-reveal .aip-btn:focus-visible { outline-offset:-2px; }
 /* The clear control on the models filter. Chrome's native
    "::-webkit-search-cancel-button" is a fixed raster glyph — a chunky grey
    pill-with-X that ignores colour, sizing and theme, and reads as a much
