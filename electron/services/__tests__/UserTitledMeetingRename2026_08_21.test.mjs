@@ -119,8 +119,19 @@ describe('RC-7: the compiled DatabaseManager carries the guards (drift pins)', (
     assert.match(compiled, /SELECT title, COALESCE\(user_titled, 0\) AS user_titled FROM meetings WHERE id = \?/);
     assert.match(compiled, /is_processed, summary_status, user_titled/);
   });
-  test('the v28 migration exists', () => {
-    assert.match(compiled, /ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0/);
+  test('the user_titled ALTER is applied UNCONDITIONALLY, not version-gated (live incident 2026-08-23)', () => {
+    // Shipped as `if (version < 28) { ALTER … }` while the live DB already
+    // sat at user_version 30 (stamped by a parallel branch build) WITHOUT the
+    // column — the gate never ran and every saveMeeting threw, silently
+    // losing meetings and their summaries. An additive nullable column is
+    // idempotent by construction and must not depend on a version counter
+    // concurrent branches can race: the ALTER must execute BEFORE any
+    // version-28 gate is consulted.
+    const alterIdx = compiled.indexOf('ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0');
+    const gateIdx = compiled.indexOf('version < 28');
+    assert.ok(alterIdx >= 0, 'the ALTER must exist');
+    assert.ok(gateIdx >= 0, 'the version stamp must still advance');
+    assert.ok(alterIdx < gateIdx, 'the ALTER must run unconditionally, before the version-28 gate');
     assert.match(compiled, /user_version = 28/);
   });
 });
