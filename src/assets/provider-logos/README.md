@@ -112,17 +112,18 @@ against the dark theme.
 
 Raster marks have no `currentColor` to resolve, so they are imported as URLs and
 rendered with `<img>`. Both consumers split their registries along that line:
-`AIP_PROVIDER_LOGOS` / `AIP_PROVIDER_LOGO_IMAGES` in `AIProvidersSettings.tsx`
-(for `litellm.png`), and `BRAND_MARKS` / `BRAND_MARK_IMAGES` in `BrandMark.tsx`
-(for the Natively app icon). `BrandMark` resolves the vector registry first, so
-an id must not appear in both — the coverage test enforces that.
+`AI_PROVIDER_MARKS` / `AI_PROVIDER_MARK_IMAGES` in `ui/aiProviderMarks.ts` (for
+`litellm.png` and the Natively app icon), and `BRAND_MARKS` /
+`BRAND_MARK_IMAGES` in `BrandMark.tsx`. Both renderers resolve the vector
+registry first, so an id must not appear in both — the coverage test enforces
+that.
 
 ## Colour vs monochrome
 
 The two consumers make opposite choices, for reasons specific to the surface
 each one renders onto. Neither is an inconsistency to be tidied up.
 
-**AI Providers** (`AIP_PROVIDER_LOGOS`) matches each brand: `gemini`, `claude`
+**AI providers** (`AI_PROVIDER_MARKS`) matches each brand: `gemini`, `claude`
 and `deepseek` carry their own colours; `groq`, `openai` and `ollama` are
 `currentColor` because those marks *are* monochrome, so they adapt to the light
 and dark themes for free. Do not "fix" this by tinting the monochrome three or
@@ -174,9 +175,21 @@ inventing a brand colour.
 ## Adding a mark later
 
 Drop the SVG here, add the key to the registry for the surface you are adding to
-— `AIP_PROVIDER_LOGOS` in `src/components/settings/AIProvidersSettings.tsx` for
-AI providers, `BRAND_MARKS` in `src/components/ui/BrandMark.tsx` for speech
+— `AI_PROVIDER_MARKS` in `src/components/ui/aiProviderMarks.ts` for AI/model
+providers, `BRAND_MARKS` in `src/components/ui/BrandMark.tsx` for speech
 providers — and record its source and licence above.
+
+`AI_PROVIDER_MARKS` is ONE registry with two renderers over it, and adding a
+provider to it covers both surfaces at once: `<AipProviderMark>` draws the tiled
+version for Settings > AI Providers (it needs `AIP_CSS`, which is scoped to that
+panel), and `<ProviderMark>` draws the bare glyph everywhere else — currently the
+overlay's model picker. `AIProvidersSettings.tsx` re-exports the maps under their
+original `AIP_*` names, so existing call sites still resolve.
+
+The model picker is why the split exists: it rendered a generic `<Cloud>` glyph
+for every provider except Gemini, so `Nvidia Nim`, `OpenAI`, `Claude`, `DeepSeek`
+and `Groq` all shipped with no brand. `ModelPickerProviderMarkCoverage.test.mjs`
+now fails if a provider reachable from `STANDARD_CLOUD_MODELS` has no mark.
 
 For a speech provider, also set `neutralTile: true` on its option in
 `SettingsOverlay.tsx`, and normalise the asset to `width="1em" height="1em"`

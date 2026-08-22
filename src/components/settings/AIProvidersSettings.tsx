@@ -17,18 +17,14 @@ import { useToggleInit } from './useToggleInit';
 // is a separate document context, so those would render black and disappear
 // against the dark theme. Inlining lets them inherit the tile's colour and
 // adapt to both themes for free.
-import geminiMark from '../../assets/provider-logos/gemini.svg?raw';
-import claudeMark from '../../assets/provider-logos/claude.svg?raw';
-import deepseekMark from '../../assets/provider-logos/deepseek.svg?raw';
-import groqMark from '../../assets/provider-logos/groq.svg?raw';
-import openaiMark from '../../assets/provider-logos/openai.svg?raw';
-import ollamaMark from '../../assets/provider-logos/ollama.svg?raw';
-import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
-// LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
-// URL rather than inlined markup. No currentColor to resolve in a PNG, so <img>
-// loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
-// `enterprise/` directory that their LICENSE carves out.
-import litellmMark from '../../assets/provider-logos/litellm.png';
+// The marks themselves live in ../ui/aiProviderMarks so the overlay's model
+// picker can render the same registry without pulling this panel in. Re-exported
+// below under their original AIP_* names.
+import {
+    AI_PROVIDER_BRANDS,
+    AI_PROVIDER_MARKS,
+    AI_PROVIDER_MARK_IMAGES,
+} from '../ui/aiProviderMarks';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1099,19 +1095,7 @@ export const CLOUD_PROVIDERS = [
 ];
 export type CloudProviderId = (typeof CLOUD_PROVIDERS)[number]['id'];
 
-export const AIP_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }> = {
-    gemini:   { mono: 'GE', brand: '#7C9CF5' },
-    groq:     { mono: 'GQ', brand: '#F2755C' },
-    openai:   { mono: 'OA', brand: '#10A37F' },
-    claude:   { mono: 'CL', brand: '#D97757' },
-    deepseek: { mono: 'DS', brand: '#4D6BFE' },
-    // Mark is vendored (nvidia.svg), so `mono` is only a safety net; `brand`
-    // still drives the tile wash. Hex is NVIDIA green as shipped in the mark.
-    nvidia_nim: { mono: 'NV', brand: '#76B900' },
-    codex:    { mono: 'CX', brand: '#10A37F' },
-    litellm:  { mono: 'LL', brand: '#8B5CF6' },
-    ollama:   { mono: 'OL', brand: '#9CA3AF' },
-};
+export const AIP_PROVIDER_BRANDS = AI_PROVIDER_BRANDS;
 
 interface AipMonogramProps {
     /** Two letters. Longer strings are clipped to two. */
@@ -1138,21 +1122,9 @@ export const AipMonogram: React.FC<AipMonogramProps> = ({ mono, brand, className
  * `codex` maps to the OpenAI mark because it is the same brand.
  */
 /** Raster marks, rendered as <img>. See AIP_PROVIDER_LOGOS for the inlined SVGs. */
-export const AIP_PROVIDER_LOGO_IMAGES: Record<string, string> = {
-    litellm: litellmMark,
-};
+export const AIP_PROVIDER_LOGO_IMAGES = AI_PROVIDER_MARK_IMAGES;
 
-export const AIP_PROVIDER_LOGOS: Record<string, string> = {
-    gemini: geminiMark,
-    claude: claudeMark,
-    anthropic: claudeMark,
-    deepseek: deepseekMark,
-    groq: groqMark,
-    openai: openaiMark,
-    codex: openaiMark,
-    ollama: ollamaMark,
-    nvidia_nim: nvidiaMark,
-};
+export const AIP_PROVIDER_LOGOS = AI_PROVIDER_MARKS;
 
 interface AipProviderMarkProps {
     /** Provider id. Falls back to a monogram when no mark is vendored. */
