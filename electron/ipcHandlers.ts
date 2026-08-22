@@ -5808,8 +5808,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
-    appState.setAutoAnswerEnabled(enabled);
-    return { success: true };
+    const persisted = appState.setAutoAnswerEnabled(Boolean(enabled));
+    return persisted
+      ? { success: true }
+      : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
   });
 
   safeHandle('get-code-verification', async () => {

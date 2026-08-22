@@ -1218,7 +1218,7 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
-import { evaluateAutoAnswerGate } from "./intelligence/autoAnswerGate"
+import { AutoAnswerScheduler } from "./intelligence/autoAnswerScheduler"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
@@ -3175,69 +3175,37 @@ export class AppState {
   // against the in-flight speculative run, rejects on the mismatch, bumps
   // currentGenerationId — cancelling the correctly-prefetched answer — and then
   // generates one for the PREVIOUS question.
-  private autoAnswerTimer: NodeJS.Timeout | null = null;
-  // The turn already dispatched. The planner's 3 s cooldown alone would let a
-  // stable last-turn be re-answered every time the cooldown lapsed.
-  private lastAutoAnsweredQuestion: string | null = null;
-  // Long enough for a multi-segment question ("Tell me about a time..." /
-  // "...where you disagreed with your manager") to coalesce into one trigger;
-  // each new final restarts it.
-  private static readonly AUTO_ANSWER_DEBOUNCE_MS = 900;
-
-  private scheduleAutoAnswer(): void {
-    if (!this._autoAnswerEnabled) return;
-    // The transcript handler also runs during the post-Stop drain window
-    // (`_isDraining`); a meeting that is over must not produce a new answer.
-    if (!this.isMeetingActive) return;
-
-    const generation = this._meetingGeneration;
-    if (this.autoAnswerTimer) clearTimeout(this.autoAnswerTimer);
-
-    this.autoAnswerTimer = setTimeout(() => {
-      this.autoAnswerTimer = null;
-      // Every remaining guard lives in evaluateAutoAnswerGate so it is reachable
-      // from a test. The engine half — mode + cooldown — matters because
-      // `runWhatShouldISay` aborts any live What-to-Answer stream with
-      // 'superseded': without it an auto-trigger would kill the answer the user
-      // just requested by hand. The cooldown is consulted HERE rather than left
-      // to the planner because planSuggestionTrigger runs the zero-shot ONNX
-      // intent classifier BEFORE planNextAssistantAction applies that cooldown,
-      // so the classification would be paid for and thrown away.
-      const decision = evaluateAutoAnswerGate({
-        enabled: this._autoAnswerEnabled,
-        meetingActive: this.isMeetingActive,
-        generationAtSchedule: generation,
-        generationNow: this._meetingGeneration,
-        lastQuestion: this.intelligenceManager.getLastInterviewerTurn(),
-        lastAnsweredQuestion: this.lastAutoAnsweredQuestion,
-        engineAccepting: this.intelligenceManager.canAutoAnswer(),
-      });
-      if (!decision.dispatch) {
-        if (this._verboseLogging) console.log(`[Main] Auto Answer skipped: ${decision.reason}`);
-        return;
-      }
-      const lastQuestion = decision.question;
-      this.lastAutoAnsweredQuestion = lastQuestion;
-
-      // The planner still decides whether the turn is answerable at all; this
-      // confidence reflects a completed STT final, not a claim that every
-      // interviewer sentence is a question.
+  // The timer, hard cap, pending-rearm slot and dedup live in
+  // AutoAnswerScheduler (electron/intelligence/autoAnswerScheduler.ts) so they
+  // run against an injected clock in tests. AppState owns only the wiring.
+  private readonly autoAnswerScheduler = new AutoAnswerScheduler({
+    isEnabled: () => this._autoAnswerEnabled,
+    isMeetingActive: () => this.isMeetingActive,
+    meetingGeneration: () => this._meetingGeneration,
+    lastInterviewerTurn: () => this.intelligenceManager.getLastInterviewerTurn(),
+    engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
+    onSkip: (reason) => {
+      if (this._verboseLogging) console.log(`[Main] Auto Answer skipped: ${reason}`);
+    },
+    dispatch: (lastQuestion) => {
+      // No fabricated confidence (V2 §13): the trigger carries none until the
+      // Auto Answer detector supplies a real one, and the planner falls back to
+      // the intent classifier's own score in its absence.
       void this.intelligenceManager.handleSuggestionTrigger({
         context: this.intelligenceManager.getFormattedContext(120),
         lastQuestion,
-        confidence: 0.9,
       }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
-    }, AppState.AUTO_ANSWER_DEBOUNCE_MS);
+    },
+  });
+
+  private scheduleAutoAnswer(): void {
+    this.autoAnswerScheduler.noteInterviewerFinal();
   }
 
   private cancelAutoAnswer(): void {
-    if (this.autoAnswerTimer) {
-      clearTimeout(this.autoAnswerTimer);
-      this.autoAnswerTimer = null;
-    }
-    this.lastAutoAnsweredQuestion = null;
+    this.autoAnswerScheduler.cancel();
   }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
@@ -6673,6 +6641,8 @@ export class AppState {
     this.intelligenceManager.on('mode_changed', (mode: string) => {
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-mode-changed', { mode })
+      // A candidate parked because the engine was busy may now dispatch.
+      if (mode === 'idle') this.autoAnswerScheduler.noteEngineIdle()
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
@@ -7564,13 +7534,23 @@ export class AppState {
     return this._autoAnswerEnabled;
   }
 
-  public setAutoAnswerEnabled(enabled: boolean): void {
+  /**
+   * Returns whether the value was PERSISTED. SettingsManager.set refuses when
+   * the store is degraded (R-15); the in-memory flag is left untouched in that
+   * case so memory, disk and the renderer's toggle cannot disagree.
+   */
+  public setAutoAnswerEnabled(enabled: boolean): boolean {
+    const persisted = SettingsManager.getInstance().set('autoAnswerEnabled', enabled);
+    if (!persisted) {
+      console.warn(`[AppState] autoAnswerEnabled=${enabled} NOT persisted — settings store degraded; keeping ${this._autoAnswerEnabled}`);
+      return false;
+    }
     this._autoAnswerEnabled = enabled;
-    SettingsManager.getInstance().set('autoAnswerEnabled', enabled);
     // Drop anything already armed: turning the toggle off mid-meeting must not
     // let one more auto-answer land a second later.
     if (!enabled) this.cancelAutoAnswer();
     console.log(`[AppState] autoAnswerEnabled set to ${enabled}`);
+    return true;
   }
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {

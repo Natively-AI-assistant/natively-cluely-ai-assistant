@@ -60,7 +60,14 @@ export interface TranscriptSegment {
 export interface SuggestionTrigger {
     context: string;
     lastQuestion: string;
-    confidence: number;
+    /**
+     * Trigger-level confidence that `lastQuestion` is an answerable question.
+     * Optional since the Auto Answer V3 campaign: the automatic trigger no
+     * longer fabricates a value, and an absent confidence means "defer to the
+     * planner's own classifier score" (PlannerDecision falls back to
+     * intentResult.confidence).
+     */
+    confidence?: number;
 }
 
 // Context item matching Swift ContextManager structure

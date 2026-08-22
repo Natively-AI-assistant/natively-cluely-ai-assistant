@@ -2033,10 +2033,21 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                     <SettingsToggle
                                                         checked={autoAnswerEnabled}
                                                         label={t('Auto Answer')}
-                                                        onChange={() => {
-                                                            const newState = !autoAnswerEnabled;
-                                                            setAutoAnswerEnabled(newState);
-                                                            window.electronAPI?.setAutoAnswerEnabled?.(newState);
+                                                        onChange={async () => {
+                                                            const previous = autoAnswerEnabled;
+                                                            const newState = !previous;
+                                                            setAutoAnswerEnabled(newState); // Optimistic update
+                                                            try {
+                                                                const result = await window.electronAPI?.setAutoAnswerEnabled?.(newState);
+                                                                if (result && !result.success) {
+                                                                    // Rollback on explicit failure (settings store degraded)
+                                                                    setAutoAnswerEnabled(previous);
+                                                                    console.error('[Settings] Failed to set Auto Answer:', result.error);
+                                                                }
+                                                            } catch (err) {
+                                                                setAutoAnswerEnabled(previous);
+                                                                console.error('[Settings] Exception setting Auto Answer:', err);
+                                                            }
                                                         }}
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />

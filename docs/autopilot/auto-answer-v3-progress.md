@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 0 complete
+## Status: phase 1 complete
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -183,6 +183,59 @@ Pre-existing failures (recorded, NOT fixed, must not grow):
   NO `speech_started` event and no joint channel state; Deepgram `speech_final`/Soniox `<end>` are dropped today;
   the bundled embedder is all-MiniLM-L6-v2, not bge-small; `electron/intelligence/**` tests are NOT in `npm test`.
 - Validation label: n/a (documentation only).
+
+### Phase 1 — hotfixes on the existing trigger
+Branch note: a parallel session committed `d780eb16 fix(settings): tighten the Auto Answer row's copy and icon`
+directly onto `feat/auto-answer-v3` between Phase 0 and this commit (the cosmetic SettingsOverlay edit noted at
+campaign start). Not mine; history left untouched.
+
+- `electron/intelligence/autoAnswer/AutoAnswerClock.ts` — NEW: `Clock` interface + `systemClock` (V2 §33).
+- `electron/intelligence/autoAnswer/__tests__/fakeClock.mjs` — NEW: deterministic FakeClock (advance runs due timers in order).
+- `electron/intelligence/autoAnswerScheduler.ts` — NEW: the timer half extracted from AppState. `HARD_CAP_MS=2500`
+  from the first final of an accumulation; single-slot `PendingAutoAnswer` with `PENDING_TTL_MS=6000`, rearmed on
+  `mode_changed→idle` (fast path) and a `PENDING_RETRY_MS=500` poll (cooldown has no event); dropped on TTL, newer
+  final, live-turn mismatch, or `cancel()`. All guards still flow through `evaluateAutoAnswerGate`.
+- `electron/main.ts` — AppState wires `AutoAnswerScheduler` (scheduleAutoAnswer/cancelAutoAnswer now delegate);
+  `mode_changed` 'idle' → `noteEngineIdle()`; dispatch passes NO confidence; `setAutoAnswerEnabled` returns whether
+  `SettingsManager.set` persisted and leaves the in-memory flag untouched on refusal.
+- `electron/ipcHandlers.ts` — `set-auto-answer-enabled` returns `{success:false, error}` on persistence failure.
+- `electron/preload.ts`, `src/types/electron.d.ts` — `setAutoAnswerEnabled` result gains `error?`.
+- `src/components/SettingsOverlay.tsx` — optimistic toggle rolls back on `{success:false}` or throw (same pattern as
+  `handleAiLanguageChange`).
+- `electron/SessionTracker.ts` — `SuggestionTrigger.confidence` is now optional.
+- `electron/IntelligenceEngine.ts` — `handleSuggestionTrigger` only early-returns on an EXPLICIT `< 0.5`; absent
+  confidence → planner falls through to `intentResult.confidence` (`?? 0`, the planner's `||` fallthrough) and
+  `runWhatShouldISay` keeps its 0.8 default.
+- `package.json` — `npm test` now also runs `electron/intelligence/autoAnswer/__tests__/**/*.test.mjs`.
+- `electron/intelligence/autoAnswer/__tests__/AutoAnswerScheduler.test.mjs` — NEW: 16 tests, fake clock, zero sleeps.
+
+Test results: `npm test` → tests 8316 · pass 8246 · fail 7 (the identical pre-existing 7, verified by diffing the
+failing-test list against baseline) · skipped 63. Existing `AutoAnswer.test.mjs` 11/11 still pass.
+`typecheck:electron` clean · `typecheck:ts7` (renderer) clean · `npm run build` OK.
+
+Mutation probes (guard deleted → exactly this test reds → restored; diff-verified restore):
+| Guard | Test that reds |
+|---|---|
+| hard cap (`min(DEBOUNCE, capRemaining)`) | hard cap: finals faster than the debounce still fire at HARD_CAP_MS |
+| pending TTL | pending: expires after PENDING_TTL_MS without firing |
+| pending dropped on newer final | pending: a newer interviewer final supersedes the parked candidate |
+| pending turn must still be the live turn | pending: the slot does not fire if the latest turn changed underneath it |
+| pending cleared on cancel() | pending: meeting stop drops the parked candidate |
+| dedup (`lastAnsweredQuestion`) | an unchanged last turn is not re-dispatched after the cooldown |
+| generation check | a stop→start inside the debounce window drops the timer |
+| enabled precondition | toggle OFF: nothing is armed and nothing fires |
+
+Validation labels:
+- Hard cap, pending TTL/rearm/drop, dedup, generation, toggle-off: **Covered by automated tests** (scheduler
+  unit, fake clock). The AppState→scheduler wiring itself (host callbacks, mode_changed hookup):
+  **Reviewed but not executed** (typecheck + build only; no live meeting run).
+- Settings persistence propagation (main → IPC → renderer rollback): **Reviewed but not executed** (typechecks
+  on both sides; no degraded-store run).
+- `confidence: 0.9` removal: **Covered by automated tests** for the type contract (build/typecheck) and
+  **Reviewed but not executed** for the planner fallthrough at runtime (existing planner tests exercise
+  `confidence || intentResult.confidence`).
+
+Deviations from spec: none. Open questions for the human: none.
 
 ## Known residuals
 

@@ -717,7 +717,9 @@ export class IntelligenceEngine extends EventEmitter {
      * This is the primary auto-trigger path
      */
     async handleSuggestionTrigger(trigger: SuggestionTrigger): Promise<void> {
-        if (trigger.confidence < 0.5) return;
+        // An absent confidence is not a low one: the planner substitutes the
+        // intent classifier's score. Only an EXPLICIT sub-threshold value skips.
+        if (trigger.confidence !== undefined && trigger.confidence < 0.5) return;
 
         const plannerDecision = await this.planSuggestionTrigger(trigger);
         if (plannerDecision.kind === 'silent') {
@@ -767,7 +769,8 @@ export class IntelligenceEngine extends EventEmitter {
             ++this.currentGenerationId;
         }
 
-        await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence);
+        // runWhatShouldISay's own default (0.8) applies when the trigger carried none.
+        await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
     }
 
     private async planSuggestionTrigger(trigger: SuggestionTrigger): Promise<PlannerDecision> {
@@ -788,7 +791,9 @@ export class IntelligenceEngine extends EventEmitter {
 
         return planNextAssistantAction({
             triggerQuestion: trigger.lastQuestion,
-            confidence: trigger.confidence,
+            // 0 is the planner's "no trigger confidence" value: it `||`-falls
+            // through to intentResult.confidence (PlannerDecision.ts).
+            confidence: trigger.confidence ?? 0,
             transcriptContext,
             intentResult,
             hasRecentAssistantResponse: this.session.getAssistantResponseHistory().length > 0,

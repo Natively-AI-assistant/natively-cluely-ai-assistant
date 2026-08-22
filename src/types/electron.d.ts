@@ -642,7 +642,7 @@ export interface ElectronAPI {
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
-  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
