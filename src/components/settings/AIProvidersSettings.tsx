@@ -94,6 +94,9 @@ export const AIP_CSS = `
     --aip-accent-muted:      color-mix(in srgb, var(--aip-accent) 14%, transparent);
     --aip-accent-border:     color-mix(in srgb, var(--aip-accent) 22%, transparent);
     --aip-accent-ring:       color-mix(in srgb, var(--aip-accent) 12%, transparent);
+    /* Stroked X, used as a mask so it can be tinted by whatever colour the rule
+       sets. Single-quoted attrs and %23 for '#' keep it legal inside url(). */
+    --aip-x-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 3 9 9M9 3 3 9' stroke='%23000' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E");
 
     --aip-hero:      #ffffff;
     --aip-primary:   rgba(255,255,255,0.86);
@@ -807,6 +810,24 @@ export const AIP_CSS = `
    clear SC 1.4.11's 3:1, which is what the outline was there to guarantee. Nothing
    paints outside the border box now, so no ancestor's overflow can clip it. */
 .aip-root .aip-input:focus-visible { outline: none; }
+/* The clear control on the models filter. Chrome's native
+   "::-webkit-search-cancel-button" is a fixed raster glyph — a chunky grey
+   pill-with-X that ignores colour, sizing and theme, and reads as a much
+   heavier control than the hairline field it sits in. Replaced with a plain
+   stroked X.
+   Drawn as a MASK rather than a background image so the colour comes from
+   --aip-danger, which is theme-split; a background SVG would hardcode one red
+   and go wrong in the light theme. -webkit-appearance:none is what removes the
+   native glyph — without it the mask paints on top of it. */
+.aip-input[type='search']::-webkit-search-cancel-button {
+    -webkit-appearance: none; appearance: none;
+    width:11px; height:11px; cursor:pointer;
+    background-color: var(--aip-danger);
+    -webkit-mask: var(--aip-x-glyph) center / 11px 11px no-repeat;
+            mask: var(--aip-x-glyph) center / 11px 11px no-repeat;
+    opacity:0.8; transition: opacity var(--aip-dur-state) var(--aip-ease-out);
+}
+.aip-input[type='search']::-webkit-search-cancel-button:hover { opacity:1; }
 .aip-input[data-mono='true'] { font-family: var(--aip-mono); font-size:11.5px; }
 textarea.aip-input { height:auto; padding:10px; line-height:1.5; resize:none; }
 select.aip-input { cursor:pointer; }
