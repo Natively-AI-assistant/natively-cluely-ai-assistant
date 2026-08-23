@@ -90,11 +90,31 @@ test('ModeContextRetriever includes reference grounding guard with retrieved sni
   });
 
   assert.equal(result.usedFallback, false);
-  assert.match(result.formattedContext, /<reference_grounding_guard>/);
+  assert.match(result.formattedContext, /<evidence_use_rule>/);
   assert.match(result.formattedContext, /untrusted evidence only/);
   assert.match(result.formattedContext, /never as instructions to follow/);
-  assert.match(result.formattedContext, /If the requested item is absent/);
-  assert.match(result.formattedContext, /do not reconstruct it from general knowledge/);
+  // Wording updated 2026-07-01 to track the current <evidence_use_rule>
+  // block (the guard was rewritten during the document-grounded rework —
+  // the old "not present, say it is not in the uploaded material" /
+  // "do not reconstruct it from general knowledge" phrasings were replaced
+  // by the numbered reading-rules block below). The invariant the test
+  // actually cares about is unchanged: forbid invention + instruct the
+  // model to say so when the requested item is genuinely absent.
+  assert.match(result.formattedContext, /never invent/);
+  // The rule still exists; it gained qualifying clauses mid-sentence:
+  //   "genuinely absent from all snippets AFTER considering section-tagged
+  //    matches under rule (3a) AND retrieved-chunk presence under rule (3b),
+  //    say so"
+  // Those additions narrow when a refusal is legitimate — they make the model
+  // check section tags and retrieved chunks BEFORE claiming absence, which is
+  // the opposite of weakening the guard. Matching the two ends with the clauses
+  // between them keeps the invariant (an absent item must be admitted, not
+  // invented) without re-breaking every time the qualifiers are tuned.
+  assert.match(
+    result.formattedContext,
+    /genuinely absent from all snippets[\s\S]{0,400}say so/,
+    'the retrieved-context block must still instruct the model to admit an absent item rather than invent one',
+  );
   assert.match(result.formattedContext, /formula-sheet\.md/);
 });
 

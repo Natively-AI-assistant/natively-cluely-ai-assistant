@@ -198,5 +198,20 @@ export class CodingConversationState {
     try { this.bySession.delete(sessionId); } catch { /* ignore */ }
   }
 
+  /**
+   * Clear every session's coding-thread state (answer-pipeline-rebuild
+   * Phase 3, code-review finding, 2026-07-28). Sibling to
+   * ConversationMemoryService.clearAllSessions() and cleared alongside it on
+   * mode switch (ipcHandlers.ts's modes:set-active): this store has no
+   * `mode` field at all, so stale cross-mode coding-problem state is
+   * currently only prevented by an incidental AND-gate at its one read site
+   * (it's consulted only when ConversationMemoryService.getLastCodingTurn
+   * is also truthy, which the mode-switch clear already empties) — this
+   * clear removes that dependency on an unrelated store's behavior.
+   */
+  clearAllSessions(): void {
+    try { this.bySession.clear(); } catch { /* ignore */ }
+  }
+
   get sessionCount(): number { return this.bySession.size; }
 }

@@ -28,7 +28,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
@@ -125,8 +125,8 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 // Now we can safely import the compiled wrappers.
-const { SystemAudioCapture } = await import(path.join(distRoot, 'SystemAudioCapture.js'));
-const { MicrophoneCapture } = await import(path.join(distRoot, 'MicrophoneCapture.js'));
+const { SystemAudioCapture } = await import(pathToFileURL(path.join(distRoot, 'SystemAudioCapture.js')).href);
+const { MicrophoneCapture } = await import(pathToFileURL(path.join(distRoot, 'MicrophoneCapture.js')).href);
 
 // setImmediate-flush helper. `stop()` defers `monitor.stop()` via setImmediate;
 // we wait one macrotask so the deferred teardown actually runs.
@@ -189,12 +189,13 @@ test('MicrophoneCapture restart after stop must not reuse a torn-down native mon
 
     const cap = new MicrophoneCapture('same-mic-id');
 
-    // Note: MicrophoneCapture uses EAGER init — the constructor already
-    // created a native instance.
-    assert.equal(created.microphone.length, 1, 'constructor should eagerly create a native instance');
-    const first = created.microphone[0];
+    // Note: MicrophoneCapture uses LAZY init — the constructor does NOT create
+    // a native instance. The first construction happens inside start().
+    assert.equal(created.microphone.length, 0, 'constructor (lazy init) must not create a native instance');
 
     cap.start();
+    assert.equal(created.microphone.length, 1, 'start() must construct the first native instance');
+    const first = created.microphone[0];
     assert.equal(first.startCalls, 1, 'first native instance should have been started exactly once');
 
     await cap.stop();

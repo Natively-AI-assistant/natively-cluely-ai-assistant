@@ -24,6 +24,12 @@ export type PiTelemetryEvent =
   | 'wta_question_extracted'
   | 'wta_live_session_memory_enabled'
   | 'wta_live_followup_resolved'
+  // WTA audit Part 11 (2026-08-18): clause-coverage observation/repair.
+  // MARKER-ONLY: counts and booleans, never clause text.
+  | 'wta_clause_coverage'
+  // WTA audit F14 residual (2026-08-18): the legacy `_wtaPlan` and the
+  // canonical plan classified one turn differently. MARKER-ONLY: enums.
+  | 'wta_plan_divergence'
   | 'wta_context_free_clarification'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'
@@ -38,7 +44,36 @@ export type PiTelemetryEvent =
   | 'pi_scaffold_compressed'
   | 'pi_answer_repeated'
   // Groq-scout E2E sprint 2026-06-14: assistant-voice identity/refusal misfire guard.
-  | 'pi_assistant_voice_misfire_repaired';
+  | 'pi_assistant_voice_misfire_repaired'
+  // Document-grounded real-path fix 2026-06-27: groundedness/greeting validator.
+  | 'pi_doc_grounded_validation_failed'
+  | 'pi_doc_grounded_regenerated'
+  | 'pi_doc_grounded_safe_failure'
+  // Round-7 Failure-3: completeness re-ask kept the original (valid but partial) answer.
+  | 'pi_doc_grounded_completeness_kept_original'
+  // Root-cause fix (2026-07-23): a substantial original answer classified as a
+  // false refusal was kept because the regen didn't cleanly improve on it —
+  // non-regression floor, see ipcHandlers.ts regenIsQualityDowngrade.
+  | 'pi_doc_grounded_false_refusal_kept_original'
+  // OKF Phase 0 (2026-07-01): false-refusal self-trigger guard + repair markers.
+  | 'pi_doc_grounded_false_refusal_repair_attempted'
+  | 'pi_doc_grounded_retrieval_summary'
+  // OKF Profile Intelligence upgrade (2026-07-02): profile-pack lifecycle +
+  // fail-closed retrieval + evidence composition markers. Marker-only — card
+  // COUNTS and coarse reasons, never card titles / bodies / profile content.
+  | 'pi_okf_profile_pack_generated'
+  | 'pi_okf_profile_pack_stale'
+  | 'pi_okf_profile_pack_invalidated'
+  | 'pi_okf_profile_retrieval_allowed'
+  | 'pi_okf_profile_retrieval_blocked'
+  | 'pi_okf_profile_evidence_assembled'
+  | 'pi_okf_profile_export_requested'
+  | 'pi_okf_profile_export_completed'
+  // Coding-meta fix (grounding campaign H4, 2026-07-18): sanitizer skip + retry markers.
+  | 'pi_coding_skip_candidate_sanitizer'
+  | 'pi_coding_meta_retry_attempted'
+  | 'pi_coding_meta_retry_succeeded'
+  | 'pi_coding_meta_retry_no_accept';
 
 export interface PiTelemetryRecord {
   event: PiTelemetryEvent;
@@ -71,6 +106,11 @@ const ALLOWED_KEYS = new Set<string>([
   'sanitizerApplied', 'repaired', 'needsFallback', 'markerCount', 'violationCode',
   // speakability markers (coarse class only — never raw answer text)
   'speakabilityClass',
+  // OKF Profile Intelligence markers (2026-07-02): COUNTS + coarse reasons /
+  // states only — never card titles, bodies, quotes, or any profile content.
+  'cardCount', 'nodeCount', 'entityCount', 'relationCount', 'rejectedCount',
+  'fastPathUsed', 'blockedReason', 'evidenceTier', 'packVersion', 'docType',
+  'conformant', 'fileCount', 'generatedMs',
 ]);
 // Even for an allowed key, a string value is bounded + must look like a marker label
 // (no free-text, no salary/PII numbers). Defense-in-depth on top of the allowlist.

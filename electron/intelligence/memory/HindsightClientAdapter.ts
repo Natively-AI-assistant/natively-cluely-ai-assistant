@@ -26,6 +26,13 @@ export interface HindsightConfig {
   defaultBank?: string;
   /** Default recall timeout if a call doesn't specify one. */
   timeoutMs?: number;
+  /** Derived from baseUrl hostname at config-resolution time. Consumed by the renderer to
+   *  decide which copy to show (local 3-step install vs cloud URL+key form). */
+  mode?: 'local' | 'cloud';
+  /** True when the config was synthesized by getHindsightConfig() because nothing was
+   *  persisted. The renderer uses this to label the URL as "(using local default)" rather
+   *  than pretending the user actively chose it. Never written to disk. */
+  synthetic?: boolean;
 }
 
 // Structural type for just the bits of the client we use (so we don't hard-import it).

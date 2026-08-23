@@ -18,7 +18,8 @@ const nullAdCampaigns = (
   _appStartTime?: number,
   _lastMeetingEndTime?: number | null,
   _isProcessingMeeting?: boolean,
-  _hasNativelyApi?: boolean
+  _hasNativelyApi?: boolean,
+  _enabled?: boolean,
 ) => ({
   activeAd: null as string | null,
   dismissAd: (_campaignId?: string) => {},
@@ -70,6 +71,10 @@ const _modesSettings = import.meta.glob<any>(
   '../../premium/src/ModesSettings.tsx',
   { eager: true }
 );
+const _roleInsight = import.meta.glob<any>(
+  '../../premium/src/RoleInsightPanel.tsx',
+  { eager: true }
+);
 
 // ─── Helper ──────────────────────────────────────────────────────────
 function get<T>(mods: Record<string, any>, name: string, fallback: T): T {
@@ -110,3 +115,6 @@ export const MaxUltraUpgradeToaster: React.FC<any> =
 
 export const ModesSettings: React.FC<any> =
   get(_modesSettings, 'default', NullComponent);
+
+export const RoleInsightPanel: React.FC<any> =
+  get(_roleInsight, 'RoleInsightPanel', NullComponent);

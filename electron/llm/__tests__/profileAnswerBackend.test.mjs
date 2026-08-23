@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { buildManualProfileBackendAnswer } = require('../../../dist-electron/electron/llm/profileAnswerBackend.js');
+const { buildManualProfileEvidenceRoute, buildManualProfileBackendAnswer } = require('../../../dist-electron/electron/llm/profileAnswerBackend.js');
 
 const PROFILES = [
   {
@@ -80,66 +80,75 @@ function makeOrchestrator(profile) {
   };
 }
 
-function answer(profile, question) {
-  const result = buildManualProfileBackendAnswer({
+function evidenceText(result) {
+  return JSON.stringify(result.route?.items?.map((item) => item.value) ?? []);
+}
+
+function route(profile, question) {
+  const result = buildManualProfileEvidenceRoute({
     question,
     orchestrator: makeOrchestrator(profile),
     source: 'manual_input',
   });
-  assert.ok(result.route, `${profile.id}: expected backend route for ${question}`);
-  assert.equal(result.route.providerUsed, false);
-  return result.route.answer;
+  assert.ok(result.route, `${profile.id}: expected backend evidence route for ${question}`);
+  assert.equal(result.route.answer, undefined);
+  assert.equal(result.route.usedDeterministicFastPath, false);
+  assert.equal(result.route.usedDeterministicEvidenceSelection, true);
+  assert.equal(result.route.providerUsed, true);
+  assert.equal(result.route.finalGenerationMode, 'jit_llm');
+  return result;
 }
 
 function assertNoLeak(text, forbidden) {
   for (const value of forbidden) {
-    assert.doesNotMatch(text, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `answer leaked ${value}: ${text}`);
+    assert.doesNotMatch(text, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), `evidence leaked ${value}: ${text}`);
   }
 }
 
-describe('backend profile answer path used by frontend chat IPC', () => {
-  test('answers profile facts for five synthetic profiles from current structured backend state only', () => {
+describe('backend profile evidence path used by frontend chat IPC', () => {
+  test('selects profile evidence for five synthetic profiles from current structured backend state only', () => {
     for (const profile of PROFILES) {
-      const name = answer(profile, 'what is my name?');
-      assert.equal(name, `Your name is ${profile.name}.`);
-      assertNoLeak(name, profile.forbidden);
+      const name = route(profile, 'what is my name?');
+      assert.match(evidenceText(name), new RegExp(profile.name, 'i'));
+      assertNoLeak(evidenceText(name), profile.forbidden);
 
-      const experience = answer(profile, 'what are my experiences?');
-      assert.match(experience, new RegExp(profile.expected[1], 'i'));
-      assert.match(experience, new RegExp(profile.expected[2], 'i'));
-      assertNoLeak(experience, profile.forbidden);
+      const experience = route(profile, 'what are my experiences?');
+      assert.match(evidenceText(experience), new RegExp(profile.expected[1], 'i'));
+      assert.match(evidenceText(experience), new RegExp(profile.expected[2], 'i'));
+      assertNoLeak(evidenceText(experience), profile.forbidden);
 
-      const projects = answer(profile, 'what projects have I done?');
-      assert.match(projects, new RegExp(profile.expected[3], 'i'));
-      assertNoLeak(projects, profile.forbidden);
+      const projects = route(profile, 'what projects have I done?');
+      assert.match(evidenceText(projects), new RegExp(profile.expected[3], 'i'));
+      assertNoLeak(evidenceText(projects), profile.forbidden);
 
-      const skills = answer(profile, 'what are my skills?');
-      assert.match(skills, new RegExp(profile.expected[4], 'i'));
-      assert.match(skills, new RegExp(profile.expected[5], 'i'));
-      assertNoLeak(skills, profile.forbidden);
+      const skills = route(profile, 'what are my skills?');
+      assert.match(evidenceText(skills), new RegExp(profile.expected[4], 'i'));
+      assert.match(evidenceText(skills), new RegExp(profile.expected[5], 'i'));
+      assertNoLeak(evidenceText(skills), profile.forbidden);
 
-      const jdFit = answer(profile, 'how do I fit this JD?');
-      assert.match(jdFit, new RegExp(profile.expected[6], 'i'));
-      assert.match(jdFit, new RegExp(profile.expected[7], 'i'));
-      assert.match(jdFit, new RegExp(profile.expected[4], 'i'));
-      assertNoLeak(jdFit, profile.forbidden);
+      const jdFit = route(profile, 'how do I fit this JD?');
+      assert.match(evidenceText(jdFit), new RegExp(profile.expected[6], 'i'));
+      assert.match(evidenceText(jdFit), new RegExp(profile.expected[7], 'i'));
+      assert.match(evidenceText(jdFit), new RegExp(profile.expected[4], 'i'));
+      assertNoLeak(evidenceText(jdFit), profile.forbidden);
     }
   });
 
   test('resume replacement uses latest backend structured state without leaking old facts', () => {
     const orchestrator = makeOrchestrator(PROFILES[0]);
-    let result = buildManualProfileBackendAnswer({ question: 'what is my name?', orchestrator, source: 'manual_input' });
-    assert.equal(result.route?.answer, 'Your name is Aarav Menon.');
+    let result = buildManualProfileEvidenceRoute({ question: 'what is my name?', orchestrator, source: 'manual_input' });
+    assert.match(evidenceText(result), /Aarav Menon/);
+    assert.equal(result.route?.answer, undefined);
 
     orchestrator.activeResume = { structured_data: PROFILES[1].resume };
     orchestrator.activeJD = { structured_data: PROFILES[1].jd };
 
-    result = buildManualProfileBackendAnswer({ question: 'what is my name?', orchestrator, source: 'manual_input' });
-    assert.equal(result.route?.answer, 'Your name is Maya Iyer.');
+    result = buildManualProfileEvidenceRoute({ question: 'what is my name?', orchestrator, source: 'manual_input' });
+    assert.match(evidenceText(result), /Maya Iyer/);
 
-    const projects = buildManualProfileBackendAnswer({ question: 'what projects have I done?', orchestrator, source: 'manual_input' });
-    assert.match(projects.route?.answer || '', /Sales Dashboard/);
-    assert.doesNotMatch(projects.route?.answer || '', /Aarav Menon|Inventory API/);
+    const projects = buildManualProfileEvidenceRoute({ question: 'what projects have I done?', orchestrator, source: 'manual_input' });
+    assert.match(evidenceText(projects), /Sales Dashboard/);
+    assert.doesNotMatch(evidenceText(projects), /Aarav Menon|Inventory API/);
   });
 
   test('fresh backend object after restart loads latest persisted structured profile', () => {
@@ -149,20 +158,33 @@ describe('backend profile answer path used by frontend chat IPC', () => {
       activeJD: { structured_data: latestPersisted.jd },
     };
 
-    const result = buildManualProfileBackendAnswer({ question: 'what is my name?', orchestrator: restartedOrchestrator, source: 'manual_input' });
-    assert.equal(result.route?.answer, 'Your name is Sara Thomas.');
+    const result = buildManualProfileEvidenceRoute({ question: 'what is my name?', orchestrator: restartedOrchestrator, source: 'manual_input' });
+    assert.match(evidenceText(result), /Sara Thomas/);
+    assert.equal(result.route?.answer, undefined);
   });
 
   test('multiple backend sessions do not cross-contaminate profile context', () => {
     const sessionA = makeOrchestrator(PROFILES[2]);
     const sessionB = makeOrchestrator(PROFILES[4]);
 
-    const a = buildManualProfileBackendAnswer({ question: 'what projects have I done?', orchestrator: sessionA, source: 'manual_input' });
-    const b = buildManualProfileBackendAnswer({ question: 'what projects have I done?', orchestrator: sessionB, source: 'manual_input' });
+    const a = buildManualProfileEvidenceRoute({ question: 'what projects have I done?', orchestrator: sessionA, source: 'manual_input' });
+    const b = buildManualProfileEvidenceRoute({ question: 'what projects have I done?', orchestrator: sessionB, source: 'manual_input' });
 
-    assert.match(a.route?.answer || '', /Kubernetes Rollout/);
-    assert.doesNotMatch(a.route?.answer || '', /Pipeline Sequencer|Daniel Joseph/);
-    assert.match(b.route?.answer || '', /Pipeline Sequencer/);
-    assert.doesNotMatch(b.route?.answer || '', /Kubernetes Rollout|Rahul Nair/);
+    assert.match(evidenceText(a), /Kubernetes Rollout/);
+    assert.doesNotMatch(evidenceText(a), /Pipeline Sequencer|Daniel Joseph/);
+    assert.match(evidenceText(b), /Pipeline Sequencer/);
+    assert.doesNotMatch(evidenceText(b), /Kubernetes Rollout|Rahul Nair/);
+  });
+
+  test('deprecated backend alias is evidence-only, not final-answer prose', () => {
+    const result = buildManualProfileBackendAnswer({
+      question: 'what is my name?',
+      orchestrator: makeOrchestrator(PROFILES[0]),
+      source: 'manual_input',
+    });
+    assert.ok(result.route);
+    assert.equal(result.route.answer, undefined);
+    assert.equal(result.route.usedDeterministicFastPath, false);
+    assert.match(evidenceText(result), /Aarav Menon/);
   });
 });

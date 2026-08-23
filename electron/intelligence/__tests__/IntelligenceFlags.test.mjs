@@ -6,7 +6,6 @@ import {
   isIntelligenceFlagEnabled,
   isIntelligenceTraceEnabled,
   isDurableMemoryWindowEnabled,
-  isIntelligenceOsEnabled,
   intelligenceFlagSnapshot,
   __resetIntelligenceFlagsCache,
 } from '../../../dist-electron/electron/intelligence/intelligenceFlags.js';
@@ -21,18 +20,75 @@ const ENV_KEYS = [
   'NATIVELY_GLOBAL_SEARCH_V2', 'NATIVELY_IN_MEETING_SEARCH_V2', 'NATIVELY_CONVERSATION_MEMORY_V2',
   'NATIVELY_LECTURE_INTELLIGENCE_V2', 'NATIVELY_DIAGRAM_INTELLIGENCE', 'NATIVELY_HINDSIGHT_MEMORY',
   'NATIVELY_HINDSIGHT_LIVE_RECALL', 'NATIVELY_HINDSIGHT_POST_MEETING_RETAIN',
+  'NATIVELY_RAG_CONFIDENCE_GATE', 'NATIVELY_RAG_LOCAL_RERANK', 'NATIVELY_RAG_RRF_FUSION', 'NATIVELY_RAG_SPECULATIVE_RERANK',
+  'NATIVELY_OKF_KNOWLEDGE_PACKS', 'NATIVELY_OKF_MARKDOWN_EXPORT', 'NATIVELY_OKF_HYBRID_RETRIEVAL',
+  'NATIVELY_OKF_GRAPH_EXPANSION', 'NATIVELY_OKF_KNOWLEDGE_UI', 'NATIVELY_OKF_USER_EDITABLE_CARDS',
+  'NATIVELY_OKF_PROFILE_PACKS', 'NATIVELY_OKF_PROFILE_HYBRID_RETRIEVAL', 'NATIVELY_OKF_PROFILE_MARKDOWN_EXPORT',
+  'NATIVELY_OKF_PROFILE_GRAPH_EXPANSION', 'NATIVELY_OKF_PROFILE_KNOWLEDGE_UI',
+  'NATIVELY_DOC_GROUNDED_STRICT_ISOLATION', 'NATIVELY_CUSTOM_MODE_SOURCE_ENFORCEMENT',
+  'NATIVELY_DOC_GROUNDED_FALSE_REFUSAL_REPAIR', 'NATIVELY_JIT_FINAL_ANSWER_ENFORCED',
+  'NATIVELY_CONTEXT_OS', 'NATIVELY_CONTEXT_OS_MANUAL_CHAT', 'NATIVELY_CONTEXT_OS_WTA',
+  'NATIVELY_CONTEXT_OS_RECAP_FOLLOWUP', 'NATIVELY_CONTEXT_OS_EVIDENCE_PACK',
+  'NATIVELY_CONTEXT_OS_MEMORY_SAFETY', 'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
+  'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION', 'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
+  // Pre-existing gap closed 2026-07-25 (found while adding NATIVELY_TURN_IDENTITY_V2
+  // below): NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE was added to intelligenceFlags.ts's
+  // FLAGS registry but never added here, so this test's own length-parity assertion
+  // was already red at HEAD (53 !== 52, confirmed via git stash) before this change.
+  'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
+  'NATIVELY_PROMPT_COMPOSER_V2',
+  'NATIVELY_ATOMIC_JD_PROFILE_PACK',
+  'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
+  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
+  // 2026-07-28) — dev/test-only, same pattern.
+  'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW',
+  'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere (including dev/test).
+  'NATIVELY_PROMPT_SYSTEM_V2',
 ];
 
 // The full flag set — Meeting Notes V3 product flags intentionally ship default ON;
 // the rest remain additive/opt-in default OFF.
 const ALL_FLAG_KEYS = [
-  'trace', 'durableMemoryWindow', 'intelligenceOsEnabled', 'profileTreeV2', 'contextRouterV2',
+  // WTA audit flags (2026-08-18, both default OFF — shadow/observe-only).
+  'questionLedgerShadow',
+  'wtaClauseCoverageRepair',
+  'trace', 'durableMemoryWindow', 'profileTreeV2', 'contextRouterV2',
   'liveTranscriptBrain', 'promptAssemblerV2', 'answerDiversityGuard', 'meetingMemoryV2',
   'meetingSummaryV3', 'meetingModeAutoDetect', 'followUpDraftV2', 'speakerLabelsV1',
-  'meetingNotesStructuredOutput', 'meetingSummaryLlmPolish', 'speakerDiarizationV1',
+  'meetingSummaryLlmPolish', 'speakerDiarizationV1',
   'globalSearchV2', 'inMeetingSearchV2', 'conversationMemoryV2', 'lectureIntelligenceV2', 'diagramIntelligence',
   'hindsightMemory', 'hindsightLiveRecall', 'hindsightPostMeetingRetain',
   'ragConfidenceGate', 'ragLocalRerank', 'ragRrfFusion', 'ragSpeculativeRerank',
+  'okfKnowledgePacks', 'okfMarkdownExport', 'okfHybridRetrieval', 'okfGraphExpansion',
+  'okfKnowledgeUi', 'okfUserEditableCards',
+  'okfProfilePacks', 'okfProfileHybridRetrieval', 'okfProfileMarkdownExport',
+  'okfProfileGraphExpansion', 'okfProfileKnowledgeUi',
+  'docGroundedStrictIsolation', 'customModeSourceEnforcement', 'docGroundedFalseRefusalRepair',
+  'jitFinalAnswerEnforced',
+  // Context OS / Source Authority Kernel (2026-07-10). The first six were
+  // promoted from isInternalDevTestContext() to unconditional `true`
+  // (2026-07-18, grounding campaign — see DEFAULT_ON_KEYS below); the
+  // remaining enforcement/property-validation/multi-family flags still
+  // default to isInternalDevTestContext() (FALSE under this bare node harness).
+  'contextOsEnabled', 'contextOsManualChatEnabled', 'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled', 'contextOsEvidencePackEnabled', 'contextOsMemorySafetyEnabled',
+  'contextOsEnforceSourceCapabilities', 'contextOsPropertyValidation',
+  'contextOsMultiFamilyEvidenceEnabled',
+  // Pre-existing gap closed 2026-07-25 (see the matching ENV_KEYS comment above).
+  'answerRelevanceGuardLive',
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only; resolves to
+  // isInternalDevTestContext() = FALSE under this bare node harness.
+  'atomicJdProfilePackGeneration',
+  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only, same pattern.
+  'pronounRegexShadowObservation',
+  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
+  // 2026-07-28) — dev/test-only, same pattern.
+  'contextOsImpossibleStateGateShadow',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere (including dev/test):
+  // the legacy prompt suite must keep passing byte-for-byte until deliberate rollout.
+  'promptSystemV2',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
@@ -41,6 +97,29 @@ const DEFAULT_ON_KEYS = new Set([
   'followUpDraftV2',
   'speakerLabelsV1',
   'meetingSummaryLlmPolish',
+  // Safety isolation gates default ON. okf*/okfProfile* dev/test-default flags
+  // resolve to isInternalDevTestContext() = FALSE under this bare node harness.
+  'docGroundedStrictIsolation',
+  'docGroundedFalseRefusalRepair',
+  // Full-JIT final-answer law — unconditionally `true` everywhere (the intended
+  // production policy, not a dev/test-only experiment), restored 2026-07-14
+  // after the 2026-07-09 stability rollback was resolved.
+  'jitFinalAnswerEnforced',
+  // Context OS core pipeline — promoted from dev/test-only to unconditional
+  // production default-ON (2026-07-18, grounding campaign) after live
+  // verification (H4/NEW-3/THESIS-091/C8 traces, real MiniMax-M3, real
+  // documents). contextOsEnforceSourceCapabilities/contextOsPropertyValidation/
+  // contextOsMultiFamilyEvidenceEnabled are SEPARATE stricter flags not
+  // covered by this promotion — they stay dev/test-only (isInternalDevTestContext).
+  'contextOsEnabled',
+  'contextOsManualChatEnabled',
+  'contextOsWtaEnabled',
+  'contextOsRecapFollowupEnabled',
+  'contextOsEvidencePackEnabled',
+  'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted to production default-ON (2026-08-02) after the
+  // 8-run benchmark campaign (see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;
@@ -57,7 +136,6 @@ describe('intelligenceFlags', () => {
   test('every flag resolves to its documented default', () => {
     assert.equal(isIntelligenceTraceEnabled(), false);
     assert.equal(isDurableMemoryWindowEnabled(), false);
-    assert.equal(isIntelligenceOsEnabled(), false);
     for (const key of ALL_FLAG_KEYS) {
       assert.equal(isIntelligenceFlagEnabled(key), expectedDefault(key), `flag ${key} default mismatch`);
     }

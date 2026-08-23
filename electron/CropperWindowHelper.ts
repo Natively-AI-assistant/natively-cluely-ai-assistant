@@ -112,15 +112,38 @@ export class CropperWindowHelper {
                 return;
             }
 
-            // Validate input data for security
-            if (!this.validateBounds(bounds)) {
-                console.error('[CropperWindowHelper] Invalid bounds received:', bounds);
+            // The renderer fires 'cropper-confirmed' with WINDOW-LOCAL coordinates
+            // (e.clientX/clientY inside the cropper BrowserWindow, which itself spans
+            // the combined multi-monitor virtual screen at combinedBounds.{x,y}). The
+            // downstream screenshot pipeline + validateBounds both expect GLOBAL
+            // screen coordinates, so we add the cropper window's absolute position.
+            //
+            // If the cropper window is gone (e.g. closed mid-IPC), there's no safe
+            // global mapping; reject the selection rather than forwarding local
+            // coords to a global-coordinate consumer.
+            const cropperBounds = this.cropperWindow?.getBounds();
+            if (!cropperBounds) {
+                console.error('[CropperWindowHelper] cropper window missing on confirmed — refusing selection');
                 this.rejectCurrentSelection(null);
                 this.hideOrClose();
                 return;
             }
 
-            this.resolveCurrentSelection(bounds);
+            const globalBounds: Electron.Rectangle = {
+                ...bounds,
+                x: bounds.x + cropperBounds.x,
+                y: bounds.y + cropperBounds.y,
+            };
+
+            // Validate input data for security using global coordinates to support multi-monitor setups
+            if (!this.validateBounds(globalBounds)) {
+                console.error('[CropperWindowHelper] Invalid bounds received:', globalBounds);
+                this.rejectCurrentSelection(null);
+                this.hideOrClose();
+                return;
+            }
+
+            this.resolveCurrentSelection(globalBounds);
             this.hideOrClose();
         };
 
@@ -314,6 +337,27 @@ export class CropperWindowHelper {
             };
 
             if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+                // F-113: the window was sized to the combined display bounds
+                // at CREATION (app startup) and reused forever — no display
+                // change listener exists anywhere. After a monitor plug/unplug
+                // or DPI change the stale bounds leave new screen regions
+                // unselectable, and the local→global mapping (stale origin)
+                // disagrees with validateBounds' FRESH combined bounds, so
+                // valid selections were silently rejected. Re-fit on every
+                // show; the confirm listener reads getBounds() fresh, so the
+                // mapping is correct once the window matches reality.
+                const combinedNow = getCombinedDisplayBounds();
+                const current = this.cropperWindow.getBounds();
+                if (
+                    current.x !== combinedNow.x ||
+                    current.y !== combinedNow.y ||
+                    current.width !== combinedNow.width ||
+                    current.height !== combinedNow.height
+                ) {
+                    console.log('[CropperWindowHelper] Display arrangement changed — refitting cropper to', combinedNow);
+                    this.cropperWindow.setBounds(combinedNow);
+                }
+
                 // Get cursor position and display info at the moment cropper is shown
                 const cursorPosition = screen.getCursorScreenPoint();
                 const displays = screen.getAllDisplays();
@@ -625,8 +669,15 @@ export class CropperWindowHelper {
         ipcMain.removeListener('cropper-cancelled', this.cancelledListener);
         console.log('[CropperWindowHelper] IPC listeners removed');
 
-        // Close window
-        this.closeWindow();
+        // Close window. Direct — NOT via closeWindow(): its guard includes
+        // `!this.isDisposed`, and isDisposed was set to true above, so the
+        // old `this.closeWindow()` call here was a guaranteed no-op and the
+        // live BrowserWindow was orphaned by the null on the next line
+        // (F-112). destroy() is deliberate for this forced-cleanup path: it
+        // skips close events entirely.
+        if (this.cropperWindow && !this.cropperWindow.isDestroyed()) {
+            this.cropperWindow.destroy();
+        }
         this.cropperWindow = null;
         console.log('[CropperWindowHelper] Window closed');
 

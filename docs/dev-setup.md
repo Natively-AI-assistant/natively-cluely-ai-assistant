@@ -4,7 +4,7 @@ This guide is for contributors who want a repeatable local setup for the Electro
 
 ## Prerequisites
 
-- Node.js 22 LTS is recommended for new contributor machines. The repo currently documents Node.js 20+ as the minimum, and the Electron build targets Node 20 runtime semantics.
+- Node.js 22.6 or newer is required by `package.json`; Node.js 22 LTS is recommended for contributor machines. The Electron build targets Node 20 runtime semantics.
 - npm from the same Node.js install.
 - Git.
 - Rust stable with `cargo` and `rustup` available on your PATH.
@@ -28,7 +28,7 @@ The root `postinstall` script does more than a normal web app install:
 1. Rebuilds `sharp`.
 2. Rebuilds Electron native addons (`better-sqlite3`, `keytar`) for the Electron ABI.
 3. Downloads local model assets into `resources/models`.
-4. Ensures macOS `sqlite-vec` platform packages are present.
+4. Ensures the macOS and Windows x64 `sqlite-vec` platform packages are present.
 5. Patches the development Electron app plist for microphone, audio capture, and screen capture permissions.
 6. Verifies native addon architecture on macOS.
 
@@ -168,7 +168,7 @@ node scripts/ensure-sharp-mac-deps.js
 
 ### `sqlite-vec` package is missing
 
-The install script ensures both macOS sqlite-vec platform packages are present for packaging:
+The install script ensures both macOS sqlite-vec packages and the Windows x64 package are present for packaging:
 
 ```bash
 node scripts/ensure-sqlite-vec.js

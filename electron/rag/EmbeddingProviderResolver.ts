@@ -8,12 +8,22 @@ import { ProviderScopeError, assertProviderDataScopes, type ProviderDataScopePol
 export interface AppAPIConfig {
   openaiKey?: string;
   geminiKey?: string;
+  // Optional Gemini key POOL for rotation + per-key 429 cooldown. When present,
+  // ALL of these (plus geminiKey) are handed to GeminiEmbeddingProvider so a
+  // rate-limited key is skipped for the others instead of hard-failing the index.
+  geminiKeys?: string[];
   ollamaUrl?: string; // e.g. 'http://localhost:11434'
   providerDataScopes?: ProviderDataScopePolicy;
   // Optional overrides for the Gemini embedding model/dims (internal escape hatch
   // for a future bump). Default to gemini-embedding-2 @ 768d when omitted.
   geminiEmbeddingModel?: string;
   geminiEmbeddingDims?: number;
+  /**
+   * True when config came from the Settings UI credential store. In that mode,
+   * clearing a key must actually remove that provider; shell/.env keys should not
+   * silently keep it alive and make the UI lie about provider availability.
+   */
+  explicitKeyManagement?: boolean;
 }
 
 export class EmbeddingProviderResolver {
@@ -34,11 +44,38 @@ export class EmbeddingProviderResolver {
    * Stabilizing the probe keeps the active space stable and avoids the thrash.
    * Local/Ollama probes are cheap + deterministic, so they aren't retried.
    */
+  /**
+   * Assemble the ordered, de-duped Gemini key pool for embedding rotation:
+   *   config.geminiKeys[]  →  config.geminiKey  →  env GEMINI_API_KEY(_2.._6) / GOOGLE_API_KEY
+   * Env keys are included so a packaged app (which may only have process env) still
+   * gets rotation, and so the mission's multi-key .env is used automatically.
+   */
+  static buildGeminiKeyPool(config: AppAPIConfig): string[] {
+    const pool: string[] = [];
+    const add = (k?: string) => { const v = (k || '').trim(); if (v) pool.push(v); };
+    for (const k of config.geminiKeys || []) add(k);
+    add(config.geminiKey);
+    if (!config.explicitKeyManagement) {
+      for (const name of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) {
+        add(process.env[name]);
+      }
+    }
+    return [...new Set(pool)];
+  }
+
   private static async probeAvailable(provider: IEmbeddingProvider): Promise<boolean> {
     const isCloud = EmbeddingProviderResolver.CLOUD_PROVIDER_NAMES.has(provider.name);
     const attempts = isCloud ? EmbeddingProviderResolver.CLOUD_PROBE_ATTEMPTS : 1;
     for (let i = 1; i <= attempts; i++) {
-      if (await provider.isAvailable()) return true;
+      try {
+        if (await provider.isAvailable()) return true;
+      } catch (error: any) {
+        if (error?.permanentAuthFailure || error?.status === 401 || error?.status === 403) {
+          console.warn(`[EmbeddingProviderResolver] ${provider.name} unavailable due to permanent auth failure — demoting immediately.`);
+          return false;
+        }
+        throw error;
+      }
       if (i < attempts) {
         console.log(`[EmbeddingProviderResolver] ${provider.name} probe ${i}/${attempts} failed — retrying (avoids spurious space-thrash demotion)...`);
         await new Promise(r => setTimeout(r, EmbeddingProviderResolver.CLOUD_PROBE_BACKOFF_MS * i));
@@ -70,7 +107,10 @@ export class EmbeddingProviderResolver {
         }
       }
     }
-    if (config.geminiKey) {
+    // Build the Gemini key pool: explicit geminiKeys[] ∪ single geminiKey ∪
+    // GEMINI_API_KEY(_2.._6)/GOOGLE_API_KEY from env. De-duped, order-preserving.
+    const geminiPool = EmbeddingProviderResolver.buildGeminiKeyPool(config);
+    if (geminiPool.length > 0) {
       try {
         assertProviderDataScopes('gemini_embeddings', ['embeddings'], config.providerDataScopes);
         // Rollback lever: NATIVELY_GEMINI_EMBED_MODEL / _DIMS env vars pin the model
@@ -79,7 +119,7 @@ export class EmbeddingProviderResolver {
         const envModel = process.env.NATIVELY_GEMINI_EMBED_MODEL;
         const envDims = process.env.NATIVELY_GEMINI_EMBED_DIMS ? Number(process.env.NATIVELY_GEMINI_EMBED_DIMS) : undefined;
         candidates.push(new GeminiEmbeddingProvider(
-          config.geminiKey,
+          geminiPool,
           config.geminiEmbeddingModel ?? envModel,
           config.geminiEmbeddingDims ?? (Number.isFinite(envDims) ? envDims : undefined),
         ));

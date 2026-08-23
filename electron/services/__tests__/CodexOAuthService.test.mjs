@@ -362,8 +362,18 @@ test('CodexCliService: AbortSignal + deadline both propagate to the fetch + read
   // The combined signal is passed to fetch() — look for `signal` in the
   // fetch init object.
   assert.match(source, /fetch\([^,]+,\s*\{[\s\S]*?signal,/);
-  // And the reader is checked inside the loop.
-  assert.match(source, /if\s*\(signal\.aborted\)\s*throw\s+new\s+Error\('Codex request aborted\.'\)/);
+  // And the reader is checked inside the loop. Accept the braced multi-line
+  // form as well as the single-statement one — the check grew a block when the
+  // surrounding error handling was expanded, and requiring `if (…) throw` on ONE
+  // line made this a formatting assertion rather than a behavioural one. Both
+  // the guard and the exact message are still required: the message string is
+  // load-bearing, matched by isAbort handling further down to suppress the log
+  // line for a user-initiated cancel.
+  assert.match(
+    source,
+    /if\s*\(signal\.aborted\)\s*\{?\s*throw\s+new\s+Error\('Codex request aborted\.'\)/,
+    'the stream reader must re-check signal.aborted inside the loop and throw the exact "Codex request aborted." message',
+  );
 });
 
 test('CodexCliService: buildRequestBody sets reasoning.effort + include for non-none effort', () => {

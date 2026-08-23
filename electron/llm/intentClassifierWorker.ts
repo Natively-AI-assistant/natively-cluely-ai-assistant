@@ -1,4 +1,6 @@
 import { parentPort } from 'worker_threads';
+import { getBoundedOnnxSessionOptions } from '../utils/onnxThreadConfig';
+import { classifyWorkerFailure } from '../utils/workerStatus';
 
 if (!parentPort) throw new Error('intentClassifierWorker must be run as a Worker thread');
 
@@ -28,9 +30,23 @@ async function ensureLoaded(msg: any): Promise<void> {
     pipe = await pipeline(
       'zero-shot-classification',
       'Xenova/mobilebert-uncased-mnli',
-      { local_files_only: !!msg.isPackaged }
+      {
+        local_files_only: !!msg.isPackaged,
+      // dtype MUST be explicit on transformers.js v3. v2 defaulted to the
+      // quantized variant; v3 ignores `quantized` and defaults to fp32, so a
+      // bare pipeline() call asks for onnx/model.onnx — while the installer
+      // ships onnx/model_quantized.onnx and NOTHING else (see
+      // LocalFallbackAssets.ts and scripts/verify-packaged-local-assets.mjs).
+      // In a packaged build that is local_files_only, so the load fails and the
+      // feature silently degrades. scripts/download-models.js already documents
+      // this trap for the DOWNLOAD side; these consumers were missed.
+      // localRerankerWorker already passes `dtype: msg.dtype || 'q8'`.
+      dtype: 'q8',
+        session_options: getBoundedOnnxSessionOptions(),
+      }
     );
     console.log('[IntentClassifierWorker] Zero-shot classifier loaded successfully.');
+    parentPort!.postMessage({ type: 'status', status: { type: 'ready', backend: 'onnx', modelPath: msg.localModelPath } });
   })();
 
   try {
@@ -38,6 +54,17 @@ async function ensureLoaded(msg: any): Promise<void> {
   } catch (e) {
     loadingPromise = null;
     pipe = null;
+    const failure = classifyWorkerFailure(e);
+    parentPort!.postMessage({
+      type: 'status',
+      status: {
+        type: failure.recoverable ? 'degraded' : 'failed',
+        backend: 'regex',
+        reason: failure.reason,
+        message: failure.message,
+        recoverable: failure.recoverable,
+      },
+    });
     throw e;
   }
 }
@@ -54,7 +81,19 @@ parentPort.on('message', async (msg: any) => {
       if (!pipe) {
         await ensureLoaded(msg);
       }
-      const result = await pipe(msg.text, msg.labels, { multi_label: false });
+      // Campaign 2 longsession (2026-07-19): optional hypothesisTemplate
+      // passthrough so a second caller (AnswerRelevanceChecker) can reuse
+      // this SAME worker/ONNX session for a differently-framed zero-shot
+      // check (answer-relevance entailment) without spinning up a second
+      // model load. Additive — omitted entirely by the existing
+      // IntentClassifier.ts caller, so intent classification is byte-for-
+      // byte unaffected (transformers.js defaults to "This example is {}."
+      // when the option is undefined).
+      const options: Record<string, any> = { multi_label: false };
+      if (typeof msg.hypothesisTemplate === 'string' && msg.hypothesisTemplate.length > 0) {
+        options.hypothesis_template = msg.hypothesisTemplate;
+      }
+      const result = await pipe(msg.text, msg.labels, options);
       parentPort!.postMessage({
         type: 'result',
         requestId: msg.requestId,

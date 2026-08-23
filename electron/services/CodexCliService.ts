@@ -39,7 +39,51 @@
  *     stream consumer; partial deltas yielded so far are NOT lost.
  */
 
+import fs from 'fs';
+import path from 'path';
+import sharp from 'sharp';
 import { CodexOAuthService } from './CodexOAuthService';
+
+// Extension → MIME for the RAW fallback path only (the normal path re-encodes
+// to JPEG via sharp, so its MIME is fixed). PNG/JPEG/WebP/GIF are the four
+// formats the Responses API accepts in `input_image` items — the same set as
+// the Chat Completions vision endpoint. Default to PNG for unknown extensions;
+// the backend rejects truly unsupported formats with a clear error.
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
+
+// Cap for the raw (sharp-failed) fallback. Matches the LLMHelper cloud-vision
+// providers, which skip rather than ship an oversized raw image.
+const RAW_IMAGE_MAX_BYTES = 500 * 1024;
+
+// Floor for the same fallback. sharp has already failed to decode by the time
+// this applies, so anything this small is a 0-byte or truncated capture rather
+// than a real image. (The smallest valid PNG is ~67 bytes; a JPEG header alone
+// is ~125. 64 is below any real image and above an empty/near-empty file.)
+const RAW_IMAGE_MIN_BYTES = 64;
+
+// The two auth failures that are ACTIONABLE by the user, so callers may show
+// them verbatim instead of a generic "the model failed" message. Exported and
+// matched via isCodexAuthError() rather than re-typed as string literals at
+// each call site — a reword here would otherwise silently stop matching and
+// users would be back to the generic text with no test catching it.
+export const CODEX_NOT_SIGNED_IN_MESSAGE =
+  'Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.';
+export const CODEX_SESSION_EXPIRED_MESSAGE =
+  'Codex session expired. Please sign in again from Settings → AI Providers.';
+
+/** True when `err` is one of the actionable Codex auth failures above. */
+export function isCodexAuthError(err: unknown): boolean {
+  const message = (err as { message?: unknown } | null | undefined)?.message;
+  if (typeof message !== 'string') return false;
+  return message.includes(CODEX_NOT_SIGNED_IN_MESSAGE)
+    || message.includes(CODEX_SESSION_EXPIRED_MESSAGE);
+}
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
 export type CodexServiceTier = 'default' | 'fast' | 'flex';
@@ -300,19 +344,31 @@ export class CodexCliService {
     const oauth = CodexOAuthService.getInstance();
     const status = oauth.getStatus();
     if (!status.signedIn) {
-      throw new Error('Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.');
+      throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
     }
 
     // Build the request body ONCE outside the retry loop — refreshing
     // tokens doesn't change the prompt.
-    const body = this.buildRequestBody(options);
+    const body = await this.buildRequestBody(options);
     const headers = this.buildHeaders();
 
-    // Manual deadline (in addition to AbortSignal) so an open connection
-    // that stops emitting data still gets killed.
+    // Idle-timeout guard: aborts the HTTP connection if no bytes arrive for
+    // `timeoutMs` ms. The timer RESETS on every yielded delta, so a long
+    // answer that is actively streaming (even slowly) is never cut off.
+    // This is intentionally NOT a wall-clock cap from request start — that
+    // would abort long but healthy responses (e.g. gpt-5.5 with a large
+    // system prompt routinely takes >30s total). The outer
+    // raceStreamWithDeadline() already handles the first-useful-token
+    // deadline and the inter-token stall guard independently; this guard
+    // serves as a belt-and-suspenders kill for a truly stuck HTTP connection
+    // (server accepted the request but sends nothing at all for timeoutMs).
     const deadlineController = new AbortController();
-    const deadlineTimer = setTimeout(() => deadlineController.abort(), options.timeoutMs);
-    // Combine user-supplied signal with our deadline.
+    let deadlineTimer: ReturnType<typeof setTimeout> = setTimeout(() => deadlineController.abort(), options.timeoutMs);
+    const resetDeadline = () => {
+      clearTimeout(deadlineTimer);
+      deadlineTimer = setTimeout(() => deadlineController.abort(), options.timeoutMs);
+    };
+    // Combine user-supplied signal with our idle-timeout signal.
     const combinedSignal = combineSignals(options.signal, deadlineController.signal);
     const cleanup = () => {
       clearTimeout(deadlineTimer);
@@ -322,6 +378,7 @@ export class CodexCliService {
     try {
       const deltas = this.fetchDeltas(body, headers, combinedSignal.signal, options);
       for await (const delta of deltas) {
+        resetDeadline();
         yield delta;
       }
     } finally {
@@ -352,22 +409,119 @@ export class CodexCliService {
    *  - `prompt_cache_key` is a stable session id so the backend can
    *    cache the prompt prefix (codex.md:428-430)
    */
-  private static buildRequestBody(options: CodexCliRunOptions): Record<string, unknown> {
+  /**
+   * Encode one screenshot as a data URL for an `input_image` item, or return
+   * null to skip it.
+   *
+   * Downscale-then-JPEG mirrors what every other cloud vision provider in
+   * LLMHelper does (resize 1920 inside / quality 85). It is not cosmetic:
+   * a raw Retina PNG is routinely 5-15 MB, which base64 inflates by ~33% into
+   * a single JSON body, and the extra pixels buy nothing above the model's
+   * tile budget. Reads are async so the main process is not blocked on the
+   * read plus the base64 encode.
+   *
+   * If sharp fails (unsupported/corrupt input) we fall back to the raw bytes,
+   * but only under RAW_IMAGE_MAX_BYTES — an uncapped raw send is how a request
+   * silently exceeds the API's image limit and comes back as an opaque error.
+   */
+  private static async encodeImageForRequest(imagePath: string): Promise<string | null> {
+    try {
+      const compressed = await sharp(imagePath)
+        .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      return `data:image/jpeg;base64,${compressed.toString('base64')}`;
+    } catch (compressErr: any) {
+      console.warn(`[CodexCliService] Image compression failed, trying raw: ${imagePath}`, compressErr?.message);
+    }
+
+    try {
+      const raw = await fs.promises.readFile(imagePath);
+      if (raw.length > RAW_IMAGE_MAX_BYTES) {
+        console.warn(`[CodexCliService] Raw image too large to send (${raw.length} bytes), skipping: ${imagePath}`);
+        return null;
+      }
+      // Lower bound too. sharp already failed to decode this file, so a
+      // suspiciously small payload is a 0-byte or truncated capture — exactly
+      // the tmp-file race the catch below exists for. Shipping it would put
+      // `data:image/png;base64,` (or a fragment) on the wire, and the backend
+      // rejects the WHOLE turn with an opaque 400 because every content item
+      // fails together. Skipping degrades to a text answer instead.
+      if (raw.length < RAW_IMAGE_MIN_BYTES) {
+        console.warn(`[CodexCliService] Image is empty or truncated (${raw.length} bytes), skipping: ${imagePath}`);
+        return null;
+      }
+      const mimeType = IMAGE_MIME_BY_EXT[path.extname(imagePath).toLowerCase()] || 'image/png';
+      return `data:${mimeType};base64,${raw.toString('base64')}`;
+    } catch (e: any) {
+      // Non-fatal: skip unreadable images (already validated at the IPC
+      // layer, so this is a belt-and-suspenders guard for race conditions
+      // like tmp-file cleanup between capture and send).
+      console.warn(`[CodexCliService] Failed to read image, skipping: ${imagePath}`, e?.message);
+      return null;
+    }
+  }
+
+  private static async buildRequestBody(options: CodexCliRunOptions): Promise<Record<string, unknown>> {
     const resolvedEffort = resolveCodexReasoningEffort(options.model, options.modelReasoningEffort);
 
-    // Image inputs: Responses API wants `type: "input_image"` items.
-    // We don't yet support image-bearing Codex calls in this rewrite
-    // (LLMHelper.buildCodexCliPrompt only passes text) — the imagePaths
-    // arg is accepted for backward-compat but ignored at the wire level.
-    // Future: encode as data URLs the same way LocalWhisperSTT does.
+    // Build the user message content array. Always starts with the text
+    // prompt; image paths (screenshots) are encoded as data-URL
+    // `input_image` items so the Codex backend can process them with
+    // vision-capable models (gpt-5.4, gpt-5.5-codex, etc.).
+    const contentItems: Array<Record<string, unknown>> = [
+      { type: 'input_text', text: options.prompt },
+    ];
+
+    if (options.imagePaths?.length) {
+      let encodedCount = 0;
+      for (const imagePath of options.imagePaths) {
+        const encoded = await CodexCliService.encodeImageForRequest(imagePath);
+        if (!encoded) continue;
+        encodedCount++;
+        contentItems.push({
+          type: 'input_image',
+          image_url: encoded,
+          // 'auto' lets the backend pick the tile budget. Left explicit
+          // (rather than omitted) so the value is greppable when tuning
+          // vision cost — 'original' is the high-fidelity alternative.
+          detail: 'auto',
+        });
+      }
+
+      // Images were requested and NONE survived encoding. Throwing beats
+      // sending the prompt alone: a text-only turn returns HTTP 200 with a
+      // confident answer that never saw the screenshot ("I don't see an image"
+      // — the very symptom this vision work was written to fix), and the
+      // fallback chain records Codex as HEALTHY.
+      //
+      // HONEST LIMITS of this throw, measured against visionStreamFallback.ts:
+      //   • classifyVisionError() maps this message to 'unknown' → treated as
+      //     TRANSIENT, so the chain retries up to maxAttempts (3) before moving
+      //     on, and then marks Codex unhealthy for transientCooldownMs (30s).
+      //     The retries are cheap (a local re-read, no network) and do recover
+      //     the case where a file reappears, but the unhealthy mark is
+      //     misattributed — the fault is the file's, not the provider's.
+      //   • Failing over does NOT guarantee the screenshot gets seen: the
+      //     sibling cloud providers (LLMHelper.ts ~3505, ~6709) skip unreadable
+      //     images and answer text-only, so a chain with other providers may
+      //     still end up blind, just later.
+      // It is still the better default: for the case that actually matters —
+      // the user explicitly selected the codex-cli model, so the chain has ONE
+      // entry — this turns a confidently-wrong blind answer into a real error.
+      if (encodedCount === 0) {
+        throw new Error(
+          `Codex could not read any of the ${options.imagePaths.length} attached image(s). `
+          + 'They may have been cleaned up, be empty, or exceed the size limit.',
+        );
+      }
+    }
 
     const input: Array<Record<string, unknown>> = [
       {
         type: 'message',
         role: 'user',
-        content: [
-          { type: 'input_text', text: options.prompt },
-        ],
+        content: contentItems,
       },
     ];
 
@@ -420,7 +574,7 @@ export class CodexCliService {
     const oauth = CodexOAuthService.getInstance();
     const accessToken = await oauth.getAccessToken();
     if (!accessToken) {
-      throw new Error('Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.');
+      throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
     }
     const tokens = oauth.getCachedTokens();
     const headers: Record<string, string> = {
@@ -454,7 +608,7 @@ export class CodexCliService {
     const oauth = CodexOAuthService.getInstance();
     const tokens = oauth.getCachedTokens();
     if (!tokens || !tokens.accessToken) {
-      throw new Error('Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.');
+      throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
     }
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -489,7 +643,9 @@ export class CodexCliService {
     let refreshedOnce = false;
 
     while (true) {
-      if (signal.aborted) throw new Error('Codex request aborted.');
+      if (signal.aborted) {
+        throw new Error('Codex request aborted.');
+      }
 
       // Re-mint headers on each attempt so a 401-retry uses the FRESH
       // access token (after the refresh succeeded, not before).
@@ -502,15 +658,24 @@ export class CodexCliService {
 
       let response: Response;
       try {
+        const serializedBody = JSON.stringify(body);
+        require('../llm/providerPayloadCapture').captureProviderPayload({
+          provider: 'codex',
+          classification: 'exact_serialized_provider_payload',
+          payload: body,
+          serializedPayload: serializedBody,
+        });
         response = await fetch(CODEX_RESPONSES_URL, {
           method: 'POST',
           headers: merged,
-          body: JSON.stringify(body),
+          body: serializedBody,
           signal,
         });
       } catch (e: any) {
         // AbortError: re-throw so the generator halts cleanly.
-        if (e?.name === 'AbortError') throw new Error('Codex request aborted.');
+        if (e?.name === 'AbortError') {
+          throw new Error('Codex request aborted.');
+        }
         // Network error: retry with backoff.
         if (attempt >= TRANSIENT_RETRY_MAX) {
           throw new Error(`Codex request failed after ${TRANSIENT_RETRY_MAX} retries: ${e?.message || e}`);
@@ -527,7 +692,7 @@ export class CodexCliService {
         const oauth = CodexOAuthService.getInstance();
         const refreshed = await oauth.refreshTokens();
         if (!refreshed) {
-          throw new Error('Codex session expired. Please sign in again from Settings → AI Providers.');
+          throw new Error(CODEX_SESSION_EXPIRED_MESSAGE);
         }
         continue;
       }
@@ -603,13 +768,44 @@ export class CodexCliService {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
-    let sawTerminalDone = false;
+    // Tracks whether the stream for THIS response has finished normally.
+    // Set to `true` when ANY of the following happens:
+    //   - a terminal event arrives: response.completed / .incomplete / .failed
+    //   - the SSE body closes cleanly (reader.read() returns done: true)
+    //
+    // Once set, an AbortError on a subsequent reader.read() is a benign
+    // cleanup event (the ChatGPT OAuth endpoint keeps the SSE body open
+    // with :keepalive for ~30s after the model finishes; if our outer
+    // controller.abort() fires during that window, the still-bound
+    // fetch rejects reader.read() with AbortError — even though the
+    // response was already fully delivered). Surfacing such an abort
+    // as "Codex request aborted." is the bug this flag was added to
+    // address.
+    //
+    // CRITICAL: this flag MUST also cover the clean-close path (`done:
+    // true`) below. The 30s-late AbortError can ALSO fire on a stream
+    // that finished via `done: true` without a terminal event name we
+    // recognize (in practice chatgpt.com sometimes sends the final
+    // delta + closes the body without emitting response.completed).
+    let sawTerminalEvent = false;
     let terminalError: Error | null = null;
     try {
       while (true) {
-        if (signal.aborted) throw new Error('Codex request aborted.');
+        if (signal.aborted) {
+          throw new Error('Codex request aborted.');
+        }
         const { value, done } = await reader.read();
-        if (done) break;
+        if (done) {
+          // Body closed cleanly (server sent EOF, or our own prior
+          // reader.cancel() in the finally of an earlier code path
+          // unwound the body). This IS a successful completion — deltas
+          // were already flushed. Set sawTerminalEvent so any future
+          // AbortError on the catch's swallow predicate treats this
+          // stream as post-completion cleanup, in case the abort
+          // signal fires after the loop exits.
+          sawTerminalEvent = true;
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
 
         // SSE messages are separated by a blank line ("\n\n" in
@@ -621,10 +817,17 @@ export class CodexCliService {
           buffer = buffer.slice(idx + (buffer[idx] === '\r' ? 4 : 2));
           const parsed = parseSseEvent(raw);
           if (!parsed) continue;
-          if (parsed.data === '[DONE]') {
-            sawTerminalDone = true;
-            continue;
-          }
+          // The `[DONE]` sentinel was historically used by the old
+          // chat-completions SSE protocol to signal end-of-stream. The
+          // new Responses API uses `response.completed` / .incomplete /
+          // .failed events instead — those drive sawTerminalEvent
+          // (the flag that gates the post-completion AbortError
+          // swallow). We intentionally IGNORE `[DONE]` here: ignoring
+          // it lets the parser keep reading the body until the real
+          // terminal event arrives or the body closes, which matches
+          // the natively path at LLMHelper.ts:4897-4900 (also ignores
+          // `[DONE]` and relies on the terminal event).
+          if (parsed.data === '[DONE]') continue;
           let json: any;
           try {
             json = JSON.parse(parsed.data);
@@ -641,8 +844,20 @@ export class CodexCliService {
               : new Error(errMsg);
             break;
           }
+          // Real terminal events on the Responses SSE stream. Once
+          // any of these arrive, we know the model has finished and
+          // the deltas have all been yielded. From here on, ANY
+          // AbortError on reader.read() is post-completion cleanup
+          // noise — don't surface it.
+          if (json && (json.type === 'response.completed' ||
+              json.type === 'response.incomplete' ||
+              json.type === 'response.failed')) {
+            sawTerminalEvent = true;
+            break;
+          }
         }
         if (terminalError) break;
+        if (sawTerminalEvent) break;
       }
       // Drain any trailing buffer (last event without trailing blank line).
       if (buffer.trim()) {
@@ -658,23 +873,68 @@ export class CodexCliService {
                 ? new TransientStreamError(errMsg)
                 : new Error(errMsg);
             }
+            if (json && (json.type === 'response.completed' ||
+                json.type === 'response.incomplete' ||
+                json.type === 'response.failed')) {
+              sawTerminalEvent = true;
+            }
           } catch { /* not JSON, ignore */ }
         }
       }
     } catch (e: any) {
-      if (e?.name === 'AbortError' || /aborted/i.test(String(e?.message))) {
-        // Surface partials; the caller's generator will see the abort.
-        throw new Error('Codex request aborted.');
+      // POST-COMPLETION SWALLOW: an AbortError thrown by reader.read()
+      // AFTER we've seen a terminal event is benign. The ChatGPT OAuth
+      // endpoint keeps the SSE body open with trailing :keepalive for
+      // ~30s after the model finishes; any outer controller.abort()
+      // (supersession, user stop, deadline teardown) that fires in
+      // that window rejects the reader.read() with AbortError, which
+      // is a cleanup event — NOT a stream error. The deltas were
+      // already flushed upstream before the terminal event arrived.
+      const isAbort = e?.name === 'AbortError' || /aborted/i.test(String(e?.message));
+      if (isAbort && sawTerminalEvent) {
+        // Best-effort log; the IPC handler's catch at ipcHandlers.ts:2299
+        // uses the message text to classify, so swallowing here is what
+        // removes the "Codex request aborted." log line from the user's
+        // session.
+        if (process.env.CODEX_DEBUG) {
+          console.warn('[Codex] parseSseStream: reader throw AFTER normal completion; swallowed.', {
+            stage: 'post_completion_cleanup',
+            reason: e?.name || 'unknown',
+          });
+        }
+        return;
       }
+      // Pre-completion abort: still surface as before. The outer
+      // raceStreamWithDeadline / chatStreamGuard consumes this for
+      // supersession/cancel; user's gemini-stream-error UI is the
+      // correct signal in that case (matches Escape / Cmd+R behaviour).
+      if (isAbort) throw new Error('Codex request aborted.');
       throw e;
     } finally {
-      try { reader.releaseLock(); } catch { /* already released */ }
+      // CANCEL — not releaseLock — to actively tear down the HTTP
+      // body. The natively path at LLMHelper.ts:4935 uses the same
+      // pattern; releaseLock() only drops the consumer lock on the
+      // stream and leaves the body open on the server. The ChatGPT
+      // OAuth endpoint specifically keeps the SSE body alive for
+      // ~30s after the model finishes; if our outer controller fires
+      // a real abort (supersession of the next user request, user
+      // presses Cmd+R, etc.) during that window, the still-open body
+      // throws AbortError on the next reader.read() — the very error
+      // the catch above swallows when sawTerminalEvent is true.
+      //
+      // reader.cancel() returns a Promise. We attach .catch() because
+      // the synchronous try/catch around a Promise-returning call does
+      // NOT catch Promise rejections — those surface as
+      // unhandledRejection events which Electron's main process treats
+      // as fatal under --unhandled-rejections=strict. The reject is
+      // benign (the body is already torn down by the abort path or by
+      // a prior cancel) — we just need to absorb it.
+      reader.cancel().catch(() => { /* already torn down */ });
     }
     if (terminalError) throw terminalError;
     // We intentionally don't require [DONE] — some servers omit it; an
     // open stream that just ends is treated as successful (the deltas
     // already produced the response).
-    void sawTerminalDone;
   }
 
   // ---------------------------------------------------------------------------

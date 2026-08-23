@@ -13,9 +13,9 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, Monitor, Mic, Settings } from 'lucide-react';
 import nativelyIcon from '../../../assets/icon.png';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { classifyMicStatus } from '../../lib/micPermissionPolicy.mjs';
 
 const STORAGE_KEY  = 'natively_perms_shown_v1';
-const STARTUP_DELAY_MS = 1_200;
 
 // ─── Design tokens ────────────────────────────────────────────
 const T = {
@@ -26,7 +26,7 @@ const T = {
   red:     '#F87171',
 };
 
-type PermStatus = 'granted' | 'denied' | 'not-determined' | 'restricted' | 'loading';
+type PermStatus = 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown' | 'loading';
 
 interface Props {
   isOpen:    boolean;
@@ -131,11 +131,9 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
 
   useEffect(() => {
     if (!isOpen) { setVisible(false); return; }
-    const t = setTimeout(async () => {
-      await refreshStatus();
-      setVisible(true);
-    }, STARTUP_DELAY_MS);
-    return () => clearTimeout(t);
+    // Pure presentational: orchestrator already gated on the homepage-mounted
+    // duration predicate. We just refresh status and become visible.
+    refreshStatus().then(() => setVisible(true));
   }, [isOpen, refreshStatus]);
 
   useEffect(() => {
@@ -148,10 +146,23 @@ export const PermissionsToaster: React.FC<Props> = ({ isOpen, onDismiss }) => {
   const handleMicToggle = async () => {
     if (micStatus === 'granted') {
       setMicStatus('denied');
-    } else {
-      setRequesting(true);
-      await window.electronAPI?.requestMicPermission?.();
-      setMicStatus('granted');
+      return;
+    }
+    // CR-03: this used to assume the request SUCCEEDED and set 'granted'
+    // unconditionally. Off darwin nothing was requested at all, so a Windows
+    // user with the mic toggle off saw a green control over a denied device and
+    // capture silently produced nothing. Route by platform and re-read the real
+    // status instead of asserting one.
+    setRequesting(true);
+    try {
+      const plan = classifyMicStatus(platform, micStatus);
+      if (plan.remedy === 'request') {
+        await window.electronAPI?.requestMicPermission?.();
+      } else if (plan.remedy === 'settings') {
+        await window.electronAPI?.openMicSettings?.();
+      }
+      await refreshStatus();
+    } finally {
       setRequesting(false);
     }
   };

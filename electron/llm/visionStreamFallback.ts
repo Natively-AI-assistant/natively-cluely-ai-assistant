@@ -17,6 +17,9 @@
 //     later failure cannot switch providers (that would duplicate output), so
 //     we end the stream gracefully with whatever was already delivered.
 
+/** Shared default so the config default and the use-site fallback cannot drift. */
+export const MODEL_GONE_COOLDOWN_MS = 86_400_000;
+
 export type VisionErrorClass =
   | 'auth'        // 401/403/quota/invalid-or-expired key — will not self-heal
   | 'rate'        // 429 rate limit
@@ -25,6 +28,14 @@ export type VisionErrorClass =
   | 'no_vision'   // model rejects images
   | 'payload'     // 413 / image too large
   | 'server'      // 5xx / overloaded
+  // The MODEL ID itself is gone — decommissioned/renamed upstream. Distinct
+  // from every class above because it is PERMANENT and config-shaped: no
+  // amount of retrying or cooling brings it back, only a new model id.
+  // Observed 2026-08-12: Groq retired
+  // `meta-llama/llama-4-scout-17b-16e-instruct` and the 404 classified as
+  // `unknown` → transient → three full retries on every single vision call,
+  // with no signal to the version manager that the pin was dead.
+  | 'model_gone'
   | 'unknown';
 
 export interface VisionStreamProvider {
@@ -74,6 +85,14 @@ export interface VisionFallbackConfig {
   transientCooldownMs: number;
   /** Cooldown for structural incompatibilities (no_vision / payload too large). */
   incompatibleCooldownMs: number;
+  /**
+   * Cooldown for a model id that upstream has retired. See the default.
+   * OPTIONAL because `textStreamFallback` reuses this config shape and has its
+   * own defaults object; making it required broke that build. The use site
+   * falls back to the same 24h constant, so an omitting caller still gets the
+   * permanent-failure semantics rather than `undefined`.
+   */
+  modelGoneCooldownMs?: number;
   backoffInitialMs: number;
   backoffMaxMs: number;
   /** Upper bound on closing a provider's upstream iterator so teardown can't hang the chain. */
@@ -109,6 +128,14 @@ export interface VisionFallbackHooks {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   log?: (msg: string) => void;
   warn?: (msg: string) => void;
+  /**
+   * Called once when a provider's MODEL ID is found to be retired upstream
+   * (`model_gone`). The caller is expected to kick model rediscovery so a
+   * replacement id can be promoted — that, not the cooldown, is the recovery
+   * path. Kept as a hook so this module stays pure: it must not import
+   * ModelVersionManager.
+   */
+  onModelGone?: (providerId: string, providerName: string, err: any) => void;
 }
 
 export const DEFAULT_VISION_FALLBACK_CONFIG: VisionFallbackConfig = {
@@ -122,6 +149,12 @@ export const DEFAULT_VISION_FALLBACK_CONFIG: VisionFallbackConfig = {
   authCooldownMs: 300_000,
   transientCooldownMs: 30_000,
   incompatibleCooldownMs: 600_000,
+  // A retired model id does not come back. Reusing incompatibleCooldownMs
+  // (10 min) would only turn "3 wasted retries per call" into "3 wasted
+  // retries every 10 minutes, forever" — the log would still fill and every
+  // window would still cost the user latency. Recovery here is a NEW MODEL ID
+  // from the version manager (see the onModelGone hook), not the clock.
+  modelGoneCooldownMs: MODEL_GONE_COOLDOWN_MS,
   backoffInitialMs: 250,
   backoffMaxMs: 10_000,
   cleanupTimeoutMs: 2_000,
@@ -147,6 +180,23 @@ export function classifyVisionError(err: any, timedOut: boolean): VisionErrorCla
     msg.includes('api key') || msg.includes('api_key') || msg.includes('invalid_api') ||
     msg.includes('expired') || msg.includes('quota') || msg.includes('insufficient_quota')
   ) return 'auth';
+  // AFTER auth, deliberately: a 403 that also happens to mention a model name
+  // is a credentials problem, and demoting the provider for 24h would be the
+  // wrong remedy. The observed Groq body carries none of the auth tokens
+  // ("The model `…` does not exist or you do not have access to it"), so it
+  // falls through to here.
+  //
+  // NOT matched on a bare '404' substring: a 5xx body that quotes a request id
+  // containing 404 would then be treated as permanently gone and demote a
+  // healthy provider for a day — worse than the bug this fixes. Only a real
+  // status code, or an unambiguous phrase, qualifies.
+  if (
+    status === 404 ||
+    msg.includes('does not exist') || msg.includes('no such model') ||
+    msg.includes('model_not_found') || msg.includes('model not found') ||
+    msg.includes('decommissioned') || msg.includes('has been removed') ||
+    msg.includes('deprecated')
+  ) return 'model_gone';
   if (
     status === 429 || msg.includes('429') || msg.includes('rate limit') ||
     msg.includes('rate_limit') || msg.includes('too many requests')
@@ -375,6 +425,7 @@ export async function* runStreamingVisionFallback(
   const random = hooks.random ?? Math.random;
   const log = hooks.log ?? (() => { });
   const warn = hooks.warn ?? (() => { });
+  const onModelGone = hooks.onModelGone ?? (() => { });
   const sleep = hooks.sleep ?? ((ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
     const t = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
     const onAbort = () => { clearTimeout(t); resolve(); };
@@ -490,7 +541,16 @@ export async function* runStreamingVisionFallback(
           throw new Error(`Provider chain aborted (${cls}): ${err?.message || err}`);
         }
 
-        if (cls === 'auth') {
+        if (cls === 'model_gone') {
+          // Permanent and deterministic: every remaining attempt would 404
+          // identically. Demote for a long window and tell the caller so it can
+          // trigger rediscovery — retrying is pure wasted latency.
+          const goneCooldownMs = cfg.modelGoneCooldownMs ?? MODEL_GONE_COOLDOWN_MS;
+          markVisionUnhealthy(health, provider.id, goneCooldownMs, now());
+          providerFatal = true;
+          warn(`[Vision] ${provider.name}: model id retired upstream — demoted for ${Math.round(goneCooldownMs / 3600_000)}h pending rediscovery`);
+          try { onModelGone(provider.id, provider.name, err); } catch { /* notification only */ }
+        } else if (cls === 'auth') {
           // Won't self-heal without a config change — open the breaker long.
           markVisionUnhealthy(health, provider.id, cfg.authCooldownMs, now());
           providerFatal = true;

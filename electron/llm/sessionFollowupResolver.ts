@@ -124,7 +124,23 @@ export function resolveSessionFollowup(input: SessionFollowupInput): SessionFoll
   // company"), substitute the demonstrative with the recalled entity and route on its
   // kind. This handles self-contained-but-referential follow-ups ("what was the
   // hardest part of THAT PROJECT?") that the bare-fragment resolver doesn't cover.
-  if (recalledEntity && kind) {
+  //
+  // LENGTH GUARD (live session B, 2026-08-20): a demonstrative follow-up is by
+  // nature SHORT — "how is it developed?", "what was the hardest part of that
+  // project?", "who owns that?". A LONG question that merely contains "it" or
+  // "that" somewhere is self-contained, and rewriting it corrupts the ask. In
+  // session B this branch fired on 17-word questions and produced
+  // "…because EstroTech's honestly the most interesting part…",
+  // "…three things about Playwright why you went with playwright…" and
+  // "…and answer Playwright first across all three of these projects…". The
+  // damage was not cosmetic: the corrupted PriceX question named a project
+  // that never used Playwright, and the model answered "I don't have those
+  // specific details from my background" — a false refusal on a question the
+  // résumé answers outright. The cap matches the extractor's own
+  // FOLLOW_UP_WORD_CAP (14), which draws the same fragment/self-contained line.
+  const referentialWordCap = 14;
+  const questionWordCount = (input.latestQuestion || '').trim().split(/\s+/).filter(Boolean).length;
+  if (recalledEntity && kind && questionWordCount <= referentialWordCap) {
     const refRe = kind === 'project' ? PROJECT_REF_RE
       : kind === 'company' ? COMPANY_REF_RE
       : kind === 'skill' ? SKILL_REF_RE
@@ -149,12 +165,15 @@ export function resolveSessionFollowup(input: SessionFollowupInput): SessionFoll
         [/\byour earlier (example|project|one)\b/i, recalledEntity],
         [/\bthe (first|second|last) one\b/i, recalledEntity],
         // "the architecture/stack/role/part of that <noun>" → "... of <entity>"
-        [/\b(that|this|the)\s+(project|app|product|system|company|customer|client|account|prospect|concept|topic|one|internship|role)\b/i, recalledEntity],
+        [/\b(that|this|the)(?!['’])\s+(project|app|product|system|company|customer|client|account|prospect|concept|topic|one|internship|role)\b/i, recalledEntity],
         [/\bthe key idea (there|here)?\b/i, `the key idea of ${recalledEntity}`],
         // "the architecture/stack/role/part ... there" → "... of <entity>"
         [/\b(architecture|stack|backend|frontend|role|part|design|tech|team|hardest part)\s+(there|here)\b/i, `$1 of ${recalledEntity}`],
-        // bare pronoun fallback
-        [/\b(it|that|there)\b/i, recalledEntity],
+        // Bare pronoun fallback. The (?!['’]) guard keeps the CONTRACTION
+        // "that's" out of it — the apostrophe is a word boundary, so a bare
+        // \bthat\b happily rewrote "because that's honestly" into
+        // "because <Entity>'s honestly" (live session B).
+        [/\b(it|that|there)(?!['’])\b/i, recalledEntity],
       ];
       let resolvedQuestion = input.latestQuestion;
       for (const [re, rep] of SUBSTITUTIONS) {

@@ -21,6 +21,19 @@ import { app } from 'electron';
 import path from 'path';
 import { buildWorkerInitMessage } from './inferenceConfig';
 import { resolveWhisperWorkerPath } from './workerPathResolver';
+import { acquireSharedNemotronWorker } from './nemotron/sharedWorkerRegistry';
+
+// Stable channelId for the preloader's warm hold. Distinct from LocalWhisperSTT's
+// per-channel ids ('mic' / 'system'), so it occupies its own registry slot and
+// its engine instance is never mistaken for an audio channel's.
+const NEMOTRON_WARM_CHANNEL_ID = 'preload-warm';
+import { acquireOnnxSlot, hasEnoughMemoryForOnnxSession, getMinFreeGBForOnnxSession } from '../../utils/onnxThreadConfig';
+import {
+    consumePoisonedOnnxLoad,
+    isSentinelWithinTtl,
+    clearLoadSentinel as clearOnnxLoadSentinel,
+    writeLoadSentinel as writeOnnxLoadSentinel,
+} from '../../utils/onnxLoadSentinel';
 
 // Recent preload failure cooldown: tracks modelIds that just failed to init
 // so we don't hammer them on every app launch / settings toggle / hotkey.
@@ -28,6 +41,20 @@ import { resolveWhisperWorkerPath } from './workerPathResolver';
 // re-attempted across restarts. TTL is short (5 min) — the recovery path is
 // the new local-whisper-reset-to-default IPC.
 const RECENT_FAILURE_TTL_MS = 5 * 60 * 1000;
+
+// Cross-launch disk sentinel: re-exports of the generalized module keyed on
+// the 'whisper' family. The original `WhisperLoadSentinel` type is preserved
+// as a structural superset of the generalized record, so call sites and the
+// existing `WhisperLoadSentinel.test.mjs` keep compiling without changes.
+// `family` is widened to the full `OnnxFamily` union so the generalized
+// module's return type assigns cleanly into this alias.
+import type { OnnxFamily } from '../../utils/onnxLoadSentinel';
+export type WhisperLoadSentinel = {
+    family: OnnxFamily;
+    modelId: string;
+    startedAt: number;
+    attempt: number;
+};
 
 function recentFailuresPath(): string {
     return path.join(app.getPath('userData'), 'whisper-recent-failures.json');
@@ -65,9 +92,28 @@ function saveRecentFailures(m: Map<string, number>): void {
     }
 }
 
+// Whisper-family thin shims over the generalized module so existing call
+// sites in `electron/main.ts` and `electron/audio/LocalWhisperSTT.ts` keep
+// working byte-identically. New families wire the generalized primitives
+// directly (no shim).
+export function writeLoadSentinel(modelId: string): void {
+    writeOnnxLoadSentinel('whisper', modelId);
+}
+
+export function clearLoadSentinel(modelId?: string): void {
+    clearOnnxLoadSentinel('whisper', modelId);
+}
+
 class ModelPreloader {
     private warmWorker: Worker | null = null;
     private warmModelId: string | null = null;
+    // Nemotron only. Not a Worker: the registry owns that. This is just the
+    // refcount hold that keeps its shared worker (and the three loaded ONNX
+    // sessions) alive between meetings, so mic/system JOIN instead of cold
+    // starting. Released when the selected model changes away from Nemotron.
+    private nemotronWarmRelease: (() => void) | null = null;
+    private nemotronWarmModelId: string | null = null;
+    private nemotronWarmLoading = false;
     private loadingWorker: Worker | null = null;
     private pendingModelId: string | null = null;
     private loading = false;
@@ -82,7 +128,103 @@ class ModelPreloader {
      * Safe to call multiple times — no-ops if already warm or loading for the same model.
      * Cancels an in-progress load if a different model is requested.
      */
+    /**
+     * Warms Nemotron by taking a long-lived registry channel. The registry
+     * remains the sole owner of the worker — this only contributes a refcount
+     * so the loaded sessions survive between meetings.
+     *
+     * Deliberately fire-and-forget: preload() is synchronous by contract (its
+     * only caller is the app-launch path, which must not block on a ~7s model
+     * load). A failure here is non-fatal — LocalWhisperSTT still cold-starts
+     * through the registry exactly as before, just slowly.
+     */
+    private preloadNemotronViaRegistry(modelId: string): void {
+        if (this.nemotronWarmModelId === modelId && this.nemotronWarmRelease) return;
+        if (this.nemotronWarmLoading) return;
+        // A different Nemotron build was warm — let it go before warming this one.
+        this.releaseNemotronWarmHold();
+        // Same persisted cooldown the normal preload path honours — a model
+        // that just crashed the process must not be re-warmed on every launch.
+        const failureExpiry = this.recentFailures.get(modelId);
+        if (failureExpiry && failureExpiry > Date.now()) {
+            console.warn(`[ModelPreloader] Skipping Nemotron warm for ${modelId} — recent failure cooldown until ${new Date(failureExpiry).toISOString()}`);
+            return;
+        }
+        const workerPath = resolveWhisperWorkerPath();
+        if (!workerPath || !fs.existsSync(workerPath)) {
+            console.error(`[ModelPreloader] Worker path missing or invalid: ${workerPath}`);
+            this.recordFailure(modelId);
+            return;
+        }
+        if (!hasEnoughMemoryForOnnxSession()) {
+            console.warn(`[ModelPreloader] Skipping Nemotron warm — under ${getMinFreeGBForOnnxSession()}GB free`);
+            return;
+        }
+        const initMsg = buildWorkerInitMessage(modelId);
+        this.nemotronWarmLoading = true;
+        console.log(`[ModelPreloader] Warming Nemotron via sharedWorkerRegistry for ${modelId}...`);
+        const startedAt = Date.now();
+        // Same crash sentinel every other preloaded model gets: a NATIVE abort
+        // during session load kills the process before any catch runs, and the
+        // sentinel is what makes the next launch treat the model as poisoned.
+        writeLoadSentinel(modelId);
+        acquireSharedNemotronWorker(modelId, NEMOTRON_WARM_CHANNEL_ID, initMsg.executionProviders ?? ['cpu'], initMsg.cacheDir, workerPath)
+            .then(({ release }) => {
+                clearLoadSentinel(modelId);
+                this.nemotronWarmLoading = false;
+                // Model changed while we were loading — don't strand a hold on
+                // a worker nobody wants.
+                if (this.pendingModelId && this.pendingModelId !== modelId) { release(); return; }
+                this.nemotronWarmRelease = release;
+                this.nemotronWarmModelId = modelId;
+                console.log(`[ModelPreloader] Nemotron warm for ${modelId} (${Date.now() - startedAt}ms) — channels will join, not cold start`);
+            })
+            .catch((err: unknown) => {
+                clearLoadSentinel(modelId);
+                this.nemotronWarmLoading = false;
+                this.recordFailure(modelId);
+                console.warn(`[ModelPreloader] Nemotron warm failed for ${modelId}:`, (err as Error)?.message ?? err);
+            });
+    }
+
+    /** Drops the Nemotron warm hold, if any. Safe to call unconditionally. */
+    private releaseNemotronWarmHold(): void {
+        if (!this.nemotronWarmRelease) return;
+        console.log(`[ModelPreloader] Releasing Nemotron warm hold for ${this.nemotronWarmModelId}`);
+        try { this.nemotronWarmRelease(); } catch { /* registry already torn down */ }
+        this.nemotronWarmRelease = null;
+        this.nemotronWarmModelId = null;
+    }
+
     preload(modelId: string): void {
+        // Dual-channel Nemotron routes worker acquisition entirely through
+        // sharedWorkerRegistry.ts, so it must NOT go through this class's
+        // "one warm worker, hand it to whichever channel asks first" scheme —
+        // that would create a second, competing concept of who owns the
+        // worker. This used to return outright, leaving LocalWhisperSTT to pay
+        // the cold start on first use.
+        //
+        // That cold start is not cheap and not hidden: loading the three ONNX
+        // sessions takes ~7s, and it happened at MEETING START. VAD banks a
+        // backlog for those 7s, so the first dispatch is seconds of audio
+        // (observed 4080ms mic / 5670ms system) — and streamingTaskInFlight
+        // gates re-dispatch until it returns, so the streaming loop stalls
+        // behind that one oversized request. A short meeting ended before any
+        // result came back and produced an empty transcript.
+        //
+        // Fixed by warming through the REGISTRY rather than through
+        // warmWorker: acquire a long-lived channel here and hold its release.
+        // The registry stays the single owner (no competing lifecycle), the
+        // sessions load at app start, and mic/system then JOIN a ready worker
+        // — their NemotronEngine.create() reuses nemotronSharedResources and
+        // returns without loading anything.
+        if (modelId.toLowerCase().includes('nemotron')) {
+            this.preloadNemotronViaRegistry(modelId);
+            return;
+        }
+        // Switching AWAY from Nemotron — drop the warm hold so the registry can
+        // tear its worker down and free the ONNX slot for the incoming model.
+        this.releaseNemotronWarmHold();
         if (this.warmModelId === modelId && this.warmWorker) return;
         if (this.pendingModelId === modelId && this.loading) return;
 
@@ -94,6 +236,18 @@ class ModelPreloader {
         const failureExpiry = this.recentFailures.get(modelId);
         if (failureExpiry && failureExpiry > Date.now()) {
             console.warn(`[ModelPreloader] Skipping preload for ${modelId} — recent failure cooldown active until ${new Date(failureExpiry).toISOString()}`);
+            return;
+        }
+
+        // Cross-loader ONNX gate — REFUSE silently if memory is tight. Do NOT
+        // surface as a worker error here, or the 5-min persisted failure
+        // cooldown above would block future preloads. The user can retry by
+        // toggling Settings → Audio when memory frees up. Acquire the slot
+        // at HIGH priority (Whisper is latency-critical).
+        if (!hasEnoughMemoryForOnnxSession()) {
+            console.warn(
+                `[ModelPreloader] skipping preload for ${modelId} — free memory below ${getMinFreeGBForOnnxSession()}GB floor (silent skip, not a worker error)`,
+            );
             return;
         }
 
@@ -125,11 +279,47 @@ class ModelPreloader {
             this.pendingModelId = null;
             return;
         }
+        // Acquire the shared ONNX slot BEFORE spawning the worker. The release
+        // function is wired into the worker's error/exit handlers below — the
+        // slot stays held for the lifetime of the worker's session. Always
+        // weight 1: Nemotron never reaches this line (the early-return guard
+        // at the top of preload() routes it through sharedWorkerRegistry.ts
+        // instead), and every other model is one worker = one gate unit —
+        // the previous `includes('nemotron') ? 3 : 1` here was dead code.
+        // A weight-1 acquisition never rejects (only weight > cap does, per
+        // acquireOnnxSlot's contract), so the empty .catch() is genuinely
+        // unreachable, kept purely as a chain guard.
+        let slotRelease: (() => void) | null = null;
+        acquireOnnxSlot('high', 1).then((release) => {
+            slotRelease = release;
+        }).catch(() => { /* unreachable for weight 1 — chain guard only */ });
+
+        writeLoadSentinel(modelId);
         const w = new Worker(workerPath);
         this.loadingWorker = w;
+        // Stash release on the worker object so takeWarmWorker() can hand it
+        // off cleanly when LocalWhisperSTT picks up this warm worker.
+        (w as any).__slotRelease = () => {
+            if (slotRelease) { slotRelease(); slotRelease = null; }
+        };
+        w.on('exit', (code) => {
+            if (code === 0) {
+                clearLoadSentinel(modelId);
+            } else {
+                this.recordFailure(modelId);
+            }
+            if (this.loadingWorker === w) {
+                this.loadingWorker = null;
+                this.pendingModelId = null;
+                this.loading = false;
+            }
+            (w as any).__slotRelease?.();
+        });
+        w.on('error', () => { (w as any).__slotRelease?.(); });
 
         w.on('message', (msg: any) => {
             if (msg.type === 'ready') {
+                clearLoadSentinel(modelId);
                 console.log(`[ModelPreloader] Worker warm for ${modelId}`);
                 this.warmWorker = w;
                 this.loadingWorker = null;
@@ -139,6 +329,7 @@ class ModelPreloader {
             } else if (msg.type === 'error') {
                 console.warn(`[ModelPreloader] Worker init failed: ${msg.message}`);
                 this.recordFailure(modelId);
+                clearLoadSentinel(modelId);
                 w.terminate();
                 this.loadingWorker = null;
                 this.pendingModelId = null;
@@ -163,6 +354,20 @@ class ModelPreloader {
         saveRecentFailures(this.recentFailures);
     }
 
+    recordLoadFailure(modelId: string): void {
+        this.recordFailure(modelId);
+    }
+
+    consumePoisonedLoadSentinel(): WhisperLoadSentinel | null {
+        const sentinel = consumePoisonedOnnxLoad('whisper');
+        if (sentinel && isSentinelWithinTtl(sentinel)) {
+            console.warn(`[ModelPreloader] Previous process exited while loading ${sentinel.modelId}; recording recent-failure cooldown`);
+            this.recordFailure(sentinel.modelId);
+            return sentinel;
+        }
+        return null;
+    }
+
     /**
      * Clear the recent-failure entry for a modelId. Called by the
      * local-whisper-reset-to-default IPC after we successfully swap the
@@ -179,15 +384,27 @@ class ModelPreloader {
      * Hand off the warm worker to a caller and clear the cache.
      * Returns null if no warm worker is available for that model ID.
      *
-     * IMPORTANT: removes the preloader's `message` / `error` listeners
-     * before handoff. Otherwise, when the receiving LocalWhisperSTT
-     * instance drives the worker and a transient error fires during
-     * recording, the preloader's `error` handler would ALSO fire and
-     * call `recordFailure(modelId)` — silently poisoning the recent-
-     * failure cooldown for the modelId the user is actively using. The
-     * cooldown would then block the next preload of the same model for
-     * 5 minutes, manifesting as a "transcription silently stops"
-     * regression. Mirrors the listener-cleanup pattern in
+     * IMPORTANT: removes ALL of the preloader's listeners (`message`,
+     * `error`, `exit`) before handoff — not just `message`. Node's
+     * EventEmitter fires every registered listener for an event, not just
+     * the most recently added one, so leaving the preloader's `error`/`exit`
+     * handlers attached means BOTH the preloader's AND the consumer's
+     * handler fire on a live-worker error. The preloader's `error`/`exit`
+     * handlers call `recordFailure(modelId)` (modelPreloader.ts ~199-232) —
+     * so a transient error on the worker AFTER handoff (while
+     * LocalWhisperSTT is actively driving it during a live recording)
+     * would silently poison the 5-minute recent-failure cooldown for a
+     * model that is demonstrably fine (it's mid-session, not failing to
+     * load). The NEXT meeting's pre-warm would then silently skip for up
+     * to 5 minutes (preload()'s cooldown check at ~133-137), manifesting as
+     * "transcription is slow to start" with no visible error. The consumer
+     * (LocalWhisperSTT.attachWorkerListeners) installs its own complete
+     * message/error/exit handlers immediately after taking the worker, so
+     * removing all three preloader listeners here is safe — the worker is
+     * never left without error/exit handling. The ONNX slot release
+     * (`__slotRelease`, stashed on the worker object) is unaffected by this
+     * — it's read by the CONSUMER's own exit/error handlers, not the
+     * preloader's removed ones. Mirrors the listener-cleanup pattern in
      * LocalWhisperSTT.beginWorkerTermination.
      */
     takeWarmWorker(modelId: string): Worker | null {

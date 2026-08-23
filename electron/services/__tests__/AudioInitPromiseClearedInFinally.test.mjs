@@ -9,8 +9,8 @@ const mainPath = path.resolve(__dirname, '../../main.ts');
 const source = fs.readFileSync(mainPath, 'utf8');
 
 // ── Function isolation ──────────────────────────────────────────────────────
-const startMeetingStart = source.indexOf('public async startMeeting');
-const endMeetingStart = source.indexOf('public async endMeeting', startMeetingStart);
+const startMeetingStart = source.indexOf('private async startMeetingTransition');
+const endMeetingStart = source.indexOf('private async endMeetingTransition', startMeetingStart);
 const ragStart = source.indexOf('private async processCompletedMeetingForRAG', endMeetingStart);
 
 const startMeetingSource = source.slice(startMeetingStart, endMeetingStart);

@@ -56,7 +56,7 @@ export interface TieredModels {
   tier3: string;
 }
 
-interface FamilyState {
+export interface FamilyState {
   /** The original hardcoded baseline (never changes) */
   baseline: string;
   /** Current Tier 1 (promoted stable) */
@@ -86,19 +86,24 @@ interface PersistedState {
 /** Hardcoded baseline models for vision Tier 1 (initial pinned stable) */
 const BASELINE_MODELS: Record<ModelFamily, string> = {
   [ModelFamily.OPENAI]: 'gpt-5.4',
-  [ModelFamily.GEMINI_FLASH]: 'gemini-3.5-flash',
+  [ModelFamily.GEMINI_FLASH]: 'gemini-3.7-flash',
   [ModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [ModelFamily.CLAUDE]: 'claude-sonnet-4-6',
-  [ModelFamily.GROQ_LLAMA]: 'meta-llama/llama-4-scout-17b-16e-instruct',
+  // Groq retired llama-4-scout on 2026-07-17. qwen3.6-27b is the only model
+  // left in Groq's catalogue that accepts image input. The enum key stays
+  // GROQ_LLAMA because it is the persisted state key — renaming it would
+  // orphan every existing model_versions.json entry.
+  [ModelFamily.GROQ_LLAMA]: 'qwen/qwen3.6-27b',
 };
 
 /** Hardcoded baseline models for text Tier 1 */
 const TEXT_BASELINE_MODELS: Record<TextModelFamily, string> = {
   [TextModelFamily.OPENAI]: 'gpt-5.4',
-  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.5-flash',
+  [TextModelFamily.GEMINI_FLASH]: 'gemini-3.7-flash',
   [TextModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [TextModelFamily.CLAUDE]: 'claude-sonnet-4-6',
-  [TextModelFamily.GROQ]: 'llama-3.3-70b-versatile',
+  // Groq retired llama-3.3-70b-versatile on 2026-08-16.
+  [TextModelFamily.GROQ]: 'qwen/qwen3.6-27b',
 };
 
 /** Vision-capable model ordering for screenshot analysis */
@@ -119,8 +124,23 @@ export const TEXT_PROVIDER_ORDER: TextModelFamily[] = [
   TextModelFamily.GEMINI_PRO,
 ];
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const DISCOVERY_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+/**
+ * Model ids the upstream provider has switched off. reconcileBaselines() drops
+ * any persisted tier holding one of these straight back to the baseline.
+ *
+ * The version comparison alone is not enough: it keeps a persisted `latest`
+ * whenever its parsed version is >= the new baseline's, and a retirement is not
+ * a version bump. Groq's llama-4-scout parses as 4.0 and its replacement
+ * qwen3.6-27b as 3.6, so a pure version check would have kept serving a model
+ * that now 404s. Compare by id, not by number.
+ */
+// Single source: groqModels.ts (code-review 2026-08-23 — retirement knowledge
+// belongs to the Groq authority module; re-imported here for the reconciler).
+import { RETIRED_MODEL_IDS, isRetiredModelId, groqSupportsImages } from '../llm/groqModels';
+export { isRetiredModelId };
 const PERSISTENCE_FILENAME = 'model_versions.json';
 const MAX_DISCOVERY_FAILURES_BEFORE_BACKOFF = 3;
 const DISCOVERY_BACKOFF_MULTIPLIER = 2; // exponential backoff on repeated failures
@@ -136,7 +156,7 @@ const EVENT_DISCOVERY_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
  * Handles diverse and irregular naming conventions:
  *   "gpt-5.4"                                  → { major:5, minor:4, patch:0 }
  *   "gpt-5.4"                                  → { major:5, minor:4, patch:0 }
- *   "gemini-3.5-flash"                         → { major:3, minor:5, patch:0 }
+ *   "gemini-3.7-flash"                         → { major:3, minor:7, patch:0 }
  *   "gemini-3.1-pro-preview"                   → { major:3, minor:1, patch:0 }
  *   "claude-sonnet-4-6"                        → { major:4, minor:6, patch:0 }
  *   "claude-opus-4-6"                          → { major:4, minor:6, patch:0 }
@@ -150,6 +170,7 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
   // Normalize: strip vendor prefixes and non-version suffixes
   let cleaned = modelId
     .replace(/^meta-llama\//, '')                // vendor prefix
+    .replace(/^anthropic\./, '')                 // Bedrock prefix: anthropic.claude-opus-5
     .replace(/-chat-latest$/, '')                // OpenAI suffix
     .replace(/-lite-preview$/, '')               // Gemini suffix
     .replace(/-preview$/, '')                    // Gemini suffix
@@ -157,6 +178,18 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
     .replace(/-instruct$/, '')                   // instruction-tuned tag
     .replace(/-\d+b(-\d+e)?$/, '')              // hardware specs like -17b-16e
     .replace(/-\d+b$/, '');                      // hardware specs like -70b
+
+  // Claude release-date snapshots are NOT versions. Strip the YYYYMMDD suffix
+  // before any strategy runs, or "claude-3-5-sonnet-20241022" parses as version
+  // 20241022.0 and a RETIRED 3.5 model outranks every current model — including
+  // Opus 5 — in findLatestInFamily(). Both id shapes carry the suffix:
+  //   claude-3-5-sonnet-20241022  (pre-4.6, dated)
+  //   claude-haiku-4-5-20251001   (pre-4.6, dated)
+  // Anthropic documents this as claude-{name}-{major}-{minor}-{YYYYMMDD};
+  // 4.6-generation ids are dateless, so this is a no-op for them.
+  if (/^claude[-.]/.test(cleaned)) {
+    cleaned = cleaned.replace(/-\d{8}$/, '');
+  }
 
   // Strategy 1: Dotted version (X.Y or X.Y.Z) — most OpenAI & Gemini models
   const dotVersion = cleaned.match(/(\d+)\.(\d+)(?:\.(\d+))?/);
@@ -169,14 +202,27 @@ export function parseModelVersion(modelId: string): ModelVersion | null {
     };
   }
 
-  // Strategy 2: Claude-style hyphenated version (claude-TYPE-MAJOR-MINOR)
-  //   "claude-sonnet-4-6" → major:4, minor:6
-  //   "claude-opus-5-2"   → major:5, minor:2
-  const claudePattern = cleaned.match(/claude-(?:sonnet|opus|haiku)-(\d+)-(\d+)/);
-  if (claudePattern) {
+  // Strategy 2: Claude-style hyphenated version. Both documented id shapes:
+  //   current  claude-{family}-{major}[-{minor}]   "claude-sonnet-4-6" → 4.6
+  //                                                "claude-opus-5"     → 5.0
+  //   legacy   claude-{major}-{minor}-{family}     "claude-3-5-sonnet" → 3.5
+  // The family segment is matched as [a-z]+ rather than a fixed sonnet|opus|haiku
+  // list so new families (fable, mythos, ...) parse without a code change.
+  const claudeModern = cleaned.match(/^claude-[a-z]+-(\d+)(?:-(\d+))?(?:$|-)/);
+  if (claudeModern) {
     return {
-      major: parseInt(claudePattern[1], 10),
-      minor: parseInt(claudePattern[2], 10),
+      major: parseInt(claudeModern[1], 10),
+      minor: claudeModern[2] ? parseInt(claudeModern[2], 10) : 0,
+      patch: 0,
+      raw: modelId,
+    };
+  }
+
+  const claudeLegacy = cleaned.match(/^claude-(\d+)(?:-(\d+))?-[a-z]/);
+  if (claudeLegacy) {
+    return {
+      major: parseInt(claudeLegacy[1], 10),
+      minor: claudeLegacy[2] ? parseInt(claudeLegacy[2], 10) : 0,
       patch: 0,
       raw: modelId,
     };
@@ -245,6 +291,23 @@ export function versionDistance(older: ModelVersion, newer: ModelVersion): numbe
 // ─── Model Family Classification ────────────────────────────────────────
 
 /**
+ * Is this an Anthropic Claude model id?
+ *
+ * Deliberately NOT an allow-list of family names. The previous
+ * `sonnet|opus|haiku` check classified claude-fable-5 and claude-mythos-5 as
+ * null, so discovery could not see them at all and would never promote them.
+ * Anthropic's own id grammar is `claude-{name}-...`, so the prefix is the
+ * reliable signal and new family names work without a code change.
+ *
+ * Accepts the Bedrock `anthropic.`-prefixed form too, since ids from that
+ * platform reach the same ranking code. Excludes any non-Anthropic id that
+ * merely contains the substring "claude" (e.g. a third-party `my-claude-clone`).
+ */
+function isClaudeModelId(lowerModelId: string): boolean {
+  return lowerModelId.startsWith('claude-') || lowerModelId.startsWith('anthropic.claude-');
+}
+
+/**
  * Determine which vision ModelFamily a discovered model ID belongs to.
  * Returns null if it doesn't match any known vision-capable family.
  */
@@ -266,13 +329,23 @@ export function classifyModel(modelId: string): ModelFamily | null {
     return ModelFamily.GEMINI_PRO;
   }
 
-  // Claude vision-capable models (sonnet, opus, haiku)
-  if (lower.startsWith('claude-') && (lower.includes('sonnet') || lower.includes('opus') || lower.includes('haiku'))) {
+  // Claude vision-capable models. Every current Claude model accepts image
+  // input, so this matches the `claude-` prefix rather than an allow-list of
+  // sonnet|opus|haiku — that list silently returned null for claude-fable-5 and
+  // claude-mythos-5, making them invisible to discovery. A new family name would
+  // have failed the same way.
+  if (isClaudeModelId(lower)) {
     return ModelFamily.CLAUDE;
   }
 
-  // Groq Llama Scout (vision-capable)
-  if (lower.includes('llama') && lower.includes('scout')) {
+  // Groq's vision-capable model. Was llama-4-scout until Groq retired it on
+  // 2026-07-17; qwen3.6-27b is now the only Groq id that accepts images, so
+  // discovery has to match it or this family never leaves its baseline.
+  // Code-review 2026-08-23: a bare 'qwen' substring put EVERY qwen — Groq has
+  // repeatedly hosted text-only qwens (qwen3-32b, QwQ) — into the VISION
+  // family while groqSupportsImages simultaneously said supportsImages:false
+  // for the same id. The two vision predicates must be the same predicate.
+  if (lower.includes('scout') || groqSupportsImages(lower)) {
     return ModelFamily.GROQ_LLAMA;
   }
 
@@ -301,17 +374,71 @@ export function classifyTextModel(modelId: string): TextModelFamily | null {
     return TextModelFamily.GEMINI_PRO;
   }
 
-  // Claude text models (sonnet, opus, haiku — all text-capable)
-  if (lower.startsWith('claude-') && (lower.includes('sonnet') || lower.includes('opus') || lower.includes('haiku'))) {
+  // Claude text models — all Claude models are text-capable. See the note in
+  // classifyModel(): matching the prefix, not a family allow-list.
+  if (isClaudeModelId(lower)) {
     return TextModelFamily.CLAUDE;
   }
 
-  // Groq text models — broader: llama, mixtral, gemma (NOT scout-only like vision)
-  if (lower.includes('llama') || lower.includes('mixtral') || lower.includes('gemma')) {
+  // Groq text models — broader than vision. The llama/mixtral/gemma terms are
+  // retired upstream but kept so ids from a self-hosted or gateway catalogue
+  // still classify; qwen/gpt-oss/compound are what Groq actually serves now.
+  if (lower.includes('llama') || lower.includes('mixtral') || lower.includes('gemma')
+    || lower.includes('qwen') || lower.includes('gpt-oss') || lower.includes('compound')) {
     return TextModelFamily.GROQ;
   }
 
   return null;
+}
+
+/** True if `modelId` is a model the upstream provider has switched off. */
+
+
+/**
+ * Bring one persisted family entry back in line with the current hardcoded
+ * baseline. Mutates `entry`; returns true if anything changed.
+ *
+ * Exported as a pure function so the reconciliation rules are testable without
+ * an Electron `app` (the manager reads its persist path from app.getPath()).
+ *
+ * Three independent reasons to reset, and the third is the one a version
+ * comparison alone cannot see: a retirement is not a version bump. Groq's
+ * llama-4-scout parses as 4.0 and its replacement qwen3.6-27b as 3.6, so
+ * `latest` would have survived the version check and kept 404ing.
+ */
+export function reconcileFamilyEntry(entry: FamilyState, currentBaseline: string): boolean {
+  const baselineVersion = parseModelVersion(currentBaseline);
+  const baselineMismatch = entry.baseline !== currentBaseline;
+  const tier1Retired = RETIRED_MODEL_IDS.has(entry.tier1);
+  // Code-review 2026-08-23: a retired `latest` ALONE must trigger — the old
+  // trigger set only looked at baseline/tier1, so a healthy baseline let a
+  // retired discovery-promoted `latest` keep serving tier 2/3 retries
+  // (404 forever), contradicting RETIRED_MODEL_IDS's own contract.
+  const latestRetired = RETIRED_MODEL_IDS.has(entry.latest);
+  const tier1OlderThanBaseline = !!(
+    baselineVersion &&
+    entry.tier1Version &&
+    compareVersions(entry.tier1Version, baselineVersion) < 0
+  );
+
+  if (!baselineMismatch && !tier1OlderThanBaseline && !tier1Retired && !latestRetired) return false;
+
+  entry.baseline = currentBaseline;
+  entry.tier1 = currentBaseline;
+  entry.tier1Version = baselineVersion;
+  entry.previousTier1 = null;
+
+  const latestStillValid =
+    !RETIRED_MODEL_IDS.has(entry.latest) &&
+    baselineVersion &&
+    entry.latestVersion &&
+    compareVersions(entry.latestVersion, baselineVersion) >= 0;
+  if (!latestStillValid) {
+    entry.latest = currentBaseline;
+    entry.latestVersion = baselineVersion;
+  }
+  entry.previousLatest = null;
+  return true;
 }
 
 // ─── Service Class ──────────────────────────────────────────────────────
@@ -725,6 +852,11 @@ export class ModelVersionManager {
     let best: { modelId: string; version: ModelVersion } | null = discovered.get(family) || null;
 
     for (const modelId of modelIds) {
+      // Code-review 2026-08-23: admission never consulted the retirement
+      // list, so a catalogue still listing a deprecated-but-announced id that
+      // out-versions the baseline was promoted here and reset by the next
+      // reconcile pass — a promote→reset flap every discovery cycle.
+      if (isRetiredModelId(modelId)) continue;
       const classified = classifyModel(modelId);
       if (classified !== family) continue;
 
@@ -973,9 +1105,11 @@ export class ModelVersionManager {
           return parsed;
         }
 
-        // Schema migration: v3 → v4 (forces baseline reconciliation for stale Gemini 1.5 entries)
-        if (parsed.schemaVersion === 3) {
-          console.log('[ModelVersionManager] Migrating v3 → v4 state (reconciling stale baselines)');
+        // Schema migration: v3/v4 → v5. Both are pure baseline reconciliations
+        // (v4 cleared stale Gemini 1.5 entries; v5 clears the Groq Llama ids
+        // Groq switched off in 2026), so they share one branch.
+        if (parsed.schemaVersion === 3 || parsed.schemaVersion === 4) {
+          console.log(`[ModelVersionManager] Migrating v${parsed.schemaVersion} → v${SCHEMA_VERSION} state (reconciling stale baselines)`);
           this.reconcileBaselines(parsed);
           parsed.schemaVersion = SCHEMA_VERSION;
           return parsed;
@@ -1047,32 +1181,13 @@ export class ModelVersionManager {
     for (const [family, currentBaseline] of Object.entries(expected)) {
       const entry = state.families[family];
       if (!entry) continue;
-
-      const baselineVersion = parseModelVersion(currentBaseline);
-      const baselineMismatch = entry.baseline !== currentBaseline;
-      const tier1OlderThanBaseline =
-        baselineVersion &&
-        entry.tier1Version &&
-        compareVersions(entry.tier1Version, baselineVersion) < 0;
-
-      if (baselineMismatch || tier1OlderThanBaseline) {
+      const before = { baseline: entry.baseline, tier1: entry.tier1, latest: entry.latest };
+      if (reconcileFamilyEntry(entry, currentBaseline)) {
         console.log(
           `[ModelVersionManager] 🔄 Reconciling stale family "${family}": ` +
-          `baseline ${entry.baseline} → ${currentBaseline}, tier1 ${entry.tier1} → ${currentBaseline}`
+          `baseline ${before.baseline} → ${entry.baseline}, ` +
+          `tier1 ${before.tier1} → ${entry.tier1}, latest ${before.latest} → ${entry.latest}`
         );
-        entry.baseline = currentBaseline;
-        entry.tier1 = currentBaseline;
-        entry.tier1Version = baselineVersion;
-        entry.previousTier1 = null;
-        const latestStillValid =
-          baselineVersion &&
-          entry.latestVersion &&
-          compareVersions(entry.latestVersion, baselineVersion) >= 0;
-        if (!latestStillValid) {
-          entry.latest = currentBaseline;
-          entry.latestVersion = baselineVersion;
-        }
-        entry.previousLatest = null;
       }
     }
   }
@@ -1178,13 +1293,13 @@ export class ModelVersionManager {
     lines.push('  --- Vision ---');
     for (const family of VISION_PROVIDER_ORDER) {
       const tiers = this.getTieredModels(family);
-      lines.push(`  ${family}: T1=${tiers.tier1} | T2/T3=${tiers.tier2}`);
+      lines.push(`  ${family}: T1=${tiers.tier1} | T2=${tiers.tier2} | T3=${tiers.tier3}`);
     }
 
     lines.push('  --- Text ---');
     for (const family of TEXT_PROVIDER_ORDER) {
       const tiers = this.getTextTieredModels(family);
-      lines.push(`  ${family}: T1=${tiers.tier1} | T2/T3=${tiers.tier2}`);
+      lines.push(`  ${family}: T1=${tiers.tier1} | T2=${tiers.tier2} | T3=${tiers.tier3}`);
     }
 
     // Show rollback availability (both vision and text)

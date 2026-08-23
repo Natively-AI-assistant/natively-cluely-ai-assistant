@@ -30,7 +30,19 @@ async function makeEngineWithAnswer(chunks) {
   return { engine, session };
 }
 
-test('runWhatShouldISay suppresses nothing-actionable sentinel output', async () => {
+// Campaign 2 (longsession, 2026-07-16): a MANUAL (non-speculative) press that
+// hits the "nothing actionable" sentinel now gets an honest, visible fallback
+// message instead of a silent null — see IntelligenceEngine.ts's
+// isNonAnswerSentinel branch, [FIX:longsession-nonanswer-fallback]. Live-proven
+// on the real backend: a well-formed prompt for a real interviewer question
+// (a long-range follow-up whose referent had been evicted from the transcript
+// window) produced the sentinel, and the prior silent-null behavior was
+// indistinguishable from a greeting-failure/no-op to the user. The SPECULATIVE
+// path (auto-trigger prefetch on ambient chatter) is intentionally unchanged —
+// see the tests further below.
+const LONGSESSION_NONANSWER_FALLBACK = "I don't have enough from the conversation to answer that specific point yet.";
+
+test('runWhatShouldISay gives an honest fallback for a manual nothing-actionable sentinel', async () => {
   const { engine, session } = await makeEngineWithAnswer(['Nothing ', 'actionable right now.']);
   const events = [];
   engine.on('suggested_answer_token', token => events.push(['token', token]));
@@ -38,13 +50,14 @@ test('runWhatShouldISay suppresses nothing-actionable sentinel output', async ()
 
   const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true });
 
-  assert.equal(answer, null);
-  assert.deepEqual(events, []);
+  assert.equal(answer, LONGSESSION_NONANSWER_FALLBACK);
+  assert.deepEqual(events, [['final', LONGSESSION_NONANSWER_FALLBACK]]);
   assert.deepEqual(session.getFullUsage(), []);
   assert.equal(session.getFullTranscript().some(segment => segment.text.includes('Nothing actionable')), false);
+  assert.equal(session.getFullTranscript().some(segment => segment.text === LONGSESSION_NONANSWER_FALLBACK), true);
 });
 
-test('runWhatShouldISay suppresses nothing-to-capture sentinel output', async () => {
+test('runWhatShouldISay gives an honest fallback for a manual nothing-to-capture sentinel', async () => {
   const { engine, session } = await makeEngineWithAnswer([' Nothing to capture right now.\n']);
   const events = [];
   engine.on('suggested_answer_token', token => events.push(['token', token]));
@@ -52,13 +65,14 @@ test('runWhatShouldISay suppresses nothing-to-capture sentinel output', async ()
 
   const answer = await engine.runWhatShouldISay('anything to capture?', 0.9, undefined, { skipCooldown: true });
 
-  assert.equal(answer, null);
-  assert.deepEqual(events, []);
+  assert.equal(answer, LONGSESSION_NONANSWER_FALLBACK);
+  assert.deepEqual(events, [['final', LONGSESSION_NONANSWER_FALLBACK]]);
   assert.deepEqual(session.getFullUsage(), []);
   assert.equal(session.getFullTranscript().some(segment => segment.text.includes('Nothing to capture')), false);
+  assert.equal(session.getFullTranscript().some(segment => segment.text === LONGSESSION_NONANSWER_FALLBACK), true);
 });
 
-test('runWhatShouldISay suppresses normalized sentinel variants', async () => {
+test('runWhatShouldISay gives an honest fallback for normalized sentinel variants (manual press)', async () => {
   const { engine, session } = await makeEngineWithAnswer(['  NOTHING ACTIONABLE RIGHT NOW!!!  ']);
   const events = [];
   engine.on('suggested_answer_token', token => events.push(['token', token]));
@@ -66,8 +80,8 @@ test('runWhatShouldISay suppresses normalized sentinel variants', async () => {
 
   const answer = await engine.runWhatShouldISay('anything actionable?', 0.9, undefined, { skipCooldown: true });
 
-  assert.equal(answer, null);
-  assert.deepEqual(events, []);
+  assert.equal(answer, LONGSESSION_NONANSWER_FALLBACK);
+  assert.deepEqual(events, [['final', LONGSESSION_NONANSWER_FALLBACK]]);
   assert.deepEqual(session.getFullUsage(), []);
 });
 

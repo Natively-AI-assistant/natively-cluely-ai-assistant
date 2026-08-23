@@ -70,7 +70,7 @@ Enhancement suggestions are tracked as GitHub issues. When you are creating an e
 
 ### Prerequisites
 
-- Node.js (v20+ recommended)
+- Node.js (v22.6+ required; Node.js 22 LTS recommended)
 - Git
 - Rust (required for native audio capture compilation)
 

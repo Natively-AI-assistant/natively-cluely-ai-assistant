@@ -87,7 +87,11 @@ export interface DecideProfileInput {
 }
 
 const MODE_TEMPLATE_TYPES: ReadonlySet<string> = new Set([
-  'general', 'looking-for-work', 'sales', 'recruiting', 'team-meet', 'lecture', 'technical-interview',
+  // F-505: 'seminar' is the 8th member of the template union (see
+  // modeProfiles.ts). Omitting it here made toActiveModeInfo return null
+  // for a seminar mode, so planAnswer ran mode-blind and applyModeFallback
+  // never rewrote the fallthrough to lecture_answer.
+  'general', 'looking-for-work', 'sales', 'recruiting', 'team-meet', 'lecture', 'technical-interview', 'seminar',
 ]);
 
 /** Normalize the legacy string form into ActiveModeInfo (unknown ids → null). */
@@ -99,10 +103,23 @@ function toActiveModeInfo(input: DecideProfileInput): ActiveModeInfo | null {
 }
 
 // Answer types that speak as the candidate in first person when interviewer-asked.
+//
+// resume_jd_fit_answer / resume_jd_gap_answer / resume_jd_intro_answer
+// (2026-07-07, AnswerPlanner JD/Resume JIT pipeline) were missing here —
+// AnswerPlanner's own CANDIDATE_VOICE_TYPES and profileContextPolicyFor()
+// both treat these three as candidate-voice, profile-required answers (same
+// as jd_fit_answer), but this set had drifted out of sync, so
+// decideProfileIntelligence's shouldUseProfile fell back to false for them.
+// Added 2026-07-11 (Context OS ownership audit). The JD-only shapes
+// (jd_summary_answer / jd_requirements_answer / jd_fact_answer) are
+// deliberately NOT added — those describe the target role, not the
+// candidate, and AnswerPlanner marks them profileContextPolicy:'allowed'
+// (not 'required'), consistent with CANDIDATE_VOICE_TYPES excluding them too.
 const PROFILE_ANSWER_TYPES: ReadonlySet<AnswerType> = new Set<AnswerType>([
   'identity_answer', 'profile_fact_answer', 'project_answer', 'project_followup_answer',
   'skills_answer', 'skill_experience_answer', 'experience_answer', 'jd_fit_answer',
   'behavioral_interview_answer', 'negotiation_answer',
+  'resume_jd_fit_answer', 'resume_jd_gap_answer', 'resume_jd_intro_answer',
 ]);
 
 // Map the planner's ContextLayer vocabulary onto the spec's richer

@@ -68,10 +68,13 @@ describe('the prompt builders forward the pinned id to resolveMode (source guard
   test('suffix / pinned-instructions / retrieval (sync + hybrid) all take + use pinnedModeId', () => {
     assert.match(src, /getActiveModeSystemPromptSuffix\(pinnedModeId\?: string\)/);
     assert.match(src, /getActiveModePinnedInstructions\(answerType\?: AnswerType, pinnedModeId\?: string\)/);
-    assert.match(src, /buildRetrievedActiveModeContextBlock\([^)]*pinnedModeId\?: string\)/);
-    // Hybrid takes pinnedModeId; a trailing `allowRerank?: boolean` (Phase 1
-    // smart-retrieval) may follow it, so don't require it to be the LAST param.
-    assert.match(src, /buildRetrievedActiveModeContextBlockHybrid\([^)]*pinnedModeId\?: string(, allowRerank\?: boolean)?\)/);
+    // pinnedModeId is present; trailing params (retrievalOptions?:
+    // ModeRetrievalOptions — round-6) may follow it, so don't require it to be
+    // the LAST param.
+    assert.match(src, /buildRetrievedActiveModeContextBlock\([^)]*pinnedModeId\?: string(,\s*\w+\?:[^)]*)?\)/);
+    // Hybrid takes pinnedModeId; trailing `allowRerank?: boolean` (Phase 1
+    // smart-retrieval) and/or other params may follow it.
+    assert.match(src, /buildRetrievedActiveModeContextBlockHybrid\([^)]*pinnedModeId\?: string(,\s*[^)]*)?\)/);
     // Each must resolve via the pin, not a bare getActiveMode().
     const suffix = src.slice(src.indexOf('getActiveModeSystemPromptSuffix(pinnedModeId'));
     assert.match(suffix.slice(0, 200), /this\.resolveMode\(pinnedModeId\)/);
@@ -80,6 +83,8 @@ describe('the prompt builders forward the pinned id to resolveMode (source guard
   test('the hybrid lexical fallback forwards the same pinned id', () => {
     // Inside buildRetrievedActiveModeContextBlockHybrid, the lexical fallback must
     // pass pinnedModeId through so the fallback path pins the same mode.
-    assert.match(src, /buildRetrievedActiveModeContextBlock\(query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId\)/);
+    // The fallback forwards pinnedModeId; a trailing retrievalOptions arg
+    // (round-6) may follow it.
+    assert.match(src, /buildRetrievedActiveModeContextBlock\(\s*query, transcript, tokenBudget, answerType, excludeCustomContext, pinnedModeId(, retrievalOptions)?\s*\)/);
   });
 });

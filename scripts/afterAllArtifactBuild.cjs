@@ -61,7 +61,18 @@ function resolveDeveloperIdIdentity() {
 function notarytoolArgs() {
   const e = process.env;
   if (e.APPLE_API_KEY && e.APPLE_API_KEY_ID && e.APPLE_API_ISSUER) {
-    return ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER];
+    // Skip (loudly) when the .p8 path no longer resolves, so a stale export cannot
+    // shadow a working APPLE_KEYCHAIN_PROFILE. Kept in lockstep with the identical
+    // guard in scripts/notarize.js — see that file's resolveCredentials() for the
+    // full rationale. Without it the dead path reaches notarytool and kills the DMG
+    // notarization step AFTER the .app has already been notarized and stapled.
+    if (fs.existsSync(e.APPLE_API_KEY)) {
+      return ['--key', e.APPLE_API_KEY, '--key-id', e.APPLE_API_KEY_ID, '--issuer', e.APPLE_API_ISSUER];
+    }
+    console.warn(
+      `[dmg-notarize] APPLE_API_KEY points at a file that does not exist: ${e.APPLE_API_KEY} — ` +
+        'ignoring the api-key strategy and falling through (apple-id, then keychain-profile).'
+    );
   }
   if (e.APPLE_ID && e.APPLE_APP_SPECIFIC_PASSWORD && e.APPLE_TEAM_ID) {
     return ['--apple-id', e.APPLE_ID, '--password', e.APPLE_APP_SPECIFIC_PASSWORD, '--team-id', e.APPLE_TEAM_ID];
@@ -203,7 +214,13 @@ function buildStyledDmg({ appPath, outDmg, identity }) {
     '--hdiutil-quiet',
   ];
   if (fs.existsSync(VOLICON)) args.push('--volicon', VOLICON);
-  if (fs.existsSync(BACKGROUND)) args.push('--background', BACKGROUND);
+  // Background is opt-in. assets/dmg-background.png is 2640×1600 px = 660×400 pt at 4x,
+  // but create-dmg/Finder lays a non-@2x image 1:1 point-for-pixel into the 660×400-pt
+  // window, so the artwork renders off-scale/mis-positioned relative to the icon/drop-link.
+  // Ship the default white DMG window unless a correctly-sized background is explicitly enabled.
+  if (process.env.NATIVELY_DMG_BACKGROUND === '1' && fs.existsSync(BACKGROUND)) {
+    args.push('--background', BACKGROUND);
+  }
   if (identity) args.push('--codesign', identity); // sign the DMG container itself
   args.push(outDmg, stage);
 

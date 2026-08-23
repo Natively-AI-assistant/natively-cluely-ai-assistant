@@ -25,7 +25,18 @@ test('KnowledgeOrchestrator.ts has no TS2339 "property does not exist" errors', 
   try {
     // execFileSync with an arg array — no shell, no injection surface. The
     // command and args are all hardcoded constants regardless.
-    execFileSync('npx', ['tsc', '-p', 'electron/tsconfig.json', '--noEmit'], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    // tsconfig.premium-check.json, NOT tsconfig.json. The main project drops
+    // premium from its ROOT FILE SET, so KnowledgeOrchestrator.ts is not in that
+    // program at all and tsc emits no lines for it — this whole assertion then
+    // passed unconditionally. Verified by injecting a real TS2339 into
+    // KnowledgeOrchestrator.ts: against tsconfig.json the guard still passed.
+    //
+    // Invoked as node_modules/typescript7/lib/tsc.js rather than `npx tsc`:
+    // it pins the compiler the project actually type-checks with (TS 7), avoids
+    // resolving npm's Windows .cmd shim, and lib/tsc.js is a real .js under
+    // "type": "module" so it is ESM on every Node version (bin/tsc is
+    // extensionless and needs Node >= 22.7).
+    execFileSync('node', ['node_modules/typescript7/lib/tsc.js', '-p', 'electron/tsconfig.premium-check.json', '--noEmit'], { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
     // tsc exits non-zero when ANY error exists (including unrelated pre-existing
     // ones). Capture its stdout and filter to the file + error class we care about.

@@ -82,6 +82,11 @@ export class DynamicActionEngine {
             .slice(0, 3);
     }
 
+    /** Store an action built elsewhere (Auto Answer V3 offer card) verbatim — no trigger pack, no dedup. */
+    registerAction(action: DynamicAction): void {
+        this.store.addAction(action);
+    }
+
     acceptAction(actionId: string): DynamicAction | null {
         const action = this.store.getAction(actionId);
         if (action) {

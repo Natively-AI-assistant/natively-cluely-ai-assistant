@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Check, Cloud, Terminal, Monitor, Server, Plus } from 'lucide-react';
+import { ChevronDown, Check, Cloud, Terminal, Server, Plus } from 'lucide-react';
 import { getCodexCliModelDisplayName, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { useT } from '../../i18n';
+import { ProviderMark } from './ProviderMark';
 
 interface ModelSelectorProps {
     currentModel: string;
@@ -14,6 +16,7 @@ interface CustomProvider {
 }
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSelectModel }) => {
+    const t = useT();
     const [isOpen, setIsOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'cloud' | 'custom' | 'local'>('cloud');
     const [ollamaModels, setOllamaModels] = useState<string[]>([]);
@@ -52,7 +55,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                 const cModels: { id: string; name: string; desc: string; provider: string }[] = [];
 
                 if (creds?.hasNativelyKey) {
-                    cModels.push({ id: 'natively', name: 'Natively API', desc: 'Managed AI • Fast execution', provider: 'natively' });
+                    cModels.push({ id: 'natively', name: 'Natively API', desc: t('Managed AI • Fast execution'), provider: 'natively' });
                 }
                 for (const [prov, cfg] of Object.entries(STANDARD_CLOUD_MODELS)) {
                     if (!cfg.hasKeyCheck(creds)) continue;
@@ -86,10 +89,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');
-        if (model === 'gemini-3.5-flash') return 'Gemini 3.5 Flash';
+        if (model === 'gemini-3.7-flash') return 'Gemini 3.7 Flash';
+        // Legacy: users who selected 3.6-flash before the 3.7 bump still have it
+        // persisted. It remains a valid, working model, so name it rather than
+        // rendering the raw slug.
+        if (model === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
         if (model === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
         if (model === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-        if (model === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+        if (model === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
+        if (model === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
+        if (model === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
         if (model === 'gpt-5.4') return 'GPT 5.4';
         if (model === 'claude-sonnet-4-6') return 'Sonnet 4.6';
 
@@ -122,19 +131,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                             onClick={() => setActiveTab('cloud')}
                             className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'cloud' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
                         >
-                            Cloud
+                            {t('Cloud')}
                         </button>
                         <button
                             onClick={() => setActiveTab('custom')}
                             className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'custom' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
                         >
-                            Custom
+                            {t('Custom')}
                         </button>
                         <button
                             onClick={() => setActiveTab('local')}
                             className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${activeTab === 'local' ? 'text-accent-primary bg-bg-item-surface border-t-2 border-t-accent-primary' : 'text-text-secondary hover:text-text-primary'}`}
                         >
-                            Local
+                            {t('Local')}
                         </button>
                     </div>
 
@@ -146,14 +155,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                             <div className="space-y-1">
                                 {cloudModels.length === 0 ? (
                                     <div className="text-center py-6 text-text-tertiary">
-                                        <p className="text-xs mb-2">No cloud providers configured.</p>
-                                        <p className="text-[10px] opacity-70">Add API keys in Settings.</p>
+                                        <p className="text-xs mb-2">{t('No cloud providers configured.')}</p>
+                                        <p className="text-[10px] opacity-70">{t('Add API keys in Settings.')}</p>
                                     </div>
                                 ) : (
                                     cloudModels.map((m, idx) => {
                                         const prevProvider = idx > 0 ? cloudModels[idx - 1].provider : null;
                                         const showDivider = prevProvider && prevProvider !== m.provider;
-                                        const icon = m.provider === 'gemini' ? <Monitor size={14} /> : <Cloud size={14} />;
+                                        // Real brand mark per provider. This used to be
+                                        // `provider === 'gemini' ? <Monitor/> : <Cloud/>`, so every
+                                        // Nvidia Nim, OpenAI, Claude, DeepSeek and Groq row shipped
+                                        // with a generic cloud glyph and no brand at all — and even
+                                        // Gemini got a monitor icon rather than its own mark.
+                                        const icon = <ProviderMark provider={m.provider} size={14} fallback={<Cloud size={14} />} />;
                                         return (
                                             <React.Fragment key={m.id}>
                                                 {showDivider && <div className="h-px bg-border-subtle my-1" />}
@@ -177,8 +191,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                             <div className="space-y-1">
                                 {customProviders.length === 0 ? (
                                     <div className="text-center py-6 text-text-tertiary">
-                                        <p className="text-xs mb-2">No custom providers.</p>
-                                        <button className="text-[10px] text-accent-primary hover:underline">Manage in Settings</button>
+                                        <p className="text-xs mb-2">{t('No custom providers.')}</p>
+                                        <button className="text-[10px] text-accent-primary hover:underline">{t('Manage in Settings')}</button>
                                     </div>
                                 ) : (
                                     customProviders.map(provider => (
@@ -186,7 +200,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                             key={provider.id}
                                             id={provider.id}
                                             name={provider.name}
-                                            desc="Custom cURL"
+                                            desc={t("Custom cURL")}
                                             icon={<Terminal size={14} />}
                                             selected={currentModel === provider.id}
                                             onSelect={() => handleSelect(provider.id)}
@@ -201,8 +215,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                             <div className="space-y-1">
                                 {ollamaModels.length === 0 ? (
                                     <div className="text-center py-6 text-text-tertiary">
-                                        <p className="text-xs">No Ollama models found.</p>
-                                        <p className="text-[10px] mt-1 opacity-70">Ensure Ollama is running.</p>
+                                        <p className="text-xs">{t('No Ollama models found.')}</p>
+                                        <p className="text-[10px] mt-1 opacity-70">{t('Ensure Ollama is running.')}</p>
                                     </div>
                                 ) : (
                                     ollamaModels.map(model => (
@@ -210,7 +224,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
                                             key={model}
                                             id={`ollama-${model}`}
                                             name={model}
-                                            desc="Local"
+                                            desc={t("Local")}
                                             icon={<Server size={14} />}
                                             selected={currentModel === `ollama-${model}`}
                                             onSelect={() => handleSelect(`ollama-${model}`)}
@@ -238,10 +252,10 @@ interface ModelOptionProps {
 const ModelOption: React.FC<ModelOptionProps> = ({ name, desc, icon, selected, onSelect }) => (
     <button
         onClick={onSelect}
-        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-primary/10' : 'hover:bg-bg-input'}`}
+        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors group ${selected ? 'bg-accent-subtle' : 'hover:bg-bg-input'}`}
     >
         <div className="flex items-center gap-3">
-            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-primary/20 text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
+            <div className={`p-1.5 rounded-md ${selected ? 'bg-accent-muted text-accent-primary' : 'bg-bg-elevated text-text-secondary group-hover:text-text-primary'}`}>
                 {icon}
             </div>
             <div className="text-left">

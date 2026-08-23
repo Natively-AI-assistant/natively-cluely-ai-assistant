@@ -138,7 +138,7 @@ async function main() {
 
   const h = H.createHarness({ provider: 'auto' });
   h.llmHelper.groqClient = mm;
-  try { h.llmHelper.setModel('meta-llama/llama-4-scout-17b-16e-instruct'); } catch {}
+  try { h.llmHelper.setModel('qwen/qwen3.6-27b'); } catch {}
   try { h.llmHelper.setGroqFastTextMode(false); } catch {}
   try { h.llmHelper.client = null; h.llmHelper.openaiClient = null; h.llmHelper.claudeClient = null; h.llmHelper.deepseekClient = null; } catch {}
   try { const rl = h.llmHelper.rateLimiters; if (rl?.groq) { rl.groq.maxTokens = 100000; rl.groq.tokens = 100000; rl.groq.refillRatePerSecond = 1000; } } catch {}

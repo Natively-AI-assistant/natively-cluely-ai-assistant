@@ -38,13 +38,14 @@ export class ProcessingHelper {
       let openaiApiKey = process.env.OPENAI_API_KEY
       let claudeApiKey = process.env.CLAUDE_API_KEY
       let deepseekApiKey = process.env.DEEPSEEK_API_KEY
+      let nvidiaNimApiKey = process.env.NVIDIA_NIM_API_KEY
 
       // Allow initializing without key (will be loaded in loadStoredCredentials or via Settings)
       if (!apiKey) {
         console.warn("[ProcessingHelper] GEMINI_API_KEY not found in env. Will try CredentialsManager after ready.")
       }
 
-      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey)
+      this.llmHelper = new LLMHelper(apiKey, false, undefined, undefined, groqApiKey, openaiApiKey, claudeApiKey, deepseekApiKey, nvidiaNimApiKey)
     }
   }
 
@@ -60,6 +61,7 @@ export class ProcessingHelper {
     const openaiKey = credManager.getOpenaiApiKey();
     const claudeKey = credManager.getClaudeApiKey();
     const deepseekKey = credManager.getDeepseekApiKey();
+    const nvidiaNimKey = credManager.getNvidiaNimApiKey();
 
     if (geminiKey) {
       console.log("[ProcessingHelper] Loading stored Gemini API Key from CredentialsManager");
@@ -85,6 +87,7 @@ export class ProcessingHelper {
       console.log("[ProcessingHelper] Loading stored DeepSeek API Key from CredentialsManager");
       this.llmHelper.setDeepseekApiKey(deepseekKey);
     }
+    if (nvidiaNimKey) this.llmHelper.setNvidiaNimApiKey(nvidiaNimKey);
 
     const litellmBaseURL = credManager.getLitellmBaseURL();
     if (litellmBaseURL) {

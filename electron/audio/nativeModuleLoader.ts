@@ -26,14 +26,25 @@ export interface NativeModule {
   // rebuild — WindowHelper checks `typeof` and degrades to plain panel
   // type if missing. Caller passes BrowserWindow.getNativeWindowHandle().
   applyStealthToWindow?: (handle: Buffer) => void;
-  // macOS-only: Accessibility permission gate for CGEventTap. Returns
-  // true if the process is currently trusted; false otherwise. Cheap;
-  // safe to poll to drive UI state.
+  // Permission gate for the stealth keyboard capture. macOS: CGEventTap
+  // Accessibility trust (true if granted). Windows: always true — a
+  // WH_KEYBOARD_LL hook needs no OS permission. Cheap; safe to poll to
+  // drive UI state.
   isAccessibilityGranted?: () => boolean;
-  // macOS-only: CGEventTap-backed stealth keyboard interception.
-  // Engaged by StealthKeyboardManager; the foreground app does NOT
-  // receive any keystroke while the tap is active. Optional: requires
-  // binary rebuild AND Accessibility permission at runtime.
+  // Windows-only: true when the active keyboard layout is a CJK IME
+  // (Chinese/Japanese/Korean). The WH_KEYBOARD_LL hook swallows keystrokes
+  // before IMM32/TSF can compose them, so stealth typing must be reported
+  // UNAVAILABLE for these users — they fall back to normal focusable typing.
+  // macOS makes the same call from ImeDetector.ts. Optional: requires a binary
+  // rebuild; callers must `typeof`-check and treat a missing export as "no IME"
+  // so a stale binary keeps today's behaviour.
+  isImeKeyboardActive?: () => boolean;
+  // Stealth keyboard interception. macOS: CGEventTap. Windows:
+  // WH_KEYBOARD_LL low-level hook (native-module/src/keyboard_hook_windows.rs)
+  // exposing this IDENTICAL surface. Engaged by StealthKeyboardManager; the
+  // foreground app does NOT receive any keystroke while active, so the user
+  // types into the overlay without it taking OS focus. Optional: requires a
+  // binary rebuild (macOS additionally needs Accessibility permission).
   StealthKeyboardTap?: new () => {
     start(callback: (err: Error | null, ev: CapturedKey) => void, overlayBounds?: OverlayBoundsInput | null): boolean;
     stop(): void;
@@ -115,22 +126,32 @@ function validateNativeModule(mod: any): asserts mod is NativeModule {
     // This catches the Electron asar-stub false-pass: the JS index.js stub
     // exports all the right names (passing the checks above) but its internal
     // require('./index.*.node') fails silently when run from inside the sealed
-    // asar. Calling getInputDevices() forces a real native ABI call.
+    // asar. Calling getHardwareId() forces a real native ABI call.
+    //
+    // WHY getHardwareId() (NOT getInputDevices()): this smoke-test runs at
+    // MODULE LOAD TIME — `loadNativeModule()` is called by the static import
+    // chain `main.ts:412 → MicrophoneCapture.ts:7 → nativeModuleLoader.ts`
+    // BEFORE `app.whenReady()`. On macOS, getInputDevices() instantiates
+    // cpal::default_host() and registers the Electron main process with
+    // CoreAudio HAL — which lights the orange menu-bar microphone-in-use
+    // indicator at app launch, even though no input stream has been opened.
+    // getHardwareId() is pure (machine_uid + sha2), touches no audio HAL,
+    // and is already in REQUIRED_METHODS above.
     //
     // NOTE: The guard MUST be separate from the try/catch that wraps the call.
     // Placing the throw INSIDE the try means our own error gets caught by the
     // same catch block, producing a double-wrapped message and losing the stack.
     let result: unknown;
     try {
-        result = mod.getInputDevices();
+        result = mod.getHardwareId();
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new Error(`NativeModule: functional smoke-test threw (${msg}) — likely loaded asar stub instead of real binary`);
     }
     // Guard is OUTSIDE the try block so our throw propagates cleanly.
-    if (!Array.isArray(result)) {
+    if (typeof result !== 'string' || result.length === 0) {
         throw new Error(
-            `NativeModule: getInputDevices() returned ${typeof result} instead of Array` +
+            `NativeModule: getHardwareId() returned ${typeof result} (${result === '' ? 'empty string' : 'value'})` +
             ` — likely loaded asar stub instead of real binary`
         );
     }

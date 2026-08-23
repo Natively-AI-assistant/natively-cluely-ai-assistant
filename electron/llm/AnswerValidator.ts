@@ -28,21 +28,57 @@ const REQUIRED_MARKDOWN_HEADINGS = CODING_SECTIONS.map(section => `## ${section}
 const sectionHeader = (label: string): RegExp =>
   new RegExp(`^\\s*#{0,3}\\s*(?:\\*\\*)?\\s*(?:${label})\\s*(?:\\*\\*)?\\s*(?::|[-–—])?\\s*$`, 'im');
 
-const SECTION_ALIASES: Record<string, RegExp[]> = {
-  Approach: [sectionHeader('Approach')],
-  'Technique / Data Structure / Algorithm Used': [
-    sectionHeader('Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used'),
-  ],
-  Code: [sectionHeader('Code')],
-  'Dry Run': [sectionHeader('Dry Run')],
-  Complexity: [sectionHeader('Complexity')],
-  'Interviewer Follow-up Points': [
-    sectionHeader('Interviewer Follow-up Points|Follow-up Points|Follow-ups'),
-  ],
+// The SAME label alternations as `sectionHeader`, but requiring a real markdown
+// heading (`#`..`###`) and refusing the bold form. Kept beside the aliases so
+// the two cannot drift apart.
+const markdownSectionHeader = (label: string): RegExp =>
+  new RegExp(`^\\s*#{1,3}\\s+(?:${label})\\s*(?::|[-–—])?\\s*$`, 'im');
+
+const SECTION_LABELS: Record<string, string> = {
+  Approach: 'Approach',
+  'Technique / Data Structure / Algorithm Used':
+    'Technique|Data Structure|Algorithm Used|Technique \\/ Data Structure \\/ Algorithm Used',
+  Code: 'Code',
+  'Dry Run': 'Dry Run',
+  Complexity: 'Complexity',
+  'Interviewer Follow-up Points': 'Interviewer Follow-up Points|Follow-up Points|Follow-ups',
 };
+
+const SECTION_ALIASES: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(SECTION_LABELS).map(([section, label]) => [section, [sectionHeader(label)]]),
+);
+
+const SECTION_MARKDOWN_HEADERS: Record<string, RegExp[]> = Object.fromEntries(
+  Object.entries(SECTION_LABELS).map(([section, label]) => [section, [markdownSectionHeader(label)]]),
+);
 
 const hasSection = (answer: string, section: string): boolean =>
   SECTION_ALIASES[section]?.some(pattern => pattern.test(answer)) ?? false;
+
+// Strips CLOSED fences, then any UNTERMINATED trailing fence.
+//
+// Code-review 2026-08-13: the non-greedy `[\s\S]*?` needs a closing ``` to
+// match, so an answer cut off inside its code block kept the whole block. That
+// is not an edge case on this branch — MAX_STREAM_OUTPUT_CHARS (client) and
+// AI_STREAM_MAX_OUTPUT_TOKENS (server) both cut mid-token, and a coding answer
+// is usually inside a fence at that point. Every caller here treats the result
+// as PROSE (complexity extraction, canonical-heading detection), so leaking
+// code into it published a Big-O from a discarded approach — "# brute force is
+// O(n^2), too slow" — as the shipped answer's official Complexity section.
+const stripFencedCode = (answer: string): string =>
+  answer.replace(/```[\s\S]*?```/g, ' ').replace(/```[\s\S]*$/, ' ');
+// "Did the model start OUR canonical scaffold?" — a canonical section LABEL
+// written as a real markdown heading. Both halves must hold on the SAME
+// heading, which is what the previous two-term conjunction (any canonical label
+// anywhere, in any style) AND (any `##` heading anywhere) could not express:
+// a model writing `## Solution` in its own words plus a bold `**Complexity**`
+// satisfied both terms separately and was fed back into the lossy repair.
+const usesCanonicalSectionHeadings = (answer: string): boolean => {
+  const prose = stripFencedCode(answer);
+  return CODING_SECTIONS.some(section =>
+    SECTION_MARKDOWN_HEADERS[section]?.some(pattern => pattern.test(prose)) ?? false,
+  );
+};
 
 const hasCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]*\n[\s\S]+?```/.test(answer);
 const hasLanguageTaggedCodeBlock = (answer: string): boolean => /```[a-zA-Z0-9+#-]+\n[\s\S]+?```/.test(answer);
@@ -54,6 +90,36 @@ const hasComplexity = (answer: string): boolean =>
 
 const isCodingType = (answerType: AnswerType): boolean =>
   answerType === 'coding_question_answer' || answerType === 'dsa_question_answer';
+
+/**
+ * "We never classified this", NOT "we determined this is not coding"
+ * (2026-08-02). AnswerPlanner assigns `unknown_answer` from a single
+ * condition — `if (!question) answerType = 'unknown_answer'` (AnswerPlanner.ts
+ * ~:2527) — so it is the ABSENCE of a classification, reached whenever no
+ * question could be extracted (empty transcript, Ambient AI Chat suppressing
+ * STT, a screen/DOM-only press with no spoken or typed question).
+ *
+ * That distinction is load-bearing for the two scaffold detectors below. Their
+ * entire premise (see detectAndExtractScaffoldMisfire's doc comment) is that a
+ * real negotiation/behavioral/lecture answer "has no reason to ever contain"
+ * coding vocabulary — true of answers KNOWN to be non-coding, false of
+ * unclassified ones. A user who captures a coding problem from their browser
+ * and presses "What should I say?" without ever asking a question out loud gets
+ * `unknown_answer` plus a legitimate coding answer carrying exactly the
+ * fingerprint these detectors treat as proof of contamination: `## Approach`,
+ * `## Code`, `## Complexity`, `O(n)`. Both detectors then fire on a correct
+ * answer — extraction discards the real content as scaffold, and the
+ * unrecovered path replaces the whole answer via bounded regeneration.
+ * Observed live 2026-08-01 (two of three presses destroyed).
+ *
+ * Treat unclassified as out of scope for both, matching the codebase's
+ * established preference for shipping intact content over silently discarding
+ * real answers. `general_meeting_answer` is deliberately NOT included: it is a
+ * real classification reached only when a question EXISTS, and is pinned by
+ * ScaffoldMisfireExtraction_2026_07_18.test.mjs.
+ */
+const isUnclassifiedType = (answerType: AnswerType): boolean =>
+  answerType === 'unknown_answer';
 
 const startsWithCodeLikeContent = (answer: string): boolean => {
   const trimmed = answer.trimStart();
@@ -148,7 +214,35 @@ const extractFirstCodeBlock = (answer: string): { language: string; code: string
   };
 };
 
-const stripCodeBlock = (answer: string, block?: string): string => block ? answer.replace(block, '').trim() : answer.trim();
+/**
+ * Remove the extracted code block from prose that will be re-emitted as the
+ * Approach section (the code lives in its own `## Code` section).
+ *
+ * Also drops the model's own lead-in heading when the block was its ONLY
+ * content. Live regression (2026-08-11): the model wrote
+ *
+ *     **Python implementation:**
+ *
+ *     ```python … ```
+ *
+ * and removing just the fence left "**Python implementation:**" followed by
+ * nothing — the user watched code appear under that heading and then vanish
+ * from it. A label whose entire body was lifted out belongs with the code, not
+ * stranded above an empty gap. Only a short bold/heading line immediately above
+ * the block is taken, and only when nothing else separates it from the fence,
+ * so ordinary prose is never removed.
+ */
+const CODE_LEAD_IN_RE = /(?:^|\n)[ \t]*(?:\*\*[^\n*]{0,60}?:?\*\*|#{1,6}[ \t][^\n]{0,60}?)[ \t]*:?[ \t]*\n(?:[ \t]*\n)*$/;
+
+const stripCodeBlock = (answer: string, block?: string): string => {
+  if (!block) return answer.trim();
+  const at = answer.indexOf(block);
+  if (at < 0) return answer.replace(block, '').trim();
+  const before = answer.slice(0, at);
+  const after = answer.slice(at + block.length);
+  const trimmedBefore = CODE_LEAD_IN_RE.test(before) ? before.replace(CODE_LEAD_IN_RE, '\n') : before;
+  return `${trimmedBefore}${after}`.replace(/\n{3,}/g, '\n\n').trim();
+};
 
 const inferLanguage = (answer: string, explicit?: string): string => {
   if (explicit && explicit.trim()) return explicit.trim();
@@ -157,6 +251,12 @@ const inferLanguage = (answer: string, explicit?: string): string => {
   if (/\bjava\b/i.test(answer)) return 'java';
   if (/\bc\+\+|cpp\b/i.test(answer)) return 'cpp';
   if (/\bsql\b/i.test(answer)) return 'sql';
+  // React / JSX: detect import, hooks, or JSX element signals before falling
+  // back to python. Covers the common model error of fencing TSX/JSX as
+  // ```python (the prior CODING_CONTRACT specified "language tag ```python").
+  if (/\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=|<[A-Z][a-zA-Z]*[\s/>]/.test(answer)) {
+    return 'tsx';
+  }
   return 'python';
 };
 
@@ -337,8 +437,23 @@ export const repairCodingMarkdown = (rawResponse: string, question?: string, lan
   // if there's no complexity section AND no extractable bound do we use the
   // honest O(?) placeholder.
   const complexitySection = (parsed.sections.complexity || '').trim();
+  // Live regression (2026-08-10, real natively-api answer): the model stated
+  // "runs in O(n) time and O(1) space" in prose that sat AFTER its own bold
+  // heading, so it landed in a parsed section rather than the preamble — and
+  // scanning only the preamble missed it, overwriting a correct bound with the
+  // O(?) placeholder. Search the preamble first (most common position), then
+  // the rest of the model's own text, before ever falling back to the marker.
+  // Never fabricate a bound; only lift one the model actually wrote.
+  // Code-review 2026-08-12: the last fallback scanned `trimmed` — the whole
+  // answer, fences included — so an answer whose only Big-O sat in a comment
+  // about a DISCARDED approach ("# brute force is O(n^2), too slow") had that
+  // bound lifted out of the fence and published as the shipped code's official
+  // Complexity section. The validation gate strips fences for exactly this
+  // reason (see `proseOnly` in validateCodingMarkdown); the repairer, which
+  // actually writes the user-visible line, must do the same.
   const complexity = complexitySection
-    || extractComplexityText(parsed.preamble) // bound stated inline in prose
+    || extractComplexityText(parsed.preamble)          // bound stated inline in prose
+    || extractComplexityText(stripFencedCode(trimmed)) // bound stated anywhere else in PROSE
     || MISSING_COMPLEXITY_MARKER;
 
   // Follow-ups: parsed section (as lines) or the standard two prompts.
@@ -379,13 +494,287 @@ export const validateCodingMarkdown = (response: string): AnswerValidationResult
     && !startsWithCode
     && !leaksContext;
 
+  // SUBSTANTIVELY COMPLETE ANSWERS ARE NOT REWRITTEN (live regression,
+  // 2026-08-10). Reproduced against the real natively-api backend on a healthy
+  // ~1.7s answer — no deadline, nothing malformed: the model simply wrote a
+  // correct, complete solution in its OWN format (bold pseudo-headings) instead
+  // of the six `##` headings. The reformat then LOST content — it dropped the
+  // second fenced block and replaced the model's own "O(n) time and O(1) space"
+  // with the O(?) placeholder. 2 of 3 live coding answers hit this.
+  //
+  // An answer that carries working code AND a stated complexity has everything
+  // the contract exists to guarantee; only its heading style differs. Rewriting
+  // it can lose real content and can only ever gain cosmetics, so the trade is
+  // strictly negative. The repair still runs where it genuinely helps — a
+  // missing code block, a missing bound, or leaked context — which is the case
+  // it was built for.
+  // `hasComplexity` requires the LABELLED form ("Time Complexity: O(n)"). The
+  // live answer stated its bound as natural prose — "runs in O(n) time and O(1)
+  // space" — which is a real, user-visible complexity statement that the label
+  // check rejects. `extractComplexityText` is the existing parser for exactly
+  // that phrasing, so completeness is judged on "did the model state a bound in
+  // any form", not "did it use our heading style".
+  // Code-review 2026-08-12: extractComplexityText is fence-blind, so a code
+  // COMMENT ("# brute force is O(n^2), too slow") satisfied this check and
+  // suppressed the repair for an answer that never stated a bound TO THE USER.
+  // Strip fenced blocks before asking whether the model stated its complexity.
+  const proseOnly = stripFencedCode(answer);
+  const statesComplexity = complexity || Boolean(extractComplexityText(proseOnly));
+  // Narrow exemption: it applies only when the model used its OWN format and
+  // wrote everything. An answer that already uses the canonical `##` headings
+  // but puts them in the WRONG ORDER is a different case — re-ordering known
+  // sections is lossless (every section is parsed and re-emitted verbatim), and
+  // leading with a bare code block is a real presentation problem worth fixing.
+  // So an answer that has recognized canonical sections still gets repaired;
+  // only a model-formatted, complete answer is left alone.
+  // Code-review 2026-08-12: this was `missingSections.length === 0`, i.e. true
+  // only when ALL SIX canonical sections exist. An answer that started the
+  // canonical scaffold and dropped out partway (say Approach + Code +
+  // Complexity, no Dry Run / Technique / Follow-ups) therefore counted as
+  // "not canonical" and was wrongly treated as model-formatted-and-complete —
+  // exempting exactly the half-finished answers the contract exists to repair.
+  // ANY canonical heading means the model was using our format, so the
+  // exemption (which is only for a model using its OWN format) must not apply.
+  //
+  // Code-review 2026-08-12 (round 2): `missingSections` alone cannot express
+  // that, because `sectionHeader` deliberately matches a bold `**Approach**`
+  // too — so the widened test caught the model's OWN format and fed complete
+  // bold-heading answers back into the lossy repair, re-opening the 2026-08-10
+  // regression this exemption exists to close. Both halves are required: the
+  // answer must carry a real `##` markdown heading AND at least one heading we
+  // recognize as canonical.
+  //
+  // Code-review 2026-08-13: expressing that as two INDEPENDENT terms still
+  // failed, because they could be satisfied by two DIFFERENT lines. Verified:
+  // `## Solution` + `**Complexity**` on its own line makes term 1 true (via the
+  // bold form) and term 2 true (via `## Solution`), so a complete, correctly
+  // formatted answer was sent to `repairCodingMarkdown`, which keeps only the
+  // FIRST fenced block and dropped the user's second code block. Both halves
+  // must hold on the SAME heading — that is `usesCanonicalSectionHeadings`.
+  const usesCanonicalHeadings = usesCanonicalSectionHeadings(answer);
+  const substantivelyComplete = codeBlock
+    && hasTaggedBlock
+    && statesComplexity
+    && !startsWithCode
+    && !leaksContext
+    && !usesCanonicalHeadings;
+
   return {
     ok,
     missingSections,
     hasCodeBlock: codeBlock,
     hasComplexity: complexity,
-    repaired: ok ? undefined : repairCodingMarkdown(answer),
+    repaired: (ok || substantivelyComplete) ? undefined : repairCodingMarkdown(answer),
   };
+};
+
+/**
+ * Campaign 2 longsession run-022/023/024 finding (2026-07-18): MiniMax-M3
+ * occasionally answers a NON-coding question (behavioral, JD-fit,
+ * negotiation, technical-concept — confirmed via direct AnswerPlanner calls
+ * that answerType routing is correct in every repro) using a coding-contract-
+ * flavored planning scaffold ("## Approach" / "## Technique..." / etc. —
+ * SHARED_CODING_RULES's headings are unconditionally present in every
+ * system prompt, so the model has them in context regardless of question
+ * type). `validateAnswerStructure` deliberately no-ops for non-coding
+ * answerTypes (line ~407 below) since it only ever validates that a CODING
+ * answer used the contract correctly — there was no counterpart check for
+ * the opposite direction.
+ *
+ * Reading the FULL raw repro dumps (not just the truncated report preview)
+ * showed the model does not always follow the rigid six-section contract —
+ * it uses several loosely coding-scaffold-flavored variants — but in the
+ * cases observed so far, a real, complete, well-formed answer is cleanly
+ * present AFTER the scaffold, either following a trailing `---` separator
+ * or under a final heading.
+ *
+ * Code-review 2026-07-18 HIGH fix: the first draft's trigger (≥2 headings
+ * from a generic word list — Approach/Code/Complexity/Answer) was NOT a
+ * strong enough signal on its own. A skeptic pass constructed several
+ * plausible, real, substantive non-coding answers (negotiation framing,
+ * behavioral narrative, document-grounded lecture answer echoing a paper's
+ * own "Approach"/"Code" section names) that would have had real, valuable
+ * content silently and unrecoverably discarded, since this function runs
+ * BEFORE every other repair/validator in the pipeline and nothing
+ * downstream has a signal that a truncation happened. Fixed by requiring a
+ * CODING-SCAFFOLD-SPECIFIC fingerprint before extracting, not just any two
+ * headings: either (a) one of the two headings that are near-unique to the
+ * real coding contract and essentially never appear in a legitimate
+ * non-coding structured answer ("Technique / Data Structure / Algorithm
+ * Used", "Dry Run"), or (b) explicit complexity/Big-O notation
+ * ("O(...)"/"Time Complexity"/"Space Complexity") in the discarded head —
+ * both are things a real negotiation/behavioral/lecture answer has no
+ * reason to ever contain. A generic Approach/Code/Complexity/Answer
+ * heading pair ALONE no longer triggers extraction.
+ */
+const SCAFFOLD_MISFIRE_HEADING_RE = /^\s*#{1,3}\s*(?:Approach|Technique(?:\s*\/\s*Data Structure\s*\/\s*Algorithm Used)?|Code|Dry Run|Complexity|Interviewer Follow-up Points|Key Reasoning|Key Talking Points(?:\s*\([^)]*\))?|Answer(?:\s*\([^)]*\))?)\s*$/im;
+
+// Coding-scaffold-specific signals — near-unique to the real coding
+// contract, essentially never appear in a legitimate non-coding answer.
+const CODING_SCAFFOLD_UNIQUE_HEADING_RE = /^\s*#{1,3}\s*(?:Technique(?:\s*\/\s*Data Structure\s*\/\s*Algorithm Used)?|Dry Run)\s*$/im;
+const CODING_SCAFFOLD_COMPLEXITY_NOTATION_RE = /\bO\([^)]{1,20}\)|\b(?:Time|Space)\s+Complexity\b/i;
+
+const hasCodingScaffoldFingerprint = (text: string): boolean =>
+  CODING_SCAFFOLD_UNIQUE_HEADING_RE.test(text) || CODING_SCAFFOLD_COMPLEXITY_NOTATION_RE.test(text);
+
+export const detectAndExtractScaffoldMisfire = (answerType: AnswerType, answer: string): string | null => {
+  if (isCodingType(answerType)) return null; // that's validateAnswerStructure's job
+  if (isUnclassifiedType(answerType)) return null; // no classification ⇒ premise doesn't hold
+  const text = String(answer || '');
+  if (!text.trim()) return null;
+
+  const headingMatches = [...text.matchAll(new RegExp(SCAFFOLD_MISFIRE_HEADING_RE.source, 'gim'))];
+  if (headingMatches.length < 2) return null; // not a strong enough structural signal
+  if (!hasCodingScaffoldFingerprint(text)) return null; // generic headings alone are not enough
+
+  // Pattern A: a trailing `---`-separated block after the scaffold (A10's
+  // shape) — take everything after the LAST standalone `---` line. Only the
+  // HEAD (the discarded portion) needs the fingerprint above — the tail is
+  // the real answer being recovered, so it correctly does NOT need to
+  // contain coding vocabulary itself.
+  const separatorMatch = [...text.matchAll(/^\s*---\s*$/gim)].pop();
+  if (separatorMatch && separatorMatch.index !== undefined) {
+    const head = text.slice(0, separatorMatch.index);
+    const tail = text.slice(separatorMatch.index + separatorMatch[0].length).trim();
+    if (hasCodingScaffoldFingerprint(head) && tail.length >= 20 && !SCAFFOLD_MISFIRE_HEADING_RE.test(tail.split('\n')[0])) {
+      return tail;
+    }
+  }
+
+  // Pattern B: content under the LAST recognized heading, when that heading
+  // itself reads like a final-answer marker (C12's shape: "## Answer
+  // (spoken, ~22s)"). Only trust this when the heading text itself signals
+  // "this is the actual answer" — NOT for a generic last heading like
+  // "## Interviewer Follow-up Points" (A17's shape), which is real content
+  // but not a clean single answer block, so this function intentionally
+  // returns null for that case rather than guessing. The discarded HEAD
+  // (everything before this heading) must carry the fingerprint, mirroring
+  // Pattern A.
+  const lastHeading = headingMatches[headingMatches.length - 1];
+  if (lastHeading.index !== undefined && /answer/i.test(lastHeading[0])) {
+    const head = text.slice(0, lastHeading.index);
+    const tail = text.slice(lastHeading.index + lastHeading[0].length).trim();
+    if (hasCodingScaffoldFingerprint(head) && tail.length >= 20) return tail;
+  }
+
+  // Pattern C: content under a trailing BOLD-TEXT final-answer marker,
+  // e.g. "**Direct Answer:**" (run-026 C15's shape — the model used real
+  // `## ` headings for the scaffold portion but switched to a bold-text
+  // marker for the final answer instead of another `## ` heading, so
+  // Pattern B's line-start-heading match never fired even though the exact
+  // same "fingerprinted scaffold, then a clean final answer" shape is
+  // present).
+  //
+  // Code-review 2026-07-18 HIGH fix: the first draft's regex
+  // (`\*\*[^*\n]*answer[^*\n]*\*\*`) matched ANY bold-wrapped text on its own
+  // line merely CONTAINING "answer" anywhere — no closed vocabulary, unlike
+  // Pattern B's heading match (which can only ever match
+  // SCAFFOLD_MISFIRE_HEADING_RE's short, fixed word list). A skeptic pass
+  // constructed a real answer containing its own internal bold rhetorical
+  // aside mid-narrative ("**So what was the answer that finally worked?**")
+  // and proved everything before it — genuine, valuable answer content, not
+  // scaffold — would be silently discarded, since `.pop()` always takes the
+  // LAST such match and the true scaffold earlier in the text still
+  // satisfies the fingerprint gate regardless of where the wrong split
+  // point lands. Fixed by restricting the marker to a closed set of short,
+  // label-shaped phrasings (mirroring Pattern B's own closed-vocabulary
+  // discipline exactly, not just its stated intent) — a marker must be
+  // ONLY a label like "Direct Answer" / "Final Answer" / "Answer (spoken)",
+  // never an arbitrary sentence or question that happens to contain the
+  // word "answer".
+  const BOLD_ANSWER_MARKER_RE = /^\s*\*\*\s*(?:direct|final|spoken|the)?\s*answer\s*(?:\([^)]{0,40}\))?\s*:?\s*\*\*:?\s*$/im;
+  const boldMarkerMatch = [...text.matchAll(new RegExp(BOLD_ANSWER_MARKER_RE.source, 'gim'))].pop();
+  if (boldMarkerMatch && boldMarkerMatch.index !== undefined) {
+    const head = text.slice(0, boldMarkerMatch.index);
+    const tail = text.slice(boldMarkerMatch.index + boldMarkerMatch[0].length).trim();
+    if (hasCodingScaffoldFingerprint(head) && tail.length >= 20 && !SCAFFOLD_MISFIRE_HEADING_RE.test(tail.split('\n')[0])) {
+      return tail;
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Detection-only signal for scaffold contamination detectAndExtractScaffoldMisfire
+ * could not cleanly recover from (campaign2 longsession run-039 script-a/c
+ * investigation, 2026-07-19): presses A4/A5/C9 all carry the same coding-
+ * scaffold fingerprint (a "Technique / Data Structure / Algorithm Used"
+ * heading and/or O(...)/complexity notation) as every case
+ * detectAndExtractScaffoldMisfire already handles, but the real content sits
+ * under a heading NONE of that function's extraction patterns recognize
+ * (e.g. A5's "## STAR story, Long-Tail aggregation at Datadog" — a model-
+ * invented heading, not one of the fixed scaffold/answer labels) — so
+ * extraction returns null even though the contamination is real and severe
+ * (G3 judge on all three: answersQuestion=false, noMetaTalk=false, reason
+ * cites literal "## Approach" / meta-commentary leakage). A 5th sample from
+ * the same investigation (C8) is a different shape entirely — a fabricated
+ * multi-turn [INTERVIEWER]/[APPLICANT]/[ASSISTANT] transcript ending in the
+ * exact isNonAnswerSentinel string, with no coding fingerprint at all — NOT
+ * covered by this detector (that shape has no scaffold heading to key off
+ * of; it needs a different signal, and already partially has one: it ends in
+ * the sentinel string IntelligenceEngine.isNonAnswerSentinel independently
+ * catches).
+ *
+ * With only 5 real repros already surfacing 3+ distinct heading shapes,
+ * hand-rolling a 4th/5th/Nth extraction pattern per new shape does not
+ * generalize — the same lesson already learned building the answer-
+ * relevance guard (see its own doc comment on phrase-matching not
+ * generalizing). This function intentionally does NOT attempt extraction;
+ * it only answers "is this text scaffold-contaminated AND did surgical
+ * extraction already fail on it" so a caller can fall back to a bounded
+ * regeneration (the same repair mechanics the answer-relevance guard and
+ * profile-repair guard already use) instead of either shipping the raw
+ * scaffold-and-meta-commentary text or attempting a brittle new regex.
+ */
+export const hasUnrecoveredScaffoldContamination = (answerType: AnswerType, answer: string): boolean => {
+  if (isCodingType(answerType)) return false;
+  if (isUnclassifiedType(answerType)) return false; // no classification ⇒ premise doesn't hold
+  const text = String(answer || '');
+  if (!text.trim()) return false;
+  const headingMatches = [...text.matchAll(new RegExp(SCAFFOLD_MISFIRE_HEADING_RE.source, 'gim'))];
+  if (headingMatches.length < 2) return false;
+  if (!hasCodingScaffoldFingerprint(text)) return false;
+  return detectAndExtractScaffoldMisfire(answerType, text) === null;
+};
+
+// ── RC-3 (live session C, 2026-08-21) ──────────────────────────────────────
+// Answer types whose legitimate content overlaps the LOOSE scaffold
+// fingerprint (Big-O / complexity notation is their actual subject), so the
+// regeneration repair may only fire on the STRICT signal below. Mirrors the
+// engine's TECHNICAL_ANSWER_TYPES_EXCLUDED_FROM_SCAFFOLD_EXTRACTION — which
+// used to exclude them from repair ENTIRELY, shipping "what's a semaphore?"
+// as a six-section DSA template with three literal "Not applicable,
+// conceptual question." sections while the detector was returning true.
+const STRICT_SCAFFOLD_SIGNAL_TYPES = new Set<AnswerType>([
+  'technical_concept_answer', 'system_design_answer', 'debugging_question_answer',
+]);
+
+/**
+ * STRICT scaffold signal: the coding contract's own unique headings
+ * ("## Dry Run", "## Technique / Data Structure / Algorithm Used") plus the
+ * ≥2-recognized-headings structure. Unlike the loose fingerprint, complexity
+ * notation alone can never trip this — a legitimate technical answer about
+ * Big-O discusses complexity but does not emit the contract's template
+ * headings.
+ */
+export const hasStrictCodingScaffoldSignal = (answer: string): boolean => {
+  const text = String(answer || '');
+  if (!text.trim()) return false;
+  const headingMatches = [...text.matchAll(new RegExp(SCAFFOLD_MISFIRE_HEADING_RE.source, 'gim'))];
+  return headingMatches.length >= 2 && CODING_SCAFFOLD_UNIQUE_HEADING_RE.test(text);
+};
+
+/**
+ * Single policy point for the engine's scaffold-regeneration repair: should a
+ * completed non-coding answer of this type be regenerated for scaffold
+ * contamination? Technical types require the strict signal; everything else
+ * keeps the historical loose eligibility.
+ */
+export const isScaffoldRegenerationEligible = (answerType: AnswerType, answer: string): boolean => {
+  if (!hasUnrecoveredScaffoldContamination(answerType, answer)) return false;
+  if (STRICT_SCAFFOLD_SIGNAL_TYPES.has(answerType)) return hasStrictCodingScaffoldSignal(answer);
+  return true;
 };
 
 export const validateAnswerStructure = (
@@ -411,7 +800,71 @@ export const validateAnswerStructure = (
     return validateExplicitCodingContract(explicitContract, answer);
   }
 
+  // dsa_question_answer (named algorithm problems: "reverse a linked list")
+  // keeps the six-section validator. coding_question_answer (general
+  // implementation: "write a React stopwatch") goes through the lighter
+  // impl validator that only requires a code block and corrects a wrong
+  // fence tag (the canonical bug: model fences JSX as ```python).
+  if (answerType === 'coding_question_answer') {
+    return validateImplAnswer(answer);
+  }
+
   return validateCodingMarkdown(answer);
+};
+
+/**
+ * Light validator for general implementation answers (coding_question_answer).
+ * Only requires a language-tagged code block. Detects and repairs JSX/React
+ * code that the model misfenced as ```python — a contract-induced error from
+ * the old CODING_CONTRACT that always said "language tag ```python".
+ */
+const validateImplAnswer = (answer: string): AnswerValidationResult => {
+  const trimmed = (answer || '').trim();
+  const codeBlock = extractFirstCodeBlock(trimmed);
+  if (!codeBlock) {
+    return { ok: false, missingSections: ['Code'], hasCodeBlock: false, hasComplexity: false };
+  }
+
+  // JSX detection must not fire on GENERICS. `<[A-Z][a-zA-Z]*[\s/>]` matches
+  // `Stack<Character>`, `Map<Integer, Integer>`, `vector<int>` and `List<String>`,
+  // so a correct Java or C++ answer had its fence rewritten to ```tsx by the
+  // repair below (live benchmark 2026-08-18: Java isBalanced returned tagged
+  // ```tsx). A statically-typed non-JS language is excluded outright, and the
+  // bare-tag heuristic now requires a tag that actually opens or closes an
+  // element rather than any `<Word`.
+  const looksStaticallyTypedNonJs =
+    /\bimport\s+java\.|\bpublic\s+(?:static\s+)?(?:class|int|void|boolean|String)\b|#include\s*<|\bstd::|\busing\s+namespace\b|\bfunc\s+\w+\s*\(|\bfn\s+\w+\s*\(|\bpackage\s+main\b/.test(codeBlock.code);
+  const isJsx = !looksStaticallyTypedNonJs && (
+    /\bimport\s+React\b|\buseState\s*\(|\buseEffect\s*\(|\buseRef\s*\(|\bclassName\s*=/.test(codeBlock.code)
+    // A real element: `<Foo />`, `<Foo attr={x} />`, or a closing `</Foo>`.
+    // Attributes are allowed between the name and `/>` (code review
+    // 2026-08-19): requiring `/>` to follow the name immediately missed every
+    // component that takes props — `<Clock time={now} />`, `<Button onClick={fn} />`
+    // — so an attribute-bearing JSX answer mis-fenced as ```python kept the
+    // wrong fence, which is the exact bug this repair exists for. The inner
+    // `[^<>]*` cannot span a tag boundary, so Java/C++ generics
+    // (`Stack<Character>`, `Map<Integer, Integer>`) stay excluded.
+    || /<[A-Z][A-Za-z0-9]*(?:\s[^<>]*?)?\s*\/>|<\/[A-Z][A-Za-z0-9]*>/.test(codeBlock.code)
+  );
+  // Note: codeBlock.language defaults to 'python' when the fence had no tag
+  // (see extractFirstCodeBlock). Treat empty/undefined as "no tag" so an
+  // untagged JSX fence still triggers repair — empty-tag is as wrong as
+  // mis-tagging as python.
+  const langRaw = (codeBlock.language || '').toLowerCase();
+  const wrongTag = isJsx && langRaw !== 'tsx' && langRaw !== 'jsx';
+  if (wrongTag) {
+    // Build the actual opening-fence substring from the matched block (NOT
+    // from codeBlock.language — the language is the *normalized* tag and may
+    // differ from the literal opening). The block begins with ```, optional
+    // tag, then \n. Replace just that prefix with ```tsx\n so the body is
+    // untouched.
+    const openingMatch = codeBlock.block.match(/^```([^\n]*)\n/);
+    const actualOpening = openingMatch ? openingMatch[0] : '```\n';
+    const fixed = trimmed.replace(actualOpening, '```tsx\n');
+    return { ok: false, missingSections: [], hasCodeBlock: true, hasComplexity: false, repaired: fixed };
+  }
+
+  return { ok: true, missingSections: [], hasCodeBlock: true, hasComplexity: hasComplexity(trimmed) };
 };
 
 /**

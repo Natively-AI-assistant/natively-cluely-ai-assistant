@@ -40,9 +40,9 @@ export class MeetingSummaryReducer {
     const sections = buildSections(params.modeNoteSections || [], atoms);
     const timeline = buildTimeline(atoms, decisions, actionItems, risks);
     // "Summary" (rendered at the top of the notes) = outcome-first, grounded, no filler.
-    const tldr = buildSummary(decisions, actionItems, risks, atoms, sections);
+    const tldr = buildSummary(decisions, actionItems, risks, atoms, sections, params.modeTemplateType);
     const whatChanged = buildWhatChanged(atoms, decisions).slice(0, 6);
-    const overview = buildOverview(tldr, atoms, decisions);
+    const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType);
     const actionConfidence = deriveActionConfidence(actionItems);
     const transcriptCoverage = Math.max(0, Math.min(1, typeof params.transcriptCoverage === 'number' ? params.transcriptCoverage : (params.normalizedTranscript.totalChars > 0 ? 1 : 0)));
     const warnings = [...params.normalizedTranscript.qualityWarnings];
@@ -155,18 +155,75 @@ function buildWhatChanged(atoms: ChunkMeetingAtoms[], decisions: DecisionItem[])
   return dedupeStrings(candidates).slice(0, 6);
 }
 
+// The mode's DEFINING sections, in priority order — the content that makes this
+// mode's headline Summary read differently from every other mode's. buildSummary
+// leads with the first non-empty bullet from the first matching section, so a
+// technical interview's Summary opens with the hiring signal / problem, a
+// lecture's with its study summary, a sales call's with buying signals — not a
+// generic first-chunk brief. Titles must match TEMPLATE_NOTE_SECTIONS
+// (ModesManager.ts) — buildSections carries those titles into
+// summary.sections verbatim. Unknown/custom modes fall through to the generic
+// shape (their custom sections still render below).
+const MODE_HEADLINE_SECTIONS: Record<string, string[]> = {
+  'technical-interview': ['Hiring signal', 'Problem discussed', 'Approach'],
+  lecture: ['Study summary', 'Core concepts'],
+  sales: ['Buying signals', 'Pain points', 'Next steps'],
+  recruiting: ['Role fit', 'Candidate profile'],
+  'team-meet': ['Progress since last sync', 'Blockers'],
+  'looking-for-work': ['Role fit', 'Next steps'],
+  seminar: ['Core concepts', 'Open questions'],
+  'call-center': ['Customer issue', 'Resolution'],
+};
+
+const CONFIDENCE_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const rankConfidence = (c?: string): number => CONFIDENCE_RANK[c || ''] ?? 1;
+
 // Outcome-first Summary, built deterministically from the already-grounded reduced content.
-// 3–5 lines: purpose → key decisions → most important next step → top risk (only if nothing
-// else carried the meeting). Zero new information. Returns [] (empty Summary) rather than
+// 3–5 lines: mode-defining lead → purpose → key decisions → most important next step →
+// high-severity risk. Zero new information. Returns [] (empty Summary) rather than
 // boilerplate when there is genuinely no grounded outcome — honest beats filler.
-function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[], atoms: ChunkMeetingAtoms[], sections: MeetingNoteSection[]): string[] {
+//
+// Selection quality (review 2026-08-23 — the previous version was a positional
+// grab: chunk 1's brief, the first 2 decisions CHronologically, actionItems[0],
+// risk only as filler — so a critical decision at minute 45, the 3rd action
+// item, or a high-severity mid-meeting risk never reached the headline even
+// though the pipeline had already computed confidence/severity for them):
+//   - decisions ranked by confidence (stable among equals, so chronology still
+//     breaks ties);
+//   - the next step prefers explicit over inferred, then confidence;
+//   - a HIGH-severity risk is always included, not just as filler;
+//   - the lead line comes from the active mode's defining section.
+function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risks: RiskItem[], atoms: ChunkMeetingAtoms[], sections: MeetingNoteSection[], modeTemplateType?: string | null): string[] {
   const out: string[] = [];
-  const purpose = atoms.map(a => a.brief).find(Boolean) || sections.find(s => s.bullets.length)?.bullets[0]?.text;
+
+  // Mode-defining lead: the first non-empty bullet of the mode's top section.
+  const headlineTitles = MODE_HEADLINE_SECTIONS[modeTemplateType || ''] || [];
+  for (const title of headlineTitles) {
+    const sec = sections.find(sect => sect.title === title && sect.bullets.length > 0);
+    const bullet = sec?.bullets[0]?.text?.trim();
+    if (bullet) { out.push(bullet); break; }
+  }
+
+  const purpose = atoms.map(a => a.brief).find(Boolean) || sections.find(sect => sect.bullets.length)?.bullets[0]?.text;
   if (purpose) out.push(purpose);
-  out.push(...decisions.slice(0, 2).map(d => d.text));
-  const a = actionItems[0];
+
+  const rankedDecisions = decisions
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => rankConfidence(x.d.confidence) - rankConfidence(y.d.confidence) || x.i - y.i);
+  out.push(...rankedDecisions.slice(0, 2).map(({ d }) => d.text));
+
+  const rankedActions = actionItems
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => (x.a.explicitness === 'explicit' ? 0 : 1) - (y.a.explicitness === 'explicit' ? 0 : 1)
+      || rankConfidence(x.a.confidence) - rankConfidence(y.a.confidence)
+      || x.i - y.i);
+  const a = rankedActions[0]?.a;
   if (a) out.push(`${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` by ${a.deadline}` : ''}`);
-  if (out.length < 2 && risks[0]) out.push(risks[0].text);
+
+  const highRisk = risks.find(r => r.severity === 'high');
+  if (highRisk) out.push(highRisk.text);
+  else if (out.length < 2 && risks[0]) out.push(risks[0].text);
+
   return dedupeStrings(out).slice(0, 5);
 }
 
@@ -174,13 +231,26 @@ function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risk
 // Stitches the chunk briefs (the chronological arc of the meeting) into a paragraph, then
 // folds in the headline decisions so it reads as a quick recap of the ENTIRE meeting rather
 // than just the first two summary bullets. Capped to ~400 words.
-function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[]): string {
+function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[], sections: MeetingNoteSection[] = [], modeTemplateType?: string | null): string {
   const briefs = dedupeStrings(atoms.map(a => a.brief).filter(Boolean));
   const parts: string[] = [];
   if (briefs.length) parts.push(briefs.join(' '));
   else if (summary.length) parts.push(summary.join(' '));
-  const topDecisions = decisions.slice(0, 3).map(d => d.text);
+  // Confidence-ranked, mirroring buildSummary (review 2026-08-23).
+  const topDecisions = decisions
+    .map((d, i) => ({ d, i }))
+    .sort((x, y) => rankConfidence(x.d.confidence) - rankConfidence(y.d.confidence) || x.i - y.i)
+    .slice(0, 3).map(({ d }) => d.text);
   if (topDecisions.length) parts.push(`Key decisions: ${topDecisions.join('; ')}.`);
+  // Mode-defining close, so the overview paragraph also reads in the mode's
+  // own terms (a technical interview ends on the hiring signal, a lecture on
+  // its study summary) instead of always generic decisions.
+  const headlineTitles = MODE_HEADLINE_SECTIONS[modeTemplateType || ''] || [];
+  for (const title of headlineTitles) {
+    const sec = sections.find(sect => sect.title === title && sect.bullets.length > 0);
+    const bullet = sec?.bullets[0]?.text?.trim();
+    if (bullet && !parts.some(pp => pp.includes(bullet))) { parts.push(`${title}: ${bullet}`); break; }
+  }
   const text = parts.join(' ').replace(/\s+/g, ' ').trim();
   const words = text.split(/\s+/);
   return words.length > 400 ? words.slice(0, 400).join(' ') : text;
@@ -188,21 +258,41 @@ function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions:
 
 // Deterministic follow-up body (fallback used when the LLM follow-up generator is
 // unavailable or scope-denied). Kept exported so FollowUpDraftGenerator can reuse it.
-export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[]): string {
-  const lines = ['Hi team,', '', 'Thanks for the conversation.'];
-  if (decisions.length > 0) {
-    lines.push('', 'Decisions confirmed:', ...decisions.slice(0, 5).map(item => `- ${item.text}`));
+// Mode-aware: salutation, opening, section labels and sign-off match the meeting mode
+// so an offline draft still reads correctly for its audience (a sales prospect, a
+// candidate, an internal team, a study recap, etc.) rather than always "Hi team,".
+export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[], mode?: string | null): string {
+  // Per-mode scaffold: [salutation, opening, decisionsLabel, nextStepsLabel, emptyLine, signoff]
+  // A null salutation/sign-off means "omit" (study notes, interviewer feedback).
+  const S: Record<string, { salutation: string | null; opening: string; decisionsLabel: string; nextStepsLabel: string; empty: string; signoff: string | null }> = {
+    general:              { salutation: 'Hi team,',            opening: 'Thanks for the conversation.',           decisionsLabel: 'Decisions confirmed:', nextStepsLabel: 'Next steps:',        empty: 'No explicit decisions or action items were captured.', signoff: 'Best,' },
+    sales:                { salutation: 'Hi there,',           opening: 'Thanks for taking the time to meet today.', decisionsLabel: 'What we aligned on:',  nextStepsLabel: 'Next steps:',        empty: 'It was great connecting — I\'ll follow up with next steps shortly.', signoff: 'Best regards,' },
+    // Recruiting omits the decisions block from the deterministic fallback entirely:
+    // negative-hiring decisions or Concerns would be leaked to the candidate if rendered.
+    recruiting:           { salutation: 'Hi there,',           opening: 'Thank you for taking the time to speak with us today.', decisionsLabel: '',                       nextStepsLabel: 'What happens next:',  empty: 'Thanks again — we\'ll be in touch about next steps soon.', signoff: 'Best,' },
+    'team-meet':          { salutation: 'Hi team,',            opening: 'Quick recap from our sync:',             decisionsLabel: 'Decisions:',           nextStepsLabel: 'Owners & next steps:', empty: 'No decisions or action items were captured this time.', signoff: 'Thanks,' },
+    'looking-for-work':   { salutation: 'Dear interviewer,',   opening: 'Thank you for taking the time to speak with me today.', decisionsLabel: 'What we discussed:',   nextStepsLabel: 'Next steps:',        empty: 'Thank you again for the conversation — I really enjoyed it.', signoff: 'Best regards,' },
+    'technical-interview':{ salutation: null,                  opening: 'Interview debrief:',                     decisionsLabel: 'Assessment:',          nextStepsLabel: 'Recommended next step:', empty: 'No decisions were recorded during the session.', signoff: null },
+    lecture:              { salutation: null,                  opening: 'Study recap:',                           decisionsLabel: 'Key points:',          nextStepsLabel: 'To review:',         empty: 'No key points were captured.', signoff: null },
+  };
+  const p = (mode && S[mode]) || S.general;
+
+  const lines: string[] = [];
+  if (p.salutation) lines.push(p.salutation, '');
+  lines.push(p.opening);
+  if (decisions.length > 0 && p.decisionsLabel) {
+    lines.push('', p.decisionsLabel, ...decisions.slice(0, 5).map(item => `- ${item.text}`));
   }
   if (actionItems.length > 0) {
-    lines.push('', 'Next steps:', ...actionItems.slice(0, 8).map(item => {
+    lines.push('', p.nextStepsLabel, ...actionItems.slice(0, 8).map(item => {
       const owner = item.owner ? `${item.owner}: ` : '';
       const deadline = item.deadline ? ` by ${item.deadline}` : '';
       const inferred = item.explicitness === 'inferred' ? ' (inferred)' : '';
       return `- ${owner}${item.text}${deadline}${inferred}`;
     }));
   }
-  if (decisions.length === 0 && actionItems.length === 0) lines.push('', 'No explicit decisions or action items were captured.');
-  lines.push('', 'Best,');
+  if (decisions.length === 0 && actionItems.length === 0) lines.push('', p.empty);
+  if (p.signoff) lines.push('', p.signoff);
   return lines.join('\n');
 }
 

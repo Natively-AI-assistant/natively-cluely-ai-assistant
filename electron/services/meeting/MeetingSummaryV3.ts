@@ -220,6 +220,196 @@ export function cleanNoteText(value: unknown, max = 240): string {
   return cleanString(value).replace(FENCE_RE, '').replace(FILLER_RE, '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Meeting title shape guard
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The title is the one summary field with no schema validator behind it and the
+// widest UI surface (history rows, window titles, email subjects). The prompt
+// asks for three to six words, but that is advice, not a bound — a model that
+// answers the transcript instead of naming it writes its whole reply into the
+// title column. Two real rows, 2026-08-02:
+//
+//   197 chars  "I'm Natively, an AI assistant developed by Evin John. I help you ..."
+//    60 chars  "A third-party GraphQL client is a separate tool, service, or"
+//
+// So the bound lives here, in code, and is deliberately prompt-agnostic: it has
+// to hold whichever prompt system produced the text. The caps sit above the
+// prompt's 3-6 words so a title that already obeys the contract is never
+// touched — this only fires when generation has already gone wrong.
+//
+// Applied to GENERATED titles only. Calendar- and user-supplied titles are the
+// user's own words and keep whatever length they have.
+export const MEETING_TITLE_MAX_WORDS = 8;
+export const MEETING_TITLE_MAX_CHARS = 70;
+
+// Spoken-answer furniture the composer can append to any output. A [[GIST]]
+// line renders as a summary chip on screen; glued onto a title it is noise.
+const GIST_MARKER = '[[GIST]]';
+// "Title:", "Meeting title -", "Here's the title:", "Suggested title —", ...
+const TITLE_PREAMBLE_RE = /^(?:here(?:'s|\s+is|\s+are)\s+)?(?:the\s+|a\s+|an\s+)?(?:suggested\s+|proposed\s+|meeting\s+|concise\s+)*title\s*[:\-–—]\s*/i;
+// Double quotes go everywhere, not just at the ends — stripping only a wrapping
+// pair turns `Review of "Project Falcon"` into an unbalanced `Review of "Project
+// Falcon`. The prompt bans quotation marks in titles outright, and the call site
+// this replaced stripped every `"`, so parity and correctness agree here.
+const DOUBLE_QUOTES_RE = /["“”«»]/g;
+// Single quotes only when they wrap, so `Sam's 1:1` keeps its apostrophe.
+const WRAPPING_SINGLE_QUOTES_RE = /^['‘’]+|['‘’]+$/g;
+// A title that ends on a connective was cut mid-thought; the stub reads worse
+// than dropping it. Only ever applied to text this function truncated — an
+// author who genuinely named a meeting "Sync On" keeps it.
+const DANGLING_WORD_RE = /[\s,]+(?:and|or|but|with|for|to|of|in|on|at|by|from|as|the|a|an)$/i;
+
+export function cleanMeetingTitle(
+  value: unknown,
+  opts?: { maxWords?: number; maxChars?: number },
+): string {
+  const maxWords = opts?.maxWords ?? MEETING_TITLE_MAX_WORDS;
+  const maxChars = opts?.maxChars ?? MEETING_TITLE_MAX_CHARS;
+
+  let text = String(value ?? '').replace(NUL_RE, '');
+
+  const gistAt = text.indexOf(GIST_MARKER);
+  if (gistAt >= 0) text = text.slice(0, gistAt);
+
+  // An over-explaining model puts the title on the first line and its reasoning
+  // underneath. Take the first line that has content.
+  text = text.replace(FENCE_RE, '');
+  text = text.split(/\r?\n/).map(line => line.trim()).find(Boolean) ?? '';
+
+  const stripQuotes = (s: string) => s.replace(DOUBLE_QUOTES_RE, '').replace(WRAPPING_SINGLE_QUOTES_RE, '');
+
+  text = stripQuotes(cleanString(
+    text
+      .replace(/\*+/g, '')
+      .replace(/`/g, '')
+      .replace(/^#+\s*/, ''),
+  ));
+
+  text = stripQuotes(cleanString(text.replace(TITLE_PREAMBLE_RE, ''))).trim();
+  if (!text) return '';
+
+  let words = text.split(' ');
+  let truncated = false;
+
+  // Prose rather than a title: keep the first sentence before clamping, so the
+  // cut lands on a thought boundary instead of mid-clause. Gated on already
+  // being over budget so "Sync with Dr. Patel" is never cut at "Dr.".
+  if (words.length > maxWords) {
+    const firstSentence = text.split(/(?<=[.!?])\s+/)[0]?.trim() ?? '';
+    const sentenceWords = firstSentence ? firstSentence.split(' ') : [];
+    if (sentenceWords.length >= 2 && sentenceWords.length < words.length) {
+      words = sentenceWords;
+      truncated = true;
+    }
+  }
+
+  if (words.length > maxWords) {
+    words = words.slice(0, maxWords);
+    truncated = true;
+  }
+  let out = words.join(' ');
+
+  if (out.length > maxChars) {
+    out = out.slice(0, maxChars);
+    const lastSpace = out.lastIndexOf(' ');
+    // Only break on a word boundary when one exists late enough to leave a
+    // readable title; a single over-long token is cut hard instead.
+    if (lastSpace > maxChars / 2) out = out.slice(0, lastSpace);
+    truncated = true;
+  }
+
+  out = out.replace(/[\s.,;:!?\-–—]+$/g, '').trim();
+  if (truncated) {
+    while (DANGLING_WORD_RE.test(out)) out = out.replace(DANGLING_WORD_RE, '').trim();
+    out = out.replace(/[\s.,;:!?\-–—]+$/g, '').trim();
+  }
+
+  return out;
+}
+
+// ── Answer-fragment title rejection (RC-7 adjacent, live session C 2026-08-21) ──
+// The length clamp above bounds SIZE, not SEMANTICS. Live rows from one session:
+//
+//   402 chars -> "Here's the C++ implementation"
+//   294 chars -> "cpp"
+//   185 chars -> "I'm sorry, but I don't have the full"
+//    60 chars -> "Return [0, 1] for the two numbers that"
+//
+// All are the model ANSWERING the transcript instead of naming it, clamped to a
+// first sentence. A rejected generated title is simply not applied — the
+// meeting keeps its default until the structured V3 summary title (usually
+// well-formed) lands, and user renames outrank both via user_titled.
+// Deliberately conservative: only clear answer/refusal shapes are rejected, so
+// a legitimate terse title ("Standup", "Sync with Dr. Patel") always passes.
+const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
+  // Answer openers: "Here's the…", "Here is what…"
+  /^here(?:'s|\s+is|\s+are)\b/i,
+  // Refusals / apologies: "I'm sorry…", "I don't have…", "Unfortunately…"
+  /^(?:i'?m sorry|sorry\b|i apologi[sz]e|i don'?t (?:have|know)|i can(?:no|')t|unfortunately)\b/i,
+  // Code-answer imperatives: "Return [0, 1] for the two numbers that…"
+  /^(?:return|print|output|write|implement|initialize)\b/i,
+  // Conversational acknowledgements: "Yes, that's right", "Okay, so…"
+  /^(?:yes|no|sure|okay|ok|yeah|yep)\b\s*[,.!]/i,
+  // Complexity notation is answer vocabulary, never a meeting name
+  // ("The two-pointer approach solves this in O(n) time." — review 2026-08-22).
+  /\bO\([^)]{1,12}\)/,
+  // ── Session E live misses (2026-08-23) ────────────────────────────────
+  // First-person answer speech: "I'll switch the solution to C++". A meeting
+  // name never opens with "I " / "I'…" ("I/O Performance Review" is safe —
+  // no space or apostrophe after the I).
+  /^i(?:['’]|\s)/i,
+  // "<language> code <verb>…" describes an answer, it doesn't name a meeting
+  // ("Python code also uses the same backtracking approach"). Verb-anchored
+  // so "Legacy Code Review" stays a valid title.
+  /\bcode (?:also\s+|just\s+)?(?:uses|is|does|works|runs|solves|looks)\b/i,
+  // Malayalam first/second-person pronouns — answer speech in any language
+  // ("ഞാൻ ഇംഗ്ലീഷിൽ സംസാരിക്കാൻ വന്നതാണ്…"). Bare includes: \b is unreliable
+  // outside ASCII. Extend per-script as other languages show up.
+  /ഞാൻ|ഞങ്ങൾ|നിങ്ങൾ|എനിക്ക്/u,
+];
+
+/** True when a GENERATED title reads as an answer fragment, not a name. */
+export function isAnswerFragmentTitle(title: string): boolean {
+  const t = String(title || '').trim();
+  if (!t) return false;
+  if (ANSWER_FRAGMENT_TITLE_RES.some((re) => re.test(t))) return true;
+  // A single all-lowercase token ("cpp") is an answer artifact — the 3-6-word
+  // title prompt never legitimately produces one, and user/calendar titles do
+  // not pass through this predicate.
+  const words = t.split(/\s+/);
+  if (words.length === 1 && t === t.toLowerCase() && /^[a-z0-9+#.]+$/.test(t)) return true;
+  // An ENTIRELY-lowercase multi-word Latin title is a truncation fragment
+  // ("ral backend for every keystroke" — the clamp caught a line mid-word,
+  // session E 2026-08-23). Generated titles are Title Case; any uppercase
+  // anywhere ("iOS Migration Kickoff") passes. Code-review 2026-08-23: the
+  // rule requires EVERY word to carry an ASCII letter — a mixed-script title
+  // ("പ്രോജക്ട് sync review") has caseless words that can never satisfy the
+  // Title Case expectation, so it must not be judged by it.
+  if (words.length >= 2 && !/[A-Z]/.test(t) && words.every((w) => /[a-z]/.test(w))) return true;
+  return false;
+}
+
+/**
+ * Catch-all for a GENERATED title whose source text is an ANSWER, whatever
+ * the clamp salvages from it: after stripping code fences and the [[GIST]]
+ * tail (the same pre-cleaning cleanMeetingTitle applies), a first content
+ * line over 200 chars is the model answering the transcript — a real title
+ * attempt, even a verbose one with reasoning underneath, keeps its first
+ * line short. Code-review 2026-08-23: the first version of this rule lived
+ * at the call site and measured the RAW first line, so a fence-wrapped
+ * answer ("```\n<450-char explanation>\n```") measured 3 chars and walked
+ * straight past it.
+ */
+export function isAnswerShapedGeneration(rawGenerated: unknown): boolean {
+  let text = String(rawGenerated ?? '').replace(NUL_RE, '');
+  const gistAt = text.indexOf('[[GIST]]');
+  if (gistAt >= 0) text = text.slice(0, gistAt);
+  text = text.replace(FENCE_RE, '');
+  const firstLine = text.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? '';
+  return firstLine.length > 200;
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));

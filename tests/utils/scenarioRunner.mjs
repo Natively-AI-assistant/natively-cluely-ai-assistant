@@ -20,8 +20,9 @@ import { ModeContextRetriever } from '../../dist-electron/electron/services/Mode
  * @param {string} params.query
  * @param {string} [params.transcript]
  * @param {number} [params.tokenBudget]
+ * @param {object} [params.options]
  */
-export function runScenario({ mode, files, query, transcript, tokenBudget }) {
+export function runScenario({ mode, files, query, transcript, tokenBudget, options }) {
   const retriever = new ModeContextRetriever();
   const result = retriever.retrieve(
     {
@@ -33,7 +34,7 @@ export function runScenario({ mode, files, query, transcript, tokenBudget }) {
       createdAt: '2026-05-15T00:00:00.000Z',
     },
     files,
-    { query, transcript, tokenBudget }
+    { query, transcript, tokenBudget, ...(options || {}) }
   );
   return result;
 }

@@ -19,6 +19,12 @@
 // is derived from the transcript turns and generic question/role grammar.
 
 import { TranscriptTurn, cleanTranscript } from './transcriptCleaner';
+import {
+    SOCIAL_PLEASANTRY, WAIT_IDIOM,
+    CLAUSE_INTERROGATIVE, AUX_SECOND_PERSON, TRAILING_WH_FRAGMENT, SHORT_TOPIC_SHIFT,
+    WH_NOUN_AUX, TASK_DIRECTIVE,
+    QUESTION_MARK, INTERROGATIVE_LEAD, IMPERATIVE_ASK, scoreAskShape,
+} from './questionShapes';
 
 export type DetectedSpeaker = 'interviewer' | 'candidate' | 'unknown';
 
@@ -56,12 +62,104 @@ export interface ExtractedQuestion {
 // catches whole-turn greetings that survive as short meaningful-looking turns.
 const GREETING_ONLY = /^(hi|hello|hey|good (morning|afternoon|evening)|how are you|nice to meet you|thanks?|thank you|welcome|let'?s (get )?started|can you hear me|are you there)[\s!.,?]*$/i;
 
+// Social-pleasantry chit-chat that is grammatically a question ("did you have
+// any trouble finding parking?", "how was your weekend?", "did you find us
+// okay?") but is NOT a substantive interview question. These pass QUESTION_MARK
+// + INTERROGATIVE_LEAD, so without this the live speculative gate (0.75) fires a
+// WhatToAnswer suggestion on small-talk (E2E MiniMax campaign, F-DETECT round-13
+// p08). We DON'T drop these (they may precede a real question) — we cap their
+// confidence below the live gate so they don't trigger a suggestion on their own.
+// Anchored on the social TOPIC so a real question that merely contains the word
+// (e.g. "how did you architect the parking-lot allocation service?") is unaffected.
+// SOCIAL_PLEASANTRY: shared — see questionShapes.ts.
+
+// An imperative ask appearing ANYWHERE in the turn, not just sentence-initially.
+// INTERROGATIVE_LEAD is ^-anchored on purpose (it feeds confidence scoring), but
+// the answerability floor must not reject a genuine ask merely because it is
+// preceded by a clause: "One more question — tell me about levee." is the exact
+// shape campaign2 fix#5 (2026-07-17) was written to keep selecting.
+// IMPERATIVE_ASK: shared — see questionShapes.ts.
+
+// Wait/hold idioms (negative-benchmark neg_logistics_011, 2026-08-18): "give
+// me one second", "bear with me" are pause REQUESTS, not asks — but "give me"
+// sits in IMPERATIVE_ASK/INTERROGATIVE_LEAD, so "Give me one second, my other
+// monitor just died." scored 0.8 (0.95 under unavailable punctuation) and
+// cleared both live gates. Capped below the gates like SOCIAL_PLEASANTRY —
+// unless the turn also classifies as a substantive type (a real question can
+// follow the pause in the same breath). The lookahead keeps "give me a second
+// OPINION/chance/example…" out of the idiom.
+// WAIT_IDIOM: shared — see questionShapes.ts.
+
 // Interrogative signal: a question mark, or a leading wh-/aux question word.
-const QUESTION_MARK = /\?/;
-const INTERROGATIVE_LEAD = /^(\s*)(what|who|why|where|when|which|how|whose|whom|can|could|would|will|do|did|does|are|is|were|was|have|has|had|tell me|walk me|describe|explain|give me|share|let'?s talk about|talk about|i'?d like to (hear|know)|i want to (hear|know))\b/i;
+// QUESTION_MARK / INTERROGATIVE_LEAD: shared — see questionShapes.ts (unified
+// with the shadow ledger's copies, code review 2026-08-19; definitions are
+// verbatim the ones that lived here, so live selection is unchanged).
 
 // Follow-up markers: the turn leans on a previously-mentioned thing.
-const FOLLOW_UP_MARKERS = /\b(that|this|it|those|these|the (project|one|system|approach|role|company)|in more detail|more about (that|it|this)|elaborate|go deeper|expand on|you (just )?(said|mentioned)|the previous|earlier)\b/i;
+//
+// Split into WEAK and STRONG tiers (Campaign 2, longsession, 2026-07-16 —
+// forensic-report.md H3). WEAK markers (bare "that"/"this"/"it"/"the project")
+// are common words that can appear in a perfectly ordinary FRESH question too
+// ("what did you build with that framework?"), so they only count as a
+// follow-up signal on a SHORT turn — a long turn containing "that" is more
+// likely a new, self-contained question that happens to use the word. STRONG
+// markers ("you mentioned", "earlier", "going back to", "the previous", "you
+// said") are unambiguous explicit backward-references regardless of how long
+// the sentence built around them is — a real interviewer callback like "going
+// back to the memory leak you mentioned earlier, how long did it take your
+// team to ship the fix?" is 26 words but is exactly as much a follow-up as a
+// 5-word one. Applying the same length cap to both tiers silently mis-typed
+// realistic long callback questions as fresh/standalone (live-proven:
+// traces2/golden-longctx-18.txt, isFollowUp:false on that exact sentence).
+const WEAK_FOLLOW_UP_MARKERS = /\b(that|this|it|those|these|the (project|one|system|approach|role|company)|in more detail|more about (that|it|this)|elaborate|go deeper|expand on)\b/i;
+// STRONG markers must be phrase-anchored to an explicit conversational
+// recall — NOT bare words that also occur constantly in ordinary fresh
+// speech. Skeptic-pass review (Campaign 2, 2026-07-16) found the first draft
+// of this tier matched bare "earlier" ("I graduated earlier than my cohort"),
+// bare "the previous" ("the previous role I held"), and open-object "going
+// back to" ("going back to the office three days a week") — all common,
+// NON-callback interview phrasings that got misclassified as follow-ups,
+// corrupting downstream grounding lookups (a bogus followUpTarget can
+// overwrite a perfectly good identity/technical query — see
+// IntelligenceEngine.ts's lookupQ override) and letting small talk escape the
+// SOCIAL_PLEASANTRY confidence down-weight. Each alternative below requires
+// the recall verb/phrase itself, not just a co-occurring word:
+//   - "you (just) said/mentioned ... earlier" or "mentioned earlier" as a unit
+//   - "going/coming back to" ONLY when the object is a demonstrative or an
+//     explicit "what you said/mentioned" — not an open noun phrase like "the
+//     office"/"school"
+//   - "the previous" ONLY when paired with a conversation-shaped noun
+//     (point/topic/question/thing/example you mentioned), not a career noun
+//     (role/company/job/quarter)
+const STRONG_FOLLOW_UP_MARKERS = /\b(you (just )?(said|mentioned)\b|\bmentioned (earlier|before)\b|\bsaid (earlier|before)\b|(going|coming) back to (that|this|it|what you (said|mentioned)|the (earlier|previous|last) (point|topic|question|thing))\b|the previous (point|topic|question|thing|example)( you (mentioned|said|brought up|raised))?\b|circling back|you (had )?(brought up|touched on|referenced))\b/i;
+const FOLLOW_UP_WORD_CAP = 14;
+
+// ── Clause-level interrogatives for UNPUNCTUATED providers (WTA audit
+// F9/Phase 3, 2026-08-18) ───────────────────────────────────────────────────
+// INTERROGATIVE_LEAD is ^-anchored by design, and on punctuating providers a
+// prefix clause is separated by a comma/period so the lead survives cleaning.
+// On a no-punctuation provider ("Soniox-class"), "Just to confirm, what
+// should I call you?" arrives as one flat "just to confirm what should i
+// call you" — the wh-lead sits MID-STRING, hasMark/hasLead both fail, and
+// the answerability floor caps the turn at 0.3, silently skipping profile
+// grounding (measured: 12 of the 102 selection-dataset cases cross below the
+// 0.6 gate this way). These patterns recover the interrogative CLAUSE
+// deterministically and are consulted ONLY when the turn's
+// punctuationSource === 'unavailable' — on punctuating providers the missing
+// '?'/comma stays real negative evidence.
+//   1. wh-word + auxiliary/degree word ("how strong is", "what should i",
+//      "how ready are", "why did you") anywhere in the turn.
+// CLAUSE_INTERROGATIVE: shared — see questionShapes.ts.
+//   2. auxiliary + second person ("can you", "did you", "are you") anywhere —
+//      the interviewer addressing the candidate interrogatively.
+// AUX_SECOND_PERSON: shared — see questionShapes.ts.
+//   3. a trailing wh-fragment ("…engineering-heavy why data"): why/what-about
+//      + a 1-2 word object at the very END of the turn.
+// TRAILING_WH_FRAGMENT: shared — see questionShapes.ts.
+//   4. a bare topic-shift fragment ("and sql", "and python frameworks") —
+//      "and" is too common for the anywhere rule, so the WHOLE turn must be
+//      the fragment (≤4 words).
+// SHORT_TOPIC_SHIFT: shared — see questionShapes.ts.
 
 // Demonstrative-only openers that strongly imply a follow-up ("can you explain that?").
 const DEMONSTRATIVE_FOLLOW_UP = /\b(explain|elaborate on|tell me more about|go deeper into|expand on)\s+(that|this|it|those|these)\b/i;
@@ -156,7 +254,15 @@ function classifyType(q: string): ExtractedQuestionType {
     // require profile grounding — they're identity questions even without the
     // exact phrase "what is your name".
     if (/\b(your (full |first |last )?name|who are you|what'?s your name|what is your name)\b/.test(t)) return 'identity';
-    if (/\b(introduce yourself|tell me about yourself|describe yourself|about yourself)\b/.test(t)) return 'identity';
+    if (/\b(introduce yourself|introducing yourself|tell me about yourself|describe yourself|about yourself)\b/.test(t)) return 'identity';
+    // Intro/self-introduction openers ("quick self-introduction", "give a brief
+    // intro", "start us off with a brief self-intro", "introduction of yourself").
+    // The LIVE grounding gate keys on this classifier (NOT AnswerPlanner), so
+    // without these the auto-trigger skipped identity grounding and returned a
+    // clarification ("could you give me a bit more to go on?"). E2E MiniMax
+    // campaign round-13/14, F-VOICE live-path parity with AnswerPlanner.
+    if (/\bself[- ]?(introduc(tion|e)|intro)\b/.test(t)) return 'identity';
+    if (/\b(give|giving|provide|share|start (us |me |the team )?off with)\b.{0,30}\b(a |an )?(quick |brief |short |little )?(introduction|intro)\b/.test(t)) return 'identity';
     if (/\b(who (are|is) (the|this) (candidate|person|interviewee))\b/.test(t)) return 'identity';
 
     // Negotiation
@@ -214,13 +320,40 @@ export function extractLatestQuestion(
     // to empty/too-short or is a whole-turn greeting.
     const ignoredTranscriptNoise: string[] = [];
     const cleaned = cleanTranscript(turns);
-    const cleanedKey = new Set(cleaned.map(c => `${c.timestamp}:${c.role}`));
-    for (const turn of turns) {
-        if (!cleanedKey.has(`${turn.timestamp}:${turn.role}`)) {
+
+    // Map every cleaned turn back to the RAW turn it came from, by ORIGINAL
+    // INDEX rather than by timestamp.
+    //
+    // The previous implementation keyed a Set on `${timestamp}:${role}` and
+    // looked turns up with `turns.find(t => t.timestamp === …)` — two different
+    // key shapes for the same relation. Streaming STT regularly emits several
+    // turns inside the same millisecond, so the timestamp-only lookup returned
+    // the FIRST turn sharing that millisecond rather than the one being
+    // examined, which silently defeated the raw-text greeting guard below.
+    // cleanTranscript preserves order and only ever drops turns, so a single
+    // forward pointer recovers the exact correspondence and is collision-proof.
+    const rawIndexOfCleaned: number[] = [];
+    {
+        let p = 0;
+        for (const c of cleaned) {
+            while (p < turns.length && !(turns[p].role === c.role && turns[p].timestamp === c.timestamp)) p++;
+            rawIndexOfCleaned.push(p < turns.length ? p : -1);
+            p++;
+        }
+    }
+    const keptRaw = new Set(rawIndexOfCleaned.filter(i => i >= 0));
+    turns.forEach((turn, i) => {
+        if (!keptRaw.has(i)) {
             const trimmed = turn.text.trim();
             if (trimmed) ignoredTranscriptNoise.push(trimmed);
         }
-    }
+    });
+    /** Raw (uncleaned) text for a cleaned-array index, falling back to cleaned. */
+    const rawTextAt = (cleanedIdx: number): string => {
+        const ri = rawIndexOfCleaned[cleanedIdx];
+        const raw = ri >= 0 ? turns[ri]?.text?.trim() : '';
+        return raw || cleaned[cleanedIdx]?.text?.trim() || '';
+    };
 
     // Background window: the most recent few cleaned turns, oldest-first.
     const window = cleaned.slice(-windowTurns);
@@ -228,9 +361,22 @@ export function extractLatestQuestion(
         .map(t => `[${t.role === 'interviewer' ? 'INTERVIEWER' : t.role === 'user' ? 'ME' : 'ASSISTANT'}]: ${t.text}`)
         .join('\n');
 
-    // Walk backwards for the latest meaningful INTERVIEWER turn that looks like
-    // a question (or an imperative ask like "tell me about ..."). Greeting-only
+    // Walk backwards for the latest meaningful INTERVIEWER turn. Greeting-only
     // interviewer turns are skipped, so "Hi, can you hear me?" → keep walking.
+    // Otherwise take the FIRST (i.e. most recent) non-greeting, non-empty
+    // interviewer turn outright — do NOT keep searching backward for an OLDER
+    // turn that merely LOOKS more question-shaped (has "?" or an interrogative
+    // lead). "Tell me about X" / "One more question — tell me about levee." are
+    // genuine imperative asks that don't match QUESTION_MARK/INTERROGATIVE_LEAD
+    // (no "?", and the lead word isn't sentence-initial), so the old logic kept
+    // them only as a "weak candidate" and preferred an earlier, more question-
+    // shaped turn instead — inverting recency in a live conversation (harness
+    // longsession campaign2, 2026-07-17: live-proven on 4 real presses —
+    // traces2/harness-script-{a,c}-press-{A12,A15,C11,C14}.txt — where the
+    // extractor locked onto a stale prior "?"-turn while the interviewer had
+    // already moved on to a new imperative ask). The shape signals
+    // (QUESTION_MARK/INTERROGATIVE_LEAD) still matter for isFollowUp/confidence
+    // scoring below, just not for WHICH turn is chosen — recency wins.
     let chosen: TranscriptTurn | null = null;
     let chosenIdx = -1;
     for (let i = cleaned.length - 1; i >= 0; i--) {
@@ -238,19 +384,22 @@ export function extractLatestQuestion(
         if (turn.role !== 'interviewer') continue;
         const text = turn.text.trim();
         if (!text) continue;
-        if (GREETING_ONLY.test(text)) {
+        // Check GREETING_ONLY against both the cleaned text AND the original
+        // raw turn. cleanText() strips leading acknowledgement words (e.g.
+        // "nice", "great") as discourse-marker noise, so "Nice to meet you"
+        // cleans to "to meet you" — no longer matching the greeting pattern.
+        // Falling through to the raw text catches this so a genuine greeting
+        // isn't mistaken for a real (fragmentary, meaningless) question now
+        // that this loop stops at the first non-greeting turn instead of
+        // continuing to search for a more question-shaped one.
+        const original = rawTextAt(i) || text;
+        if (GREETING_ONLY.test(text) || GREETING_ONLY.test(original)) {
             ignoredTranscriptNoise.push(turn.text.trim());
             continue;
         }
-        const looksLikeQuestion = QUESTION_MARK.test(text) || INTERROGATIVE_LEAD.test(text);
-        if (looksLikeQuestion) {
-            chosen = turn;
-            chosenIdx = i;
-            break;
-        }
-        // First non-greeting interviewer turn that ISN'T obviously a question:
-        // keep it as a weak candidate but keep looking for a stronger one.
-        if (!chosen) { chosen = turn; chosenIdx = i; }
+        chosen = turn;
+        chosenIdx = i;
+        break;
     }
 
     if (!chosen) {
@@ -258,16 +407,81 @@ export function extractLatestQuestion(
         return { ...empty, relevantTranscriptWindow, ignoredTranscriptNoise };
     }
 
-    const latestQuestion = chosen.text.trim();
-    const hasMark = QUESTION_MARK.test(latestQuestion);
-    const hasLead = INTERROGATIVE_LEAD.test(latestQuestion);
+    // SHAPE SCORING runs on the CLEANED text; the EMITTED question is the RAW
+    // interviewer utterance.
+    //
+    // These must be different strings. cleanText() lowercases everything and
+    // strips leading/trailing discourse markers *including their punctuation*,
+    // so emitting the cleaned text handed downstream consumers a mangled
+    // question: "PostgreSQL"/"Kafka"/"React" arrived case-flattened in the
+    // retrieval query and the prompt, and "…for three years, right?" lost its
+    // terminal '?' along with the stripped "right". Both the résumé lookup
+    // (toCandidateFraming → orchestrator.processQuestion) and the model prompt
+    // consume the returned string, so both were degraded.
+    //
+    // Scoring stays on the cleaned text deliberately: INTERROGATIVE_LEAD is
+    // anchored at ^, so a raw "Um, what is your name?" would lose its lead
+    // signal and drop from 0.95 to 0.4 confidence. Cleaning exists to make the
+    // heuristics robust — it is a FILTER, not a transformation of the output.
+    const scoringText = chosen.text.trim();
+    const latestQuestion = rawTextAt(chosenIdx) || scoringText;
+    const hasMark = QUESTION_MARK.test(scoringText) || QUESTION_MARK.test(latestQuestion);
+    const hasLead = INTERROGATIVE_LEAD.test(scoringText);
+    // F9: on providers that never guarantee punctuation, the absence of '?'
+    // (and of clause-separating commas) is NEUTRAL — see the clause patterns
+    // above and the confidence block below.
+    const punctuationUnavailable = chosen.punctuationSource === 'unavailable';
+    const hasClauseInterrogative = punctuationUnavailable && !hasMark && !hasLead && (
+        CLAUSE_INTERROGATIVE.test(scoringText)
+        || AUX_SECOND_PERSON.test(scoringText)
+        || TRAILING_WH_FRAGMENT.test(scoringText)
+        || WH_NOUN_AUX.test(scoringText)
+        || (scoringText.split(/\s+/).length <= 4 && SHORT_TOPIC_SHIFT.test(scoringText))
+    );
+    // Task directives ("Rate your SQL out of ten", "Convince me you're right
+    // for this role", "Solve two sum") are imperative asks with no '?', no
+    // clause-initial lead and no tell-me phrase. Unlike the clause-recovery
+    // patterns this is provenance-INDEPENDENT: an imperative is imperative
+    // whether or not the provider punctuates. Live session A (2026-08-20):
+    // these scored 0.3 and lost the résumé on every press.
+    const hasTaskDirective = TASK_DIRECTIVE.test(scoringText);
 
-    // Follow-up detection: demonstrative-only ask, or follow-up markers present
-    // AND there's a prior turn to refer back to.
+    // Follow-up detection: demonstrative-only ask, a STRONG explicit backward-
+    // reference marker (unambiguous regardless of sentence length), or a WEAK
+    // marker on a short turn (length-capped since a bare "that"/"this" is
+    // common in ordinary fresh questions too) — AND there's a prior turn to
+    // refer back to.
     const priorTurns = cleaned.slice(0, chosenIdx);
     const hasPrior = priorTurns.length > 0;
-    const isFollowUp = hasPrior && (DEMONSTRATIVE_FOLLOW_UP.test(latestQuestion) ||
-        (FOLLOW_UP_MARKERS.test(latestQuestion) && latestQuestion.split(/\s+/).length <= 14));
+    // ANSWERABILITY FLOOR. Selection is recency-first and has no question-shape
+    // requirement (deliberately — see the comment above the walk-back loop), so
+    // a purely evaluative interviewer turn can become "the question":
+    //
+    //   interviewer: "Tell me about your distributed systems work."
+    //   user:        "Sure, I built a sharded event bus…"
+    //   interviewer: "Interesting, that sounds pretty solid."
+    //
+    // The last turn carries no '?', no interrogative lead and no imperative
+    // ask, but the bare word "that" matched WEAK_FOLLOW_UP_MARKERS under the
+    // 14-word cap, so it was labelled follow_up — which floors confidence at
+    // 0.7 (below), clearing the 0.6 grounding gate in IntelligenceEngine — and
+    // pickSalientToken's fallback produced followUpTarget "second.", so the
+    // résumé was queried with "Tell me about my second."
+    //
+    // A weak demonstrative alone is not evidence of a question. Require real
+    // interrogative or imperative shape, or an explicit backward reference.
+    const isAnswerable = hasMark || hasLead
+        || hasClauseInterrogative
+        || hasTaskDirective
+        || IMPERATIVE_ASK.test(scoringText)
+        || DEMONSTRATIVE_FOLLOW_UP.test(scoringText)
+        || STRONG_FOLLOW_UP_MARKERS.test(scoringText);
+
+    const isFollowUp = hasPrior && isAnswerable && (
+        DEMONSTRATIVE_FOLLOW_UP.test(scoringText) ||
+        STRONG_FOLLOW_UP_MARKERS.test(scoringText) ||
+        (WEAK_FOLLOW_UP_MARKERS.test(scoringText) && scoringText.split(/\s+/).length <= FOLLOW_UP_WORD_CAP)
+    );
 
     // Follow-up target: the most recent salient noun phrase from a prior turn.
     // Strategy: scan backward through ALL prior turns (both candidate and
@@ -283,7 +497,7 @@ export function extractLatestQuestion(
         for (let i = priorTurns.length - 1; i >= 0; i--) {
             if (priorTurns[i].role === 'interviewer') continue;
             const cand = priorTurns[i].text;
-            const original = turns.find(t => t.timestamp === priorTurns[i].timestamp)?.text || cand;
+            const original = rawTextAt(i) || cand;
             const found = pickSalientToken(original);
             if (found) { followUpTarget = found; break; }
             const words = cand.split(/\s+/).filter(w => w.length > 4 && !CAPITALIZED_STOPWORDS.has(w.toLowerCase()));
@@ -294,7 +508,7 @@ export function extractLatestQuestion(
             for (let i = priorTurns.length - 1; i >= 0; i--) {
                 if (priorTurns[i].role !== 'interviewer') continue;
                 const cand = priorTurns[i].text;
-                const original = turns.find(t => t.timestamp === priorTurns[i].timestamp)?.text || cand;
+                const original = rawTextAt(i) || cand;
                 const found = pickSalientToken(original);
                 if (found) { followUpTarget = found; break; }
                 const words = cand.split(/\s+/).filter(w => w.length > 4 && !CAPITALIZED_STOPWORDS.has(w.toLowerCase()));
@@ -303,15 +517,68 @@ export function extractLatestQuestion(
         }
     }
 
-    const questionType: ExtractedQuestionType = isFollowUp ? 'follow_up' : classifyType(latestQuestion);
+    const questionType: ExtractedQuestionType = isFollowUp ? 'follow_up' : classifyType(scoringText);
 
     // Confidence: explicit '?' + interrogative lead is strongest. A bare
     // imperative ask ("tell me about your projects") with a lead but no '?' is
     // still high. A non-question interviewer statement we fell back to is low.
+    //
+    // Punctuation-provenance-aware scoring (WTA audit F9/Phase 3, 2026-08-18):
+    // whether a '?' CAN appear is a property of the STT provider, not the
+    // utterance — only Deepgram/Google/local models guarantee punctuation
+    // (see punctuationProvenance.ts). When the chosen turn is stamped
+    // 'unavailable', a missing mark is NEUTRAL: an interrogative lead alone
+    // scores like mark+lead. Measured before this fix (102-case selection
+    // dataset, punctuation-stripped): selection unchanged, but mean
+    // confidence fell 0.777 → 0.63 and 18 → 30 cases dropped below the live
+    // 0.6 grounding gate — ~12% of turns silently losing profile grounding
+    // on no-punctuation providers. ABSENT provenance (legacy writers, typed
+    // questions) keeps byte-identical legacy scoring — this branch only
+    // fires for segments stamped by the STT seam. Mirrors
+    // QuestionLedger.askShape so live and shadow scoring cannot drift.
+    // Core mark/lead scoring comes from the SHARED table (questionShapes.ts)
+    // so the shadow ledger cannot drift from it; the 0.4 baseline and the
+    // clause-interrogative recovery below are this selector's own tail.
     let confidence = 0.4;
-    if (hasMark && hasLead) confidence = 0.95;
-    else if (hasMark || hasLead) confidence = 0.8;
+    const coreConfidence = scoreAskShape({ hasMark, hasLead, punctuationSource: chosen.punctuationSource });
+    if (coreConfidence !== null) confidence = coreConfidence;
+    else if (hasClauseInterrogative) confidence = 0.75;
+    else if (hasTaskDirective) confidence = 0.75;
     if (questionType !== 'general' && confidence < 0.8) confidence = 0.7;
+
+    // Social-pleasantry down-weight: a question-shaped chit-chat turn ("did you
+    // have any trouble finding parking?") should NOT clear the live speculative
+    // gate (0.75) on its own. Cap below the gate UNLESS the turn also carries a
+    // substantive classified type (a real question bundled after the pleasantry,
+    // e.g. "...found us okay? Great — walk me through your last project."), in
+    // which case classifyType already returned something other than 'general'.
+    //
+    // 'follow_up' counts as non-substantive here (live session A, 2026-08-20):
+    // "How's your day going so far? I know it's evening over in Kochi" set
+    // isFollowUp, which short-circuits classifyType to 'follow_up', so the cap
+    // was skipped and small talk scored 0.95 — clearing BOTH the grounding and
+    // the speculative gate. 'follow_up' is a STRUCTURAL label, not a
+    // substantive topic, so it must not act as the escape hatch that only a
+    // real classified topic (identity/profile/jd/negotiation/behavioral/
+    // technical) was meant to open.
+    const nonSubstantiveType = questionType === 'general' || questionType === 'follow_up';
+    if (SOCIAL_PLEASANTRY.test(scoringText) && nonSubstantiveType) {
+        confidence = Math.min(confidence, 0.5);
+    }
+    // Wait/hold idiom cap (see WAIT_IDIOM above): same shape as the
+    // pleasantry down-weight — below both live gates unless a substantive
+    // classified type says a real ask shares the turn.
+    if (WAIT_IDIOM.test(scoringText) && nonSubstantiveType) {
+        confidence = Math.min(confidence, 0.5);
+    }
+
+    // Answerability floor (see isAnswerable above): a turn with no question
+    // shape at all must not clear the 0.6 grounding gate, and must not carry a
+    // salient-token guess that would become a fabricated retrieval query.
+    if (!isAnswerable) {
+        confidence = Math.min(confidence, 0.3);
+        followUpTarget = '';
+    }
 
     return {
         detectedSpeaker: 'interviewer',

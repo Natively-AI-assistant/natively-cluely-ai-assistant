@@ -19,7 +19,27 @@ test('open-external IPC only allows known external destinations', () => {
   const handler = source.slice(start, end);
 
   assert.ok(start >= 0, 'open-external handler should exist');
-  assert.match(handler, /parsed\.protocol === 'https:'[\s\S]{0,80}parsed\.hostname === 'mail\.google\.com'[\s\S]{0,80}parsed\.pathname === '\/mail\/'/);
+  // The hostname/pathname half of this dates from when the ONLY external
+  // destination was the Gmail compose link. The app now opens GitHub releases,
+  // checkout, per-provider STT dashboards, feature links and deep links, so a
+  // mail.google.com-only allowlist would block nearly every legitimate call —
+  // it was widened to "any https" deliberately.
+  //
+  // The security property that survives, and is what this test is really for,
+  // is the SCHEME restriction: only https, checked as exact equality on the
+  // PARSED url (not a startsWith on the raw string, which is bypassable), plus
+  // the macOS settings scheme gated on darwin below. Anything that would let
+  // http:, file:, data: or javascript: through must still fail here.
+  assert.match(
+    handler,
+    /parsed\.protocol === 'https:'/,
+    'open-external must allow https only, via exact equality on the parsed protocol',
+  );
+  assert.doesNotMatch(
+    handler,
+    /parsed\.protocol === '(?:http|file|data|javascript):'/,
+    'open-external must never permit a non-https web scheme',
+  );
   assert.match(handler, /parsed\.protocol === 'x-apple\.systempreferences:' && process\.platform === 'darwin'/);
   assert.doesNotMatch(handler, /\['http:', 'https:', 'mailto:'\]\.includes\(parsed\.protocol\)/);
   assert.doesNotMatch(handler, /url\.startsWith\('x-apple\.systempreferences:'\)/);

@@ -9,6 +9,21 @@ export interface AppSettings {
     isUndetectable?: boolean;
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
     verboseLogging?: boolean;
+    // Context Intelligence debug logging level (Developer settings). The env
+    // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
+    // context-intelligence/debug/debug-config.ts, which reads this value
+    // through the bound reader; this store only persists the UI choice.
+    contextDebugLevel?: 'off' | 'standard' | 'verbose';
+    // Lets the user summon the overlay as a standalone AI chatbox (no audio
+    // capture, no STT, no meeting record) via the toggle-visibility hotkey
+    // while idle. Off by default — the hotkey's existing behavior is unchanged
+    // until the user opts in from Settings > General.
+    ambientChatEnabled?: boolean;
+    // Automatic answers after the interviewer finishes a question. Off by
+    // default: until the user opts in from Settings > General, an answer is
+    // produced only by the What-to-Answer hotkey, exactly as before. The
+    // trigger itself lives in AppState.scheduleAutoAnswer().
+    autoAnswerEnabled?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
@@ -32,9 +47,33 @@ export interface AppSettings {
     hindsightAutoStart?: boolean;
     hindsightServerCommand?: string;
     hindsightLlmProvider?: string;
+    // Explicit opt-out sentinel for "I do not want Hindsight at all". Distinct from
+    // "hindsightBaseUrl is empty" — that condition means "user hasn't configured yet"
+    // (synthetic default applies). `true` here means "user has actively disabled Hindsight"
+    // and getHindsightConfig() must return null. Set via the `hindsight:disable` IPC; the
+    // renderer offers a "Don't use Hindsight" link in the setup card.
+    hindsightExplicitlyDisabled?: boolean;
+    // Persisted override for the `hindsightMemory` intelligence flag (see
+    // electron/intelligence/intelligenceFlags.ts). HindsightManager.start() flips this ON
+    // when the user has a baseUrl configured + autoStart on, so the `memoryFlagOn()` gate
+    // inside start() doesn't early-return on the flag's default-OFF registry value. The
+    // flag's setting key in the registry is `hindsightMemoryEnabled` — keep them aligned.
+    hindsightMemoryEnabled?: boolean;
+    // True when the user has explicitly set the hindsightMemory flag to a non-default
+    // value. Distinguishes "default OFF, user hasn't touched it" from "user explicitly
+    // set OFF" — without this, the auto-flip on every Settings save would silently
+    // re-enable a flag the user intentionally disabled. Written by `setIntelligenceFlag`
+    // whenever value !== registry default. NAME MUST MATCH the runtime key: the registry
+    // setting is `hindsightMemoryEnabled`, so the explicit sibling is
+    // `<setting>Explicit` = `hindsightMemoryEnabledExplicit` (read by
+    // HindsightManager.hindsightMemoryExplicitlyOff()).
+    hindsightMemoryEnabledExplicit?: boolean;
     knowledgeMode?: boolean;
     phoneMirrorEnabled?: boolean;
     phoneMirrorExposeOnLan?: boolean;
+    // External optional provider. Default false: do not spawn Ollama unless
+    // the user selects an Ollama model or explicitly opts into auto-start.
+    autoStartOllama?: boolean;
     // ── Smart Browser Context v2 ───────────────────────────────────────────
     // Manual browser capture is always available (no flag). These control the
     // AUTOMATIC behaviour. Defaults (read at the use sites): coding auto-detect
@@ -129,6 +168,9 @@ export interface AppSettings {
     sttAllowDualStream?: boolean;
 }
 
+export const VALID_CONTEXT_DEBUG_LEVELS = ['off', 'standard', 'verbose'] as const;
+export type ContextDebugLevelSetting = typeof VALID_CONTEXT_DEBUG_LEVELS[number];
+
 export const VALID_SCREEN_UNDERSTANDING_MODES = ['vision_first', 'vision_only', 'private_vision'] as const;
 export type ScreenUnderstandingMode = typeof VALID_SCREEN_UNDERSTANDING_MODES[number];
 
@@ -175,19 +217,42 @@ export class SettingsManager {
     }
 
     public static getInstance(): SettingsManager {
-        if (!SettingsManager.instance) {
-            SettingsManager.instance = new SettingsManager();
+        // Instance anchored on globalThis: esbuild inlines this module into 53
+        // dist bundles, and in any process that co-loads two of them (every
+        // test/eval harness) a per-class instance means a settings write in one
+        // bundle is invisible to reads in another — a flag flipped in the UI
+        // never reaches the answering bundle. One process, one settings truth.
+        const g = globalThis as unknown as Record<string, SettingsManager | undefined>;
+        if (!g.__nativelySettingsManagerV1__) {
+            g.__nativelySettingsManagerV1__ = SettingsManager.instance ?? new SettingsManager();
         }
-        return SettingsManager.instance;
+        SettingsManager.instance = g.__nativelySettingsManagerV1__;
+        return g.__nativelySettingsManagerV1__;
     }
 
     public get<K extends keyof AppSettings>(key: K): AppSettings[K] {
         return this.settings[key];
     }
 
-    public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
+    /**
+     * @returns true when the value was persisted; false when the store is
+     * degraded and the write was refused. CR-04: callers that report success to
+     * the renderer must check this — several used to report success while disk
+     * was unchanged, so the setting silently reverted on restart.
+     */
+    public set<K extends keyof AppSettings>(key: K, value: AppSettings[K]): boolean {
+        // R-15: when the store is degraded, saveSettings() refuses. Mutating
+        // in-memory first left the process believing the write succeeded while
+        // disk still held the old value — and roughly fifteen IPC handlers report
+        // success to the renderer off this call. Refuse before mutating so memory
+        // and disk cannot disagree.
+        if (this.settingsUnreadable) {
+            console.warn(`[SettingsManager] Refusing to set "${String(key)}": the settings store is degraded this session (see the quarantine warning at startup).`);
+            return false;
+        }
         this.settings[key] = value;
         this.saveSettings();
+        return true;
     }
 
     // Resolved screen-understanding mode with default and runtime validation.
@@ -200,12 +265,38 @@ export class SettingsManager {
         return 'vision_first';
     }
 
-    public setScreenUnderstandingMode(mode: ScreenUnderstandingMode): void {
+    /** Persisted UI choice only — env-var precedence lives in debug-config. */
+    public getContextDebugLevel(): ContextDebugLevelSetting {
+        const stored = this.settings.contextDebugLevel;
+        if (stored && (VALID_CONTEXT_DEBUG_LEVELS as readonly string[]).includes(stored)) return stored;
+        return 'off';
+    }
+
+    /**
+     * CR-04: this used to mutate `this.settings` directly and then call
+     * saveSettings(), which REFUSES when the store is degraded — so memory and
+     * disk diverged, the IPC handler reported success, and the setting reverted
+     * on restart. The R-15 guard lives in set(); go through it.
+     * @returns false when the write was refused.
+     */
+    public setContextDebugLevel(level: ContextDebugLevelSetting): boolean {
+        if (!(VALID_CONTEXT_DEBUG_LEVELS as readonly string[]).includes(level)) {
+            throw new Error(`[SettingsManager] Invalid contextDebugLevel: ${level}`);
+        }
+        return this.set('contextDebugLevel', level);
+    }
+
+    /**
+     * CR-04: same bypass as setContextDebugLevel. Worse here, because the IPC
+     * handler also BROADCASTS screen-understanding-mode-changed to every window
+     * — so the whole UI switched mode while disk still held the old value.
+     * @returns false when the write was refused.
+     */
+    public setScreenUnderstandingMode(mode: ScreenUnderstandingMode): boolean {
         if (!(VALID_SCREEN_UNDERSTANDING_MODES as readonly string[]).includes(mode)) {
             throw new Error(`[SettingsManager] Invalid screenUnderstandingMode: ${mode}`);
         }
-        this.settings.screenUnderstandingMode = mode;
-        this.saveSettings();
+        return this.set('screenUnderstandingMode', mode);
     }
 
     public getTechnicalInterviewVisionFirst(): boolean {
@@ -314,14 +405,27 @@ export class SettingsManager {
                         throw new Error('Settings JSON is not a valid object');
                     }
                 } catch (parseError) {
-                    console.error('[SettingsManager] Failed to parse settings.json. Continuing with empty settings. Error:', parseError);
-                    this.settings = {};
+                    // F-703: the file EXISTS but is unreadable. Continuing with
+                    // `{}` is fine for reads, but the next set() used to
+                    // serialize that empty object straight over settings.json —
+                    // destroying every user setting (~60 keys incl. API/CLI
+                    // paths, retention, provider scopes, onboarding state) on
+                    // the first toggle after a corrupt read. CredentialsManager
+                    // treats this exact situation as unacceptable and refuses
+                    // writes for the session; mirror that here so a recoverable
+                    // file is never overwritten with a partial one.
+                    this.quarantineUnreadableSettings(parseError);
                 }
                 console.log('[SettingsManager] Settings loaded');
             }
         } catch (e) {
-            console.error('[SettingsManager] Failed to read settings file:', e);
+            // F-703: same reasoning as the parse failure above — a file we
+            // could not READ must not be overwritten from an empty in-memory
+            // object. (A genuinely absent file is handled by the existsSync
+            // branch above and stays writable, so first-run is unaffected.)
+            console.error('[SettingsManager] Failed to read settings file; continuing READ-ONLY for this session:', e);
             this.settings = {};
+            this.settingsUnreadable = true;
         }
     }
 
@@ -343,10 +447,80 @@ export class SettingsManager {
         }
     }
 
+    /**
+     * F-703: set when settings.json exists but could not be read/parsed. While
+     * true the in-memory object is a partial view, so persisting it would
+     * destroy the user's real settings. Reads continue to work (callers get
+     * defaults); writes are refused for the session, exactly as
+     * CredentialsManager does for an unreadable keyring.
+     */
+    private settingsUnreadable = false;
+
+    /** True when settings could not be loaded and writes are being refused. */
+    public isDegraded(): boolean {
+        return this.settingsUnreadable;
+    }
+
+    /**
+     * R-15: a file that cannot be PARSED will never parse — the content is
+     * deterministic — so refusing writes for "this session" actually refused them
+     * on every launch, forever, with no recovery path (isDegraded() had no
+     * callers and nothing ever cleared the flag). A 0-byte, whitespace-only,
+     * "null" or BOM-prefixed settings.json therefore bricked the settings store
+     * permanently, and saveSettings' missing fsync is one of the ways such a file
+     * gets created in the first place.
+     *
+     * F-703's underlying concern was still right: never overwrite a recoverable
+     * file with an empty object. Quarantine satisfies both — the original bytes
+     * are PRESERVED under a timestamped name for recovery, and the app continues
+     * with defaults on a writable store so it self-heals on the next write.
+     *
+     * If the rename itself fails we fall back to F-703's read-only stance, which
+     * is the correct conservative choice: we could not move the file, so we must
+     * not overwrite it either.
+     */
+    private quarantineUnreadableSettings(cause: unknown): void {
+        this.settings = {};
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const quarantinePath = `${this.settingsPath}.corrupt-${stamp}`;
+        try {
+            fs.renameSync(this.settingsPath, quarantinePath);
+            this.settingsUnreadable = false;
+            console.error(
+                `[SettingsManager] settings.json could not be parsed and was moved to ${quarantinePath}. `
+                + 'Continuing with defaults on a writable store; the original file is preserved for recovery. Cause:',
+                cause,
+            );
+        } catch (renameErr) {
+            this.settingsUnreadable = true;
+            console.error(
+                '[SettingsManager] settings.json could not be parsed AND could not be quarantined; '
+                + 'continuing READ-ONLY so the existing file is not overwritten. Parse cause:',
+                cause, 'Quarantine error:', renameErr,
+            );
+        }
+    }
+
     private saveSettings(): void {
+        if (this.settingsUnreadable) {
+            console.warn('[SettingsManager] Refusing to save: settings.json was unreadable and could not be quarantined, so writing would overwrite it with an incomplete set. Repair or remove the file, then restart.');
+            return;
+        }
         try {
             const tmpPath = this.settingsPath + '.tmp';
-            fs.writeFileSync(tmpPath, JSON.stringify(this.settings, null, 2));
+            // R-15: write + fsync + rename. Without the fsync the rename could be
+            // durable while the DATA was still in the page cache, so a power loss
+            // left a 0-byte settings.json — which is exactly the input that used to
+            // brick the store permanently. Only the FILE is synced: fsync on a
+            // directory handle is not supported on Windows, so syncing the parent
+            // would break the win32 path for a guarantee we do not need here.
+            const fd = fs.openSync(tmpPath, 'w');
+            try {
+                fs.writeFileSync(fd, JSON.stringify(this.settings, null, 2));
+                fs.fsyncSync(fd);
+            } finally {
+                fs.closeSync(fd);
+            }
             fs.renameSync(tmpPath, this.settingsPath);
         } catch (e) {
             console.error('[SettingsManager] Failed to save settings:', e);

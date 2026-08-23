@@ -2,15 +2,125 @@ name: Build Smoke
 
 on:
   pull_request:
+  # Main had NO per-commit signal: this workflow ran on pull_request only, so a
+  # PR whose Build Smoke failed could be merged and main itself was never
+  # re-checked. That is exactly how c2ad3133 landed a TS7005 that broke the
+  # FIRST build step — `Typecheck Electron main process` — and went unnoticed
+  # for three days while every subsequent PR inherited a red check it did not
+  # cause. With this trigger, a break is attributable to the commit that
+  # introduced it instead of to whoever opens the next PR.
+  push:
+    branches:
+      - main
   workflow_dispatch:
+  # MUST live here, not on the job. `schedule` is not a valid job key, and an
+  # unknown key makes GitHub reject the whole workflow at parse time — every run
+  # since it was added completed with zero jobs, so no PR has actually been
+  # smoke-tested. Verified: three most recent runs each report total_count 0.
+  #
+  # Moving it made the workflow PARSE. Making it PASS additionally required the
+  # private `premium` submodule (electron/tsconfig.premium-check.json includes
+  # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
+  # calls) — see the checkout steps below, which fetch it explicitly.
+  #
+  # Note the earlier plan recorded here (`submodules: true` + `token:`) does NOT
+  # work in this repo: the tree has an undescribed `natively-api` gitlink that
+  # makes the recursive submodule init abort before `premium` is ever cloned.
+  schedule:
+    - cron: '0 9 * * 1' # Every Monday at 09:00 UTC
 
 jobs:
   electron-entry-smoke:
-    runs-on: macos-latest
+    # Natively ships on macOS AND Windows, so shared build/test behavior must be
+    # proven on both. A macOS-only job cannot catch Windows-specific breakage in
+    # package scripts: npm runs them through cmd.exe there, which has no POSIX
+    # subshells, no `VAR=value cmd` prefixes, no `${VAR:-default}`, and does not
+    # strip single quotes (so single-quoted globs reach Node literally and match
+    # nothing). Every such break shipped green on the macOS-only matrix.
+    name: Electron entry smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Keep both legs running: knowing whether a failure is shared or
+      # platform-specific is the whole point of the matrix.
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
+          # `natively-api` — but .gitmodules only describes `premium`.
+          # `submodules: true` runs `git submodule update --init --recursive`,
+          # which aborts on the undescribed one:
+          #
+          #   fatal: No url found for submodule path 'natively-api' in .gitmodules
+          #
+          # and it aborts BEFORE cloning `premium`, so the checkout would fail
+          # while still leaving the directory empty. The explicit step below is
+          # path-limited to `premium` and therefore unaffected by the orphan.
+          #
+          # persist-credentials keeps the checkout token in .git/config so the
+          # submodule clone can reuse the header rewrite configured below.
+          persist-credentials: true
+
+      # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
+      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
+      # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
+      # calls. Without it every run dies at the first typecheck with
+      #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
+      # which is what every run of this workflow has done since it was added.
+      #
+      # GITHUB_TOKEN cannot read another private repo, so a token with access is
+      # required. Absent one, this step is SKIPPED rather than failed: the job
+      # then dies at the typecheck exactly as it does today, which is no worse
+      # than the status quo and keeps the reason visible in the step list.
+      #
+      # Two steps, because a step's own `env:` is NOT in scope for its `if:`.
+      # This one publishes the availability as an output the next step can gate
+      # on, without ever putting the secret itself in a condition.
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No SUBMODULE_TOKEN/GH_APP_TOKEN; the private premium submodule cannot be fetched and the typecheck step will fail on TS2307."
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `git -c`, NOT `git config --local`. The submodule clone runs as a
+          # SUBPROCESS, and a --local rewrite on the superproject does not reach
+          # it — the first attempt used --local and the runner fell straight
+          # through to an interactive credential prompt:
+          #   fatal: could not read Username for 'https://github.com'
+          # `-c` is exported through GIT_CONFIG_PARAMETERS, so the child git
+          # inherits it. Verified both ways against a local repro.
+          #
+          # It also keeps the token out of .git/config entirely: nothing is
+          # written to disk, so there is no cleanup step that could be skipped
+          # by an earlier failure and leave a credential behind in the workspace.
+          #
+          # Path-limited to `premium` on purpose — see the checkout comment above.
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          # Prove the checkout really produced the file the typecheck needs,
+          # rather than an empty directory that fails 200 lines later.
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -21,37 +131,256 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck Electron main process
+      # Belt-and-suspenders: confirm postinstall produced correct-arch
+      # binaries. The macOS runner is arm64, so x86_64 here means the install
+      # itself was poisoned. Mirrors the developer-side pre-commit + boot-time
+      # gates in main.ts. macOS-only by design: the check guards against Rosetta
+      # arch drift, which has no Windows analogue (verify-native-arch.js already
+      # returns `skipped` off darwin, so running it there proves nothing).
+      - name: Verify native module architecture
+        if: runner.os == 'macOS'
+        run: node scripts/verify-native-arch.js
+
+      # Real-execution proof that this platform's sqlite-vec binary loads and
+      # answers a vector query (2026-08-15). The Windows leg is the ONLY
+      # automated Windows this repo has, and vec0.dll had never been executed
+      # anywhere — the Windows pin (sqlite-vec-windows-x64) was verified from
+      # macOS as fetch + loader-name mapping only. BLOCKING on BOTH legs by
+      # design: VectorStore degrades to a JS-cosine fallback when the native
+      # extension is missing, which is exactly how a broken platform binary
+      # would otherwise ship green. Runs under Electron's ABI because
+      # postinstall builds better-sqlite3 for Electron, not system Node.
+      - name: Verify sqlite-vec native extension loads (vec0)
+        env:
+          ELECTRON_RUN_AS_NODE: "1"
+        run: npx --no-install electron scripts/verify-sqlite-vec-load.mjs
+
+      # TypeScript 7 is now the PRIMARY type-checker: `typecheck:electron` runs
+      # node_modules/typescript7/bin/tsc. Emit is untouched — esbuild owns
+      # dist-electron and vite owns dist; TS 7 only checks.
+      #
+      # This runs on BOTH legs on purpose. TS 7 is a native Go binary shipped as
+      # per-platform optional dependencies (@typescript/typescript-darwin-arm64,
+      # -win32-x64, ...), so the Windows leg is the ONLY thing that proves the
+      # win32 binary resolves and runs — a macOS-only check would say nothing
+      # about it.
+      #
+      # ⚠️ EXPECTED RED until the two deferred findings are resolved
+      # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
+      # EvidenceResolver's DI port, and ModeHybridRetriever's genuinely-nullable
+      # reranker. Deliberately left BLOCKING rather than downgraded to
+      # continue-on-error — muting a real gate to hide two known type errors is
+      # exactly the loosening this migration is not allowed to do. TS 5.9.3 and
+      # TS 7.0.2 report byte-identical error lists here, so this is a deferral
+      # backlog, NOT a TS 7 incompatibility.
+      - name: Typecheck Electron main process (TypeScript 7)
         run: npm run typecheck:electron
 
+      # Coverage gate for the `premium/` submodule. tsconfig.json deliberately
+      # drops premium from its ROOT FILE SET so `strict` applies only to this
+      # repo's sources — which silently took 38 premium files (KnowledgeOrchestrator,
+      # StructuredExtractor, NegotiationEngine, LicenseManager, all of roleInsight/)
+      # out of type-checking entirely, because they are reached via untyped
+      # require() and nothing else checks them: premium/ has no tsconfig of its own.
+      # This runs them at the strictness they were written against.
+      - name: Typecheck premium submodule (TypeScript 7)
+        if: steps.submodule_token.outputs.available == 'true'
+        run: npm run typecheck:premium
+
+      # Insurance for one release cycle: if TS 7 ever diverges from the compiler
+      # this repo shipped on, this step is what tells us. Non-blocking because
+      # TS 7 is the source of truth now. `typescript` 5.x stays installed
+      # regardless — react-doctor (.husky/pre-commit, every commit by everyone),
+      # typescript-eslint and tap all cap below TS 7.
+      - name: Typecheck Electron main process with TypeScript 5 (non-blocking insurance)
+        continue-on-error: true
+        run: npm run typecheck:ts5:electron
+
+      # `npm run build` now type-checks the renderer with TS 7 before vite emits.
       - name: Build renderer
         run: npm run build
 
       - name: Build Electron main process
         run: npm run build:electron
 
+      # `test -f` is a POSIX builtin and does not exist in the Windows runner's
+      # default shell (PowerShell). Node is guaranteed present on both legs.
       - name: Verify packaged entrypoint exists
-        run: test -f dist-electron/electron/main.js
+        run: node -e "require('node:fs').accessSync('dist-electron/electron/main.js')"
 
+      # Required packaged local-fallback assets (ONNX/Transformers deps +
+      # bundled MiniLM/MobileBERT models + local ONNX worker scripts). Fail the
+      # build here if any required core-fallback asset is missing — the app must
+      # work on a clean machine with no Ollama and no API keys.
+      - name: Verify required local models present
+        run: node scripts/download-models.js --verify
+
+      - name: Verify packaged local fallback assets (source mode)
+        run: npm run verify:packaged-local-assets
+
+      # Windows runs these ADVISORY (2026-08-10). Previously both steps were
+      # skipped outright on Windows, which meant the windows-latest leg reported
+      # green while running ZERO tests — its signal covered install and build
+      # only, and the matrix looked stronger than it was.
+      #
+      # The original gate was deliberate, and its reasoning stands: measured on a
+      # Windows 11 host, `npm test` failed 139 of 2832 and `test:intelligence` 3
+      # of 957, all pre-existing Windows incompatibilities in the suites (POSIX
+      # path assumptions, tsc-isolated-tree helpers, symlink fixtures). Shipping
+      # that red on every PR trains reviewers to ignore the workflow and would
+      # destroy the macOS signal that already works.
+      #
+      # `continue-on-error` keeps both properties: the suites actually RUN on
+      # Windows so the gap is visible and measurable per-PR, while only macOS can
+      # fail the check. A Windows regression now shows up as a warning instead of
+      # being invisible.
+      #
+      # RE-MEASURED 2026-08-17 on main @ e701c809 (the first fully green run), by
+      # attributing each count to its own step in the Windows job log rather than
+      # trusting step conclusions — two of them carry continue-on-error, so their
+      # "success" proves nothing:
+      #
+      #     npm test              7540 tests,  41 fail   <- still advisory, below
+      #     test:intelligence      963 tests,   0 fail   <- now ENFORCING
+      #     test:lib               327 tests,   0 fail   <- already enforcing
+      #     test:scripts            20 tests,   0 fail   <- already enforcing
+      #
+      # So the old "139 of 2832 / 3 of 957" figures are superseded: the real
+      # Windows gap is 41 tests in ONE suite, and intelligence has closed
+      # completely. The TODO below is being worked off suite by suite as each
+      # goes green, which is what it asked for.
+      #
+      # TODO: fix the remaining 41 Windows failures in `npm test`, then drop its
+      # `continue-on-error` too and the leg is enforcing on both platforms.
       - name: Run Electron unit tests
+        continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
 
+      # The four test steps here are INDEPENDENT suites over disjoint globs, so
+      # each of the three below carries `!cancelled()`. Without it a failed step
+      # skips every later one, and on the macOS leg — the only enforcing leg —
+      # that meant one red suite suppressed the other three: `test:intelligence`
+      # had never once been measured in CI, because `npm test` failed on every
+      # run that ever reached it. (Windows was unaffected only because
+      # `continue-on-error` keeps its steps' conclusion green.)
+      #
+      # `!cancelled()` rather than `always()`: both keep a later suite running
+      # after an earlier one fails, but `always()` ALSO forces the step to run
+      # while the job is being cancelled, turning a cancel into a multi-minute
+      # wait. The job still fails if any suite fails — this only stops one
+      # failure from hiding the others' results.
+      # ENFORCING ON BOTH LEGS since 2026-08-17. This carried
+      # `continue-on-error: runner.os == 'Windows'` while Windows failed 3 of 957
+      # here; it now passes 963 of 963 on Windows (green on the two consecutive
+      # runs before this change landed), so the gate was muting a suite that no
+      # longer needs muting — and a muted step cannot report the regression it
+      # exists to catch.
       - name: Run intelligence unit tests
+        if: ${{ !cancelled() }}
         run: npm run test:intelligence
 
+      # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
+      # onboarding orchestrator/stageCatalog, overlay state, etc.). Previously
+      # unwired: no CI job ran these, including the regression invariant added
+      # for the quiet_window drain-loop OOM crash. --experimental-strip-types
+      # lets the suite import stageCatalog.ts directly (not just its .mjs test
+      # mirror), so a real production-catalog regression fails CI, not just the
+      # hand-maintained mirror.
+      - name: Run src/lib unit tests
+        if: ${{ !cancelled() }}
+        run: npm run test:lib
+
+      # Runs on BOTH legs by design. scripts/package-app.js and
+      # scripts/run-with-env.mjs exist solely to reconcile /bin/sh and cmd.exe
+      # behavior for `npm run dist` and `test:electron`; verifying them on one
+      # OS would defeat their purpose. The helpers are pure and take tmpdir /
+      # resolver / signal-table as parameters, so each leg exercises both
+      # platform shapes rather than only its own.
+      - name: Run build-script unit tests
+        if: ${{ !cancelled() }}
+        run: npm run test:scripts
+
   api-smoke:
-    # Runs weekly (Monday 09:00 UTC) and on demand via workflow_dispatch.
-    # Requires secrets: NATIVELY_API_KEY (or NATIVELY_TRIAL_TOKEN) set in repo.
-    # Without credentials the suite is skipped cleanly via the env gate.
+    # Runs weekly (Monday 09:00 UTC, see the schedule trigger above) and on
+    # demand via workflow_dispatch. Requires secrets: NATIVELY_API_KEY (or
+    # NATIVELY_TRIAL_TOKEN) set in repo. Without credentials the suite is
+    # skipped cleanly via the env gate.
     name: API Smoke (weekly)
     runs-on: macos-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    schedule:
-      - cron: '0 9 * * 1'  # Every Monday at 09:00 UTC
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
+          # `natively-api` — but .gitmodules only describes `premium`.
+          # `submodules: true` runs `git submodule update --init --recursive`,
+          # which aborts on the undescribed one:
+          #
+          #   fatal: No url found for submodule path 'natively-api' in .gitmodules
+          #
+          # and it aborts BEFORE cloning `premium`, so the checkout would fail
+          # while still leaving the directory empty. The explicit step below is
+          # path-limited to `premium` and therefore unaffected by the orphan.
+          #
+          # persist-credentials keeps the checkout token in .git/config so the
+          # submodule clone can reuse the header rewrite configured below.
+          persist-credentials: true
+
+      # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
+      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
+      # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
+      # calls. Without it every run dies at the first typecheck with
+      #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
+      # which is what every run of this workflow has done since it was added.
+      #
+      # GITHUB_TOKEN cannot read another private repo, so a token with access is
+      # required. Absent one, this step is SKIPPED rather than failed: the job
+      # then dies at the typecheck exactly as it does today, which is no worse
+      # than the status quo and keeps the reason visible in the step list.
+      #
+      # Two steps, because a step's own `env:` is NOT in scope for its `if:`.
+      # This one publishes the availability as an output the next step can gate
+      # on, without ever putting the secret itself in a condition.
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No SUBMODULE_TOKEN/GH_APP_TOKEN; the private premium submodule cannot be fetched and the typecheck step will fail on TS2307."
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `git -c`, NOT `git config --local`. The submodule clone runs as a
+          # SUBPROCESS, and a --local rewrite on the superproject does not reach
+          # it — the first attempt used --local and the runner fell straight
+          # through to an interactive credential prompt:
+          #   fatal: could not read Username for 'https://github.com'
+          # `-c` is exported through GIT_CONFIG_PARAMETERS, so the child git
+          # inherits it. Verified both ways against a local repro.
+          #
+          # It also keeps the token out of .git/config entirely: nothing is
+          # written to disk, so there is no cleanup step that could be skipped
+          # by an earlier failure and leave a credential behind in the workspace.
+          #
+          # Path-limited to `premium` on purpose — see the checkout comment above.
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          # Prove the checkout really produced the file the typecheck needs,
+          # rather than an empty directory that fails 200 lines later.
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -65,8 +394,14 @@ jobs:
       - name: Build Electron (test prerequisite)
         run: npm run build:electron
 
+      # Dedicated script rather than `npm test -- --test-name-pattern`: the test
+      # runner now launches under Electron (so native modules built for
+      # Electron's ABI load), and the extra argv layer does not forward node's
+      # --test-name-pattern through to the runner — the flag was silently
+      # ignored and the FULL suite ran. Targeting the one file is also cheaper
+      # than filtering the whole glob set.
       - name: Run API smoke tests
-        run: npm test -- --test-name-pattern 'Natively API'
+        run: npm run test:api-smoke
         env:
           RUN_NATIVELY_API_E2E: ${{ secrets.RUN_NATIVELY_API_E2E }}
           NATIVELY_API_KEY: ${{ secrets.NATIVELY_API_KEY }}

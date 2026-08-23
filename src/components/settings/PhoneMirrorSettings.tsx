@@ -1,8 +1,54 @@
-import { Check, Copy, Lock, Puzzle, RefreshCw, ShieldAlert, ShieldCheck, Smartphone, Wifi, Zap } from 'lucide-react';
+import { BookOpen, Bot, Braces, Briefcase, Check, Copy, HelpCircle, Lock, Paperclip, RefreshCw, ShieldAlert, ShieldCheck, Sparkles, Wifi, Zap } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useT } from '../../i18n';
 import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electron';
 import { isMac } from '../../utils/platformUtils';
 import { BrowserExtensionIcon } from '../onboarding/BrowserExtensionIcon';
+import { useToggleInit } from './useToggleInit';
+
+const MiniPairingCountdownRing: React.FC<{ seconds: number; total: number }> = ({
+  seconds,
+  total,
+}) => {
+  const size = 24;
+  const stroke = 2.25;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const safeTotal = total > 0 ? total : 60;
+  const remaining = Math.max(0, Math.min(safeTotal, seconds));
+  const dashOffset = circumference * (1 - remaining / safeTotal);
+
+  return (
+    <div className="relative h-6 w-6 flex-shrink-0" aria-hidden="true">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgba(59, 130, 246, 0.18)"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="rgb(96, 165, 250)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ transition: 'stroke-dashoffset 950ms cubic-bezier(0.4, 0, 0.2, 1)' }}
+        />
+      </svg>
+      <span className="absolute inset-0 grid place-items-center font-mono text-[8px] font-semibold tabular-nums text-accent-primary">
+        {remaining}
+      </span>
+    </div>
+  );
+};
 
 const EMPTY_BROWSER_CTX: BrowserContextSettings = {
   autoDetectCoding: true,
@@ -27,9 +73,54 @@ const EMPTY_INFO: PhoneMirrorInfo = {
   qrDataUrl: null,
   clients: 0,
   extensionConnected: false,
+  bindAddress: '127.0.0.1',
+};
+
+/**
+ * Phone Mirror's own switch: same `.t-toggle` contract as the rest of settings,
+ * but it carries a focus ring and a busy/cursor-wait state the shared
+ * SettingsToggle does not model.
+ *
+ * `useToggleInit()`/`is-init` below is now inert — the shared CSS moved from a
+ * keyframe bounce (which needed `is-init` to avoid replaying on stale renders)
+ * to a plain `transition`, which doesn't need arming. Left wired rather than
+ * ripped out here; the `busy`-gating logic it's paired with is otherwise
+ * unaffected. THESE TWO SWITCHES ARE ASYNC: `onToggleEnable`/`onToggleLan` go
+ * through `apply()`, which sets `busy` synchronously but only updates `info`
+ * after the IPC round-trip, so `checked` (and therefore `data-on`) flips one
+ * or more renders later — that's still true regardless of what the CSS does
+ * with `is-init`.
+ */
+const PhoneMirrorSwitch: React.FC<{
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  busy: boolean;
+  /** Track color when on — accent for the server, amber for LAN exposure. */
+  onClassName: string;
+}> = ({ checked, onChange, label, busy, onClassName }) => {
+  const toggleInit = useToggleInit();
+  return (
+    <button
+      type="button"
+      role="switch"
+      data-on={String(checked)}
+      aria-checked={checked}
+      aria-label={label}
+      disabled={busy}
+      onClick={() => { toggleInit.arm(); onChange(); }}
+      /* p-0.5/`t-toggle-tight` are vestigial — geometry is the shared
+         .t-toggle rule's literal 88x40 shape at zoom:0.6 (t-toggle-lg,
+         index.css), not padding-derived. */
+      className={`t-toggle t-toggle-lg t-toggle-tight inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${busy ? '' : toggleInit.className}`}
+    >
+      <span className="t-toggle-thumb" aria-hidden="true" />
+    </button>
+  );
 };
 
 export const PhoneMirrorSettings: React.FC = () => {
+  const t = useT();
   const [info, setInfo] = useState<PhoneMirrorInfo>(EMPTY_INFO);
   const [busy, setBusy] = useState<null | 'enable' | 'disable' | 'lan' | 'rotate'>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +128,12 @@ export const PhoneMirrorSettings: React.FC = () => {
   // Companion browser-extension pairing: countdown (seconds left) while the 60s
   // one-click /pair window is open after "Connect browser extension".
   const [armCountdown, setArmCountdown] = useState(0);
+  const [armTotal, setArmTotal] = useState(60);
   const [armError, setArmError] = useState<string | null>(null);
   const [pairCopied, setPairCopied] = useState(false);
   const [showManualPair, setShowManualPair] = useState(false);
+  // Pairing disclosure under the Enable Phone Mirror row.
+  const [showPairing, setShowPairing] = useState(false);
   const armTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Smart Browser Context v2 — auto-capture settings.
@@ -196,6 +290,7 @@ export const PhoneMirrorSettings: React.FC = () => {
           ? Math.round((result.armedMs as number) / 1000)
           : 60;
       if (armTimerRef.current) clearInterval(armTimerRef.current);
+      setArmTotal(seconds);
       setArmCountdown(seconds);
       armTimerRef.current = setInterval(() => {
         setArmCountdown((prev) => {
@@ -231,407 +326,440 @@ export const PhoneMirrorSettings: React.FC = () => {
   const showQr = info.running && info.qrDataUrl;
   const lanRequestedButMissing = info.running && info.exposeOnLan && info.lanUrls.length === 0;
 
+  // Count of Optional classifiers that are hidden under the disclosure.
+  const hiddenOptionalCount = 4;
+
   return (
-    <div className="space-y-6 animated fadeIn">
-      <header className="flex items-start gap-3">
-        <div className="rounded-xl bg-bg-item-surface p-2.5 border border-border-subtle">
-          <Smartphone size={20} className="text-text-primary" />
-        </div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-text-primary text-lg font-semibold tracking-tight">Sync</h3>
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.08em] bg-amber-500/15 text-amber-400 border border-amber-500/30">
-              Beta
-            </span>
-          </div>
-          <p className="text-text-secondary text-sm mt-1 leading-relaxed">
-            Connect Natively to your phone and your browser. Stream live AI responses to a phone
-            browser on the same network, and pair the companion browser extension to send the
-            active tab's page context to the desktop.
-          </p>
-        </div>
+    <div className="space-y-6 animated fadeIn" data-settings-stagger>
+      <header>
+        <h3 className="text-lg font-bold text-text-primary mb-1">{t('Sync')}</h3>
+        <p className="text-xs text-text-secondary mb-5">
+          Mirror answers to your phone. Capture browser tabs to your answers.
+        </p>
       </header>
 
-      {/* Master toggle */}
-      <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-text-primary font-medium text-sm">Enable Phone Mirror</div>
-          <div className="text-text-secondary text-xs mt-1">
-            {info.running
-              ? `Running on port ${info.port} · ${info.clients} ${info.clients === 1 ? 'phone' : 'phones'} connected`
-              : 'Off — no listener, no exposure.'}
-          </div>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={info.running}
-          disabled={busy !== null}
-          onClick={onToggleEnable}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${info.running ? 'bg-blue-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
-        >
-          <span
-            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.running ? 'translate-x-5' : 'translate-x-1'}`}
-          />
-        </button>
-      </div>
-
-      {/* LAN switch */}
-      <div
-        className={`bg-bg-item-surface rounded-xl border ${lanWarning ? 'border-amber-500/30' : 'border-border-subtle'} p-5 transition-colors`}
-      >
+      {/* =====================================================================
+          Group A — Always-visible controls (the spine)
+          Single card with three stacked rows: Enable Phone Mirror, Allow LAN,
+          Browser Extension. Pairing lives as a nested disclosure under row 1,
+          manual pair under row 3, arm countdown under row 3.
+          ===================================================================== */}
+      <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 space-y-4">
+        {/* Row 1 — Enable Phone Mirror */}
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-text-primary font-medium text-sm flex items-center gap-2">
-              <Wifi size={14} className="text-text-secondary" /> Allow LAN access
-            </div>
+            <div className="text-text-primary font-medium text-sm">{t('Enable Phone Mirror')}</div>
             <div className="text-text-secondary text-xs mt-1">
-              {info.exposeOnLan
-                ? 'Phones on the same WiFi can connect with the pairing token.'
-                : 'Loopback only — only this computer can connect (use SSH tunnel for remote access).'}
+              {info.running
+                ? `On — port ${info.port} · bound to ${info.bindAddress} (${info.bindAddress === '0.0.0.0' ? 'LAN' : 'loopback only'}) · ${info.clients} ${info.clients === 1 ? 'phone' : 'phones'} connected`
+                : 'Off'}
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={info.exposeOnLan}
-            disabled={busy !== null}
-            onClick={onToggleLan}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.exposeOnLan ? 'translate-x-5' : 'translate-x-1'}`}
+          <PhoneMirrorSwitch
+            checked={info.running}
+            onChange={onToggleEnable}
+            label={t('Enable Phone Mirror')}
+            busy={busy !== null}
+            onClassName="bg-accent-primary"
+          />
+        </div>
+
+        {/* Pairing disclosure — nested under Enable Phone Mirror */}
+        <details
+          className="text-xs rounded-lg border border-border-subtle bg-bg-main"
+          open={showPairing}
+          onToggle={(e) => setShowPairing((e.target as HTMLDetailsElement).open)}
+        >
+          <summary className="px-3 py-2 text-text-secondary cursor-pointer hover:text-text-primary select-none">
+            Pairing code and URL
+          </summary>
+          <div className="px-3 pb-3 pt-1">
+            {info.running ? (
+              <div className="space-y-3">
+                <div className="flex items-start gap-4">
+                  {showQr ? (
+                    <div className="flex-shrink-0 rounded-md bg-white p-1.5 shadow-sm">
+                      <img
+                        src={info.qrDataUrl!}
+                        alt="Pairing QR code"
+                        className="block w-28 h-28"
+                        draggable={false}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex-shrink-0 w-28 h-28 rounded-md border border-dashed border-border-subtle grid place-items-center text-text-secondary text-[11px]">
+                      generating QR…
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0 space-y-2.5">
+                    <div>
+                      <div className="text-text-secondary text-[10px] uppercase tracking-wider mb-1">
+                        Scan with your phone
+                      </div>
+                      <div className="text-text-primary text-xs leading-snug">
+                        {info.exposeOnLan
+                          ? 'Open the camera app and point at the code.'
+                          : 'LAN access is off. Turn it on, or open the URL on this computer.'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-text-secondary text-[10px] uppercase tracking-wider mb-1">
+                        Pairing URL
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 min-w-0 truncate font-mono text-[11px] px-2 py-1.5 rounded-md bg-bg-item-surface border border-border-subtle text-text-primary">
+                          {info.primaryUrl || '—'}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={onCopy}
+                          disabled={!info.primaryUrl}
+                          className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-bg-item-active text-text-primary hover:bg-bg-item-active/70 disabled:opacity-50 transition-colors"
+                        >
+                          {copied ? (
+                            <>
+                              <Check size={12} /> Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={12} /> Copy
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    {info.exposeOnLan && info.lanUrls.length > 1 && (
+                      <details className="text-[11px]">
+                        <summary className="text-text-secondary cursor-pointer hover:text-text-primary">
+                          Other LAN addresses ({info.lanUrls.length - 1})
+                        </summary>
+                        <ul className="mt-1.5 space-y-0.5 font-mono text-text-secondary">
+                          {info.lanUrls.slice(1).map((u) => (
+                            <li key={u} className="truncate">
+                              {u}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
+                  <div className="flex items-center gap-1.5 text-text-secondary text-[11px]">
+                    <Lock size={11} /> Pairing token gates every connection.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onRotate}
+                    disabled={busy !== null}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/60 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={busy === 'rotate' ? 'animate-spin' : ''} />
+                    Rotate token
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-text-secondary text-xs py-1">
+                Turn on Phone Mirror to show the pairing code.
+              </div>
+            )}
+          </div>
+        </details>
+
+        <div className="h-px bg-border-subtle" />
+
+        {/* Row 2 — Allow LAN access */}
+        <div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-text-primary font-medium text-sm flex items-center gap-2">
+                <Wifi size={14} className="text-text-secondary" /> Allow LAN access
+              </div>
+              <div className="text-text-secondary text-xs mt-1">
+                {info.exposeOnLan
+                  ? 'Open the mirror on any device on this network.'
+                  : 'Keep the mirror on this computer only.'}
+              </div>
+            </div>
+            <PhoneMirrorSwitch
+              checked={info.exposeOnLan}
+              onChange={onToggleLan}
+              label={t('Allow LAN access')}
+              busy={busy !== null}
+              onClassName="bg-amber-500"
             />
-          </button>
-        </div>
-        {lanWarning && (
-          <div className="mt-3 flex items-start gap-2 text-amber-400/90 text-xs leading-relaxed">
-            <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
-            <span>
-              Anyone on this network with the pairing URL can read your AI responses. Use only on
-              trusted networks. Rotate the token below if you suspect the URL was shared.
-            </span>
           </div>
-        )}
-      </div>
-
-      {/* No-LAN-IP warning */}
-      {lanRequestedButMissing && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300 text-xs leading-relaxed flex items-start gap-2">
-          <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
-          <span>
-            LAN access is on, but no Wi-Fi or Ethernet IP was detected. Connect this{' '}
-            {isMac ? 'Mac' : 'PC'} to the same Wi-Fi as your phone (VPN tunnels and virtual
-            interfaces don't count). If you've connected, also confirm{' '}
-            {isMac ? (
-              <strong>System Settings → Network → Firewall</strong>
-            ) : (
-              <strong>Windows Defender Firewall → Allowed apps</strong>
-            )}{' '}
-            is allowing incoming connections for this app.
-          </span>
-        </div>
-      )}
-
-      {/* Pairing card */}
-      {info.running ? (
-        <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 space-y-4">
-          <div className="flex items-start gap-5">
-            {showQr ? (
-              <div className="flex-shrink-0 rounded-lg bg-white p-2 shadow-sm">
-                <img
-                  src={info.qrDataUrl!}
-                  alt="Pairing QR code"
-                  className="block w-36 h-36"
-                  draggable={false}
-                />
-              </div>
-            ) : (
-              <div className="flex-shrink-0 w-36 h-36 rounded-lg border border-dashed border-border-subtle grid place-items-center text-text-secondary text-xs">
-                generating QR…
-              </div>
-            )}
-            <div className="flex-1 min-w-0 space-y-3">
-              <div>
-                <div className="text-text-secondary text-xs uppercase tracking-wider mb-1.5">
-                  Scan with your phone
-                </div>
-                <div className="text-text-primary text-sm font-medium">
-                  {info.exposeOnLan
-                    ? 'Open the camera app and point at the code.'
-                    : 'LAN access is off. Turn it on, or open the URL on this computer.'}
-                </div>
-              </div>
-              <div>
-                <div className="text-text-secondary text-xs uppercase tracking-wider mb-1.5">
-                  Pairing URL
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 min-w-0 truncate font-mono text-xs px-2.5 py-2 rounded-md bg-bg-main border border-border-subtle text-text-primary">
-                    {info.primaryUrl || '—'}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={onCopy}
-                    disabled={!info.primaryUrl}
-                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium bg-bg-item-active text-text-primary hover:bg-bg-item-active/70 disabled:opacity-50 transition-colors"
-                  >
-                    {copied ? (
-                      <>
-                        <Check size={13} /> Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={13} /> Copy
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-              {info.exposeOnLan && info.lanUrls.length > 1 && (
-                <details className="text-xs">
-                  <summary className="text-text-secondary cursor-pointer hover:text-text-primary">
-                    Other LAN addresses ({info.lanUrls.length - 1})
-                  </summary>
-                  <ul className="mt-2 space-y-1 font-mono text-text-secondary">
-                    {info.lanUrls.slice(1).map((u) => (
-                      <li key={u} className="truncate">
-                        {u}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+          {lanWarning && (
+            <div className="mt-2.5 flex items-start gap-2 text-amber-400/90 text-xs leading-relaxed">
+              <ShieldAlert size={13} className="mt-0.5 flex-shrink-0" />
+              <span>
+                Anyone with the pairing link can view the phone mirror on this Wi-Fi. Rotate the
+                token if the link was shared.
+              </span>
             </div>
-          </div>
-          <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
-            <div className="flex items-center gap-2 text-text-secondary text-xs">
-              <Lock size={12} /> Pairing token gates every connection.
+          )}
+          {lanRequestedButMissing && (
+            <div className="mt-2.5 flex items-start gap-2 text-amber-300/90 text-xs leading-relaxed">
+              <ShieldAlert size={13} className="mt-0.5 flex-shrink-0" />
+              <span>
+                LAN access is on, but no Wi-Fi or Ethernet IP was detected. Connect this{' '}
+                {isMac ? 'Mac' : 'PC'} to the same Wi-Fi as your phone (VPN tunnels and virtual
+                interfaces don't count). If you've connected, also confirm{' '}
+                {isMac ? (
+                  <strong>System Settings → Network → Firewall</strong>
+                ) : (
+                  <strong>Windows Defender Firewall → Allowed apps</strong>
+                )}{' '}
+                is allowing incoming connections for this app.
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={onRotate}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/60 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={busy === 'rotate' ? 'animate-spin' : ''} />
-              Rotate token
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-bg-item-surface/50 rounded-xl border border-dashed border-border-subtle p-6 text-center text-text-secondary text-sm">
-          Turn on Phone Mirror to generate a pairing URL and QR code.
-        </div>
-      )}
-
-      {/* Browser Extension card — pair the companion extension to send the active
-          browser tab's page context to the desktop. Shares the Phone Mirror
-          server + pairing token. */}
-      <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="rounded-lg bg-bg-main p-2 border border-border-subtle flex-shrink-0">
-            <BrowserExtensionIcon color="rgb(129, 140, 248)" size={16} className="text-indigo-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-text-primary font-medium text-sm">Browser Extension</div>
-              {/* Live connection indicator: green = extension connected over the
-                  capture WebSocket; grey = paired/installed but not connected. */}
-              {info.running && (
-                <span className="flex items-center gap-1.5 flex-shrink-0">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      info.extensionConnected ? 'bg-green-500' : 'bg-text-secondary/40'
-                    }`}
-                  />
-                  <span className="text-[11px] text-text-secondary">
-                    {info.extensionConnected ? 'Connected' : 'Not connected'}
-                  </span>
-                </span>
-              )}
-            </div>
-            <div className="text-text-secondary text-xs mt-1 leading-relaxed">
-              Pair the Natively companion extension to send the active tab's page content
-              to the desktop. Press{' '}
-              <kbd className="px-1 py-0.5 rounded bg-bg-main border border-border-subtle font-mono text-[10px]">
-                {isMac ? '⌘' : 'Ctrl'}+Shift+Y
-              </kbd>{' '}
-              to capture (falls back to a screenshot when no browser is reachable). Install
-              steps are in the Help tab.
-            </div>
-          </div>
+          )}
         </div>
 
-        {info.running ? (
-          <>
-            <button
-              type="button"
-              onClick={onArmExtension}
-              disabled={armCountdown > 0}
-              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                armCountdown > 0
-                  ? 'bg-blue-500/15 text-blue-300 cursor-default'
-                  : 'bg-blue-500 text-white hover:bg-blue-400'
-              }`}
-            >
+        <div className="h-px bg-border-subtle" />
+
+        {/* Row 3 — Browser Extension (inline status + action, not a big card) */}
+        <div>
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-bg-main p-2 border border-border-subtle flex-shrink-0 mt-0.5">
+              <BrowserExtensionIcon color="rgb(129, 140, 248)" size={16} className="text-indigo-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-text-primary font-medium text-sm">{t('Browser Extension')}</div>
+              <div className="text-text-secondary text-xs mt-1 leading-relaxed">
+                Pair the companion extension to send the active tab to the desktop.{' '}
+                <kbd className="px-1 py-0.5 rounded bg-bg-main border border-border-subtle font-mono text-[10px]">
+                  {isMac ? '⌘' : 'Ctrl'}+Y
+                </kbd>{' '}
+                to capture manually.
+              </div>
+            </div>
+          </div>
+
+          {info.running ? (
+            <div className="mt-3 space-y-2.5">
+              {/* Primary action area — three states:
+                  1) Counting down (arm in flight) → compact waiting status.
+                  2) Already connected & not arming → quiet emerald status row +
+                     small ghost "Re-pair" link on the right.
+                  3) Idle, not connected → big blue primary CTA. */}
               {armCountdown > 0 ? (
-                <>
-                  <Zap size={14} className="animate-pulse" />
-                  Open the extension and click “Connect to Natively” · {armCountdown}s
-                </>
-              ) : (
-                <>
-                  <Zap size={14} />
-                  Connect browser extension
-                </>
-              )}
-            </button>
-
-            <details
-              className="text-xs"
-              open={showManualPair}
-              onToggle={(e) => setShowManualPair((e.target as HTMLDetailsElement).open)}
-            >
-              <summary className="text-text-secondary cursor-pointer hover:text-text-primary select-none">
-                Pair manually instead
-              </summary>
-              <div className="mt-2 space-y-2">
-                <div className="text-text-secondary leading-relaxed">
-                  In the extension popup, expand <strong>Pair manually instead</strong> and paste
-                  this pairing string:
+                <div
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                  aria-label={`Waiting for extension. Pairing window: ${armCountdown} seconds remaining.`}
+                  className="flex items-center gap-2.5 rounded-lg border border-accent-border bg-accent-subtle px-3 py-2"
+                >
+                  <MiniPairingCountdownRing seconds={armCountdown} total={armTotal} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-text-primary text-xs font-medium leading-tight">
+                      Waiting for extension
+                    </div>
+                    <div className="text-text-secondary text-[11px] mt-0.5 leading-snug">
+                      Click <span className="text-accent-primary">Connect to Natively</span> in the browser popup.
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 min-w-0 truncate font-mono text-xs px-2.5 py-2 rounded-md bg-bg-main border border-border-subtle text-text-primary">
-                    {info.port && info.extToken ? `${info.port}:${info.extToken}` : '—'}
-                  </code>
+              ) : info.extensionConnected ? (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/20">
+                      <Check size={12} className="text-emerald-400" aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="text-emerald-300 text-xs font-medium leading-tight">
+                        Connected
+                      </div>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    onClick={onCopyPairString}
-                    disabled={!info.port || !info.extToken}
-                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium bg-bg-item-active text-text-primary hover:bg-bg-item-active/70 disabled:opacity-50 transition-colors"
+                    onClick={onArmExtension}
+                    aria-label="Re-pair browser extension"
+                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium text-text-secondary hover:text-text-primary hover:bg-bg-item-active/60 transition-colors"
                   >
-                    {pairCopied ? (
-                      <>
-                        <Check size={13} /> Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={13} /> Copy
-                      </>
-                    )}
+                    <RefreshCw size={11} />
+                    Re-pair
                   </button>
                 </div>
-              </div>
-            </details>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onArmExtension}
+                  aria-label="Connect browser extension"
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors bg-legacy-action-bg text-legacy-action-fg hover:bg-legacy-action-hover"
+                >
+                  <Zap size={13} />
+                  Connect browser extension
+                </button>
+              )}
 
-            {armError && (
-              <div className="text-xs text-red-300">{armError}</div>
-            )}
-          </>
-        ) : (
-          <div className="text-text-secondary text-xs flex items-center gap-2">
-            <Lock size={12} /> Enable Phone Mirror first to pair the browser extension.
-          </div>
-        )}
+              <details
+                className="text-[11px]"
+                open={showManualPair}
+                onToggle={(e) => setShowManualPair((e.target as HTMLDetailsElement).open)}
+              >
+                <summary className="text-text-secondary cursor-pointer hover:text-text-primary select-none">
+                  Pair manually instead
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <div className="text-text-secondary leading-relaxed">
+                    In the extension popup, expand <strong>Pair manually instead</strong> and paste
+                    this pairing string:
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 min-w-0 truncate font-mono text-[11px] px-2 py-1.5 rounded-md bg-bg-item-surface border border-border-subtle text-text-primary">
+                      {info.port && info.extToken ? `${info.port}:${info.extToken}` : '—'}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={onCopyPairString}
+                      disabled={!info.port || !info.extToken}
+                      className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-medium bg-bg-item-active text-text-primary hover:bg-bg-item-active/70 disabled:opacity-50 transition-colors"
+                    >
+                      {pairCopied ? (
+                        <>
+                          <Check size={12} /> Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} /> Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </details>
+
+              {armError && <div className="text-[11px] text-red-300">{armError}</div>}
+            </div>
+          ) : (
+            <div className="mt-2.5 text-text-secondary text-[11px] flex items-center gap-1.5">
+              <Lock size={11} /> Enable Phone Mirror first to pair the browser extension.
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Smart Browser Context — automatic coding/interview capture. Manual
-          capture (the hotkey + popup) always works and is intentionally not a
-          toggle here. Sensitive pages (email/chat/banking/auth) are ALWAYS
-          blocked — that floor is enforced in the desktop policy engine and has
-          no off switch. */}
+      {/* =====================================================================
+          Group B — Smart Browser Context (single card)
+          Primary 3 toggles always visible; Optional classifiers nested under a
+          <details>. Experimental toggle lives inside that disclosure with
+          amber treatment, NOT as a peer card.
+          ===================================================================== */}
       <div className="bg-bg-item-surface rounded-xl border border-border-subtle p-5 space-y-4">
         <div className="flex items-start gap-3">
           <div className="rounded-lg bg-bg-main p-2 border border-border-subtle flex-shrink-0">
             <ShieldCheck size={16} className="text-emerald-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-text-primary font-medium text-sm">Smart Browser Context</div>
+            <div
+              role="heading"
+              aria-level={3}
+              className="text-text-primary font-medium text-sm"
+            >
+              Smart Browser Context
+            </div>
             <div className="text-text-secondary text-xs mt-1 leading-relaxed">
-              Automatically detect coding/interview pages (LeetCode, HackerRank, CoderPad, and
-              more) and attach the problem context when you ask for an answer. Manual capture
-              always works regardless of these settings.
+              Detect coding/interview pages and attach the problem when you ask. Manual capture
+              always works.
             </div>
           </div>
         </div>
 
-        <CtxToggle
-          label="Auto-detect coding problems"
-          desc="Recognize high-confidence coding/interview pages locally (no page content is read in the background)."
-          checked={ctx.autoDetectCoding}
-          onChange={() => onToggleCtx('autoDetectCoding', 'browserAutoDetectCoding')}
-        />
-        <CtxToggle
-          label="Auto-attach coding context when answering"
-          desc="When you ask for an answer on a high-confidence coding page, capture and attach it just-in-time."
-          checked={ctx.autoAttachCoding}
-          onChange={() => onToggleCtx('autoAttachCoding', 'browserAutoAttachCoding')}
-        />
-        <CtxToggle
-          label="Ask before attaching unknown pages"
-          desc="For pages we can't classify confidently, ask first instead of attaching automatically."
-          checked={ctx.askBeforeUnknown}
-          onChange={() => onToggleCtx('askBeforeUnknown', 'browserAskBeforeUnknown')}
-        />
-        <CtxToggle
-          label="AI page classifier (opt-in)"
-          desc="For unknown pages, send sanitized metadata only (host + keywords, never page content) to your configured AI provider to classify the page. Off by default."
-          checked={ctx.aiClassifierEnabled}
-          onChange={() => onToggleCtx('aiClassifierEnabled', 'browserAiClassifierEnabled')}
-        />
-        <CtxToggle
-          label="Auto-detect job descriptions"
-          desc="Optional. Recognize job-posting pages so you can attach them when answering."
-          checked={ctx.autoDetectJobDescriptions}
-          onChange={() => onToggleCtx('autoDetectJobDescriptions', 'browserAutoDetectJobDescriptions')}
-        />
-        <CtxToggle
-          label="Auto-detect developer docs"
-          desc="Optional. Recognize documentation pages so you can attach them when answering."
-          checked={ctx.autoDetectDeveloperDocs}
-          onChange={() => onToggleCtx('autoDetectDeveloperDocs', 'browserAutoDetectDeveloperDocs')}
-        />
+        <div role="group" aria-label="Automatic coding capture" className="space-y-2.5">
+          <CtxToggle
+            icon={<Braces size={13} className="text-text-secondary" aria-hidden="true" />}
+            label="Auto-detect coding problems"
+            desc="Recognize high-confidence coding/interview pages locally."
+            checked={ctx.autoDetectCoding}
+            onChange={() => onToggleCtx('autoDetectCoding', 'browserAutoDetectCoding')}
+          />
+          <CtxToggle
+            icon={<Paperclip size={13} className="text-text-secondary" aria-hidden="true" />}
+            label="Auto-attach coding context"
+            desc="Capture and attach it just-in-time when you ask for an answer."
+            checked={ctx.autoAttachCoding}
+            onChange={() => onToggleCtx('autoAttachCoding', 'browserAutoAttachCoding')}
+          />
+          <CtxToggle
+            icon={<HelpCircle size={13} className="text-text-secondary" aria-hidden="true" />}
+            label="Ask before attaching unknown pages"
+            desc="When we can't classify a page confidently, ask first instead of attaching automatically."
+            checked={ctx.askBeforeUnknown}
+            onChange={() => onToggleCtx('askBeforeUnknown', 'browserAskBeforeUnknown')}
+          />
+        </div>
 
-        {/* EXPERIMENTAL: full-page capture. Relaxes the coding-only auto gate but
-            NEVER the sensitive floor below — email/chat/banking/auth stay blocked. */}
-        <CtxToggle
-          label="Experimental: send full page to AI"
-          desc="When on, attach the FULL page content (not just coding problems) when you ask for an answer, and let the AI pick what's relevant. Email, chat, banking, and auth pages are still never captured."
-          checked={ctx.experimentalFullPageCapture}
-          onChange={() => onToggleCtx('experimentalFullPageCapture', 'browserExperimentalFullPageCapture')}
-          experimental
-        />
+        {/* Optional classifiers — collapsed by default. Experimental toggle
+            lives inside, with amber treatment, no standalone peer card. */}
+        <details className="text-xs rounded-lg border border-border-subtle bg-bg-main">
+          <summary className="px-3 py-2 text-text-secondary cursor-pointer hover:text-text-primary select-none flex items-center gap-2">
+            <span>Optional classifiers</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-bg-item-active text-text-secondary border border-border-subtle">
+              {hiddenOptionalCount} hidden
+            </span>
+          </summary>
+          <div className="px-3 pb-3 pt-1 space-y-2.5">
+            <CtxToggle
+              icon={<Sparkles size={13} className="text-text-secondary" aria-hidden="true" />}
+              label="AI page classifier"
+              desc="Classify unknown pages with sanitized metadata."
+              checked={ctx.aiClassifierEnabled}
+              onChange={() => onToggleCtx('aiClassifierEnabled', 'browserAiClassifierEnabled')}
+            />
+            <CtxToggle
+              icon={<Briefcase size={13} className="text-text-secondary" aria-hidden="true" />}
+              label="Auto-detect job descriptions"
+              desc="Recognize job posts."
+              checked={ctx.autoDetectJobDescriptions}
+              onChange={() => onToggleCtx('autoDetectJobDescriptions', 'browserAutoDetectJobDescriptions')}
+            />
+            <CtxToggle
+              icon={<BookOpen size={13} className="text-text-secondary" aria-hidden="true" />}
+              label="Auto-detect developer docs"
+              desc="Recognize dev docs."
+              checked={ctx.autoDetectDeveloperDocs}
+              onChange={() => onToggleCtx('autoDetectDeveloperDocs', 'browserAutoDetectDeveloperDocs')}
+            />
 
-        {/* The non-negotiable privacy floor — shown as a locked, always-on row. */}
-        <div className="flex items-start justify-between gap-3 pt-1">
-          <div className="min-w-0">
-            <div className="text-text-primary text-sm flex items-center gap-1.5">
-              <Lock size={12} className="text-text-secondary" />
-              Never capture email, chat, banking, or auth pages
-            </div>
-            <div className="text-text-secondary text-xs mt-0.5 leading-relaxed">
-              Always on. Sensitive pages are never auto-captured and are never sent to the AI
-              classifier, even if a page looks like a coding problem.
-            </div>
+            <CtxToggle
+              icon={<Paperclip size={13} className="text-text-secondary" aria-hidden="true" />}
+              label="Full page context"
+              desc="Use the complete page when excerpts miss details. More tokens; sensitive pages stay blocked."
+              checked={ctx.experimentalFullPageCapture}
+              onChange={() => onToggleCtx('experimentalFullPageCapture', 'browserExperimentalFullPageCapture')}
+              experimental
+            />
           </div>
-          <span className="flex-shrink-0 text-[11px] text-emerald-400 font-medium mt-0.5">
-            Enforced
+        </details>
+      </div>
+
+      {/* =====================================================================
+          Group C — Quiet reassurance footer (NOT a big emerald card)
+          Privacy floor line + local-network line. Muted, no gradients.
+          ===================================================================== */}
+      <footer className="space-y-1.5 text-text-secondary text-xs leading-relaxed">
+        <div className="flex items-start gap-2">
+          <Lock size={12} className="mt-0.5 flex-shrink-0 text-text-secondary" />
+          <span>
+            Email, chat, banking, and auth pages are never captured — even if they look like a
+            coding page.
           </span>
         </div>
-      </div>
+        <div className="flex items-start gap-2">
+          <Wifi size={12} className="mt-0.5 flex-shrink-0 text-text-secondary" />
+          <span>{t('Phone Mirror runs on your local network. No traffic leaves this machine.')}</span>
+        </div>
+      </footer>
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
-
-      <div className="text-text-secondary text-xs leading-relaxed">
-        Phone Mirror runs entirely on your local network. No traffic leaves your machine — the
-        bridge serves an HTML page and a WebSocket directly to your phone, gated by a per-session
-        pairing token.
-      </div>
     </div>
   );
 };
@@ -642,6 +770,8 @@ const CtxToggle: React.FC<{
   desc: string;
   checked: boolean;
   onChange: () => void;
+  /** Optional leading icon, rendered in a small rounded surface on the left. */
+  icon?: React.ReactNode;
   /** Show a subtle amber "Experimental" chip next to the label. */
   experimental?: boolean;
   /**
@@ -652,40 +782,53 @@ const CtxToggle: React.FC<{
    * path — tracked as a follow-up.)
    */
   comingSoon?: boolean;
-}> = ({ label, desc, checked, onChange, experimental, comingSoon }) => (
+}> = ({ label, desc, checked, onChange, icon, experimental, comingSoon }) => {
+  const toggleInit = useToggleInit();
+  return (
   <div className={`flex items-start justify-between gap-3 ${comingSoon ? 'opacity-55' : ''}`}>
-    <div className="min-w-0">
-      <div className="text-text-primary text-sm flex items-center gap-2">
-        {label}
-        {experimental && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.08em] bg-amber-500/15 text-amber-400 border border-amber-500/30">
-            Experimental
-          </span>
-        )}
-        {comingSoon && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.08em] bg-text-secondary/15 text-text-secondary border border-border-subtle">
-            Coming soon
-          </span>
-        )}
+    <div className="flex items-start gap-2.5 min-w-0">
+      {icon && (
+        <div
+          className="flex-shrink-0 mt-0.5 w-6 h-6 rounded-md bg-bg-main border border-border-subtle grid place-items-center"
+          aria-hidden="true"
+        >
+          {icon}
+        </div>
+      )}
+      <div className="min-w-0">
+        <div className="text-text-primary text-sm flex items-center gap-2">
+          {label}
+          {experimental && (
+            <span className="inline-flex items-center rounded-full bg-amber-500/10 px-1 py-px text-[8px] font-semibold uppercase tracking-[0.05em] text-amber-400/90">
+              Experimental
+            </span>
+          )}
+          {comingSoon && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.08em] bg-text-secondary/15 text-text-secondary border border-border-subtle">
+              Coming soon
+            </span>
+          )}
+        </div>
+        <div className="text-text-secondary text-xs mt-0.5 leading-snug">{desc}</div>
       </div>
-      <div className="text-text-secondary text-xs mt-0.5 leading-relaxed">{desc}</div>
     </div>
     <button
       type="button"
       role="switch"
+      data-on={String(comingSoon ? false : checked)}
       aria-checked={comingSoon ? false : checked}
       aria-label={label}
       disabled={comingSoon}
-      onClick={comingSoon ? undefined : onChange}
-      className={`flex-shrink-0 mt-0.5 relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-        comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-blue-500' : 'bg-bg-item-active'
-      }`}
+      onClick={comingSoon ? undefined : () => { toggleInit.arm(); onChange(); }}
+      /* p-0.5/`t-toggle-tight` are vestigial — geometry is the shared
+         .t-toggle rule's literal 88x40 shape at zoom:0.6 (t-toggle-lg,
+         index.css), not padding-derived. */
+      className={`t-toggle t-toggle-lg t-toggle-tight flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
+        comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
+      } ${toggleInit.className}`}
     >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-          !comingSoon && checked ? 'translate-x-4' : 'translate-x-0.5'
-        }`}
-      />
+      <span className="t-toggle-thumb" aria-hidden="true" />
     </button>
   </div>
-);
+  );
+};

@@ -13,20 +13,20 @@ async function loadRouter() {
   return import(pathToFileURL(routerPath).href);
 }
 
-test('embeddings scope denial routes through Ollama before local fallback', () => {
+test('embeddings scope denial routes through Ollama before bundled local fallback', () => {
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
   assert.match(src, /error instanceof ProviderScopeError/);
   assert.match(src, /\[ScopeFallback\] embeddings denied for cloud; routing to Ollama/);
   assert.match(src, /candidates\.push\(new OllamaEmbeddingProvider/);
-  assert.match(src, /if \(!embeddingsDenied\) \{\s*candidates\.push\(new LocalEmbeddingProvider\(\)\)/);
+  assert.match(src, /const local = new LocalEmbeddingProvider\(\)/);
 });
 
-test('embeddings scope denial gracefully omits embeddings when Ollama is unavailable', () => {
+test('embeddings scope denial gracefully uses bundled local embeddings when Ollama is unavailable', () => {
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
   assert.match(src, /\[ScopeFallback\] embeddings denied; Ollama unavailable, using bundled local embedding model/);
-  assert.match(src, /return new LocalEmbeddingProvider\(\)/);
+  assert.match(src, /return local/);
 });
 
 test('transcript scope denial routes full context to Ollama when available', () => {
@@ -50,13 +50,15 @@ test('transcript scope denial omits transcript from cloud calls when Ollama is u
   assert.match(src, /shouldOmitContext \? "" : context \|\| ""/);
 });
 
-test('LLMHelper infers auxiliary context scopes before cloud routing', () => {
+test('LLMHelper infers auxiliary context and embedded message scopes before cloud routing', () => {
   const src = read('electron/LLMHelper.ts');
 
   assert.match(src, /inferContextScopes\(context\?: string\): ProviderDataScope\[\]/);
+  assert.match(src, /inferEmbeddedMessageScopes\(message\?: string\): ProviderDataScope\[\]/);
   assert.match(src, /<reference_file\|<active_mode_retrieved_context\|mode_retrieval/);
-  assert.match(src, /<meeting_history\|USER-PROVIDED PERSONA CONTEXT\|<user_context/);
+  assert.match(src, /<meeting_history\|USER-PROVIDED PERSONA CONTEXT\|<user_context\|<candidate_\|<active_mode_custom_instructions/);
   assert.match(src, /<post_call_summary\|meeting summary\|silent meeting summarizer\|silent meeting note-taker/);
+  assert.match(src, /stripDeniedScopedBlocksFromMessage\(message, deniedOutboundScopes\)/);
 });
 
 test('routeLLMProviders keeps Ollama available when cloud scopes are denied', async () => {
@@ -87,6 +89,14 @@ test('routeLLMProviders keeps Ollama available when cloud scopes are denied', as
     dataScopes: ['transcript'],
     scopePolicy: { transcript: false },
   }));
+});
+
+test('WhatToAnswerLLM document-grounded mode fails closed when reference_files scope is denied and local fallback unavailable', () => {
+  const src = read('electron/llm/WhatToAnswerLLM.ts');
+
+  assert.match(src, /DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE/);
+  assert.match(src, /documentGroundedCustomModeActive = activeModeGroundingInfo\?\.documentGroundedCustomModeActive === true/);
+  assert.match(src, /if \(forceDocumentGrounding\) \{\s*yield DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE;\s*return;\s*\}/);
 });
 
 test('MeetingPersistence post_call_summary denial falls back to local summary path', () => {

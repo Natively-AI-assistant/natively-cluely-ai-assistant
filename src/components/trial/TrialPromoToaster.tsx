@@ -11,10 +11,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, ArrowRight, MessageSquareCode, AudioLines, Compass } from 'lucide-react';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { isToasterAllowed, markToasterAsShown } from '../../lib/toasterGating';
 
 const PERMS_KEY        = 'natively_perms_shown_v1';
-const STARTUP_DELAY_MS = 10_000;
 
 // ─── Design tokens ────────────────────────────────────────────
 const T = {
@@ -42,7 +40,7 @@ interface Props {
 }
 
 export const TrialPromoToaster: React.FC<Props> = ({
-  isOpen, hasNativelyKey, hasTrialToken, onDismiss, onStartTrial, onManualSetup,
+  isOpen, hasNativelyKey: _hasNativelyKey, hasTrialToken: _hasTrialToken, onDismiss, onStartTrial, onManualSetup,
 }) => {
   const [visible,  setVisible]  = useState(false);
   const [starting, setStarting] = useState(false);
@@ -68,26 +66,12 @@ export const TrialPromoToaster: React.FC<Props> = ({
 
   useEffect(() => {
     if (!isOpen) { setVisible(false); return; }
-
-    // Don't show if user has a key or trial already
-    if (hasNativelyKey || hasTrialToken) return;
-
-    // Don't show on very first launch (permissions toaster shows instead)
-    const permsShown = localStorage.getItem(PERMS_KEY);
-    if (!permsShown) return;
-
-    // Check central gating
-    if (!isToasterAllowed('trial_promo')) return;
-
-    const t = setTimeout(() => {
-      setVisible(true);
-      markToasterAsShown('trial_promo');
-    }, STARTUP_DELAY_MS);
-    return () => clearTimeout(t);
-  }, [isOpen, hasNativelyKey, hasTrialToken]);
+    // Pure presentational: orchestrator has already gated on key/token/perms.
+    // Just become visible.
+    setVisible(true);
+  }, [isOpen]);
 
   const handleDismiss = () => {
-    markToasterAsShown('trial_promo');
     setVisible(false);
     onDismiss();
   };
@@ -97,7 +81,6 @@ export const TrialPromoToaster: React.FC<Props> = ({
     setError(null);
     try {
       await onStartTrial();
-      markToasterAsShown('trial_promo');
       setVisible(false);
     } catch (e: any) {
       setError(e.message || 'Could not start trial. Check your connection.');
@@ -106,7 +89,6 @@ export const TrialPromoToaster: React.FC<Props> = ({
   };
 
   const handleManual = () => {
-    markToasterAsShown('trial_promo');
     setVisible(false);
     onManualSetup();
   };

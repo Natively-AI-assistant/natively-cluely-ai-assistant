@@ -285,6 +285,95 @@ test('follow-up generator uses LLM body when valid', async () => {
   assert.equal(draft.subject, 'Sync recap');
 });
 
+// ── Follow-up generator quality gates (regression suite for the senior review) ─
+// These tests are intentionally narrow: each one locks in a single user-visible
+// behaviour that the senior review found missing or breakable.
+
+test('follow-up: rejects LLM subject with placeholder syntax and falls back to a grounded one', async () => {
+  // A model that emits {first name} / [Name] must not see it persisted; the gate
+  // strips placeholder syntax, then falls back to subjectFromContent(title).
+  const llm = fakeLLM(['{"subject":"Hi {first name}, following up","body":"Thanks for your time today, we landed on PostHog for analytics."}']);
+  const gen = new FollowUpDraftGenerator(llm);
+  const draft = await gen.generate({
+    summary: {
+      title: 'Acme Q3 renewal kickoff',
+      overview: 'Renewal conversation covering PostHog selection.',
+      tldr: ['Chose PostHog for analytics'],
+      whatChanged: [],
+      decisions: [{ id: 'd1', text: 'Use PostHog', confidence: 'high' }],
+      actionItems: [],
+      openQuestions: [],
+      risks: [],
+      sections: [],
+    },
+    mode: 'general',
+  });
+  assert.equal(draft.type, 'email');
+  // Placeholder syntax must not appear in the persisted subject.
+  assert.equal(/[{}\[\]]/.test(draft.subject || ''), false, `subject leaked placeholder syntax: ${draft.subject}`);
+  // The deterministic fallback subject is grounded in the title.
+  assert.match(draft.subject || '', /Acme Q3 renewal kickoff/);
+});
+
+test('follow-up: rejects LLM subject with zero overlap to the notes (hallucinated topics list)', async () => {
+  // Classic small-model regression: subject like "Mentions of PostHog, retention, Friday"
+  // when the notes don't mention "Friday" — must be rejected.
+  const llm = fakeLLM(['{"subject":"Mentions of bananas, quokkas, and prisms","body":"Thanks for your time today, we landed on PostHog for analytics."}']);
+  const gen = new FollowUpDraftGenerator(llm);
+  const draft = await gen.generate({
+    summary: {
+      title: 'Acme analytics review',
+      overview: 'Reviewed analytics stack.',
+      tldr: ['Chose PostHog'],
+      whatChanged: [],
+      decisions: [{ id: 'd1', text: 'Use PostHog', confidence: 'high' }],
+      actionItems: [],
+      openQuestions: [],
+      risks: [],
+      sections: [],
+    },
+    mode: 'general',
+  });
+  assert.match(draft.subject || '', /Acme analytics review/, 'should fall back to title-derived subject');
+});
+
+test('follow-up: subjectFromContent rejects generic titles and prefers a real tldr', async () => {
+  const gen = new FollowUpDraftGenerator(fakeLLM([]));
+  // No usable title, no usable tldr/overview → falls back to a non-broken string.
+  const draft1 = await gen.generate({
+    summary: { title: 'Meeting Notes', overview: '', tldr: [], whatChanged: [], decisions: [], actionItems: [], openQuestions: [], risks: [], sections: [] },
+    mode: 'general',
+  });
+  assert.notEqual(draft1.subject, 'Follow-up: Meeting follow-up', 'generic title must not pass through verbatim');
+  assert.equal(/Meeting Notes/.test(draft1.subject || ''), false, 'generic "Meeting Notes" title must not leak into subject');
+  // A substantive tldr drives the subject.
+  const draft2 = await gen.generate({
+    summary: { title: '', tldr: ['We agreed to pilot the new onboarding flow across two regions.'], whatChanged: [], decisions: [], actionItems: [], openQuestions: [], risks: [], sections: [] },
+    mode: 'general',
+  });
+  assert.match(draft2.subject || '', /onboarding flow/);
+});
+
+test('follow-up: recruiter fallback never renders decisions (would leak no-go to candidate)', async () => {
+  // The deterministic fallback must not include a "decisions" block for recruiting,
+  // because negative-hiring decisions would be sent to the candidate.
+  const { MeetingSummaryReducer } = await load('MeetingSummaryReducer.js');
+  const body = MeetingSummaryReducer.buildFollowUpBody
+    ? MeetingSummaryReducer.buildFollowUpBody(
+        [{ id: 'd1', text: 'No-go: weak systems design experience', confidence: 'high' }],
+        [{ id: 'a1', text: 'Schedule onsite', owner: 'Taylor', deadline: 'Fri', explicitness: 'explicit', confidence: 'high' }],
+        'recruiting'
+      )
+    : (await load('MeetingSummaryReducer.js')).buildFollowUpBody(
+        [{ id: 'd1', text: 'No-go: weak systems design experience', confidence: 'high' }],
+        [{ id: 'a1', text: 'Schedule onsite', owner: 'Taylor', deadline: 'Fri', explicitness: 'explicit', confidence: 'high' }],
+        'recruiting'
+      );
+  assert.equal(/no-go|no go|systems design/i.test(body), false, 'recruiter fallback leaked a negative decision to the candidate');
+  assert.match(body, /What happens next/);
+  assert.match(body, /Taylor: Schedule onsite/);
+});
+
 // ── Long-meeting: no truncation, chunk coverage ──────────────────────────────
 
 test('long transcript: chunker covers beginning, middle, end with overlap', () => {

@@ -3,6 +3,7 @@ logs
 .env
 STATUS.md
 left.md
+.audit
 performance-audit-report.md
 FIXES.md
 /.env
@@ -42,6 +43,10 @@ change.md
 
 # Generated migration patches — private, not for public repo
 *.patch
+# Exception: the patches/ directory holds patch-package commits that MUST
+# be checked in (they re-apply automatically in postinstall). This line
+# keeps them tracked.
+!/patches/*.patch
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -75,10 +80,20 @@ bower_components
 build/Release
 
 # Dependency directories
+# Both spellings on purpose: the trailing slash matches only a DIRECTORY, so in
+# a git worktree — where node_modules is usually a symlink to the shared
+# install — `git add -A` happily stages it as a 120000 symlink entry pointing at
+# an absolute local path, which breaks every other checkout. The slash-less
+# pattern also matches the symlink.
+node_modules
 node_modules/
 jspm_packages/
 dist-electron/
 dist/
+
+# husky auto-generated machinery — only the user-facing hook files
+# (e.g. .husky/pre-commit) are committed.
+.husky/_
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -197,6 +212,10 @@ release/
 target/
 native-module/target/
 native-module/*.node
+# Windows locks a loaded .node against overwrite, so build-native.js moves the
+# previous artifact aside before rebuilding (see the win32 branch there). The
+# leftover is deleted once nothing holds it — usually on the next build.
+native-module/*.node.stale-*
 
 .github/RepoGuide.md
 
@@ -306,7 +325,12 @@ dodopayments.llm
 ANSWER_QUALITY_FINAL_REPORT.md
 ANSWER_QUALITY_EVAL_REPORT.md
 profile.md
-electron-builder.signed.cjs
+# NOT ignored: electron-builder.signed.cjs is the production build config that
+# `npm run dist:signed` loads. It was swept into this block of scratch reports and
+# then deleted by the "remove tracked files per updated .gitignore" cleanup, which
+# broke every signed build with ENOENT. It holds NO secrets — the notarytool
+# credential lives in the macOS keychain; only the profile NAME and the (public)
+# Team ID appear in the file, and the signing identity is auto-discovered.
 REMAINING_ISSUES_FIX_REPORT.md
 LONG_SESSION_MEMORY_TEST_REPORT.md
 MANUAL_CHAT_PROFILE_FIX_REPORT.md
@@ -370,9 +394,147 @@ PHASE_STATUS.md
 meetily.md
 testengineer.prompt
 cluely/
-docs/*
-!docs/dev-setup.md
+docs/
 
 # Large model binary files
 *.onnx
 *.onnx_data
+
+# Round-7 cleanup (2026-07-01, hardened after senior review): large
+# reference PDFs and debug artifacts should NEVER be committed. Keep
+# patterns narrow — broad patterns like `Sample*.pdf` and `*thesis*.pdf`
+# would silently ignore legitimate PDFs (invoices, resumes, etc.). Use
+# the exact filename + the debug-artifacts directory + a single specific
+# pattern for the `Sample thesis for testing.pdf` filename family.
+debug-artifacts/
+Sample thesis for testing.pdf
+"Sample thesis for testing.pdf"
+
+# Live-smoke harness scratch dir (created at runtime by scripts/smoke-document-grounded.js)
+/.smoke-sandbox/
+
+# User-submitted crash reports / debug logs (device + session diagnostics — never commit)
+user log/
+*.ips
+
+# --- branch-integration safety hardening (2026-07-23) ---
+# Third-party dispute / billing evidence dirs — never push
+/dispute-evidence-*/
+/dispute-evidence-*
+/dispute_evidence/
+scripts/*evidence*.py
+scripts/combine_*_single_file.py
+# The dispute handover docs are ALSO written to the repo root, outside every
+# directory rule above — byte-identical strays that a `git add -A` would sweep
+# in. This repo is PUBLIC and those files carry a named customer's email, phone
+# number and home address, so the root copies need their own rule.
+/*_DISPUTE_HANDOVER.md
+/*_DISPUTE_*.md
+# Autopilot campaign prompts — internal docs, not source
+/HANDOFF*.md
+/NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Generated Vite build output that mirrors src/**/*.{tsx,ts}
+/src/**/*.js
+
+# --- User requested exclusions (2026-07-23) ---
+PRODUCTION_HARDENING_FINAL_REPORT.md
+loop.md
+loop2.md
+AUDIT_AI_CONTEXT_OWNERSHIP.md
+AUDIT_ARCHITECTURE_MAP.md
+AUDIT_AUDIO_REALTIME_PIPELINE.md
+AUDIT_BACKEND_SECURITY_STABILITY.md
+AUDIT_DEPENDENCIES_PACKAGING.md
+AUDIT_ELECTRON_SECURITY.md
+AUDIT_ERROR_OBSERVABILITY.md
+AUDIT_FRONTEND_STATE_REACT.md
+AUDIT_MEMORY_AND_LOOPS.md
+AUDIT_PRIVACY_SECRETS_LOGGING.md
+AUDIT_VERIFICATION_REPORT.md
+campaign-log.md
+campaign2-log.md
+campaign3-log.md
+contextauthresearchdoc.md
+test/
+test-fixtures/
+# …except the two tiny documents SafeDocumentTextExtractor needs. The rest of
+# test-fixtures/ is a 46MB corpus regenerated with live MiniMax calls, which no
+# CI run can reproduce — so those two suites failed on every run for want of a
+# 3.7KB PDF and a 2.2KB DOCX. These are generated deterministically by
+# scripts/e2e/lib/docwriters.mjs (jsPDF + JSZip, no network, no model) and carry
+# only the marker names the tests assert on.
+!test-fixtures/profiles/p01/resume.pdf
+!test-fixtures/profiles/p03/resume.docx
+
+traces/
+traces2/
+traces3/
+--help/
+.remember/
+fixtures/
+# ...but NOT test fixtures that suites import. The blanket `fixtures/` above swept up
+# electron/**/__tests__/fixtures/*, which the "remove tracked files per updated
+# .gitignore" cleanup then deleted — leaving 4 test files importing modules that no
+# longer existed. Both lines are required and must stay in this order: git will not
+# descend into an excluded directory, so the directory itself has to be re-included
+# before its contents can be.
+!electron/**/__tests__/fixtures/
+!electron/**/__tests__/fixtures/**
+# Same sweep deleted tests/fixtures/modes/* (73 files) in 6f8e3329 — the mode
+# reference-file corpus that CustomModes / ModePersonaScenarios / Seminar /
+# ModeFixtureIntegrity / ModeBleedingMatrix import. That turned ~120 suite
+# cases into unconditional ENOENT failures on every fresh checkout. Restored
+# from 6f8e3329~1 (2026-08-11) and re-included here so the cleanup cannot
+# recur. Same two-line pattern as above: re-include the directory first, then
+# its contents.
+!tests/fixtures/
+!tests/fixtures/**
+tools/
+
+# Vision benchmark source documentation + generated reports
+!docs/
+docs/*
+!docs/dev-setup.md
+!docs/VISION_MODEL_BENCHMARK.md
+# Usage ledger — the progress file is the mandated handoff contract across three
+# campaigns (16 architectural decisions, 5 open findings, the full forensics
+# record), the architecture doc is the system's specification, and the privacy
+# diff is a release gate. Untracked, none of it survives a fresh clone or a
+# worktree — which is exactly where the next person picks this up.
+!docs/usage-ledger-architecture.md
+!docs/usage-ledger-progress.md
+!docs/usage-ledger-privacy-diff.md
+# TypeScript 7 upgrade — audit + report are deliverables, not scratch notes,
+# so they are allowlisted out of the blanket `docs/*` ignore above.
+!docs/ts7-upgrade-audit.md
+!docs/ts7-upgrade-report.md
+# Auto Answer V3 campaign — the progress file is the resume contract for the
+# autopilot (a fresh session must be able to continue from it alone) and the
+# two specs govern every phase. Same reasoning as the usage-ledger entries.
+!docs/autopilot/
+!docs/autopilot/auto-answer-v3-progress.md
+!docs/specs/
+!docs/specs/auto-answer-v2-spec.md.md
+!docs/specs/auto-answer-v3-amendments.md
+benchmark-results/
+
+
+# Role Insight visual harness — generated artifacts (regenerate with
+# `electron scripts/dump-role-insight-fixture.mjs` + `node scripts/role-insight-harness/build.mjs`)
+/scripts/.role-insight-fixture.json
+/scripts/role-insight-harness/dist/
+
+# Unbuilt feature PRDs — planning documents, never shipped to the public repo
+/upcoming/
+
+# Working-directory artifacts that are NOT part of this application.
+# These accumulated as untracked noise; none of them belong in the app repo.
+#   natively-control/    a separate 1.8 GB / 41k-file project checkout
+#   chargeback_evidence/ payment-dispute documents (business records, not code)
+#   undefined/           written by a bug that resolved a path to the literal
+#                        string "undefined" — if this reappears, fix the caller
+#   natively_debug.size* one-off debug dumps
+/natively-control/
+/chargeback_evidence/
+/undefined/
+/natively_debug.size*

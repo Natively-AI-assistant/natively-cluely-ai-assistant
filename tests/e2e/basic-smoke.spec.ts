@@ -114,4 +114,43 @@ test.describe('FINDING-006: Natively E2E smoke', () => {
       test.skip('Settings button not found in this UI layout');
     }
   });
+
+  test('manager panel opens, closes on Escape, and returns focus to its trigger', async ({ page }) => {
+    if (!APP_PORT) test.skip();
+    await page.goto(`http://localhost:${APP_PORT}`);
+    await page.waitForLoadState('networkidle');
+
+    const profileTrigger = page.getByTestId('open-profile-intelligence');
+    if (!await profileTrigger.isVisible().catch(() => false)) {
+      test.skip('Profile Intelligence trigger not found in this UI layout');
+      return;
+    }
+
+    await profileTrigger.click();
+    const host = page.getByTestId('manager-panel-host');
+    await expect(host).toHaveCount(1);
+    await expect(page.getByTestId('manager-panel-profile')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(host).toHaveCount(0);
+    await expect(profileTrigger).toBeFocused();
+  });
+
+  test('manager surface opens and closes with reduced motion', async ({ page }) => {
+    if (!APP_PORT) test.skip();
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(`http://localhost:${APP_PORT}`);
+    await page.waitForLoadState('networkidle');
+
+    const modesTrigger = page.getByTestId('open-modes-manager');
+    if (!await modesTrigger.isVisible().catch(() => false)) {
+      test.skip('Modes trigger not found in this UI layout');
+      return;
+    }
+
+    await modesTrigger.click();
+    await expect(page.getByTestId('manager-panel-modes')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('manager-panel-host')).toHaveCount(0);
+  });
 });

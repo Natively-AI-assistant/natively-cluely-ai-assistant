@@ -192,16 +192,28 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
     }
 
     const hostname = url.hostname.toLowerCase();
+    const bareHostname = hostname.replace(/^\[/, '').replace(/\]$/, '');
 
     // Block localhost variants (the entire 127.0.0.0/8 range is loopback, not
     // just 127.0.0.1 — e.g. 127.0.0.2 also routes to the local machine).
-    if (hostname === 'localhost' || hostname.startsWith('127.') || hostname === '::1' || hostname === '0.0.0.0') {
+    if (hostname === 'localhost' || hostname.startsWith('127.') || bareHostname === '::1' || hostname === '0.0.0.0') {
         return { isValid: false, reason: 'Loopback addresses are not allowed' };
     }
 
-    // Block link-local (169.254.x.x)
-    if (hostname.startsWith('169.254.')) {
+    // Reject non-dotted numeric hostnames before DNS/canonicalization tricks can
+    // reinterpret them as IPv4 (e.g. https://2130706433/ → 127.0.0.1 in some stacks).
+    if (/^(?:0x[0-9a-f]+|\d+)$/i.test(bareHostname)) {
+        return { isValid: false, reason: 'Encoded IP hostnames are not allowed' };
+    }
+
+    // Block link-local IPv4 (169.254.x.x) and IPv6 (fe80::/10).
+    if (hostname.startsWith('169.254.') || /^fe[89ab][0-9a-f]*:/i.test(bareHostname)) {
         return { isValid: false, reason: 'Link-local addresses are not allowed' };
+    }
+
+    // Block IPv6 unique-local/private (fc00::/7 — fc* and fd*).
+    if (/^f[cd][0-9a-f]*:/i.test(bareHostname)) {
+        return { isValid: false, reason: 'Private IPv6 networks are not allowed' };
     }
 
     // Block private network ranges
@@ -235,6 +247,46 @@ export function validateUrlForSsrf(urlString: string): { isValid: boolean; reaso
     }
 
     return { isValid: true };
+}
+
+/**
+ * SECURITY: Validates an STT provider "region" slug before it is interpolated
+ * into a provider endpoint hostname (Azure / IBM Watson).
+ *
+ * The region is renderer-supplied and is placed *directly into the host* of the
+ * outbound, API-key-bearing request, e.g.
+ *   https://${region}.stt.speech.microsoft.com/...
+ *   https://api.${region}.speech-to-text.watson.cloud.ibm.com/...
+ * Without validation a value like `evil.com/x#` or `foo.attacker.net` would
+ * redirect the key to an attacker-controlled host (SSRF + credential exfil).
+ *
+ * Real Azure/IBM regions are short lowercase slugs (letters, digits, hyphen),
+ * e.g. `eastus`, `westeurope`, `us-south`, `eu-gb`. We allow exactly that shape.
+ * Empty is allowed (callers fall back to a hardcoded default region).
+ */
+export function isValidSttRegion(region: unknown): boolean {
+    if (region === undefined || region === null || region === '') return true;
+    if (typeof region !== 'string') return false;
+    // 1–40 chars, lowercase alphanumerics and single hyphens only. No dots,
+    // slashes, `@`, `#`, whitespace, or uppercase — anything that could break
+    // out of the host label or introduce credentials/paths into the URL.
+    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(region) && region.length <= 40;
+}
+
+/**
+ * SECURITY: Validates a user-supplied OpenAI-compatible STT base URL.
+ *
+ * Reuses validateUrlForSsrf so a renderer cannot point the STT upload (which
+ * carries the user's OpenAI key) at a loopback/private/non-HTTPS host. Empty is
+ * allowed (falls back to https://api.openai.com). Returns a normalized result
+ * shaped like the other validators in this module.
+ */
+export function validateSttBaseUrl(url: unknown): { isValid: boolean; reason?: string } {
+    if (url === undefined || url === null || url === '') return { isValid: true };
+    if (typeof url !== 'string') return { isValid: false, reason: 'Base URL must be a string' };
+    const trimmed = url.trim();
+    if (trimmed === '') return { isValid: true };
+    return validateUrlForSsrf(trimmed);
 }
 
 /**
@@ -361,4 +413,41 @@ export function getByPath(obj: any, path: string): any {
         .replace(/\]/g, "")
         .split(".")
         .reduce((o, k) => (o || {})[k], obj);
+}
+
+/**
+ * OpenAI Structured Outputs / JSON Schema mode still serializes message.content as a
+ * JSON-encoded string rather than auto-flattening it, so a responsePath pointed at
+ * that field extracts raw JSON text (e.g. '{"bullet_points": ["a", "b"]}') instead of
+ * the intended array. Detect that shape and render it as text; returns null if the
+ * string isn't JSON or doesn't match a recognizable list shape, so the caller can
+ * fall back to the raw string untouched.
+ */
+export function flattenStructuredJsonAnswer(answer: string): string | null {
+    let parsed: any;
+    try {
+        parsed = JSON.parse(answer);
+    } catch {
+        return null;
+    }
+
+    const toBulletList = (items: any[]): string =>
+        items.map(item => `- ${typeof item === 'string' ? item : JSON.stringify(item)}`).join('\n');
+
+    if (Array.isArray(parsed)) {
+        return toBulletList(parsed);
+    }
+
+    if (parsed && typeof parsed === 'object') {
+        const arrayValues = Object.values(parsed).filter(v => Array.isArray(v)) as any[][];
+        if (arrayValues.length === 1) {
+            return toBulletList(arrayValues[0]);
+        }
+        const keys = Object.keys(parsed);
+        if (keys.length === 1 && typeof parsed[keys[0]] === 'string') {
+            return parsed[keys[0]];
+        }
+    }
+
+    return null;
 }

@@ -80,11 +80,46 @@ test('sustained zero-valued system-output chunks do not emit a permission failur
     /kind:\s*['"]chunk['"]/,
     'BUG: system-audio chunks should be fed to the pure classifier for signal diagnostics.',
   );
-  assert.doesNotMatch(
-    wireSystemBody,
-    /formatPermissionMessage\(\s*['"]mac-screen-recording-revoked-rebuild['"]\s*\)/,
-    'BUG: amplitude silence alone must not show the macOS Screen Recording revoked/rebuild warning.',
-  );
+  // F10 (2026-08-14) deliberately began emitting a
+  // mac-screen-recording-revoked-rebuild banner on sustained zero-fill — the
+  // signature of a MID-MEETING Screen Recording revocation, where the tap keeps
+  // "running" but every IO callback yields zero frames. Those users were
+  // previously told to change devices, or told nothing.
+  //
+  // That does not break this test's invariant. The banner is raised only after
+  // re-probing the ACTUAL TCC grant (bypassCache, because the revocation just
+  // happened and a cached 'granted' would defeat the check) and finding it
+  // denied — so amplitude silence alone still warns about nothing. A flat
+  // doesNotMatch cannot express "present but guarded", so assert the guard.
+  const revokedRe = /formatPermissionMessage\(\s*['"]mac-screen-recording-revoked-rebuild['"]\s*\)/;
+  const revokedMatch = revokedRe.exec(wireSystemBody);
+  if (revokedMatch) {
+    const silenceIdx = wireSystemBody.search(/['"]sustained-zero-valued-silence['"]/);
+    assert.ok(
+      silenceIdx >= 0 && silenceIdx < revokedMatch.index,
+      'BUG: the revoked/rebuild banner must live inside the sustained-zero-valued-silence branch, ' +
+      'not on a path any silence can reach.',
+    );
+    const guard = wireSystemBody.slice(silenceIdx, revokedMatch.index);
+    assert.match(
+      guard, /process\.platform\s*===\s*['"]darwin['"]/,
+      'BUG: the Screen Recording revoked banner is macOS-only — Windows has no TCC grant to lose.',
+    );
+    assert.match(
+      guard, /resolveMacScreenCaptureCapability\s*\(/,
+      'BUG: zero-fill must re-probe the real Screen Recording grant before blaming permissions — ' +
+      'silence alone is also produced by a genuinely quiet room.',
+    );
+    assert.match(
+      guard, /bypassCache:\s*true/,
+      'BUG: the probe must bypass the permission cache — the revocation just happened, so a cached ' +
+      "'granted' would defeat the check.",
+    );
+    assert.match(
+      guard, /effectiveDenied/,
+      'BUG: the banner must be conditional on the probe finding the grant actually denied.',
+    );
+  }
 });
 
 test('hard same-device route conflict still emits an actionable system audio warning', () => {
