@@ -751,6 +751,27 @@ green (precision 1.0, recall unchanged); full suite 8510 / 8445 / 2 (Ollama pair
 Unrelated live observation, NOT this branch: the STT relay auto-detected `de-DE` mid-session on English video
 audio (gen 5), which degraded every transcript of that meeting — a NativelyProSTT/relay language-pinning issue.
 
+### Live-run repairs, round 2 (2026-08-24 — the system-design session)
+Second physical session (meeting 343d1321, a system-design mock interview): 35 candidates, ALL skipped. The full
+transcript was replayed verbatim; two more real-shape gaps fixed:
+
+4. **Design/coding TASK statements are the question.** The entire prompt was first-person task-giving — "…we need
+   help designing the actual app", "We need help designing the code that could implement an online cloud reading
+   application… this is very open-ended. You can implement this how you want…" — no '?', no clause-initial
+   imperative, so every fragment scored `not_question`. (The repo's `looksLikeCodingQuestion` needs ≥2 signal
+   classes and also misses these.) Fix: `DESIGN_TASK` frames (we need help designing / we want you to build /
+   your task is / you can implement this / …, min 40 chars) → act `coding_question`, imperative floor,
+   directed by nature. Full-meeting replay now fires EXACTLY ONCE, on the prompt itself.
+5. **A short affirmation echo after a question is the exchange closing itself.** "Is that correct? Correct."
+   (the video's other same-channel speaker) FIRED before this round. Fix: after-text of ≤4 words starting with an
+   affirmation (correct/right/exactly/yes/…) → `rhetorical`.
+
+Verbatim regression tests live#4/4b added (the design-prompt final sequence with real timings pinned to 1–2
+dispatches with act `coding_question`; requirements listing, "Is that correct? Correct." and window-resizing
+chatter pinned silent). Auto Answer suite 189/189 · evaluator gate green (precision 1.0, recall unchanged) ·
+full suite 8513 / 8448 / 2 (Ollama pair) · typecheck clean. Full-meeting replay: 1 auto answer (the prompt),
+3 offer-band cards (requirement fragments — Tab-gated, never auto), everything else silent.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

@@ -636,3 +636,44 @@ test('live#3: fourteen finals of screen-sharing logistics (meeting 54f832cc verb
   assert.deepEqual(h.texts(), [], `dispatched: ${JSON.stringify(h.texts())}`);
   assert.deepEqual(h.state.offered, [], 'not even offered');
 });
+
+test('live#4: a system-design TASK statement (no "?", first-person framing, meeting 343d1321 verbatim) is an answer opportunity', async () => {
+  // The canonical coding-round shape: the entire prompt is task-giving
+  // statements. Verbatim finals with their real relative timings.
+  const segs = [
+    [0, 'And basically what we want to do to start this'],
+    [161, 'problem off is that we need help designing the actual'],
+    [162, 'app.'],
+    [6288, 'We need help designing the'],
+    [8250, 'code that could implement an online'],
+    [10292, 'cloud reading application,'],
+    [12352, "and there's a couple things that we're looking for"],
+    [14374, ', and this is very open-ended. You can impl'],
+    [16432, 'ement this how you want, but a f'],
+    [16770, "ew things, and I'll paste these into the coder pad that we're looking for,"],
+    [16775, '.'],
+  ];
+  const h = makeHarness();
+  let t = 0;
+  for (const [at, text] of segs) { if (at > t) { await h.advance(at - t); t = at; } h.interviewerFinal(text); }
+  h.controller.onEngineIdle();
+  await h.advance(HARD_CAP_MS + QUIET + 8000);
+  assert.ok(h.texts().length >= 1, `the design task must fire (skips: ${h.state.skips.join(',')})`);
+  assert.ok(h.texts().length <= 2, `but not for every fragment: ${JSON.stringify(h.texts())}`);
+  assert.ok(/design/i.test(h.texts()[0]), h.texts()[0]);
+  const cand = h.state.events.find(e => e.name === 'auto_answer_committed');
+  assert.equal(cand.dialogueAct, 'coding_question');
+});
+
+test('live#4b: requirements listing and confirmations from the same session still never fire', async () => {
+  for (const text of [
+    'so a few things that you\'re looking for: users have a library of books that they can add to or remove from, users can set a book from their library as active,',
+    'Is that correct? Correct.',
+    'Right, so let me make this smaller. Over on this end so people can see all of this.',
+  ]) {
+    const h = makeHarness();
+    h.interviewerFinal(text);
+    await h.advance(HARD_CAP_MS + QUIET + 2000);
+    assert.deepEqual(h.texts(), [], `${JSON.stringify(text.slice(0, 40))} must stay silent (skips: ${h.state.skips.join(',')})`);
+  }
+});

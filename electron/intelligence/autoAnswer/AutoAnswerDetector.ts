@@ -105,6 +105,16 @@ const DEFERRAL = /(\.\.\.|…)\s+\S|\b(actually,? (before|first|hold|wait|let me
  * floor (live-run false positive, 2026-08-24). First-person narration
  * ("I recommend…", "we're going to share…") never anchors a clause here.
  */
+/**
+ * A coding/system-design TASK given as first-person statements — the canonical
+ * coding-round shape, verbatim from live meeting 343d1321 (2026-08-24):
+ * "…we need help designing the actual app", "We need help designing the code
+ * that could implement…", "this is very open-ended. You can implement this how
+ * you want…". No '?', no clause-initial imperative — but it IS the question.
+ */
+const DESIGN_TASK = /\b(we (need|want|would like) (help (you )?|you to |to )?(design|build|implement|creat(e|ing)|writ(e|ing)|cod(e|ing)|solv(e|ing))|need help (design|build|implement|creat|writ|cod|solv)(e|ing)?|help (us |me )?(design|build|implement|creat|writ|cod|solv)(e|ing)?|your (task|job|goal) (is|today|here)|the (task|problem|challenge) (is|today|for you)|i('d| would) like you to (design|build|implement|write|create|solve)|you can implement this|we're going to (have you|ask you to) (design|build|implement|write))\b/i;
+/** Below this a task-frame match is casual chatter, not a prompt. Unfitted placeholder. */
+export const DESIGN_TASK_MIN_CHARS = 40;
 const CLAUSE_IMPERATIVE = /(?:^|[.!?;:\u2014-]\s*)(?:(?:ok(?:ay)?|so|now|alright|great|please|and|next|one more question|next question|last question|first question)[,.!\u2014:-]?\s+)*(?:please\s+)?(tell me|tell us|walk me through|walk us through|talk me through|explain|describe|give me|show me|list|name|compare|summari[sz]e|define|discuss|solve|implement|write|design|build|code)\b/i;
 const CODING_ASK = /\b(implement|write (a|the|some)? ?(function|code|program|class|method)|solve|code (up|this)|algorithm|time complexity|big[- ]?o|data structure|hash ?map|linked list|binary tree|two pointers|dynamic programming)\b/i;
 
@@ -184,15 +194,23 @@ export function scoreCandidate(params: DetectParams): DetectorScores {
     const directedImperative = CLAUSE_IMPERATIVE.test(questionText) || TASK_DIRECTIVE.test(questionText);
     if (keyedOnCandidate && directedImperative) questionConfidence = Math.max(questionConfidence, IMPERATIVE_ASK_FLOOR);
 
-    const act = classifyAct(text, extracted, keyedOnCandidate, punctuationSource, split);
+    // A design/coding TASK is an answer opportunity even though the extractor
+    // has no question to key on (statements, first person, no '?').
+    const designTask = DESIGN_TASK.test(questionText) && questionText.length >= DESIGN_TASK_MIN_CHARS;
+    if (designTask) questionConfidence = Math.max(questionConfidence, IMPERATIVE_ASK_FLOOR);
+
+    const act = designTask
+        ? 'coding_question'
+        : classifyAct(text, extracted, keyedOnCandidate, punctuationSource, split);
 
     // Completion: per-source baseline, then the textual incompleteness cues.
     let completionConfidence = ENDPOINT_COMPLETION[source];
     if (act === 'incomplete') completionConfidence = Math.min(completionConfidence, 0.3);
 
-    // Directedness (V2 §17), judged on the question itself.
+    // Directedness (V2 §17), judged on the question itself. A design task is
+    // by nature directed at the candidate.
     let directedness = 0.5;
-    if (SECOND_PERSON.test(questionText) || AUX_SECOND_PERSON.test(questionText) || hasImperative) directedness = 1.0;
+    if (SECOND_PERSON.test(questionText) || AUX_SECOND_PERSON.test(questionText) || hasImperative || designTask) directedness = 1.0;
     if (EXPOSITION.test(questionText) || SELF_NARRATION.test(questionText)) directedness = Math.min(directedness, 0.2);
 
     // Composite on the extractor scale.
@@ -300,6 +318,13 @@ function classifyAct(
         const directedQuestion = SECOND_PERSON.test(split.questionRegion) || AUX_SECOND_PERSON.test(split.questionRegion)
             || IMPERATIVE_ASK.test(split.questionRegion) || TASK_DIRECTIVE.test(split.questionRegion);
         if (SELF_ANSWER_LEAD.test(split.afterRaw) && !directedQuestion) return 'rhetorical';
+        // A short affirmation right after the question ("Is that correct?
+        // Correct." / "…right? Exactly.") is the OTHER same-channel speaker
+        // answering it — the exchange is already closed (live 343d1321).
+        const afterWords = split.afterRaw.split(/\s+/).filter(Boolean);
+        if (afterWords.length <= 4 && /^(correct|right|exactly|yes|yeah|yep|sure|of course|absolutely|indeed|true)\b/i.test(split.afterRaw)) {
+            return 'rhetorical';
+        }
         return classifyAct(split.questionRegion, extracted, keyedOnCandidate, punctuationSource, null);
     }
     const words = text.split(/\s+/).filter(Boolean);
