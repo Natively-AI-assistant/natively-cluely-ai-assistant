@@ -25,6 +25,14 @@ test('calendar connect error formatter handles main-process failure shapes', () 
         'Google Calendar authorization was cancelled. Approve the consent prompt and try again.',
     );
     assert.equal(
+        getCalendarConnectErrorMessage('access_denied: The user denied access to your application'),
+        'Google Calendar authorization was cancelled. Approve the consent prompt and try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('access_denied: Access was cancelled by the user'),
+        'Google Calendar authorization was cancelled. Approve the consent prompt and try again.',
+    );
+    assert.equal(
         getCalendarConnectErrorMessage('exchange_failed status=403 access_denied'),
         'Could not connect Google Calendar: exchange_failed status=403 access_denied',
     );
@@ -43,6 +51,10 @@ test('calendar connect error formatter handles main-process failure shapes', () 
     assert.equal(
         getCalendarConnectErrorMessage('access_denied: forbidden by organization policy'),
         'Could not connect Google Calendar: access_denied: forbidden by organization policy',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('access_denied: The user is denied access by organization policy'),
+        'Could not connect Google Calendar: access_denied: The user is denied access by organization policy',
     );
     assert.equal(
         getCalendarConnectErrorMessage(new Error('GOOGLE_CLIENT_ID is not configured')),

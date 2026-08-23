@@ -36,7 +36,14 @@ export function getCalendarConnectErrorMessage(error, translate = identity) {
         return translate(GOOGLE_AUTH_BLOCKED_ERROR);
     }
 
-    if (/^access_denied$/i.test(message)) {
+    const accessDenied = /^access_denied(?:\s*:\s*(.*))?$/i.exec(message);
+    const denialDescription = accessDenied?.[1]?.trim();
+    const userDeclined = denialDescription
+        && (
+            /\b(?:the\s+)?user\s+(?:has\s+)?(?:denied|declined|cancelled|canceled)\b/i.test(denialDescription)
+            || /\b(?:denied|declined|cancelled|canceled)\b.*\bby\s+(?:the\s+)?user\b/i.test(denialDescription)
+        );
+    if (accessDenied && (!denialDescription || userDeclined)) {
         return translate(GOOGLE_CONSENT_DECLINED_ERROR);
     }
 
