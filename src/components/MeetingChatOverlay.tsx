@@ -7,6 +7,7 @@ import { mapLanguageForPrism, isBlockCode } from '../utils/prismLanguage';
 import { registerPrismLanguages } from '../utils/registerPrismLanguages';
 import nativelyIcon from './icon.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
+import { splitGistLineStreaming } from '../lib/displayMarkup';
 
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -93,10 +94,13 @@ const UserMessage: React.FC<{ content: string }> = ({ content }) => (
 
 const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
     const [copied, setCopied] = useState(false);
+    // Teleprompter gist: persisted answers can end with a [[GIST]] line —
+    // split it into a bottom summary chip instead of showing the marker.
+    const { body: gistBody, gist: gistLine } = splitGistLineStreaming(content);
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(content);
+            await navigator.clipboard.writeText(gistBody);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
@@ -132,7 +136,7 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                         rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false, errorColor: '#cc0000' }]]}
                         components={{
                             p: ({ node, ...props }: any) => <p className="mb-[6px] last:mb-0 leading-relaxed whitespace-pre-wrap text-[13.5px]" {...props} />,
-                            a: ({ node, ...props }: any) => <a className="text-blue-500 hover:underline" {...props} />,
+                            a: ({ node, ...props }: any) => <a className="text-accent-primary hover:underline" {...props} />,
                             h1: ({ node, ...props }: any) => <h1 className="text-sm font-bold mt-2 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
                             h2: ({ node, ...props }: any) => <h2 className="text-xs font-bold mt-1.5 mb-[4.5px] leading-relaxed uppercase tracking-wide" {...props} />,
                             h3: ({ node, ...props }: any) => <h3 className="text-xs font-semibold mt-1.5 mb-[4.5px] leading-relaxed" {...props} />,
@@ -183,8 +187,9 @@ const AssistantMessage: React.FC<{ content: string; isStreaming?: boolean }> = (
                             },
                         }}
                     >
-                        {content}
+                        {gistBody}
                     </ReactMarkdown>
+                    {gistLine && <div className="overlay-gist-chip">{gistLine}</div>}
                 </div>
             </div>
         </motion.div>
@@ -334,7 +339,14 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 
             // Set up RAG streaming listeners (RAF-batched to avoid per-token re-renders)
             streamBuffer.reset();
+            // F-122: see GlobalChatOverlay — the rag:stream-* channels are shared
+            // by three scopes and main tags every payload, but no consumer read
+            // the tag. Accept only this meeting's stream.
+            const isThisMeeting = (d: any) =>
+                d?.global !== true && d?.live !== true
+                && (d?.meetingId == null || d.meetingId === meetingContext?.id);
             const tokenCleanup = window.electronAPI?.onRAGStreamChunk((data: { chunk: string }) => {
+                if (!isThisMeeting(data)) return;
                 setChatState('streaming_response');
                 streamBuffer.appendToken(data.chunk, (content) => {
                     setMessages(prev => prev.map(msg =>
@@ -345,7 +357,8 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
                 });
             });
 
-            const doneCleanup = window.electronAPI?.onRAGStreamComplete(() => {
+            const doneCleanup = window.electronAPI?.onRAGStreamComplete((data?: any) => {
+                if (data && !isThisMeeting(data)) return;   // F-122
                 // Final commit — flush any remaining buffered content
                 const finalContent = streamBuffer.getBufferedContent();
                 setMessages(prev => prev.map(msg =>
@@ -361,6 +374,7 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
             });
 
             const errorCleanup = window.electronAPI?.onRAGStreamError((data: { error: string }) => {
+                if (!isThisMeeting(data)) return;   // F-122
                 console.error('[MeetingChat] RAG stream error:', data.error);
                 setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                 setErrorMessage("Couldn't get a response. Please try again.");
@@ -398,7 +412,17 @@ const MeetingChatOverlay: React.FC<MeetingChatOverlayProps> = ({
 ${contextString}`;
 
                     streamBuffer.reset();
-                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                    // Stream-id guard (2026-07-31) — see GlobalChatOverlay: drop
+                    // tokens/done/error belonging to an older abandoned stream.
+                    let adoptedStreamId: number | null = null;
+                    const acceptsMeta = (meta?: { streamId?: number }) => {
+                        const id = meta?.streamId;
+                        if (typeof id !== 'number') return true;
+                        if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                        return id === adoptedStreamId;
+                    };
+                    const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                        if (!acceptsMeta(meta)) return;
                         setChatState('streaming_response');
                         streamBuffer.appendToken(token, (content) => {
                             setMessages(prev => prev.map(msg =>
@@ -409,7 +433,8 @@ ${contextString}`;
                         });
                     });
 
-                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                    const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                        if (!acceptsMeta(payload)) return;
                         const finalContent = streamBuffer.getBufferedContent();
                         setMessages(prev => prev.map(msg =>
                             msg.id === assistantMessageId
@@ -423,7 +448,9 @@ ${contextString}`;
                         oldErrorCleanup?.();
                     });
 
-                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                    const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                        if (meta?.source === 'phone-mirror') return;
+                        if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                         console.error('[MeetingChat] Gemini stream error (fallback):', error);
                         setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                         setErrorMessage("Couldn't get a response. Please check your settings.");
@@ -454,7 +481,15 @@ ${contextString}`;
 
                 // Switch to Gemini streaming (RAF-batched)
                 streamBuffer.reset();
-                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string) => {
+                let adoptedStreamId: number | null = null;
+                const acceptsMeta = (meta?: { streamId?: number }) => {
+                    const id = meta?.streamId;
+                    if (typeof id !== 'number') return true;
+                    if (adoptedStreamId === null || id > adoptedStreamId) { adoptedStreamId = id; return true; }
+                    return id === adoptedStreamId;
+                };
+                const oldTokenCleanup = window.electronAPI?.onGeminiStreamToken((token: string, meta?: { streamId?: number }) => {
+                    if (!acceptsMeta(meta)) return;
                     setChatState('streaming_response');
                     streamBuffer.appendToken(token, (content) => {
                         setMessages(prev => prev.map(msg =>
@@ -465,7 +500,8 @@ ${contextString}`;
                     });
                 });
 
-                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone(() => {
+                const oldDoneCleanup = window.electronAPI?.onGeminiStreamDone((payload?: { streamId?: number }) => {
+                    if (!acceptsMeta(payload)) return;
                     const finalContent = streamBuffer.getBufferedContent();
                     setMessages(prev => prev.map(msg =>
                         msg.id === assistantMessageId
@@ -479,7 +515,9 @@ ${contextString}`;
                     oldErrorCleanup?.();
                 });
 
-                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string) => {
+                const oldErrorCleanup = window.electronAPI?.onGeminiStreamError((error: string, meta?: { streamId?: number | null; source?: string }) => {
+                    if (meta?.source === 'phone-mirror') return;
+                    if (typeof meta?.streamId === 'number' && adoptedStreamId !== null && meta.streamId !== adoptedStreamId) return;
                     console.error('[MeetingChat] Gemini stream error:', error);
                     setMessages(prev => prev.filter(msg => msg.id !== assistantMessageId));
                     setErrorMessage("Couldn't get a response. Please check your settings.");

@@ -673,10 +673,16 @@ export class ScreenshotHelper {
       if (this.view === "queue") {
         screenshotPath = path.join(this.screenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using queue directory: ${screenshotPath}`);
-        if (process.platform === 'darwin') {
+        // Both desktop platforms capture via desktopCapturer, and BOTH must
+        // forward preferredDisplay. main.ts already resolves the display the
+        // overlay / meeting is on (getTargetDisplayForFullScreenshot) and passes
+        // it in; the old win32 branch dropped the argument, so the capture fell
+        // through to screen.getPrimaryDisplay() and a multi-monitor Windows user
+        // silently sent the model their PRIMARY screen instead of the one the
+        // meeting was on. (Selective/cropper capture was unaffected — it passes
+        // an explicit area, which routes through getDisplayContainingRect.)
+        if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
-        } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
@@ -696,10 +702,16 @@ export class ScreenshotHelper {
       } else {
         screenshotPath = path.join(this.extraScreenshotDir, `${uuidv4()}.png`)
         console.log(`[ScreenshotHelper] Using extra screenshots directory: ${screenshotPath}`);
-        if (process.platform === 'darwin') {
+        // Both desktop platforms capture via desktopCapturer, and BOTH must
+        // forward preferredDisplay. main.ts already resolves the display the
+        // overlay / meeting is on (getTargetDisplayForFullScreenshot) and passes
+        // it in; the old win32 branch dropped the argument, so the capture fell
+        // through to screen.getPrimaryDisplay() and a multi-monitor Windows user
+        // silently sent the model their PRIMARY screen instead of the one the
+        // meeting was on. (Selective/cropper capture was unaffected — it passes
+        // an explicit area, which routes through getDisplayContainingRect.)
+        if (process.platform === 'darwin' || process.platform === 'win32') {
           await this.captureWithDesktopCapturer(screenshotPath, undefined, preferredDisplay);
-        } else if (process.platform === 'win32') {
-          await this.captureWithDesktopCapturer(screenshotPath);
         } else {
           await shellExecAsync(this.getScreenshotCommand(screenshotPath, false))
         }
@@ -826,9 +838,28 @@ export class ScreenshotHelper {
     this.extraScreenshotQueue = []
   }
 
+  /**
+   * THUMBNAIL for on-screen display only (code review 2026-08-19).
+   *
+   * This used to return the full-resolution PNG as a base64 data URL. A retina
+   * capture is several MB, base64 adds ~33%, the overlay keeps up to 5 per
+   * message, and `messages` is an uncapped, unvirtualized list whose <img>
+   * elements all stay mounted — so a long session accumulated hundreds of MB of
+   * data-URL strings in the crash-sensitive overlay renderer for pixels nobody
+   * views at more than a couple hundred CSS px.
+   *
+   * The model is NEVER fed this string: every send path passes the file PATH
+   * (`currentAttachments.map(s => s.path)`), so downscaling here costs no answer
+   * quality. Bounded long edge + JPEG, matching ImageOptimizer's conventions.
+   * If sharp is unavailable (packaged-build native-module edge cases), falls
+   * back to the original full-resolution encoding rather than losing the
+   * preview.
+   */
   public async getImagePreview(filepath: string): Promise<string> {
     const maxRetries = 20
     const delay = 250 // 5s total wait time
+    const PREVIEW_MAX_LONG_EDGE_PX = 480
+    const PREVIEW_QUALITY = 70
 
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -837,7 +868,24 @@ export class ScreenshotHelper {
           const stats = await fs.promises.stat(filepath)
           if (stats.size > 0) {
             const data = await fs.promises.readFile(filepath)
-            return `data:image/png;base64,${data.toString("base64")}`
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-var-requires
+              const sharp = require('sharp')
+              const thumb = await sharp(data)
+                .rotate()
+                .resize({
+                  width: PREVIEW_MAX_LONG_EDGE_PX,
+                  height: PREVIEW_MAX_LONG_EDGE_PX,
+                  fit: 'inside',
+                  withoutEnlargement: true,
+                })
+                .jpeg({ quality: PREVIEW_QUALITY })
+                .toBuffer()
+              return `data:image/jpeg;base64,${thumb.toString("base64")}`
+            } catch (thumbErr: any) {
+              console.warn('[ScreenshotHelper] preview downscale unavailable, using full-resolution preview:', thumbErr?.message)
+              return `data:image/png;base64,${data.toString("base64")}`
+            }
           }
         }
       } catch (error) {

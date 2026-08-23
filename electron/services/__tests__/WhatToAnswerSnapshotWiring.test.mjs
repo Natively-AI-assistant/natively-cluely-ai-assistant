@@ -56,7 +56,11 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   test('an immutable request snapshot is built and passed into generateStream', () => {
     assert.match(body, /const requestSnapshot: WhatToAnswerRequestSnapshot = Object\.freeze\(/,
       'a frozen request snapshot must be assembled');
-    assert.match(body, /generateStream\([^;]*,\s*modeContextPromise,\s*requestSnapshot,\s*whatToAnswerCancellationToken\.signal\)/,
+    // Anchored on the ORDER of the three threaded values, not on the call
+    // ending there — a later parameter was appended (the truncation sink,
+    // 2026-08-12) and an end-anchored match would fail for a reason unrelated
+    // to the invariant this test guards.
+    assert.match(body, /generateStream\([^;]*,\s*modeContextPromise,\s*requestSnapshot,\s*whatToAnswerCancellationToken\.signal[,)]/,
       'the snapshot and request cancellation signal must be threaded into WhatToAnswerLLM.generateStream');
   });
 
@@ -77,7 +81,11 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   });
 
   test('the parallel mode-context prefetch is pinned to the t0 mode id', () => {
-    assert.match(body, /buildRetrievedActiveModeContextBlockHybrid\(\s*preparedTranscript, preparedTranscript, 1800, undefined, true, snapshotModeInfo\?\.id,/,
+    // WTA audit F5 (2026-08-18): the query slot is the resolved question
+    // (wtaPrefetchQuery, transcript-blob fallback) and a provisional
+    // answerType replaces the old `undefined` — the pinned t0 mode id this
+    // test exists for is unchanged.
+    assert.match(body, /buildRetrievedActiveModeContextBlockHybrid\(\s*wtaPrefetchQuery, preparedTranscript, 1800, wtaPrefetchAnswerType, true, snapshotModeInfo\?\.id,/,
       'the prefetched retrieval must pin the snapshot mode id');
   });
 
@@ -99,7 +107,12 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
   // duplicate-authority cleanup can't silently re-open profile evidence on a
   // JD-only / reference-files-only / transcript-only turn.
   test('the candidate-profile orchestrator fetch is gated on the canonical never-retrieve decision', () => {
-    assert.match(body, /isKnowledgeMode\?\.\(\) && !documentGroundedCustomModeActive\s*\n?\s*&& wtaDecisionAllowsCandidateProfile/s,
+    // 2026-08-12: the suppression side of this gate reads the EXPLICIT
+    // strictness flag (Defect C split) — the broad isolation flag classified
+    // every template-seeded mode as strict and ran the doc-refusal pipeline on
+    // fileless stock modes. The invariant this pin protects is unchanged: the
+    // résumé orchestrator fetch must AND the canonical candidate-profile gate.
+    assert.match(body, /isKnowledgeMode\?\.\(\) && !strictDocumentGroundedActive\s*\n?\s*&& wtaDecisionAllowsCandidateProfile/s,
       'the résumé orchestrator fetch must AND the canonical candidate-profile gate');
   });
 
@@ -149,9 +162,18 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
 
   test('a pre-resolved multi-family packet is reused by WhatToAnswerLLM without re-retrieval', () => {
     const llmSrc = read('../../llm/WhatToAnswerLLM.ts');
-    assert.match(llmSrc, /let governedEvidencePack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =\s*initialContextOsGeneration\?\.evidencePack \?\? null/s,
-      'WTA generation must begin with the coordinator-owned EvidencePack');
-    assert.match(llmSrc, /if \(!activeSkill && !governedEvidencePack\) \{/,
+    // Pin updated 2026-08-12 (review F3): the packet seed is now gated on
+    // .govern — an ungoverned refuse pack must NOT suppress legacy retrieval.
+    // The protected invariant is unchanged: a GOVERNED coordinator pack is
+    // reused as-is, with no re-retrieval.
+    assert.match(llmSrc, /let governedEvidencePack: import\('\.\.\/intelligence\/context-os'\)\.EvidencePack \| null =\s*initialContextOsGeneration\?\.govern\s*\?\s*\(initialContextOsGeneration\?\.evidencePack \?\? null\) : null/s,
+      'WTA generation must begin with the coordinator-owned EvidencePack, gated on .govern');
+    // Pin updated 2026-08-19 (HDFC leak): the legacy branch is additionally
+    // gated on retrievalQueryDecision.allowed (retrievalQueryPolicy.ts) — a
+    // turn with no user-originated query skips legacy retrieval too. The
+    // governed-pack invariant is unchanged: !governedEvidencePack still
+    // guards the branch, so a resolved packet is never re-retrieved.
+    assert.match(llmSrc, /if \(!activeSkill && !governedEvidencePack && retrievalQueryDecision\.allowed\) \{/,
       'a resolved packet must skip the legacy document retrieval branch');
     assert.match(llmSrc, /const pack = governedEvidencePack \?\? _cog\.evidencePack/,
       'the rendered factual block must use that same packet identity');
@@ -206,12 +228,25 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
       'the EvidenceResolver block must resolve the pinned mode row');
   });
 
-  test('a deadline replaces an unseen sub-threshold provider fragment with the safe fallback', () => {
+  test('a deadline replaces an unseen sub-threshold FRAGMENT but keeps a COMPLETE short answer', () => {
     // `raceStreamWithDeadline` considers a response useful only at the same
     // safe-prefix threshold. A short provider fragment that then times out must
     // not bypass the fallback merely because fullAnswer is non-empty.
-    assert.match(body, /if \(fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS\) \{\s*const safe =/s,
-      'the timeout fallback must replace an unseen short provider fragment');
+    //
+    // CONTRACT REFINED 2026-08-19: length alone cannot tell a fragment ("Sure,")
+    // from a COMPLETE short answer ("Yes — lead with the AWS migration."). Both
+    // are sub-threshold; only the first is a non-answer. Reproduced through the
+    // real app: a provider that delivered a complete 34-char answer and then held
+    // the stream open had it DISCARDED after 32s and replaced. The length test is
+    // now ANDed with isCompleteShortAnswer (terminal mark AND >=5 words), so the
+    // fragment case this test was written for still falls through to the fallback.
+    assert.match(body, /fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS/,
+      'the sub-threshold length test must remain — it is what makes the fallback reachable');
+    assert.match(body, /&&\s*!isCompleteShortAnswer\(fullAnswer\)\)\s*\{\s*const safe =/s,
+      'a COMPLETE short answer must be exempt from the timeout substitution');
+    // Negative pin: the exemption must NARROW the fallback, never replace it.
+    assert.doesNotMatch(body, /if \(!isCompleteShortAnswer\(fullAnswer\)\)\s*\{\s*const safe =/s,
+      'the length test must not be dropped in favour of the completeness check alone');
   });
 
   test('a post-deadline exception is not mistaken for supersession', () => {

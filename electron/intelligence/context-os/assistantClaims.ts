@@ -54,7 +54,7 @@ export function extractCandidateClaims(answer: string): string[] {
 
 // ── Claim ↔ evidence verification ────────────────────────────────────────────
 
-function normalizeForOverlap(s: string): string[] {
+export function normalizeForOverlap(s: string): string[] {
   return String(s || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')

@@ -50,6 +50,17 @@ import type {
 import { allowsEvidence, allowsRetrieval } from './types';
 import type { EvidenceItem, EvidencePack, RejectedEvidenceItem } from './evidencePack';
 import { textCanProveProperty } from './requestedProperty';
+// Type-only (erased at runtime). The DI ports below described a structural
+// SUBSET of the pack, but what actually flows through them at runtime is a
+// real KnowledgePack: getPackForFile() returns KnowledgePack | null and the
+// resolver forwards that value straight into queryOkfCards. Declaring the
+// real type makes the ports state the contract they already have — the
+// subset made the real queryOkfCards un-assignable to the port (its `pack`
+// parameter is contravariant, so a narrower declared parameter rejects the
+// wider real one).
+import type { KnowledgePack } from '../../services/knowledge/types';
+import type { OkfRetrieveOptions, ScoredCard } from '../../services/knowledge/OkfRetriever';
+import type { QuestionClassification } from '../../services/knowledge/QuestionClassifier';
 import {
   deriveEvidenceSufficiency,
   MIN_ANSWER_CONFIDENCE,
@@ -154,20 +165,7 @@ export interface HybridRetrieverLike {
 }
 
 export interface KnowledgeManagerLike {
-  getPackForFile(fileId: string): {
-    packId: string;
-    packVersion: number;
-    cards: Array<{
-      id: string;
-      title: string;
-      body: string;
-      sourcePages: number[];
-      sourceSections: string[];
-      entities: string[];
-      confidence: 'high' | 'medium' | 'low';
-      approvalStatus?: string;
-    }>;
-  } | null;
+  getPackForFile(fileId: string): KnowledgePack | null;
 }
 
 export interface EvidenceResolverDeps {
@@ -175,13 +173,13 @@ export interface EvidenceResolverDeps {
   getReferenceFiles: (modeId: string) => ReferenceFileLike[];
   hybridRetriever: HybridRetrieverLike;
   knowledgeManager: KnowledgeManagerLike;
-  classifyQuestion: (question: string) => { type: string; isSynthesis: boolean; targetEntities: string[]; softEntities?: string[] };
+  classifyQuestion: (question: string) => QuestionClassification;
   queryOkfCards: (
-    pack: { cards: any[]; packVersion: number },
+    pack: KnowledgePack,
     question: string,
-    classification: { type: string; isSynthesis: boolean; targetEntities: string[] },
-    options?: { topN?: number; minScore?: number; fileId?: string },
-  ) => Array<{ card: any; score: number }>;
+    classification: QuestionClassification,
+    options?: OkfRetrieveOptions,
+  ) => ScoredCard[];
 }
 
 // ── Confidence floor for "is this pack good enough to answer from" ─────────

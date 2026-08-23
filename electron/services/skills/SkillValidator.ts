@@ -533,7 +533,7 @@ export function validateSkillPayload(
       errors: [{
         field: 'structure',
         code: 'invalid_payload',
-        message: `Payload must be {kind: 'file', ...} or {kind: 'folder', ...} (got kind='${payload?.kind ?? 'unknown'}').`,
+        message: `Payload must be {kind: 'file', ...} or {kind: 'folder', ...} (got kind='${(payload as { kind?: string } | null | undefined)?.kind ?? 'unknown'}').`,
       }],
     };
   }

@@ -13,6 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X, Monitor, Mic, Lightbulb, Check, AlertCircle, ArrowRight, Lock } from 'lucide-react';
 import { NativelyLogoMark } from '../NativelyLogoMark';
 import nativelyIcon from '../../../assets/icon.png';
+import { classifyMicStatus } from '../../lib/micPermissionPolicy.mjs';
 
 const STORAGE_KEY  = 'natively_perms_shown_v1';
 
@@ -21,7 +22,7 @@ interface Props {
   onDismiss: () => void;
 }
 
-type PermStatus = 'granted' | 'denied' | 'not-determined' | 'restricted' | 'loading';
+type PermStatus = 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown' | 'loading';
 
 // ─── Design Tokens (Premium & Crafted) ────────────────────────
 const COLORS = {
@@ -236,12 +237,26 @@ export const PermissionsOnboardingFull: React.FC<Props> = ({ isOpen, onDismiss }
     return () => window.removeEventListener('focus', onFocus);
   }, [micStatus, scrStatus, refreshStatus]);
 
+  // CR-03: requestMicPermission can only grant on darwin. On win32 it did
+  // nothing and reported success, so this button could never turn the control
+  // green and there was no other way forward. Route by the platform policy.
+  const micPlan = classifyMicStatus(platform, micStatus);
+
   const handleMicRequest = async () => {
     if (!canClick) return;
     setRequesting(true);
-    await window.electronAPI?.requestMicPermission?.();
-    await refreshStatus();
-    setRequesting(false);
+    try {
+      if (micPlan.remedy === 'request') {
+        await window.electronAPI?.requestMicPermission?.();
+      } else if (micPlan.remedy === 'settings') {
+        await window.electronAPI?.openMicSettings?.();
+      }
+      // 'policy' is blocked by administrator policy — the panel cannot change
+      // it, so opening it would be a dead end. We only re-read status.
+      await refreshStatus();
+    } finally {
+      setRequesting(false);
+    }
   };
 
   const openScreenSettings = () => {
@@ -259,9 +274,12 @@ export const PermissionsOnboardingFull: React.FC<Props> = ({ isOpen, onDismiss }
 
   if (!isOpen) return null;
 
+  // CR-03: 'unknown' means the OS could not resolve the state, not that it is
+  // denied. Gating on a literal 'granted' stranded such a machine in onboarding
+  // forever, which is exactly the lockout F-706 said must never happen.
   const allGranted = platform === 'darwin'
-    ? micStatus === 'granted' && scrStatus === 'granted'
-    : micStatus === 'granted';
+    ? micPlan.usable && scrStatus === 'granted'
+    : micPlan.usable;
 
   // Dynamic button configurations based on active setup state
   const getButtonConfig = () => {
@@ -272,9 +290,20 @@ export const PermissionsOnboardingFull: React.FC<Props> = ({ isOpen, onDismiss }
         active: true,
       };
     }
-    if (micStatus !== 'granted') {
+    if (!micPlan.usable) {
+      if (micPlan.remedy === 'policy') {
+        // No control can fix this; say so rather than offering a dead button.
+        return {
+          label: 'Microphone blocked by your organization',
+          action: () => {},
+          active: false,
+        };
+      }
+      const settings = micPlan.remedy === 'settings';
       return {
-        label: requesting ? 'Requesting access…' : 'Request microphone access',
+        label: requesting
+          ? (settings ? 'Opening settings…' : 'Requesting access…')
+          : (settings ? 'Open microphone settings' : 'Request microphone access'),
         action: handleMicRequest,
         active: !requesting,
       };

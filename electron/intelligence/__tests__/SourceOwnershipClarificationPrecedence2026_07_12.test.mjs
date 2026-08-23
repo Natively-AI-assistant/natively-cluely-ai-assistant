@@ -166,7 +166,18 @@ describe('FIX: manual-chat and WTA short-circuits prefer the specific legacy mes
     // decision before falling through to the kernel's generic builder.
     const shortCircuitStart = ipcSource.indexOf("turnContract.sourceOwner === 'clarify'");
     assert.ok(shortCircuitStart >= 0, 'clarification short-circuit not found');
-    const shortCircuitBlock = ipcSource.slice(shortCircuitStart, shortCircuitStart + 2500);
+    // Anchor on the STATEMENT, not a fixed-size window. The original 2500-char
+    // slice silently stopped covering the assignment once the block grew (an
+    // actionability guard and its comment were added 2026-08-11), so this
+    // failed with the correct code in place — the window simply no longer
+    // reached it. A magic number here fails for reasons unrelated to the
+    // invariant, which is what it did on main.
+    const clarifyIdx = ipcSource.indexOf('const clarify = manualOwnership', shortCircuitStart);
+    assert.ok(
+      clarifyIdx > shortCircuitStart,
+      'the clarify assignment must live inside the short-circuit block',
+    );
+    const shortCircuitBlock = ipcSource.slice(clarifyIdx, clarifyIdx + 400);
     assert.match(
       shortCircuitBlock,
       /manualOwnership\?\.shouldClarifyInsteadOfProfile\s*\?\s*require\('\.\/llm\/sourceOwnership'\)\.buildSourceSwitchClarification\(manualOwnership\.owner\)\s*:\s*buildSourceClarification/,

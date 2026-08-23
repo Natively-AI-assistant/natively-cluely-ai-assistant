@@ -1,0 +1,99 @@
+{
+  "name": "question_then_continued_speech",
+  "bucket": "continued_speech",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "How would you scale this if..."
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "How would you scale this if..."
+    },
+    {
+      "at": 700,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    },
+    {
+      "at": 1000,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 1100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Actually, before that,"
+    },
+    {
+      "at": 1550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "Actually, before that,"
+    },
+    {
+      "at": 1550,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Actually, before that, let me give you some context"
+    },
+    {
+      "at": 2000,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "let me give you some context"
+    },
+    {
+      "at": 2000,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Actually, before that, let me give you some context about how the team works."
+    },
+    {
+      "at": 2450,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "about how the team works."
+    },
+    {
+      "at": 2600,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": false,
+    "triggerCount": 0,
+    "noOffer": true
+  }
+}

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import WebSocket from 'ws';
+import { safeDetachAndClose } from './wsSafeTeardown';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -95,8 +96,10 @@ export class ElevenLabsStreamingSTT extends EventEmitter {
             this.reconnectTimer = null;
         }
         if (this.ws) {
-            this.ws.removeAllListeners();
-            this.ws.close();
+            // safeDetachAndClose (F-201): setRecognitionLanguage does
+            // stop()+start(), so this runs mid-handshake — a CONNECTING
+            // socket's abort error must not escape listener-less.
+            safeDetachAndClose(this.ws);
             this.ws = null;
         }
         this.isActive = false;

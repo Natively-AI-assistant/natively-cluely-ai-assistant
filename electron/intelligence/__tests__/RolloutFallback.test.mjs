@@ -36,12 +36,14 @@ const DEFAULT_ON_KEYS = new Set([
   'contextOsRecapFollowupEnabled',
   'contextOsEvidencePackEnabled',
   'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted default-ON 2026-08-02 (benchmark campaign;
+  // see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;
 
 const FLAG_ENV = {
-  intelligenceOsEnabled: 'NATIVELY_INTELLIGENCE_OS',
   profileTreeV2: 'NATIVELY_PROFILE_TREE_V2',
   contextRouterV2: 'NATIVELY_CONTEXT_ROUTER_V2',
   liveTranscriptBrain: 'NATIVELY_LIVE_TRANSCRIPT_BRAIN',
@@ -70,7 +72,6 @@ const EXTRA_FLAG_ENV = [
   'NATIVELY_MEETING_MODE_AUTODETECT',
   'NATIVELY_FOLLOWUP_DRAFT_V2',
   'NATIVELY_SPEAKER_LABELS_V1',
-  'NATIVELY_MEETING_NOTES_STRUCTURED_OUTPUT',
   'NATIVELY_MEETING_SUMMARY_LLM_POLISH',
   'NATIVELY_SPEAKER_DIARIZATION_V1',
   'NATIVELY_RAG_CONFIDENCE_GATE', 'NATIVELY_RAG_LOCAL_RERANK', 'NATIVELY_RAG_RRF_FUSION', 'NATIVELY_RAG_SPECULATIVE_RERANK',

@@ -50,7 +50,7 @@ export function shouldShowPromptLocal(state: PromptState | null | undefined, now
     const anchorMs = anchor ? new Date(anchor).getTime() : 0
     const ageMs = anchorMs ? (now - anchorMs) : Number.POSITIVE_INFINITY
     if (ageMs >= PROMPT_REDISPLAY_DELAY_MS) return { eligible: true, reason: 'redisplay_delay_met' }
-    if (sessions >= PROMPT_FIRST_SESSION_THRESHOLD + (state.dismissed_count * PROMPT_REDISPLAY_SESSION_THRESHOLD)) {
+    if (sessions >= PROMPT_FIRST_SESSION_THRESHOLD + (state.dismissed_count! * PROMPT_REDISPLAY_SESSION_THRESHOLD)) {
         return { eligible: true, reason: 'redisplay_sessions_met' }
     }
     return { eligible: false, reason: 'redisplay_threshold_not_met' }

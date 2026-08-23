@@ -161,6 +161,41 @@ function checkNativeModuleUnpacked(): { ok: boolean; message: string } {
   return { ok: false, message: `Native module binary missing under resources/app.asar.unpacked/native-module/` };
 }
 
+/**
+ * Like checkUnpackedNativeDir, but satisfied by ANY entry under `dirRel` whose
+ * name starts with `prefix`.
+ *
+ * Used for the platform-specific native packages (sharp, sqlite-vec) whose
+ * directory name embeds the CPU arch — `sharp-win32-x64` vs `sharp-win32-ia32`
+ * vs `sharp-win32-arm64`. Windows ships both x64 and ia32 installers, so
+ * pinning one arch would fail the other. Matching on the platform prefix
+ * verifies "a native binary for this OS was packaged" without hardcoding an
+ * arch that may legitimately not be the one installed.
+ */
+function checkUnpackedNativePrefix(
+  dirRel: string,
+  prefix: string,
+  label: string,
+): { ok: boolean; message: string } {
+  if (!isPackagedSafe()) {
+    return { ok: true, message: `Dev mode: skipping unpacked check (${dirRel}/${prefix}*)` };
+  }
+  if (!process.resourcesPath) {
+    return {
+      ok: false,
+      message: `Cannot validate packaged path: process.resourcesPath is undefined (rel=${dirRel})`,
+    };
+  }
+  const dir = path.join(process.resourcesPath, 'app.asar.unpacked', dirRel);
+  try {
+    const hit = fs.readdirSync(dir).find((entry) => entry.startsWith(prefix));
+    if (hit) return { ok: true, message: `Found app.asar.unpacked/${dirRel}/${hit}` };
+    return { ok: false, message: `Missing ${label}: no ${dirRel}/${prefix}* in app.asar.unpacked` };
+  } catch {
+    return { ok: false, message: `Missing ${label}: cannot read app.asar.unpacked/${dirRel}` };
+  }
+}
+
 function checkUnpackedNativeDir(rel: string): { ok: boolean; message: string } {
   if (!isPackagedSafe()) {
     return { ok: true, message: `Dev mode: skipping unpacked check (${rel})` };
@@ -242,10 +277,30 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     checks.push(await timedCheck('rust native audio module', async () => checkNativeModuleUnpacked()));
     checks.push(await timedCheck('rust native audio module loadable', async () => tryRequireNativeModule()));
     checks.push(await timedCheck('better-sqlite3 native', async () => checkUnpackedNativeDir('node_modules/better-sqlite3/build/Release/better_sqlite3.node')));
-    checks.push(await timedCheck('sharp darwin-arm64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-arm64/lib')));
-    checks.push(await timedCheck('sharp darwin-x64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-x64/lib')));
-    checks.push(await timedCheck('sqlite-vec darwin-arm64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-arm64/vec0.dylib')));
-    checks.push(await timedCheck('sqlite-vec darwin-x64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-x64/vec0.dylib')));
+    // sharp / sqlite-vec ship as per-OS packages, so these checks MUST be
+    // platform-scoped. They used to be darwin-only paths run unconditionally,
+    // which meant every packaged WINDOWS build failed four checks for binaries
+    // that are never installed there — flipping `nativeOk` false and telling the
+    // user "Please reinstall Natively" on a perfectly good install. (Dev mode
+    // short-circuits checkUnpacked*, which is why it never showed up locally.)
+    //
+    // The darwin branch is byte-for-byte what shipped before; only the win32
+    // branch is new. Linux gets neither (as before) rather than a guess.
+    if (process.platform === 'darwin') {
+      checks.push(await timedCheck('sharp darwin-arm64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-arm64/lib')));
+      checks.push(await timedCheck('sharp darwin-x64 native', async () => checkUnpackedNativeDir('node_modules/@img/sharp-darwin-x64/lib')));
+      checks.push(await timedCheck('sqlite-vec darwin-arm64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-arm64/vec0.dylib')));
+      checks.push(await timedCheck('sqlite-vec darwin-x64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-x64/vec0.dylib')));
+    } else if (process.platform === 'win32') {
+      // Prefix-matched: Windows ships x64 AND ia32 installers (and arm64 is
+      // possible), so the arch suffix cannot be hardcoded. Both directories are
+      // covered by asarUnpack (`**/node_modules/@img/**`,
+      // `**/node_modules/sqlite-vec-*/**`).
+      // The 'sharp ' / 'sqlite-vec ' id prefixes are load-bearing — `nativeOk`
+      // below selects these checks by exactly those prefixes.
+      checks.push(await timedCheck('sharp win32 native', async () => checkUnpackedNativePrefix('node_modules/@img', 'sharp-win32-', 'sharp Windows binary')));
+      checks.push(await timedCheck('sqlite-vec windows extension', async () => checkUnpackedNativePrefix('node_modules', 'sqlite-vec-windows-', 'sqlite-vec Windows extension')));
+    }
 
     // 4. Ollama optional path.
     if (options.ollamaSelected) {

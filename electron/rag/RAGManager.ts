@@ -13,10 +13,64 @@ import { LiveRAGIndexer } from './LiveRAGIndexer';
 import { buildRAGPrompt, NO_CONTEXT_FALLBACK, NO_GLOBAL_CONTEXT_FALLBACK } from './prompts';
 import type { ProviderDataScopePolicy } from '../llm/ProviderRouter';
 
+/**
+ * A bare `for await` over an LLM stream blocks forever if the provider hangs
+ * mid-stream (no token, no error, no close) — this is the exact mechanism
+ * behind the previously-fixed 134s manual-chat hang (see electron/llm/
+ * liveDeadlines.ts). That fix (raceStreamWithDeadline) was wired into manual
+ * chat and WhatToAnswer but never into RAGManager's queryMeeting/queryGlobal,
+ * so the meeting-search and global-search chat surfaces were still exposed to
+ * an unbounded hang. This mirrors the same Promise.race-per-next() mechanism,
+ * reshaped to fit an `async *` generator (yield per token) instead of the
+ * callback-based onToken() the shared helper uses.
+ */
+const RAG_STREAM_STALL_MS = 15_000;
+
+async function* raceGeneratorWithDeadline(
+    stream: AsyncGenerator<string, void, unknown>,
+    stallMs: number,
+): AsyncGenerator<string, void, unknown> {
+    const DEADLINE = Symbol('rag-stream-deadline');
+    try {
+        while (true) {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            const deadline = new Promise<typeof DEADLINE>((resolve) => {
+                timer = setTimeout(() => resolve(DEADLINE), stallMs);
+            });
+            const nextP = stream.next();
+            // Defuse: if the deadline wins, nextP is still pending and unobserved —
+            // when the hung provider's request later settles it must not surface as
+            // an unhandledRejection (fatal in Electron main).
+            nextP.catch(() => { /* loser of the race — defused */ });
+            const res = await Promise.race([nextP, deadline]);
+            if (timer) clearTimeout(timer);
+            if (res === DEADLINE) {
+                console.warn(`[RAGManager] Stream stalled for ${stallMs}ms — aborting.`);
+                try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
+                return;
+            }
+            if (res.done) return;
+            // TS cannot discriminate the IteratorResult union through the
+            // Promise.race with the DEADLINE symbol, so `res.value` widens to
+            // `string | void` despite the `done` check above. The check makes
+            // the cast sound: a non-done result's value is the yielded string.
+            yield res.value as string;
+        }
+    } catch (e) {
+        try { const p = stream.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
+        throw e;
+    }
+}
+
 export interface RAGManagerConfig {
     db: Database.Database;
-    dbPath: string;       // Passed to VectorStore so worker can open its own read-only connection
-    extPath: string;      // Resolved sqlite-vec extension path (no platform suffix)
+    // dbPath/extPath are unused by VectorStore now (it runs on `db` directly —
+    // see VectorStore.ts's header comment for why the worker-thread design
+    // that needed these was removed) but kept required here so every existing
+    // call site doesn't need to change, and so a future re-introduction of an
+    // out-of-process search path doesn't have to re-thread them.
+    dbPath: string;
+    extPath: string;
     openaiKey?: string;
     geminiKey?: string;
     geminiKeys?: string[];   // optional pool for embedding key-rotation + 429 cooldown
@@ -40,8 +94,22 @@ export class RAGManager {
     private retriever: RAGRetriever;
     private llmHelper: LLMHelper | null = null;
     private liveIndexer: LiveRAGIndexer;
-    /** Guards against concurrent reprocessMeeting() calls for the same meeting ID. */
-    private _reprocessInFlight = new Set<string>();
+    /**
+     * Guards against concurrent reprocessMeeting()/reindex calls for the same
+     * target. Process-wide on globalThis, not per-instance: RAGManager is
+     * constructor-owned (not a getInstance singleton), so a harness that
+     * constructs two instances over ONE natively.db — or co-loads two esbuild
+     * bundles — would otherwise run duplicate embedding jobs for the same
+     * documents (duplicate spend; duplicate vectors if inserts aren't
+     * idempotent). Same bug class as the 2026-07-31 singleton sweep, LOW
+     * severity because the DB itself is shared truth.
+     */
+    private get _jobGuards(): { reprocess: Set<string>; reindexing: boolean } {
+        const g = globalThis as unknown as Record<string, { reprocess: Set<string>; reindexing: boolean } | undefined>;
+        if (!g.__nativelyRagJobGuardsV1__) g.__nativelyRagJobGuardsV1__ = { reprocess: new Set(), reindexing: false };
+        return g.__nativelyRagJobGuardsV1__;
+    }
+    private get _reprocessInFlight(): Set<string> { return this._jobGuards.reprocess; }
 
     constructor(config: RAGManagerConfig) {
         this.db = config.db;
@@ -72,6 +140,18 @@ export class RAGManager {
      */
     setLLMHelper(llmHelper: LLMHelper): void {
         this.llmHelper = llmHelper;
+    }
+
+    /**
+     * The retriever, for callers that need typed chunks rather than a formatted
+     * blob — specifically the Context Intelligence V3 meeting retrieval port,
+     * which builds its own evidence with per-meeting scope.
+     *
+     * Read-only accessor: retrieval itself stays owned by RAGRetriever, so this
+     * does not become a second query path with its own ranking rules.
+     */
+    getRetriever(): RAGRetriever {
+        return this.retriever;
     }
 
     getEmbeddingPipeline(): EmbeddingPipeline {
@@ -198,11 +278,22 @@ export class RAGManager {
         const prompt = buildRAGPrompt(query, context.formattedContext, 'meeting', context.intent);
 
         // Stream response
-        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
+        const streamOutcome: { incomplete?: boolean } = {};
+        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
 
-        for await (const chunk of stream) {
+        for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
+        }
+        // F7 (code-review 2026-08-14): surface an incomplete stream to the
+        // reader. Without this, a capped or post-commit-failed stream ended
+        // normally, ipcHandlers sent rag:stream-complete, and the renderer
+        // finalized a mid-sentence bubble as a complete answer that then
+        // entered conversation state. The coda makes the truncation VISIBLE
+        // in the rendered/persisted answer (skipped on user abort — that is
+        // a cancellation, not a truncation).
+        if (streamOutcome.incomplete && !abortSignal?.aborted) {
+            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
         }
     }
 
@@ -229,11 +320,22 @@ export class RAGManager {
         const prompt = buildRAGPrompt(query, context.formattedContext, 'global', context.intent);
 
         // Stream response
-        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true);
+        const streamOutcome: { incomplete?: boolean } = {};
+        const stream = this.llmHelper.streamChatWithGemini(prompt, undefined, undefined, true, undefined, streamOutcome);
 
-        for await (const chunk of stream) {
+        for await (const chunk of raceGeneratorWithDeadline(stream, RAG_STREAM_STALL_MS)) {
             if (abortSignal?.aborted) break;
             yield chunk;
+        }
+        // F7 (code-review 2026-08-14): surface an incomplete stream to the
+        // reader. Without this, a capped or post-commit-failed stream ended
+        // normally, ipcHandlers sent rag:stream-complete, and the renderer
+        // finalized a mid-sentence bubble as a complete answer that then
+        // entered conversation state. The coda makes the truncation VISIBLE
+        // in the rendered/persisted answer (skipped on user abort — that is
+        // a cancellation, not a truncation).
+        if (streamOutcome.incomplete && !abortSignal?.aborted) {
+            yield '\n\n_(Answer incomplete \u2014 the model stream ended early.)_';
         }
     }
 
@@ -287,6 +389,25 @@ export class RAGManager {
             return;
         }
         
+        // F-411: purge anything still sitting under this id BEFORE indexing the
+        // new session. The live id is a CONSTANT ('live-meeting-current'), and
+        // the only cleanup is at meeting end — guarded by !isMeetingActive, and
+        // deliberately skipped when a new meeting has already started. So after
+        // a crash, a force-quit, or a start that overlaps the previous drain,
+        // the previous meeting's transcript chunks survive under the same id;
+        // the live "ask about this meeting" surface filters only on meeting_id,
+        // so meeting A's transcript was served as evidence for meeting B.
+        // There is no startup sweep anywhere, and `chunks` has no
+        // UNIQUE(meeting_id, chunk_index) to stop the rows interleaving.
+        // Purging here is the one place that runs on EVERY path into a new
+        // live session, and it is safe: these JIT rows are always disposable
+        // (post-meeting RAG re-indexes under the real meeting id).
+        try {
+            this.deleteMeetingData(meetingId);
+        } catch (e) {
+            console.warn('[RAGManager] Failed to purge stale live-indexing data before start:', e);
+        }
+
         // Ensure meeting row exists in DB to satisfy foreign key constraints for chunks
         try {
             this.db.prepare(`
@@ -337,9 +458,39 @@ export class RAGManager {
     }
 
     /**
+     * Whether this instance's connection can still serve statements. Mirrors
+     * VectorStore.isDatabaseUsable() — see that method for the full rationale.
+     */
+    private isDatabaseUsable(): boolean {
+        try {
+            return (this.db as any)?.open === true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * Delete RAG data for a meeting
      */
     deleteMeetingData(meetingId: string): void {
+        // Shutdown guard: RAGManager holds a RAW better-sqlite3 handle
+        // (`this.db = config.db`), so after the fatal path's
+        // closeWithoutCheckpoint() this reference is a closed connection and
+        // every prepare() below would throw out of the driver. This method is
+        // called from the background meeting-teardown block, where a throw is
+        // caught but aborts the remaining teardown steps. Return one controlled,
+        // logged result instead of three separate driver failures.
+        //
+        // Defense in depth for the shutdown window only — nothing here reopens
+        // the database.
+        if (!this.isDatabaseUsable()) {
+            console.warn(
+                `[RAGManager] deleteMeetingData(${meetingId}): database is closed — skipping RAG cleanup. ` +
+                'Expected during fatal shutdown.'
+            );
+            return;
+        }
+
         // 1. Delete from vector store (chunks and summaries)
         this.vectorStore.deleteChunksForMeeting(meetingId);
         
@@ -499,7 +650,8 @@ export class RAGManager {
      *  - Search during re-index is empty-not-wrong: a cleared, not-yet-re-embedded
      *    meeting has NULL space and is excluded by the space-filtered search.
      */
-    private _reindexInFlight = false;
+    private get _reindexInFlight(): boolean { return this._jobGuards.reindexing; }
+    private set _reindexInFlight(v: boolean) { this._jobGuards.reindexing = v; }
     private _autoReindexTimer: ReturnType<typeof setTimeout> | null = null;
     private static readonly AUTO_REINDEX_DEFER_MS = 15_000;
     private static readonly REINDEX_LIVE_RECHECK_MS = 30_000;
@@ -538,6 +690,11 @@ export class RAGManager {
      */
     async dispose(): Promise<void> {
         this.cancelPendingReindex();
+        // Stop the embedding drain loop BEFORE the shared DB handle is closed
+        // (main.ts disposes RAG, then closes the DB): an in-flight embed that
+        // resumed after close used to throw into queueMeeting's catch, and on
+        // the emergency-close path its write raced an uncheckpointed database.
+        try { this.embeddingPipeline.stop(); } catch { /* non-fatal */ }
         try { await this.vectorStore.destroy(); } catch (e) {
             console.warn('[RAGManager] dispose: vectorStore.destroy failed (non-fatal):', e);
         }

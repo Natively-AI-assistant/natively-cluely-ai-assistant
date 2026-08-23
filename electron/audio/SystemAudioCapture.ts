@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
+import { normalizeSpeechEdge } from './speechEdge';
 
 // RustAudioCapture is the native Rust class (napi-rs) that captures system audio.
 // May be null if the .node binary isn't available — constructor logs an error in that case.
@@ -83,7 +84,13 @@ export class SystemAudioCapture extends EventEmitter {
 
         if (!RustAudioCapture) {
             console.error('[SystemAudioCapture] Cannot start: Rust module missing');
-            return;
+            // F-107: a bare return here made a missing/wrong-arch native
+            // module a SILENT no-op — no 'error', no 'start' (so the stuck
+            // watchdog never armed), empty device lists, and a meeting that
+            // reported success with zero transcript. Throw instead: every
+            // start() call site (startCaptureChannels, recovery, resume,
+            // audio test) catches and surfaces a terminal channel banner.
+            throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
         // LAZY INIT: Create monitor here when meeting starts (not in constructor)
@@ -138,6 +145,15 @@ export class SystemAudioCapture extends EventEmitter {
                     return;
                 }
                 this.emit('speech_ended');
+            }, (err: Error | null, edge: any) => {
+                // Joint dual-channel transition (Auto Answer V3, Amendment 1).
+                // Optional third callback; absent consumers cost nothing.
+                if (err) {
+                    console.error('[SystemAudioCapture] Speech edge callback error:', err);
+                    return;
+                }
+                const normalized = normalizeSpeechEdge(edge);
+                if (normalized) this.emit('speech_edge', normalized);
             });
 
             // getSampleRate MUST be called AFTER start() — background init updates

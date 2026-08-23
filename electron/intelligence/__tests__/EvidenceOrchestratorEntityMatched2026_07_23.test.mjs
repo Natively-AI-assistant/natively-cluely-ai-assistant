@@ -26,7 +26,16 @@ const distDir = (() => {
   if (fs.existsSync(bundled)) return path.resolve(repoRoot, 'dist-electron');
   const target = fs.mkdtempSync(path.join(os.tmpdir(), 'entitymatched-dist-'));
   fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(target, 'node_modules'), 'dir');
-  try { execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected partial */ }
+  // Args array + `node <entry>`: `target` is a mkdtemp path (backslashes and
+  // possibly spaces on Windows) and `.bin/tsc` is a `.cmd` there, which
+  // execFileSync cannot launch. Same fix as ContextOsProductionDefaultRollout.
+  try {
+    execFileSync(process.execPath, [
+      path.join('node_modules', 'typescript', 'bin', 'tsc'),
+      '-p', path.join('electron', 'tsconfig.json'),
+      '--outDir', target,
+    ], { cwd: repoRoot, stdio: 'pipe' });
+  } catch { /* expected partial */ }
   return target;
 })();
 

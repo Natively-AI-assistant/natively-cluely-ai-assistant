@@ -26,10 +26,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import sharp from 'sharp';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const screenDir = path.join(root, 'dist-electron/electron/services/screen');
 
 let OptMod;

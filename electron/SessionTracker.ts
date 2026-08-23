@@ -4,6 +4,7 @@
 
 import { RecapLLM } from './llm';
 import { isVerboseLogging } from './verboseLog';
+import type { AttemptId, TurnIdentity } from './llm/turnIdentity';
 
 // Canned-fallback phrases that mean the model gave up entirely, not phrases
 // that might legitimately appear inside a real answer. Matched only when the
@@ -24,6 +25,17 @@ function isCannedFallbackPhrase(text: string): boolean {
     return CANNED_FALLBACK_PHRASES.includes(normalized);
 }
 
+/**
+ * Provenance of a transcript segment (Defect B fix, 2026-08-01). Real spoken
+ * audio ('stt') is the ONLY origin that is evidence for meeting memory
+ * extraction; typed manual-chat questions, assistant answers, injected system
+ * instructions, and test fixtures share this store but must never be mined as
+ * things that "happened in the meeting". Optional so old stored segments and
+ * un-migrated callers keep working — readers fall back to a documented
+ * heuristic (see isMemoryEligibleSegment in intelligence/MeetingMemoryService).
+ */
+export type TranscriptOrigin = 'stt' | 'manual_chat' | 'assistant' | 'system_instruction' | 'test';
+
 export interface TranscriptSegment {
     marker?: string;
     speaker: string;
@@ -35,12 +47,42 @@ export interface TranscriptSegment {
     timestamp: number;
     final: boolean;
     confidence?: number;
+    /** Where this segment came from. Absent = legacy/unknown writer (see TranscriptOrigin). */
+    origin?: TranscriptOrigin;
+    /** STT provider id that produced this segment (WTA audit F9, additive). */
+    sttProvider?: string;
+    /** Punctuation provenance (WTA audit F9): 'unavailable' means the provider
+     *  never guaranteed punctuation — scoring must treat a missing '?' as
+     *  NEUTRAL, not negative. Absent = legacy writer (same neutral treatment). */
+    punctuationSource?: import('./llm/punctuationProvenance').PunctuationSource;
 }
 
 export interface SuggestionTrigger {
     context: string;
     lastQuestion: string;
-    confidence: number;
+    /**
+     * Trigger-level confidence that `lastQuestion` is an answerable question.
+     * Optional since the Auto Answer V3 campaign: the automatic trigger no
+     * longer fabricates a value, and an absent confidence means "defer to the
+     * planner's own classifier score" (PlannerDecision falls back to
+     * intentResult.confidence).
+     */
+    confidence?: number;
+    /**
+     * True when the trigger came from the Auto Answer path rather than a user
+     * action. The engine records the resulting generation so a user barge-in
+     * can cancel exactly that stream and never a manual What-to-Answer.
+     */
+    automatic?: boolean;
+    // ── Auto Answer V3 identity/quality fields (all optional, V2 §26) ──
+    questionId?: string;
+    answerability?: number;
+    dialogueAct?: string;
+    isFollowUp?: boolean;
+    endpointSource?: string;
+    candidateGeneration?: number;
+    /** The controller verified (by id or embedding cosine) that the speculative cache answers THIS question. */
+    reuseSpeculative?: boolean;
 }
 
 // Context item matching Swift ContextManager structure
@@ -48,6 +90,10 @@ export interface ContextItem {
     role: 'interviewer' | 'user' | 'assistant';
     text: string;
     timestamp: number;
+    /** STT provider id (WTA audit F9, additive; absent on legacy/assistant items). */
+    sttProvider?: string;
+    /** Punctuation provenance (WTA audit F9, additive; see TranscriptSegment). */
+    punctuationSource?: import('./llm/punctuationProvenance').PunctuationSource;
 }
 
 /**
@@ -93,6 +139,19 @@ export class SessionTracker {
     // continuity that intentionally reads the shared field is unaffected).
     // Keyed by ConversationSurface; a surface with no turns yet is simply absent.
     private lastAssistantMessageBySurface: Partial<Record<ConversationSurface, string>> = {};
+
+    // Phase 6 Slice 1 (context-rebuild, 2026-07-25) — TurnIdentity write guard.
+    // Tracks, PER SURFACE (mirroring lastAssistantMessageBySurface above — a
+    // newer commit on one surface must never reject an un-superseded write on
+    // a different surface), the highest AttemptId that has already committed
+    // an addAssistantMessage write. attemptId is minted from a single
+    // globally-monotonic counter (ipcHandlers.ts's `_chatStreamId`), so a
+    // strictly SMALLER incoming attemptId is unambiguously stale. Keyed by
+    // 'unspecified' for identity-tagged calls that pass no surface. Only
+    // consulted when the caller passes `identity` — omitting it (every
+    // existing caller, until Slice 1's ipcHandlers.ts wiring lands) is a
+    // complete no-op, exactly like `surface` being optional above.
+    private lastCommittedAttemptBySurface: Partial<Record<ConversationSurface | 'unspecified', AttemptId>> = {};
 
     // Temporal RAG: Track all assistant responses in session for anti-repetition
     private assistantResponseHistory: AssistantResponse[] = [];
@@ -278,7 +337,11 @@ export class SessionTracker {
         this.contextItems.push({
             role,
             text,
-            timestamp: segment.timestamp
+            timestamp: segment.timestamp,
+            // F9 provenance rides along when the seam supplied it (additive;
+            // legacy writers leave both undefined = neutral treatment).
+            ...(segment.sttProvider ? { sttProvider: segment.sttProvider } : {}),
+            ...(segment.punctuationSource ? { punctuationSource: segment.punctuationSource } : {}),
         });
 
         this.evictOldEntries();
@@ -319,26 +382,66 @@ export class SessionTracker {
         // a same-surface-only reader (getLastAssistantMessage(surface)) can
         // consult, without changing what the shared, cross-surface state sees.
         surface?: ConversationSurface,
-    ): void {
+        // Phase 6 Slice 1 (context-rebuild, 2026-07-25): OPTIONAL — absent
+        // means the caller hasn't been updated yet (every existing caller,
+        // today), and this write behaves exactly as before. Passing an
+        // identity additionally rejects the write if a newer attempt for the
+        // same surface has already committed (see
+        // lastCommittedAttemptBySurface above).
+        identity?: TurnIdentity,
+    ): boolean {
         console.log(`[SessionTracker] addAssistantMessage called`, { length: text.length, policy: writeDecision?.policy || 'store_conversational_only', surface: surface ?? 'unspecified' });
+
+        // TurnIdentity write guard — checked FIRST, before any other filter
+        // and before either of this method's two writes, in the SAME
+        // synchronous call (this method has no `await`, so nothing can
+        // interleave between this check and the writes below — the
+        // non-interleavable-block requirement the migration plan calls for
+        // falls out of the method already being synchronous, not from any
+        // added locking).
+        if (identity) {
+            const key = surface ?? 'unspecified';
+            const lastCommitted = this.lastCommittedAttemptBySurface[key];
+            if (lastCommitted != null && identity.attemptId < lastCommitted) {
+                console.warn(`[SessionTracker] Rejected stale-attempt assistant message`, {
+                    surface: key,
+                    attemptId: identity.attemptId,
+                    lastCommittedAttemptId: lastCommitted,
+                });
+                return false;
+            }
+        }
 
         if (writeDecision?.policy === 'do_not_store' || writeDecision?.blockedFromSessionTracker) {
             console.warn(`[SessionTracker] Blocked assistant message by write policy`, { reason: writeDecision?.reason || 'unspecified' });
-            return;
+            return false;
         }
 
         // Natively-style filtering
-        if (!text) return;
+        if (!text) return false;
+
+        // Prompt System v2 no-action sentinel (2026-08-01): [[NO_ACTION]] is a
+        // machine signal, never a message. It must not enter contextItems,
+        // fullTranscript (and therefore epoch summaries, DB transcripts, or
+        // meeting persistence), lastAssistantMessage, or response history —
+        // regardless of which of the ~23 call sites forgot to gate it.
+        try {
+            const { shouldSuppressModelOutput } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (shouldSuppressModelOutput(text)) {
+                console.warn(`[SessionTracker] Suppressed no-action sentinel (never stored)`);
+                return false;
+            }
+        } catch { /* non-fatal — fall through to normal filtering */ }
 
         const cleanText = text.trim();
         if (cleanText.length < 10) {
             console.warn(`[SessionTracker] Ignored short message (<10 chars)`);
-            return;
+            return false;
         }
 
         if (isCannedFallbackPhrase(cleanText)) {
             console.warn(`[SessionTracker] Ignored fallback message`);
-            return;
+            return false;
         }
 
         this.contextItems.push({
@@ -353,7 +456,10 @@ export class SessionTracker {
             text: cleanText,
             timestamp: Date.now(),
             final: true,
-            confidence: 1.0
+            confidence: 1.0,
+            // Defect B (2026-08-01): assistant answers are NOT meeting evidence.
+            // Meeting-memory extraction filters on origin === 'stt'.
+            origin: 'assistant'
         });
 
         // Compact transcript with summarization instead of losing early context
@@ -365,6 +471,9 @@ export class SessionTracker {
         this.lastAssistantMessage = cleanText;
         if (surface) {
             this.lastAssistantMessageBySurface[surface] = cleanText;
+        }
+        if (identity) {
+            this.lastCommittedAttemptBySurface[surface ?? 'unspecified'] = identity.attemptId;
         }
 
         // Temporal RAG: Track response history for anti-repetition
@@ -382,6 +491,7 @@ export class SessionTracker {
 
         console.log(`[SessionTracker] lastAssistantMessage updated, history size: ${this.assistantResponseHistory.length}`);
         this.evictOldEntries();
+        return true;
     }
 
     /**
@@ -439,15 +549,15 @@ export class SessionTracker {
 
     /**
      * DURABLE context window (Intelligence OS, 2026-06-12). Unlike `getContext()`,
-     * which reads `contextItems` — hard-evicted to `contextWindowDuration` (120s) on
+     * which reads `contextItems` — hard-evicted to `contextWindowDuration` (180s) on
      * EVERY final segment by `evictOldEntries()` — this reads `fullTranscript`, the
-     * session's persisted store that survives the 120s eviction. It exists to make
+     * session's persisted store that survives the 180s eviction. It exists to make
      * genuinely long-range recall possible: a project named at minute 1 is still
      * present at minute 62.
      *
      * WHY THIS METHOD EXISTS: `IntelligenceEngine.LIVE_MEMORY_WINDOW_SECONDS = 7200`
      * fed `getContext(7200)` into the long-range follow-up memory and assumed a 2h
-     * window. But `contextItems` can never hold more than ~120s, so that path
+     * window. But `contextItems` can never hold more than ~180s, so that path
      * silently saw at most the last two minutes — the long-range entity it was built
      * to recall had already been evicted. Pointing it at the durable store fixes the
      * bug for the common case (a multi-minute session under the compaction threshold).
@@ -456,7 +566,7 @@ export class SessionTracker {
      * evicts the OLDEST 500 raw segments into an epoch summary, so this returns only
      * the raw segments STILL RESIDENT — a minute-1 entity in a *very* long session can
      * still age out of the raw store into a summary. That's a far higher bar than the
-     * 120s `contextItems` eviction this fixes; for the full summary-prefixed view see
+     * 180s `contextItems` eviction this fixes; for the full summary-prefixed view see
      * `getFullSessionContext()`.
      *
      * @param lastSeconds Window size in seconds (default 7200 = 2h). `Infinity`
@@ -514,18 +624,22 @@ export class SessionTracker {
     getContextWithInterim(lastSeconds: number = 120): ContextItem[] {
         const contextItems = [...this.getContext(lastSeconds)];
 
+        // RC-1 (session C, 2026-08-21): same resolver as the WTA injection site
+        // in IntelligenceEngine — a cumulative provider interim (measured up to
+        // 10K chars) must never be appended whole; only its novel tail is.
         const lastInterim = this.lastInterimInterviewer;
         if (lastInterim && lastInterim.text.trim().length > 0) {
-            const lastItem = contextItems[contextItems.length - 1];
-            const isDuplicate = lastItem &&
-                lastItem.role === 'interviewer' &&
-                (lastItem.text === lastInterim.text ||
-                    Math.abs(lastItem.timestamp - lastInterim.timestamp) < 1000);
-
-            if (!isDuplicate) {
+            const { resolveInterimInjection } = require('./llm/interimInjectionGuard') as typeof import('./llm/interimInjectionGuard');
+            const verdict = resolveInterimInjection({
+                interim: { text: lastInterim.text, timestamp: lastInterim.timestamp },
+                recentInterviewerFinals: contextItems.filter(item => item.role === 'interviewer'),
+                lastContextItem: contextItems[contextItems.length - 1] ?? null,
+                now: Date.now(),
+            });
+            if (verdict.action === 'inject') {
                 contextItems.push({
                     role: 'interviewer',
-                    text: lastInterim.text,
+                    text: verdict.text,
                     timestamp: lastInterim.timestamp,
                 });
             }

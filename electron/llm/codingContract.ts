@@ -41,7 +41,7 @@ export const CODING_CONTRACT = `CODING / DSA RESPONSE CONTRACT — output these 
 - Name the core DSA concept/data structure/algorithm (e.g. two pointers, sliding window, hash map, stack, queue, binary search, DP, BFS/DFS, heap, trie, union-find, recursion, backtracking).
 
 ## Code
-- Clean, correct, interview-ready code in ONE fenced block with a language tag (\`\`\`python). Meaningful names, minimal comments. Do NOT start the answer with code — the \`## Approach\` heading comes first.
+- Clean, correct, interview-ready code in ONE fenced block, tagged with the language you ACTUALLY wrote (\`\`\`python, \`\`\`java, \`\`\`cpp, \`\`\`javascript, \`\`\`typescript, \`\`\`go, \`\`\`rust, \`\`\`sql). A Java answer is tagged \`\`\`java, never \`\`\`python. Meaningful names, minimal comments. Do NOT start the answer with code — the \`## Approach\` heading comes first.
 
 ## Dry Run
 - Walk through ONE sample input step by step and show how the code reaches the output.
@@ -59,7 +59,7 @@ Every heading is mandatory and must appear verbatim (with the \`## \` prefix). E
  * A compact one-line variant of the contract for tiny-model prompts where token
  * budget is tight but the SAME heading contract must hold.
  */
-export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique / Data Structure / Algorithm Used", "## Code" (one fenced block with a language tag), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
+export const CODING_CONTRACT_TINY = `Coding/DSA answers MUST use these EXACT markdown headings, in order, nothing before the first: "## Approach", "## Technique / Data Structure / Algorithm Used", "## Code" (one fenced block tagged with the language you actually wrote — Java is \`\`\`java, never \`\`\`python), "## Dry Run", "## Complexity" (Time + Space, each "O(...) because ..."), "## Interviewer Follow-up Points". Never start with code. A missing/renamed heading is a failure.`;
 
 /**
  * Contract for GENERAL IMPLEMENTATION tasks (React components, scripts, utilities,
@@ -89,6 +89,31 @@ export const CODING_CONTRACT_IMPL = `IMPLEMENTATION RESPONSE CONTRACT:
   ## Dry Run / ## Complexity / ## Interviewer Follow-up Points) unless the user
   explicitly asks for them.
 - This is a complete, ready-to-run implementation — not an interview walkthrough.`;
+
+/**
+ * TEMPLATE CONFORMANCE — the answer must be written INTO the template the
+ * question already supplies, not into one the model invents.
+ *
+ * The surface this exists for: a LeetCode/HackerRank stub read off the screen
+ * (`class Solution: def twoSum(self, nums: List[int], target: int) -> List[int]:`),
+ * a signature the interviewer dictated, or a starter block the user pasted. The
+ * six-section contract independently tells the model to write ```python with
+ * its own entry point, so before this rule the produced code did not compile
+ * against the editor the user was actually typing in.
+ *
+ * Deliberately STATIC and conditional (no per-turn text): the question, screen
+ * context, and supplied files are already in the turn content, so the model can
+ * see the template — it just was never told the template outranks the default.
+ * Keeping it text-free also keeps promptSystemV2's prompt registry bounded.
+ */
+export const CODING_TEMPLATE_CONFORMANCE = `TEMPLATE CONFORMANCE — outranks every default here:
+- If the question, screen, transcript, or an attached file already shows a function signature, method stub, class skeleton, or starter block, WRITE YOUR SOLUTION INTO IT: keep its names, parameter order, type hints, class wrapper, and return type exactly. Never rename, re-order, "improve", or re-wrap the given entry point.
+- Use the LANGUAGE of that template even if another would fit better. A Java stub gets Java.
+- Add helpers alongside the given entry point, never in place of it.
+- Choose the signature and language yourself ONLY when none is supplied.`;
+
+/** One-line variant for tiny-model prompts. Same rule, compressed. */
+export const CODING_TEMPLATE_CONFORMANCE_TINY = `TEMPLATE CONFORMANCE (outranks the defaults): if the question/screen/files already contain a function signature, stub, class skeleton, or starter code, write your solution INTO it — keep the exact names, parameters, type hints, class wrapper, return type, and LANGUAGE as supplied. Only pick your own signature and language when none is given.`;
 
 /**
  * Optional verification-spec instruction. Appended to the coding prompt ONLY

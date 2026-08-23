@@ -6,13 +6,16 @@
 //
 // Run with: npm run build:electron && node --test electron/services/__tests__/SafeDocumentTextExtractor.test.mjs
 
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const moduleUrl = pathToFileURL(path.resolve(
@@ -23,6 +26,7 @@ const {
   extractSafeDocumentText,
   SAFE_DOCUMENT_EXTENSIONS,
   SAFE_DOCUMENT_MAX_BYTES,
+  computeParseTimeoutMs,
 } = await import(moduleUrl);
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-safe-document-'));
@@ -84,4 +88,52 @@ test('rejects a symlink instead of following it', async (t) => {
   }
   createdPaths.push(link);
   await assert.rejects(() => extractSafeDocumentText(link), /not a regular file/);
+});
+
+// Real PDF/DOCX round-trip through the pdf-parse/pdfjs-dist and mammoth
+// branches. Bug fix 2026-07-28 (senior review, pdf-parse pin): the test
+// suite above only ever exercised the plain-text branch of
+// SAFE_DOCUMENT_EXTENSIONS, so a `pdfjs-dist` version drift under
+// pdf-parse's caret range (fixed to an exact pin in the same change) could
+// have shipped without any test catching it. Reuses the existing profile
+// eval fixtures (synthetic data) instead of adding new binary fixtures.
+const fixturesRoot = path.resolve(__dirname, '../../../test-fixtures/profiles');
+
+test('extracts real PDF resume text via the pdf-parse/pdfjs-dist branch', async () => {
+  const result = await extractSafeDocumentText(path.join(fixturesRoot, 'p01', 'resume.pdf'));
+  assert.equal(result.extension, '.pdf');
+  assert.ok(result.content.includes('MARCUS J. HOLLOWAY'), 'expected known fixture text in extracted content');
+  assert.ok(result.pageCount >= 1, 'expected a populated page count');
+  assert.ok(result.extractedPageCount >= 1, 'expected at least one page with extracted text');
+});
+
+test('extracts real DOCX resume text via the mammoth branch', async () => {
+  const result = await extractSafeDocumentText(path.join(fixturesRoot, 'p03', 'resume.docx'));
+  assert.equal(result.extension, '.docx');
+  assert.ok(result.content.includes('MARGARET'), 'expected known fixture text in extracted content');
+});
+
+// Resource-leak fix 2026-07-28: parser.destroy() must run on every PDF parse
+// exit path, not just on failure, so pdfjs documents don't pile up relying
+// on GC. `require('pdf-parse')` is cached by Node, so mocking the prototype
+// here also affects the instance the compiled extractor module constructs.
+// Parse-timeout scaling fix 2026-07-28: a flat 30s timeout for every file
+// regardless of size meant a legitimate large (but well under 50MB)
+// PDF/DOCX could spuriously fail parsing just for being long.
+test('scales the parse timeout by file size, bounded between 30s and 5 minutes', () => {
+  assert.equal(computeParseTimeoutMs(1 * 1024 * 1024), 30_000, '1MB should still hit the 30s floor');
+  assert.equal(computeParseTimeoutMs(20 * 1024 * 1024), 40_000, '20MB should scale to 40s (2s/MB)');
+  assert.equal(computeParseTimeoutMs(50 * 1024 * 1024), 100_000, '50MB (the max file size) should scale to 100s');
+  assert.equal(computeParseTimeoutMs(500 * 1024 * 1024), 5 * 60_000, 'an unrealistically large size should cap at 5 minutes');
+});
+
+test('calls parser.destroy() exactly once on a successful PDF parse', async () => {
+  const { PDFParse } = require('pdf-parse');
+  const destroySpy = mock.method(PDFParse.prototype, 'destroy');
+  try {
+    await extractSafeDocumentText(path.join(fixturesRoot, 'p01', 'resume.pdf'));
+    assert.equal(destroySpy.mock.callCount(), 1, 'expected destroy() to be called exactly once');
+  } finally {
+    destroySpy.mock.restore();
+  }
 });

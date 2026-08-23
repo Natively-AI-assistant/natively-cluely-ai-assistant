@@ -54,7 +54,7 @@ const electronStub = {
 // NOW import the service. Its top-level `var import_electron = require("electron")`
 // hits our resolver, gets 'electron-stub', and caches our stub in `import_electron`.
 const mod = await import(pathToFileURL(compiledPath).href);
-const { LocalModelDownloadService, createWhisperDownloadProvider } = mod;
+const { LocalModelDownloadService, createWhisperDownloadProvider, createNemotronDownloadProvider, resolveLocalModelProviderName } = mod;
 
 let tmpUserData;
 
@@ -351,6 +351,33 @@ test('rehydrate: downloading → interrupted (no live worker after restart)', ()
   assert.equal(e.status, 'interrupted');
 });
 
+test('REGRESSION: rehydrate drops a stale wrong-provider entry (whisper:<nemotron-id> ghost error)', () => {
+  // Before resolveLocalModelProviderName existed, every download call site
+  // hardcoded provider 'whisper' — so a failed real Nemotron attempt
+  // persisted as `whisper:<nemotron modelId>` carrying the stale
+  // "init.channelId is required" error. That ghost entry re-marked the
+  // Nemotron row as errored in Settings on EVERY launch, even after the
+  // routing fix, and manual state-file edits were overwritten by the
+  // running app's own re-persist. rehydrate() must drop it.
+  const NEMOTRON_ID = 'onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4';
+  const statePath = path.join(tmpUserData, 'state.json');
+  fs.writeFileSync(statePath, JSON.stringify({
+    v: 1,
+    entries: [
+      // The mis-keyed ghost — must be dropped:
+      { provider: 'whisper', modelId: NEMOTRON_ID, status: 'error', progress: 0, startedAt: 1, updatedAt: 2, error: 'Failed to load model: init.channelId is required for sessionLayout "nemotron-rnnt"' },
+      // A correctly-keyed nemotron entry — must survive:
+      { provider: 'nemotron', modelId: NEMOTRON_ID, status: 'cancelled', progress: 0, startedAt: 3, updatedAt: 4 },
+      // A correctly-keyed whisper entry — must survive:
+      { provider: 'whisper', modelId: 'Xenova/whisper-tiny.en', status: 'complete', progress: 100, startedAt: 5, updatedAt: 6 },
+    ],
+  }));
+  const svc = new LocalModelDownloadService({ persistencePath: statePath, providers: new Map([['whisper', FakeProvider.create()]]) });
+  assert.equal(svc.getState('whisper', NEMOTRON_ID), null, 'mis-keyed whisper:<nemotron-id> ghost must be dropped at rehydrate');
+  assert.equal(svc.getState('nemotron', NEMOTRON_ID)?.status, 'cancelled', 'correctly-keyed nemotron entry must survive');
+  assert.equal(svc.getState('whisper', 'Xenova/whisper-tiny.en')?.status, 'complete', 'correctly-keyed whisper entry must survive');
+});
+
 test('rehydrate: interrupted + isModelCached=true → complete', () => {
   const statePath = path.join(tmpUserData, 'state.json');
   fs.writeFileSync(statePath, JSON.stringify({
@@ -494,4 +521,58 @@ test('REGRESSION: whisper worker path resolves correctly under BOTH bundling lay
     !fs.existsSync(brokenPath),
     `Broken path must not exist (otherwise the regression is back): ${brokenPath}`,
   );
+});
+
+test('nemotron provider factory builds a valid provider', () => {
+  const p = createNemotronDownloadProvider();
+  assert.equal(p.name, 'nemotron');
+  assert.equal(typeof p.isModelCached, 'function');
+  assert.equal(typeof p.deletePartial, 'function');
+  assert.equal(typeof p.preflightCheck, 'function');
+  assert.equal(typeof p.spawnWorker, 'function');
+  assert.equal(typeof p.buildInitMessage, 'function');
+});
+
+test('REGRESSION: nemotron init message includes a channelId — every "Download" click in Settings failed without this', () => {
+  // whisperWorker.ts's nemotron-rnnt init branch (added by the dual-channel
+  // fix) rejects any init lacking a channelId with "Failed to load model:
+  // init.channelId is required for sessionLayout \"nemotron-rnnt\"". This
+  // provider predates that requirement and was never updated for it, so
+  // clicking "Download"/"Install" on the Nemotron catalog entry in Settings
+  // failed immediately, every time, with that exact message.
+  const p = createNemotronDownloadProvider();
+  const msg = p.buildInitMessage('onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4');
+  assert.equal(msg.sessionLayout, 'nemotron-rnnt');
+  assert.ok(msg.channelId, `buildInitMessage() must include a truthy channelId — got ${JSON.stringify(msg.channelId)}`);
+  assert.equal(typeof msg.channelId, 'string');
+});
+
+test('REGRESSION: resolveLocalModelProviderName routes the Nemotron catalog entry to "nemotron", not "whisper"', () => {
+  // The real bug this fixes: every real download call site
+  // (ipcHandlers.ts's local-whisper-start-download/cancel-download/
+  // get-download-state handlers, and main.ts's background auto-download
+  // loop) hardcoded 'whisper' as the provider name for every model,
+  // including Nemotron. createNemotronDownloadProvider() (Task 9) was
+  // registered but NEVER actually invoked for a real download as a
+  // result — every real "Download" click for Nemotron routed through the
+  // whisper provider's buildInitMessage() (which has no channelId logic
+  // at all), reproducing "Failed to load model: init.channelId is
+  // required for sessionLayout \"nemotron-rnnt\"" regardless of the
+  // separate provider-level fix above. Confirmed live: the persisted
+  // local-model-download-state.json entry for a failed real attempt
+  // recorded `"provider": "whisper"` for the Nemotron modelId.
+  assert.equal(
+    resolveLocalModelProviderName('onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4'),
+    'nemotron',
+  );
+});
+
+test('REGRESSION: resolveLocalModelProviderName routes every non-Nemotron catalog entry to "whisper" (unchanged)', () => {
+  assert.equal(resolveLocalModelProviderName('Xenova/whisper-tiny.en'), 'whisper');
+  assert.equal(resolveLocalModelProviderName('onnx-community/parakeet-ctc-0.6b-ONNX'), 'whisper');
+  assert.equal(resolveLocalModelProviderName('onnx-community/moonshine-tiny-ONNX'), 'whisper');
+});
+
+test('REGRESSION: an unknown modelId falls back to "whisper" (fail into the existing generic path, not a crash)', () => {
+  assert.equal(resolveLocalModelProviderName('not-a-real-model-id'), 'whisper');
 });

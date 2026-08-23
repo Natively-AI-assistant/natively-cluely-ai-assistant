@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
+import { normalizeSpeechEdge } from './speechEdge';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
 // Uses LAZY init — the native monitor is NOT created in the constructor. Constructing
@@ -91,7 +92,11 @@ export class MicrophoneCapture extends EventEmitter {
 
         if (!RustMicCapture) {
             console.error('[MicrophoneCapture] Cannot start: Rust module missing');
-            return;
+            // F-107: see SystemAudioCapture.start() — a silent return here hid
+            // a missing/wrong-arch native module entirely. Throwing matches
+            // this wrapper's existing construction-failure contract and lets
+            // every call site surface a terminal channel banner.
+            throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
         // PRIMARY construction site (lazy init). The wrapper does NOT construct
@@ -150,6 +155,15 @@ export class MicrophoneCapture extends EventEmitter {
                     return;
                 }
                 this.emit('speech_ended');
+            }, (err: Error | null, edge: any) => {
+                // Joint dual-channel transition (Auto Answer V3, Amendment 1).
+                // Optional third callback; absent consumers cost nothing.
+                if (err) {
+                    console.error('[MicrophoneCapture] Speech edge callback error:', err);
+                    return;
+                }
+                const normalized = normalizeSpeechEdge(edge);
+                if (normalized) this.emit('speech_edge', normalized);
             });
 
             // Enable pre-warm for the NEXT stop() cycle only after the JS-side
@@ -162,6 +176,26 @@ export class MicrophoneCapture extends EventEmitter {
             console.error('[MicrophoneCapture] Failed to start:', error);
             this.isRecording = false;
             this.preWarmEnabled = false;
+            // ORPHAN-HANDLE FIX (F-106) — mirror of SystemAudioCapture's:
+            // construction already opened the cpal input stream (macOS orange
+            // mic indicator, Windows device handle), and with isRecording
+            // false every later stop()/destroy() early-returns — the open
+            // device would be held until the GC finalizer runs, blocking
+            // immediate retries (Settings > Audio test) and keeping the
+            // indicator lit. Stop the dying instance on the next tick so the
+            // device releases deterministically; the next start() takes the
+            // lazy-init branch and constructs fresh.
+            const dying = this.monitor;
+            this.monitor = null;
+            if (dying) {
+                setImmediate(() => {
+                    try {
+                        dying.stop();
+                    } catch (e) {
+                        console.error('[MicrophoneCapture] Error stopping orphaned monitor after failed start:', e);
+                    }
+                });
+            }
             this.emit('error', error);
             throw error;
         }

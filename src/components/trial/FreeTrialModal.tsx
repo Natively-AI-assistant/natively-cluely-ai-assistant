@@ -10,7 +10,7 @@
 import React, { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Zap, Key, ArrowRight, Loader2, CheckCircle, Brain, Mic, Flame, ShieldCheck } from 'lucide-react';
-import { NativelyLogoMark } from '../NativelyLogoMark';
+import nativelyLogo from '../../assets/logo.webp';
 
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
 const PLAN_PRO_URL      = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
@@ -213,7 +213,7 @@ function ChooseState({ usage, error, reduced, onPro, onMax, onUltra, onStandard,
       {/* ── Header ─── */}
       <div style={{display:'flex',alignItems:'center',gap:'10px',paddingBottom:'12px',borderBottom:`1px solid ${C.div}`}}>
         <div style={{width:'34px',height:'34px',borderRadius:'10px',background:'rgba(139,92,246,.13)',border:'1px solid rgba(139,92,246,.22)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-          <NativelyLogoMark size={16} className="text-violet-400" />
+          <img src={nativelyLogo} alt="Natively" style={{width:'16px',height:'16px',objectFit:'contain'}} draggable={false} />
         </div>
         <div>
           <div style={{fontSize:'14px',fontWeight:650,color:C.t1,letterSpacing:'-.02em',lineHeight:1.2}}>Keep the momentum going</div>

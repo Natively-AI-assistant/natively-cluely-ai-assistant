@@ -4,6 +4,7 @@ import { useT } from '../../i18n';
 import type { BrowserContextSettings, PhoneMirrorInfo } from '../../types/electron';
 import { isMac } from '../../utils/platformUtils';
 import { BrowserExtensionIcon } from '../onboarding/BrowserExtensionIcon';
+import { useToggleInit } from './useToggleInit';
 
 const MiniPairingCountdownRing: React.FC<{ seconds: number; total: number }> = ({
   seconds,
@@ -42,7 +43,7 @@ const MiniPairingCountdownRing: React.FC<{ seconds: number; total: number }> = (
           style={{ transition: 'stroke-dashoffset 950ms cubic-bezier(0.4, 0, 0.2, 1)' }}
         />
       </svg>
-      <span className="absolute inset-0 grid place-items-center font-mono text-[8px] font-semibold tabular-nums text-blue-300">
+      <span className="absolute inset-0 grid place-items-center font-mono text-[8px] font-semibold tabular-nums text-accent-primary">
         {remaining}
       </span>
     </div>
@@ -73,6 +74,49 @@ const EMPTY_INFO: PhoneMirrorInfo = {
   clients: 0,
   extensionConnected: false,
   bindAddress: '127.0.0.1',
+};
+
+/**
+ * Phone Mirror's own switch: same `.t-toggle` contract as the rest of settings,
+ * but it carries a focus ring and a busy/cursor-wait state the shared
+ * SettingsToggle does not model.
+ *
+ * `useToggleInit()`/`is-init` below is now inert — the shared CSS moved from a
+ * keyframe bounce (which needed `is-init` to avoid replaying on stale renders)
+ * to a plain `transition`, which doesn't need arming. Left wired rather than
+ * ripped out here; the `busy`-gating logic it's paired with is otherwise
+ * unaffected. THESE TWO SWITCHES ARE ASYNC: `onToggleEnable`/`onToggleLan` go
+ * through `apply()`, which sets `busy` synchronously but only updates `info`
+ * after the IPC round-trip, so `checked` (and therefore `data-on`) flips one
+ * or more renders later — that's still true regardless of what the CSS does
+ * with `is-init`.
+ */
+const PhoneMirrorSwitch: React.FC<{
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  busy: boolean;
+  /** Track color when on — accent for the server, amber for LAN exposure. */
+  onClassName: string;
+}> = ({ checked, onChange, label, busy, onClassName }) => {
+  const toggleInit = useToggleInit();
+  return (
+    <button
+      type="button"
+      role="switch"
+      data-on={String(checked)}
+      aria-checked={checked}
+      aria-label={label}
+      disabled={busy}
+      onClick={() => { toggleInit.arm(); onChange(); }}
+      /* p-0.5/`t-toggle-tight` are vestigial — geometry is the shared
+         .t-toggle rule's literal 88x40 shape at zoom:0.6 (t-toggle-lg,
+         index.css), not padding-derived. */
+      className={`t-toggle t-toggle-lg t-toggle-tight inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${checked ? onClassName : 'bg-bg-item-active'} ${busy ? 'opacity-60 cursor-wait' : ''} ${busy ? '' : toggleInit.className}`}
+    >
+      <span className="t-toggle-thumb" aria-hidden="true" />
+    </button>
+  );
 };
 
 export const PhoneMirrorSettings: React.FC = () => {
@@ -286,7 +330,7 @@ export const PhoneMirrorSettings: React.FC = () => {
   const hiddenOptionalCount = 4;
 
   return (
-    <div className="space-y-6 animated fadeIn">
+    <div className="space-y-6 animated fadeIn" data-settings-stagger>
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Sync')}</h3>
         <p className="text-xs text-text-secondary mb-5">
@@ -311,18 +355,13 @@ export const PhoneMirrorSettings: React.FC = () => {
                 : 'Off'}
             </div>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={info.running}
-            disabled={busy !== null}
-            onClick={onToggleEnable}
-            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${info.running ? 'bg-blue-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.running ? 'translate-x-5' : 'translate-x-1'}`}
-            />
-          </button>
+          <PhoneMirrorSwitch
+            checked={info.running}
+            onChange={onToggleEnable}
+            label={t('Enable Phone Mirror')}
+            busy={busy !== null}
+            onClassName="bg-accent-primary"
+          />
         </div>
 
         {/* Pairing disclosure — nested under Enable Phone Mirror */}
@@ -443,18 +482,13 @@ export const PhoneMirrorSettings: React.FC = () => {
                   : 'Keep the mirror on this computer only.'}
               </div>
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={info.exposeOnLan}
-              disabled={busy !== null}
-              onClick={onToggleLan}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${info.exposeOnLan ? 'bg-amber-500' : 'bg-bg-item-active'} ${busy !== null ? 'opacity-60 cursor-wait' : ''}`}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${info.exposeOnLan ? 'translate-x-5' : 'translate-x-1'}`}
-              />
-            </button>
+            <PhoneMirrorSwitch
+              checked={info.exposeOnLan}
+              onChange={onToggleLan}
+              label={t('Allow LAN access')}
+              busy={busy !== null}
+              onClassName="bg-amber-500"
+            />
           </div>
           {lanWarning && (
             <div className="mt-2.5 flex items-start gap-2 text-amber-400/90 text-xs leading-relaxed">
@@ -496,7 +530,7 @@ export const PhoneMirrorSettings: React.FC = () => {
               <div className="text-text-secondary text-xs mt-1 leading-relaxed">
                 Pair the companion extension to send the active tab to the desktop.{' '}
                 <kbd className="px-1 py-0.5 rounded bg-bg-main border border-border-subtle font-mono text-[10px]">
-                  {isMac ? '⌘' : 'Ctrl'}+Shift+Y
+                  {isMac ? '⌘' : 'Ctrl'}+Y
                 </kbd>{' '}
                 to capture manually.
               </div>
@@ -516,7 +550,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                   aria-live="polite"
                   aria-atomic="true"
                   aria-label={`Waiting for extension. Pairing window: ${armCountdown} seconds remaining.`}
-                  className="flex items-center gap-2.5 rounded-lg border border-blue-500/20 bg-blue-500/[0.05] px-3 py-2"
+                  className="flex items-center gap-2.5 rounded-lg border border-accent-border bg-accent-subtle px-3 py-2"
                 >
                   <MiniPairingCountdownRing seconds={armCountdown} total={armTotal} />
                   <div className="min-w-0 flex-1">
@@ -524,7 +558,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                       Waiting for extension
                     </div>
                     <div className="text-text-secondary text-[11px] mt-0.5 leading-snug">
-                      Click <span className="text-blue-300">Connect to Natively</span> in the browser popup.
+                      Click <span className="text-accent-primary">Connect to Natively</span> in the browser popup.
                     </div>
                   </div>
                 </div>
@@ -555,7 +589,7 @@ export const PhoneMirrorSettings: React.FC = () => {
                   type="button"
                   onClick={onArmExtension}
                   aria-label="Connect browser extension"
-                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors bg-blue-500 text-white hover:bg-blue-400"
+                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors bg-legacy-action-bg text-legacy-action-fg hover:bg-legacy-action-hover"
                 >
                   <Zap size={13} />
                   Connect browser extension
@@ -748,7 +782,9 @@ const CtxToggle: React.FC<{
    * path — tracked as a follow-up.)
    */
   comingSoon?: boolean;
-}> = ({ label, desc, checked, onChange, icon, experimental, comingSoon }) => (
+}> = ({ label, desc, checked, onChange, icon, experimental, comingSoon }) => {
+  const toggleInit = useToggleInit();
+  return (
   <div className={`flex items-start justify-between gap-3 ${comingSoon ? 'opacity-55' : ''}`}>
     <div className="flex items-start gap-2.5 min-w-0">
       {icon && (
@@ -779,19 +815,20 @@ const CtxToggle: React.FC<{
     <button
       type="button"
       role="switch"
+      data-on={String(comingSoon ? false : checked)}
       aria-checked={comingSoon ? false : checked}
       aria-label={label}
       disabled={comingSoon}
-      onClick={comingSoon ? undefined : onChange}
-      className={`flex-shrink-0 mt-0.5 relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
-        comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-blue-500' : 'bg-bg-item-active'
-      }`}
+      onClick={comingSoon ? undefined : () => { toggleInit.arm(); onChange(); }}
+      /* p-0.5/`t-toggle-tight` are vestigial — geometry is the shared
+         .t-toggle rule's literal 88x40 shape at zoom:0.6 (t-toggle-lg,
+         index.css), not padding-derived. */
+      className={`t-toggle t-toggle-lg t-toggle-tight flex-shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full p-0.5 focus:outline-none focus:ring-2 focus:ring-accent-focus ${
+        comingSoon ? 'cursor-not-allowed bg-bg-item-active' : checked ? 'bg-accent-primary' : 'bg-bg-item-active'
+      } ${toggleInit.className}`}
     >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-          !comingSoon && checked ? 'translate-x-5' : 'translate-x-0.5'
-        }`}
-      />
+      <span className="t-toggle-thumb" aria-hidden="true" />
     </button>
   </div>
-);
+  );
+};

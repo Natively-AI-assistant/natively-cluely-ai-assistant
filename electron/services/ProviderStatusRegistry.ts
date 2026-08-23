@@ -11,10 +11,17 @@ export class ProviderStatusRegistry {
   private constructor() {}
 
   static getInstance(): ProviderStatusRegistry {
-    if (!ProviderStatusRegistry.instance) {
-      ProviderStatusRegistry.instance = new ProviderStatusRegistry();
+    // Instance anchored on globalThis (25 dist bundles). Writers live in the
+    // OllamaManager/embedding/intent-classifier bundles; the pull-reader is
+    // ipcHandlers' provider-status:getAll — per-bundle instances meant a
+    // window created after a status change hydrated EMPTY and stayed wrong
+    // until the next push.
+    const g = globalThis as unknown as Record<string, ProviderStatusRegistry | undefined>;
+    if (!g.__nativelyProviderStatusRegistryV1__) {
+      g.__nativelyProviderStatusRegistryV1__ = ProviderStatusRegistry.instance ?? new ProviderStatusRegistry();
     }
-    return ProviderStatusRegistry.instance;
+    ProviderStatusRegistry.instance = g.__nativelyProviderStatusRegistryV1__;
+    return g.__nativelyProviderStatusRegistryV1__;
   }
 
   setBroadcaster(broadcaster: Broadcaster | null): void {

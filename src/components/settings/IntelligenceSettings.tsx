@@ -2,9 +2,18 @@ import { AlertTriangle, Check, ChevronDown, Copy, Cpu, Loader2, Wifi, WifiOff } 
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useT } from '../../i18n';
+import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { SettingsToggle } from './SettingsToggle';
 
-// Label + one-line description + group + TIER for each Intelligence OS flag. Keyed by flag
-// key; an unknown key falls back to the raw key so a newly-added flag still renders.
+// Label + one-line description + group + TIER for each USER-FACING Intelligence OS flag.
+// Keyed by flag key.
+//
+// THIS MAP IS AN ALLOWLIST, not a decoration (changed 2026-08-05). A registry flag with no
+// entry here is NOT rendered at all. It previously fell back to the raw key + the 'dev'
+// tier, which surfaced every internal rollout/shadow/kernel flag as an unexplained
+// camelCase switch. Only add an entry when the flag (a) has a real production call site,
+// and (b) is something a user can meaningfully decide.
 //
 // `tier` drives how much the user sees by default (so a non-technical job candidate isn't
 // confronted with ~15 switches):
@@ -14,11 +23,12 @@ import { useT } from '../../i18n';
 //                  default:true AND live-wired). The master orchestrates exactly this set;
 //                  the per-feature switches still live inside "Customize" for power users.
 //   • 'advanced' → real opt-in features with a genuine tradeoff (extra LLM passes, search,
-//                  lecture/diagram, full-session memory). Shown only inside "Customize".
+//                  lecture/diagram). Shown only inside "Customize".
 //                  NOTE: the Hindsight long-term-memory flags are NOT here — they live in
 //                  their own setup card above (privacy + external server), not the flag list.
-//   • 'dev'      → shadow / observe-only / inert diagnostics. Hidden behind "Developer
-//                  options". No visible effect on answers.
+//   • 'dev'      → user-meaningful diagnostics only. Shadow/observe-only experiments do NOT
+//                  belong here — a switch whose best outcome is "no effect" is noise; leave
+//                  those to their NATIVELY_* env vars.
 //
 // Why not promote profileTreeV2 / answerDiversityGuard / meetingMemoryV2 / etc. into 'core'?
 // They're default-OFF in the registry and not yet eval-promoted — the master must only
@@ -31,21 +41,24 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
   followUpDraftV2: { label: 'Smart follow-up drafts', desc: 'Writes a short, copy-ready follow-up message from the meeting’s decisions and action items.', group: 'Meeting notes', tier: 'core' },
   speakerLabelsV1: { label: 'Speaker labels', desc: 'Lets you rename speakers (e.g. “John from Client”) and uses those names in notes and action items.', group: 'Meeting notes', tier: 'core' },
   // ── Advanced: real opt-in tradeoffs (cost / scope / niche) → inside "Customize" ──────
-  meetingMemoryV2: { label: 'Capture key points', desc: 'Automatically pulls out the topics, decisions, and action items from each meeting so you can recall and search them later.', group: 'Memory', tier: 'advanced' },
-  durableMemoryWindow: { label: 'Full-session memory', desc: 'Remembers everything said earlier in your session, not just the last few exchanges — useful for long interviews or lectures.', group: 'Memory', tier: 'advanced' },
-  conversationMemoryV2: { label: 'Conversation follow-ups', desc: 'Understands short follow-ups like "make that shorter" by looking back at what was just said.', group: 'Memory', tier: 'advanced' },
-  profileTreeV2: { label: 'Stronger candidate voice', desc: 'Keeps answers sounding like you — first person, your own experience, no generic AI phrasing.', group: 'Answer quality', tier: 'advanced' },
-  answerDiversityGuard: { label: 'Polished phrasing', desc: 'Reduces repeated or templated wording so answers sound more natural.', group: 'Answer quality', tier: 'advanced' },
+  // Descriptions corrected 2026-08-05 (settings-surface audit): each now states what the
+  // toggle ADDS on top of what already ships unconditionally, rather than describing the
+  // whole subsystem. Three of these previously advertised behavior that runs flag or not.
+  meetingMemoryV2: { label: 'Capture key points', desc: 'Extracts each meeting’s topics, decisions, and action items and carries "still open from last time" into the next one. To search them, also turn on "Search past meetings".', group: 'Memory', tier: 'advanced' },
+  conversationMemoryV2: { label: 'Conversation follow-ups', desc: 'Adds short follow-up handling ("make that shorter") to the typed chat panel. Live spoken answers already resolve follow-ups without this.', group: 'Memory', tier: 'advanced' },
+  profileTreeV2: { label: 'Extra candidate-voice check', desc: 'Adds one more check that catches assistant-voice slips the standard first-person cleanup misses. Candidate-voice answers are already cleaned without this.', group: 'Answer quality', tier: 'advanced' },
+  answerDiversityGuard: { label: 'Repetition guard', desc: 'Stops live answers repeating themselves across different questions in one meeting, and applies the full layout cleanup. Basic cleanup already runs without this.', group: 'Answer quality', tier: 'advanced' },
   globalSearchV2: { label: 'Search past meetings', desc: 'Search by keyword across all your saved meetings and jump to relevant moments.', group: 'Search', tier: 'advanced' },
-  inMeetingSearchV2: { label: 'Search current meeting', desc: 'Search the live transcript of the meeting you’re in, with timestamps.', group: 'Search', tier: 'advanced' },
-  lectureIntelligenceV2: { label: 'Lecture notes', desc: 'Turns a lecture into structured notes, flashcards, and practice questions.', group: 'Lecture & diagrams', tier: 'advanced' },
-  diagramIntelligence: { label: 'Diagrams', desc: 'Draws a diagram to explain a concept during a lecture.', group: 'Lecture & diagrams', tier: 'advanced' },
-  // ── Developer options: shadow / observe-only / inert → "Developer options" disclosure ─
+  inMeetingSearchV2: { label: 'Search current meeting', desc: 'Search the live transcript of the meeting you’re in, with timestamps. Currently reachable only from "Try it" below.', group: 'Search', tier: 'advanced' },
+  lectureIntelligenceV2: { label: 'Lecture notes', desc: 'Turns a lecture into structured notes, flashcards, and practice questions. Currently reachable only from "Try it" below.', group: 'Lecture & diagrams', tier: 'advanced' },
+  diagramIntelligence: { label: 'Diagrams', desc: 'Draws a diagram to explain a concept during a lecture. Currently reachable only from "Try it" below.', group: 'Lecture & diagrams', tier: 'advanced' },
+  // ── Developer options: the ONE diagnostic a user or support agent may legitimately flip ─
+  // Everything else that used to live here (contextRouterV2 / liveTranscriptBrain /
+  // promptAssemblerV2 / intelligenceOsEnabled / durableMemoryWindow) was removed
+  // 2026-08-05: they are shadow-only, reserved, or no longer gate anything, so their best
+  // case for a user was "no effect" and their worst case was a misleading promise. They
+  // remain flippable via their NATIVELY_* env vars for internal testing.
   trace: { label: 'Diagnostics trace', desc: 'Records a per-answer routing trace (no transcript content). For troubleshooting only.', group: 'Developer options', tier: 'dev' },
-  contextRouterV2: { label: 'Next-gen routing (preview)', desc: 'Evaluates a new routing engine in the background. No visible effect on answers yet.', group: 'Developer options', tier: 'dev' },
-  liveTranscriptBrain: { label: 'Live context engine (preview)', desc: 'Evaluates a new live-transcript engine in the background. No visible effect on answers yet.', group: 'Developer options', tier: 'dev' },
-  promptAssemblerV2: { label: 'Improved prompt builder (preview)', desc: 'Evaluates a new prompt builder in the background. No visible effect on answers yet.', group: 'Developer options', tier: 'dev' },
-  intelligenceOsEnabled: { label: 'Intelligence OS (reserved)', desc: 'Reserved flag with no effect on its own — toggle the specific features instead.', group: 'Developer options', tier: 'dev' },
 };
 
 // The Hindsight long-term-memory flags are rendered by the dedicated setup card above (not
@@ -99,7 +112,12 @@ const FlagRowView: React.FC<{ row: FlagRow; onToggle: (row: FlagRow) => void }> 
         <div className="text-xs font-medium text-text-primary">{meta?.label || row.key}</div>
         {meta?.desc ? <div className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">{meta.desc}</div> : null}
       </div>
-      <Toggle on={row.enabled} onClick={() => onToggle(row)} />
+      <SettingsToggle
+        checked={row.enabled}
+        onChange={() => onToggle(row)}
+        label={meta?.label || row.key}
+        className={row.enabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+      />
     </div>
   );
 };
@@ -137,48 +155,6 @@ const formatStamp = (ms: number): string => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const Toggle: React.FC<{ on: boolean; disabled?: boolean; onClick: () => void }> = ({ on, disabled, onClick }) => (
-  <button
-    type="button"
-    disabled={disabled}
-    onClick={onClick}
-    aria-pressed={on}
-    className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${on ? 'bg-accent-primary' : 'bg-bg-toggle-switch border border-border-muted'} ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-  >
-    <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-spring motion-reduce:transition-none ${on ? 'translate-x-5' : 'translate-x-0'}`} />
-  </button>
-);
-
-// Smooth height+opacity expand/collapse for the disclosures (Set up / Customize / Developer
-// options), matching the HelpSettings AccordionSection idiom. Height-auto is measured by
-// framer-motion; under prefers-reduced-motion we drop the height/opacity tween so nothing
-// slides or reflows — the content just appears.
-const Disclosure: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => {
-  const reduce = useReducedMotion();
-  return (
-    <AnimatePresence initial={false}>
-      {open ? (
-        <motion.div
-          key="disclosure"
-          initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          animate={reduce ? { opacity: 1 } : { height: 'auto', opacity: 1 }}
-          exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          style={{ overflow: 'hidden' }}
-        >
-          {children}
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-};
-
-// A chevron that rotates between collapsed (▸) and expanded (▾) instead of swapping glyphs,
-// so the disclosure indicator turns smoothly with the panel.
-const DisclosureChevron: React.FC<{ open: boolean }> = ({ open }) => (
-  <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ease-apple-ease motion-reduce:transition-none ${open ? 'rotate-0' : '-rotate-90'}`} />
-);
-
 // Inline copyable command/snippet block — same idiom as UpdateModal's CopyBlock. Used in the
 // Hindsight setup card so a non-technical user can grab the install / launch / env-export
 // commands with one click instead of typing them by hand.
@@ -207,6 +183,127 @@ const CopyBlock: React.FC<{ text: string; label?: string }> = ({ text, label }) 
         {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
         {copied ? t('Copied') : t('Copy')}
       </button>
+    </div>
+  );
+};
+
+// ── Context Intelligence debug logging (Developer options) ──────────────────
+// Records AI routing/retrieval/evidence/answers to a local JSONL file for
+// debugging. Level precedence is env var > this setting (owned by
+// debug-config.ts in the main process); when the env var is set, the selector
+// shows the effective value and disables itself.
+type CtxDebugLevel = 'off' | 'standard' | 'verbose';
+
+const ContextDebugSection: React.FC = () => {
+  const t = useT();
+  const [cfg, setCfg] = useState<{
+    level: CtxDebugLevel; levelSource: 'environment' | 'setting' | 'default';
+    contentInclusion: boolean; storedLevel?: CtxDebugLevel;
+    logDirectory?: string | null; currentFile?: string | null;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try { setCfg(await window.electronAPI.getContextDebugConfig() as never); } catch { /* panel is best-effort */ }
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const setLevel = useCallback(async (level: CtxDebugLevel) => {
+    setBusy(true);
+    try { await window.electronAPI.setContextDebugLevel(level); await refresh(); }
+    finally { setBusy(false); }
+  }, [refresh]);
+
+  if (!cfg) return null;
+  const envForced = cfg.levelSource === 'environment';
+
+  return (
+    <div className="mt-3 rounded-lg border border-border-subtle bg-bg-main p-3 space-y-2.5">
+      <div>
+        <div className="text-xs font-semibold text-text-primary">{t('Context Debug Logging')}</div>
+        <div className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">
+          {t('Records AI routing, retrieval, evidence selection, and final answers for local debugging. Verbose logs may include redacted document excerpts. Logs stay on this device unless you export them.')}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        {(['off', 'standard', 'verbose'] as const).map((lvl) => (
+          <button
+            key={lvl}
+            type="button"
+            disabled={busy || envForced}
+            onClick={() => void setLevel(lvl)}
+            aria-pressed={cfg.level === lvl}
+            className={`rounded-md border px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${
+              cfg.level === lvl
+                ? 'border-transparent bg-accent-primary text-white'
+                : 'border-border-subtle bg-bg-input text-text-secondary hover:text-text-primary'
+            } ${busy || envForced ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          >
+            {t(lvl)}
+          </button>
+        ))}
+        {envForced ? (
+          <span className="ml-1 text-[10px] text-amber-400">
+            {t('Set by NATIVELY_CONTEXT_DEBUG — the environment variable overrides this setting.')}
+          </span>
+        ) : null}
+      </div>
+
+      {cfg.contentInclusion ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-300">
+          {t('Full local evidence logging is enabled (development build). Logs may contain sensitive personal data.')}
+        </div>
+      ) : null}
+
+      {cfg.level !== 'off' && (cfg.currentFile || cfg.logDirectory) ? (
+        <CopyBlock text={cfg.currentFile ?? cfg.logDirectory ?? ''} label={t('Log:')} />
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => { void window.electronAPI.openContextDebugFolder(); }}
+          className="rounded-md border border-border-subtle bg-bg-input px-2.5 py-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          {t('Open Debug Log Folder')}
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            const r = await window.electronAPI.exportContextDebugSession();
+            setNotice(r.ok ? t('Revealed current session log.') : (r.error ?? t('Export failed.')));
+            setTimeout(() => setNotice(null), 3000);
+          }}
+          className="rounded-md border border-border-subtle bg-bg-input px-2.5 py-1 text-[11px] font-medium text-text-secondary transition-colors hover:text-text-primary"
+        >
+          {t('Export Context Debug Session')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmClear(true)}
+          className="rounded-md border border-border-subtle bg-bg-input px-2.5 py-1 text-[11px] font-medium text-red-400 transition-colors hover:text-red-300"
+        >
+          {t('Clear Context Debug Logs')}
+        </button>
+        {notice ? <span className="text-[10px] text-text-tertiary">{notice}</span> : null}
+      </div>
+
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title={t('Clear context debug logs?')}
+        description={t('Deletes every context-debug JSONL file on this device. This cannot be undone.')}
+        confirmLabel={t('Clear logs')}
+        busy={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try { await window.electronAPI.clearContextDebugLogs(); await refresh(); }
+          finally { setBusy(false); setConfirmClear(false); }
+        }}
+      />
     </div>
   );
 };
@@ -541,10 +638,20 @@ export const IntelligenceSettings: React.FC = () => {
     for (const row of flags) {
       if (HINDSIGHT_FLAG_KEYS.has(row.key)) continue;
       const meta = FLAG_META[row.key];
-      const tier: FlagTier = meta?.tier || 'dev'; // unknown/new flags hide in dev until classified
+      // NOT RENDERED unless explicitly classified in FLAG_META (2026-08-05 audit).
+      // This used to fall back to `'dev'`, which dumped every unclassified registry
+      // flag into "Developer options" as a bare camelCase key with no description —
+      // 41 of them, including load-bearing default-ON safety gates
+      // (docGroundedStrictIsolation, contextOsEnabled, promptSystemV2). A user could
+      // silently disable document-grounding isolation or revert every prompt to the
+      // legacy constants by flipping a row labelled only `docGroundedStrictIsolation`.
+      // Internal flags are still settable via their NATIVELY_* env vars; adding a
+      // FLAG_META entry is now the deliberate act that makes one user-facing.
+      if (!meta) continue;
+      const tier: FlagTier = meta.tier;
       if (tier === 'core') core.push(row);
       else if (tier === 'dev') dev.push(row);
-      else (advancedByGroup[meta?.group || 'Other'] ||= []).push(row);
+      else (advancedByGroup[meta.group] ||= []).push(row);
     }
     return { core, advancedByGroup, dev };
   }, [flags]);
@@ -609,7 +716,12 @@ export const IntelligenceSettings: React.FC = () => {
   // payload exposes an `envForced` field, honor it; for now toggles are always enabled.)
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    // data-settings-stagger: the 4 blocks below settle in sequence on tab
+    // entrance (rules in src/index.css). Safe here — all four direct children
+    // are plain elements, and the file's own motion (12 AnimatePresence, all
+    // `initial={false}`, plus StaggerRow inside the "Customize" disclosure)
+    // is interaction-only and lives deeper in the tree.
+    <div className="space-y-6 max-w-2xl" data-settings-stagger>
       <header>
         <h3 className="text-lg font-bold text-text-primary mb-1">{t('Intelligence')}</h3>
         <p className="text-xs text-text-secondary mb-5">
@@ -786,7 +898,12 @@ export const IntelligenceSettings: React.FC = () => {
                   {t('When ON and the companion is installed, Natively starts it for you at launch and forwards your AI provider key automatically. Turn OFF to manage the server yourself.')}
                 </span>
               </span>
-              <Toggle on={autoStart} onClick={() => { setAutoStart((v) => !v); scheduleAutoSave(); }} />
+              <SettingsToggle
+                checked={autoStart}
+                onChange={() => { setAutoStart((v) => !v); scheduleAutoSave(); }}
+                label={t('Start memory server automatically at launch')}
+                className={autoStart ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+              />
             </label>
 
             {/* "Don't use Hindsight" opt-out — sets the explicit-disable sentinel so the
@@ -836,7 +953,7 @@ export const IntelligenceSettings: React.FC = () => {
                 type="button"
                 onClick={onSaveHindsight}
                 disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-1.5 text-xs font-medium text-white transition-[opacity,transform] active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover px-3 py-1.5 text-xs font-medium text-legacy-action-fg transition-[opacity,transform] active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 motion-reduce:active:scale-100"
               >
                 <AnimatePresence mode="wait" initial={false}>
                   {saving ? (
@@ -896,7 +1013,16 @@ export const IntelligenceSettings: React.FC = () => {
                   </motion.span>
                 ) : null}
               </AnimatePresence>
-              <Toggle on={masterState !== 'off'} disabled={masterBusy} onClick={onToggleMaster} />
+              <SettingsToggle
+                checked={masterState !== 'off'}
+                disabled={masterBusy}
+                onChange={onToggleMaster}
+                label={t('Smart features')}
+                className={
+                  (masterState !== 'off' ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted')
+                  + (masterBusy ? ' opacity-40' : '')
+                }
+              />
             </div>
           </div>
 
@@ -947,6 +1073,7 @@ export const IntelligenceSettings: React.FC = () => {
                       {byTier.dev.map((row) => (
                         <FlagRowView key={row.key} row={row} onToggle={onToggleFlag} />
                       ))}
+                      <ContextDebugSection />
                     </div>
                   </Disclosure>
                 </div>
@@ -993,7 +1120,7 @@ export const IntelligenceSettings: React.FC = () => {
             type="button"
             disabled={tryBusy !== null || !flagOn('inMeetingSearchV2') || !searchQ.trim()}
             onClick={() => runTry('search', () => window.electronAPI.searchInMeeting?.(searchQ.trim()))}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent-primary px-3 py-1.5 text-xs font-medium text-white transition-[opacity,transform] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover px-3 py-1.5 text-xs font-medium text-legacy-action-fg transition-[opacity,transform] active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100 motion-reduce:active:scale-100"
           >
             {tryBusy === 'search' ? <Loader2 size={14} className="animate-spin" /> : null} {t('Search')}
           </button>

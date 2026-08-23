@@ -13,9 +13,12 @@
 //   • ESM-only package → forced runtime import() via `new Function` inside the
 //     dedicated worker (see localRerankerWorker.ts for the why).
 //   • Packaged prod: local_files_only, model read from resources/models. The
-//     reranker model is NOT bundled yet, so in a packaged build load() fails and
-//     the caller falls through to the existing top-K — that is the intended
-//     default-OFF posture until the model is added to extraResources.
+//     reranker model IS bundled (stale-comment fix 2026-08-13): download-models.js
+//     fetches Xenova/bge-reranker-base (q8) at postinstall, extraResources maps
+//     resources/models/ → models/, and verify-packaged-local-assets.mjs lists all
+//     four reranker files in REQUIRED_MODEL_FILES — the build FAILS without them.
+//     If the model is genuinely absent at runtime, load() fails and the caller
+//     falls through to the existing top-K (graceful degradation, not the norm).
 //   • Dev: allowRemoteModels so the model is fetched + cached on first use.
 //
 // WORKER-ISOLATED (2026-07-05 SIGTRAP crash hardening): the actual ONNX
@@ -232,6 +235,21 @@ class LocalRerankerImpl {
                 if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
                 this.rejectAllPending(new Error(`Worker exited with code ${code}`));
             });
+
+            // Do not let this worker hold the Node event loop open.
+            //
+            // MUST be after the listeners above: attaching a 'message' listener
+            // re-references the underlying MessagePort, so an unref() next to
+            // `new Worker()` is undone by the following line.
+            //
+            // Electron's main process is anchored by `app` and its windows, so
+            // this cannot cause a premature exit. Under `node --test` there is no
+            // anchor, and a referenced worker made every importing test file pass
+            // its assertions and then never exit — blocking the whole suite.
+            // See docs/context-intelligence-v3/01_INVESTIGATION_REPORT.md F21.
+            // Optional call: test doubles substitute a mock Worker that does not
+            // implement unref(). A hard call throws there and disables the model.
+            this.worker.unref?.();
         }
         return this.worker;
     }

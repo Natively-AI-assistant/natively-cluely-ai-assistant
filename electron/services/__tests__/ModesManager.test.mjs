@@ -22,6 +22,8 @@ const EXPECTED_MODE_TYPES = [
   'technical-interview',
   'lecture',
   'seminar',
+  // 9th built-in, added 2026-08-23. UI order, so it goes last.
+  'call-center',
 ];
 
 const BASE_TIME = '2026-05-14T00:00:00.000Z';
@@ -441,7 +443,9 @@ test('isPremiumKnowledgeInterceptAllowed gates the whole premium intercept by ac
   );
 
   const INTERCEPT_ALLOWED = new Set(['general', 'sales', 'recruiting', 'looking-for-work']);
-  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture', 'seminar']);
+  // 'call-center' joined 2026-08-23: support calls are not salary negotiations,
+  // and ModesManager blocks it in PREMIUM_INTERCEPT_INCOMPATIBLE_TEMPLATES.
+  const INTERCEPT_BLOCKED = new Set(['technical-interview', 'team-meet', 'lecture', 'seminar', 'call-center']);
 
   // Every production mode must land on one side of the gate — guards against
   // a future template silently inheriting the wrong default.

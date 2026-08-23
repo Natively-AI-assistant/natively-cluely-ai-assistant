@@ -11,7 +11,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { shouldShowToaster } from '../orchestrator.mjs';
-import { STAGES, QUIET_WINDOW_STAGE } from '../stageCatalog.mjs';
+import {
+  STAGES,
+  QUIET_WINDOW_STAGE,
+  REVIEW_PROMPT_MIN_SESSIONS,
+  REVIEW_PROMPT_MIN_USAGE_MS,
+} from '../stageCatalog.mjs';
 import { STAGES as STAGES_TS, QUIET_WINDOW_STAGE as QUIET_WINDOW_STAGE_TS } from '../stageCatalog.ts';
 
 // ─── Drain-loop safety invariant ────────────────────────────────────
@@ -314,24 +319,51 @@ test('ads: skipped when isPremium', () => {
 
 // ─── Review prompt ────────────────────────────────────────────────
 
-test('review_prompt: requires startupCount >= 6 AND totalUsageMs >= 45min', () => {
+// Engagement is "sessions OR usage", matching the review ledger
+// (electron/services/ReviewPromptLogic.ts). It previously read
+// requiresStartupCount: 6 + requiresTotalUsageMs: 45min in `triggers`, but the
+// orchestrator ANDs triggers — so the catalog demanded BOTH, a strictly harder
+// gate than the ledger's OR, and the ledger's own thresholds never bound.
+
+test('review_prompt: enough sessions alone qualifies, even with little usage', () => {
   const ctx = makeCtx({
     completed: { ads: 1 },
-    startupCount: 6,
-    totalUsageMs: 44 * 60 * 1000,
+    startupCount: REVIEW_PROMPT_MIN_SESSIONS,
+    totalUsageMs: 60 * 1000, // one minute — nowhere near the usage gate
+    homepageMountedFor: 11_000,
+  });
+  assert.equal(show('review_prompt', ctx), true);
+});
+
+test('review_prompt: enough usage alone qualifies, even on first session', () => {
+  const ctx = makeCtx({
+    completed: { ads: 1 },
+    startupCount: 1,
+    totalUsageMs: REVIEW_PROMPT_MIN_USAGE_MS,
+    homepageMountedFor: 11_000,
+  });
+  assert.equal(show('review_prompt', ctx), true);
+});
+
+test('review_prompt: withheld until at least one engagement gate is met', () => {
+  const ctx = makeCtx({
+    completed: { ads: 1 },
+    startupCount: REVIEW_PROMPT_MIN_SESSIONS - 1,
+    totalUsageMs: REVIEW_PROMPT_MIN_USAGE_MS - 1,
     homepageMountedFor: 11_000,
   });
   assert.equal(show('review_prompt', ctx), false);
 });
 
-test('review_prompt: fires when both gates met', () => {
+test('review_prompt: engagement does not bypass the other triggers', () => {
+  // Fully engaged, but the ads stage has not completed — order still holds.
   const ctx = makeCtx({
-    completed: { ads: 1 },
-    startupCount: 6,
-    totalUsageMs: 46 * 60 * 1000,
+    completed: {},
+    startupCount: 99,
+    totalUsageMs: 99 * 60 * 1000,
     homepageMountedFor: 11_000,
   });
-  assert.equal(show('review_prompt', ctx), true);
+  assert.equal(show('review_prompt', ctx), false);
 });
 
 // ─── Backgrounding / meeting ──────────────────────────────────────

@@ -47,9 +47,10 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { NODE_MODULES_LINK_TYPE, removeIsolatedDistTree } from '../../services/__tests__/isolatedDistTree.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -74,13 +75,18 @@ const distDir = (() => {
   fs.symlinkSync(
     path.join(repoRoot, 'node_modules'),
     path.join(target, 'node_modules'),
-    process.platform === 'win32' ? 'junction' : 'dir',
+    NODE_MODULES_LINK_TYPE,
   );
   try {
-    execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    });
+    execFileSync(process.execPath, [
+      // lib/tsc.js, not bin/tsc: bin/tsc is EXTENSIONLESS and contains `import`,
+    // and Node only treats an extensionless entry as ESM from >=22.7 (module
+    // detection). lib/tsc.js is a real .js under "type": "module", so it is ESM
+    // on every Node version. This repo declares no `engines` floor.
+    path.join('node_modules', 'typescript7', 'lib', 'tsc.js'),
+      '-p', path.join('electron', 'tsconfig.emit.json'),
+      '--outDir', target,
+    ], { cwd: repoRoot, stdio: 'pipe' });
   } catch (_tscErr) {
     // expected — tsc returns 1 on type errors in unrelated files; we only
     // need LLMHelper.js + its direct deps to have emitted cleanly.
@@ -308,7 +314,10 @@ async function drainStream(generator) {
 
 after(() => {
   if (isolatedDistDir) {
-    fs.rmSync(isolatedDistDir, { recursive: true, force: true });
+    // NOT a bare rmSync: this tree links the REAL node_modules, and on Windows
+    // that link is a junction a recursive delete can traverse. See
+    // ../../services/__tests__/isolatedDistTree.mjs for the CI timeline.
+    removeIsolatedDistTree(isolatedDistDir);
   }
 });
 

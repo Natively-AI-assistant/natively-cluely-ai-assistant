@@ -39,6 +39,8 @@
  *        APPLE_API_KEY       = absolute path to the .p8 key file
  *        APPLE_API_KEY_ID    = key id (e.g. T9GPZ92M7K)
  *        APPLE_API_ISSUER    = issuer UUID (team keys)
+ *      If APPLE_API_KEY names a file that does not exist, this strategy is SKIPPED
+ *      (with a loud warning) rather than selected — see resolveCredentials().
  *   2) Apple ID + app-specific password:
  *        APPLE_ID                      = your Apple Developer login email
  *        APPLE_APP_SPECIFIC_PASSWORD   = app-specific password (NOT your Apple ID password)
@@ -50,6 +52,7 @@
  * We never log secret values — only which strategy was selected.
  */
 
+const fs = require('fs');
 const path = require('path');
 
 /** Decide which credential strategy is configured, if any. Returns null if none. */
@@ -59,15 +62,35 @@ function resolveCredentials() {
   // App Store Connect API key. APPLE_API_ISSUER is REQUIRED for Team keys but must be
   // OMITTED for Individual keys (passing it yields a 401), so we only require key+id and
   // forward the issuer only when present (matches @electron/notarize v3 optional issuer).
+  //
+  // APPLE_API_KEY is a FILE PATH, and a path that stops resolving is how this strategy
+  // rots in practice: App Store Connect serves the .p8 exactly once, it lands in
+  // ~/Downloads, the folder later gets cleaned out, and the stale `export` lives on in a
+  // shell rc forever. Because api-key is checked FIRST, that dead path then shadows a
+  // perfectly good APPLE_KEYCHAIN_PROFILE (which electron-builder.signed.cjs always
+  // sets). Without the existence check the bad path goes straight to notarytool, which
+  // fails with "The file couldn't be opened because it doesn't exist" — ~20 minutes into
+  // a signed build, AFTER packing and Developer ID signing have already succeeded.
+  // Skipping (loudly) instead of selecting lets the next configured strategy carry the
+  // build, and turns a late, cryptic notarytool usage error into an early, named one.
   if (env.APPLE_API_KEY && env.APPLE_API_KEY_ID) {
-    return {
-      strategy: 'api-key',
-      creds: {
-        appleApiKey: env.APPLE_API_KEY,
-        appleApiKeyId: env.APPLE_API_KEY_ID,
-        ...(env.APPLE_API_ISSUER ? { appleApiIssuer: env.APPLE_API_ISSUER } : {}),
-      },
-    };
+    if (fs.existsSync(env.APPLE_API_KEY)) {
+      return {
+        strategy: 'api-key',
+        creds: {
+          appleApiKey: env.APPLE_API_KEY,
+          appleApiKeyId: env.APPLE_API_KEY_ID,
+          ...(env.APPLE_API_ISSUER ? { appleApiIssuer: env.APPLE_API_ISSUER } : {}),
+        },
+      };
+    }
+    console.warn(
+      `[notarize] APPLE_API_KEY points at a file that does not exist: ${env.APPLE_API_KEY}\n` +
+        '[notarize] Ignoring the api-key strategy and falling through to the next configured one ' +
+        '(apple-id, then keychain-profile). App Store Connect serves a .p8 only ONCE — if it is ' +
+        'gone, generate a new key, or drop APPLE_API_KEY/APPLE_API_KEY_ID and use ' +
+        'APPLE_KEYCHAIN_PROFILE (`xcrun notarytool store-credentials`) instead.'
+    );
   }
 
   if (env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID) {
@@ -128,12 +151,49 @@ module.exports = async function notarizeHook(context) {
   const { stapleWithRetry } = require('./staple-with-retry');
 
   const start = Date.now();
-  try {
-    await notarize({ appPath, ...resolved.creds });
-    console.log(
-      `[notarize] Success — notarized and stapled in ${Math.round((Date.now() - start) / 1000)}s.`
-    );
-  } catch (err) {
+
+  // TRANSIENT-NETWORK RETRY (2026-08-03). The notary submission is a large,
+  // minutes-long multipart upload to Apple's S3 (observed dying at part 148
+  // with "Network.NWError error 54 - Connection reset by peer" after the
+  // ENTIRE build/sign pipeline had succeeded). One dropped TCP connection
+  // must not cost a full rebuild: re-submitting is safe — an aborted upload
+  // never became a submission, it just expires server-side. Bounded and
+  // signature-gated: only network-class failures retry; a genuine
+  // notarization REJECTION or auth failure still fails the build on the
+  // first attempt, loudly, exactly as before.
+  const TRANSIENT_NETWORK_RE =
+    /Connection reset by peer|NWError|abortedUpload|ECONNRESET|ETIMEDOUT|ENETDOWN|EPIPE|socket hang up|network connection was lost|Operation timed out|temporarily unavailable/i;
+  const MAX_SUBMIT_ATTEMPTS = 3;
+
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_SUBMIT_ATTEMPTS; attempt++) {
+    try {
+      await notarize({ appPath, ...resolved.creds });
+      console.log(
+        `[notarize] Success — notarized and stapled in ${Math.round((Date.now() - start) / 1000)}s.`
+      );
+      return;
+    } catch (err) {
+      lastErr = err;
+      const attemptMsg = (err && err.message ? err.message : String(err)) || '';
+      // Staple-race is handled below (it is a SUCCESS of submission) — break
+      // out of the retry loop for it and for any non-transient failure.
+      const isTransient = TRANSIENT_NETWORK_RE.test(attemptMsg) && !/staple/i.test(attemptMsg);
+      if (isTransient && attempt < MAX_SUBMIT_ATTEMPTS) {
+        const delayS = 30 * attempt;
+        console.warn(
+          `[notarize] Transient network failure during submission (attempt ${attempt}/${MAX_SUBMIT_ATTEMPTS}) — ` +
+            `retrying in ${delayS}s. The upload restarts from scratch; the aborted one expires on Apple's side.`
+        );
+        await new Promise((r) => setTimeout(r, delayS * 1000));
+        continue;
+      }
+      break;
+    }
+  }
+
+  {
+    const err = lastErr;
     const msg = (err && err.message ? err.message : String(err)) || '';
     // STAPLE RACE RECOVERY: @electron/notarize submits + waits for the verdict,
     // then staples ONCE. If only the staple failed due to CDN ticket-propagation

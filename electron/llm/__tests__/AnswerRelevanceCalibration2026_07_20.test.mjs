@@ -25,9 +25,21 @@ const { checkAnswerRelevance } = re;
 // inferences are <100ms each.
 try { intentMod.warmupIntentClassifier(); } catch { /* not in main-process context */ }
 
-const corpus = JSON.parse(fs.readFileSync('/tmp/corpus/run-047.json', 'utf8'));
+// A CALIBRATION HARNESS, not a regression test. It replays a recorded live run
+// (run-047) to produce a TSV for threshold tuning, and that recording lives in
+// /tmp — machine-local and ephemeral, so it is absent on CI and on any laptop
+// that has rebooted. Read at module scope, its absence threw before any test
+// registered and the whole file counted as a failure on every run.
+//
+// Skipped explicitly with the path in the reason, so it runs untouched wherever
+// the corpus exists and states plainly why it did not otherwise.
+const CORPUS_PATH = '/tmp/corpus/run-047.json';
+const CORPUS_MISSING = !fs.existsSync(CORPUS_PATH)
+  ? `skip: ${CORPUS_PATH} not present — this is a calibration replay over a recorded live run, not a self-contained test`
+  : false;
+const corpus = CORPUS_MISSING ? [] : JSON.parse(fs.readFileSync(CORPUS_PATH, 'utf8'));
 
-test('replay every press from run-047 through real checkAnswerRelevance, write /tmp/relevance_calibration.tsv', async () => {
+test('replay every press from run-047 through real checkAnswerRelevance, write /tmp/relevance_calibration.tsv', { skip: CORPUS_MISSING }, async () => {
   // Warmup call (first inference) — discards its result but gets the
   // model loaded into the worker.
   try {

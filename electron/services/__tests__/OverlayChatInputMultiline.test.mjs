@@ -52,8 +52,20 @@ describe('overlay chat input multiline behavior', () => {
   });
 
   test('keeps Enter-to-send while allowing Shift+Enter newlines', () => {
-    assert.match(region, /e\.key !== 'Enter' \|\| e\.repeat \|\| e\.shiftKey \|\| e\.nativeEvent\.isComposing/, 'Shift+Enter and IME composition must not submit');
-    assert.match(region, /e\.preventDefault\(\);\s*handleManualSubmit\(\);/, 'plain Enter should still submit');
-    assert.match(region, /e\.key === 'Tab' \|\| \(e\.key === 'Enter' && !e\.repeat\)/, 'skill picker Enter selection should be preserved');
+    assert.match(
+      region,
+      /if \(\s*e\.key === 'Enter' &&\s*\(e\.shiftKey \|\| e\.nativeEvent\.isComposing \|\| e\.metaKey \|\| e\.ctrlKey\)\s*\) \{\s*return;\s*\}\s*if \(filteredSkills\.length/s,
+      'Shift+Enter, IME Enter, and Cmd/Ctrl+Enter must bypass skill selection and submission',
+    );
+    assert.match(
+      region,
+      /if \(e\.key === 'Tab' \|\| e\.key === 'Enter'\) \{\s*e\.preventDefault\(\);\s*if \(e\.key === 'Enter' && e\.repeat\) return;\s*selectSkill/s,
+      'skill picker should consume repeated plain Enter without selecting twice or inserting a newline',
+    );
+    assert.match(
+      region,
+      /if \(e\.key !== 'Enter'\) return;\s*e\.preventDefault\(\);\s*if \(e\.repeat\) return;\s*handleManualSubmit\(\);/s,
+      'plain Enter should prevent textarea newlines before suppressing repeat submissions',
+    );
   });
 });

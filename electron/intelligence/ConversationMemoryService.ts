@@ -188,5 +188,28 @@ export class ConversationMemoryService {
     try { this.bySession.delete(sessionId); } catch { /* ignore */ }
   }
 
+  /**
+   * Clear EVERY session's memory (answer-pipeline-rebuild Phase 3, 2026-07-28).
+   * Mode switching is a global operation (ModesManager is a singleton; a mode
+   * change affects every window), but conversation turns are recorded per
+   * sessionId (senderId) with no registry of which sessionIds are currently
+   * live from the mode-switch call site — so a targeted clearSession(id)
+   * isn't reachable there. Mirrors the existing BUG-MODE-BLEEDING fix
+   * (IntelligenceManager.clearSessionContext(), also a global clear on mode
+   * switch) for the same bug class: without this, resolveSameSession/
+   * getLastAssistantAnswer/getLastCodingTurn recall the most recent turn
+   * regardless of which mode recorded it — a bare or refinement follow-up
+   * ("why?", "make that shorter") asked in a NEW mode after switching away
+   * from a document-grounded mode would re-inject that mode's prior answer
+   * (and whatever reference-file/profile content it contained) into a mode
+   * with no authorization to see it. The per-turn `mode` field is recorded
+   * but never read back, so filtering by mode at read time was the other
+   * option; a full clear on switch was chosen to exactly mirror the already-
+   * accepted IntelligenceManager precedent for this identical bug class.
+   */
+  clearAllSessions(): void {
+    try { this.bySession.clear(); } catch { /* ignore */ }
+  }
+
   get sessionCount(): number { return this.bySession.size; }
 }
