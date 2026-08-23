@@ -10,6 +10,7 @@
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, type ConversationSurface } from './SessionTracker';
+import type { TurnIdentity } from './llm/turnIdentity';
 import { IntelligenceEngine } from './IntelligenceEngine';
 import { MeetingPersistence } from './MeetingPersistence';
 import { ScreenContext } from './services/screen/ScreenContextService';
@@ -19,7 +20,7 @@ export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './Sessio
 export type { IntelligenceMode, IntelligenceModeEvents } from './IntelligenceEngine';
 export type { DynamicAction } from './services/dynamic-actions/DynamicAction';
 
-export const GEMINI_FLASH_MODEL = "gemini-3.6-flash";
+export const GEMINI_FLASH_MODEL = "gemini-3.7-flash";
 export const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite";
 
 /**
@@ -53,12 +54,25 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /**
+     * Give the engine lazy access to the meeting-RAG retriever.
+     *
+     * Called from main.ts AFTER RAGManager exists — this manager is constructed
+     * first, so a provider is passed rather than the instance.
+     */
+    setRagRetrieverProvider(provider: (() => unknown) | null): void {
+        this.engine.setRagRetrieverProvider(provider);
+    }
+
+    /**
      * Forward all events from IntelligenceEngine through this facade
      * so existing listeners on IntelligenceManager continue to work.
      */
     private forwardEngineEvents(): void {
         const events = [
             'assist_update', 'suggested_answer', 'suggested_answer_token', 'suggested_answer_discard',
+            // Planner declined to answer a trigger (cooldown dedup) — forwarded so
+            // a skip is observable rather than silent.
+            'suggestion_skipped',
             // Verified code execution (background): ✓ badge + corrected message.
             'code_verified', 'code_correction',
             'refined_answer', 'refined_answer_token',
@@ -116,8 +130,9 @@ export class IntelligenceManager extends EventEmitter {
         text: string,
         writeDecision?: { policy?: 'store_conversational_only' | 'store_non_authoritative' | 'do_not_store'; reason?: string; blockedFromSessionTracker?: boolean },
         surface?: ConversationSurface,
-    ): void {
-        this.session.addAssistantMessage(text, writeDecision, surface);
+        identity?: TurnIdentity,
+    ): boolean {
+        return this.session.addAssistantMessage(text, writeDecision, surface, identity);
     }
 
     getContext(lastSeconds: number = 120) {
@@ -145,6 +160,23 @@ export class IntelligenceManager extends EventEmitter {
         this.session.logUsage(type, question, answer);
     }
 
+    /**
+     * Raw usage-entry passthrough, for callers that must set fields `logUsage`
+     * does not expose — today only `synthetic`, which excludes an entry from
+     * `SessionTracker.getRecentManualTurn` (and therefore from
+     * `buildRecentManualContext`'s prompt injection) while still persisting it
+     * to the Meeting Notes usage panel.
+     *
+     * Added 2026-08-14: a truncated manual-chat turn needs exactly that split —
+     * the call was made and must be billed/shown, but its partial answer must
+     * never be replayed into the next prompt as context. Without this proxy the
+     * call site's `im?.pushUsage?.(…)` optional-chained into a silent no-op and
+     * dropped the usage row altogether.
+     */
+    pushUsage(entry: any): void {
+        this.session.pushUsage(entry);
+    }
+
     // ============================================
     // Transcript Handling (delegates to engine)
     // ============================================
@@ -155,6 +187,11 @@ export class IntelligenceManager extends EventEmitter {
 
     async handleSuggestionTrigger(trigger: import('./SessionTracker').SuggestionTrigger): Promise<void> {
         return this.engine.handleSuggestionTrigger(trigger);
+    }
+
+    /** Mode + cooldown gate for the Auto Answer trigger. See IntelligenceEngine.canAutoAnswer. */
+    canAutoAnswer(): boolean {
+        return this.engine.canAutoAnswer();
     }
 
     // ============================================
@@ -226,7 +263,7 @@ export class IntelligenceManager extends EventEmitter {
     // Meeting Lifecycle (delegates to persistence)
     // ============================================
 
-    async stopMeeting(): Promise<string | null> {
+    async stopMeeting(): Promise<{ meetingId: string; memoryEligibleCount: number } | null> {
         return this.persistence.stopMeeting();
     }
 
@@ -255,6 +292,18 @@ export class IntelligenceManager extends EventEmitter {
      */
     clearSessionContext(): void {
         this.session.clearSessionContext();
+    }
+
+    /**
+     * Supersede every in-flight live answer (2026-07-31). Called by
+     * modes:set-active: WTA supersession was generation-relative only, so a
+     * slow generation planned under mode A stayed "current" through the switch
+     * and streamed A's answer into a UI showing mode B. engine.reset() bumps
+     * currentGenerationId (breaking every active stream's guard) and aborts
+     * the WTA cancellation token.
+     */
+    supersedeLiveAnswers(): void {
+        this.engine.reset();
     }
 
     // ============================================
@@ -303,5 +352,6 @@ export class IntelligenceManager extends EventEmitter {
     reset(): void {
         this.session.reset();
         this.engine.reset();
+        this.engine.clearWtaDiversityHistory();
     }
 }

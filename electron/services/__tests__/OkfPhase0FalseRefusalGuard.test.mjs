@@ -25,8 +25,19 @@ const read = (rel) => fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 const ipcHandlersSrc = read('electron/ipcHandlers.ts');
 const flagsSrc = read('electron/intelligence/intelligenceFlags.ts');
 
-test('ipcHandlers: defines SYSTEM_REFUSAL_RE for the system own refusal phrase', () => {
-  assert.match(ipcHandlersSrc, /const SYSTEM_REFUSAL_RE = \/\^I could not find that in the retrieved sections/);
+test('SYSTEM_REFUSAL_RE is defined for the system own refusal phrase, and ipcHandlers imports it', () => {
+  // The constant was EXTRACTED out of ipcHandlers into documentGroundedPrompt.ts
+  // (alongside isAssistantRefusal and the other doc-grounded predicates) and is
+  // now imported back. Pinning its definition in ipcHandlers matched nothing.
+  // Assert it where it lives, AND that ipcHandlers still pulls it from there —
+  // a local re-declaration would silently fork the phrase the repair gate keys on.
+  const dgSrc = read('electron/llm/documentGroundedPrompt.ts');
+  assert.match(dgSrc, /export const SYSTEM_REFUSAL_RE = \/\^I could not find that in the retrieved sections/);
+  assert.match(
+    ipcHandlersSrc,
+    /import \{[^}]*\bSYSTEM_REFUSAL_RE\b[^}]*\} from '\.\/llm\/documentGroundedPrompt'/,
+    'ipcHandlers must import SYSTEM_REFUSAL_RE rather than redeclare it',
+  );
 });
 
 test('ipcHandlers: derives highSignalEntities from the question + the active document\'s own extracted knowledge (not a hardcoded fixture list)', () => {
@@ -61,15 +72,43 @@ test('ipcHandlers: repair gate does NOT depend on a retrieval-score threshold', 
   assert.ok(!ipcHandlersSrc.includes('DOC_GROUNDED_REPAIR_MIN_TOP_SCORE'), 'must not gate on raw retrieval score');
 });
 
-test('ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity OR tier; shouldRepair uses it directly', () => {
-  assert.match(ipcHandlersSrc, /const hasStrongEvidence = hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\) \|\| isTier1Or2Evidence;/);
-  assert.match(ipcHandlersSrc, /const shouldRepair = hasStrongEvidence;/);
+test('ipcHandlers: strong-evidence = entity evidence OR matched high-signal entity (NOT tier); shouldRepair uses it directly', () => {
+  // CONTRACT CHANGED 2026-08-19 (audit F-412, owner-confirmed). The tier was
+  // removed from this gate. EvidenceAssembler.computeTier is TOPIC-BLIND — it
+  // returns tier 2 for ANY synthesis-classified question the moment the pack
+  // yields >=1 card, and OkfRetriever admits cards on a question-TYPE match with
+  // zero query-word overlap. As an independent disjunct the tier therefore made
+  // the off-topic veto unable to veto anything: an off-topic synthesis question
+  // ("key takeaway for the Kyoto Protocol" against a robotics thesis) produced
+  // hasEntityEvidence=false yet still repaired — discarding an honest "not in the
+  // document" refusal and re-prompting the model to synthesize harder, which is
+  // the hallucination pressure this gate exists to prevent.
+  //
+  // The tier is still COMPUTED and reported in the decision diagnostics, which is
+  // where a topic-blind signal belongs. Pinned negatively too, so the disjunct
+  // cannot be reintroduced silently.
+  assert.match(ipcHandlersSrc, /const hasStrongEvidence =\s*hasRealEvidence \|\| Boolean\(matchedHighSignalEntity\);/);
+  assert.ok(
+    !/hasStrongEvidence =[^;]*isTier1Or2Evidence/.test(ipcHandlersSrc),
+    'the topic-blind tier must not gate the false-refusal repair',
+  );
+  // `&& !governedRefusal` was ADDED after this pin was written: a Context-OS
+  // governed refusal is authoritative and must never be "repaired" into an
+  // answer. The pin accepts the extra conjunct — it only ever meant to assert
+  // that repair is DRIVEN by strong evidence, and an additional safety term
+  // narrows repair rather than widening it.
+  assert.match(ipcHandlersSrc, /const shouldRepair = hasStrongEvidence(\s*&&\s*!governedRefusal)?;/);
 });
 
 test('ipcHandlers: defers first-paint on the doc-grounded lecture path to avoid the refusal flash', () => {
   assert.match(ipcHandlersSrc, /const deferFirstPaintEligible = answerPlan\.answerType === 'lecture_answer'/);
   assert.match(ipcHandlersSrc, /const sendChunkGated = \(chunk: string\) => \{/);
-  assert.match(ipcHandlersSrc, /if \(deferFirstPaint && deferredBuffer\.length > 0 && !finalText\)/);
+  // The end-of-stream flush — without it, an answer that stayed under the
+  // sniff threshold (or looked like a refusal the whole way) is buffered and
+  // NEVER painted, so the user sees an empty reply. `|| sentinelHold` was added
+  // so a stream held back for a [[NO_ACTION]] sentinel is flushed too; that
+  // widens when the safety net fires, so the pin accepts it.
+  assert.match(ipcHandlersSrc, /if \(\(?deferFirstPaint(\s*\|\|\s*sentinelHold)?\)? && deferredBuffer\.length > 0 && !finalText\)/);
 });
 
 test('ipcHandlers: false-refusal repair is gated behind docGroundedFalseRefusalRepair flag', () => {

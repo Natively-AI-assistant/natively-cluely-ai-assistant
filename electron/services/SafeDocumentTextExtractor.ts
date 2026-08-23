@@ -22,20 +22,69 @@ export const SAFE_DOCUMENT_EXTENSIONS = new Set([
 
 /** 50 MB hard cap — should be enforced by the upload UI's progress bar first. */
 export const SAFE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
-const PARSE_TIMEOUT_MS = 30_000;
+
+// A flat 30s timeout applied to every file regardless of size meant a
+// legitimate large (but well under 50MB) PDF/DOCX could spuriously fail
+// parsing simply for being long, indistinguishable from a genuinely hung
+// parse. pdf-parse/mammoth parse the whole document in one pass (no
+// incremental/streaming option) — bigger files really do take longer.
+// Parsing already runs non-blocking in the background (see
+// ModeReferenceFileIngestion.ts's onIndexStatus callback), so there's no
+// UX cost to waiting longer for a large legitimate file.
+const MIN_PARSE_TIMEOUT_MS = 30_000;
+const MAX_PARSE_TIMEOUT_MS = 5 * 60_000;
+const PARSE_TIMEOUT_MS_PER_MB = 2_000;
+
+// Test-overridable so the timeout/cancellation path can be exercised
+// deterministically (a real parse finishing in ms, not 30s+) instead of
+// requiring an artificially slow/poison fixture. When set, this literal
+// value wins regardless of file size.
+const PARSE_TIMEOUT_MS_OVERRIDE = process.env.NATIVELY_PARSE_TIMEOUT_MS
+  ? Number(process.env.NATIVELY_PARSE_TIMEOUT_MS)
+  : undefined;
+
+export const computeParseTimeoutMs = (fileSizeBytes: number): number => {
+  if (PARSE_TIMEOUT_MS_OVERRIDE !== undefined) return PARSE_TIMEOUT_MS_OVERRIDE;
+  const sizeMb = fileSizeBytes / (1024 * 1024);
+  return Math.min(MAX_PARSE_TIMEOUT_MS, Math.max(MIN_PARSE_TIMEOUT_MS, sizeMb * PARSE_TIMEOUT_MS_PER_MB));
+};
 
 let pdfjsWorkerSrcPinned = false;
 
-const withTimeout = <T>(promise: Promise<T>, label: string): Promise<T> =>
-  Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`${label} timed out after ${PARSE_TIMEOUT_MS}ms`)),
-        PARSE_TIMEOUT_MS,
-      ),
-    ),
-  ]);
+/**
+ * Race `promise` against a timeout. Unlike a bare `Promise.race`, this always
+ * clears its own timer once `promise` settles (so a successful parse doesn't
+ * leave a dangling timer/closure behind), and on timeout it invokes
+ * `onTimeout` (used by the PDF branch to call `parser.destroy()`, the only
+ * cancellation primitive pdf-parse exposes) and swallows `promise`'s eventual
+ * settlement so it can't surface as an unhandled rejection after we've
+ * already rejected on its behalf.
+ */
+const withTimeout = <T>(promise: Promise<T>, label: string, timeoutMs: number, onTimeout?: () => void): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      onTimeout?.();
+      promise.catch(() => {});
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 
 /**
  * Pinned once per process. pdf-parse@2.x wraps pdfjs-dist@5.4.296 (legacy
@@ -126,6 +175,7 @@ export const extractSafeDocumentText = async (
 
   const binary = await fs.promises.readFile(filePath);
   const binarySha256 = crypto.createHash('sha256').update(binary).digest('hex');
+  const parseTimeoutMs = computeParseTimeoutMs(stats.size);
   let content = '';
   let pageCount: number | undefined;
   let extractedPageCount: number | undefined;
@@ -134,31 +184,49 @@ export const extractSafeDocumentText = async (
     await pinPdfjsWorkerSrcOnce();
     const { PDFParse } = require('pdf-parse');
     const parser = new PDFParse({ data: binary });
-    const data: any = await withTimeout<any>(parser.getText(), 'PDF parse');
-    pageCount =
-      typeof data?.total === 'number' && data.total > 0
-        ? data.total
-        : Array.isArray(data?.pages)
-          ? data.pages.length
-          : undefined;
-    if (Array.isArray(data?.pages) && data.pages.length > 0) {
-      extractedPageCount = data.pages.filter(
-        (page: any) => typeof page?.text === 'string' && page.text.trim(),
-      ).length;
-      content = data.pages
-        .map(
-          (page: any) =>
-            `[Page ${page.num}]\n${typeof page.text === 'string' ? page.text : ''}`,
-        )
-        .join('\n\n');
-    } else {
-      content = String(data?.text || '');
+    try {
+      // `parser.destroy()` is idempotent (no-ops once `this.doc` is
+      // undefined) and, called mid-parse, makes pdf-parse's internal
+      // `doc.getPage(i)` loop reject on its next iteration — the only
+      // cancellation primitive this library exposes, so a timeout actually
+      // stops the underlying pdfjs work instead of merely giving up on it.
+      const data: any = await withTimeout<any>(
+        parser.getText(),
+        'PDF parse',
+        parseTimeoutMs,
+        () => { parser.destroy().catch(() => {}); },
+      );
+      pageCount =
+        typeof data?.total === 'number' && data.total > 0
+          ? data.total
+          : Array.isArray(data?.pages)
+            ? data.pages.length
+            : undefined;
+      if (Array.isArray(data?.pages) && data.pages.length > 0) {
+        extractedPageCount = data.pages.filter(
+          (page: any) => typeof page?.text === 'string' && page.text.trim(),
+        ).length;
+        content = data.pages
+          .map(
+            (page: any) =>
+              `[Page ${page.num}]\n${typeof page.text === 'string' ? page.text : ''}`,
+          )
+          .join('\n\n');
+      } else {
+        content = String(data?.text || '');
+      }
+    } finally {
+      await parser.destroy().catch(() => {});
     }
   } else if (extension === '.docx') {
+    // mammoth has no cancellation/destroy surface at all, so a timeout here
+    // (unlike the PDF branch) can't stop the underlying parse — it can only
+    // give up waiting on it. Accepted asymmetry, not a gap in this fix.
     const mammoth = require('mammoth');
     const data: any = await withTimeout<any>(
       mammoth.extractRawText({ path: filePath }),
       'DOCX parse',
+      parseTimeoutMs,
     );
     content = String(data?.value || '');
   } else {

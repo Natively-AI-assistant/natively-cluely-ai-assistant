@@ -83,7 +83,13 @@ export class SystemAudioCapture extends EventEmitter {
 
         if (!RustAudioCapture) {
             console.error('[SystemAudioCapture] Cannot start: Rust module missing');
-            return;
+            // F-107: a bare return here made a missing/wrong-arch native
+            // module a SILENT no-op — no 'error', no 'start' (so the stuck
+            // watchdog never armed), empty device lists, and a meeting that
+            // reported success with zero transcript. Throw instead: every
+            // start() call site (startCaptureChannels, recovery, resume,
+            // audio test) catches and surfaces a terminal channel banner.
+            throw new Error('Native audio engine unavailable — the audio capture module failed to load. Reinstall the app (dev: npm run build:native).');
         }
 
         // LAZY INIT: Create monitor here when meeting starts (not in constructor)

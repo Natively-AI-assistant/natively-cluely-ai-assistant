@@ -12,7 +12,7 @@ import {
   UNIVERSAL_RECAP_PROMPT, UNIVERSAL_FOLLOWUP_PROMPT, UNIVERSAL_FOLLOW_UP_QUESTIONS_PROMPT, UNIVERSAL_ASSIST_PROMPT,
   CUSTOM_SYSTEM_PROMPT, CUSTOM_ANSWER_PROMPT, CUSTOM_WHAT_TO_ANSWER_PROMPT,
   CUSTOM_RECAP_PROMPT, CUSTOM_FOLLOWUP_PROMPT, CUSTOM_FOLLOW_UP_QUESTIONS_PROMPT, CUSTOM_ASSIST_PROMPT,
-  CHAT_MODE_PROMPT, CORE_IDENTITY, EXECUTION_CONTRACT
+  CHAT_MODE_PROMPT, CORE_IDENTITY, EXECUTION_CONTRACT, IMAGE_TRUST_TRAILER
 } from "./llm/prompts"
 import {
   TINY_SYSTEM_PROMPT, TINY_ANSWER_PROMPT, TINY_WHAT_TO_ANSWER_PROMPT,
@@ -44,13 +44,21 @@ import {
   customProviderSupportsVision,
   customProviderIsLocal,
 } from "./llm/visionCapability"
-import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+import { assertProviderDataScopes, getDeniedDataScopes, routeWithScopeFallback, ProviderRouter, DOCUMENT_GROUNDING_SCOPE_DENIED_MESSAGE, isProviderFamilyDisabled, ProviderDisabledError, type ProviderDataScope, type ProviderDataScopePolicy } from "./llm/ProviderRouter"
+// Outbound-scope vocabulary shared with Context Intelligence V3. ONE mapping of
+// SourceType → privacy toggle: a second copy here is how the two layers would
+// drift into disagreeing about what a `<evidence source_type="RESUME">` block is.
+import { applyEnvScopeDenials, sourceTypesForScopes, dataScopeForSourceType, dataScopesForEvidenceMarkup, scopeLabels, DENY_PROVIDER_SCOPES_ENV } from "./context-intelligence/policies/provider-scope-policy"
+// Screen-understanding enforcement (private_vision / vision_only). Lives in
+// LLMHelper so EVERY screenshot-bearing path is covered, not the one IPC
+// handler that used to read the enum.
+import { resolveVisionPolicy, readScreenUnderstandingMode, isLocalVisionProvider, VisionPolicyError, PRIVATE_VISION_NO_LOCAL_MESSAGE } from "./llm/visionPolicy"
 // D1 (PROFILE_INTELLIGENCE_RESEARCH_AND_REDESIGN.md §15 R1): make the routing
 // decision authoritative at this central execution choke-point.
 import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions } from "./llm/streamContextPolicy"
 import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
-import { deepVariableReplacer, getByPath, injectImageIntoMessages } from './utils/curlUtils';
+import { deepVariableReplacer, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
@@ -101,7 +109,7 @@ interface OllamaResponse {
 }
 
 // Model constants for Gemini (priority: flash-lite → flash → pro)
-const GEMINI_FLASH_MODEL = "gemini-3.6-flash"
+const GEMINI_FLASH_MODEL = "gemini-3.7-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
@@ -115,6 +123,10 @@ const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+const NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
+// Requested ceiling; see createNvidiaNimCompletion for why it is a request and
+// not a guarantee (NVIDIA exposes no per-model output budget to look up).
+const NVIDIA_NIM_MAX_OUTPUT_TOKENS = 8192
 const DEEPSEEK_MAX_OUTPUT_TOKENS = 8192
 // LiteLLM fronts arbitrary upstream models with widely varying output ceilings.
 // Resolution order per request: (1) user manual override from Settings,
@@ -205,17 +217,46 @@ export const CODING_THINKING_BUDGET = 0;
 // `thinkingBudget` is DEPRECATED in favor of the `thinkingLevel` enum
 // (minimal|low|medium|high), and gemini-3.1-pro CANNOT disable thinking — it
 // rejects budget:0 / 'minimal' with a 400, so Pro gets 'low' (its floor).
-// A budget of 0 (or negative) maps to 'minimal' (verified to drive
-// thoughtsTokenCount→0 on flash/flash-lite); a positive budget is preserved
-// verbatim for callers that explicitly want a bounded token budget.
-// Keep the Pro→LOW / flash→MINIMAL policy in sync with the server's
-// thinkingConfigForModel() in natively-api/lib/flashModelPicker.js.
+// A budget of 0 (or negative) maps to 'minimal' ONLY on models that accept it;
+// a positive budget is preserved verbatim for callers that explicitly want a
+// bounded token budget.
+// Keep this policy in sync with the server's thinkingConfigForModel() in
+// natively-api/lib/flashModelPicker.js.
 // Match "pro" as a SEGMENT (not a loose substring) so only real Pro ids hit the
 // floor — Pro rejects MINIMAL/budget:0 with a 400.
 const PRO_MODEL_RE = /(?:^|[-/])pro(?:[-/]|$)/i;
+
+// `minimal` IS NOT UNIFORMLY SUPPORTED ACROSS THE FLASH TIER. Probed live
+// against the Gemini API on 2026-08-14:
+//
+//   gemini-3.1-flash-lite   minimal → 200    low → 200
+//   gemini-3.6-flash        minimal → 200    low → 200
+//   gemini-3.7-flash        minimal → 400    low → 200
+//                           ("Thinking level MINIMAL is not supported for this
+//                            model. Please retry with other thinking level.")
+//
+// So `minimal` is opt-in PER MODEL ID and `low` — accepted by every flash tier
+// and by Pro — is the floor for any other model. The direction matters: sending
+// MINIMAL to a model that rejects it is a hard 400 on the interactive stream,
+// not a slower answer. This is the client mirror of MINIMAL_THINKING_MODELS in
+// natively-api/lib/flashModelPicker.js — add an id only after probing it live.
+// Safe as an allow-list because buildThinkingConfig's only call site is the
+// Gemini-only streaming path, so it never sees an OpenAI/Claude model id.
+const MINIMAL_THINKING_MODELS = new Set<string>([
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
+]);
+
 export function buildThinkingConfig(model: string | undefined, budget: number): { thinkingLevel: ThinkingLevel } | { thinkingBudget: number } {
   if (typeof model === 'string' && PRO_MODEL_RE.test(model)) return { thinkingLevel: ThinkingLevel.LOW };
-  if (budget <= 0) return { thinkingLevel: ThinkingLevel.MINIMAL };
+  if (budget <= 0) {
+    // Unknown/unlisted model → LOW, the universally accepted floor. Falling
+    // through to MINIMAL here is what 400s gemini-3.7-flash.
+    if (typeof model === 'string' && !MINIMAL_THINKING_MODELS.has(model)) {
+      return { thinkingLevel: ThinkingLevel.LOW };
+    }
+    return { thinkingLevel: ThinkingLevel.MINIMAL };
+  }
   return { thinkingBudget: budget };
 }
 
@@ -232,26 +273,122 @@ function openaiReasoningParam(model: string): { reasoning_effort: OpenAiReasonin
   return effort ? { reasoning_effort: effort } : {};
 }
 
-// Simple prompt for image analysis (not interview copilot - kept separate)
-const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.`
+// Simple prompt for image analysis (not interview copilot - kept separate).
+// Security fix (code-review finding, Phase 3, 2026-07-28): this prompt is
+// used by debugSolutionWithImages, which feeds
+// ProcessingHelper.processScreenshots()'s debug path — the app's PRIMARY
+// screenshot-capture "solve"/"debug" hotkey flow, and arguably the single
+// most natural attack surface for an image-embedded prompt-injection
+// attempt (a crafted on-screen webpage/editor/document). (extractProblemFromImages,
+// also listed as a consumer in an earlier version of this comment, has zero
+// live callers — confirmed dead code as of this pass; corrected here so a
+// future reader doesn't chase a phantom call site.) This bare one-line
+// prompt previously composed NONE of CORE_IDENTITY's protections.
+// Deliberately does NOT compose the FULL CORE_IDENTITY here — that's a
+// large, comprehensive prompt (anti-AI-tells, behavioral-admission
+// templates, etc.) meant for full conversational answer surfaces, and its
+// <accuracy_admissions> templates (which mandate exact opening sentences)
+// would directly conflict with generateRollingScript's sibling strict
+// JSON-only contract. Uses IMAGE_TRUST_TRAILER instead — the same
+// compact-trailer pattern SECURITY_TRAILER already establishes for short
+// prompts that don't compose CORE_IDENTITY (see that constant's own header
+// comment in prompts.ts for the full protection list and rationale).
+const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatting. Return plain text only.
+
+${IMAGE_TRUST_TRAILER}`
+
+/** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
+export interface StreamOutcome {
+  /** True when the turn stopped early and the text is INCOMPLETE. */
+  truncated: boolean;
+  /** Which guard ended it — telemetry and log wording only. */
+  reason?: 'provider_failed_after_first_token' | 'output_cap_reached';
+}
 
 export class LLMHelper {
-  private client: GoogleGenAI | null = null
-  private groqClient: Groq | null = null
-  private openaiClient: OpenAI | null = null
-  private claudeClient: Anthropic | null = null
+  // ── Provider clients ────────────────────────────────────────────────────
+  //
+  // Each client is stored in a `_`-prefixed field and read through a getter
+  // that consults the user's disabled-provider list LIVE.
+  //
+  // WHY A GETTER AND NOT A CHECK AT EACH BRANCH
+  // CredentialsManager documents "…and is never chosen as a routing fallback",
+  // but nothing enforced it: `disabledProviders` was honoured only by the model
+  // PICKER and by refreshRuntimeDefaultIfUnavailable(). The streaming cascade
+  // in _streamChatInner and the vision chain select providers by testing these
+  // client fields directly, at ~30 separate branches, so a rate-limited or 503
+  // primary fell back onto a provider the user had explicitly switched off —
+  // sending it transcript, reference-file context and screenshots. Gating the
+  // READ covers every existing branch and every future one by construction;
+  // patching 30 conditions would leave the 31st to be found later.
+  //
+  // The assignment sites are unchanged: each getter has a matching setter.
+  private _client: GoogleGenAI | null = null
+  private _groqClient: Groq | null = null
+  private _openaiClient: OpenAI | null = null
+  private _claudeClient: Anthropic | null = null
   // DeepSeek is OpenAI-compatible; reuse the OpenAI SDK with a custom baseURL.
   // Kept as a separate client so credentials/scope/telemetry stay provider-specific.
-  private deepseekClient: OpenAI | null = null
+  private _deepseekClient: OpenAI | null = null
+  private _nvidiaNimClient: OpenAI | null = null
   // LiteLLM proxy is OpenAI-compatible (AI gateway fronting 100+ providers).
   // Same pattern as DeepSeek: OpenAI SDK + custom baseURL, separate client so
   // credentials/scope/telemetry stay provider-specific.
-  private litellmClient: OpenAI | null = null
+  private _litellmClient: OpenAI | null = null
+
+  private get client(): GoogleGenAI | null { return this.isProviderDisabled('gemini') ? null : this._client }
+  private set client(v: GoogleGenAI | null) { this._client = v }
+  private get groqClient(): Groq | null { return this.isProviderDisabled('groq') ? null : this._groqClient }
+  private set groqClient(v: Groq | null) { this._groqClient = v }
+  private get openaiClient(): OpenAI | null { return this.isProviderDisabled('openai') ? null : this._openaiClient }
+  private set openaiClient(v: OpenAI | null) { this._openaiClient = v }
+  private get claudeClient(): Anthropic | null { return this.isProviderDisabled('claude') ? null : this._claudeClient }
+  private set claudeClient(v: Anthropic | null) { this._claudeClient = v }
+  private get deepseekClient(): OpenAI | null { return this.isProviderDisabled('deepseek') ? null : this._deepseekClient }
+  private set deepseekClient(v: OpenAI | null) { this._deepseekClient = v }
+  private get nvidiaNimClient(): OpenAI | null { return this.isProviderDisabled('nvidia_nim') ? null : this._nvidiaNimClient }
+  private set nvidiaNimClient(v: OpenAI | null) { this._nvidiaNimClient = v }
+  private get litellmClient(): OpenAI | null { return this.isProviderDisabled('litellm') ? null : this._litellmClient }
+  private set litellmClient(v: OpenAI | null) { this._litellmClient = v }
+
+  /**
+   * The user's switched-off providers, read LIVE on every question.
+   * NEVER cached: CredentialsManager is anchored on globalThis (one instance
+   * across all 22 bundles that inline it), so this read is the same truth the
+   * Settings window wrote, and a toggle applies to the very next answer.
+   *
+   * Fails OPEN — a credential-store failure must not brick every provider.
+   */
+  private getDisabledProviderFamilies(): readonly string[] {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const list = CredentialsManager.getInstance().getDisabledProviders?.();
+      return Array.isArray(list) ? list : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private isProviderDisabled(family: string): boolean {
+    return isProviderFamilyDisabled(family, this.getDisabledProviderFamilies());
+  }
+
+  /** Error text for "nothing left to try", which reads very differently when
+   *  the user switched the providers off than when they never added a key. */
+  private noProviderAvailableMessage(): string {
+    const off = this.getDisabledProviderFamilies();
+    if (off.length > 0) {
+      return `No AI provider is available: ${off.join(', ')} ${off.length === 1 ? 'is' : 'are'} switched off in `
+        + 'Settings > AI Providers. Switch one back on, or add another provider key.';
+    }
+    return 'No AI provider configured. Please add at least one API key in Settings.';
+  }
   private apiKey: string | null = null
   private groqApiKey: string | null = null
   private openaiApiKey: string | null = null
   private claudeApiKey: string | null = null
   private deepseekApiKey: string | null = null
+  private nvidiaNimApiKey: string | null = null
   private litellmApiKey: string | null = null
   private litellmBaseURL: string = "http://localhost:4000/v1"
   // Manual output-ceiling override (Settings → LiteLLM Proxy dropdown).
@@ -364,13 +501,24 @@ export class LLMHelper {
   // but 10× the cost.
   private _claudeCacheFirstHitLogged: boolean = false;
 
+  // Read LIVE on every call — never memoised. esbuild inlines this module into
+  // many entry bundles, so a cached policy would go stale in every bundle but
+  // the one that wrote it. SettingsManager is anchored on globalThis, so the
+  // read below is one truth across all of them.
   private getProviderScopePolicy(): ProviderDataScopePolicy | undefined {
+    let stored: ProviderDataScopePolicy | undefined;
     try {
       const { SettingsManager } = require('./services/SettingsManager');
-      return SettingsManager.getInstance().get('providerDataScopes');
+      stored = SettingsManager.getInstance().get('providerDataScopes');
     } catch {
-      return undefined;
+      stored = undefined;
     }
+    // Deny-only env override (NATIVELY_DENY_PROVIDER_SCOPES). It can add a
+    // denial, never grant one, so it cannot be used to weaken the user's
+    // choice — and it is what lets the enforcement path be exercised end to
+    // end without a live settings store. Same helper the V3 layer uses, so the
+    // two layers can never disagree about the effective policy.
+    return applyEnvScopeDenials(stored, process.env[DENY_PROVIDER_SCOPES_ENV]);
   }
 
   private inferContextScopes(context?: string): ProviderDataScope[] {
@@ -379,7 +527,13 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(context)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(context)) scopes.push('profile_history');
     if (/<post_call_summary|meeting summary|silent meeting summarizer|silent meeting note-taker/i.test(context)) scopes.push('post_call_summary');
-    return scopes;
+    // Context Intelligence V3 evidence markup. The patterns above are the
+    // LEGACY tag vocabulary; V3 has been the default answer path since
+    // 2026-07-30 and packs every source as `<evidence source_type="…">`, which
+    // matched none of them — so a V3-composed payload was inferred to carry no
+    // scope at all and no toggle was enforced on the shipped default path.
+    scopes.push(...dataScopesForEvidenceMarkup(context));
+    return [...new Set(scopes)];
   }
 
   private inferEmbeddedMessageScopes(message?: string): ProviderDataScope[] {
@@ -388,7 +542,14 @@ export class LLMHelper {
     if (/<reference_file|<active_mode_retrieved_context|mode_retrieval/i.test(message)) scopes.push('reference_files');
     if (/<meeting_history|USER-PROVIDED PERSONA CONTEXT|<user_context|<candidate_|<active_mode_custom_instructions/i.test(message)) scopes.push('profile_history');
     if (/<post_call_summary/i.test(message)) scopes.push('post_call_summary');
-    return scopes;
+    // V3 evidence markup — see inferContextScopes. A V3 prompt carries its
+    // evidence in the MESSAGE (context is undefined), so this is the branch
+    // that actually fires on the default path.
+    scopes.push(...dataScopesForEvidenceMarkup(message));
+    // V3 renders prior-turn continuity as a labelled prose section rather than
+    // as evidence; it is CONVERSATION_STATE data, i.e. transcript scope.
+    if (/^# Conversation so far$/m.test(message)) scopes.push('transcript');
+    return [...new Set(scopes)];
   }
 
   private stripDeniedScopedBlocksFromMessage(message: string, deniedScopes: ProviderDataScope[]): string {
@@ -414,22 +575,301 @@ export class LLMHelper {
     if (deniedScopes.includes('post_call_summary')) {
       scrubbed = scrubbed.replace(/<post_call_summary\b[\s\S]*?<\/post_call_summary>\s*/gi, '');
     }
+    // TRANSCRIPT had NO branch at all. Enforcement for it was `context =
+    // undefined` and nothing else, so a payload carrying the transcript inside
+    // the MESSAGE (every V3 turn, and the legacy assemblers below) shipped
+    // byte-identical while `logScopeFallback(scope, 'omitting')` printed a line
+    // claiming it had been removed.
+    if (deniedScopes.includes('transcript')) {
+      scrubbed = scrubbed
+        .replace(/<transcript\b[\s\S]*?<\/transcript>\s*/gi, '')
+        .replace(/<recent_transcript\b[\s\S]*?<\/recent_transcript>\s*/gi, '')
+        // V3's prior-turn continuity section (CONVERSATION_STATE data). Runs to
+        // the next top-level section or tag, both of which the composer emits
+        // after a blank line.
+        //
+        // Start anchor is `(?:^|\n)`, NOT `(?:^|\n\n)`. Detection above is
+        // `/^# Conversation so far$/m`, whose `^` matches after ANY newline, so
+        // a heading preceded by a single `\n` was classified as transcript and
+        // then not stripped at all. `(?:^|\n)` is that same "start of line"
+        // condition written without the `/m` flag — which the flag must stay
+        // off for, because with `/m` the `$` in the lookahead below would match
+        // every line end and the lazy body would stop after the section's FIRST
+        // line: a strictly worse leak than the one being fixed.
+        //
+        // KNOWN REMAINING GAP, not an oversight: a conversation summary whose
+        // own text contains a blank line followed by `#` or `<` ends the match
+        // early and the remainder survives. The obvious fix — an alternation on
+        // the composer's known following-section literals — was rejected: those
+        // literals are not stable, and any miss silently swallows the whole
+        // `# Evidence` block on a turn where only `transcript` was denied,
+        // turning a privacy strip into a retrieval outage. This regex is a
+        // BACKSTOP; primary enforcement is engine-bridge.ts:190, which nulls
+        // convoSummary before composing, so nothing reaches here on the live
+        // path.
+        .replace(/(?:^|\n)# Conversation so far(?:\n[\s\S]*?)?(?=\n\n[#<]|$)/g, '');
+    }
+
+    // ── Context Intelligence V3 evidence blocks ─────────────────────────────
+    // The transport-layer BACKSTOP. The primary enforcement is the filter in
+    // engine-bridge, which runs before packing so the composed instructions
+    // agree with the evidence that survived. This exists for prompts that reach
+    // a transport without having been through that filter.
+    //
+    // Safe to match with a regex: context-packer's esc() XML-escapes every
+    // attribute value and all content, so no `<`/`>` from a document can forge
+    // or prematurely close an <evidence> tag.
+    const deniedSourceTypes = sourceTypesForScopes(deniedScopes);
+    if (deniedSourceTypes.size > 0 && /<evidence\b/i.test(scrubbed)) {
+      let removed = 0;
+      // The scopes that ACTUALLY removed something — not every denied scope.
+      // The notice is read by the model and quoted to the user, so naming a
+      // scope that withheld nothing would be its own small lie.
+      const removedScopes = new Set<ProviderDataScope>();
+      scrubbed = scrubbed.replace(/<evidence\b[^>]*>[\s\S]*?<\/evidence>\s*/gi, (block) => {
+        const match = /\bsource_type="([A-Za-z_]+)"/.exec(block);
+        if (match && deniedSourceTypes.has(match[1])) {
+          removed += 1;
+          const scope = dataScopeForSourceType(match[1]);
+          if (scope) removedScopes.add(scope);
+          return '';
+        }
+        return block;
+      });
+      if (removed > 0) {
+        // Never leave a prompt whose instructions describe evidence that is no
+        // longer there: an "# Evidence" heading over nothing, with a
+        // checked-absence contract still in the system prompt, is a fabrication
+        // engine. Say what happened, in the prompt, where the model can act on
+        // it.
+        const named = [...removedScopes];
+        scrubbed += `\n\n<evidence_withheld scopes="${named.join(',')}">`
+          + `${removed} piece(s) of evidence were removed from this prompt by a privacy setting in this app `
+          + `(Settings > AI Providers > Privacy — cloud data scopes: ${scopeLabels(named)}). `
+          + 'Treat NO evidence here as a complete record, never state that something is absent from a source, '
+          + 'and do not answer from general knowledge in place of the withheld material. If the question cannot '
+          + 'be answered from what remains, say plainly that a privacy setting is withholding it.'
+          + '</evidence_withheld>';
+      }
+    }
     return scrubbed.replace(/\n{3,}/g, '\n\n').trim();
   }
 
+  /**
+   * The data scopes a payload carries.
+   *
+   * `extraScopes` is what the CALLER declares — always prefer it. The
+   * transcript rule below is the LAST-BOUNDARY backstop: the ~20
+   * assertOutboundScopes() sites sit inside the individual provider methods
+   * (generateWithGroq, callNatively, …), which are reached from dozens of call
+   * paths and know nothing about the payload's provenance. Treating any
+   * non-empty payload there as transcript-bearing is deliberately conservative:
+   * it is the only thing standing between those sites and an unclassified send.
+   *
+   * The removed `&& extraScopes.length === 0` guard was NOT that conservatism —
+   * it was a hole in it. It made any OTHER detected scope suppress transcript
+   * detection entirely, so a payload with a reference-file block was checked for
+   * reference_files and silently exempted from the transcript check, while the
+   * very same payload with no detected scope WAS checked. It also desynchronised
+   * the two layers: the gate in _streamChatInner (which does have extraScopes)
+   * would clear a payload the provider-level assert then rejected, turning a
+   * "route this to Ollama" outcome into "all providers failed".
+   */
   private scopesForPayload(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
     const scopes = new Set<ProviderDataScope>(extraScopes);
-    if (text.trim().length > 0 && extraScopes.length === 0) scopes.add('transcript');
+    if (text.trim().length > 0) scopes.add('transcript');
     if (imagePaths?.length) scopes.add('screenshots');
     return [...scopes];
   }
 
+  /**
+   * Provider-label → disabled-provider family.
+   *
+   * `custom_curl`/`custom_provider` map to the literal family id `'custom'`,
+   * which is what the Providers panel's "Disable custom providers (keeps them
+   * saved)" toggle writes. They were previously omitted on the rationale that
+   * "a custom provider's family id is its own opaque id, not recoverable from
+   * this label" — true of a PER-PROVIDER disable, but the toggle the UI
+   * actually ships is the family one, so the omission left the only case the
+   * user can reach uncovered. A rate-limited primary then cascaded onto
+   * `if (this.customProvider)` and sent transcript / reference-file /
+   * screenshot data to the user's own endpoint after they had switched custom
+   * providers off.
+   *
+   * STILL NOT COVERED, deliberately and unavoidably: disabling ONE individual
+   * custom provider by its opaque id. Both labels below are shared by every
+   * custom provider, so the id of the specific one being called is genuinely
+   * not recoverable at this boundary. That case is enforced upstream, where
+   * the provider object is in hand — not here.
+   */
+  private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
+    gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
+    claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
+    custom_curl: 'custom', custom_provider: 'custom',
+  };
+
+  /**
+   * True when a Gemini `contents` array carries an image part.
+   *
+   * DERIVED, never passed in. `generateContent` takes no `imagePaths` — the
+   * image rides inside `contents` as an `inlineData`/`fileData` part — so an
+   * opt-in "hasImages" argument would re-open this hole the moment a future
+   * caller forgot it, which is exactly how the boundary was bypassed the first
+   * time.
+   *
+   * Handles BOTH shapes the Gemini SDK accepts. Bare parts
+   * (`[{ text }, { inlineData }]`) is what every current caller of
+   * generateContent builds — generateWithVisionFallback's two Gemini branches
+   * and runVisionRequest. Role-shaped turns
+   * (`[{ role, parts: [{ inlineData }] }]`) reach the SDK today only from
+   * generateContentStructured, which calls `client.models.generateContent`
+   * DIRECTLY and so never passes through here; that branch is therefore
+   * defensive, and deliberately so — the whole defect being fixed is a check
+   * that covered the shapes in front of it and not the shape someone added
+   * next.
+   */
+  private static geminiContentsCarryImages(contents: unknown): boolean {
+    const isImagePart = (part: any): boolean =>
+      Boolean(part) && typeof part === 'object' && (Boolean(part.inlineData) || Boolean(part.fileData));
+    for (const entry of Array.isArray(contents) ? contents : [contents]) {
+      if (!entry || typeof entry !== 'object') continue;
+      if (isImagePart(entry)) return true;
+      const parts = (entry as any).parts;
+      if (Array.isArray(parts) ? parts.some(isImagePart) : isImagePart(parts)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The screen-understanding decision for this turn, resolved LIVE.
+   *
+   * `localVisionAvailable` is probed only when the decision could depend on it,
+   * because the probe is a round trip to the local runtime.
+   */
+  private async resolveOutboundVisionDecision(
+    imagePaths: string[] | undefined,
+    screenshotsScopeAllowed: boolean,
+  ): Promise<{ decision: import('./llm/visionPolicy').VisionDecision; localAvailable: boolean }> {
+    const decision = resolveVisionPolicy({
+      hasImages: Boolean(imagePaths?.length),
+      mode: readScreenUnderstandingMode(),
+      screenshotsScopeAllowed,
+      visionProviderAvailable: this.anyVisionProviderAvailable(),
+    });
+    const localAvailable = decision.action === 'local_only'
+      ? (this.useOllama && await this.ensureOllamaModelSelected(true))
+      : false;
+    return { decision, localAvailable };
+  }
+
+  /** Live, fail-OPEN: a credential-store failure must not start refusing turns
+   *  that would otherwise have been answered. */
+  private anyVisionProviderAvailable(): boolean {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return cm.anyVisionProviderConfigured?.() ?? true;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * The private_vision half of the outbound boundary, split out so a call site
+   * that HAS images but no image PATHS can still enforce it — `generateContent`
+   * carries its image inside the Gemini `contents` array, so it has no
+   * `imagePaths` to hand to `assertOutboundScopes`.
+   *
+   * Every caller is a CLOUD provider (the local runtime is reached through
+   * callOllama/streamWithOllama, which do not pass through here), so under
+   * private_vision an image arriving here is exactly the send the setting
+   * promises never happens.
+   */
+  private assertOutboundImagesAllowed(provider: string, hasImages: boolean): void {
+    if (hasImages && !isLocalVisionProvider(provider)
+      && readScreenUnderstandingMode() === 'private_vision') {
+      throw new VisionPolicyError(provider, PRIVATE_VISION_NO_LOCAL_MESSAGE);
+    }
+  }
+
+  /**
+   * The last boundary before a payload leaves for a named provider.
+   *
+   * WHAT THIS IS NOT (corrected 2026-08-01): this was previously commented as
+   * holding "by construction … for any path that reaches a provider call
+   * another way", on the claim that these call sites "are already the one place
+   * every provider request passes through". That was FALSE, and an adversarial
+   * review drove a screenshot to Gemini, Groq and Claude through the gap:
+   *   • generateContent passed no imagePaths (the image is inside `contents`),
+   *     so neither the private_vision check nor the `screenshots` scope could
+   *     see it;
+   *   • generateWithClaude and generateWithGroqMultimodal did not call this at
+   *     all, despite both accepting imagePaths and building image blocks;
+   *   • generateWithCodexCli / streamWithCodexCli never reached it either —
+   *     the sharpest case, since visionPolicy.ts singles Codex out as the
+   *     provider that LOOKS local and is not.
+   * All five now call in (generateContent via assertOutboundImagesAllowed plus
+   * an explicit `screenshots` extraScope, since it has no paths to classify).
+   *
+   * The honest invariant is therefore NOT "by construction" but: this is a
+   * BACKSTOP that holds for every send path wired into it, and the wiring is
+   * checked by ProviderDataScopeOutbound / ScreenUnderstandingModeEnforcement,
+   * which enumerate the image-bearing provider methods and assert each one
+   * refuses. A NEW provider method is covered only when it is added here and to
+   * that enumeration — nothing about the shape of the code makes it automatic.
+   */
   private assertOutboundScopes(provider: string, text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): void {
+    this.assertOutboundImagesAllowed(provider, Boolean(imagePaths?.length) || extraScopes.includes('screenshots'));
+    // LAST-BOUNDARY disabled-provider check. The client getters stop every
+    // cascade branch from selecting a switched-off provider; this is the
+    // backstop for a path that reaches a provider call another way (the custom
+    // and Codex families have no client getter at all, so for them it is the
+    // only structural check).
+    const family = LLMHelper.PROVIDER_LABEL_FAMILY[provider];
+    if (family && this.isProviderDisabled(family)) {
+      throw new ProviderDisabledError(provider);
+    }
     assertProviderDataScopes(provider, this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
   }
 
   private getDeniedOutboundScopes(text: string, imagePaths?: string[], extraScopes: ProviderDataScope[] = []): ProviderDataScope[] {
     return getDeniedDataScopes(this.scopesForPayload(text, imagePaths, extraScopes), this.getProviderScopePolicy());
+  }
+
+  /**
+   * Turn a privacy refusal into text that names the switch responsible and the
+   * action that would actually change the outcome. Returns null for anything
+   * else, so the caller falls through to its normal error handling.
+   *
+   * These refusals are DELIBERATE outcomes of a user setting, so they must not
+   * be reported like transient provider failures — "please try again" is wrong
+   * advice for a state that only Settings can change. This is also the only
+   * consumer of VisionPolicyError.userMessage, which was otherwise dead text.
+   *
+   * Name-matched on purpose: main-process modules are inlined per esbuild entry
+   * bundle, so `instanceof` fails whenever thrower and catcher are in different
+   * bundles.
+   */
+  private describePrivacyRefusal(error: any): string | null {
+    const name = error?.name;
+    if (name === 'VisionPolicyError') {
+      return error.userMessage || error.message || null;
+    }
+    if (name === 'ProviderScopeError') {
+      const denied = Array.isArray(error.deniedScopes) ? error.deniedScopes : [];
+      const labels = denied.length ? scopeLabels(denied) : 'Some data';
+      return `${labels} ${denied.length === 1 ? 'is' : 'are'} switched off for cloud providers in `
+        + `Settings > AI Providers > Privacy, and no local model is available to handle `
+        + `${denied.length === 1 ? 'it' : 'them'}. Nothing was sent. Re-enable `
+        + `${denied.length === 1 ? 'that data type' : 'those data types'}, or select a local `
+        + `model under Local & Gateways, then ask again.`;
+    }
+    if (name === 'ProviderDisabledError') {
+      return `${error.provider || 'That provider'} is switched off in Settings > AI Providers, `
+        + `and no other provider was available for this request. Switch it back on, or enable `
+        + `another provider, then ask again.`;
+    }
+    return null;
   }
 
   private logScopeFallback(scope: ProviderDataScope, action: 'routing' | 'omitting'): void {
@@ -440,7 +880,7 @@ export class LLMHelper {
     console.warn(`[ScopeFallback] ${scope} denied; Ollama unavailable, omitting from context`);
   }
 
-  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string) {
+  constructor(apiKey?: string, useOllama: boolean = false, ollamaModel?: string, ollamaUrl?: string, groqApiKey?: string, openaiApiKey?: string, claudeApiKey?: string, deepseekApiKey?: string, nvidiaNimApiKey?: string) {
     this.useOllama = useOllama
 
     // Initialize rate limiters
@@ -479,6 +919,7 @@ export class LLMHelper {
       this.deepseekClient = new OpenAI({ apiKey: deepseekApiKey, baseURL: DEEPSEEK_BASE_URL })
       console.log(`[LLMHelper] DeepSeek client initialized with model: ${DEEPSEEK_MODEL}`)
     }
+    if (nvidiaNimApiKey) this.setNvidiaNimApiKey(nvidiaNimApiKey)
 
     if (useOllama) {
       this.ollamaUrl = ollamaUrl || "http://127.0.0.1:11434"
@@ -602,6 +1043,15 @@ export class LLMHelper {
     console.log("[LLMHelper] DeepSeek API Key updated.");
   }
 
+  public setNvidiaNimApiKey(apiKey: string) {
+    const trimmed = (apiKey || '').trim();
+    this.nvidiaNimApiKey = trimmed || null;
+    this.nvidiaNimClient = trimmed ? new OpenAI({ apiKey: trimmed, baseURL: NVIDIA_NIM_BASE_URL }) : null;
+    this.textHealth.delete('nvidia_nim');
+    this.visionHealth.delete('nvidia_nim');
+    console.log(`[LLMHelper] NVIDIA NIM API Key ${trimmed ? 'updated' : 'cleared'}.`);
+  }
+
   /**
    * Configure the LiteLLM proxy. baseURL is required (the proxy location);
    * apiKey is the optional virtual/master key (`sk-...`). A keyless local
@@ -700,6 +1150,11 @@ export class LLMHelper {
     return this.lastProviderModel;
   }
 
+  /** E2E-only: clear the last-reported model so a failed/aborted rep can't be misattributed to the prior rep's model. */
+  public resetLastProviderModel(): void {
+    this.lastProviderModel = null;
+  }
+
   /**
    * Enable or disable local-only mode.
    * When enabled, cloud providers (Gemini, OpenAI, Claude, Groq) will be blocked.
@@ -715,6 +1170,10 @@ export class LLMHelper {
   }
 
   private hasNatively(): boolean {
+    // Switched off in Settings > AI Providers: not a fallback, not a primary.
+    // Checked before the E2E escape hatch so a test harness cannot resurrect a
+    // provider the user turned off.
+    if (this.isProviderDisabled('natively')) return false;
     // E2E: a locally-run backend with NATIVELY_LOCAL_TEST_AUTH accepts the app
     // via the x-natively-local-test header, so the natively provider is usable
     // even without a stored key. Strictly gated behind NATIVELY_E2E=1.
@@ -877,6 +1336,52 @@ export class LLMHelper {
     return !!modelId && modelId.startsWith("litellm/");
   }
 
+  private isNvidiaNimModel(modelId: string): boolean { return !!modelId && modelId.startsWith('nvidia_nim/'); }
+
+  /**
+   * NVIDIA NIM output ceiling.
+   *
+   * Unlike LiteLLM (whose /model/info exposes a per-model budget, see
+   * resolveLitellmMaxTokens), NVIDIA's /v1/models returns only id/object/
+   * created/owned_by — there is no ceiling to look up. The model list is
+   * fetched wholesale from the catalogue, so the user can select a model whose
+   * ceiling is below this default, and a fixed max_tokens then 400s EVERY
+   * request for that model with no path to recovery.
+   *
+   * So: ask for NVIDIA_NIM_MAX_OUTPUT_TOKENS, and if the server rejects the
+   * request because of it, retry once letting the server apply the model's own
+   * default. Message-shape-agnostic on purpose — it keys off the 400 plus a
+   * mention of the parameter, not off one vendor phrasing.
+   */
+  private isNvidiaNimMaxTokensRejection(error: any): boolean {
+    const status = error?.status ?? error?.response?.status;
+    if (status !== 400 && status !== 422) return false;
+    const text = [
+      error?.message,
+      error?.error?.message,
+      error?.response?.data?.message,
+      error?.response?.data?.detail,
+      typeof error?.response?.data?.error === 'string' ? error.response.data.error : error?.response?.data?.error?.message,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return text.includes('max_tokens') || text.includes('max tokens') || text.includes('maximum tokens');
+  }
+
+  /**
+   * Run an NVIDIA NIM completion, dropping max_tokens and retrying once if the
+   * model's ceiling is lower than what we asked for.
+   */
+  private async createNvidiaNimCompletion(request: any, options?: any): Promise<any> {
+    const client = this.nvidiaNimClient;
+    if (!client) throw new Error('NVIDIA NIM client not initialized');
+    try {
+      return await client.chat.completions.create({ ...request, max_tokens: NVIDIA_NIM_MAX_OUTPUT_TOKENS }, options);
+    } catch (error: any) {
+      if (!this.isNvidiaNimMaxTokensRejection(error)) throw error;
+      console.warn(`[LLMHelper] NVIDIA NIM rejected max_tokens=${NVIDIA_NIM_MAX_OUTPUT_TOKENS} for ${request?.model}; retrying with the model's own ceiling`);
+      return await client.chat.completions.create(request, options);
+    }
+  }
+
   private getDeepseekMaxOutput(_modelId: string): number {
     return DEEPSEEK_MAX_OUTPUT_TOKENS;
   }
@@ -942,6 +1447,9 @@ export class LLMHelper {
   }
 
   private isCodexAvailable(): boolean {
+    // The store spells this family 'codex-cli'; isProviderFamilyDisabled also
+    // accepts the router's 'codex'.
+    if (this.isProviderDisabled('codex-cli')) return false;
     if (!this.codexCliConfig.enabled) return false;
     try {
       const { CodexOAuthService } = require('./services/CodexOAuthService');
@@ -1086,6 +1594,21 @@ export class LLMHelper {
 
   private async generateWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): Promise<string> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
+    // needs the same local-only last boundary every other cloud provider has.
+    // The vision chain already omits it when isLocalOnlyMode is set, but that
+    // is a list-BUILD exclusion; this is the boundary that holds for any path
+    // reaching the transport another way. (VisionProviderRegistry marks Codex
+    // isLocal:true as a routing hint meaning "no API key" — that hint must
+    // never be mistaken for "stays on this device". See visionPolicy.ts.)
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    // Codex had NO boundary at all. It is the sharpest case: visionPolicy.ts
+    // keeps it out of isLocalVisionProvider precisely because it routes to
+    // chatgpt.com/backend-api, so a screenshot going out here is a cloud send
+    // that both the code and the user could mistake for a local one.
+    // The disabled-provider term is redundant with isCodexAvailable() above and
+    // stays for uniformity; the vision + scope terms are new coverage.
+    this.assertOutboundScopes('codex', userContent, imagePaths);
     const model = this.getSelectedCodexCliModel(fastMode);
     // System prompt is sent separately as `body.instructions` (the
     // Responses-API field the Codex backend uses for system content),
@@ -1109,6 +1632,18 @@ export class LLMHelper {
 
   private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
+    // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
+    // needs the same local-only last boundary every other cloud provider has.
+    // The vision chain already omits it when isLocalOnlyMode is set, but that
+    // is a list-BUILD exclusion; this is the boundary that holds for any path
+    // reaching the transport another way. (VisionProviderRegistry marks Codex
+    // isLocal:true as a routing hint meaning "no API key" — that hint must
+    // never be mistaken for "stays on this device". See visionPolicy.ts.)
+    if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
+    // See generateWithCodexCli. This is a generator, so the check runs on the
+    // first next() rather than at call time — still strictly before any byte
+    // reaches CodexCliService.stream, which is the property that matters.
+    this.assertOutboundScopes('codex', userContent, imagePaths);
     const model = this.getSelectedCodexCliModel(fastMode);
     // See note in generateWithCodexCli — system prompt is sent
     // separately as `body.instructions`, not concatenated.
@@ -1239,31 +1774,105 @@ export class LLMHelper {
     }
   }
 
+  /**
+   * PURE. Its one caller — WhatToAnswerLLM.ts:407 — uses the answer to pick a
+   * context-assembly branch and then routes through `streamChat`, which does
+   * its own `ensureOllamaModelSelected` before dispatching. So the model
+   * repair is not needed here, and doing it would let a capability question
+   * reassign the user's runtime model.
+   */
   public async canUseLocalFallback(needsVision = false): Promise<boolean> {
     return this.checkOllamaAvailable(needsVision);
   }
 
-  private async checkOllamaAvailable(needsVision = false): Promise<boolean> {
+  /**
+   * Exactly the condition the provider-data-scope fallback gate uses, so the
+   * Privacy panel can show what will ACTUALLY happen to a denied scope.
+   *
+   * Deliberately NOT `canUseLocalFallback`: that one omits the `useOllama`
+   * term, but every scope-denial site gates on `this.useOllama &&
+   * this.ensureOllamaModelSelected(...)` (see the `ollamaAvailable` locals in
+   * `_streamChatInner` and `chatWithGemini`). "Ollama has models installed" and
+   * "Ollama is the selected provider" are different questions, and only the
+   * second one predicts the fallback. The UI previously answered with
+   * `ollamaModels.length > 0`, which is neither.
+   *
+   * PURE, and it must stay pure: this is what the Settings pane polls. It
+   * intentionally uses the non-mutating `checkOllamaAvailable` while the gates
+   * it mirrors use `ensureOllamaModelSelected` — the two return the same
+   * boolean for the same runtime state, and the only difference is the model
+   * repair, which belongs to a turn that is about to dispatch and not to a
+   * panel that is merely asking.
+   */
+  public async scopeFallbackAvailable(needsVision = false): Promise<boolean> {
+    return this.useOllama && await this.checkOllamaAvailable(needsVision);
+  }
+
+  /**
+   * One probe of the local runtime, with NO side effects.
+   *
+   * Returns the model the probe was performed against — the currently selected
+   * one when it is still installed, otherwise the first installed model. The
+   * CALLER decides whether that repair is worth writing back, which is the
+   * whole point of the split: `checkOllamaAvailable` used to perform the
+   * write itself, so anything that merely ASKED whether local fallback was
+   * possible silently reassigned the user's runtime model selection. A
+   * Settings poll doing that a few times a second is not a hypothetical.
+   */
+  private async probeOllama(needsVision: boolean): Promise<{ ok: boolean; model?: string }> {
+    // No exemption for the local provider: the user switched it off in the same
+    // Settings panel as the cloud ones. A scope-denied turn then degrades to a
+    // scrubbed cloud payload or a clean error instead of a local answer the
+    // user asked not to have.
+    if (this.isProviderDisabled('ollama')) return { ok: false };
     try {
       const availableModels = await this.getOllamaModels();
-      if (availableModels.length === 0) return false;
-      if (!this.ollamaModel || !availableModels.includes(this.ollamaModel)) {
-        this.ollamaModel = availableModels[0];
-      }
-      const capabilities = getModelCapabilities(this.ollamaModel, true);
-      if (needsVision && !capabilities.supportsImages) return false;
+      if (availableModels.length === 0) return { ok: false };
+      const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
+        ? this.ollamaModel
+        : availableModels[0];
+      const capabilities = getModelCapabilities(model, true);
+      if (needsVision && !capabilities.supportsImages) return { ok: false, model };
       const response = await fetch(`${this.ollamaUrl}/api/show`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: this.ollamaModel }),
+        body: JSON.stringify({ name: model }),
         signal: AbortSignal.timeout(10_000),
       });
-      return response.ok;
+      return { ok: response.ok, model };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn('[ScopeFallback] Ollama availability check failed:', message);
-      return false;
+      return { ok: false };
     }
+  }
+
+  /**
+   * PURE predicate — asks, never writes. Safe to poll.
+   *
+   * Callers that go on to DISPATCH to Ollama must use
+   * `ensureOllamaModelSelected` instead, or they will dispatch against a model
+   * name the runtime no longer has installed.
+   */
+  private async checkOllamaAvailable(needsVision = false): Promise<boolean> {
+    return (await this.probeOllama(needsVision)).ok;
+  }
+
+  /**
+   * Same probe, but ALSO repairs `this.ollamaModel` when the selected model is
+   * gone (uninstalled between runs, or never set). This is the auto-selection
+   * that used to hide inside `checkOllamaAvailable`; it is now explicit, and
+   * called only from the sites that then hand `this.ollamaModel` to
+   * callOllama/streamWithOllama. Costs exactly one probe, so the sites that
+   * moved here perform the same number of round trips as before.
+   */
+  private async ensureOllamaModelSelected(needsVision = false): Promise<boolean> {
+    const { ok, model } = await this.probeOllama(needsVision);
+    if (model && model !== this.ollamaModel) {
+      console.log(`[LLMHelper] Ollama model "${this.ollamaModel}" is not installed — selecting "${model}"`);
+      this.ollamaModel = model;
+    }
+    return ok;
   }
 
   private async initializeOllamaModel(): Promise<void> {
@@ -1442,7 +2051,13 @@ export class LLMHelper {
    */
   private async generateContent(contents: any[], modelIdOverride?: string): Promise<string> {
     if (!this.client) throw new Error("Gemini client not initialized")
-    this.assertOutboundScopes('gemini', JSON.stringify(contents));
+    // The image lives INSIDE `contents`, so this call site has no `imagePaths`
+    // to hand the boundary — which is precisely why a screenshot reached Gemini
+    // under private_vision. Derive it, then declare `screenshots` explicitly so
+    // BOTH switches over these bytes fire: the screen-understanding mode and
+    // the `screenshots` data scope.
+    const carriesImages = LLMHelper.geminiContentsCarryImages(contents);
+    this.assertOutboundScopes('gemini', JSON.stringify(contents), undefined, carriesImages ? ['screenshots'] : []);
 
     const targetModel = modelIdOverride || this.geminiModel;
     console.log(`[LLMHelper] Calling ${targetModel}...`)
@@ -1585,7 +2200,9 @@ Output EXACTLY this JSON structure, and nothing else (no markdown fences around 
 CRITICAL RULES:
 - The scripts MUST sound like a human speaking out loud in an interview. Use "I", "we", "my first thought is".
 - The JSON must be perfectly valid. Escape any internal quotes with backslash.
-- Do NOT wrap the JSON in markdown fences.`;
+- Do NOT wrap the JSON in markdown fences.
+
+${IMAGE_TRUST_TRAILER}`;
 
     const userPrompt = `Please analyze the coding problem shown in the screenshot(s) and generate the Rolling Interview Script JSON.`;
 
@@ -1722,7 +2339,14 @@ CRITICAL RULES:
       // uploaded material.
       const groundingInfo = modesMgr.getActiveModeDocumentGroundingInfo?.();
       documentGroundedCustomModeActive = groundingInfo?.documentGroundedCustomModeActive === true;
-      const retrieveAnswerType = documentGroundedCustomModeActive
+      // R6 (2026-08-12, review finding): the broad flag alone forced
+      // doc-grounded suggestion retrieval over an EMPTY corpus for every
+      // template-seeded fileless mode — the same class the 2026-08-11 WTA
+      // fixes closed. Enforcement = explicit strict contract, or a doc mode
+      // with at least one real file.
+      const docGroundedEnforcementActive = groundingInfo?.strictDocumentGroundedActive === true
+        || (documentGroundedCustomModeActive && groundingInfo?.hasReferenceFiles === true);
+      const retrieveAnswerType = docGroundedEnforcementActive
         ? 'document_grounded_suggestion'
         : 'general_meeting_answer';
       // buildRetrievedActiveModeContextBlock signature:
@@ -1736,7 +2360,7 @@ CRITICAL RULES:
         retrieveAnswerType,
         false, // excludeCustomContext: false — let the manager handle scoping per answer type
         undefined, // pinnedModeId
-        { forceDocumentGrounding: documentGroundedCustomModeActive },
+        { forceDocumentGrounding: docGroundedEnforcementActive },
       ) || '';
     } catch (_modeErr: any) {
       console.warn('[LLMHelper] ModesManager load failed in generateSuggestion (non-fatal):', _modeErr?.message);
@@ -1784,15 +2408,25 @@ ANSWER DIRECTLY:`;
       if (this.useOllama) {
         return await this.callOllama(promptMessage, undefined, systemPrompt);
       } else if (this.customProvider || this.activeCurlProvider) {
+        // F3 (code-review 2026-08-14): buffered caller — a truncated stream
+        // must fail loudly, not return a mid-sentence suggestion (see chat()).
+        const { stream, outcome } = this.streamChatWithOutcome(promptMessage, undefined, suggestionContext, basePrompt, true);
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of stream) {
           fullResponse += chunk;
+        }
+        if (outcome.truncated) {
+          throw new Error('Suggestion generation truncated mid-stream — discarding partial output.');
         }
         return this.processResponse(fullResponse);
       } else if (this.client) {
+        const { stream, outcome } = this.streamChatWithOutcome(promptMessage, undefined, suggestionContext, basePrompt, true);
         let fullResponse = '';
-        for await (const chunk of this.streamChat(promptMessage, undefined, suggestionContext, basePrompt, true)) {
+        for await (const chunk of stream) {
           fullResponse += chunk;
+        }
+        if (outcome.truncated) {
+          throw new Error('Suggestion generation truncated mid-stream — discarding partial output.');
         }
         return this.processResponse(fullResponse);
       } else {
@@ -2002,7 +2636,16 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // matches what the live path will actually send (fix: 7B-class models were
       // being primed on the full HARD_SYSTEM_PROMPT but live requests now use
       // TINY_SYSTEM_PROMPT — mismatch wasted the warmup).
-      const staticPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
+      // Prompt System v2: warm the SAME base the live path will send — the
+      // composed v2 'answer' prompt when the flag is on, HARD_SYSTEM_PROMPT
+      // otherwise. A mismatched warm prompt wastes the entire warmup.
+      const prewarmBase = (() => {
+        try {
+          const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+          return resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.getPromptTier()) }) ?? HARD_SYSTEM_PROMPT;
+        } catch { return HARD_SYSTEM_PROMPT; }
+      })();
+      const staticPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(prewarmBase));
       const model = this.useOllama ? this.ollamaModel : this.currentModelId;
       const key = `${model}|${createHash('sha1').update(staticPrompt).digest('hex')}`;
       // Dedup so repeated activations are free — EXCEPT for an Ollama model that is
@@ -2067,15 +2710,27 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // If knowledge mode is active, check for intro questions and
       // inject system prompt + relevant context
       // ============================================================
-      const documentGroundedCustomModeActive = (() => {
+      // R6 (2026-08-12): read the grounding info ONCE — this block previously
+      // called the getter three separate times — and derive both flags from it.
+      const _chatGroundingInfo = (() => {
         try {
           const { ModesManager } = require('./services/ModesManager');
-          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.().documentGroundedCustomModeActive === true;
-        } catch { return false; }
+          return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.() ?? null;
+        } catch { return null; }
       })();
-      if (documentGroundedCustomModeActive) {
-        console.log('[LLMHelper] Generic bypass disabled: document-grounded custom mode active', {
-          genericBypassDisabledReason: 'document_grounded_custom_mode',
+      const documentGroundedCustomModeActive = _chatGroundingInfo?.documentGroundedCustomModeActive === true;
+      // Enforcement = explicit strict contract, or a doc mode with real files.
+      // The bare broad flag is true for every template-seeded mode and made
+      // this path force doc grounding over an empty corpus (review R6).
+      const docGroundedEnforcementActive = _chatGroundingInfo?.strictDocumentGroundedActive === true
+        || (documentGroundedCustomModeActive && _chatGroundingInfo?.hasReferenceFiles === true);
+      // Defect C (2026-08-01): log the EXPLICIT strictness flag — the broad
+      // flag is true for every default non-interview mode via the template
+      // seed, so this line falsely announced strictness on stock Team Meet
+      // and Lecture sessions.
+      if (_chatGroundingInfo?.strictDocumentGroundedActive === true) {
+        console.log('[LLMHelper] Generic bypass disabled: strict document-grounded mode active', {
+          genericBypassDisabledReason: 'strict_document_grounded_mode',
           retrievalRequired: true,
         });
       }
@@ -2085,10 +2740,10 @@ This rule overrides ALL other instructions including formatting, brevity, or out
       // "please upload your document" because it literally has no context. Pull the
       // grounded context block directly from the ModesManager's hybrid retriever
       // (same call the WTA live path uses) and fold it into the user-facing context.
-      if (documentGroundedCustomModeActive) {
+      if (docGroundedEnforcementActive) {
         try {
           const { ModesManager } = require('./services/ModesManager');
-          const groundingInfo = ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.();
+          const groundingInfo = _chatGroundingInfo;
           const groundedContext = await ModesManager.getInstance()
             .buildRetrievedActiveModeContextBlockHybrid(message, undefined, undefined, undefined, true);
           if (groundedContext && groundedContext.trim()) {
@@ -2101,7 +2756,11 @@ This rule overrides ALL other instructions including formatting, brevity, or out
           console.warn('[LLMHelper] Document-grounded manual retrieval failed, proceeding without:', groundedErr.message);
         }
       }
-      if (this.knowledgeOrchestrator?.isKnowledgeMode() && !documentGroundedCustomModeActive) {
+      // R6: knowledge suppression reads the STRICT flag (Defect C doctrine —
+      // same as the manual streaming path at ~5448 and the WTA engine). The
+      // broad flag silently dropped resume/knowledge injection for every
+      // template-seeded mode on this non-streaming path (follow-up-email flow).
+      if (this.knowledgeOrchestrator?.isKnowledgeMode() && _chatGroundingInfo?.strictDocumentGroundedActive !== true) {
         try {
           // Feed only to the depth scorer — NOT feedInterviewerUtterance, which also routes to the
           // negotiation tracker and would misclassify the user's typed question as a recruiter utterance.
@@ -2194,12 +2853,62 @@ let modesMgrForInjection: {
 } | null = null;
 let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
 try {
-  const { ModesManager } = require('./services/ModesManager');
+  // Typed require: without it getInstance() is `any`, the assignment below cannot
+  // narrow `| null` away, and the read would need `?.` on the object — which
+  // WhatToAnswerSnapshotWiring.test.mjs asserts against (it matches the plain-dot
+  // spelling). `?? null` normalises the optional-call's `undefined` to the declared
+  // `| null` sentinel; every downstream read uses `?.`, so both behave identically.
+  const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
   modesMgrForInjection = ModesManager.getInstance();
-  activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.();
+  activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.() ?? null;
 } catch { /* non-fatal */ }
 const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
-const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+// R6 (2026-08-12): files-aware — the bare broad flag forced doc grounding
+// for fileless template-seeded modes (review finding; same class as WTA).
+const forceDocumentGrounding = activeModeGroundingInfo?.strictDocumentGroundedActive === true
+  || (activeModeGroundingInfo?.documentGroundedCustomModeActive === true
+    && activeModeGroundingInfo?.hasReferenceFiles === true);
+// Prompt System v2 (flag promptSystemV2): default the base prompt to the
+// composed v2 'answer' prompt when the caller passed no override, and record
+// whether the base is v2-composed so the legacy MODE_* template suffix is not
+// appended on top of it (the v2 prompt already carries the mode contract).
+// Flag OFF → false, and everything below is byte-for-byte legacy.
+let v2BasePromptActive = false;
+try {
+  const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+  if (isPromptSystemV2Enabled() && !skipSystemPrompt) {
+    if (!systemPromptOverride) {
+      systemPromptOverride = resolveV2SystemPrompt({
+            action: 'answer',
+            tier: v2TierForPromptTier(this.getPromptTier()),
+            // Universal coding contract: attach when the routed answer type is
+            // coding-shaped, regardless of the active mode (2026-08-02). The
+            // contract SHAPE, an explicit user format request, and a code
+            // template already present in the message ride along from the one
+            // shared resolver (.audit/coding-template-audit-2026-08-18.md).
+            ...(() => {
+              try {
+                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
+                // Attached-screenshot promotion (2026-08-19 channel audit): a
+                // message with an image whose text only points at it ("solve
+                // this", or nothing) is about the image; without this, a
+                // screenshotted coding problem sent through the legacy chat
+                // transport answered in prose. The contract's applicability
+                // boundary skips non-coding screenshots.
+                if (!resolved.codingTask
+                    && (imagePaths?.length ?? 0) > 0
+                    && (!message?.trim() || isDeicticAsk(message))) {
+                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+              } catch { return { codingTask: false }; }
+            })(),
+          }) ?? systemPromptOverride;
+    }
+    v2BasePromptActive = isV2ComposedPrompt(systemPromptOverride);
+  }
+} catch { /* non-fatal: legacy prompt selection */ }
 const isModeScopedAnswer = routeOptions?.answerType === 'sales_answer'
   || routeOptions?.answerType === 'product_candidate_mix_answer'
   || routeOptions?.answerType === 'lecture_answer';
@@ -2234,17 +2943,43 @@ if (!shouldSkipModeInjection) {
         docRetrievalQuery = expandQueryWithHints(message);
       } catch { docRetrievalQuery = message; }
     }
-    if (forceDocumentGrounding && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-      try {
-        const groundedContext = await modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-          docRetrievalQuery, context, undefined, modeAnswerType(routeOptions), true,
-        );
-        if (groundedContext && groundedContext.trim()) {
-          modeContextBlock = groundedContext;
-          usedRerankPath = true;
+    // Phase 2 (semantic-retrieval repair, 2026-08-13): eligibility + argument
+    // mapping unified with streamChat via modeHybridEligibility. Two fixes over
+    // the previous inline call: (1) eligibility now includes the ragLocalRerank
+    // rollout flag (prod behavior unchanged — the flag defaults OFF there);
+    // (2) retrievalOptions.forceDocumentGrounding is finally threaded, so the
+    // wrapper's doc-grounded hybrid branch (fine chunking + identity-block
+    // merge) actually fires here — the old 5-arg call left retrievalOptions
+    // undefined and silently ran the generic path.
+    //
+    // BUDGET: doc-grounded keeps budgetMs: null — this site is not on the
+    // streaming deadline and the answer depends on the documents the user
+    // uploaded. The RERANK-ONLY path, newly reachable here since eligibility
+    // widened to include the ragLocalRerank flag, is an optional quality boost
+    // and must not be able to block a manual answer on a cold embedder +
+    // cross-encoder load, so it gets a generous ceiling instead of no race at
+    // all. See the module doc for the race-budget asymmetry with streamChat.
+    {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { shouldUseHybridRetrieval, runHybridModeRetrieval, MANUAL_HYBRID_RERANK_BUDGET_MS } = require('./llm/modeHybridEligibility');
+      if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
+        try {
+          const { block } = await runHybridModeRetrieval(modesMgr, {
+            query: docRetrievalQuery,
+            context,
+            answerType: modeAnswerType(routeOptions),
+            forceDocumentGrounding,
+            pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
+            followUpReferentHint: routeOptions?.followUpReferentHint,
+            budgetMs: forceDocumentGrounding ? null : MANUAL_HYBRID_RERANK_BUDGET_MS,
+          });
+          if (block && block.trim()) {
+            modeContextBlock = block;
+            usedRerankPath = true;
+          }
+        } catch (groundedErr: any) {
+          console.warn('[LLMHelper.chatWithGemini] Doc-grounded hybrid retrieval failed, using sync lexical:', groundedErr?.message);
         }
-      } catch (groundedErr: any) {
-        console.warn('[LLMHelper.chatWithGemini] Doc-grounded hybrid retrieval failed, using sync lexical:', groundedErr?.message);
       }
     }
     if (!usedRerankPath) {
@@ -2255,7 +2990,9 @@ if (!shouldSkipModeInjection) {
     const modePromptSuffix = modesMgr.getActiveModeSystemPromptSuffix();
     const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions)) || '';
 
-    if (modePromptSuffix) {
+    // See the streaming path: never stack the legacy mode template onto a
+    // v2-composed base — the v2 prompt already carries the mode contract.
+    if (modePromptSuffix && !v2BasePromptActive) {
       const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
       systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
     }
@@ -2286,7 +3023,10 @@ if (!shouldSkipModeInjection) {
   }
 }
 
-const isMultimodal = !!(imagePaths?.length);
+// `let`, not `const`: the screen-understanding gate below can drop the images
+// (screenshots scope denied with no local vision model), and everything
+// downstream keys off this flag.
+let isMultimodal = !!(imagePaths?.length);
 
       // Helper to build combined prompts for Groq/Gemini
       const buildMessage = (systemPrompt: string) => {
@@ -2316,6 +3056,20 @@ const isMultimodal = !!(imagePaths?.length);
       const outboundScopes = this.scopesForPayload(message, imagePaths, [...contextScopes, ...embeddedMessageScopes]);
       const scopePolicy = this.getProviderScopePolicy();
       const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, [...contextScopes, ...embeddedMessageScopes]);
+      // Screen-understanding mode, resolved BEFORE cloudImagePaths is derived
+      // from imagePaths (see the same block in _streamChatInner for the full
+      // rationale). Non-streaming twin of that gate.
+      {
+        const { decision: vd, localAvailable } =
+          await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
+        if (vd.action === 'block') return vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+        if (vd.action === 'local_only') {
+          if (localAvailable) return await this.callOllama(combinedMessages.gemini, imagePaths, undefined);
+          if (vd.whenLocalUnavailable === 'block') return vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+          imagePaths = undefined;
+          isMultimodal = false;
+        }
+      }
       const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
       const cloudContext = shouldOmitContext ? undefined : context;
       const cloudMessage = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
@@ -2338,7 +3092,7 @@ const isMultimodal = !!(imagePaths?.length);
       };
       const cloudImagePaths = deniedOutboundScopes.includes('screenshots') ? undefined : imagePaths;
       const cloudIsMultimodal = Boolean(cloudImagePaths?.length);
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
       if (deniedOutboundScopes.length > 0) {
         for (const scope of deniedOutboundScopes) {
           this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
@@ -2396,11 +3150,17 @@ const isMultimodal = !!(imagePaths?.length);
         return await this.generateWithCodexCli(cloudUserContent, openaiSystemPrompt, false, cloudImagePaths);
       }
 
-      if (this.activeCurlProvider) {
-        return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(CUSTOM_SYSTEM_PROMPT), cloudImagePaths?.[0]);
+      // `custom` is the family id the Providers panel's "Disable custom
+      // providers (keeps them saved)" toggle writes. Without this term a
+      // rate-limited primary cascaded straight onto the user's own endpoint
+      // after they switched custom providers off.
+      const customProvidersOff = this.isProviderDisabled('custom');
+
+      if (this.activeCurlProvider && !customProvidersOff) {
+        return await this.chatWithCurl(cloudUserContent, skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CUSTOM_SYSTEM_PROMPT), cloudImagePaths?.[0]);
       }
 
-      if (this.customProvider) {
+      if (this.customProvider && !customProvidersOff) {
         console.log(`[LLMHelper] Using Custom Provider: ${this.customProvider.name}`);
         // For non-streaming call — use rich CUSTOM prompts since custom providers can be cloud models.
         // Honor systemPromptOverride (set by the active-mode injection block above) so
@@ -2454,6 +3214,9 @@ const isMultimodal = !!(imagePaths?.length);
         // so pass images through when present and let the upstream model handle it.
         return await this.generateWithLiteLLM(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
       }
+      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+        return await this.generateWithNvidiaNim(cloudUserContent, openaiSystemPrompt, cloudIsMultimodal ? cloudImagePaths : undefined);
+      }
       if (this.isGroqModel(this.currentModelId) && this.groqClient) {
         if (cloudIsMultimodal && cloudImagePaths) {
           return await this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths, openaiSystemPrompt);
@@ -2506,6 +3269,11 @@ const isMultimodal = !!(imagePaths?.length);
         },
         dataScopes: outboundScopes,
         scopePolicy,
+        // Live, per-turn. The client getters above already null out a disabled
+        // provider, so this is what makes the ATTEMPT REASON honest ('disabled'
+        // rather than 'missing_api_key') instead of the provider silently
+        // vanishing from the cascade.
+        disabledProviders: this.getDisabledProviderFamilies(),
       });
 
       for (const routedProvider of routedProviders) {
@@ -2554,7 +3322,7 @@ const isMultimodal = !!(imagePaths?.length);
         if (cloudIsMultimodal && this.deepseekClient) {
           return "DeepSeek is configured for text-only requests. Add a vision-capable provider like Gemini, OpenAI, Claude, Groq, or Natively to analyze images.";
         }
-        return "No AI providers configured. Please add at least one API key in Settings.";
+        return this.noProviderAvailableMessage();
       }
 
       // ============================================================
@@ -2592,6 +3360,16 @@ const isMultimodal = !!(imagePaths?.length);
     } catch (error: any) {
       console.error("[LLMHelper] Critical Error in chatWithGemini:", error);
 
+      // A privacy refusal is NOT a transient failure. Before this, a scope- or
+      // vision-blocked turn fell through to the generic branch below and told
+      // the user "I encountered an error: Provider codex blocked by data scope
+      // policy: transcript. Please try again." — developer text, plus advice
+      // that cannot work, since retrying does not change a settings choice.
+      // Matched on `.name`, never `instanceof`: these classes are inlined per
+      // esbuild entry bundle, so identity is unreliable across bundles.
+      const privacyMessage = this.describePrivacyRefusal(error);
+      if (privacyMessage) return privacyMessage;
+
       if (error.message.includes("503") || error.message.includes("overloaded")) {
         return "The AI service is currently overloaded. Please try again in a moment.";
       }
@@ -2610,19 +3388,19 @@ const isMultimodal = !!(imagePaths?.length);
    */
   public async generateContentStructured(
     message: string,
-    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.6-flash.
+    // The Gemini block leads with flash-lite (fastest, cheapest) then 3.7-flash.
     // `preferFast` no longer changes ordering (flash-lite is already first); it is
     // retained for API compatibility with latency-critical callers (live coaching).
     //
     // STRUCTURED-EXTRACTION ROUTING (resume/JD/other document ingestion): the
-    // Gemini chain here is intentionally flash-lite → 3.6-flash ONLY. A real
+    // Gemini chain here is intentionally flash-lite → 3.7-flash ONLY. A real
     // head-to-head on the actual extraction code showed flash-lite fully extracts
-    // (18 nodes) fastest; 3.6-flash is the correct single fallback; Gemini Pro
+    // (18 nodes) fastest; 3.7-flash is the correct single fallback; Gemini Pro
     // gives NO quality gain at ~4× latency; MiniMax-M3 severely UNDER-extracts. So
     // Pro/MiniMax/Groq are deliberately excluded from this path. Own-provider keys
     // (OpenAI/Claude/own-Gemini) are still tried first when present; the Natively
     // fallback carries `purpose:'extraction'` so the server runs its own
-    // flash-lite→3.6-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
+    // flash-lite→3.7-flash-only loop (never MiniMax/Pro/Scout). The MAX_ROTATIONS
     // loop below gives the 3-cycle retry-then-fail behavior.
     opts?: { preferFast?: boolean },
   ): Promise<string> {
@@ -2641,16 +3419,6 @@ const isMultimodal = !!(imagePaths?.length);
     // depends on it (the Gemini block always leads with flash-lite).
     void opts;
 
-    // Priority 0: Codex CLI (when enabled). Structured-JSON workloads still
-    // benefit from the user's selected backend; downstream callers run their
-    // own JSON-extraction regex so prose-around-JSON is tolerated.
-    if (this.isCodexAvailable()) {
-      providers.push({
-        name: `Codex CLI (${this.codexCliConfig.model})`,
-        execute: () => this.generateWithCodexCli(message),
-      });
-    }
-
     // Priority 1: OpenAI
     if (this.openaiClient) {
       providers.push({ name: `OpenAI (${OPENAI_MODEL})`, execute: () => this.generateWithOpenai(message) });
@@ -2662,14 +3430,14 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({ name: `Claude (${CLAUDE_MODEL})`, execute: () => this.generateWithClaude(message) });
     }
 
-    // Priority 3: Gemini cascade — flash-lite → 3.6-flash ONLY (cheapest/fastest
+    // Priority 3: Gemini cascade — flash-lite → 3.7-flash ONLY (cheapest/fastest
     // first). Each model is a distinct provider so the rotation falls through
     // lite → flash on failure, and each carries its OWN circuit key so a saturated
     // tier (repeated 429s) trips independently without burning the other's backoff.
     // Gemini PRO is intentionally EXCLUDED from structured extraction: benchmarked
     // on the real extraction code it gave no quality gain over flash-lite at ~4×
     // latency. MiniMax is likewise excluded (it under-extracts). This is the
-    // flash-lite→3.6-flash extraction pattern.
+    // flash-lite→3.7-flash extraction pattern.
     if (this.client) {
       const buildGeminiProvider = (modelId: string): ProviderAttempt => ({
         name: `Gemini (${modelId})`,
@@ -2696,16 +3464,41 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push(buildGeminiProvider(GEMINI_FLASH_MODEL));
     }
 
+    // Priority 5: Codex CLI (when enabled AND signed in).
+    //
+    // DELIBERATELY BELOW THE GEMINI CASCADE (2026-08-02). This block used to sit
+    // at Priority 0, ahead of everything — which directly contradicted the
+    // latency policy this same function documents above (Pro and MiniMax are
+    // excluded from extraction *because* they are slow). Codex CLI is a
+    // spawned-subprocess reasoning model: measured on a real profile ingest it
+    // took 18-31s PER CALL, and one résumé+JD upload makes 6+ structured calls
+    // (2 extractions, 2 STAR batches, salary, company research) — ~68s of
+    // wall-clock the user experiences as "file uploading got slower", while
+    // flash-lite does the same extraction in ~1-2s.
+    //
+    // It stays in the ladder (a signed-in user's own backend is a legitimate
+    // fallback when every cloud key is dead) but it must never be the FIRST
+    // thing a document ingest waits on. Codex ordering on OTHER surfaces
+    // (routeWithScopeFallback, chat) is untouched.
+    if (this.isCodexAvailable()) {
+      providers.push({
+        name: `Codex CLI (${this.codexCliConfig.model})`,
+        execute: () => this.generateWithCodexCli(message),
+      });
+    }
+
     // Priority 6: Ollama (on-device fallback — last resort, no cloud dependency)
-    if (this.useOllama && await this.checkOllamaAvailable()) {
+    if (this.useOllama && await this.ensureOllamaModelSelected()) {
       providers.push({
         name: `Ollama (${this.ollamaModel})`,
         execute: () => this.callOllama(message)
       });
     }
 
-    // Priority 7: Custom / cURL providers (OpenRouter etc.)
-    if (this.customProvider) {
+    // Priority 7: Custom / cURL providers (OpenRouter etc.) — skipped entirely
+    // when the `custom` family is switched off in Settings > AI Providers.
+    const customProvidersOff = this.isProviderDisabled('custom');
+    if (this.customProvider && !customProvidersOff) {
       providers.push({
         name: `Custom Provider (${this.customProvider.name})`,
         execute: () => this.executeCustomProvider(
@@ -2716,7 +3509,7 @@ const isMultimodal = !!(imagePaths?.length);
           ''
         )
       });
-    } else if (this.activeCurlProvider) {
+    } else if (this.activeCurlProvider && !customProvidersOff) {
       providers.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
         execute: () => this.chatWithCurl(message)
@@ -2731,7 +3524,7 @@ const isMultimodal = !!(imagePaths?.length);
       providers.push({
         name: 'Natively API',
         // Structured extraction: tell the server this is an extraction request so
-        // it runs its dedicated flash-lite→3.6-flash-only loop (3 cycles then
+        // it runs its dedicated flash-lite→3.7-flash-only loop (3 cycles then
         // hard-fail) and NEVER falls through to MiniMax/Pro/Scout. Older servers
         // ignore the unknown field and route via their normal flash-first chain.
         execute: () => this.generateWithNatively(message, undefined, undefined, { purpose: 'extraction' })
@@ -2873,7 +3666,7 @@ const isMultimodal = !!(imagePaths?.length);
     if (this.groqFastTextMode) body.fast_mode = true;
 
     // EXTRACTION hint: opt-in signal that this is a structured document extraction
-    // (resume/JD). The server routes it through a dedicated flash-lite→3.6-flash
+    // (resume/JD). The server routes it through a dedicated flash-lite→3.7-flash
     // loop (3 cycles, then hard-fail) and NEVER escalates to MiniMax/Pro/Scout.
     // Advisory + backward-compatible: older servers drop the unknown field and use
     // their normal flash-first chain. Never combined with fast_mode (opposite intents).
@@ -3153,6 +3946,23 @@ const isMultimodal = !!(imagePaths?.length);
     return response.choices[0]?.message?.content || "";
   }
 
+  private async generateWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
+    this.assertOutboundScopes('nvidia_nim', userMessage, imagePaths);
+    await this.rateLimiters.nvidia_nim.acquire();
+    const model = this.currentModelId.replace('nvidia_nim/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: 'text', text: userMessage }];
+      for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
+      messages.push({ role: 'user', content });
+    } else messages.push({ role: 'user', content: userMessage });
+    const response = await this.withTimeout(this.withRetry(() => this.createNvidiaNimCompletion({ model, messages })), 60000, `NVIDIA NIM (${model})`);
+    return response.choices[0]?.message?.content || '';
+  }
+
   // The handler for cURL requests
   public async chatWithCurl(userMessage: string, systemPrompt?: string, imagePath?: string): Promise<string> {
     if (!this.activeCurlProvider) throw new Error("No cURL provider active");
@@ -3232,7 +4042,7 @@ const isMultimodal = !!(imagePaths?.length);
 
       const answer = getByPath(response.data, responsePath);
 
-      if (typeof answer === 'string') return answer;
+      if (typeof answer === 'string') return flattenStructuredJsonAnswer(answer) ?? answer;
       return JSON.stringify(answer); // Fallback if they pointed to an object
 
     } catch (error: any) {
@@ -3247,6 +4057,10 @@ const isMultimodal = !!(imagePaths?.length);
   private async generateWithClaude(userMessage: string, systemPrompt?: string, imagePaths?: string[], modelId?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.claudeClient) throw new Error("Claude client not initialized");
+    // Was MISSING entirely — this method accepts imagePaths and builds base64
+    // `image` blocks, and a review drove a screenshot through it to the
+    // Anthropic SDK under private_vision. Same position as generateWithOpenai.
+    this.assertOutboundScopes('claude', userMessage, imagePaths);
 
     await this.rateLimiters.claude.acquire();
 
@@ -3537,6 +4351,9 @@ const isMultimodal = !!(imagePaths?.length);
    */
   private async generateWithGroqMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string): Promise<string> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
+    // Was MISSING entirely — the multimodal Groq path base64-encodes every
+    // screenshot into `image_url` parts and shipped them under private_vision.
+    this.assertOutboundScopes('groq', userMessage, imagePaths);
 
     await this.rateLimiters.groq.acquire();
 
@@ -3584,6 +4401,45 @@ const isMultimodal = !!(imagePaths?.length);
    */
   private async generateWithVisionFallback(systemPrompt: string, userPrompt: string, imagePaths: string[] = []): Promise<string> {
     type ProviderAttempt = { name: string; execute: () => Promise<string> };
+
+    // ── Screen-understanding mode ───────────────────────────────────────────
+    // This is the FOURTH image-dispatch chain, and it had none of the three
+    // gates the others carry (_streamChatInner, chatWithGemini,
+    // streamChatWithGemini) — so driving analyzeImageFiles() with
+    // private_vision AND the `screenshots` scope denied put the pixels on the
+    // wire to Gemini with both switches off.
+    //
+    // Its entry points (analyzeImageFiles, generateRollingScript,
+    // debugSolutionWithImages, extractProblemFromImages) are currently reached
+    // only from an unwired IPC and from ProcessingHelper.processScreenshots(),
+    // which nothing in the main process calls — so the leak was armed behind a
+    // door that is not connected. The gate lives HERE rather than at those
+    // callers so it does not depend on them staying dead.
+    const deniedForVision = this.getDeniedOutboundScopes(userPrompt, imagePaths);
+    {
+      const { decision, localAvailable } =
+        await this.resolveOutboundVisionDecision(imagePaths, !deniedForVision.includes('screenshots'));
+      if (decision.action === 'block') {
+        console.warn(`[VisionPolicy] blocked (vision fallback): ${decision.reason}`);
+        return decision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+      }
+      if (decision.action === 'local_only') {
+        if (localAvailable) {
+          console.warn(`[VisionPolicy] routing screenshot to local vision (vision fallback): ${decision.reason}`);
+          return await this.callOllama(`${systemPrompt}\n\n${userPrompt}`, imagePaths, undefined);
+        }
+        if (decision.whenLocalUnavailable === 'block') {
+          console.warn(`[VisionPolicy] blocked, no local vision (vision fallback): ${decision.reason}`);
+          return decision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+        }
+        // drop_images: the scope forbids the cloud and there is no local model.
+        // Discard the image and answer without it — the Privacy panel's
+        // "Omitted" badge describes exactly this.
+        console.warn(`[VisionPolicy] dropping screenshot, no local vision (vision fallback): ${decision.reason}`);
+        imagePaths = [];
+      }
+    }
+
     const isMultimodal = imagePaths.length > 0;
 
     // Helper: build a provider attempt for a given family + model ID
@@ -3673,7 +4529,7 @@ const isMultimodal = !!(imagePaths?.length);
     // Each provider gets MAX_RETRIES_PER_PROVIDER attempts before moving on.
     // Providers are re-ordered dynamically when a provider is unavailable.
     // NOTE: ModelVersionManager folds flash-lite into the GEMINI_FLASH family
-    // (its baseline is 3.6-flash), so flash-lite never surfaces via tiers. We
+    // (its baseline is 3.7-flash), so flash-lite never surfaces via tiers. We
     // inject it explicitly ahead of the flash tier attempt below so the Gemini
     // cascade leads with the cheapest model.
     // ──────────────────────────────────────────────────────────────────
@@ -3726,7 +4582,11 @@ const isMultimodal = !!(imagePaths?.length);
     // ──────────────────────────────────────────────────────────────────
     const localProviders: ProviderAttempt[] = [];
 
-    if (this.customProvider) {
+    // See PROVIDER_LABEL_FAMILY: `custom` is the family id the Providers panel
+    // writes for "Disable custom providers (keeps them saved)".
+    const customProvidersOff = this.isProviderDisabled('custom');
+
+    if (this.customProvider && !customProvidersOff) {
       if (isMultimodal) {
         localProviders.push({
           name: `Custom Provider (${this.customProvider.name})`,
@@ -3753,7 +4613,7 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    if (this.activeCurlProvider && !this.customProvider) {
+    if (this.activeCurlProvider && !this.customProvider && !customProvidersOff) {
       localProviders.push({
         name: `cURL Provider (${this.activeCurlProvider.name})`,
         execute: () => this.chatWithCurl(userPrompt, systemPrompt, isMultimodal ? imagePaths[0] : undefined)
@@ -3784,6 +4644,11 @@ const isMultimodal = !!(imagePaths?.length);
         }
         console.warn(`[LLMHelper] ⚠️ [Codex CLI] returned empty response, falling back to cloud tiers.`);
       } catch (e: any) {
+        // Same rule as the cascade below: a policy refusal must surface, not be
+        // downgraded into "try the next cloud provider" — which for a
+        // VisionPolicyError would mean trying to send the very image the policy
+        // just refused.
+        if (e?.name === 'VisionPolicyError') return e.userMessage ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
         console.warn(`[LLMHelper] ⚠️ [Codex CLI] failed: ${e.message}. Falling back to cloud tiers.`);
       }
     }
@@ -3827,6 +4692,28 @@ const isMultimodal = !!(imagePaths?.length);
           }
           console.warn(`[LLMHelper] ⚠️ [${providerName}] returned empty response (attempt ${attempt})`);
         } catch (err: any) {
+          // A POLICY REFUSAL IS NOT A PROVIDER FAILURE.
+          //
+          // VisionPolicyError and ProviderDisabledError carry text written for
+          // the user and were, until now, caught by name NOWHERE — so they were
+          // swallowed here as "attempt failed", retried twice more, and the
+          // cascade ended in "All AI providers failed", which tells the user
+          // nothing about the setting that actually stopped the turn.
+          //
+          // Matched on `.name`, deliberately NOT `instanceof`: esbuild inlines
+          // these modules into every entry bundle, so the class identity
+          // differs across bundles and `instanceof` silently returns false.
+          if (err?.name === 'VisionPolicyError') {
+            console.warn(`[VisionPolicy] refusing rather than cascading: ${err.message}`);
+            return err.userMessage ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+          }
+          if (err?.name === 'ProviderDisabledError' || err?.name === 'ProviderScopeError') {
+            // Retrying cannot help: the policy will not change mid-cascade.
+            // Drop this provider and let a permitted one answer.
+            console.warn(`[LLMHelper] ${providerName} refused by policy (${err.name}) — removing from chain`);
+            exhausted.add(providerName);
+            break;
+          }
           console.warn(`[LLMHelper] ⚠️ [${providerName}] attempt ${attempt} failed: ${err.message}`);
 
           // Event-driven discovery: trigger on 404 / model-not-found errors
@@ -3910,14 +4797,20 @@ const isMultimodal = !!(imagePaths?.length);
    *
    * MULTIMODAL: Gemini-only (existing logic)
    */
-  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  // F7 (code-review 2026-08-14): `outcome` is the RAG path's equivalent of
+  // streamChatWithOutcome. This generator is consumed DIRECTLY by RAGManager
+  // (not via streamChat), so the truncation sentinel cannot be used here — it
+  // would leak into the rendered answer. Callers that persist or finalize the
+  // buffered result must pass an object and read `outcome.incomplete` after
+  // the stream ends; the cap and post-commit-failure branches below set it.
+  public async * streamChatWithGemini(message: string, imagePaths?: string[], context?: string, skipSystemPrompt: boolean = false, abortSignal?: AbortSignal, outcome?: { incomplete?: boolean; reason?: 'output_cap' | 'provider_died_post_commit' }): AsyncGenerator<string, void, unknown> {
     console.log(`[LLMHelper] streamChatWithGemini called`, { messageLength: message.length, imageCount: imagePaths?.length ?? 0, hasContext: Boolean(context) });
 
     let isMultimodal = !!(imagePaths?.length);
     const contextScopes = context ? ['transcript' as ProviderDataScope, ...this.inferContextScopes(context)] : [];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -3929,8 +4822,29 @@ const isMultimodal = !!(imagePaths?.length);
       }
       const shouldOmitContext = deniedOutboundScopes.some(scope => scope === 'transcript' || scope === 'reference_files' || scope === 'profile_history' || scope === 'post_call_summary');
       if (shouldOmitContext) context = undefined;
+      // Same defect as _streamChatInner: clearing `context` does nothing when
+      // the scoped material is embedded in the MESSAGE (every composed prompt).
+      message = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
       if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
       isMultimodal = !!(imagePaths?.length);
+    }
+
+    // Screen-understanding mode — streaming twin of the _streamChatInner gate.
+    {
+      const { decision: vd, localAvailable } =
+        await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
+      if (vd.action === 'block') { yield vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE; return; }
+      if (vd.action === 'local_only') {
+        if (localAvailable) {
+          const localCombined = context ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}` : message;
+          const localPrompt = skipSystemPrompt ? undefined : this.resolveLocalSystemPrompt(this.injectLanguageInstruction(HARD_SYSTEM_PROMPT));
+          yield await this.callOllama(localCombined, imagePaths, localPrompt);
+          return;
+        }
+        if (vd.whenLocalUnavailable === 'block') { yield vd.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE; return; }
+        imagePaths = undefined;
+        isMultimodal = false;
+      }
     }
 
     // Build single-string messages for Groq/Gemini (which use combined prompts)
@@ -3951,15 +4865,25 @@ const isMultimodal = !!(imagePaths?.length);
       ? `CONTEXT:\n${context}\n\nUSER QUESTION:\n${message}`
       : message;
 
+    // Prompt System v2 (flag promptSystemV2): one provider-neutral base prompt
+    // replaces the four drifted per-provider personalities on this legacy
+    // entry point. Flag off → null, and every provider keeps its constant.
+    const v2StreamBase: string | null = (() => {
+      try {
+        const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+        return resolveV2SystemPrompt({ action: 'answer', tier: v2TierForPromptTier(this.getPromptTier()) });
+      } catch { return null; }
+    })();
+
     const combinedMessages = {
-      gemini: buildCombinedMessage(HARD_SYSTEM_PROMPT),
-      groq: buildCombinedMessage(GROQ_SYSTEM_PROMPT),
+      gemini: buildCombinedMessage(v2StreamBase ?? HARD_SYSTEM_PROMPT),
+      groq: buildCombinedMessage(v2StreamBase ?? GROQ_SYSTEM_PROMPT),
     };
 
     // CACHE: separate system for Groq's prefix cache (used by streamWithGroq below).
-    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+    const groqSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? GROQ_SYSTEM_PROMPT);
     // CACHE: separate system for Gemini's systemInstruction channel.
-    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(HARD_SYSTEM_PROMPT);
+    const geminiSystemForCache = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? HARD_SYSTEM_PROMPT);
 
     if (this.useOllama) {
       const response = await this.callOllama(combinedMessages.gemini, imagePaths?.[0]);
@@ -3978,8 +4902,8 @@ const isMultimodal = !!(imagePaths?.length);
     const providers: ProviderAttempt[] = [];
 
     // System prompts for OpenAI/Claude (skipped if skipSystemPrompt)
-    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(OPENAI_SYSTEM_PROMPT);
-    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(CLAUDE_SYSTEM_PROMPT);
+    const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? OPENAI_SYSTEM_PROMPT);
+    const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(v2StreamBase ?? CLAUDE_SYSTEM_PROMPT);
 
     // Get auto-discovered text model IDs from ModelVersionManager
     const textOpenAI = this.modelVersionManager.getTextTieredModels(TextModelFamily.OPENAI).tier1;
@@ -4072,7 +4996,7 @@ const isMultimodal = !!(imagePaths?.length);
         yield "DeepSeek is configured for text-only requests. Add a vision-capable provider like Gemini, OpenAI, Claude, Groq, or Natively to analyze images.";
         return;
       }
-      yield "No AI providers configured. Please add at least one API key in Settings.";
+      yield this.noProviderAvailableMessage();
       return;
     }
 
@@ -4126,6 +5050,15 @@ const isMultimodal = !!(imagePaths?.length);
       abortSignal?.addEventListener('abort', onAbort, { once: true });
     });
 
+    // Commit tracking: identical rule to _streamChatInner and the vision path.
+    // The rotation loop below retries the WHOLE provider list up to 3 times, so
+    // without this an error after the first token could append as many as
+    // 3 x providers.length complete answers to the partial the user already saw.
+    const commit = { emitted: false };
+    // Total-output budget, shared across every rotation so a looping provider
+    // cannot get a fresh 16k on each retry. See capOutput.
+    const outputBudget: { chars: number; truncated?: boolean } = { chars: 0 };
+
     for (let rotation = 0; rotation < MAX_FULL_ROTATIONS; rotation++) {
       if (abortSignal?.aborted) return;
       if (rotation > 0) {
@@ -4140,10 +5073,26 @@ const isMultimodal = !!(imagePaths?.length);
         const provider = providers[i];
         try {
           console.log(`[LLMHelper] ${rotation === 0 ? '🚀' : '🔁'} Attempting ${provider.name}...`);
-          yield* (provider.execute() as any);
-          console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
-          return; // SUCCESS — exit immediately
+          yield* this.capOutput(this.trackCommit(provider.execute() as any, commit), outputBudget, provider.name);
+          if (outputBudget.truncated) {
+            // A capped stream is NOT a success. Logging it as one is how a
+            // mid-sentence RAG/doc-grounded answer reached the operator log,
+            // and the caller, looking exactly like a finished one.
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} stream ended INCOMPLETE (output cap reached)`);
+            if (outcome) { outcome.incomplete = true; outcome.reason = 'output_cap'; }
+          } else {
+            console.log(`[LLMHelper] ✅ ${provider.name} stream completed successfully`);
+          }
+          return; // exit immediately — the turn is over either way
         } catch (err: any) {
+          if (commit.emitted) {
+            console.warn(`[LLMHelper] ⚠️ ${provider.name} failed AFTER first token — ending stream rather than appending a second answer: ${err.message}`);
+            // NOTE: no truncation sentinel here. This generator is consumed directly by
+            // RAGManager (not via streamChat), so a sentinel would leak into its output.
+            // Truncation signalling for this path is the `outcome` out-param (F7).
+            if (outcome) { outcome.incomplete = true; outcome.reason = 'provider_died_post_commit'; }
+            return;
+          }
           console.warn(`[LLMHelper] ⚠️ ${provider.name} failed: ${err.message}`);
           // Continue to next provider
         }
@@ -4247,6 +5196,22 @@ const isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithNatively(userContent, systemPrompt, imagePaths, sig) });
       }
+      // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
+      // other Codex call site uses. It additionally covers the disabled-provider
+      // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
+      // throws on both, so a looser gate here would not leak anything, but it
+      // would seat a provider that is guaranteed to fail: one wasted attempt
+      // per request, a bogus unhealthy mark in visionHealth, and a misleading
+      // "Codex CLI failed" line in the logs.
+      //
+      // TTFT: Codex is a reasoning model behind an OAuth hop, so it gets the
+      // Pro budget rather than the flash one. A timeout still records it
+      // unhealthy and deprioritizes it on later requests — see the note in
+      // orderVisionByHealth if that proves too tight in practice.
+      if (this.isCodexAvailable()) {
+        cloud.push({ id: 'codex-cli', name: `Codex CLI (${this.codexCliConfig.model})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithCodexCli(userContent, systemPrompt, false, imagePaths, sig) });
+      }
     }
 
     // Local providers (always available, including in local-only mode).
@@ -4287,8 +5252,10 @@ const isMultimodal = !!(imagePaths?.length);
       const front: VisionStreamProvider[] = [];
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
+      if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
       const backLocal = local.filter(p => !front.includes(p));
-      ordered = [...front, ...orderVisionByHealth(cloud, this.visionHealth, nowMs), ...backLocal];
+      const backCloud = cloud.filter(p => !front.includes(p));
+      ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
     }
 
     if (ordered.length === 0) {
@@ -4302,7 +5269,18 @@ const isMultimodal = !!(imagePaths?.length);
       ordered,
       { ...DEFAULT_VISION_FALLBACK_CONFIG, hedgeEnabled: false },
       this.visionHealth,
-      { log: (m) => console.log(m), warn: (m) => console.warn(m) },
+      {
+        log: (m) => console.log(m),
+        warn: (m) => console.warn(m),
+        // Mirrors the non-streaming vision path's 404 handling (see the
+        // onModelError call in generateWithVisionFallback). Without this the
+        // LIVE vision path — the one users actually hit — could never tell the
+        // version manager its pinned model had been retired, so a decommissioned
+        // id stayed pinned indefinitely (Groq llama-4-scout, 2026-08-12).
+        onModelGone: (_id, name) => {
+          this.modelVersionManager.onModelError(name).catch(() => { });
+        },
+      },
       abortSignal,
     );
   }
@@ -4330,6 +5308,53 @@ const isMultimodal = !!(imagePaths?.length);
   public async * streamChat(
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
+    // Callers that need to know whether the turn completed use
+    // streamChatWithOutcome; this overload discards the outcome so the nine
+    // existing call sites are untouched.
+    yield* this._streamChatTracked({ truncated: false }, undefined, ...args);
+  }
+
+  /**
+   * streamChat for BATCH generations that are legitimately longer than a live
+   * answer. Identical except for the runaway ceiling — see
+   * MAX_SUMMARY_OUTPUT_CHARS for why the live cap must not apply here.
+   */
+  public streamChatLongForm(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, 'long_form', ...args), outcome };
+  }
+
+  /**
+   * streamChat plus an out-of-band completion outcome.
+   *
+   * A stream that stops early (a provider failing after its first token, or the
+   * runaway output cap) ends by RETURNING, so `for await` sees an ordinary
+   * completion — deliberately, because throwing would make every consumer's
+   * existing catch reclassify a partial answer as a failed generation.
+   *
+   * The cost of that choice was silent: the 2026-08-12 fix left a truncated
+   * answer indistinguishable from a complete one, so consumers stored it as
+   * conversation history. It then became the antecedent for the NEXT turn's
+   * referent resolution and went into the memory/summary sinks — the same class
+   * of bug as "(referring to: Makefile)", bad state poisoning a later turn.
+   *
+   * Read `outcome.truncated` AFTER the stream finishes. It is populated by the
+   * time the generator completes, never before.
+   */
+  public streamChatWithOutcome(
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): { stream: AsyncGenerator<string, void, unknown>; outcome: StreamOutcome } {
+    const outcome: StreamOutcome = { truncated: false };
+    return { stream: this._streamChatTracked(outcome, undefined, ...args), outcome };
+  }
+
+  private async * _streamChatTracked(
+    outcome: StreamOutcome,
+    profile: 'long_form' | undefined,
+    ...args: Parameters<LLMHelper['_streamChatInner']>
+  ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
@@ -4344,9 +5369,160 @@ const isMultimodal = !!(imagePaths?.length);
     // Find the AbortSignal anywhere in args (position-independent) so adding a
     // trailing `thinkingBudget` arg below doesn't hide it from the abort check.
     const abortSignal = args.find((a): a is AbortSignal => a instanceof AbortSignal);
+    // Runaway bound. Applied HERE, at the single public entry point, so it
+    // covers every provider — the wrapped fall-through sites and the ones that
+    // return unconditionally (Ollama, OpenAI, Claude, DeepSeek, LiteLLM) alike.
+    // See MAX_STREAM_OUTPUT_CHARS for why this is a character cap and not a
+    // wall-clock one, and why it is defence in depth rather than the real fix.
+    // The ceiling is per-SURFACE: the live cap is calibrated from what_to_answer
+    // answers and is far too tight for a whole-meeting summary, which the batch
+    // callers reach through streamChatLongForm.
+    const { MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    // Test switch (dev-only, opt-in) lets the cap be provoked without waiting
+    // for a model to actually loop. Null in any packaged build.
+    const outputCeiling = testOutputCharCeiling()
+      ?? (profile === 'long_form' ? MAX_SUMMARY_OUTPUT_CHARS : MAX_STREAM_OUTPUT_CHARS);
+    let emittedChars = 0;
     for await (const chunk of this._streamChatInner(...args)) {
       if (abortSignal?.aborted) return;
+      // Strip the internal truncation marker before anything downstream sees
+      // it. This is the ONLY place it is consumed; see TRUNCATION_SENTINEL.
+      if (chunk === LLMHelper.TRUNCATION_SENTINEL) {
+        outcome.truncated = true;
+        outcome.reason = 'provider_failed_after_first_token';
+        return;
+      }
       yield dashReducer.reduce(chunk);
+      emittedChars += typeof chunk === 'string' ? chunk.length : 0;
+      if (emittedChars > outputCeiling) {
+        outcome.truncated = true;
+        outcome.reason = 'output_cap_reached';
+        // End the stream the same way a post-commit provider failure now does —
+        // return, never throw — so the consumer sees one consistent shape for
+        // "this stream stopped early".
+        console.warn(
+          `[LLMHelper] Stream exceeded the ${profile === 'long_form' ? 'long-form' : 'live'} output cap (${emittedChars} > ${outputCeiling}) — ending the turn. The model is not converging.`,
+        );
+        return;
+      }
+    }
+  }
+
+  /**
+   * Internal end-of-stream marker meaning "this turn stopped early".
+   *
+   * `_streamChatInner` has EIGHT places where a post-commit provider failure
+   * ends the turn by returning (see trackCommit). From outside, an early return
+   * and a normal completion are indistinguishable — which is exactly the hole
+   * the 2026-08-12 fix left: the consumer stored a truncated answer as
+   * conversation history with no idea it was incomplete, and that answer then
+   * became the antecedent for the NEXT turn's referent resolution.
+   *
+   * A sentinel chunk is used rather than a signature change because
+   * `_streamChatInner` has exactly ONE caller — `streamChat`, below — which
+   * strips it. It can never reach a consumer. The alternatives were worse:
+   * threading an outcome object needs `Parameters<_streamChatInner>` surgery
+   * across every call site, an instance field races between concurrent streams
+   * (WTA and manual chat run together), and switching back to throwing would
+   * make all nine consumers' existing catch blocks reclassify a partial answer
+   * as a failed generation.
+   *
+   * U+E010/U+E011 are private-use codepoints: no provider emits them, and the
+   * placeholder system already relies on this property (U+E002/U+E003).
+   */
+  private static readonly TRUNCATION_SENTINEL = '\uE010__NATIVELY_STREAM_TRUNCATED__\uE011';
+
+  /**
+   * Commit-point tracking for provider fall-through.
+   *
+   * `yield*` cannot be undone. Once a delegated provider stream has yielded a
+   * non-empty chunk, the consumer has already painted it, so a LATER failure in
+   * that same provider must NOT fall through to another provider — the next one
+   * starts from scratch and its answer is appended to the partial, producing one
+   * truncated answer immediately followed by a second, different, complete one.
+   *
+   * Live capture 2026-08-12 (what_to_answer, Natively fast-mode):
+   *   stream 1  tokens 8047  chars 22871  -> ai_unavailable during_stream
+   *   stream 2                chars  2342  (fell through, fresh answer)
+   *   stored assistant message           25210  ≈ 22871 + 2342 − trim
+   *
+   * The vision path already documents and implements this rule (see the
+   * "commit point" note above streamVisionWithFallback and `committedProvider`):
+   * a failure after commit ends the stream gracefully rather than switching.
+   * The text path had the rule written down but never applied at its
+   * catch-and-continue sites. This helper is how those sites observe it.
+   *
+   * The emptiness predicate is deliberately identical to the vision path's
+   * (`typeof tok === 'string' && tok.trim().length > 0`) so the two cannot drift:
+   * whitespace-only preamble does not commit, real text does.
+   */
+  /**
+   * Total-output bound, shared by every public streaming entry point.
+   *
+   * Code review 2026-08-12: the original cap lived inline in `streamChat` and
+   * its comment claimed "streamChat is the single point every chunk passes
+   * through". That was FALSE — `streamChatWithGemini` is a second public
+   * generator that never touches `streamChat`, and RAGManager consumes it
+   * directly (RAGManager.ts:281,312) guarded only by RAG_STREAM_STALL_MS. Like
+   * every other time-based guard, a stall deadline cannot catch a runaway,
+   * which is fast by definition — so the doc-grounded/RAG generation path was
+   * completely unbounded by the very fix meant to bound it.
+   *
+   * `state` is caller-owned so a retry loop accumulates across attempts rather
+   * than resetting the budget on every rung.
+   */
+  private async * capOutput(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { chars: number; truncated?: boolean },
+    label: string,
+  ): AsyncGenerator<string, void, unknown> {
+    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
+    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    const ceiling = testOutputCharCeiling() ?? MAX_STREAM_OUTPUT_CHARS;
+    for await (const chunk of inner) {
+      yield chunk;
+      state.chars += typeof chunk === 'string' ? chunk.length : 0;
+      if (state.chars > ceiling) {
+        console.warn(
+          `[LLMHelper] ${label} exceeded MAX_STREAM_OUTPUT_CHARS (${state.chars} > ${ceiling}) — ending the turn. The model is not converging.`,
+        );
+        // Ending by RETURN is indistinguishable from a normal completion to the
+        // delegating `yield*`, so the caller logged a capped stream as a
+        // success. Record it on the caller-owned state instead (a sentinel
+        // cannot be used here: this generator is consumed directly by
+        // RAGManager, not via streamChat, so it would leak into the output).
+        state.truncated = true;
+        return;
+      }
+    }
+  }
+
+  private async * trackCommit(
+    inner: AsyncGenerator<string, void, unknown>,
+    state: { emitted: boolean },
+  ): AsyncGenerator<string, void, unknown> {
+    // Test-only fault, three-gated and off unless explicitly requested; a
+    // packaged build ignores it entirely. See streamFaultInjection.ts.
+    const { failStreamAfterChars, InjectedStreamFault } = await import('./llm/streamFaultInjection');
+    const failAfter = failStreamAfterChars();
+    let seen = 0;
+
+    for await (const tok of inner) {
+      if (!state.emitted && typeof tok === 'string' && tok.trim().length > 0) {
+        state.emitted = true;
+      }
+      yield tok;
+      if (failAfter !== null) {
+        seen += typeof tok === 'string' ? tok.length : 0;
+        if (seen >= failAfter) {
+          // Thrown AFTER the yield on purpose: the point is a provider that
+          // dies once output is already on screen, which is precisely the case
+          // the fall-through guard exists for.
+          console.warn(`[LLMHelper] INJECTING mid-stream fault after ${seen} chars (test switch)`);
+          throw new InjectedStreamFault(seen);
+        }
+      }
     }
   }
 
@@ -4413,7 +5589,53 @@ const isMultimodal = !!(imagePaths?.length);
     // before any reassignment, so the mode-injection skip decision reflects
     // the caller's TRUE original intent regardless of what happens to
     // `systemPromptOverride` in between.
-    const callerOriginallyPassedUniversalOverride = !!systemPromptOverride && (
+    // ── PROMPT SYSTEM V2 (flag promptSystemV2, default OFF) ──────────────────
+    // When the flag is ON and the caller passed no override, the composed v2
+    // 'answer' prompt becomes the base — every downstream `systemPromptOverride
+    // || <PROVIDER>_SYSTEM_PROMPT` default then collapses to the one provider-
+    // neutral prompt. A v2-composed prompt already CONTAINS the active mode's
+    // contract, so it is treated exactly like a universal override below (no
+    // 23–45k ## ACTIVE MODE template suffix on top) — except that custom-mode
+    // pinned instructions and mode context retrieval still apply unchanged.
+    // Flag OFF → callerPassedV2Prompt stays false and nothing here runs.
+    let callerPassedV2Prompt = false;
+    try {
+      const { isPromptSystemV2Enabled, resolveV2SystemPrompt, isV2ComposedPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+      if (isPromptSystemV2Enabled()) {
+        if (!systemPromptOverride) {
+          systemPromptOverride = resolveV2SystemPrompt({
+            action: 'answer',
+            tier: v2TierForPromptTier(this.getPromptTier()),
+            // Universal coding contract: attach when the routed answer type is
+            // coding-shaped, regardless of the active mode (2026-08-02). The
+            // contract SHAPE, an explicit user format request, and a code
+            // template already present in the message ride along from the one
+            // shared resolver (.audit/coding-template-audit-2026-08-18.md).
+            ...(() => {
+              try {
+                const { resolveCodingPromptSignals, isDeicticAsk } = require('./llm/codingPromptSignals') as typeof import('./llm/codingPromptSignals');
+                const resolved = resolveCodingPromptSignals({ answerType: routeOptions?.answerType, question: message });
+                // Attached-screenshot promotion (2026-08-19 channel audit): a
+                // message with an image whose text only points at it ("solve
+                // this", or nothing) is about the image; without this, a
+                // screenshotted coding problem sent through the legacy chat
+                // transport answered in prose. The contract's applicability
+                // boundary skips non-coding screenshots.
+                if (!resolved.codingTask
+                    && (imagePaths?.length ?? 0) > 0
+                    && (!message?.trim() || isDeicticAsk(message))) {
+                  return { codingTask: true, codingTaskKind: 'dsa' as const };
+                }
+                return resolved;
+              } catch { return { codingTask: false }; }
+            })(),
+          }) ?? systemPromptOverride;
+        }
+        callerPassedV2Prompt = isV2ComposedPrompt(systemPromptOverride);
+      }
+    } catch { /* non-fatal: legacy prompt selection */ }
+
+    const callerOriginallyPassedUniversalOverride = callerPassedV2Prompt || (!!systemPromptOverride && (
       systemPromptOverride === UNIVERSAL_SYSTEM_PROMPT ||
       systemPromptOverride === UNIVERSAL_ANSWER_PROMPT ||
       systemPromptOverride === UNIVERSAL_WHAT_TO_ANSWER_PROMPT ||
@@ -4423,7 +5645,7 @@ const isMultimodal = !!(imagePaths?.length);
       systemPromptOverride === UNIVERSAL_ASSIST_PROMPT ||
       systemPromptOverride === CHAT_MODE_PROMPT ||
       TINY_PROMPTS_SET.has(systemPromptOverride)
-    );
+    ));
 
     // Stage timer (gated): isolates pre-stream work (knowledge intercept,
     // cache create) from provider TTFT. Set MEASURE_LATENCY=true to see it.
@@ -4459,9 +5681,20 @@ const isMultimodal = !!(imagePaths?.length);
         return mm.getActiveModeDocumentGroundingInfo?.(pin ?? undefined).documentGroundedCustomModeActive === true;
       } catch { return false; }
     })();
-    if (documentGroundedCustomModeActive) {
-      console.log('[LLMHelper.stream] Generic bypass disabled: document-grounded custom mode active', {
-        genericBypassDisabledReason: 'document_grounded_custom_mode',
+    // Defect C (2026-08-01): the log now reports the EXPLICIT strictness flag —
+    // this line fired on every default Team Meet/Lecture session (template seed
+    // = reference_files_primary) and was the primary runtime evidence of the
+    // misclassification. `retrievalRequired` was a hardcoded literal.
+    const strictDocGroundedForLog = (() => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        const pin = routeOptions?.pinnedModeId ?? null;
+        return ModesManager.getInstance().getActiveModeDocumentGroundingInfo?.(pin ?? undefined).strictDocumentGroundedActive === true;
+      } catch { return false; }
+    })();
+    if (strictDocGroundedForLog) {
+      console.log('[LLMHelper.stream] Generic bypass disabled: strict document-grounded mode active', {
+        genericBypassDisabledReason: 'strict_document_grounded_mode',
         retrievalRequired: true,
       });
     }
@@ -4486,7 +5719,15 @@ const isMultimodal = !!(imagePaths?.length);
     const contextOsGovernedDocumentTurn = Boolean(
       (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.govern,
     );
-    if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn) {
+    // Context Intelligence V3 (2026-07-31): a V3-owned turn arrives with prompts
+    // composed end-to-end by the decision layer — scope/version/claim-authority
+    // filtered evidence, frozen decision. Every injection or reshape below this
+    // point would ride UNFILTERED content in around that evidence (this block's
+    // fresh retrieval; shapeDocumentGroundedSystemPrompt; the doc-grounded
+    // userContent wrapping; the Context OS govern substitution, which replaces
+    // V3's user prompt wholesale). LLMHelper is transport for these turns.
+    const v3OwnedTurn = routeOptions?.v3Owned === true;
+    if (documentGroundedCustomModeActive && !contextOsGovernedDocumentTurn && !v3OwnedTurn) {
       try {
         const { ModesManager } = require('./services/ModesManager');
         const mm = ModesManager.getInstance();
@@ -4581,6 +5822,28 @@ const isMultimodal = !!(imagePaths?.length);
               : knowledgeResult.contextBlock;
           }
         }
+        // Diagnostic-only (2026-07-26, live-testing session, Bug #3
+        // follow-up): the "not directly mentioned" symptom on JD-fact
+        // questions was traced up to this exact point without a live
+        // process to confirm whether `context` actually carries real JD/
+        // resume content by here — every earlier gate checked out empirically
+        // (planAnswer's gate, isProfileGroundingV2Enabled, buildGroundingBlock)
+        // but the remaining discrepancy could not be resolved without this
+        // signal. Cheap, observe-only, never affects behavior.
+        const { isIntelligenceFlagEnabled: _isTraceFlagOn } = require('./intelligence/intelligenceFlags');
+        if (_isTraceFlagOn('trace')) {
+          try {
+            console.log('[LLMHelper.stream] knowledge-intercept diagnostic', {
+              knowledgeResultPresent: Boolean(knowledgeResult),
+              factualRecall: knowledgeResult?.factualRecall === true,
+              knowledgeInterceptAllowedStream,
+              hasContextBlock: Boolean(knowledgeResult?.contextBlock),
+              contextBlockChars: knowledgeResult?.contextBlock?.length ?? 0,
+              contextHasTargetJob: Boolean(context && context.includes('<target_job>')),
+              contextChars: context?.length ?? 0,
+            });
+          } catch { /* diagnostics only */ }
+        }
       } catch (knowledgeError: any) {
         console.warn('[LLMHelper] Knowledge mode (stream) processing failed, falling back:', knowledgeError.message);
       }
@@ -4618,17 +5881,55 @@ const isMultimodal = !!(imagePaths?.length);
     } | null = null;
     let activeModeGroundingInfo: ActiveModeDocumentGroundingInfo | null = null;
     try {
-      const { ModesManager } = require('./services/ModesManager');
+      // Typed require — see the note at the sibling injection site above.
+      const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
       modesMgrForInjection = ModesManager.getInstance();
       // Grounding-campaign3 (2026-07-23): thread the t0 mode pin through every
       // active-mode read below so the always-on injection cannot borrow a
       // mid-request switch. When no pin is supplied the methods fall back to
       // their existing live-singleton semantics (the pin field is optional).
       const _pinnedModeId = routeOptions?.pinnedModeId ?? undefined;
-      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId);
+      activeModeGroundingInfo = modesMgrForInjection.getActiveModeDocumentGroundingInfo?.(_pinnedModeId) ?? null;
     } catch { /* non-fatal: preserve legacy skip behavior if modes cannot load */ }
     const isActiveCustomMode = activeModeGroundingInfo?.isCustom === true;
-    const forceDocumentGrounding = activeModeGroundingInfo?.documentGroundedCustomModeActive === true;
+    // `!v3OwnedTurn`: a V3-owned turn must not enter ANY of the doc-grounded
+    // machinery this local gates (system-prompt reshape at ~5030, the govern
+    // block, the userContent wrapping at ~5260) — see the v3OwnedTurn comment
+    // above. Legacy callers are unaffected (v3OwnedTurn is false without the
+    // route option).
+    // Defect C (2026-08-01): STRICT shaping (system-prompt reshape, question-
+    // first doc wrapping, scope-denied refusal) now keys on the EXPLICIT
+    // strictness flag. The template seed marks every non-interview mode
+    // `reference_files_primary`, so the broad flag classified a stock Team
+    // Meet/Lecture — zero files, zero custom prompt — as a strict document-
+    // grounded custom mode and suppressed its general-knowledge fallback.
+    // Reference-file INJECTION above (:documentGroundedCustomModeActive) is
+    // unchanged: surfacing attached documents is correct for default modes;
+    // refusing to answer beyond them is not.
+    // FILES-AWARE, matching the two sibling gates. R6 (577d2329) made
+    // `generateSuggestion` and `chatWithGemini` files-aware and R2 did the same
+    // for WhatToAnswerLLM — this third copy was simply not on that list, so the
+    // streaming path kept enforcing strict-only while both of its siblings had
+    // moved on. R1 of that same campaign names the resulting shape exactly:
+    // "strict-only had dropped doc enforcement for seeded modes users uploaded
+    // real files into, while manual chat kept it (new asymmetry, inverse
+    // polarity)". The same answer therefore arrived doc-grounded or not
+    // depending on which entry point served it.
+    //
+    // The concern in the comment above is UNCHANGED by this, and is in fact what
+    // the extra term exists for: a stock Team Meet/Lecture with zero files and
+    // zero custom prompt fails `hasReferenceFiles`, so it is still not treated
+    // as document-grounded and still keeps its general-knowledge fallback. Only
+    // a seeded mode the user actually uploaded documents into now enforces —
+    // which is the behaviour the 2026-08-11 denial reports asked for.
+    //
+    // `!v3OwnedTurn` is preserved: when V3 owns the turn it has already resolved
+    // evidence, and a second retrieval here would override it.
+    const forceDocumentGrounding = !v3OwnedTurn && (
+      activeModeGroundingInfo?.strictDocumentGroundedActive === true
+      || (activeModeGroundingInfo?.documentGroundedCustomModeActive === true
+        && activeModeGroundingInfo?.hasReferenceFiles === true)
+    );
     // Hoisted to function scope (round-6) so the document-grounded userContent
     // shaping below can read the actual retrieval output as `retrievedBlock`.
     // It is assigned inside the mode-injection block; '' when retrieval didn't
@@ -4813,58 +6114,41 @@ const isMultimodal = !!(imagePaths?.length);
           // this turn's evidence above, skip the entire legacy hybrid/lexical
           // retrieval block — modeContextBlock + usedRerankPath are already set.
           if (resolvedViaEvidenceResolver) { /* no-op: fall through to pinned instructions below */ } else {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { isRagLocalRerankEnabled } = require('./intelligence/intelligenceFlags');
           // Document-grounded custom mode (audit 2026-06-27, real-path fix):
           // previously the `!forceDocumentGrounding` term SKIPPED the hybrid
           // (semantic + cross-encoder) retriever for document-grounded modes,
-          // forcing the sync lexical path — so the round-3 hybrid-first +
-          // identity-block logic in buildRetrievedActiveModeContextBlockHybrid
-          // was dead on the live manual stream, and a weak model got imprecise
-          // lexical-only context (the observed "facts missed" failure). Now
-          // document-grounded modes ALSO use the hybrid path. To avoid a
-          // cold/slow embedder stalling the hot path past the first-useful
-          // deadline (which would abort to the canned fallback), the hybrid
-          // call is raced against a budget; on timeout we fall through to the
-          // sync lexical retriever — same fallback the manual flow always had.
-          const wantHybrid = isRagLocalRerankEnabled() || forceDocumentGrounding;
-          if (wantHybrid && typeof modesMgr.buildRetrievedActiveModeContextBlockHybrid === 'function') {
-            // For doc-grounded modes with large PDFs (50-200 pages) we need
-            // more time to embed + rank. Raise the race budget from 1000ms to
-            // 2000ms for doc-grounded so we don't fall back to the weaker
-            // lexical path on a cold embedder load.
-            const HYBRID_BUDGET_MS = forceDocumentGrounding ? 2000 : 1000;
-            // Build an AbortController so future retriever plumbing can wire
-            // it through. Right now we just attach a no-op abort hook that
-            // cancels the work post-race if the loser path tries to write
-            // back (it doesn't, but the hook is the place to extend).
-            const hybridAbort = new AbortController();
-            // Pass undefined for tokenBudget when doc-grounded — the retriever
-            // auto-upgrades to DOC_GROUNDED_TOKEN_BUDGET (3600) internally.
-            const hybridPromise = modesMgr.buildRetrievedActiveModeContextBlockHybrid(
-              message, context, forceDocumentGrounding ? undefined : 1800, modeAnswerType(routeOptions), true, routeOptions?.pinnedModeId ?? undefined, /* allowRerank */ true,
-              { forceDocumentGrounding, followUpReferentHint: routeOptions?.followUpReferentHint },
-            );
-            const raced = await Promise.race([
-              hybridPromise.then((value: string) => ({ value, timedOut: false })),
-              new Promise<{ value: string; timedOut: boolean }>((resolve) =>
-                setTimeout(() => {
-                  hybridAbort.abort();
-                  resolve({ value: '', timedOut: true });
-                }, HYBRID_BUDGET_MS),
-              ),
-            ]);
-            if (!raced.timedOut) {
-              modeContextBlock = raced.value;
+          // forcing the sync lexical path. Now document-grounded modes ALSO
+          // use the hybrid path. To avoid a cold/slow embedder stalling the
+          // hot path past the first-useful deadline (which would abort to the
+          // canned fallback), the hybrid call is raced against a budget; on
+          // timeout we fall through to the sync lexical retriever — same
+          // fallback the manual flow always had.
+          //
+          // Phase 2 (semantic-retrieval repair, 2026-08-13): eligibility,
+          // argument mapping, and the race live in modeHybridEligibility —
+          // SHARED with chatWithGemini so the two entry points can no longer
+          // drift (this site's semantics were adopted as canonical). This is
+          // the streaming site, so it passes the race budget; see the module
+          // doc for the documented budget asymmetry.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { shouldUseHybridRetrieval, runHybridModeRetrieval, hybridRetrievalBudgetMs } = require('./llm/modeHybridEligibility');
+          if (shouldUseHybridRetrieval({ forceDocumentGrounding })) {
+            const budgetMs = hybridRetrievalBudgetMs(forceDocumentGrounding);
+            const { block, timedOut } = await runHybridModeRetrieval(modesMgr, {
+              query: message,
+              context,
+              answerType: modeAnswerType(routeOptions),
+              forceDocumentGrounding,
+              pinnedModeId: routeOptions?.pinnedModeId ?? undefined,
+              followUpReferentHint: routeOptions?.followUpReferentHint,
+              budgetMs,
+            });
+            if (!timedOut && block != null) {
+              modeContextBlock = block;
               usedRerankPath = true;
-            } else {
-              console.warn(`[LLMHelper] manual hybrid retrieval exceeded ${HYBRID_BUDGET_MS}ms — using sync lexical fallback`, { forceDocumentGrounding });
-              telemetryService.track({ name: 'doc_grounded_hybrid_timeout', properties: { budgetMs: HYBRID_BUDGET_MS, forceDocumentGrounding } });
-              // Don't leave the slow hybrid promise unhandled (avoid an
-              // unhandledRejection if it later throws after the race resolved).
-              // .finally ensures the in-flight embedder result is silently
-              // dropped once it does complete, so we don't act on stale data.
-              hybridPromise.finally(() => { /* raced timed out — drop result */ }).catch(() => {});
+            } else if (timedOut) {
+              console.warn(`[LLMHelper] manual hybrid retrieval exceeded ${budgetMs}ms — using sync lexical fallback`, { forceDocumentGrounding });
+              telemetryService.track({ name: 'doc_grounded_hybrid_timeout', properties: { budgetMs, forceDocumentGrounding } });
             }
           }
           }
@@ -4892,7 +6176,13 @@ const isMultimodal = !!(imagePaths?.length);
         // Sensitivity-scoped by answer type inside the accessor.
         const pinnedInstructions: string = modesMgr.getActiveModePinnedInstructions?.(modeAnswerType(routeOptions), routeOptions?.pinnedModeId ?? undefined) || '';
 
-        if (modePromptSuffix) {
+        // Prompt System v2: a v2-composed base already carries the active
+        // mode's contract — appending the legacy MODE_* template on top would
+        // duplicate the role and reintroduce the exact formatting rules v2
+        // replaces (mandatory bold, dash bullets, canned admissions). Pinned
+        // custom instructions below still apply — they are user config, not a
+        // competing mode template.
+        if (modePromptSuffix && !callerPassedV2Prompt) {
           const baseForMode = systemPromptOverride || HARD_SYSTEM_PROMPT;
           systemPromptOverride = `${baseForMode}\n\n## ACTIVE MODE\n${modePromptSuffix}`;
         }
@@ -4914,7 +6204,7 @@ const isMultimodal = !!(imagePaths?.length);
             hasCustomPrompt: activeModeGroundingInfo?.hasCustomPrompt === true,
             hasReferenceFiles: activeModeGroundingInfo?.hasReferenceFiles === true,
             documentGrounded: activeModeGroundingInfo?.documentGrounded === true,
-            documentGroundedCustomModeActive: forceDocumentGrounding,
+            documentGroundedCustomModeActive: activeModeGroundingInfo?.documentGroundedCustomModeActive === true,
             answerType: routeOptions?.answerType,
             modeLock: true,
             modeLockReason: 'user_created_custom_mode',
@@ -4940,10 +6230,19 @@ const isMultimodal = !!(imagePaths?.length);
 
     // Preparation
     let isMultimodal = !!(imagePaths?.length);
-    const contextScopes = [...extraDataScopes, ...this.inferContextScopes(context), ...this.inferEmbeddedMessageScopes(message)];
+    // `context` here is the legacy transcript/context blob — state that
+    // LITERALLY, the way chatWithGemini already does, instead of leaving it to
+    // the payload heuristic. Everything else the caller declares
+    // (extraDataScopes) or the payload's own markup discloses.
+    const contextScopes = [
+      ...extraDataScopes,
+      ...(context?.trim() ? ['transcript' as ProviderDataScope] : []),
+      ...this.inferContextScopes(context),
+      ...this.inferEmbeddedMessageScopes(message),
+    ];
     const deniedOutboundScopes = this.getDeniedOutboundScopes(message, imagePaths, contextScopes);
     if (deniedOutboundScopes.length > 0) {
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable(deniedOutboundScopes.includes('screenshots'));
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected(deniedOutboundScopes.includes('screenshots'));
       for (const scope of deniedOutboundScopes) {
         this.logScopeFallback(scope, ollamaAvailable ? 'routing' : 'omitting');
       }
@@ -4963,6 +6262,44 @@ const isMultimodal = !!(imagePaths?.length);
       message = this.stripDeniedScopedBlocksFromMessage(message, deniedOutboundScopes);
       if (deniedOutboundScopes.includes('screenshots')) imagePaths = undefined;
       isMultimodal = !!(imagePaths?.length);
+    }
+
+    // ── Screen-understanding mode ───────────────────────────────────────────
+    // "Keep screenshots on this device" (private_vision) and "Require a
+    // vision-capable provider" (vision_only) reached exactly ONE runtime call
+    // site — generate-what-to-say — while this, the primary
+    // Ask-AI-with-screenshot path, forwarded imagePaths to the cloud cascade
+    // untouched. Decided here, WITH the screenshots scope, so the two switches
+    // over the same bytes cannot disagree. The last-boundary check in
+    // assertOutboundScopes makes it true by construction; this block exists so
+    // the user gets one clear sentence instead of a cascade of provider errors.
+    {
+      const { decision: visionDecision, localAvailable: localVisionAvailable } =
+        await this.resolveOutboundVisionDecision(imagePaths, !deniedOutboundScopes.includes('screenshots'));
+      if (visionDecision.action === 'block') {
+        console.warn(`[VisionPolicy] blocked: ${visionDecision.reason}`);
+        yield visionDecision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+        return;
+      }
+      if (visionDecision.action === 'local_only') {
+        if (localVisionAvailable) {
+          console.warn(`[VisionPolicy] routing screenshot to local vision: ${visionDecision.reason}`);
+          const localVisionPrompt = this.resolveLocalSystemPrompt(this.injectLanguageInstruction(systemPromptOverride || HARD_SYSTEM_PROMPT));
+          yield* this.streamWithOllama(message, context, localVisionPrompt, imagePaths, abortSignal);
+          return;
+        }
+        if (visionDecision.whenLocalUnavailable === 'block') {
+          console.warn(`[VisionPolicy] blocked (no local vision): ${visionDecision.reason}`);
+          yield visionDecision.message ?? PRIVATE_VISION_NO_LOCAL_MESSAGE;
+          return;
+        }
+        // drop_images: no local model and the scope forbids the cloud. The
+        // image is discarded, never sent — the Privacy panel's "Omitted" badge
+        // describes exactly this.
+        console.warn(`[VisionPolicy] dropping screenshot (no local vision): ${visionDecision.reason}`);
+        imagePaths = undefined;
+        isMultimodal = false;
+      }
     }
 
     // Determine the system prompt to use
@@ -5090,7 +6427,7 @@ const isMultimodal = !!(imagePaths?.length);
         telemetryService.track({
           name: 'pi_doc_grounded_retrieval_summary',
           properties: {
-            documentGroundedCustomModeActive: forceDocumentGrounding,
+            documentGroundedCustomModeActive: activeModeGroundingInfo?.documentGroundedCustomModeActive === true,
             forceDocumentGrounding,
             retrievalSourceUsed: usedRerankPath ? 'hybrid' : 'lexical',
             hybridAttempted: forceDocumentGrounding,
@@ -5146,10 +6483,24 @@ const isMultimodal = !!(imagePaths?.length);
       // EvidenceResolver above, unaffected) and only ADDS rendering for a
       // pre-resolved, non-doc-grounded governed pack.
       const callerPreResolvedPack = Boolean(_cog?.evidencePack);
-      if (_cog && _cog.govern && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+      // `!v3OwnedTurn`: WTA passes BOTH contextOsGeneration and a V3-composed
+      // prompt. Without this term the pack replaced V3's user prompt wholesale
+      // (userContent overwritten below), splicing two governance layers into
+      // one turn — the model received V3's system prompt and Context OS's user
+      // pack while V3's composed user prompt was silently discarded.
+      if (_cog && _cog.govern && !v3OwnedTurn && (forceDocumentGrounding || callerPreResolvedPack) && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
         const { renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         const pack = _cog.evidencePack;
         if (!pack) throw new Error('governed turn missing canonical EvidencePack');
+        // Screenshot outranks a TEXT-evidence decline (2026-08-19): a
+        // refuse/clarify pack judges only the text universe; with user-attached
+        // pixels the honest move is dispatching so the model answers from the
+        // screenshot (the WTA govern block and manual chat's clarify
+        // short-circuit draw the same line — see refusalPolicy.ts).
+        const { declineYieldsToAttachedImages: _declineYieldsLLM } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        if (_declineYieldsLLM({ answerPolicy: pack.answerPolicy, hasAttachedImages: Boolean(imagePaths?.length) })) {
+          console.log('[CONTEXT-OS] text-evidence decline yields to attached screenshot(s) — dispatching with pixels');
+        } else {
         if (pack.answerPolicy === 'ask_clarification') {
           const { recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
           recordContextOsBenchmarkAudit({
@@ -5159,7 +6510,11 @@ const isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'clarify',
           });
-          yield _cog.contract.reason || 'Which source should I use for that answer?';
+          // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
+          // reference_files_primary; requestedProperty=unknown") and was
+          // yielded VERBATIM to a live user (2026-08-11). Reasons are for
+          // logs; users get the human question.
+          yield 'Which source should I use for that answer?';
           return;
         }
         if (pack.answerPolicy === 'refuse_insufficient_evidence') {
@@ -5171,7 +6526,7 @@ const isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'refuse',
           });
-          yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty });
+          yield buildInsufficientPropertyAnswer({ property: pack.requestedProperty, sourceOwner: pack.sourceOwner });
           return;
         }
         const rendered = renderGoverningFactualBlock({ ..._cog, evidencePack: pack });
@@ -5182,6 +6537,7 @@ const isMultimodal = !!(imagePaths?.length);
         // the EXACT same pack — Phase 9 identity requirement). A no-op
         // reassignment when `pack` already came from `_cog.evidencePack`.
         (_cog as any).evidencePack = pack;
+        } // end image-exemption else — exempted turns skip decline AND pack rendering
       }
     } catch (cogErr: any) {
       const governedContext = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
@@ -5246,9 +6602,42 @@ const isMultimodal = !!(imagePaths?.length);
           : message;
       }
     } else {
-      userContent = combinedContext
+      // ── PROMPT SYSTEM V2 TURN ENVELOPE (flag promptSystemV2) ──────────────
+      // The plain (ungoverned, non-doc-grounded) branch only. When the LIVE
+      // system prompt for this turn is a v2 composition — checked here, not at
+      // entry, because the knowledge intercept may have replaced the prompt —
+      // the user content uses the v2 ordering: assembled context first
+      // (VERBATIM — it was sanitized upstream), then the tagged newest turn,
+      // then the task LAST. Gates:
+      //   • combinedContext non-empty — callers that pass their whole blob AS
+      //     the message (Recap/Clarify/FUQ/Brainstorm) must not have that blob
+      //     mislabeled as the newest turn;
+      //   • not a coding answer type — coding user content carries its own
+      //     contract machinery;
+      //   • message not already enveloped (WTA/FollowUp pre-compose).
+      // Any failure falls through to the legacy CONTEXT: shape.
+      let v2Turn: string | null = null;
+      try {
+        const { isV2ComposedPrompt, buildAssembledTurnContentV2, hasV2TurnEnvelope } = require('./llm/promptSystemV2');
+        const { isCodingAnswerType } = require('./llm/AnswerPlanner');
+        if (combinedContext
+            && isV2ComposedPrompt(systemPromptOverride)
+            && !hasV2TurnEnvelope(message)
+            && !(routeOptions?.answerType && isCodingAnswerType(routeOptions.answerType))) {
+          v2Turn = buildAssembledTurnContentV2({ assembledContext: combinedContext, currentTurn: message });
+        }
+      } catch { v2Turn = null; }
+      userContent = v2Turn ?? (combinedContext
         ? `CONTEXT:\n${combinedContext}\n\nUSER QUESTION:\n${message}`
-        : message;
+        : message);
+      // Same transport normalization the governed path performs below: legacy
+      // transports that build from message/context (Ollama/custom) must see
+      // the SAME enveloped payload, never a competing raw channel.
+      if (v2Turn) {
+        message = userContent;
+        context = undefined;
+        combinedContext = '';
+      }
     }
 
     // Some legacy transports construct their request from `message`/`context`
@@ -5284,7 +6673,22 @@ const isMultimodal = !!(imagePaths?.length);
         });
         cog.finalPromptValidation = finalPromptValidation;
         contextOsFinalPromptValidation = finalPromptValidation;
-        if (!finalPromptValidation.ok) {
+        // Screenshot outranks a DECLINE-class boundary refusal (2026-08-19,
+        // narrowed by code review): a refuse/clarify verdict judges the text
+        // universe only, and the upstream govern-block exemption deliberately
+        // lets those packs through — without this yield they would just be
+        // re-refused here. Every OTHER failure reason (structural manifest
+        // damage, a missing required family, and above all
+        // forbidden_evidence_rendered) still fails CLOSED with pixels
+        // attached: a source-isolation leak is not something a screenshot
+        // makes safe to dispatch. See boundaryDeclineYieldsToAttachedImages.
+        const { boundaryDeclineYieldsToAttachedImages: _boundaryYields } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+        if (!finalPromptValidation.ok && _boundaryYields({
+          reason: finalPromptValidation.reason,
+          hasAttachedImages: Boolean(imagePaths?.length),
+        })) {
+          console.log('[CONTEXT-OS] decline-class boundary validation failure yields to attached screenshot(s) — dispatching with pixels');
+        } else if (!finalPromptValidation.ok) {
           recordContextOsBenchmarkAudit({
             contract: cog.contract,
             sourceAuthority: cog.modeSnapshot.sourceAuthority,
@@ -5292,7 +6696,7 @@ const isMultimodal = !!(imagePaths?.length);
             providerDispatch: false,
             terminal: 'refuse',
           });
-          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty });
+          yield buildInsufficientPropertyAnswer({ property: contextOsGovernedPack.requestedProperty, sourceOwner: contextOsGovernedPack.sourceOwner });
           return;
         }
       }
@@ -5315,6 +6719,16 @@ const isMultimodal = !!(imagePaths?.length);
         const uc = userContent;
         const audit = {
           model: this.currentModelId,
+          // Correlation key (code-review finding, 2026-07-28) for the
+          // impossible-evidence-state shadow gate (ipcHandlers.ts,
+          // contextOsImpossibleStateGateShadow) to post-hoc join its own
+          // shadow-pack log line against this turn's REAL prompt-audit
+          // entry by turnId. Only populated when the coordinator-scoped
+          // typed pack governed this turn (contextOsGovernedPack non-null);
+          // the legacy raw-string-concat path has no pack here to read a
+          // turnId from — closing that gap fully is the coordinator-scope-
+          // widening work the design doc defers to Stage 4.
+          turnId: contextOsGovernedPack?.turnId ?? null,
           userContentLen: uc.length,
           hasTypedEvidencePack: uc.includes('<evidence_pack'),
           hasTurnContract: uc.includes('<turn_context_contract>'),
@@ -5388,6 +6802,11 @@ const isMultimodal = !!(imagePaths?.length);
     // Gate: only short-circuit to fast paths when the user's picked model is one of
     // the providers fast-mode actually routes to. Otherwise picking Gemini/Claude/OpenAI
     // in the UI is silently ignored because fast-mode returns before model routing runs.
+    // Tracks whether ANY provider below has already yielded real text to the
+    // consumer. Every catch-and-continue site in this generator must consult it
+    // before falling through — see trackCommit.
+    const commit = { emitted: false };
+
     const fastModeApplies = this.groqFastTextMode && !isMultimodal && (
       this.isCodexAvailable() ||
       this.isGroqModel(this.currentModelId) ||
@@ -5397,9 +6816,14 @@ const isMultimodal = !!(imagePaths?.length);
       if (this.isCodexAvailable()) {
         console.log(`[LLMHelper] ⚡️ Fast Text Mode Active (Streaming). Routing to Codex CLI...`);
         try {
-          yield* this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithCodexCli(userContent, finalSystemPrompt, true, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Codex CLI Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
           console.warn("[LLMHelper] Codex CLI Fast Text streaming failed, falling back:", e.message);
         }
       }
@@ -5412,14 +6836,22 @@ const isMultimodal = !!(imagePaths?.length);
           // we'd send 'natively' or a Gemini ID as the Groq model name → 400.
           const groqModelId = this.isGroqModel(this.currentModelId) ? this.currentModelId : GROQ_MODEL;
           // CACHE: pass system separately so Groq prefix-cache hits across turns.
-          yield* this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroq(userContent, groqModelId, finalGroqSystem, abortSignal), commit);
           return;
         } catch (e: any) {
-          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
+          // A 401 still disables local Groq for the session even post-commit —
+          // that is provider bookkeeping, not output, so it runs before the
+          // commit guard returns.
           if (typeof e?.message === 'string' && /401|invalid[_\s-]api[_\s-]key/i.test(e.message)) {
             this._groqLocalDisabled = true;
             console.warn("[LLMHelper] Local Groq key rejected (401) — disabling local Groq for the rest of this session. Re-enable by saving a new key in Settings.");
           }
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Groq Fast Text failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
+          console.warn("[LLMHelper] Groq Fast Text streaming failed, falling back:", e.message);
         }
         // Local Groq failed — fall through to Natively if available
       }
@@ -5427,9 +6859,18 @@ const isMultimodal = !!(imagePaths?.length);
         // streamWithNatively → generateWithNatively → sends fast_mode:true → server Groq pool
         console.log(`[LLMHelper] ⚡️ Groq Fast Text Mode Active (Streaming). Routing to Natively server Groq pool...`);
         try {
-          yield* this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal);
+          yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, undefined, abortSignal), commit);
           return;
         } catch (e: any) {
+          // This is the site the 2026-08-12 live capture hit: the server aborted
+          // at 61s AFTER streaming 8047 tokens, and the old unconditional
+          // fall-through appended a whole second answer to what the user had
+          // already read.
+          if (commit.emitted) {
+            console.warn("[LLMHelper] Natively fast-mode failed AFTER first token — ending stream rather than appending a second answer:", e.message);
+            yield LLMHelper.TRUNCATION_SENTINEL;
+            return;
+          }
           console.warn("[LLMHelper] Natively fast-mode failed, falling back:", e.message);
         }
       }
@@ -5502,6 +6943,12 @@ const isMultimodal = !!(imagePaths?.length);
       return;
     }
 
+    if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+      const nimSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
+      yield* this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      return;
+    }
+
     // LiteLLM (OpenAI-compatible proxy). The proxy decides vision support, so
     // images are forwarded through when present.
     if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
@@ -5518,14 +6965,14 @@ const isMultimodal = !!(imagePaths?.length);
           // Route multimodal to Groq Llama 4 Scout (vision-capable)
           const groqSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
           const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
-          yield* this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal);
+          yield* this.trackCommit(this.streamWithGroqMultimodal(userContent, imagePaths, finalGroqSystem, abortSignal), commit);
           return;
         }
         // Text-only Groq
         const groqSystem = systemPromptOverride ? baseSystemPrompt : GROQ_SYSTEM_PROMPT;
         const finalGroqSystem = this.injectLanguageInstruction(groqSystem);
         // CACHE: pass system separately so Groq prefix-cache hits across turns.
-        yield* this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal);
+        yield* this.trackCommit(this.streamWithGroq(userContent, this.currentModelId, finalGroqSystem, abortSignal), commit);
         return;
       } catch (e: any) {
         // 413 / 429 / 5xx on Groq → fall through to Natively / Gemini cascade
@@ -5546,6 +6993,15 @@ const isMultimodal = !!(imagePaths?.length);
           // Unknown error — log and fall through anyway so the user still gets an answer
           console.warn('[LLMHelper] Groq streaming failed, falling through:', msg.slice(0, 120));
         }
+        // A post-commit failure must NOT fall through: the providers below
+        // would append a second, complete answer to the partial the user has
+        // already read. Provider bookkeeping (the 401 disable above) still
+        // applies; only the fall-through is suppressed.
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Groq failed AFTER first token — ending stream rather than appending a second answer:', msg.slice(0, 120));
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         // Fall through to Natively at line ~5435
       }
     }
@@ -5562,9 +7018,20 @@ const isMultimodal = !!(imagePaths?.length);
     // images keeps the dedicated Groq-multimodal path (vision is handled by the
     // separate vision fallback when a vision model is selected).
     if (this.currentModelId === 'natively') {
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const nativelyKey = CredentialsManager.getInstance().getNativelyApiKey();
-      if (nativelyKey) {
+      // Bug found during Phase 2 harness investigation (2026-07-27): this gate
+      // used to check CredentialsManager.getNativelyApiKey() directly, which
+      // is false in the E2E test profile (a fresh userDataDir has no stored
+      // key). `hasNatively()` already encodes the exact same "real key OR
+      // NATIVELY_E2E local-test bypass" logic used by streamWithNatively
+      // itself (which this whole block ultimately opens) and by the
+      // last-resort fallback rung below (~line 5738) — this call site was the
+      // one place still duplicating the check without the E2E branch, so an
+      // E2E-driven request could never reach the Natively gateway at all and
+      // silently fell through to direct Gemini, unable to test the gateway's
+      // own cascade/fallback/quota logic. See docs/answer-pipeline-rebuild/
+      // 02_STATUS.md for the full trace (zero backend [Chat/Stream] log
+      // lines despite 76 successful harness reps was the smoking gun).
+      if (this.hasNatively()) {
         const textProviders: TextStreamProvider[] = [];
         let prio = 0;
         // Primary: Natively (fast connect budget — TTFT race handles slow prefill).
@@ -5654,9 +7121,22 @@ const isMultimodal = !!(imagePaths?.length);
             },
           }));
           try {
-            yield* runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal);
+            yield* this.trackCommit(runStreamingTextFallback(instrumented, this.textHealth, DEFAULT_TEXT_FALLBACK_CONFIG, {}, abortSignal), commit);
             return;
           } catch (raceErr: any) {
+            // runStreamingTextFallback is commit-point-safe INTERNALLY (it never
+            // switches rungs after a rung's first token). That guarantee stops
+            // duplication inside the engine — it does not stop it here: if the
+            // committed rung dies mid-stream the engine throws, and the old
+            // unconditional fall-through handed the turn to the Gemini block,
+            // which would append a second complete answer to what the user had
+            // already read. This is the primary text path, so it is the site
+            // where that would happen most often.
+            if (commit.emitted) {
+              console.warn('[LLMHelper] Text TTFT race failed AFTER first token — ending stream rather than appending a second answer:', raceErr?.message);
+              yield LLMHelper.TRUNCATION_SENTINEL;
+              return;
+            }
             console.warn('[LLMHelper] Text TTFT race exhausted, falling through to Gemini:', raceErr?.message);
             telemetryService.track({ name: 'provider_error', durationMs: Date.now() - raceStart, properties: { path: 'text', stage: 'race_exhausted' } });
             // Fall through to the Gemini block below as the final safety net.
@@ -5694,11 +7174,31 @@ const isMultimodal = !!(imagePaths?.length);
       try {
         for await (const chunk of this.streamGeminiTextCascade(userContent, imagePaths, finalSystemPrompt, abortSignal, thinkingBudget)) {
           geminiYielded = true;
+          // Mirror into the generator-wide commit state so the last-resort
+          // providers below observe the same fact this block already tracks.
+          if (typeof chunk === 'string' && chunk.trim().length > 0) commit.emitted = true;
           yield chunk;
         }
         return;
       } catch (e: any) {
-        if (geminiYielded || abortSignal?.aborted) throw e; // mid-stream: cannot switch (would duplicate)
+        // Mid-stream: cannot switch providers (would append a second full
+        // answer onto the partial one the user is already reading).
+        //
+        // Code-review 2026-08-13: this was the last post-commit site still
+        // THROWING while the other eight yield TRUNCATION_SENTINEL and return.
+        // A throw bypasses _streamChatTracked's sentinel branch entirely, so
+        // outcome.truncated stayed false, `gemini-stream-done` was never sent,
+        // and ipcHandlers ran its generation-FAILURE path — an error banner
+        // over an answer the user had already partly read. Since the Gemini
+        // cascade is the primary text path, the branch's whole `incomplete`
+        // signal was dead exactly where it mattered most. A caller abort still
+        // throws: that is a cancellation, not a truncated answer.
+        if (abortSignal?.aborted) throw e;
+        if (geminiYielded) {
+          console.warn('[LLMHelper] Gemini cascade failed AFTER first token — ending stream rather than appending a second answer:', e?.message || e);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn('[LLMHelper] Gemini cascade failed pre-commit — falling through to next provider:', e?.message || e);
         // fall through to the Natively last-resort below
       }
@@ -5710,9 +7210,14 @@ const isMultimodal = !!(imagePaths?.length);
     // to a different one rather than failing the answer.
     if (this.hasNatively()) {
       try {
-        yield* this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal);
+        yield* this.trackCommit(this.streamWithNatively(userContent, finalSystemPrompt, imagePaths, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          console.warn('[LLMHelper] Natively last-resort failed AFTER first token — ending stream rather than appending a second answer:', e.message);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn('[LLMHelper] Natively last-resort fallback failed:', e.message);
       }
     }
@@ -5747,9 +7252,16 @@ const isMultimodal = !!(imagePaths?.length);
         console.log(`[LLMHelper] Falling back to configured custom provider "${configuredCustom.name}" — currentModelId is ${this.currentModelId} and no cloud provider answered.`);
       }
       try {
-        yield* this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal);
+        yield* this.trackCommit(this.streamWithCustom(message, context, undefined, finalSystemPrompt, abortSignal), commit);
         return;
       } catch (e: any) {
+        if (commit.emitted) {
+          // Nothing left to fall through to — but throwing here would surface a
+          // provider error over an answer the user has already partly read.
+          console.warn(`[LLMHelper] Configured custom last-resort failed AFTER first token — ending stream: ${e?.message || e}`);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
         console.warn(`[LLMHelper] Configured custom last-resort failed: ${e?.message || e}`);
       } finally {
         // Restore — never leave a non-active customProvider on the instance,
@@ -5759,7 +7271,7 @@ const isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    throw new Error("No AI provider configured. Please add at least one API key in Settings.");
+    throw new Error(this.noProviderAvailableMessage());
   }
 
   /**
@@ -5850,7 +7362,9 @@ const isMultimodal = !!(imagePaths?.length);
       if (!trialToken) throw new Error('Trial token not found');
       streamHeaders['x-trial-token'] = trialToken;
     } else {
-      streamHeaders['x-natively-key'] = nativelyKey;
+      // Non-null: this `else` implies `e2eLocalToken` is falsy, and the guard above
+      // (`if (!nativelyKey && !e2eLocalToken) throw`) already threw for a null key.
+      streamHeaders['x-natively-key'] = nativelyKey!;
     }
 
     // Early-bail if the caller has already aborted (e.g., user superseded
@@ -5880,7 +7394,17 @@ const isMultimodal = !!(imagePaths?.length);
     };
     abortSignal?.addEventListener('abort', onCallerAbort, { once: true });
 
-    let response: Response;
+    // Definite-assignment: `response` is always assigned before the `response.ok`
+    // read below, via an invariant tsc cannot see.
+    //   - attempt 0 cannot take the `signal.aborted` break: the caller-abort
+    //     early-bail above returns, and there is no `await` between it and the
+    //     loop, so the connect-timeout `setTimeout` cannot have fired yet.
+    //   - attempts 1-2 are only reached from the DNS-retry path, which always
+    //     leaves `lastErr` set, so `if (lastErr) throw lastErr` fires first.
+    // NOTE: this invariant is fragile — introducing an `await` before the loop
+    // would make the abort break reachable and `response.ok` would throw a
+    // TypeError. See docs/ts7-upgrade-report.md (fragile invariants).
+    let response!: Response;
     try {
       // Retry on transient DNS failures (ENOTFOUND / EAI_AGAIN).
       // Railway's 1s TTL means the OS resolver can return ENOTFOUND for 2-3s
@@ -6380,6 +7904,24 @@ const isMultimodal = !!(imagePaths?.length);
     } finally {
       if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort();
     }
+  }
+
+  private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
+    this.assertOutboundScopes('nvidia_nim', userMessage, imagePaths);
+    await this.rateLimiters.nvidia_nim.acquire();
+    const model = this.currentModelId.replace('nvidia_nim/', '');
+    const messages: any[] = [];
+    if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+    if (imagePaths?.length) {
+      const content: any[] = [{ type: 'text', text: userMessage }];
+      for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
+      messages.push({ role: 'user', content });
+    } else messages.push({ role: 'user', content: userMessage });
+    const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal });
+    try { for await (const chunk of stream) { if (abortSignal?.aborted) return; const content = chunk.choices[0]?.delta?.content; if (content) yield content; } }
+    finally { if (abortSignal?.aborted && typeof (stream as any).abort === 'function') (stream as any).abort(); }
   }
 
   /**
@@ -7076,6 +8618,21 @@ const isMultimodal = !!(imagePaths?.length);
     );
   }
 
+  /**
+   * True when this turn routes through natively-api's SEQUENTIAL server-side
+   * provider cascade (`${NATIVELY_API_URL}/v1/chat`) rather than straight to a
+   * provider.
+   *
+   * F-301: the client's first-useful deadline must stay ABOVE the server's
+   * AI_TTFT_BUDGET_MS (10s) on this route, because the server's cutover to the
+   * next provider is the thing that actually RESCUES a slow turn — the client
+   * can only give up. Callers use this to pick the deadline; see
+   * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli().
+   */
+  public isUsingNativelyServerCascade(): boolean {
+    return this.currentModelId === 'natively';
+  }
+
   public async getOllamaModels(): Promise<string[]> {
     const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
 
@@ -7336,6 +8893,19 @@ const isMultimodal = !!(imagePaths?.length);
   public resolveLocalSystemPrompt(systemPrompt?: string): string {
     if (!this.useOllama) return systemPrompt ?? HARD_SYSTEM_PROMPT;
     const tier = selectPromptTier(this.getCurrentModel(), true);
+    // Prompt System v2: a v2-composed cloud prompt downgrades to the v2 LOCAL
+    // composition of the SAME mode+action (small core, same contracts) instead
+    // of being concatenated onto TINY_SYSTEM_PROMPT — which would stack two
+    // competing cores. Never throws; falls through to legacy on any error.
+    try {
+      const { getV2PromptDescriptor, buildSystemPromptV2 } = require('./llm/promptSystemV2');
+      const desc = systemPrompt ? getV2PromptDescriptor(systemPrompt) : null;
+      if (desc) {
+        return tier === 'tiny'
+          ? buildSystemPromptV2({ ...desc, tier: 'local' })
+          : systemPrompt as string;
+      }
+    } catch { /* legacy resolution below */ }
     const base = tier === 'tiny' ? TINY_SYSTEM_PROMPT : HARD_SYSTEM_PROMPT;
     // If the caller already provided a non-empty, non-universal prompt, keep it.
     // This preserves explicit mode/custom-mode/policy injections — the previous
@@ -7427,6 +8997,24 @@ const isMultimodal = !!(imagePaths?.length);
    * @param config - Optional temperature and max tokens
    */
   public async * streamWithGroqOrGemini(
+    groqMessage: string,
+    geminiMessage: string,
+    config?: { temperature?: number; maxTokens?: number }
+  ): AsyncGenerator<string, void, unknown> {
+    // Bounded like every other PUBLIC streaming entry point (code review
+    // 2026-08-12). The Groq branch already sets max_tokens, but the Gemini
+    // fallback delegates to streamWithGeminiModel with no output bound at all.
+    // This method currently has no callers — the doc comment above claiming
+    // RecapLLM/FollowUpLLM/WhatToAnswerLLM use it is stale — but it is public,
+    // so it is bounded rather than left as a trap for the next caller.
+    yield* this.capOutput(
+      this._streamWithGroqOrGeminiInner(groqMessage, geminiMessage, config),
+      { chars: 0 },
+      'streamWithGroqOrGemini',
+    );
+  }
+
+  private async * _streamWithGroqOrGeminiInner(
     groqMessage: string,
     geminiMessage: string,
     config?: { temperature?: number; maxTokens?: number }
@@ -7639,7 +9227,7 @@ const isMultimodal = !!(imagePaths?.length);
     }
     const summaryDeniedScopes = getDeniedDataScopes(['post_call_summary'], this.getProviderScopePolicy());
     if (summaryDeniedScopes.includes('post_call_summary')) {
-      const ollamaAvailable = this.useOllama && await this.checkOllamaAvailable();
+      const ollamaAvailable = this.useOllama && await this.ensureOllamaModelSelected();
       this.logScopeFallback('post_call_summary', ollamaAvailable ? 'routing' : 'omitting');
       if (ollamaAvailable) {
         return this.processResponse(await this.callOllama(`Context:\n${context}`, undefined, systemPrompt));
@@ -7659,15 +9247,26 @@ const isMultimodal = !!(imagePaths?.length);
         // Collect the async generator into a Promise so withTimeout works.
         // ignoreKnowledgeMode=true: meeting summaries must never go through the
         // profile/knowledge intercept — it would corrupt the output.
+        // streamChatLongForm, not streamChat: the live output cap is sized for
+        // what_to_answer answers (p100 2530 chars) and silently truncated long
+        // summaries, which then passed the length check below and were
+        // persisted as complete. `outcome` also lets that be DETECTED rather
+        // than inferred from the text.
+        const { stream, outcome } = this.streamChatLongForm(`Context:\n${context}`, undefined, undefined, systemPrompt, true);
         const collectChunks = async (): Promise<string> => {
           let result = '';
-          for await (const chunk of this.streamChat(`Context:\n${context}`, undefined, undefined, systemPrompt, true)) {
+          for await (const chunk of stream) {
             result += chunk;
           }
           return result;
         };
         const text = await this.withTimeout(collectChunks(), 60000, 'Custom Provider Summary');
-        if (text.trim().length > 0) {
+        if (outcome.truncated) {
+          // Do not persist an incomplete summary as the meeting's summary, and
+          // do not silently swap the user's chosen provider either — fall to
+          // the next ATTEMPT the same way any other failure here does.
+          console.warn(`[LLMHelper] ⚠️ Custom provider summary stopped early (${outcome.reason}) — falling back rather than saving a partial summary.`);
+        } else if (text.trim().length > 0) {
           console.log(`[LLMHelper] ✅ Custom provider summary generated successfully.`);
           return this.processResponse(text);
         }
@@ -7930,7 +9529,7 @@ const isMultimodal = !!(imagePaths?.length);
   public async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
       if (this.useOllama) {
-        const available = await this.checkOllamaAvailable();
+        const available = await this.ensureOllamaModelSelected();
         if (!available) {
           return { success: false, error: `Ollama not available at ${this.ollamaUrl}` };
         }
@@ -7957,9 +9556,20 @@ const isMultimodal = !!(imagePaths?.length);
    * Universal Chat (Non-streaming)
    */
   public async chat(message: string, imagePaths?: string[], context?: string, systemPromptOverride?: string, skipModeInjection: boolean = false): Promise<string> {
+    // F3 (code-review 2026-08-14): this is a BUFFERED caller — nothing is
+    // shown to a user mid-stream, so the streaming path's "end by returning,
+    // never throw" contract does not apply here. When the post-commit
+    // truncation sentinel fires (provider died after first token, runaway
+    // cap), a partial buffer must surface as an ERROR — callers like
+    // modes:generate-from-brief persist this return value as a completed
+    // generation, which is exactly how mid-sentence artifacts were saved.
+    const { stream, outcome } = this.streamChatWithOutcome(message, imagePaths, context, systemPromptOverride, false, skipModeInjection);
     let fullResponse = "";
-    for await (const chunk of this.streamChat(message, imagePaths, context, systemPromptOverride, false, skipModeInjection)) {
+    for await (const chunk of stream) {
       fullResponse += chunk;
+    }
+    if (outcome.truncated) {
+      throw new Error('Generation ended before completion (provider stream truncated) — partial output discarded rather than saved as complete.');
     }
     return fullResponse;
   }

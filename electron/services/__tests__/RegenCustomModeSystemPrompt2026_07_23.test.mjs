@@ -103,15 +103,19 @@ test('IntelligenceEngine: HARD_SYSTEM_PROMPT is imported (needed by the new rege
 // ---------------------------------------------------------------------------
 
 import os from 'node:os';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 const distDir = (() => {
   const bundled = path.resolve(repoRoot, 'dist-electron/electron/llm/documentGroundedPrompt.js');
   if (fs.existsSync(bundled)) return path.resolve(repoRoot, 'dist-electron');
   const target = fs.mkdtempSync(path.join(os.tmpdir(), 'modeinjection-dist-'));
-  fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(target, 'node_modules'), 'dir');
-  try { execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected partial */ }
+  fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(target, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+  try { execFileSync(process.execPath, [
+    path.join('node_modules', 'typescript', 'bin', 'tsc'),
+    '-p', path.join('electron', 'tsconfig.json'),
+    '--outDir', target,
+  ], { cwd: repoRoot, stdio: 'pipe' }); } catch { /* expected partial */ }
   return target;
 })();
 const cjsRequire = createRequire(import.meta.url);

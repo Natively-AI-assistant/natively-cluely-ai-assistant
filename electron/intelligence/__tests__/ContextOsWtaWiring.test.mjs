@@ -111,5 +111,10 @@ test('WIRING: WTA contract failure is non-fatal', () => {
 const wtaLlmSource = fs.readFileSync(path.resolve(repoRoot, 'electron/llm/WhatToAnswerLLM.ts'), 'utf8');
 
 test('WIRING: WTA prompt suppresses prior responses in doc-grounded mode (pre-existing gate preserved)', () => {
-  assert.match(wtaLlmSource, /priorResponses: !documentGroundedCustomModeActiveForPrompt/, 'doc-grounded prior-responses suppression must remain');
+  // Pin repaired 2026-08-19: this assertion had been failing since the
+  // expression was wrapped in parens to add the promoted-screen-coding
+  // condition — a STALE anchor, not a real regression (the suppression it
+  // guards is intact). Tolerate surrounding parens/conditions so the pin
+  // guards the invariant rather than one exact spelling of it.
+  assert.match(wtaLlmSource, /priorResponses: \(?!documentGroundedCustomModeActiveForPrompt/, 'doc-grounded prior-responses suppression must remain');
 });

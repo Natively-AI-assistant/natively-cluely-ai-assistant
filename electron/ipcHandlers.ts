@@ -2,14 +2,15 @@
 
 import * as crypto from 'crypto';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
+import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { pathToFileURL, fileURLToPath } from 'url';
 import { AudioDevices } from './audio/AudioDevices';
 import { DatabaseManager } from './db/DatabaseManager'; // Import Database Manager
 import { AppState } from './main';
-import { CodexCliService } from './services/CodexCliService';
+import { CodexCliService, isCodexAuthError } from './services/CodexCliService';
+import { describeServiceAccountRejection } from './services/googleServiceAccount';
 import { PhoneMirrorService } from './services/PhoneMirrorService';
 import { sanitizeContextEnvelope } from './services/browser-context/sanitize';
 import { formatEnvelopeForPrompt } from './services/browser-context/formatEnvelopeForPrompt';
@@ -23,7 +24,11 @@ import { DEFAULT_BUILTIN_SKILL_IDS, type SkillUploadPayload } from './services/s
 
 import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
+import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
+import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
 import { decideSessionWritePolicy, type FinalGenerationMode, type SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
@@ -38,10 +43,48 @@ import { recordAttribution, hindsightModeFor, type AttributionInput } from './in
 import { routeContext, isBackwardLookingQuery } from './intelligence/ContextRouter';
 import { SearchOrchestrator, type SearchCandidate } from './intelligence/SearchOrchestrator';
 import { CHAT_MODE_PROMPT } from './llm/prompts';
+
+// Prompt System v2 (flag promptSystemV2): the manual-chat base prompt. When
+// the flag is ON this is the composed core+mode+answer prompt (which LLMHelper
+// recognizes as a universal override, so the legacy MODE_* template suffix is
+// not stacked on top); when OFF (or on any error) it is CHAT_MODE_PROMPT,
+// byte-for-byte the legacy behavior.
+function resolveManualChatBasePrompt(
+  llmHelper?: { getPromptTier?: () => string } | null,
+  // Accepts the full CodingPromptSignals shape so every chat call site can hand
+  // over the resolver's output verbatim — contract shape, explicit format, and
+  // supplied template — instead of degrading it to a bare boolean.
+  opts?: import('./llm/codingPromptSignals').CodingPromptSignals,
+): string {
+  try {
+    const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+    const v2 = resolveV2SystemPrompt({
+      action: 'answer',
+      tier: v2TierForPromptTier(llmHelper?.getPromptTier?.()),
+      // Semantic coding activation: a coding turn gets the coding contract in
+      // ANY mode (universal coding-answer contract, 2026-08-02).
+      codingTask: opts?.codingTask,
+      codingTaskKind: opts?.codingTaskKind,
+      codingFormat: opts?.codingFormat,
+      suppliedTemplate: opts?.suppliedTemplate,
+      // This is the TYPED chat panel — the one surface where the user reads
+      // the answer instead of speaking it. Attaches the scannable chat layout
+      // (lead sentence → labeled sections → quotable close); every live and
+      // spoken surface leaves this unset and keeps the spoken shape.
+      chatSurface: true,
+    });
+    if (v2) return v2;
+  } catch { /* legacy fallback */ }
+  return CHAT_MODE_PROMPT;
+}
 import { isAssistantIdentityQuestion, profileFactsReady } from './llm/manualProfileIntelligence';
 import { buildManualProfileEvidenceRoute } from './llm/profileAnswerBackend';
 import { DOC_GROUNDED_TOKEN_BUDGET } from './services/ModeContextRetriever';
 import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGroundedAnswerType, isAssistantRefusal, SYSTEM_REFUSAL_RE } from './llm/documentGroundedPrompt';
+// ONE list of provider data scopes (see ProviderRouter). The handler below used
+// to carry its own copy, which had already drifted and was erasing an enforced
+// scope on every write.
+import { mergeProviderDataScopes } from './llm/ProviderRouter';
 
 // Generic tokens excluded when splitting OKF entity names / card titles into
 // distinctive words for the document-grounded false-refusal gate (2026-07-02).
@@ -69,104 +112,6 @@ const GATE_GENERIC_TOKENS = new Set<string>([
   'implementation', 'component', 'components', 'structure', 'technique', 'techniques',
 ]);
 
-// Module-scope: pdfjs-dist's legacy build defaults GlobalWorkerOptions.workerSrc
-// to `new URL("./pdf.worker.mjs", import.meta.url)`. Inside esbuild's bundle
-// for the electron main process, `import.meta.url` points at the bundled
-// main.js, so the runtime tries to load
-// `dist-electron/electron/pdf.worker.mjs` — a file that does not exist and
-// is not copied by scripts/build-electron.js. PDFParse then falls through to
-// the fake-worker bootstrap, which fails with
-// "Setting up fake worker failed: Cannot find module '.../pdf.worker.mjs'"
-// and the IPC surfaces that as the misleading "PDF may be corrupt /
-// password-protected" message. Pin workerSrc to the real pdfjs-dist worker
-// before the first PDFParse construction so the bundled PDFWorker resolves
-// the worker file regardless of where the bundle lives on disk. Guarded so
-// the require.resolve + file:// conversion runs at most once per process.
-//
-// REQUIRES `pdfjs-dist` (and `pdf-parse`/`mammoth`) to be listed in the
-// esbuild externals array in scripts/build-electron.js. If those packages
-// are bundled, the canvas/DOMMatrix polyfill chain in pdfjs-dist's module
-// init throws "DOMMatrix is not defined" at line 15620
-// (`const SCALE_MATRIX = new DOMMatrix();`) because esbuild's CJS bundle
-// sets `import_meta = {}`, breaking the
-// `createRequire(import.meta.url)` call that loads @napi-rs/canvas. The
-// ModeUploadHardening.test.mjs suite asserts both halves of the fix.
-//
-// The pin itself uses dynamic import() (not require()) because pdfjs-dist
-// is an ESM-only package (.mjs). Node 20 throws
-// "require() of ES Module ... not supported" when you require() an .mjs
-// file, so the function must be async and awaited at its call site.
-let pdfjsWorkerSrcPinned = false;
-async function pinPdfjsWorkerSrcOnce(): Promise<void> {
-  if (pdfjsWorkerSrcPinned) return;
-  try {
-    // pdfjs-dist is external (not bundled) so its .mjs entry point must be
-    // loaded via dynamic import() — Node 20 forbids synchronous require() of
-    // ESM modules and throws "require() of ES Module ... not supported".
-    const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    // The pdfjs-dist legacy build sets `GlobalWorkerOptions.workerSrc` to
-    // `"./pdf.worker.mjs"` (relative string) at class-init time. In the
-    // bundled electron main, pdfjs-dist's class init runs once, then
-    // PDFParse is built from inside `new PDFWorker(...)` — which resolves
-    // the relative string against `import.meta.url` of the bundle
-    // (dist-electron/electron/main.js) and produces a file:// URL that
-    // does not point at a real file. We check both the unset case and the
-    // "resolved to a missing file" case and pin in both situations. A
-    // previously-set working URL (e.g. from a parent app) is left alone.
-    const current = pdfjsLib?.GlobalWorkerOptions?.workerSrc;
-    let currentIsBroken = !current || current === './pdf.worker.mjs';
-    if (current && !currentIsBroken) {
-      try {
-        const candidatePath = current.startsWith('file://') ? fileURLToPath(current) : current;
-        if (!fs.existsSync(candidatePath)) currentIsBroken = true;
-      } catch {
-        currentIsBroken = true;
-      }
-    }
-    if (currentIsBroken) {
-      const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
-    }
-    pdfjsWorkerSrcPinned = true;
-  } catch (pinErr) {
-    // Non-fatal — if the pin fails the original fake-worker error path is
-    // still taken (and logged); the upload handler's catch block converts
-    // it to the user-facing message.
-    console.warn('[IPC] pdfjs-dist workerSrc pin failed (PDF parse may fail):', (pinErr as Error)?.message);
-  }
-}
-
-/**
- * Strip prior ASSISTANT turns from a SessionTracker formatted-context snapshot
- * (audit 2026-06-27, document-grounded real-path fix). The snapshot format is
- * line-prefixed blocks: `[ME]: ...`, `[INTERVIEWER]: ...`,
- * `[ASSISTANT (PREVIOUS SUGGESTION)]: ...` joined by '\n' (see
- * SessionTracker.formatContextItems). An assistant block's text may itself span
- * multiple lines, so once we see the ASSISTANT label we drop every following
- * line until the next `[ME]:` / `[INTERVIEWER]:` label (or end of input).
- *
- * Keeping `[ME]:` / `[INTERVIEWER]:` turns preserves follow-up pronoun
- * resolution; dropping the assistant turns prevents a previously-emitted answer
- * from anchoring the next document-grounded answer (the observed topic collapse).
- */
-function stripPriorAssistantTurns(snapshot: string): string {
-  const lines = snapshot.split('\n');
-  const kept: string[] = [];
-  let skipping = false;
-  for (const line of lines) {
-    if (/^\[ASSISTANT \(PREVIOUS SUGGESTION\)\]:/.test(line)) {
-      skipping = true;
-      continue;
-    }
-    if (/^\[(ME|INTERVIEWER)\]:/.test(line)) {
-      skipping = false;
-      kept.push(line);
-      continue;
-    }
-    if (!skipping) kept.push(line);
-  }
-  return kept.join('\n').trim();
-}
 
 export function initializeIpcHandlers(appState: AppState): void {
   const safeHandle = (
@@ -216,18 +161,74 @@ export function initializeIpcHandlers(appState: AppState): void {
           || modelId.startsWith('qwen/')
           || modelId.startsWith('openai/gpt-oss-'); // Groq-hosted OpenAI OSS models, not OpenAI API models.
       };
+      // Which provider a model id belongs to. Mirrors the family checks below, kept
+      // as one helper so the disabled-provider test and the credential test can
+      // never disagree about what a given id is. The renderer's
+      // isProviderEnabled() in AIProvidersSettings.tsx must use the same names.
+      const providerFamily = (modelId: string): string => {
+        if (modelId === 'natively') return 'natively';
+        if (modelId.startsWith('codex-cli')) return 'codex-cli';
+        if (modelId.startsWith('litellm/')) return 'litellm';
+        if (modelId.startsWith('nvidia_nim/')) return 'nvidia_nim';
+        if (modelId.startsWith('ollama-')) return 'ollama';
+        if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return 'gemini';
+        if (isKnownGroqModel(modelId)) return 'groq';
+        // o4- included deliberately: modelFetcher.ts admits /^o[134]/, so o4-* ids reach
+        // here. Omitting it made providerFamily return 'unknown', so the disabled-provider
+        // check below never matched and switching OpenAI off did NOT hide o4 models from
+        // routing. Keep this a superset of the fetcher's admitted prefixes.
+        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return 'openai';
+        if (modelId.startsWith('claude-')) return 'claude';
+        if (/^deepseek-v/i.test(modelId)) return 'deepseek';
+        // Custom providers use arbitrary ids, so this must be an identity lookup and
+        // must come last — anything matching a built-in prefix above is that
+        // provider, not a custom one. Without it these classify as 'unknown' and
+        // switching custom providers off would hide them from the picker while
+        // routing still treated them as available.
+        if (allProviders.some((p: any) => p?.id === modelId)) return 'custom';
+        return 'unknown';
+      };
+
       const modelAvailable = (modelId: string): boolean => {
         if (!modelId) return false;
+
+        // Settings -> AI Providers filters come FIRST, so switching a provider off
+        // or de-selecting a model takes effect on the next routing decision instead
+        // of persisting until restart. Ordering matters: checking credentials first
+        // would return true before the filters ever ran.
+        const family = providerFamily(modelId);
+        const disabledProviders = cm.getDisabledProviders?.() || [];
+        if (disabledProviders.includes(family) || disabledProviders.includes(modelId)) return false;
+
+        // A populated allow-list means the model must be in it. Empty means no
+        // filter — see StoredCredentials.cloudEnabledModels. There is deliberately
+        // no "none" sentinel: hiding a provider outright is disabledProviders' job.
+        //
+        // EXCEPT for opt-in providers (LiteLLM), where empty means NOTHING is
+        // selected. A gateway exposes the upstream's entire catalogue, so "empty
+        // = all" would put hundreds of unchosen models into routing.
+        //
+        // MIRRORS isModelAllowed() in src/utils/modelUtils.ts — that one decides
+        // what the user can pick, this one decides what routing accepts. If they
+        // diverge the picker offers models the router rejects. A drift guard test
+        // pins the two together.
+        const optInFamily = family === 'litellm';
+        const enabledForFamily = cm.getCloudEnabledModels?.(family) || [];
+        if (optInFamily) {
+          if (!enabledForFamily.includes(modelId)) return false;
+        } else if (enabledForFamily.length > 0 && !enabledForFamily.includes(modelId)) return false;
+
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
+        if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
         if (allProviders.some((p: any) => p?.id === modelId)) return true;
         if (modelId.startsWith('gemini-') || modelId.startsWith('models/')) return has(cm.getGeminiApiKey());
         // Check Groq before the broad OpenAI catch-all so Groq-hosted ids such as
         // openai/gpt-oss-120b are gated by the Groq key, not the OpenAI key.
         if (isKnownGroqModel(modelId)) return has(cm.getGroqApiKey());
-        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
+        if (modelId.startsWith('gpt-') || modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o4-') || modelId.includes('openai')) return has(cm.getOpenaiApiKey());
         if (modelId.startsWith('claude-')) return has(cm.getClaudeApiKey());
         if (/^deepseek-v/i.test(modelId)) return has(cm.getDeepseekApiKey());
         // Intentional conservative fallback: unknown model ids may belong to saved
@@ -248,25 +249,45 @@ export function initializeIpcHandlers(appState: AppState): void {
           const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(2500) });
           if (resp.ok) {
             const data: any = await resp.json();
-            const firstModel = (data?.data || []).map((m: any) => m?.id).find(Boolean);
-            if (firstModel) litellmFallbackModel = `litellm/${firstModel}`;
+            const ids: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+            // The user's chosen LiteLLM default wins over "whatever the proxy listed
+            // first" — but only if the proxy still offers it. Confirming it against
+            // the live list is what keeps a default that was set against an earlier
+            // catalogue from being installed as a model that no longer resolves.
+            const preferred = cm.getPreferredModel?.('litellm');
+            const preferredBare = preferred?.startsWith('litellm/') ? preferred.slice('litellm/'.length) : preferred;
+            const chosen = (preferredBare && ids.includes(preferredBare)) ? preferredBare : ids[0];
+            if (chosen) litellmFallbackModel = `litellm/${chosen}`;
           }
         } catch { /* LiteLLM fallback discovery best-effort */ }
       }
 
-      const next = has(cm.getNativelyApiKey()) ? 'natively'
-        : has(cm.getGeminiApiKey()) ? 'gemini-3.6-flash'
-        : has(cm.getOpenaiApiKey()) ? 'gpt-5.4'
-        : has(cm.getClaudeApiKey()) ? 'claude-sonnet-4-6'
-        : has(cm.getGroqApiKey()) ? 'llama-3.3-70b-versatile'
-        : has(cm.getDeepseekApiKey()) ? 'deepseek-v4-flash'
-        : (codexConfig.enabled === true && codexSignedIn) ? 'codex-cli'
-        : litellmFallbackModel
-          || allProviders[0]?.id
-          || 'natively';
+      // Pick the replacement through modelAvailable() rather than raw key checks,
+      // so a provider the user switched off (or a model they filtered out) is never
+      // installed as the fallback.
+      const next = modelAvailable('natively') ? 'natively'
+        : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
+        : modelAvailable('gpt-5.4') ? 'gpt-5.4'
+        : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
+        : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
+        : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
+        : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
+        : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
+        : allProviders.find((p: any) => modelAvailable(p?.id))?.id
+          || null;
+      if (!next) {
+        // Every candidate was rejected. Installing any of them would re-activate a
+        // provider the user just switched off, so leave the stored default alone —
+        // routing surfaces "No AI providers configured" at execution time instead.
+        console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model (all providers disabled or unconfigured)');
+        return null;
+      }
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
-      appState.broadcast('model-changed', next);
+      // Same two listeners as every other model change. Converted alongside the
+      // rest rather than left as the one surviving broadcast — an untargeted
+      // straggler is how this class of fix keeps coming back.
+      appState.sendModelChanged(next);
       return next;
     } catch (error: any) {
       console.warn('[IPC] default model availability refresh failed:', error?.message || error);
@@ -327,9 +348,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Clears premium-only context when the pro license is lost.
   const clearActiveModeOnLicenseLoss = (): void => {
     try {
-      const { DatabaseManager } = require('./db/DatabaseManager');
-      const db = DatabaseManager.getInstance();
-      db.setActiveMode(null);
+      // Through ModesManager, not DatabaseManager, so the active-mode snapshot
+      // is invalidated with the write. Clearing the row directly left every
+      // answer surface still holding the premium mode it had cached — the
+      // context this function exists to remove.
+      const { ModesManager } = require('./services/ModesManager');
+      ModesManager.getInstance().setActiveMode(null);
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('modes-active-cleared');
       });
@@ -521,8 +545,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       const settingsWin = appState.settingsWindowHelper.getSettingsWindow();
       const overlayWin = appState.getWindowHelper().getOverlayWindow();
       const launcherWin = appState.getWindowHelper().getLauncherWindow();
+      const pillWin = appState.getWindowHelper().getPillWindow();
 
       if (
+        pillWin &&
+        !pillWin.isDestroyed() &&
+        pillWin.webContents.id === senderWebContents.id
+      ) {
+        // Overlay pill window: its renderer reports the pill's w-fit size;
+        // WindowHelper resizes the tiny window and re-centers it over the shell.
+        appState.getWindowHelper().setPillWindowSize(width, height);
+      } else if (
         settingsWin &&
         !settingsWin.isDestroyed() &&
         settingsWin.webContents.id === senderWebContents.id
@@ -549,8 +582,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
-  // Centered variant: keeps horizontal center fixed during width changes.
-  // Used by code-expansion animations to prevent the top pill from sliding sideways.
+  // X-anchored variant: the window's X origin never moves. The overlay window
+  // is a FIXED WIDTH (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and the
+  // renderer always reports that width, so in practice this is a pure
+  // height-only, top-anchored resize. Channel name is historical (it used to
+  // keep the center fixed across width changes).
   safeHandle(
     'update-content-dimensions-centered',
     async (event, { width, height }: { width: number; height: number }) => {
@@ -562,19 +598,118 @@ export function initializeIpcHandlers(appState: AppState): void {
         !overlayWin.isDestroyed() &&
         overlayWin.webContents.id === senderWebContents.id
       ) {
-        appState.getWindowHelper().setOverlayDimensionsCentered(width, height);
+        appState.getWindowHelper().setOverlayDimensionsAnchored(width, height);
       }
     },
   );
 
+  // ── Overlay aux-window coordination relays ────────────────────────────────
+  // Overlay renderer → aux windows: UI-state broadcast (expanded/shellWide/
+  // theme/opacity/hasContent). Only the overlay window may broadcast.
+  safeHandle('overlay-ui-state', async (event, state: Record<string, unknown>) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    if (overlayWin.webContents.id !== event.sender.id) return;
+    appState.getWindowHelper().setOverlayUiState(state ?? {});
+  });
+
+  // Overlay renderer → main: the panel's LIVE right edge (px from the overlay
+  // window's left edge), streamed during the width spring so the toggle aux
+  // window rides the panel's top-right corner. Only the overlay may send.
+  safeHandle('overlay-toggle-anchor', async (event, payload: { panelRight?: number }) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    if (overlayWin.webContents.id !== event.sender.id) return;
+    if (typeof payload?.panelRight !== 'number') return;
+    appState.getWindowHelper().setOverlayToggleAnchor(payload.panelRight);
+  });
+
+  // Overlay renderer → main: hover hit-test result — false while the pointer
+  // is over the fixed window's transparent side margins (collapsed state), so
+  // those margins become click-through. Only the overlay may send.
+  safeHandle('overlay-hover-interactive', async (event, interactive: boolean) => {
+    const overlayWin = appState.getWindowHelper().getOverlayWindow();
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    if (overlayWin.webContents.id !== event.sender.id) return;
+    appState.getWindowHelper().setOverlayHoverInteractive(!!interactive);
+  });
+
+
+  // Any Natively window → main: dismiss the overlay dropdowns (settings /
+  // model selector). Fired by the click-catcher window (a click landed
+  // OUTSIDE every Natively window), the aux pill/toggle windows, and the
+  // overlay renderer's own mousedown handler (with per-kind guards for the
+  // toggle buttons). Sender must be a known Natively window.
+  safeHandle(
+    'overlay-popovers:dismiss',
+    async (event, opts?: { settings?: boolean; model?: boolean }) => {
+      const helper = appState.getWindowHelper();
+      const knownSenders = [
+        helper.getOverlayWindow(),
+        helper.getPillWindow(),
+        helper.getToggleWindow(),
+        helper.getPopoverCatcherWindow(),
+      ];
+      const fromKnown = knownSenders.some(
+        (w) => w && !w.isDestroyed() && w.webContents.id === event.sender.id,
+      );
+      if (!fromKnown) return;
+      helper.dismissOverlayPopovers(opts);
+    },
+  );
+
+  // Aux windows → overlay renderer: user actions (toggle-width / end-meeting /
+  // toggle-expand). Only the pill/toggle windows may send.
+  safeHandle('overlay-ui-action', async (event, action: { type?: string }) => {
+    const helper = appState.getWindowHelper();
+    const pillWin = helper.getPillWindow();
+    const toggleWin = helper.getToggleWindow();
+    const fromAux =
+      (pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id) ||
+      (toggleWin && !toggleWin.isDestroyed() && toggleWin.webContents.id === event.sender.id);
+    if (!fromAux || !action?.type) return;
+    helper.forwardOverlayUiAction(action);
+  });
+
+  // Pill window → main: drag the welded overlay group by a pointer delta.
+  // Only the PILL may send (the toggle is not a drag handle). Sender-id
+  // validated like every other overlay channel. No-ops unless the group is
+  // welded, so the mirroring fallback is unaffected.
+  safeHandle(
+    'overlay-group-drag',
+    async (event, delta: { dx?: number; dy?: number; phase?: 'start' | 'move' | 'end' }) => {
+      const helper = appState.getWindowHelper();
+      const pillWin = helper.getPillWindow();
+      const fromPill =
+        !!pillWin && !pillWin.isDestroyed() && pillWin.webContents.id === event.sender.id;
+      if (!fromPill) return;
+      if (delta?.phase === 'start') {
+        helper.beginOverlayGroupDrag();
+        return;
+      }
+      if (delta?.phase === 'end') {
+        helper.endOverlayGroupDrag();
+        return;
+      }
+      // dx/dy are the pointer's TOTAL offset since drag start, not a per-frame
+      // delta — see moveOverlayGroupTo for why that distinction matters.
+      helper.moveOverlayGroupTo(Number(delta?.dx) || 0, Number(delta?.dy) || 0);
+    },
+  );
+
+  // Pill renderer asks whether it must run its own drag (macOS: welded child;
+  // Windows: modal-move-loop bypass) or leave dragging to the OS drag region.
+  safeHandle('overlay-group-drag-managed', async () =>
+    appState.getWindowHelper().isOverlayGroupDragManaged(),
+  );
+
   // (Removed) 'animate-overlay-width' — the overlay window is a FIXED WIDTH
-  // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 780) and is NEVER width-resized. The
-  // expand/contract animation is CSS-only in the renderer (the panel tweens
-  // 600↔780 centered inside the fixed window). 'update-content-dimensions-centered'
-  // now only carries HEIGHT changes (the renderer always sends the fixed width),
-  // which is a top-anchored resize that does not move X — so there is no
-  // sideways jump and no per-frame transparent-window re-raster. See
-  // NativelyInterface.startTransition for the renderer side.
+  // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and is NEVER width-resized.
+  // The expand/contract animation is CSS-only in the renderer (the panel
+  // tweens 600↔732 centered inside the fixed window), so every
+  // 'update-content-dimensions-centered' report is height-only — a
+  // top-anchored resize that does not move X. No sideways jump, no per-frame
+  // transparent-window re-raster. See NativelyInterface.startTransition.
 
   safeHandle('set-window-mode', async (event, mode: 'launcher' | 'overlay', inactive?: boolean) => {
     appState.getWindowHelper().setWindowMode(mode, inactive);
@@ -776,6 +911,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             speaker: 'user',
             timestamp: Date.now(),
             final: true,
+            origin: 'manual_chat',
           },
           true,
         );
@@ -871,6 +1007,656 @@ export function initializeIpcHandlers(appState: AppState): void {
         myController = new AbortController();
         _chatStreamsBySender.set(senderId, { streamId: myStreamId, controller: myController });
 
+        // Skill invocation parsed EARLY (PR #429 Bug 003). It used to live ~35k
+        // characters below, after the Context Intelligence V3 short-circuit had
+        // already returned — so under V3 (default ON since 2026-07-30) the
+        // `/skill-name` prefix reached the model as literal text and the skill
+        // instructions were never injected anywhere.
+        //
+        // Only the PARSE moved. `message` itself is still mutated at the original
+        // boundary below, so every existing reader in between is untouched.
+        let skillStrippedMessage: string | null = null;
+        // Skill invocation: /skill-name or $skill-name prefix (issue #303).
+        // Strip the prefix from message before planAnswer so routing sees the
+        // bare user query, then inject the skill's instructions into context
+        // right before streamChat so the model follows them for this turn only.
+        let skillPromptBlock = '';
+        const skillPrefixMatch = typeof message === 'string'
+          ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
+          : null;
+        // Defensive: strip any embedded <answer_contract>...</answer_contract>
+        // block from the user-visible message. See stripEmbeddedAnswerContract
+        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
+        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
+        // (skill dispatch, identity probe, source-switch resolution) sees the
+        // user's literal input — error logs and unmatched-skill fallbacks
+        // report the original message, not a stripped variant.
+        if (skillPrefixMatch) {
+          try {
+            const candidateId = skillPrefixMatch[1];
+            const skill = SkillsManager.getInstance().getSkill(candidateId);
+            if (skill) {
+              // Disabled skills still resolve by name but must NOT inject their
+              // instructions into the prompt — the user turned them off in
+              // Settings → Skills. Surface a clear error rather than silently
+              // proceeding (which would invoke the skill anyway).
+              if (skill.enabled === false) {
+                event.sender.send(
+                  'gemini-stream-error',
+                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
+                  { streamId: myStreamId },
+                );
+                return null;  // sibling error paths return null; handler is typed `| null`
+              }
+              skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
+              const strippedQuery = skillPrefixMatch[2].trim();
+              // Parsed here, APPLIED later (see the deferred assignment at the
+              // original site). Mutating `message` now would change what every
+              // reader between here and there sees — the identity probe, the
+              // source-switch resolution and the error logs all expect the
+              // user's literal input.
+              skillStrippedMessage = strippedQuery || `Please help me with the ${skill.name} skill.`;
+              console.log(`[IPC] Skill activated: ${skill.id}`);
+            } else {
+              const allSkills = SkillsManager.getInstance().listSkills();
+              const available = allSkills.length
+                ? allSkills.map(s => `/${s.id}`).join(', ')
+                : 'none registered';
+              event.sender.send(
+                'gemini-stream-error',
+                `Skill "/${candidateId}" not found. Available: ${available}`,
+                { streamId: myStreamId },
+              );
+              return null;  // sibling error paths return null; handler is typed `| null`
+            }
+          } catch (skillErr: any) {
+            console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
+            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`, { streamId: myStreamId });
+            return null;  // sibling error paths return null; handler is typed `| null`
+          }
+        }
+
+        // ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface ──────────────
+        //
+        // Deliberately a SHORT-CIRCUIT, not an interleave. The legacy assembly
+        // below is ~3,700 lines carrying five independent source decisions; the
+        // rebuild's whole premise is that those are the defect. Threading V3
+        // through them would inherit exactly what it replaces.
+        //
+        // ON by default since 2026-07-30 (DEFAULT_ENABLED = true, identical in
+        // dev and prod — flag.ts is the single source of truth), so rollback is
+        // a flag flip. When on, this path owns the turn end to end:
+        // one frozen decision, scope/version-filtered evidence, one composed
+        // prompt, and stream events that ALWAYS carry streamId (F4: every legacy
+        // early-return emits untagged events that no renderer can supersede).
+        try {
+          const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+          // CALLER-OWNED PROMPT CONTRACT: `skipSystemPrompt + context` means the
+          // caller composed the full prompt itself (MeetingChatOverlay's
+          // past-meeting recall, the voice-question path). The V3 short-circuit
+          // consumes only `message`, so entering it here DISCARDED that composed
+          // context and answered a past-meeting question from the ACTIVE mode's
+          // evidence plus the CURRENT meeting — a wrong-scope answer that
+          // looked grounded. Those turns stay on the legacy transport until a
+          // dedicated V3 surface owns them.
+          const callerOwnsPrompt = options?.skipSystemPrompt === true && Boolean(context);
+          if (!callerOwnsPrompt && isContextIntelligenceV3Enabled()) {
+            const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
+            const { resolveModePolicy, isModeId, resolveModeIdOrWarn } = require('./context-intelligence/policies/mode-policy-registry');
+            const { ModesManager } = require('./services/ModesManager');
+
+            // The registry and the turn MUST agree on this, or scope containment
+            // rejects every source. One constant rather than two literals.
+            const V3_USER_ID = 'local';
+
+            const mm = ModesManager.getInstance();
+            const modeInfo = mm.getActiveModeInfo?.() ?? null;
+            const rawMode = (modeInfo as any)?.templateType ?? 'general';
+            // Unknown ids fail closed in the registry; fall back to the seeded
+            // mode rather than throwing inside a live answer path — but SAY SO.
+            // A silent fallback lands on `general`, the one mode with no profile
+            // sources, so an unrepaired mode row silently costs the user their
+            // résumé (reported 2026-08-09).
+            const modeId = resolveModeIdOrWarn(
+              modeInfo ? rawMode : null, 'ipc/manual-chat', { quietWhenAbsent: true });
+            const policy = resolveModePolicy(modeId);
+
+            const files = modeInfo?.id ? (mm.getReferenceFiles?.(modeInfo.id) ?? []) : [];
+            // Fail-closed retrieval port over this mode's files. The registry
+            // construction lives in ONE factory (mode-retrieval-port.ts) shared
+            // with the engine surfaces — a second inline copy of a
+            // security-relevant construction is how the tokenizer copies
+            // drifted, and this one decides what evidence a turn may see.
+            const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
+            const { createMeetingRetrievalPort, combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+            // Custom/general modes gain the source types their OWN attachments
+            // evidence (deep-test D10): a candidate résumé + JD attached to an
+            // "Untitled" custom mode planned [] for every job question because
+            // the general policy's allowlist has no CANDIDATE_FILE/JOB_DESCRIPTION.
+            // Empty for every built-in non-general mode.
+            const extraSourceTypes = attachmentSourceTypeExtensions(modeId, files);
+            const effectiveAllowedSourceTypes = [...policy.allowedSourceTypes, ...extraSourceTypes];
+
+            // Context-debug: identity list of the sources this turn could read
+            // (id/role/name/status — never content). Built only when the debug
+            // level is active; Off costs one function call.
+            let v3DebugSources: Array<Record<string, unknown>> | undefined;
+            try {
+              const { getContextDebugLevel } = require('./context-intelligence/debug/debug-config');
+              if (getContextDebugLevel() !== 'off') {
+                const { sourceTypeForFile, detectDocumentStatus } = require('./context-intelligence/retrieval/mode-retrieval-port');
+                v3DebugSources = (files as Array<Record<string, unknown>>).map((f) => ({
+                  id: String(f.id ?? ''),
+                  role: sourceTypeForFile(f.fileName as string | undefined, f.content as string | undefined, effectiveAllowedSourceTypes),
+                  name: f.fileName,
+                  ...(detectDocumentStatus(f.content as string | undefined) ? { status: detectDocumentStatus(f.content as string | undefined) } : {}),
+                  ...(typeof f.pageCount === 'number' ? { pageCount: f.pageCount } : {}),
+                }));
+              }
+            } catch { /* debug identity only */ }
+            const modePort = createModeRetrievalPort({
+              modesManager: mm,
+              modeInfo,
+              files,
+              // Without this every file is typed REFERENCE_FILE, and a résumé in
+              // a mode that authorizes [RESUME, PROFILE_FACT] is retrieved and
+              // then discarded by claim authority — the user sees "not covered"
+              // for facts in their own résumé. Must match what decide() plans,
+              // so the extension list is shared with the bridge below.
+              allowedSourceTypes: effectiveAllowedSourceTypes,
+              tokenBudget: policy.contextBudget.evidenceTokens,
+              userId: V3_USER_ID,
+            });
+
+            // Meeting evidence, when this turn happens inside a meeting and the
+            // mode authorizes transcripts. Without it a MEETING_STATEMENT
+            // question composed an honest but useless no-evidence disclosure
+            // even when the answer had been said out loud a minute earlier.
+            //
+            // Cross-meeting isolation is NOT re-implemented here: the port
+            // declares each chunk's scope as its own meeting, so the adapter's
+            // existing scope containment rejects a foreign meeting OUT_OF_SCOPE
+            // — one filter, already measured, rather than a second copy of the
+            // rule (06 §4).
+            const v3MeetingId = (appState.getIntelligenceManager?.() as any)
+              ?.getSessionTracker?.()?.getMeetingMetadata?.()?.id ?? null;
+            const ragForV3 = appState.getRAGManager?.();
+            const wantsMeeting = policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
+              && Boolean(v3MeetingId) && Boolean(ragForV3?.getRetriever);
+
+            // Profile Intelligence hydration (2026-07-31 source-routing fix).
+            // The user's active résumé/target JD, uploaded ONCE in Profile
+            // settings, are the PRIMARY pool for profile-aware modes — mode
+            // attachments are optional supplements, and requiring duplicates
+            // was the live defect. Gated on the mode's EXPLICIT
+            // policy.profileSources opt-in (empty for recruiting/sales/etc so
+            // the user's own documents can never leak into those turns), and
+            // additive: any failure here degrades to mode attachments only.
+            let v3ProfilePort: unknown = null;
+            let v3ProfileCounts = { profileResume: 0, profileJd: 0, profileFact: 0 };
+            let v3ProfileResolved: Array<{ role: string; id: string }> = [];
+            try {
+              if (policy.profileSources?.length) {
+                const { collectV3ProfileSources } = require('./services/knowledge/v3ProfileSources');
+                const collected = collectV3ProfileSources(llmHelper.getKnowledgeOrchestrator?.() ?? null);
+                if (collected.docs.length) {
+                  const { createProfileRetrievalPort } = require('./context-intelligence/retrieval/profile-retrieval-port');
+                  v3ProfilePort = createProfileRetrievalPort({
+                    docs: collected.docs,
+                    allowedSourceTypes: policy.allowedSourceTypes,
+                    profileSources: policy.profileSources,
+                    userId: V3_USER_ID,
+                  });
+                  if (v3ProfilePort) {
+                    v3ProfileCounts = collected.counts;
+                    v3ProfileResolved = collected.resolved;
+                  }
+                }
+              }
+            } catch (profErr) {
+              // Additive, but NEVER silent: a broken collector is indistinguishable
+              // from "no profile" and reintroduces the upload-again defect (§22.1).
+              console.warn('[V3] profile hydration failed — continuing with mode attachments only:', (profErr as Error)?.message ?? profErr);
+            }
+
+            const v3Ports = [
+              modePort,
+              ...(v3ProfilePort ? [v3ProfilePort] : []),
+              ...(wantsMeeting ? [createMeetingRetrievalPort({
+                retriever: ragForV3!.getRetriever(),
+                currentMeetingId: v3MeetingId,
+                userId: V3_USER_ID,
+                tokenBudget: policy.contextBudget.evidenceTokens,
+              })] : []),
+            ];
+            const port = v3Ports.length > 1 ? combineRetrievalPorts(v3Ports as never[]) : modePort;
+
+            // ONE construction, shared with every engine surface: the bridge
+            // resolves the per-mode Answer policy, reads conversation state for
+            // prior-turn continuity, orchestrates, composes, emits the [V3]
+            // source line, records the trace, and counts any fallback. This
+            // block previously carried its own copy of all of that — two copies
+            // of a security-relevant construction is how the tokenizer copies
+            // drifted (§2 of the architecture review).
+            // The skill prefix is stripped for V3 too — otherwise the model reads
+            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
+            const v3Question = String((skillStrippedMessage ?? message) || '');
+            const composed = await buildV3Prompt({
+              surface: 'manual-chat',
+              pathTag: 'ipc',
+              question: v3Question,
+              // PR #429 Bug 002: omitted entirely, so it defaulted to false even
+              // when the user attached screenshots — the V3 classifier then never
+              // added SCREEN_SPECIFIC / SCREEN_FACT and the image was not treated
+              // as authoritative evidence. Manual chat has no periodic-capture OCR
+              // object at all, so imagePaths is the only screen signal here.
+              hasScreenContext: (imagePaths?.length ?? 0) > 0,
+              // Routed coding verdict, same as the WTA path (see
+              // BridgeInput.codingTask). Without it the bridge falls back to its
+              // keyword regex, which misses ordinary phrasings like "Write a BFS
+              // shortest-path function" and silently drops the six-section
+              // coding contract — the same defect fixed for the live path in
+              // 06d88fba, left open here. planAnswer is pure and the real plan
+              // is not built until much later in this handler, so this computes
+              // the verdict directly from the message + active mode.
+              codingTask: (() => {
+                try {
+                  return isCodingAnswerType(planAnswer({
+                    question: v3Question,
+                    source: 'manual_input',
+                    speakerPerspective: 'user',
+                    activeMode: modeInfo ?? undefined,
+                  }).answerType);
+                } catch { return undefined; } // fall back to the bridge's own check
+              })(),
+              modeTemplateType: rawMode,
+              modeUniqueId: modeInfo?.id ?? null,
+              modeName: (modeInfo as any)?.name ?? null,
+              attachedSourceCount: files.length,
+              attachedFileNames: (files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
+              profileSourceCount: v3ProfileCounts.profileResume + v3ProfileCounts.profileJd + v3ProfileCounts.profileFact,
+              resolvedProfileSources: v3ProfileResolved,
+              extraAllowedSourceTypes: extraSourceTypes,
+              debugSources: v3DebugSources as never,
+              deferDebugCompletion: true,
+              requestId: `v3-${myStreamId}`,
+              requestSequence: myStreamId,
+              // sessionId rides the scope: the bridge keys the AnswerRequest's
+              // sessionId (and therefore conversation state) off scope.sessionId.
+              // Containment only NARROWS: a u:local source is still visible from
+              // a u:local|s:<sender> turn.
+              scope: {
+                userId: V3_USER_ID,
+                sessionId: String(senderId),
+                ...(v3MeetingId ? { meetingId: v3MeetingId } : {}),
+              },
+              retrieval: port,
+              // Natively persona + typed-chat layout for the V3-owned surface
+              // (2026-08-02). V3's own composition is governance-only (rules,
+              // authority, grounding) — it never carried an identity or voice
+              // contract, so manual-chat answers read like a default AI
+              // assistant. The v2 base supplies the copilot identity, voice
+              // laws, glance layer, chat layout, and (via codingTask from the
+              // V3 decision) the coding contract. Deliberately NOT
+              // resolveManualChatBasePrompt: its legacy CHAT_MODE_PROMPT
+              // fallback belongs to the legacy path — under the v2 kill-switch
+              // this returns null and V3 composes exactly as it does today.
+              // Param annotated inline because `buildV3Prompt` arrives via a
+              // lazy `require` (any), so the literal gets no contextual type.
+              // Mirrors BridgeInput.personaBase in engine-bridge.ts.
+              personaBase: ({ codingTask }: { codingTask: boolean }) => {
+                const { resolveV2SystemPrompt, v2TierForPromptTier } = require('./llm/promptSystemV2');
+                // BARE CODE REQUEST on the V3 path. The legacy handler's
+                // prior-problem recall lives ~500 lines below and this path
+                // `return null`s long before reaching it, so on the DEFAULT
+                // surface a bare "code?" arrived with no problem attached.
+                // Measured live twice: once it answered a different problem
+                // (binary search) with full confidence, once it replied "please
+                // provide the problem description". Same cause, both times.
+                //
+                // The answer the user is looking at is the subject. It rides the
+                // SYSTEM channel, like the legacy path's own contract block, so
+                // no evidence-scope filter can drop it.
+                // Extended 2026-08-19 from bare-code-only to EVERY coding
+                // continuation ("what's the complexity", "make it iterative",
+                // "dry run it"): after an overlay answer those had no prior
+                // problem either — only the bare-code case was bridged. A
+                // continuation inherits ONLY when the previous answer actually
+                // looks like a coding answer (looksLikeCodingAnswer), so
+                // "what's the complexity" typed after a sales answer cannot
+                // drag that answer in as a "prior coding problem".
+                let priorProblem = '';
+                let bareCode = false;
+                if (isBareCodeRequest(v3Question) || isCodingContinuation(v3Question)) {
+                  try {
+                    // IntelligenceManager exposes getLastAssistantMessage()
+                    // directly (it owns a PRIVATE SessionTracker and has no
+                    // getSessionTracker accessor) — the old chained form was a
+                    // phantom method that `as any` + optional chaining made
+                    // silently return undefined, so this whole guard was dead
+                    // code and every continuation was answered context-free.
+                    // No surface argument: "anywhere" is the point, so an
+                    // overlay answer can ground a chat follow-up.
+                    const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
+                    bareCode = isBareCodeRequest(v3Question);
+                    if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
+                        && (bareCode || looksLikeCodingAnswer(lastAnywhere))) {
+                      priorProblem = '\n\n' + buildPriorCodingBlockForV3({
+                        userMessage: '(the question answered just before this one)',
+                        assistantAnswer: lastAnywhere,
+                      });
+                    }
+                  } catch { /* guard only; never blocks the answer */ }
+                }
+                // Contract shape (DSA walkthrough vs implementation), explicit
+                // user format request, and a code template already present in
+                // the message — resolved once, shared with every other surface.
+                const codingSignals = (() => {
+                  try {
+                    const resolved = resolveCodingPromptSignals({
+                      answerType: planAnswer({
+                        question: v3Question,
+                        source: 'manual_input',
+                        speakerPerspective: 'user',
+                        activeMode: modeInfo ?? undefined,
+                      }).answerType,
+                      question: v3Question,
+                      // A recalled prior problem IS a prior coding turn: lets
+                      // the continuation-only formats (complexity_only /
+                      // dry_run_only) fire so "what's the complexity" gets the
+                      // analysis instead of a full re-solve.
+                      priorCodingTurnExists: !!priorProblem,
+                    });
+                    // ATTACHED-SCREENSHOT promotion, mirroring the WTA surface.
+                    // A chat message with an attached screenshot and a question
+                    // that points at it ("solve this", "what about this?", or
+                    // nothing) is about the IMAGE, not about whatever the text
+                    // router inferred — the pinned ScreenCodeAskCodingTask suite
+                    // documents that V3's own classifier never claims
+                    // CODING_TASK for screen asks, so without this the chat
+                    // surface was the last one still answering a screenshotted
+                    // coding problem in prose. The contract's applicability
+                    // boundary skips non-coding screenshots.
+                    if (!resolved.codingTask
+                        && (imagePaths?.length ?? 0) > 0
+                        && (!v3Question.trim() || require('./llm/codingPromptSignals').isDeicticAsk(v3Question))) {
+                      return { codingTask: true, codingTaskKind: 'dsa' } as import('./llm/codingPromptSignals').CodingPromptSignals;
+                    }
+                    return resolved;
+                  } catch { return { codingTask: false } as import('./llm/codingPromptSignals').CodingPromptSignals; }
+                })();
+                const base = resolveV2SystemPrompt({
+                  action: 'answer',
+                  tier: v2TierForPromptTier(llmHelper?.getPromptTier?.()),
+                  activeMode: modeInfo,
+                  codingTask: codingTask || codingSignals.codingTask || !!priorProblem,
+                  codingTaskKind: codingSignals.codingTaskKind,
+                  // A BARE code request forces code_only; a richer continuation
+                  // keeps whatever format the resolver derived (complexity_only,
+                  // dry_run_only, or none for "make it iterative").
+                  codingFormat: (priorProblem && bareCode) ? 'code_only' : codingSignals.codingFormat,
+                  suppliedTemplate: codingSignals.suppliedTemplate,
+                  chatSurface: true,
+                });
+                return base ? base + priorProblem : base;
+              },
+            });
+            // Null with the flag on = the bridge caught an error and ALREADY
+            // counted/logged the fallback. Fall through to legacy without
+            // re-throwing (the outer catch would double-count it).
+            if (composed) {
+
+            // Context-debug completion hook. The collector was registered by the
+            // bridge under this requestId; every exit path below finalizes it
+            // exactly once (complete() is idempotent). Failure to log must never
+            // fail the request — every call is inside the collector's own guards.
+            const v3DebugCollector = (() => {
+              try {
+                if (!composed.debugRequestId) return null;
+                const { getTurnCollector } = require('./context-intelligence/debug/turn-collector');
+                return getTurnCollector(composed.debugRequestId) ?? null;
+              } catch { return null; }
+            })();
+            const finishDebug = (finalText: string, committed: boolean, reason: string | null) => {
+              try {
+                v3DebugCollector?.recordAnswer(finalText, committed, reason);
+                v3DebugCollector?.complete();
+              } catch { /* logging must never break the request */ }
+            };
+            try { v3DebugCollector?.recordGenerationStart({ provider: 'llmHelper' }); } catch { /* noop */ }
+
+            let finalText = '';
+            let v3SawFirstToken = false;
+            // streamChatWithOutcome, not streamChat: a turn that stops early (a
+            // provider failing after its first token, or the runaway output cap)
+            // ends by returning, so the loop below cannot tell a truncated answer
+            // from a complete one. Storing a truncated answer as history makes it
+            // the antecedent for the NEXT turn's referent resolution.
+            // Bug 003: V3 owns this turn end to end, so if the skill block is not
+            // appended here it is injected nowhere at all.
+            const v3SystemPrompt = skillPromptBlock ? `${composed.system}\n\n## ACTIVE SKILL\n${skillPromptBlock}` : composed.system;
+            const v3Stream = llmHelper.streamChatWithOutcome(
+              composed.user,
+              imagePaths,
+              undefined,
+              v3SystemPrompt,
+              true,   // ignoreKnowledgeMode — V3 owns evidence; legacy injection must not re-enter
+              true,   // skipModeInjection — same reason
+              // Declared outbound data scopes. Was `[]`, which told the
+              // transport this payload carried nothing — so LLMHelper fell back
+              // to sniffing for LEGACY tag names that a V3 prompt never
+              // contains, inferred no scope, and enforced none of the six
+              // privacy toggles on the default (V3) answer path. The bridge
+              // already filtered the evidence against the same policy, so these
+              // scopes are by construction permitted; declaring them keeps the
+              // transport's routing/denial decision honest instead of guessed.
+              composed.packedDataScopes ?? [],
+              myController.signal,
+              undefined, // thinkingBudget — keep the interactive default
+              // v3Owned: LLMHelper must TRANSPORT this prompt, not rewrite it.
+              // Without it, a doc-grounded custom mode ran a second, ungoverned
+              // retrieval and injected it around V3's filtered evidence, and
+              // shapeDocumentGroundedSystemPrompt mutated V3's system prompt.
+              { v3Owned: true },
+            );
+
+            try {
+              for await (const tok of v3Stream.stream) {
+                if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+                  finishDebug(finalText, false, 'superseded_by_newer_stream');
+                  return null;
+                }
+                if (!v3SawFirstToken) {
+                  v3SawFirstToken = true;
+                  try { v3DebugCollector?.recordFirstToken(); } catch { /* noop */ }
+                }
+                finalText += tok;
+                event.sender.send('gemini-stream-token', tok, { streamId: myStreamId });
+              }
+            } catch (streamErr) {
+              // Finalize the debug record with the partial answer, then let the
+              // existing V3 error handling run unchanged (falls back to legacy).
+              try {
+                v3DebugCollector?.recordError({
+                  stage: 'generation',
+                  message: streamErr instanceof Error ? streamErr.message : String(streamErr),
+                  recoverable: true,
+                });
+              } catch { /* noop */ }
+              finishDebug(finalText, false, 'generation_error');
+              throw streamErr;
+            }
+            if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
+              finishDebug(finalText, false, 'superseded_by_newer_stream');
+              return null;
+            }
+            // Defect G (2026-08-01): mode-identity check BEFORE the user-visible
+            // done emit — identity is enforced at commit, not left to abort
+            // timing. The registry invalidation in modes:set-active already
+            // makes the streamId guard above fail deterministically after an
+            // IPC-driven mode switch; this closes the remaining paths where the
+            // mode flips WITHOUT that handler running (e.g. upload-driven mode
+            // auto-activation) and the registry entry survives. Compare live vs
+            // request-time mode by .id (templateType collapses for custom
+            // modes). NOT checked per token: ModesManager.getActiveMode() is a
+            // DB read, too expensive for the token loop — tokens are covered by
+            // the deterministic registry invalidation. Fail open on a getter
+            // throw (never suppress a real answer on infrastructure failure);
+            // the record guard below stays as defense in depth for writes.
+            {
+              const v3RequestModeId = modeInfo?.id ?? null;
+              let liveModeIdAtEmit: string | null = v3RequestModeId;
+              try { liveModeIdAtEmit = mm.getActiveMode()?.id ?? null; } catch { /* fail open — emit-guard only */ }
+              if (liveModeIdAtEmit !== v3RequestModeId) {
+                console.warn('[IPC] stale stream suppressed: mode changed mid-generation', {
+                  streamId: myStreamId,
+                  requestMode: v3RequestModeId,
+                  liveMode: liveModeIdAtEmit,
+                });
+                finishDebug(finalText, false, 'mode_changed_mid_generation');
+                return null;
+              }
+            }
+            // A turn that stopped early is INCOMPLETE. Tell the renderer (the
+            // payload is already an object, so this is additive and older
+            // renderers simply ignore it) and record it in the debug trace as a
+            // non-success, which is what it is.
+            const v3Truncated = v3Stream.outcome.truncated === true;
+            if (v3Truncated) {
+              console.warn('[IPC] manual chat answer is INCOMPLETE — not storing it as conversation history', {
+                streamId: myStreamId,
+                reason: v3Stream.outcome.reason,
+                chars: finalText.length,
+              });
+            }
+            event.sender.send('gemini-stream-done', {
+              finalText,
+              streamId: myStreamId,
+              incomplete: v3Truncated,
+              incompleteReason: v3Truncated ? v3Stream.outcome.reason : undefined,
+            });
+            finishDebug(finalText, !v3Truncated, v3Truncated ? 'stream_truncated' : null);
+
+            // ── Record the turn (V3 previously recorded NOTHING) ────────────
+            // The short-circuit skipped every store the legacy path writes, so
+            // after a V3-answered turn the NEXT turn's follow-up had no
+            // antecedent on ANY path — V3's own state, conversation memory,
+            // the session transcript, and the phone mirror were all blank.
+            //
+            // BUG-MODE-BLEEDING guard, same as the legacy path's record call: a
+            // mode switch mid-stream aborts the provider stream, but execution
+            // still reaches here with the OLD mode's partial answer — recording
+            // it would write the old mode's turn into memory modes:set-active
+            // just cleared. Live-vs-captured by .id (templateType collapses for
+            // custom modes).
+            const manualActiveMode = modeInfo;
+            let liveModeIdAtRecord: string | null = null;
+            try { liveModeIdAtRecord = mm.getActiveMode()?.id ?? null; } catch { /* record-guard only */ }
+            if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+              // A truncated ANSWER must NOT enter conversation state or memory.
+              // It would become the antecedent for the next turn's referent
+              // resolution and be replayed as if it were a complete answer —
+              // the same class of defect as the "(referring to: Makefile)"
+              // contamination. The user still SEES the partial text; it just
+              // does not become history.
+              //
+              // Code-review 2026-08-13: the guard originally wrapped ALL FOUR
+              // blocks, so a truncated turn also dropped the sinks that record
+              // the USER's side — the question they actually asked. That is
+              // never in doubt just because the answer stopped early, and
+              // suppressing it lost the meeting transcript row, the usage row
+              // (a regression of the very bug the logUsage comment below
+              // documents), and the phone-mirror question. Split by SIDE:
+              // answer-side sinks honor the truncation guard, user-side sinks
+              // always run.
+              if (v3Truncated) {
+                console.warn('[IPC] truncated answer — recording the user turn but skipping answer-side history/memory sinks', { streamId: myStreamId });
+              }
+              // ── ANSWER-SIDE SINKS (skipped when truncated) ──────────────
+              if (!v3Truncated) {
+                try {
+                  const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                  recordAnswerSummary(String(senderId), finalText);
+                } catch { /* continuity only */ }
+                try {
+                  // The user/answer PAIR is the antecedent unit for follow-up
+                  // referent resolution, so a truncated answer suppresses the
+                  // whole pair — the user turn is still preserved in the
+                  // session transcript below.
+                  _manualConversationMemory.record({
+                    sessionId: String(senderId),
+                    userMessage: String(message || ''),
+                    assistantAnswer: finalText,
+                    mode: (modeInfo as any)?.templateType,
+                    timestamp: Date.now(),
+                  });
+                } catch { /* memory only */ }
+              } // end answer-side sinks
+              try {
+                const im = appState.getIntelligenceManager();
+                im?.addTranscript?.({ text: String(message || ''), speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' }, true);
+                if (!v3Truncated) im?.addAssistantMessage?.(finalText, undefined, 'manual_chat');
+                // Usage too: ai_interactions ("usage" in Meeting Notes) is
+                // populated solely from SessionTracker's usage log at
+                // saveMeeting time. Every legacy exit logs it; without this,
+                // a V3-answered chat during a meeting left the meeting's
+                // usage panel empty (confirmed in the live DB: V3 meetings
+                // had transcript rows but zero usage rows). A truncated turn
+                // still consumed the call, so it is still usage.
+                //
+                // But the usage log is NOT write-only (code-review 2026-08-14):
+                // SessionTracker.getRecentManualTurn reads fullUsage and
+                // IntelligenceEngine.buildRecentManualContext injects the pair
+                // into the NEXT prompt as <previous_assistant_answer_excerpt>.
+                // Plain logUsage would therefore feed the truncated answer back
+                // as conversation context — defeating the answer-side guard
+                // above through a second door. `synthetic: true` is the existing
+                // opt-out: getRecentManualTurn skips those entries (line ~688)
+                // while every persistence path still returns them, so the
+                // Meeting Notes row survives and the replay does not.
+                if (v3Truncated) {
+                  im?.pushUsage?.({
+                    type: 'chat',
+                    timestamp: Date.now(),
+                    question: String(message || ''),
+                    answer: finalText,
+                    source: 'manual_chat',
+                    synthetic: true,
+                  });
+                } else {
+                  im?.logUsage?.('chat', String(message || ''), finalText);
+                }
+              } catch { /* session transcript only */ }
+              try {
+                PhoneMirrorService.getInstance().publishUserMessage(String(myStreamId), String(message || ''));
+                if (!v3Truncated) PhoneMirrorService.getInstance().publishAssistantMessage(String(myStreamId), finalText, 'Chat');
+              } catch { /* mirror only */ }
+            }
+
+            return null;
+            }
+          }
+        } catch (v3Err: any) {
+          // A defect in the new path must not take the surface down: fall through
+          // to legacy rather than failing the answer — but the reversion is
+          // COUNTED and logged, because a silent fallback reverts five source-
+          // decision behaviours with no operator signal (§22.1).
+          console.error('[ContextIntelligenceV3] manual-chat path failed, falling back to legacy:', v3Err?.message || v3Err);
+          try {
+            require('./context-intelligence/observability/rollout-metrics').recordV3Fallback('manual-chat-ipc', v3Err);
+          } catch { /* observability only */ }
+        }
+        // Renderer-submit mint point for manual chat (Phase 6 Slice 1, context-rebuild):
+        // this turn's stable identity, threaded into SourceAuthorityKernel.build below
+        // (via buildTurnContractIfEnabled's turnId param) instead of letting the kernel
+        // mint its own randomUUID(). Mirrors IntelligenceEngine.ts's _wtaTurnId mint point
+        // for the WTA surface, which was never reverted and has been live since Phase 3 of
+        // context-rebuild — this restores parity for the manual-chat surface, lost in commit
+        // 408827c6 (a collateral revert of unfinished Phase 6 work bundled into an unrelated
+        // fix; its dependency file electron/llm/turnIdentity.ts is now committed, so this
+        // specific piece can be safely reconstructed on its own).
+        const myTurnId = mintTurnId();
+
         // Reap this sender's conversation memory when the renderer goes away, so the
         // per-process store cannot grow unbounded across window reloads / churn and
         // doesn't retain raw Q/A content after a window closes (security review
@@ -883,6 +1669,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender?.once?.('destroyed', () => {
               _convoCleanupRegistered.delete(senderId);
               try { _manualConversationMemory.clearSession(String(senderId)); } catch { /* noop */ }
+              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(String(senderId)); } catch { /* noop */ }
             });
           }
         } catch { /* noop */ }
@@ -897,7 +1684,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // loaded — are interview-rehearsal questions about the CANDIDATE and must
         // reach the deterministic profile fast path instead of leaking
         // "I'm Natively, an AI assistant".
-        if (!imagePaths?.length && typeof message === 'string') {
+        // !skillPromptBlock: a skill turn must never be hijacked by the canned
+        // identity reply. This was previously incidental — the probe ran on the raw
+        // "/humanize who are you", which its fully-anchored regexes could not match.
+        // Made explicit so the immunity does not depend on regex anchoring.
+        if (!skillPromptBlock && !imagePaths?.length && typeof message === 'string') {
           const { resolveIdentityProbe } = require('./llm/manualIdentityRouting') as typeof import('./llm/manualIdentityRouting');
           let probeProfileReady = false;
           try {
@@ -909,7 +1700,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           if (probe.kind === 'assistant_reply') {
             const identityHit = probe.reply;
             intelligenceManager.addTranscript(
-              { text: message, speaker: 'user', timestamp: Date.now(), final: true },
+              { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
               true,
             );
             try {
@@ -926,8 +1717,8 @@ export function initializeIpcHandlers(appState: AppState): void {
               );
               return null;
             }
-            event.sender.send('gemini-stream-token', identityHit);
-            event.sender.send('gemini-stream-done');
+            event.sender.send('gemini-stream-token', identityHit, { streamId: myStreamId });
+            event.sender.send('gemini-stream-done', { finalText: identityHit, streamId: myStreamId });
             try {
               PhoneMirrorService.getInstance().publishToken(String(myStreamId), identityHit);
             } catch (_) {
@@ -973,6 +1764,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             speaker: 'user',
             timestamp: Date.now(),
             final: true,
+            origin: 'manual_chat',
           },
           true,
         );
@@ -1008,57 +1800,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Released in the handler's finally below.
         _manualFgToken = ForegroundGate.begin('manual');
 
-        // Skill invocation: /skill-name or $skill-name prefix (issue #303).
-        // Strip the prefix from message before planAnswer so routing sees the
-        // bare user query, then inject the skill's instructions into context
-        // right before streamChat so the model follows them for this turn only.
-        let skillPromptBlock = '';
-        const skillPrefixMatch = typeof message === 'string'
-          ? message.match(/^[/$]([A-Za-z0-9_-]+)\s*(.*)$/s)
-          : null;
-        // Defensive: strip any embedded <answer_contract>...</answer_contract>
-        // block from the user-visible message. See stripEmbeddedAnswerContract
-        // for the contract-block leak rationale (grounding campaign H4, 2026-07-18).
-        // MEDIUM #2: placed at the planAnswer boundary so upstream routing
-        // (skill dispatch, identity probe, source-switch resolution) sees the
-        // user's literal input — error logs and unmatched-skill fallbacks
-        // report the original message, not a stripped variant.
-        if (skillPrefixMatch) {
-          try {
-            const candidateId = skillPrefixMatch[1];
-            const skill = SkillsManager.getInstance().getSkill(candidateId);
-            if (skill) {
-              // Disabled skills still resolve by name but must NOT inject their
-              // instructions into the prompt — the user turned them off in
-              // Settings → Skills. Surface a clear error rather than silently
-              // proceeding (which would invoke the skill anyway).
-              if (skill.enabled === false) {
-                event.sender.send(
-                  'gemini-stream-error',
-                  `Skill "/${skill.id}" is disabled. Enable it in Settings → Skills.`,
-                );
-                return;
-              }
-              skillPromptBlock = SkillsManager.getInstance().buildPromptBlock(skill);
-              const strippedQuery = skillPrefixMatch[2].trim();
-              message = strippedQuery || `Please help me with the ${skill.name} skill.`;
-              console.log(`[IPC] Skill activated: ${skill.id}`);
-            } else {
-              const allSkills = SkillsManager.getInstance().listSkills();
-              const available = allSkills.length
-                ? allSkills.map(s => `/${s.id}`).join(', ')
-                : 'none registered';
-              event.sender.send(
-                'gemini-stream-error',
-                `Skill "/${candidateId}" not found. Available: ${available}`,
-              );
-              return;
-            }
-          } catch (skillErr: any) {
-            console.warn('[IPC] Skill lookup failed:', skillErr?.message || skillErr);
-            event.sender.send('gemini-stream-error', `Skill lookup failed: ${skillErr?.message || 'unknown error'}`);
-            return;
-          }
+        // Skill stripping APPLIED here, at the original boundary, so upstream
+        // routing (identity probe, source-switch resolution) and error logs keep
+        // seeing the user's literal input exactly as before the parse was hoisted.
+        if (skillStrippedMessage !== null) {
+          message = skillStrippedMessage;
         }
 
         // Active mode as a routing PRIOR (PI v3, W1): an ambiguous manual
@@ -1150,6 +1896,29 @@ export function initializeIpcHandlers(appState: AppState): void {
                 },
               })
             : null;
+
+          // CONTEXT INTELLIGENCE V3 — legacy trace emission (Layer B: manual chat).
+          //
+          // This surface builds its OWN source decision here, independently of
+          // the canonical turn that the What-to-Answer path constructs. Emitting
+          // both lets shadow mode show whether the two layers agree on the same
+          // question — the comparison that F2 says has never been possible.
+          // Observability only: env-gated, never throws, identity not content.
+          try {
+            const { recordLegacyTurn } = require('./context-intelligence/observability/legacy-trace');
+            recordLegacyTurn({
+              requestId: `manual-chat-${Date.now()}`,
+              surface: 'manual-chat',
+              scope: { userId: 'local' },
+              originalQuestion: String(message || ''),
+              resolvedQuestion: String(message || ''),
+              modeId: manualActiveMode?.id ?? undefined,
+              groundingPolicy: (_activeSourceContract?.sourceAuthority ?? undefined) as never,
+              retrievalPath: 'GROUNDED',
+              legacyPath: 'ipcHandlers.gemini-chat-stream resolveTurnSourceDecision',
+            });
+          } catch { /* observability must never break an answer */ }
+
           manualSourceContract = buildCustomModeExecutionContract({
             question: String(message || ''),
             streamRoute: 'manual_chat_stream',
@@ -1182,13 +1951,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _hasProfileFacts,
             turnSourceDecision: manualTurnSourceDecision,
           });
-          if (isIntelligenceFlagEnabled('trace')) {
+          if (isIntelligenceFlagEnabled('trace')) {  // manualOwnership! below: assigned unconditionally at 1790-1797
             console.log('[SOURCE-OWNERSHIP]', JSON.stringify({
-              owner: manualOwnership.owner,
-              profileAllowed: manualOwnership.profileAllowed,
-              explicitProfileAsk: manualOwnership.explicitProfileAsk,
-              shouldClarifyInsteadOfProfile: manualOwnership.shouldClarifyInsteadOfProfile,
-              reason: manualOwnership.reason,
+              owner: manualOwnership!.owner,
+              profileAllowed: manualOwnership!.profileAllowed,
+              explicitProfileAsk: manualOwnership!.explicitProfileAsk,
+              shouldClarifyInsteadOfProfile: manualOwnership!.shouldClarifyInsteadOfProfile,
+              reason: manualOwnership!.reason,
               answerType: answerPlan.answerType,
             }));
           }
@@ -1242,7 +2011,76 @@ export function initializeIpcHandlers(appState: AppState): void {
               // mode's persisted default. See explicitSourceSwitch.ts.
               userExplicitSource: _userExplicitSource,
               turnSourceDecision: manualTurnSourceDecision,
+              turnId: myTurnId,
             });
+            // IMPOSSIBLE-EVIDENCE-STATE GATE, Stage 0 (answer-pipeline-rebuild
+            // Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md).
+            // SHADOW-ONLY: builds the same typed EvidencePack
+            // ProfileEvidenceService already produces when profile capability
+            // is granted, runs it through the forbidden-direction checks only
+            // (checkImpossibleEvidenceState), and logs agreement/divergence —
+            // zero change to `context`, `turnContract`, or any return value.
+            // Nested in its own try/catch (never rethrows) so a failure here
+            // can never affect the turnContract build above it, matching this
+            // block's own "Context OS is additive" convention.
+            if (turnContract && isIntelligenceFlagEnabled('contextOsImpossibleStateGateShadow')) {
+              try {
+                const { ProfileEvidenceService, checkImpossibleEvidenceState } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+                const orchestratorForShadow = llmHelper.getKnowledgeOrchestrator?.();
+                const shadowResume = (orchestratorForShadow as any)?.activeResume?.structured_data ?? null;
+                const shadowJd = (orchestratorForShadow as any)?.activeJD?.structured_data ?? null;
+                const shadowPack = new ProfileEvidenceService().retrieveEvidence({
+                  question: String(message || ''),
+                  contract: turnContract,
+                  profile: shadowResume,
+                  jobDescription: shadowJd,
+                  answerType: answerPlan.answerType,
+                });
+                const shadowResult = checkImpossibleEvidenceState(shadowPack, answerPlan.profileContextPolicy);
+                // turnId/packId (code-review finding, 2026-07-28): lets a shadow
+                // log line be joined post-hoc against the prompt-audit ring
+                // (LLMHelper.ts ~5343, NATIVELY_CONTEXT_OS_PROMPT_AUDIT=1) by
+                // turnId, so the Stage 1 promotion decision can check this
+                // shadow pack's verdict against what the REAL generation
+                // actually did — the join only resolves for turns that go
+                // through the coordinator-scoped pack path (the audit object
+                // only carries a turnId when contextOsGovernedPack is
+                // non-null); the legacy raw-string-concat path this shadow
+                // gate mostly observes has no turnId in the ring yet. Closing
+                // that fully is the coordinator-scope-widening work the design
+                // doc defers to Stage 4 — this is the correlation data
+                // available without that widening.
+                if (!shadowResult.ok) {
+                  console.warn('[IMPOSSIBLE-STATE-GATE-SHADOW] violation', {
+                    turnId: shadowPack.turnId,
+                    packId: shadowPack.packId,
+                    answerType: answerPlan.answerType,
+                    profileContextPolicy: answerPlan.profileContextPolicy,
+                    requestedProperty: shadowPack.requestedProperty,
+                    violationCodes: shadowResult.violations.map((v) => v.code),
+                    violationSourceKinds: shadowResult.violations.map((v) => v.sourceKind),
+                    // Code-review finding (2026-07-28), for check #3
+                    // (required_policy_zero_evidence) triage: collapses the
+                    // "no profile loaded at all" population out of the
+                    // dataset — that case is never RC-8-shaped (RC-8 needs a
+                    // profile to actually be loaded and mis-selected).
+                    hasProfileFactsForTurn: _hasProfileFactsForTurn,
+                  });
+                } else if (isIntelligenceFlagEnabled('trace')) {
+                  console.log('[IMPOSSIBLE-STATE-GATE-SHADOW] agreement', {
+                    turnId: shadowPack.turnId,
+                    packId: shadowPack.packId,
+                    answerType: answerPlan.answerType,
+                    profileContextPolicy: answerPlan.profileContextPolicy,
+                    itemCount: shadowPack.items.length,
+                  });
+                }
+              } catch (shadowGateErr: any) {
+                if (isIntelligenceFlagEnabled('trace')) {
+                  console.warn('[IMPOSSIBLE-STATE-GATE-SHADOW] skipped (non-fatal):', shadowGateErr?.message);
+                }
+              }
+            }
             // Real-custom-mode-repair (2026-07-11), Phase 4/7: the trace used to
             // be emitted HERE with a hardcoded `finalAction: 'answer'` — before
             // the clarification short-circuit below had even run. That produced
@@ -1282,6 +2120,59 @@ export function initializeIpcHandlers(appState: AppState): void {
         let explicitCodingContract: ExplicitCodingContract = detectExplicitCodingContract(message);
         let codingPriorProblemBlock = '';
         let codingFollowupResolved = false;
+        // BARE CODE REQUEST — "code?", "show me the code" — deliberately NOT gated
+        // on conversationMemoryV2 (default OFF). This is not a memory FEATURE, it
+        // is a correctness guard.
+        //
+        // Live repro 2026-08-18: the overlay solved a Trapping Rain Water
+        // screenshot, the user typed "code?" in chat, and the answer was a
+        // complete, confident BINARY SEARCH solution. "code" matches
+        // CODING_PATTERNS, so the turn was routed coding and handed the full
+        // contract — with no problem attached, so the model chose one. Answering
+        // a different question with total confidence is worse than not answering.
+        //
+        // A bare code request has no subject of its own, so the answer the user
+        // is looking at IS the subject. SessionTracker's last assistant message
+        // is cross-surface, which is exactly what the chat-only memory below is
+        // not. Runs first; the flag-gated block then refines it when enabled.
+        // Extended 2026-08-19 to EVERY coding continuation, gated on the prior
+        // answer actually looking like a coding answer — mirrors the V3
+        // personaBase guard above so the two chat paths cannot drift.
+        if (isBareCodeRequest(message) || isCodingContinuation(message)) {
+          try {
+            // Phantom-method fix (code review 2026-08-19): IntelligenceManager
+            // exposes getLastAssistantMessage() directly; getSessionTracker()
+            // does not exist, so the old chained form silently returned
+            // undefined and this guard never ran. See the V3 twin above.
+            const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
+            const bare = isBareCodeRequest(message);
+            if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
+                && (bare || looksLikeCodingAnswer(lastAnywhere))) {
+              codingPriorProblemBlock = buildPriorCodingContextBlock({
+                userMessage: '(the question answered just before this one)',
+                assistantAnswer: lastAnywhere,
+              });
+              codingFollowupResolved = true;
+              // Promote to the coding path (code review 2026-08-19). EVERY
+              // consumer of codingPriorProblemBlock sits inside
+              // `if (isCodingChat)` below, and a bare "code?" / "now optimize
+              // it" is planned follow_up_answer — so without this promotion
+              // the block was built and then silently dropped, making this
+              // guard a no-op for exactly the case it exists to fix. Mirrors
+              // the flag-gated recall block's promotion so the two cannot
+              // drift, and matches the V3 twin (which forces its coding task
+              // via `|| !!priorProblem`).
+              if (!isCodingChat) {
+                isCodingChat = true;
+                iTrace.noteContext({ source: 'conversation_history', trustLevel: 'high', requested: true, retrieved: true, included: true, reason: 'coding_followup_prior_problem' });
+              }
+              // Bare requests force code_only; richer continuations keep the
+              // format the detector already derived (complexity_only / dry_run
+              // / null for "make it iterative").
+              if (bare) explicitCodingContract = 'code_only';
+            }
+          } catch { /* guard only; never blocks the answer */ }
+        }
         {
           const looksLikeCodingFollowup = isCodingContinuation(message);
           const convMemOn = isIntelligenceFlagEnabled('conversationMemoryV2');
@@ -1488,8 +2379,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           } catch { /* default manual */ }
           const clarification = buildContextFreeClarification(clarSurface);
           if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-          event.sender.send('gemini-stream-token', clarification);
-          event.sender.send('gemini-stream-done', { finalText: clarification });
+          event.sender.send('gemini-stream-token', clarification, { streamId: myStreamId });
+          event.sender.send('gemini-stream-done', { finalText: clarification, streamId: myStreamId });
           try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarification); } catch (_) { /* noop */ }
           try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarification); } catch (_) { /* noop */ }
           intelligenceManager.addAssistantMessage(clarification, undefined, 'manual_chat');
@@ -1528,7 +2419,14 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsPropertyValidation')
             && !isCodingChat
             && !imagePaths?.length
-            && !isStealthChat) {
+            && !isStealthChat
+            // A clarify born of a reference-bound mode with ZERO files is not
+            // actionable — nothing to disambiguate into (2026-08-11). Same
+            // predicate as the WTA twin; see refusalPolicy.ts.
+            && require('./intelligence/context-os').clarificationIsActionable({
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+            })) {
           try {
             const { buildSourceClarification } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             // Evidence-execution-repair (2026-07-12): two independent source-
@@ -1560,8 +2458,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 hasLiveTranscript: Boolean(intelligenceManager.getFormattedContext(100)?.trim()),
               });
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-            event.sender.send('gemini-stream-token', clarify);
-            event.sender.send('gemini-stream-done', { finalText: clarify });
+            event.sender.send('gemini-stream-token', clarify, { streamId: myStreamId });
+            event.sender.send('gemini-stream-done', { finalText: clarify, streamId: myStreamId });
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
@@ -1591,14 +2489,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
-        // Real-custom-mode-repair (2026-07-11), Phase 4/7: this is the REAL,
-        // non-provisional `finalAction` trace log for this turn — reached only
-        // when the clarification short-circuit above did NOT fire (it already
-        // logged 'clarify' and returned). Emitted once per turn, so a trace
-        // consumer can never see a `sourceOwner=clarify` line paired with a
-        // hardcoded 'answer' outcome that doesn't reflect what actually
-        // happened, closing the authority-conflict trace gap identified in
-        // docs/context-os/real-custom-mode-repair/04_AUTHORITY_CONFLICT_REPORT.md.
+        // Real-custom-mode-repair (2026-07-11), Phase 4/7: reached only when the
+        // clarification short-circuit above did NOT fire (it already logged
+        // 'clarify' and returned), so `finalAction: 'answer'` here correctly
+        // states "not clarifying" — but no `evidencePack` is available yet at
+        // this point (it's built later, inside `manualContextOsGeneration`), so
+        // `evidenceCoverage`/`selectedEvidenceCount` below are NOT measurements —
+        // they are `buildContextOsTrace`'s no-pack defaults (false/0). Do not
+        // treat this trace as proof that evidence was insufficient; it fires
+        // before evidence is known. This is a dev-only diagnostic (gated by the
+        // `trace` intelligence flag, console output only) — no `__e2e__:*`
+        // handler currently reads it, and it does not gate generation behavior.
+        // Answer-pipeline-rebuild Phase 1/RC-3: a prior version of this comment
+        // claimed this WAS "the REAL, non-provisional" outcome trace, which is
+        // what led to the original misdiagnosis of the finalAction fingerprint.
+        // Wiring a second, post-evidence-pack trace call is tracked for Phase 3
+        // (final-payload/telemetry invariants), not done here to avoid a
+        // untested restructure of this call's surrounding control flow.
         if (turnContract && isIntelligenceFlagEnabled('trace')) {
           try {
             const { buildContextOsTrace, logContextOsTrace } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -1640,9 +2547,83 @@ export function initializeIpcHandlers(appState: AppState): void {
               || allowsEvidence(turnContract, 'profile_jd');
           } catch { return true; }
         })();
+        // IMPOSSIBLE-EVIDENCE-STATE GATE, Stage 1 enforcement (answer-pipeline-
+        // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md).
+        // Forbidden-direction ONLY. NOTE (corrected 2026-07-28, code-review
+        // finding): checkImpossibleEvidenceState DOES now also flag
+        // 'required'-policy packs (check #3, required_policy_zero_evidence,
+        // added for Stage 2's shadow observation) — the actual safety
+        // guarantee that this gate cannot affect RC-8's fix is NOT "the
+        // function never flags required" (that's now false) but the
+        // enforceableViolations filter below, which matches ONLY
+        // 'forbidden_policy_profile_item_present' by code. Do not widen that
+        // filter without re-reading the design doc's Stage 2/3 staging
+        // rationale first — enforcing check #3 before its own dedicated
+        // shadow period would reproduce RC-8 under real enforcement. Mirrors
+        // _contractAllowsProfile immediately above: an
+        // independent, self-contained computation (not reusing Stage 0's
+        // shadow-block pack, so this gate's correctness never depends on an
+        // earlier block having run) that can only NARROW the legacy decision,
+        // never widen it — leak-safe by construction. Fails OPEN (returns
+        // true) on any internal error, same as _contractAllowsProfile's own
+        // catch — a gate failure must never break chat.
+        const _impossibleStateGateAllowsProfile = (() => {
+          if (!turnContract || !isIntelligenceFlagEnabled('contextOsImpossibleStateGateEnforceForbidden')) return true;
+          try {
+            const { ProfileEvidenceService, checkImpossibleEvidenceState } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const orchestratorForGate = llmHelper.getKnowledgeOrchestrator?.();
+            const gateResume = (orchestratorForGate as any)?.activeResume?.structured_data ?? null;
+            const gateJd = (orchestratorForGate as any)?.activeJD?.structured_data ?? null;
+            const gatePack = new ProfileEvidenceService().retrieveEvidence({
+              question: String(message || ''),
+              contract: turnContract,
+              profile: gateResume,
+              jobDescription: gateJd,
+              answerType: answerPlan.answerType,
+            });
+            const gateResult = checkImpossibleEvidenceState(gatePack, answerPlan.profileContextPolicy);
+            // Code-review finding (2026-07-28): check #2
+            // (allowed_policy_unrelated_profile_item) has a live, reproduced
+            // false-refusal path — ordinary second-person skill/experience
+            // phrasing ("familiar with graphql") misclassifies as
+            // unknown_answer/allowed (requestedProperty stays 'unknown'
+            // because detectRequestedProperty only recognizes narrow
+            // first-person-possessive phrasing like "my experience"), and
+            // check #2 then suppresses a legitimate, high-confidence résumé
+            // skill match. Stage 0's shadow period never observed a single
+            // allowed-policy turn (all 19 reps were forbidden/required), so
+            // check #2 would have been enforced with zero real-world
+            // false-positive validation — the same RC-8-shaped risk class,
+            // reached via the allowed branch instead of required. Stage 1
+            // enforcement is scoped to check #1
+            // (forbidden_policy_profile_item_present) ONLY, confirmed live
+            // and necessary (SourceAuthorityKernel's unknown/mixed-owner
+            // capability grant doesn't consult answerType at all, so a
+            // forbidden-policy turn really can get profile capability
+            // granted underneath it — RC-1's exact mechanism). Check #2
+            // stays shadow-only (Stage 0's block above still logs it,
+            // unaffected by this filter) until it has real allowed-policy
+            // shadow observations across ordinary second-person phrasing.
+            const enforceableViolations = gateResult.violations.filter(
+              (v) => v.code === 'forbidden_policy_profile_item_present',
+            );
+            if (enforceableViolations.length > 0) {
+              if (isIntelligenceFlagEnabled('trace')) {
+                console.warn('[IMPOSSIBLE-STATE-GATE-ENFORCE] blocked profile injection', {
+                  turnId: gatePack.turnId,
+                  answerType: answerPlan.answerType,
+                  profileContextPolicy: answerPlan.profileContextPolicy,
+                  violationCodes: enforceableViolations.map((v) => v.code),
+                });
+              }
+              return false;
+            }
+            return true;
+          } catch { return true; }
+        })();
         const sourceOwnershipAllowsProfile = ((manualOwnership && !_ownerEnforcementOff)
           ? manualOwnership.profileAllowed
-          : legacyDocGuardEligible) && _contractAllowsProfile;
+          : legacyDocGuardEligible) && _contractAllowsProfile && _impossibleStateGateAllowsProfile;
         // TurnEvidenceCoordinator wiring gap fix (grounding campaign, 2026-07-18):
         // this legacy fast path and the coordinator below (`coordinatorInScopeKinds`,
         // ~line 2179) previously raced with no reconciliation. When the canonical
@@ -1708,8 +2689,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
             const clarify = buildSourceSwitchClarification(manualOwnership.owner);
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
-            event.sender.send('gemini-stream-token', clarify);
-            event.sender.send('gemini-stream-done', { finalText: clarify });
+            event.sender.send('gemini-stream-token', clarify, { streamId: myStreamId });
+            event.sender.send('gemini-stream-done', { finalText: clarify, streamId: myStreamId });
             try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), clarify); } catch (_) { /* noop */ }
             try { PhoneMirrorService.getInstance().publishDone(String(myStreamId), clarify); } catch (_) { /* noop */ }
             const clarifyWrite = decideSessionWritePolicy({ finalGenerationMode: 'source_safe_refusal', validationOk: true, sourceContractHonored: true });
@@ -2205,7 +3186,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
             && isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled')) {
           try {
-            const { TurnEvidenceCoordinator, ProfileEvidenceService } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
+            const { TurnEvidenceCoordinator, ProfileEvidenceService, packGovernsGeneration } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
             const { ModesManager } = require('./services/ModesManager');
             const modesMgr = ModesManager.getInstance();
             const orchestrator = llmHelper.getKnowledgeOrchestrator?.();
@@ -2309,9 +3290,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                 sourceAuthority: manualSourceContract?.sourceAuthority ?? 'ask_if_ambiguous',
               },
               turnSourceDecision: manualTurnSourceDecision,
-              govern: true,
+              // Same line as the WTA site (2026-08-11): a refusal pack governs
+              // only when the mode's authority promises a bounded universe.
+              // Elsewhere an empty pack means "the evidence system has nothing
+              // to add" and the legacy path answers. See
+              // context-os/refusalPolicy.ts.
+              govern: packGovernsGeneration({
+                answerPolicy: coordinatorResult.pack.answerPolicy,
+                sourceAuthority: manualSourceContract?.sourceAuthority ?? null,
+                hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
+              }),
             };
-            coordinatorGovernedProfileEvidence = true;
+            coordinatorGovernedProfileEvidence = manualContextOsGeneration.govern;
             iTrace.noteContext({
               source: 'context_os_turn_evidence_coordinator',
               trustLevel: 'high',
@@ -2384,9 +3374,37 @@ export function initializeIpcHandlers(appState: AppState): void {
         // framing in HARD_SYSTEM_PROMPT/ASSIST_MODE_PROMPT that was causing coding
         // questions to be answered with "At Aetherbot AI, I was responsible for..."
         // (resume hijack via CONTEXT_INTELLIGENCE_LAYER's "you ARE the user").
+        //
+        // NOTE (answer-pipeline-rebuild Phase 4 finding, 2026-07-28): this is set
+        // unconditionally, even when isCodingChat later builds `context` from
+        // formatAnswerPlanForPrompt's full CODING_TEMPLATE/CODING_CONTRACT (strict
+        // six mandatory headings). CHAT_MODE_PROMPT's own <coding> block ("code +
+        // optional 1-2 sentences, no mandated structure") is a looser, technically
+        // conflicting instruction on the same axis, sent on the system channel
+        // alongside the stricter user-channel contract. In practice this is inert:
+        // RC-7 (Phase 2) had to add a SHARED_CODING_RULES exception specifically
+        // because the stricter user-channel CODING_CONTRACT was winning and forcing
+        // the six-section treatment onto trivial code — proof the model already
+        // resolves this conflict in the contract's favor. Left as-is; see
+        // docs/answer-pipeline-rebuild/02_STATUS.md Phase 4 for the full writeup.
         const systemPromptOverride: string | undefined = options?.skipSystemPrompt
           ? ''
-          : CHAT_MODE_PROMPT;
+          : resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({
+            answerType: answerPlan.answerType,
+            question: message,
+            // Manual chat is the ONE surface that knows whether a prior coding
+            // turn exists (conversation memory, resolved above). Without it the
+            // continuation-only formats stay suppressed and a "what's the
+            // complexity" follow-up would be re-answered in full.
+            priorCodingTurnExists: codingFollowupResolved,
+            // Restores the promotion the old `codingTask: isCodingChat`
+            // argument carried (code review 2026-08-19). A bare "code?" /
+            // "now optimize it" is PLANNED follow_up_answer, so answerType
+            // alone yields codingTask:false and promptSystemV2's
+            // coding_contract gate drops the block from the SYSTEM prompt
+            // even though the user-channel contract is attached below.
+            codingTurnPromoted: isCodingChat,
+          }));
         // NOTE (audit 2026-06-28): the document-grounded greeting-suppression +
         // question-first restructuring now lives INSIDE LLMHelper._streamChatInner
         // (shapeDocumentGroundedSystemPrompt + buildDocumentGroundedUserContent),
@@ -2449,6 +3467,13 @@ export function initializeIpcHandlers(appState: AppState): void {
             {
               answerType: answerPlan.answerType,
               forbiddenContextLayers: answerPlan.forbiddenContextLayers,
+              // F-502: the t0-pinned mode. streamContextPolicy documents this as
+              // the defence against a mid-request `modes:set-active` leaking a
+              // different mode's documents into an answer whose contract is
+              // scoped to the first mode — but only the WTA path ever set it, so
+              // every mode read inside streamChat after an await resolved the
+              // LIVE singleton instead.
+              pinnedModeId: manualActiveMode?.id ?? null,
               // Surface-scoped (Phase 9, 2026-07-14): the referent hint must come
               // from THIS manual-chat conversation's own last answer, never a
               // WTA/phone-mirror turn that happened to write the shared
@@ -2475,6 +3500,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 ? { contextOsGeneration: manualContextOsGeneration }
                 : turnContract
                   && manualActiveMode?.documentGroundedCustomModeActive === true
+                  // Same rule as the WTA twin (2026-08-11): no files -> no doc-grounded govern.
+                  && Boolean((manualActiveMode as any)?.hasReferenceFiles)
                   && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')
                 ? {
                     contextOsGeneration: (manualContextOsGeneration = {
@@ -2549,20 +3576,40 @@ export function initializeIpcHandlers(appState: AppState): void {
           const PAINT_SNIFF_CHARS = 48;
           let deferFirstPaint = deferFirstPaintEligible;
           let deferredBuffer = '';
+          // PROMPT SYSTEM V2 NO-ACTION SENTINEL HOLD (2026-08-01): every manual
+          // chat stream holds its first ~13 chars until the buffer can no longer
+          // be the exact `[[NO_ACTION]]` sentinel — the sentinel must NEVER
+          // paint, not even for one frame. A normal answer diverges on the very
+          // first token, so this adds no perceptible latency. If the model
+          // misfires with "[[NO_ACTION]] real text…", the leading sentinel is
+          // stripped before painting. Cheap prefix checks; helpers never throw.
+          const { couldBecomeNoActionSentinel: _couldBeNoAction, stripLeadingNoActionSentinel: _stripNoAction } =
+            require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+          let sentinelHold = true;
           // sendChunkGated: routes tokens through the defer buffer while deferring,
           // flushing to the real sendChunk once we've decided the first pass is a
           // genuine (non-refusal) answer. When still deferring at stream end, the
           // buffered text is NOT sent here — the post-stream validator decides.
           const sendChunkGated = (chunk: string) => {
-            if (!deferFirstPaint) { sendChunk(chunk); return; }
+            if (!deferFirstPaint && !sentinelHold) { sendChunk(chunk); return; }
             deferredBuffer += chunk;
+            if (sentinelHold) {
+              if (_couldBeNoAction(deferredBuffer)) return; // still a possible/confirmed sentinel — keep holding
+              sentinelHold = false;
+            }
+            if (!deferFirstPaint) {
+              const toFlush = _stripNoAction(deferredBuffer);
+              deferredBuffer = '';
+              if (toFlush) sendChunk(toFlush);
+              return;
+            }
             if (deferredBuffer.length >= PAINT_SNIFF_CHARS) {
               if (!REFUSAL_SNIFF_RE.test(deferredBuffer.trimStart())) {
                 // Confident it's a real answer — flush and resume live streaming.
                 deferFirstPaint = false;
-                const toFlush = deferredBuffer;
+                const toFlush = _stripNoAction(deferredBuffer);
                 deferredBuffer = '';
-                sendChunk(toFlush);
+                if (toFlush) sendChunk(toFlush);
               }
               // else: looks like a refusal — keep buffering silently.
             }
@@ -2583,11 +3630,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           // fallback line below. Codex CLI shares the cold-load profile
           // (subprocess spawn → codex CLI loads the model → first delta).
           const usingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+          // F-301: on the natively-api route the server rotates providers at
+          // 10s; give it room to rescue the turn instead of aborting at 7s.
+          const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
           let manualFirstUseful = false;
           let manualSuperseded = false;
           await raceStreamWithDeadline({
             stream: stream as AsyncGenerator<string>,
-            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm),
+            firstUsefulDeadlineMs: firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -2604,7 +3654,20 @@ export function initializeIpcHandlers(appState: AppState): void {
               try { myController?.abort(); } catch { /* noop */ }
             },
             onToken: (token: string) => {
-              manualFirstUseful = true;
+              // F-302: "useful" must mean USER-USEFUL CONTENT, not "a token
+              // object arrived". raceStreamWithDeadline forwards every yielded
+              // value unfiltered, so a leading "\n\n" used to flip this flag —
+              // which (a) swapped the 7s first-useful budget for the 8s
+              // inter-token stall guard, and (b) made the blank-answer fallback
+              // below unreachable for a whitespace-only response, committing an
+              // EMPTY bubble. Every other call site in the repo already uses a
+              // content threshold (>=5/8/10 chars); this primary manual-chat
+              // path was the sole outlier.
+              // R-09: concatenate THEN trim once — trimming each side separately
+              // loses the interior whitespace ("a b" + " c" counted 4, not 5).
+              if ((fullResponse + token).trim().length >= 5) {
+                manualFirstUseful = true;
+              }
               // First token back from the provider — the gap from
               // provider_request_started is pre-work + provider TTFT (the real cost).
               chatTrace.markFirstUseful({ via: codingGate ? 'gated' : 'stream' });
@@ -2659,6 +3722,11 @@ export function initializeIpcHandlers(appState: AppState): void {
           const rawResponseForVerify = fullResponse;
           const { stripVerificationSpec: _stripSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
           if (isCodingChat) fullResponse = _stripSpec(fullResponse);
+          // A misfired "[[NO_ACTION]] real text…" keeps its real text (the
+          // display path already stripped the prefix — keep the persisted copy
+          // in sync). An EXACT sentinel response is handled after validation,
+          // where it is substituted and marked do-not-store.
+          if (!isCodingChat) fullResponse = _stripNoAction(fullResponse) || fullResponse;
 
           // Safety net: validate the STREAMED coding answer; only when repair
           // actually changes it do we hand the renderer a corrective finalText.
@@ -2725,12 +3793,41 @@ export function initializeIpcHandlers(appState: AppState): void {
                   stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
                   firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
                   isUsefulYet: () => regen.length >= 10,
-                  shouldAbort: () => regen.length > 4000,
+                  shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
                   onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                 });
                 const regenTrim = regen.trim();
-                if (regenTrim.length >= 20 && /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(regenTrim)) {
+                // F-305: a closed code fence is NOT proof the answer is whole.
+                // shouldAbort cuts this regen at 4000 chars while liveDeadlines
+                // sizes the very artifact it asks for — a six-section coding
+                // answer — at ~8000, so a correct answer whose fence closes
+                // early (## Approach, fenced code, then ## Complexity / ## Edge
+                // cases) is routinely truncated mid-sentence AFTER the fence.
+                // The old test passed on that truncation and then atomically
+                // REPLACED the streamed row with it, so the user's final answer
+                // ended mid-word. The sibling regen ~80 lines below already
+                // guards with checkCodeCompleteness; use the same bar here.
+                //
+                // R-06: that change REPLACED the closed-fence test instead of ADDING
+                // to it, which made the gate strictly WEAKER. extractFencedCodeBlocks
+                // requires a CLOSING fence, so an answer with no fences — or with an
+                // unterminated one — yields zero blocks and checkCodeCompleteness
+                // returns ok:true vacuously. Two regressions followed:
+                //   - another meta-reply (>=20 chars, no code at all) was accepted,
+                //     directly violating the invariant stated at the top of this block
+                //     ("only accept if the regen actually contains a code fence; never
+                //     overwrite with another meta-reply") and emitting a bogus
+                //     retry-succeeded telemetry event;
+                //   - raising CODING_REGEN_ABORT_CHARS to 8000 made the unclosed-fence
+                //     case REACHABLE: when shouldAbort fires mid-code-block the regen
+                //     ends on a dangling fence, and accepting it atomically replaces
+                //     the streamed answer with one whose fence never closes, so
+                //     markdown swallows everything after it.
+                // Both bars are required: the fence must close AND its contents must
+                // be complete.
+                const regenHasClosedFence = /```[a-zA-Z0-9_+\-]*\n[\s\S]*?```/.test(regenTrim);
+                if (regenTrim.length >= 20 && regenHasClosedFence && checkCodeCompleteness(regenTrim).ok) {
                   fullResponse = regenTrim;
                   finalText = regenTrim;
                   // Re-strip <verification_spec>: the regen prompt includes the
@@ -2805,7 +3902,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
                   firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
                   isUsefulYet: () => regen.length >= 10,
-                  shouldAbort: () => regen.length > 4000,
+                  shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
                   onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
                 });
@@ -2929,10 +4026,25 @@ export function initializeIpcHandlers(appState: AppState): void {
                   if (repairedTrim.length >= 5) {
                     const reCheck = validateProfileEvidence({ answer: repairedTrim, plan: answerPlan, evidence, profileAvailable, candidateDirected: true });
                     const stillCritical = reCheck.violations.some(v => v.severity === 'error' && CRITICAL_CODES.has(v.code));
-                    if (!stillCritical) {
-                      fullResponse = repairedTrim;
-                      finalText = repairedTrim;
+                    // Shared acceptance policy (PR #427 §1.4, 2026-08-07). This path
+                    // previously accepted on `!stillCritical` ALONE — it had neither
+                    // the leaked-artifact re-check nor the non-regression length floor
+                    // the WTA path has had since 2026-07-19/23, even though the WTA
+                    // comment claimed the length floor mirrored a guard here. It never
+                    // existed here, so a manual repair that came back as a leaked
+                    // <rewrite_instructions> block was shipped verbatim. Both paths now
+                    // call one policy so the guards cannot drift apart again.
+                    const verdict = acceptRepairedAnswer({
+                      original: fullResponse,
+                      repaired: repairedTrim,
+                      stillInvalid: stillCritical,
+                    });
+                    if (verdict.accepted) {
+                      fullResponse = verdict.text;
+                      finalText = verdict.text;
                       console.warn('[ProfileIntelligence] manual profile repair applied', { code: critical.code });
+                    } else {
+                      console.warn('[ProfileIntelligence] manual profile repair REJECTED', { code: critical.code, reason: verdict.reason });
                     }
                   }
                 } catch (repairErr: any) {
@@ -3315,7 +4427,17 @@ export function initializeIpcHandlers(appState: AppState): void {
               // resolver failure), the legacy re-retrieval below remains the only
               // source, unchanged.
               let docContextBlock = '';
-              const _governedPack = manualContextOsGeneration?.evidencePack;
+              // Code-review 2026-08-12: keyed on pack PRESENCE, but a pack is
+              // now attached even when it does NOT govern (packGovernsGeneration
+              // false — the layer-1 fall-through for unbounded authorities). An
+              // ungoverned refusal pack has zero items, so `_governedPack` was
+              // truthy, the `!_governedPack` branches below were skipped, and
+              // the validator ran against an empty block for a turn the legacy
+              // path actually answered. `govern` is what the comment above
+              // means by "governed this turn".
+              const _governedPack = manualContextOsGeneration?.govern
+                ? manualContextOsGeneration.evidencePack
+                : undefined;
               // Root-cause fix (2026-07-23): prefer the RAW block the actual
               // generation call retrieved (surfaced via
               // ContextOsGenerationContext.retrievedBlockRaw, written
@@ -3564,7 +4686,37 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // confident/synthesis-tier verdict, OR'd in as an additional
                   // signal. matchedHighSignalEntity is a whole-entity hit that
                   // is also present in the retrieved context.
-                  const hasStrongEvidence = hasRealEvidence || Boolean(matchedHighSignalEntity) || isTier1Or2Evidence;
+                  // F-412: the tier signal is deliberately NOT consulted here.
+                  //
+                  // EvidenceAssembler.computeTier is TOPIC-BLIND — it returns
+                  // tier 2 for ANY synthesis-classified question as soon as the
+                  // pack yields >=1 card, and OkfRetriever's type boost still
+                  // clears the score floor with ZERO query-word overlap (that is
+                  // its purpose: surface the one `result` card for a `result`
+                  // question worded differently). R-04 narrowed this — confidence
+                  // ALONE no longer admits on the document path — but a card can
+                  // still be admitted without any topical overlap, so the tier
+                  // remains topic-blind. As an independent disjunct it therefore
+                  // made the off-topic gate above unable to veto anything: an
+                  // off-topic synthesis question ("What is the key takeaway for
+                  // the Kyoto Protocol?" against a robotics thesis) produced
+                  // hasEntityEvidence=false yet still repaired, discarding an
+                  // honest "not in the document" refusal and re-prompting the
+                  // model with a stronger-synthesis instruction — the exact
+                  // hallucination pressure this gate exists to prevent.
+                  //
+                  // HONESTY NOTE (self-review): the first version of this fix
+                  // wrote `|| (isTier1Or2Evidence && hasEntityEvidence)` and
+                  // described the tier as a "corroborating signal". That was
+                  // false. `hasRealEvidence` IS `hasEntityEvidence` (see its
+                  // assignment above), so that disjunct could only ever be true
+                  // when the first disjunct had already fired — provably dead
+                  // code. The real, and correct, effect is that the tier no
+                  // longer participates at all; the expression now says so.
+                  // isTier1Or2Evidence is still COMPUTED above and reported in
+                  // the diagnostic below, which is where its value belongs.
+                  const hasStrongEvidence =
+                    hasRealEvidence || Boolean(matchedHighSignalEntity);
                   // GOVERNANCE INTEGRITY (2026-07-13): when EvidenceResolver
                   // GOVERNED this turn and its typed pack's policy is an explicit
                   // refusal, that decision is authoritative — it already ran
@@ -3578,7 +4730,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // pack exists. A governed `answer`-policy pack that merely
                   // produced a weak answer is still repaired below — only an
                   // explicit governed REFUSAL is trusted here.
-                  const governedRefusal = manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
+                  // R10 (2026-08-12, review finding): keying on pack PRESENCE
+                  // contradicted the docblock ("only an explicit GOVERNED refusal
+                  // is trusted here") — an ungoverned refuse pack from a fileless
+                  // doc-flavored mode could block the false-refusal repair while
+                  // strong document evidence existed. Same class as #446's F3.
+                  const governedRefusal = manualContextOsGeneration?.govern === true
+                    && manualContextOsGeneration?.evidencePack?.answerPolicy === 'refuse_insufficient_evidence';
                   // Both the system's own refusal phrase and a model-phrased
                   // refusal clear the same bar (the question is about a real
                   // document topic). Off-topic questions match neither a whole
@@ -3592,6 +4750,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                       tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
                       matchedHighSignalEntity: matchedHighSignalEntity || null,
+                      // F-412: reported for explainability only — the tier is
+                      // topic-blind and deliberately does NOT gate this decision.
+                      isTier1Or2Evidence,
                     });
                     piTelemetry.emit('pi_doc_grounded_false_refusal_repair_attempted', {
                       isSystemOwnRefusalPhrase,
@@ -3608,6 +4769,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                       wholeNameHit,
                       tokenHits: [...tokenHits].slice(0, 8),
                       isSystemOwnRefusalPhrase,
+                      isTier1Or2Evidence,
                     });
                   }
                 }
@@ -3850,9 +5012,13 @@ export function initializeIpcHandlers(appState: AppState): void {
                     const { appendCustomModeSystemPromptLayer } = require('./llm/documentGroundedPrompt');
                     const { ModesManager: _MMRegen } = require('./services/ModesManager');
                     const _mm = _MMRegen.getInstance();
+                    // Prompt System v2: a v2 base already carries the mode
+                    // contract — don't stack the legacy template suffix on it.
+                    const _regenBase = resolveManualChatBasePrompt(llmHelper);
+                    const _regenBaseIsV2 = _regenBase !== CHAT_MODE_PROMPT;
                     regenSystemPrompt = appendCustomModeSystemPromptLayer({
-                      baseSystemPrompt: CHAT_MODE_PROMPT,
-                      modePromptSuffix: _mm.getActiveModeSystemPromptSuffix?.(manualActiveMode?.id ?? undefined),
+                      baseSystemPrompt: _regenBase,
+                      modePromptSuffix: _regenBaseIsV2 ? undefined : _mm.getActiveModeSystemPromptSuffix?.(manualActiveMode?.id ?? undefined),
                       pinnedInstructions: _mm.getActiveModePinnedInstructions?.(answerPlan.answerType, manualActiveMode?.id ?? undefined),
                       isActiveCustomMode: manualActiveMode?.isCustom === true || _mm.isCustomMode?.(manualActiveMode),
                     });
@@ -4033,6 +5199,31 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           }
 
+          // PROMPT SYSTEM V2 NO-ACTION SENTINEL (2026-08-01): an exact
+          // [[NO_ACTION]] must never display, persist, embed, or re-enter
+          // history. Manual chat always carries a direct typed request, so a
+          // sentinel here is a model misfire — substitute the honest
+          // insufficient-context line (the same contract as the WTA manual
+          // press: explicit user intent must always see SOMETHING) and mark the
+          // turn do-not-store so the fallback never becomes conversational
+          // memory. The streaming sentinel-hold above guarantees nothing was
+          // painted, so the substitute is the first thing the user sees.
+          try {
+            const { shouldSuppressModelOutput: _isNoActionOut } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
+            if (_isNoActionOut(rawResponseForVerify) || _isNoActionOut(fullResponse)) {
+              const fb = "I don't have enough context from the conversation to answer that yet.";
+              fullResponse = fb;
+              finalText = fb;
+              finalGenerationMode = 'provider_error_no_answer';
+              sessionWriteDecision = decideSessionWritePolicy({
+                finalGenerationMode,
+                validationOk: false,
+                criticalViolations: ['no_action_sentinel_suppressed'],
+              });
+              chatTrace.mark('fallback_answer_used' as any, { answerType: answerPlan.answerType, finalGenerationMode, reason: 'no_action_sentinel' });
+            }
+          } catch { /* non-fatal — sentinel guard must never break chat */ }
+
           // DEFERRED FIRST-PAINT flush (2026-07-02): if we held the first pass
           // buffered (it looked like a refusal) and NO repair fired (finalText
           // unset), those buffered tokens were never painted — send the answer
@@ -4041,12 +5232,36 @@ export function initializeIpcHandlers(appState: AppState): void {
           // discarded (the refusal never reaches the screen). Nothing to do when
           // we weren't deferring (buffer already streamed live) or the buffer is
           // empty (deferred flag stayed true but no tokens arrived).
-          if (deferFirstPaint && deferredBuffer.length > 0 && !finalText) {
+          // The v2 sentinel-hold shares the buffer: a residual held fragment that
+          // never resolved (stream died mid-sentinel) flushes the same way.
+          if ((deferFirstPaint || sentinelHold) && deferredBuffer.length > 0 && !finalText) {
             finalText = fullResponse;
           }
 
+          // Defect G (2026-08-01): mode-identity check BEFORE the user-visible
+          // done emit, same contract as the V3 block above. Registry
+          // invalidation in modes:set-active already fails the streamId guard
+          // below deterministically after an IPC-driven switch; this closes
+          // the non-IPC switch paths (e.g. upload-driven mode auto-activation)
+          // where the registry entry survives. Compares the LIVE mode against
+          // `manualActiveMode` (captured once near handler start) by .id, not
+          // templateType (custom modes collapse to 'general'). Fail open on a
+          // getter throw — never suppress a real answer on infrastructure
+          // failure. The conversationMemoryV2 record guard further down keeps
+          // its own liveModeIdAtRecord check as defense in depth.
+          let liveModeIdAtDoneEmit: string | null = manualActiveMode?.id ?? null;
+          try {
+            const { ModesManager: _MmDoneEmitGuard } = require('./services/ModesManager');
+            liveModeIdAtDoneEmit = _MmDoneEmitGuard.getInstance().getActiveMode()?.id ?? null;
+          } catch { /* fail open — emit-guard only */ }
           // Final check: only send done if we are still the active stream
-          if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+          if (liveModeIdAtDoneEmit !== (manualActiveMode?.id ?? null)) {
+            console.warn('[IPC] stale stream suppressed: mode changed mid-generation', {
+              streamId: myStreamId,
+              requestMode: manualActiveMode?.id ?? null,
+              liveMode: liveModeIdAtDoneEmit,
+            });
+          } else if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
             // finalText is set ONLY when repair changed the streamed answer — the
             // renderer replaces the streamed row in place (no double-render). When
             // the streamed answer was already valid, finalText is undefined and the
@@ -4109,7 +5324,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // Phase 9 (exact-pack identity): when the typed pack GOVERNED
                   // this generation (H1), reuse that EXACT pack — same packId end
                   // to end. Otherwise build a verify-pack from the captured block.
-                  const verifyPack: import('./intelligence/context-os').EvidencePack = manualContextOsGeneration?.evidencePack ?? ((): import('./intelligence/context-os').EvidencePack => {
+                  // R3 (2026-08-12, review finding): PR #446 created the
+                  // pack-exists-with-govern:false state, and this consumer kept
+                  // keying on PRESENCE — so a legacy-path answer (the very turn
+                  // the fix un-gagged) was verified against the DISCARDED empty
+                  // refuse pack instead of the capturedEvidenceBlock it was
+                  // actually grounded in, persisting claims under the wrong
+                  // packId/answerPolicy/sourceOwner identity.
+                  const verifyPack: import('./intelligence/context-os').EvidencePack = (manualContextOsGeneration?.govern ? manualContextOsGeneration?.evidencePack : null) ?? ((): import('./intelligence/context-os').EvidencePack => {
                     const evItems = (() => {
                       if (!capturedEvidenceBlock.trim()) return [];
                       const snippets = parseModeSnippets(capturedEvidenceBlock);
@@ -4187,13 +5409,35 @@ export function initializeIpcHandlers(appState: AppState): void {
               // gating is that enabling mid-session starts with empty history (negligible).
               if (isIntelligenceFlagEnabled('conversationMemoryV2')) {
                 try {
-                  _manualConversationMemory.record({
-                    sessionId: String(senderId),
-                    userMessage: message,
-                    assistantAnswer: fullResponse,
-                    mode: manualActiveMode?.templateType,
-                    timestamp: Date.now(),
-                  });
+                  // Code-review finding (2026-07-28): closes a race the
+                  // clearAllSessions()-on-mode-switch fix (modes:set-active)
+                  // doesn't cover by itself — manualActiveMode is captured
+                  // ONCE near the top of this handler, before the stream
+                  // starts; if the user switches modes WHILE this answer is
+                  // still generating, clearAllSessions() fires and empties
+                  // the map, but this record() call (deep in the stream's
+                  // "done" callback, unguarded by any streamId/supersession
+                  // check) still runs afterward and writes the OLD mode's
+                  // turn back in — resurrecting exactly the cross-mode
+                  // recall bug the switch-time clear exists to prevent.
+                  // Compare the mode captured at handler-start against the
+                  // LIVE mode at record time; skip the write on mismatch.
+                  // Uses .id, not .templateType: ModesManager.isCustomMode()
+                  // collapses every custom (including document-grounded)
+                  // mode's templateType to 'general', so two DIFFERENT
+                  // custom modes would be indistinguishable by templateType
+                  // alone — exactly the case this guard must catch.
+                  const { ModesManager: _ModesManagerForRecordGuard } = require('./services/ModesManager');
+                  const liveModeIdAtRecord = _ModesManagerForRecordGuard.getInstance().getActiveMode()?.id ?? null;
+                  if (liveModeIdAtRecord === (manualActiveMode?.id ?? null)) {
+                    _manualConversationMemory.record({
+                      sessionId: String(senderId),
+                      userMessage: message,
+                      assistantAnswer: fullResponse,
+                      mode: manualActiveMode?.templateType,
+                      timestamp: Date.now(),
+                    });
+                  }
                   // CODING THREAD STATE (spoken-answer-quality sprint 2026-06-15): record a
                   // coding turn so original-vs-current problem resolution works on later
                   // follow-ups. Only for coding answers; isContinuation reuses the same
@@ -4282,15 +5526,22 @@ export function initializeIpcHandlers(appState: AppState): void {
             piTelemetry.emit('pi_provider_error_classified', { kind: klass.kind, outage: klass.isOutage, retryable: klass.retryable, surface: 'manual' });
             if (answerPlan.profileContextPolicy === 'required' && !fullResponse.trim()
                 && _chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
-              const safe = "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
+              // Codex auth failures are the one provider error the user can act
+              // on directly, and the generic text below sends them looking for a
+              // model problem instead of a sign-in. Surfaced verbatim because
+              // both strings are app-authored (isCodexAuthError matches the
+              // exported constants) — never echo arbitrary provider text here.
+              const safe = isCodexAuthError(streamError)
+                ? streamError.message
+                : "The model failed before generating an answer, so I won't guess from your profile. Please try again.";
               finalGenerationMode = 'provider_error_no_answer';
               sessionWriteDecision = decideSessionWritePolicy({
                 finalGenerationMode,
                 validationOk: false,
                 criticalViolations: ['provider_error_no_answer'],
               });
-              event.sender.send('gemini-stream-token', safe);
-              event.sender.send('gemini-stream-done', { finalText: safe });
+              event.sender.send('gemini-stream-token', safe, { streamId: myStreamId });
+              event.sender.send('gemini-stream-done', { finalText: safe, streamId: myStreamId });
               try { PhoneMirrorService.getInstance().publishToken(String(myStreamId), safe); PhoneMirrorService.getInstance().publishDone(String(myStreamId), safe); } catch (_) { /* noop */ }
               intelligenceManager.addAssistantMessage(safe, sessionWriteDecision, 'manual_chat');
               _emitAttr({ answer_type: answerPlan.answerType, profile_tree_used: false, profile_tree_fast_path_used: false, structured_resume_used: false });
@@ -4301,6 +5552,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender.send(
               'gemini-stream-error',
               streamError.message || 'Unknown streaming error',
+              { streamId: myStreamId },
             );
             try {
               PhoneMirrorService.getInstance().publishError(
@@ -4352,6 +5604,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('quit-app', () => {
     app.quit();
+  });
+
+  // Generic "restart now" action for banners that need a fresh process —
+  // e.g. macOS Screen Recording grants often don't take effect in an
+  // already-running process until the app is relaunched.
+  safeHandle('restart-app', () => {
+    console.log('[IPC] restart-app requested');
+    app.relaunch();
+    app.exit(0);
   });
 
   safeHandle('quit-and-install-update', async () => {
@@ -4530,6 +5791,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-ambient-chat-enabled', async () => {
+    return appState.getAmbientChatEnabled();
+  });
+
+  safeHandle('set-ambient-chat-enabled', async (_, enabled: boolean) => {
+    appState.setAmbientChatEnabled(enabled);
+    return { success: true };
+  });
+
+  safeHandle('get-auto-answer-enabled', async () => {
+    return appState.getAutoAnswerEnabled();
+  });
+
+  safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
+    appState.setAutoAnswerEnabled(enabled);
+    return { success: true };
+  });
+
   safeHandle('get-code-verification', async () => {
     // Default OFF: code verification is currently disabled. Only true when the
     // user has explicitly opted in via Settings → General or env override.
@@ -4541,7 +5820,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_type' };
     }
-    SettingsManager.getInstance().set('codeVerificationEnabled', enabled);
+    if (!SettingsManager.getInstance().set('codeVerificationEnabled', enabled)) {
+      // R-24: the write was refused (degraded settings store). Returning
+      // success — and broadcasting below — put every window on a value disk
+      // never received, which silently reverted on the next launch.
+      return { success: false, error: 'settings_store_degraded' };
+    }
     try {
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
@@ -4560,7 +5844,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!['forever', '7d', '30d', 'never'].includes(retention)) {
       return { success: false, error: 'invalid_retention' };
     }
-    SettingsManager.getInstance().set('meetingRetention', retention);
+    if (!SettingsManager.getInstance().set('meetingRetention', retention)) {
+      // R-24: the write was refused (degraded settings store). Returning
+      // success — and broadcasting below — put every window on a value disk
+      // never received, which silently reverted on the next launch.
+      return { success: false, error: 'settings_store_degraded' };
+    }
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('meeting-retention-changed', retention);
@@ -4577,24 +5866,27 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (!scopes || typeof scopes !== 'object') {
       return { success: false, error: 'invalid_scopes' };
     }
-    const allowedKeys = new Set([
-      'transcript',
-      'screenshots',
-      'reference_files',
-      'profile_history',
-      'embeddings',
-      'post_call_summary',
-    ]);
-    const sanitized: Record<string, boolean> = {};
-    for (const [key, value] of Object.entries(scopes)) {
-      if (allowedKeys.has(key) && typeof value === 'boolean') {
-        sanitized[key] = value;
-      }
+    // MERGE over the stored policy, using the ONE scope list in ProviderRouter.
+    // The previous inline `allowedKeys` set omitted `code_execution` — a scope
+    // that IS declared in SettingsManager and IS enforced in
+    // llm/codeVerification/cloudRunner.ts — and the handler then persisted a
+    // whole-object REPLACEMENT. So toggling any scope in the Privacy panel
+    // deleted a stored `code_execution: false` and silently re-enabled sending
+    // model-generated code to the cloud runner.
+    const settings = SettingsManager.getInstance();
+    const merged = mergeProviderDataScopes(settings.get('providerDataScopes'), scopes);
+    if (!settings.set('providerDataScopes', merged as any)) {
+      // R-24: the write was refused (degraded settings store). Returning
+      // success — and broadcasting below — put every window on a value disk
+      // never received, which silently reverted on the next launch.
+      return { success: false, error: 'settings_store_degraded' };
     }
-    SettingsManager.getInstance().set('providerDataScopes', sanitized as any);
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
-        win.webContents.send('provider-data-scopes-changed', sanitized);
+        // Broadcast the MERGED object, not the incoming payload: the renderer
+        // seeds its next write from this, so echoing a partial payload would
+        // reintroduce the erasure one turn later.
+        win.webContents.send('provider-data-scopes-changed', merged);
       }
     });
     return { success: true };
@@ -4610,7 +5902,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!['vision_first', 'vision_only', 'private_vision'].includes(mode)) {
         return { success: false, error: 'invalid_mode' };
       }
-      SettingsManager.getInstance().setScreenUnderstandingMode(mode);
+      // CR-04: report the REAL outcome. A refused write used to return success
+      // AND broadcast the change, so every renderer switched mode while disk
+      // still held the old value and the app reverted on restart.
+      if (!SettingsManager.getInstance().setScreenUnderstandingMode(mode)) {
+        return { success: false, error: 'settings_store_degraded' };
+      }
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           win.webContents.send('screen-understanding-mode-changed', mode);
@@ -4628,7 +5925,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
-    SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
+    if (!SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled)) {
+      // R-24: the write was refused (degraded settings store). Returning
+      // success — and broadcasting below — put every window on a value disk
+      // never received, which silently reverted on the next launch.
+      return { success: false, error: 'settings_store_degraded' };
+    }
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('technical-interview-vision-first-changed', enabled);
@@ -4710,16 +6012,24 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('hindsight-config:set', async (_, cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => {
     try {
       const sm = SettingsManager.getInstance();
-      if (typeof cfg?.baseUrl === 'string') sm.set('hindsightBaseUrl', cfg.baseUrl.trim());
+      // R-24: this handler writes up to six keys. A refused write must not be
+      // reported as success, and must not go on to start() a server against
+      // config that was never persisted. Collect the outcomes and fail as one.
+      let persisted = true;
+      const put = (key: any, value: any): void => { if (!sm.set(key, value)) persisted = false; };
+      if (typeof cfg?.baseUrl === 'string') put('hindsightBaseUrl', cfg.baseUrl.trim());
       // Blank apiKey on resave = KEEP the stored one (don't wipe a saved key with an empty
       // field — the documented blank-key-on-resave gotcha). Only write a non-empty value.
-      if (typeof cfg?.apiKey === 'string' && cfg.apiKey.trim()) sm.set('hindsightApiKey', cfg.apiKey.trim());
-      if (typeof cfg?.autoStart === 'boolean') sm.set('hindsightAutoStart', cfg.autoStart);
-      if (typeof cfg?.serverCommand === 'string') sm.set('hindsightServerCommand', cfg.serverCommand.trim());
-      if (typeof cfg?.llmProvider === 'string') sm.set('hindsightLlmProvider', cfg.llmProvider.trim());
+      if (typeof cfg?.apiKey === 'string' && cfg.apiKey.trim()) put('hindsightApiKey', cfg.apiKey.trim());
+      if (typeof cfg?.autoStart === 'boolean') put('hindsightAutoStart', cfg.autoStart);
+      if (typeof cfg?.serverCommand === 'string') put('hindsightServerCommand', cfg.serverCommand.trim());
+      if (typeof cfg?.llmProvider === 'string') put('hindsightLlmProvider', cfg.llmProvider.trim());
       // Saving ANY config reverses the explicit-opt-out sentinel. The user is engaging
       // with Hindsight again — the override should not silently re-apply.
-      if (sm.get('hindsightExplicitlyDisabled') === true) sm.set('hindsightExplicitlyDisabled', false);
+      if (sm.get('hindsightExplicitlyDisabled') === true) put('hindsightExplicitlyDisabled', false);
+      if (!persisted) {
+        return { success: false, error: 'settings_store_degraded' };
+      }
       // Re-run start() so the auto-spawn fires IN-SESSION — previously the user had to restart
       // the app for the boot-time start() to see the new config. start() is idempotent and a
       // no-op when nothing changed (e.g. user just saved the same baseUrl).
@@ -4801,7 +6111,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('hindsight:disable', async () => {
     try {
       const sm = SettingsManager.getInstance();
-      sm.set('hindsightExplicitlyDisabled', true);
+      if (!sm.set('hindsightExplicitlyDisabled', true)) {
+        // R-24: the write was refused (degraded settings store). Returning
+        // success — and broadcasting below — put every window on a value disk
+        // never received, which silently reverted on the next launch.
+        return { success: false, error: 'settings_store_degraded' };
+      }
       const { HindsightManager } = require('./services/HindsightManager') as typeof import('./services/HindsightManager');
       // If we spawned an app-managed server, kill it. Cloud / user-managed servers stay up.
       try { HindsightManager.getInstance().stopSync(); } catch { /* nothing to stop */ }
@@ -4829,7 +6144,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     if (typeof enabled !== 'boolean') {
       return { success: false, error: 'invalid_value' };
     }
-    SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled);
+    if (!SettingsManager.getInstance().set('technicalInterviewVisionFirst', enabled)) {
+      // R-24: the write was refused (degraded settings store). Returning
+      // success — and broadcasting below — put every window on a value disk
+      // never received, which silently reverted on the next launch.
+      return { success: false, error: 'settings_store_degraded' };
+    }
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send('technical-interview-vision-first-changed', enabled);
@@ -4879,6 +6199,90 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
+    }
+  });
+
+  // ── Context Intelligence debug logging (Developer settings) ───────────────
+  // All paths are resolved MAIN-side from the bound log directory — the
+  // renderer never supplies a path, so there is nothing to contain/validate.
+  safeHandle('context-debug:get-config', async () => {
+    try {
+      const { describeContextDebugConfig } = require('./context-intelligence/debug/debug-config');
+      const { getContextDebugLogDirectory, getContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      const cfg = describeContextDebugConfig();
+      return {
+        ...cfg,
+        storedLevel: SettingsManager.getInstance().getContextDebugLevel(),
+        logDirectory: getContextDebugLogDirectory(),
+        currentFile: cfg.level !== 'off' ? getContextDebugWriter()?.getCurrentFilePath() ?? null : null,
+      };
+    } catch (e) {
+      return { level: 'off', levelSource: 'default', contentInclusion: false, error: (e as Error)?.message };
+    }
+  });
+
+  safeHandle('context-debug:set-level', async (_e, payload: unknown) => {
+    try {
+      const level = (payload as { level?: unknown })?.level;
+      if (level !== 'off' && level !== 'standard' && level !== 'verbose') {
+        return { ok: false, error: 'invalid_level' };
+      }
+      // CR-04: a refused write used to be reported as success.
+      if (!SettingsManager.getInstance().setContextDebugLevel(level)) {
+        return { ok: false, error: 'settings_store_degraded' };
+      }
+      // Effective config is re-read per turn, so this applies to the next
+      // question without a restart. Env override (if set) still wins.
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
+    }
+  });
+
+  safeHandle('context-debug:open-folder', async () => {
+    try {
+      const { getContextDebugLogDirectory } = require('./context-intelligence/debug/jsonl-writer');
+      const dir = getContextDebugLogDirectory();
+      if (!dir) return { ok: false, error: 'log directory not configured' };
+      fs.mkdirSync(dir, { recursive: true });
+      const err = await shell.openPath(dir);
+      return err ? { ok: false, error: err } : { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
+    }
+  });
+
+  safeHandle('context-debug:clear', async () => {
+    try {
+      const { getContextDebugLogDirectory, flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      const dir = getContextDebugLogDirectory();
+      if (!dir || !fs.existsSync(dir)) return { ok: true, removed: 0 };
+      await flushContextDebugWriter();
+      let removed = 0;
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith('.jsonl')) continue;        // never touch anything else
+        try { fs.unlinkSync(path.join(dir, f)); removed += 1; } catch { /* best-effort */ }
+      }
+      return { ok: true, removed };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
+    }
+  });
+
+  // Export = flush + reveal the current session file locally. Nothing is ever
+  // uploaded; sharing is the user's explicit action from there.
+  safeHandle('context-debug:export', async () => {
+    try {
+      const { getContextDebugWriter, flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+      const writer = getContextDebugWriter();
+      if (!writer) return { ok: false, error: 'debug logging not configured' };
+      await flushContextDebugWriter();
+      const file = writer.getCurrentFilePath();
+      if (!fs.existsSync(file)) return { ok: false, error: 'no debug records written this session yet' };
+      shell.showItemInFolder(file);
+      return { ok: true, path: file };
+    } catch (e) {
+      return { ok: false, error: (e as Error)?.message };
     }
   });
 
@@ -5032,6 +6436,67 @@ export function initializeIpcHandlers(appState: AppState): void {
       // console.error("Error getting Ollama models:", error);
       throw error;
     }
+  });
+
+  // Whether a LOCAL VISION model is actually installed — not merely whether
+  // Ollama has any model at all.
+  //
+  // The Privacy panel used to answer this with `ollamaModels.length > 0`, which
+  // counts `llama3` and `nomic-embed-text`. Enforcement asks a strictly narrower
+  // question (`checkOllamaAvailable(needsVision)` -> `getModelCapabilities(id,
+  // true).supportsImages`, LLMHelper.ts:1387), so a text-only install made the
+  // UI suppress its own "no local vision model" warning and show an "On-device"
+  // pill for screenshots that would then fail or be dropped.
+  //
+  // This handler exists so the indicator and the gate share ONE predicate. Do
+  // not reimplement the capability test in the renderer: `ollamaSupportsImages`
+  // lives in the main process (electron/llm/modelCapabilities.ts), and a second
+  // copy is exactly how the two drifted apart the first time.
+  //
+  // Deliberately Ollama-only, matching `isLocalVisionProvider()` in
+  // electron/llm/visionPolicy.ts. NOT `anyLocalVisionProviderConfigured()`,
+  // which counts a configured Codex CLI as "local" even though Codex routes to
+  // chatgpt.com — claiming that as on-device would restate the very lie the
+  // "Cloud vision is never called" copy is being corrected for.
+  // The Settings pane polls this every 3s while it is open. Each probe costs an
+  // Ollama GET /api/tags plus a POST /api/show, so the naive shape — two awaited
+  // probes per call — was four SERIAL round trips every three seconds, able to
+  // outrun the interval on a slow daemon. Coalesced below: the two probes run
+  // concurrently, and a short TTL collapses the poll to at most one probe pair
+  // per window. The TTL is deliberately well under the poll interval so the
+  // indicator still reflects a provider switch made in this same window.
+  let localFallbackCache: { at: number; value: { text: boolean; vision: boolean } } | null = null;
+  let localFallbackInFlight: Promise<{ text: boolean; vision: boolean }> | null = null;
+  const LOCAL_FALLBACK_TTL_MS = 2000;
+
+  safeHandle('get-local-fallback-status', async () => {
+    const now = Date.now();
+    if (localFallbackCache && now - localFallbackCache.at < LOCAL_FALLBACK_TTL_MS) {
+      return localFallbackCache.value;
+    }
+    // Single-flight: overlapping polls share one probe instead of stacking.
+    if (localFallbackInFlight) return localFallbackInFlight;
+
+    localFallbackInFlight = (async () => {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        const [text, vision] = await Promise.all([
+          llmHelper.scopeFallbackAvailable(false),
+          llmHelper.scopeFallbackAvailable(true),
+        ]);
+        const value = { text, vision };
+        localFallbackCache = { at: Date.now(), value };
+        return value;
+      } catch {
+        // Fail CLOSED for a privacy indicator: if we cannot establish that a
+        // local fallback exists, we must not claim on-device handling. Not
+        // cached — a transient daemon blip should not pin the badge to false.
+        return { text: false, vision: false };
+      } finally {
+        localFallbackInFlight = null;
+      }
+    })();
+    return localFallbackInFlight;
   });
 
   // Liveness probe distinct from get-available-ollama-models. Lets callers tell
@@ -5340,6 +6805,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  safeHandle('set-nvidia-nim-api-key', async (_, apiKey: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      const normalizedKey = (apiKey || '').trim();
+      const keyChanged = cm.getNvidiaNimApiKey() !== normalizedKey;
+      cm.setNvidiaNimApiKey(normalizedKey);
+      appState.processingHelper.getLLMHelper().setNvidiaNimApiKey(normalizedKey);
+      await appState.reconfigureSttProvider();
+      appState.getIntelligenceManager().resetEngine();
+      appState.getIntelligenceManager().initializeLLMs();
+      if (keyChanged) {
+        await refreshRuntimeDefaultIfUnavailable();
+        broadcastCredentialsChanged();
+      }
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
+  });
+
   safeHandle('set-litellm-config', async (_, config: { apiKey: string; baseURL: string; maxTokens?: number }) => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -5363,6 +6847,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         || prevUrl !== newUrl
         || (prevMaxTokens || undefined) !== effectiveNewMaxTokens;
       cm.setLitellmConfig(requestedKey, newUrl, config?.maxTokens);
+
+      // The discovered-model cache belongs to one specific proxy. Drop it when the
+      // proxy is removed (its models would otherwise keep appearing in the picker
+      // with nothing behind them) or when the URL changes (they belong to the old
+      // host). A same-URL re-save keeps the cache so the picker stays populated.
+      if (!newUrl.trim() || prevUrl !== newUrl) {
+        cm.setLitellmModels([]);
+      }
 
       // Update the LLMHelper with the EFFECTIVE stored key — a blank apiKey on
       // re-save means "keep the stored one" (the field is masked in Settings),
@@ -5393,21 +6885,99 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Discover models from the configured LiteLLM proxy (OpenAI-compatible /v1/models).
   // Returns [] on any failure (proxy down, auth rejected, timeout) so the model
   // selector degrades gracefully rather than throwing.
+  // Discover models from the configured LiteLLM proxy (OpenAI-compatible
+  // /v1/models), answering from the persisted cache when one exists.
+  //
+  // This used to fetch on EVERY call with a 5s timeout, and one of its callers is
+  // ModelSelectorWindow — the overlay model dropdown. A user with a remote proxy
+  // could therefore wait up to 5 seconds for the dropdown to open, and a user with
+  // no proxy configured still paid a connection attempt to localhost:4000 each
+  // time. The cache now answers instantly; discovery is explicit.
+  const discoverLitellmModels = async (timeoutMs: number): Promise<string[]> => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    // No proxy configured -> don't probe localhost:4000 at all.
+    const configuredURL = (cm.getLitellmBaseURL() || '').trim();
+    if (!configuredURL) return [];
+    const baseURL = configuredURL.replace(/\/+$/, '');
+    const apiKey = cm.getLitellmApiKey();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+    const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(timeoutMs) });
+    if (!resp.ok) return [];
+    const data: any = await resp.json();
+    const models: string[] = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
+    if (models.length > 0) cm.setLitellmModels(models);
+    return models;
+  };
+
   safeHandle('get-available-litellm-models', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const baseURL = (cm.getLitellmBaseURL() || 'http://localhost:4000/v1').replace(/\/+$/, '');
-      const apiKey = cm.getLitellmApiKey();
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-      const resp = await fetch(`${baseURL}/models`, { method: 'GET', headers, signal: AbortSignal.timeout(5000) });
-      if (!resp.ok) return [];
-      const data: any = await resp.json();
-      const models = (data?.data || []).map((m: any) => m?.id).filter(Boolean);
-      return models;
+      const cached = CredentialsManager.getInstance().getLitellmModels();
+      if (cached.length > 0) return cached;
+      // Cold start: no cache yet, so pay the fetch once rather than showing an
+      // empty model list until the user finds the refresh button.
+      return await discoverLitellmModels(5000);
     } catch {
       return [];
+    }
+  });
+
+  // Explicit re-discovery, for the refresh control on the LiteLLM card.
+  safeHandle('refresh-litellm-models', async () => {
+    try {
+      const models = await discoverLitellmModels(8000);
+      broadcastCredentialsChanged();
+      return models;
+    } catch (error) {
+      console.error('[IPC] refresh-litellm-models failed:', error);
+      return [];
+    }
+  });
+
+  safeHandle('get-disabled-providers', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getDisabledProviders();
+    } catch {
+      return [];
+    }
+  });
+
+  safeHandle('set-disabled-providers', async (_, providers: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setDisabledProviders(Array.isArray(providers) ? providers : []);
+      // Move the live LLMHelper off the active model if it belonged to a provider
+      // just switched off — not just the credential store.
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('get-cloud-fetched-models', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const cm = CredentialsManager.getInstance();
+      return { models: cm.getAllCloudFetchedModels(), fetchedAt: cm.getCloudFetchedAt() };
+    } catch {
+      return { models: {}, fetchedAt: {} };
+    }
+  });
+
+  safeHandle('set-cloud-enabled-models', async (_, provider: string, models: string[]) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      CredentialsManager.getInstance().setCloudEnabledModels(provider, Array.isArray(models) ? models : []);
+      await refreshRuntimeDefaultIfUnavailable();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
   });
 
@@ -5432,7 +7002,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const defaultModel = cm.getDefaultModel();
       const providers = [...(cm.getCurlProviders() || []), ...(cm.getCustomProviders() || [])];
       llmHelper.setModel(defaultModel, providers);
-      appState.broadcast('model-changed', defaultModel);
+      appState.sendModelChanged(defaultModel);
 
       // If setNativelyApiKey auto-promoted the STT provider to 'natively', reconfigure
       // the audio pipeline immediately — without this, the in-memory pipeline still uses
@@ -5481,9 +7051,24 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!win.isDestroyed())
                 win.webContents.send('license-status-changed', { isPremium: true });
             });
-          } else if (result.skipped) {
+          } else if (result.skipped && !result.error) {
+            // Benign skip: the stored perpetual license is verified and already
+            // granting Pro, so there is nothing to tell the user.
             console.log(
               '[IPC] set-natively-api-key: existing Gumroad/Dodo license preserved — Pro not overwritten.',
+            );
+          } else if (result.skipped) {
+            // Skip WITH an error: the perpetual license could not be verified
+            // (native module absent), so it grants nothing AND the API key was
+            // refused — the user has Pro from neither credential. This is a
+            // support-visible fault, not the benign case above; do not bury it
+            // at log level. NOTE: still not surfaced in the UI — the
+            // license-status-changed payload is typed { isPremium, plan? } and
+            // has no channel for a reason string. Users hitting this via the
+            // license box DO see it (activateLicense returns result.error).
+            console.warn(
+              '[IPC] set-natively-api-key: Pro inactive —',
+              result.error,
             );
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
@@ -5555,7 +7140,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  safeHandle('get-natively-usage', async () => {
+  safeHandle('get-natively-usage', async (_event, opts?: { force?: boolean }) => {
     // Hoisted out of try so the catch block's stale-cache lookup can reach it.
     let key: string | undefined;
     try {
@@ -5563,9 +7148,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       key = CredentialsManager.getInstance().getNativelyApiKey();
       if (!key) return { ok: false, error: 'no_key' };
 
-      // Return cached value if it's still fresh
+      // Return cached value if it's still fresh — skipped when the caller
+      // explicitly asks for a fresh fetch (the Refresh button). Without this,
+      // a manual refresh within the 60s TTL silently re-serves the same
+      // stale numbers, which reads as "the button doesn't work."
       const cached = _usageCache.get(key);
-      if (cached && Date.now() - cached.ts < USAGE_CACHE_TTL_MS) {
+      if (!opts?.force && cached && Date.now() - cached.ts < USAGE_CACHE_TTL_MS) {
         return cached.data;
       }
 
@@ -5607,13 +7195,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
 
-      // Get hardware ID for HWID-binding
-      let hwid = 'unavailable';
+      // Get hardware ID for HWID-binding.
+      //
+      // F-601: this MUST be a real per-machine identity. LicenseManager
+      // returns the literal string 'unavailable' when the native module
+      // failed to load (its own JSDoc scopes that value to "display to the
+      // user for support purposes"), and the trial row is keyed
+      // `hwid text NOT NULL UNIQUE` server-side. Sending the sentinel makes
+      // every machine with a broken native module collide on ONE
+      // free_trials row: the server's idempotent re-issue branch hands back
+      // a valid signed trial token for a STRANGER's trial, exposing their
+      // usage counters and billing every request against their quota.
+      // Fail closed instead — a trial that cannot be bound to this machine
+      // must not be started.
+      let hwid = '';
       try {
         const { LicenseManager } = require('../premium/electron/services/LicenseManager');
-        hwid = LicenseManager.getInstance().getHardwareId() || 'unavailable';
+        hwid = LicenseManager.getInstance().getHardwareId() || '';
       } catch {
-        /* LicenseManager not available — fall back */
+        /* LicenseManager not available — handled by the guard below */
+      }
+      if (!hwid || hwid === 'unavailable') {
+        console.error('[Trial] Refusing to start a trial without a real hardware id (native module unavailable).');
+        return { ok: false, error: 'hardware_id_unavailable' };
       }
 
       const res = await fetch('https://api.natively.software/v1/trial/start', {
@@ -6196,6 +7800,38 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // Get stored API keys (masked for UI display)
+  // R-10 resolution flow (§19.1): let the settings UI surface the ambiguous
+  // two-store state and apply the user's choice. Summary carries key NAMES and
+  // last-4 only — never values.
+  safeHandle('credentials:get-ambiguous-stores', async () => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      return CredentialsManager.getInstance().getAmbiguousStoreSummary();
+    } catch (e) {
+      console.error('[IPC] credentials:get-ambiguous-stores error:', e);
+      return null;
+    }
+  });
+
+  safeHandle('credentials:resolve-ambiguous-stores', async (_event, choice: 'keyring' | 'fallback' | 'merge') => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const result = CredentialsManager.getInstance().resolveAmbiguousStores(choice);
+      if (result.ok) {
+        // The active credential set just changed wholesale — tell every window
+        // the same way an ordinary key edit does.
+        const { BrowserWindow } = require('electron');
+        for (const win of BrowserWindow.getAllWindows()) {
+          try { win.webContents.send('credentials-changed'); } catch { /* window closing */ }
+        }
+      }
+      return result;
+    } catch (e) {
+      console.error('[IPC] credentials:resolve-ambiguous-stores error:', e);
+      return { ok: false, error: 'internal_error' };
+    }
+  });
+
   safeHandle('get-stored-credentials', async () => {
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
@@ -6210,6 +7846,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: hasKey(creds.openaiApiKey),
         hasClaudeKey: hasKey(creds.claudeApiKey),
         hasDeepseekKey: hasKey(creds.deepseekApiKey),
+        hasNvidiaNimKey: hasKey(creds.nvidiaNimApiKey),
         hasLitellmBaseURL: hasKey(creds.litellmBaseURL),
         // The base URL is config, not a secret — returned in full so Settings can
         // prefill it (unlike API keys, which are only reported as booleans).
@@ -6218,6 +7855,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasNativelyKey: hasKey(creds.nativelyApiKey),
         googleServiceAccountPath: creds.googleServiceAccountPath || null,
         sttProvider: creds.sttProvider || 'none',
+        nvidiaNimSttModel: creds.nvidiaNimSttModel || 'nemotron-asr-streaming',
         groqSttModel: creds.groqSttModel || 'whisper-large-v3-turbo',
         hasSttGroqKey: hasKey(creds.groqSttApiKey),
         hasSttOpenaiKey: hasKey(creds.openAiSttApiKey),
@@ -6246,6 +7884,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
+        nvidia_nimPreferredModel: creds.nvidia_nimPreferredModel || undefined,
+        // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
+        litellmPreferredModel: creds.litellmPreferredModel || undefined,
+        disabledProviders: creds.disabledProviders || [],
+        cloudEnabledModels: creds.cloudEnabledModels || {},
       };
     } catch (error: any) {
       // SECURITY FIX (P0): Error fallback returns masked keys, not raw strings
@@ -6255,6 +7898,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         hasOpenaiKey: false,
         hasClaudeKey: false,
         hasDeepseekKey: false,
+        hasNvidiaNimKey: false,
         hasLitellmBaseURL: false,
         litellmBaseURL: null,
         litellmMaxTokens: null,
@@ -6289,7 +7933,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'fetch-provider-models',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) => {
       try {
         // Fall back to stored key if no key was explicitly provided
         let key = apiKey?.trim();
@@ -6301,6 +7945,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') key = cm.getOpenaiApiKey();
           else if (provider === 'claude') key = cm.getClaudeApiKey();
           else if (provider === 'deepseek') key = cm.getDeepseekApiKey();
+          else if (provider === 'nvidia_nim') key = cm.getNvidiaNimApiKey();
         }
 
         if (!key) {
@@ -6309,6 +7954,23 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         const { fetchProviderModels } = require('./utils/modelFetcher');
         const models = await fetchProviderModels(provider, key);
+        // Persist the catalog. The renderer's allow-list stores ids from this list, so
+        // if it only lived in component state the list would die on a settings-tab
+        // switch (SettingsOverlay unmounts the panel) and the stored allow-list would
+        // reference models the card could no longer render.
+        if (Array.isArray(models) && models.length > 0) {
+            try {
+                const { CredentialsManager } = require('./services/CredentialsManager');
+                CredentialsManager.getInstance().setCloudFetchedModels(
+                    provider,
+                    models.map((m: any) => ({ id: m.id, label: m.label || m.id })),
+                    Date.now(),
+                );
+                broadcastCredentialsChanged();
+            } catch (e) {
+                console.warn('[IPC] could not cache fetched models:', e);
+            }
+        }
         return { success: true, models };
       } catch (error: any) {
         console.error(`[IPC] Failed to fetch ${provider} models:`, error);
@@ -6321,7 +7983,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'set-provider-preferred-model',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm', modelId: string) => {
       try {
         const { CredentialsManager } = require('./services/CredentialsManager');
         CredentialsManager.getInstance().setPreferredModel(provider, modelId);
@@ -6349,6 +8011,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         | 'azure'
         | 'ibmwatson'
         | 'soniox'
+        | 'nvidia_nim'
         | 'natively'
         | 'local-whisper',
     ) => {
@@ -6388,6 +8051,24 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       return 'none';
     }
+  });
+
+  safeHandle('set-nvidia-nim-stt-model', async (_, model: string) => {
+    try {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      // Single source of truth — see NVIDIA_NIM_STT_MODELS. A second hardcoded
+      // list here would silently reject models the picker already offers.
+      const { isNvidiaNimSttModel } = require('./audio/nvidiaNimSttModels');
+      if (!isNvidiaNimSttModel(model)) {
+        return { success: false, error: 'Unsupported NVIDIA NIM speech model' };
+      }
+      const cm = CredentialsManager.getInstance();
+      const persisted = cm.setNvidiaNimSttModel(model);
+      if (!persisted) return { success: false, error: 'Could not save NVIDIA NIM speech model' };
+      await appState.reconfigureSttProvider();
+      broadcastCredentialsChanged();
+      return { success: true };
+    } catch (error: any) { return { success: false, error: error.message }; }
   });
 
   // Shared guard for STT key saves. Keys persist via the OS keyring or, when that is
@@ -6621,7 +8302,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     'test-stt-connection',
     async (
       _,
-      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+      provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
       apiKey: string,
       region?: string,
     ) => {
@@ -6645,7 +8326,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { success: false, error: 'Invalid region' };
         }
 
-        if (provider === 'deepgram') {
+        if (provider === 'nvidia_nim') {
+          // Extracted so the settle-on-any-terminal-event logic is unit-testable
+          // (scripts/dev/riva-probe-check.cjs) instead of buried in this handler.
+          const { probeNvidiaNimStt } = require('./audio/nvidiaNimSttProbe');
+          const { CredentialsManager: CM } = require('./services/CredentialsManager');
+          // Probe the model the user actually selected — the models sit behind
+          // different NVCF function-ids, so testing a fixed one can pass while
+          // the selected model is unreachable.
+          return await probeNvidiaNimStt(apiKey, CM.getInstance().getNvidiaNimSttModel());
+        } else if (provider === 'deepgram') {
           const WebSocket = require('ws');
           const token = apiKey.trim();
           return await new Promise<{ success: boolean; error?: string }>((resolve) => {
@@ -6885,7 +8575,16 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('local-whisper-get-models', async () => {
     try {
       const { getAvailableModels } = require('./audio/whisper/modelManager');
-      const models = getAvailableModels();
+      const { getLocalModelLanguageSupport } = require('./audio/whisper/modelLanguageSupport');
+      // languageSupport: which RECOGNITION_LANGUAGES keys each model accepts
+      // (verified against each model's official docs — see
+      // modelLanguageSupport.ts). The Settings UI uses it to restrict the
+      // Language options to the active model's set and to grey out the
+      // Language / Accent-Region selects when the model can't change them.
+      const models = getAvailableModels().map((m: any) => ({
+        ...m,
+        languageSupport: getLocalModelLanguageSupport(m.id),
+      }));
       const activeModelId = SettingsManager.getInstance().get('localWhisperModel') ?? '';
       return { models, activeModelId };
     } catch (e: any) {
@@ -6941,7 +8640,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (!MODEL_CATALOG_IDS.has(modelId)) {
         return { success: false, error: `Unknown local Whisper model: ${modelId}` };
       }
-      SettingsManager.getInstance().set('localWhisperModel', modelId);
+      if (!SettingsManager.getInstance().set('localWhisperModel', modelId)) {
+        // R-24: the write was refused (degraded settings store). Returning
+        // success — and broadcasting below — put every window on a value disk
+        // never received, which silently reverted on the next launch.
+        return { success: false, error: 'settings_store_degraded' };
+      }
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };
@@ -6962,7 +8666,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       const badGlobal = sm.get('localWhisperModel');
       const badMic = sm.get('localWhisperModelMic');
       const badSystem = sm.get('localWhisperModelSystem');
-      sm.set('localWhisperModel', DEFAULT_MODEL);
+      if (!sm.set('localWhisperModel', DEFAULT_MODEL)) {
+        // R-24: the write was refused (degraded settings store). Returning
+        // success — and broadcasting below — put every window on a value disk
+        // never received, which silently reverted on the next launch.
+        return { success: false, error: 'settings_store_degraded' };
+      }
       if (badMic) sm.set('localWhisperModelMic', DEFAULT_MODEL);
       if (badSystem) sm.set('localWhisperModelSystem', DEFAULT_MODEL);
       // Drop the recent-failure cooldown for every id we just replaced.
@@ -7010,7 +8719,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (typeof cfg?.enabled === 'boolean') sm.set('localWhisperPerChannelEnabled', cfg.enabled);
         if (typeof cfg?.micModelId === 'string') sm.set('localWhisperModelMic', cfg.micModelId);
         if (typeof cfg?.systemModelId === 'string')
-          sm.set('localWhisperModelSystem', cfg.systemModelId);
+          if (!sm.set('localWhisperModelSystem', cfg.systemModelId)) {
+            // R-24: the write was refused (degraded settings store). Returning
+            // success — and broadcasting below — put every window on a value disk
+            // never received, which silently reverted on the next launch.
+            return { success: false, error: 'settings_store_degraded' };
+          }
         return { success: true };
       } catch (e: any) {
         return { success: false, error: e.message };
@@ -7039,8 +8753,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Settings overlay severed the event channel is no longer possible.
   safeHandle('local-whisper-start-download', async (_event, modelId: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      const r = LocalModelDownloadService.getInstance().start('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      const r = LocalModelDownloadService.getInstance().start(resolveLocalModelProviderName(modelId), modelId);
       // Preserve the original return shape: the panel treats 'already-downloading'
       // as a non-error success.
       if (r.alreadyDownloading) return { success: false, error: 'already-downloading' };
@@ -7052,8 +8766,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('local-whisper-cancel-download', async (_event, modelId: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      return LocalModelDownloadService.getInstance().cancel('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      return LocalModelDownloadService.getInstance().cancel(resolveLocalModelProviderName(modelId), modelId);
     } catch (e: any) {
       return { success: false, error: e?.message ?? String(e) };
     }
@@ -7065,8 +8779,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   // mid-download.
   safeHandle('local-whisper-get-download-state', async (_event, modelId?: string) => {
     try {
-      const { LocalModelDownloadService } = require('./services/LocalModelDownloadService');
-      return LocalModelDownloadService.getInstance().getState('whisper', modelId);
+      const { LocalModelDownloadService, resolveLocalModelProviderName } = require('./services/LocalModelDownloadService');
+      // With a modelId, resolve its real provider (whisper vs nemotron) for
+      // the single-entry lookup. Without one (querying every in-flight
+      // download for the panel's initial mount), pass no providerName at
+      // all — getState() then returns entries across every registered
+      // provider; hardcoding 'whisper' here previously meant the panel
+      // could never see a Nemotron entry on remount.
+      return LocalModelDownloadService.getInstance().getState(
+        modelId ? resolveLocalModelProviderName(modelId) : undefined,
+        modelId,
+      );
     } catch {
       return modelId ? null : [];
     }
@@ -7112,7 +8835,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle(
     'test-llm-connection',
-    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey?: string) => {
+    async (_, provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey?: string) => {
       console.log(`[IPC] Received test-llm-connection request for provider: ${provider}`);
       try {
         if (!apiKey || !apiKey.trim()) {
@@ -7123,6 +8846,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           else if (provider === 'openai') apiKey = creds.getOpenaiApiKey();
           else if (provider === 'claude') apiKey = creds.getClaudeApiKey();
           else if (provider === 'deepseek') apiKey = creds.getDeepseekApiKey();
+          else if (provider === 'nvidia_nim') apiKey = creds.getNvidiaNimApiKey();
         }
 
         if (!apiKey || !apiKey.trim()) {
@@ -7133,7 +8857,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let response;
 
         if (provider === 'gemini') {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
           response = await axios.post(
             url,
             {
@@ -7202,6 +8926,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             },
           );
         }
+        else if (provider === 'nvidia_nim') {
+          response = await axios.post('https://integrate.api.nvidia.com/v1/chat/completions', {
+            model: 'meta/llama-3.1-8b-instruct', messages: [{ role: 'user', content: 'Hello' }], max_tokens: 10,
+          }, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000 });
+        }
 
         if (response && (response.status === 200 || response.status === 201)) {
           return { success: true };
@@ -7250,7 +8979,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       llmHelper.setGroqFastTextMode(enabled);
 
       const { SettingsManager } = require('./services/SettingsManager');
-      SettingsManager.getInstance().set('groqFastTextMode', enabled);
+      if (!SettingsManager.getInstance().set('groqFastTextMode', enabled)) {
+        // R-24: the write was refused (degraded settings store). Returning
+        // success — and broadcasting below — put every window on a value disk
+        // never received, which silently reverted on the next launch.
+        return { success: false, error: 'settings_store_degraded' };
+      }
 
       // Broadcast to all windows
       BrowserWindow.getAllWindows().forEach((win) => {
@@ -7276,7 +9010,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     try {
       const normalized = CodexCliService.normalizeConfig(config || {});
       const sm = SettingsManager.getInstance();
-      sm.set('codexCliEnabled', normalized.enabled);
+      if (!sm.set('codexCliEnabled', normalized.enabled)) {
+        // R-24: the write was refused (degraded settings store). Returning
+        // success — and broadcasting below — put every window on a value disk
+        // never received, which silently reverted on the next launch.
+        return { success: false, error: 'settings_store_degraded' };
+      }
       sm.set('codexCliPath', normalized.path);
       sm.set('codexCliModel', normalized.model);
       sm.set('codexCliFastModel', normalized.fastModel);
@@ -7465,7 +9204,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -7497,7 +9236,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         llmHelper.prewarmPromptCache().catch((_e: any): void => {});
       }
 
-      appState.broadcast('model-changed', modelId);
+      appState.sendModelChanged(modelId);
 
       // Close the selector window if open
       appState.modelSelectorWindowHelper.hideWindow();
@@ -7517,7 +9256,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.6-flash' };
+      return { model: 'gemini-3.7-flash' };
     }
   });
 
@@ -7603,6 +9342,51 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error ending meeting:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  // TEST-TRANSCRIPT INJECTION (deep-run 2 issue 10, 2026-08-01). The all-files
+  // stress run could never score a single team-meet transcript question: with
+  // no live audio there is NO way to get spoken turns into a session, so every
+  // "what did we decide?" turn correctly refused and the meeting pipeline had
+  // nothing to persist. This handler injects transcript segments for test runs
+  // ONLY, under two independent gates that must BOTH hold:
+  //
+  //   1. env NATIVELY_TEST_TRANSCRIPT_INJECTION=1 — an explicit, per-run opt-in;
+  //   2. !app.isPackaged — structurally unreachable in any shipped build.
+  //
+  // Injected segments are stamped origin 'test', NEVER 'stt' — provenance must
+  // stay truthful end-to-end. isMemoryEligibleSegment treats 'test' as eligible
+  // only under the same env gate, so meeting memory/summary/RAG behave as they
+  // would for real speech in a test run while production remains airtight.
+  safeHandle('debug-inject-transcript', async (_event, segments: unknown) => {
+    const { app } = require('electron');
+    if (process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION !== '1' || app.isPackaged) {
+      return { success: false, error: 'injection_disabled' };
+    }
+    if (!Array.isArray(segments) || segments.length === 0 || segments.length > 500) {
+      return { success: false, error: 'invalid_segments' };
+    }
+    const im = appState.getIntelligenceManager();
+    if (!im) return { success: false, error: 'no_session' };
+    let injected = 0;
+    for (const raw of segments) {
+      const s = raw as { speaker?: unknown; text?: unknown; timestamp?: unknown; confidence?: unknown };
+      const text = String(s?.text ?? '').slice(0, 4000).trim();
+      if (!text) continue;
+      im.addTranscript({
+        speaker: String(s?.speaker ?? 'Speaker'),
+        text,
+        timestamp: typeof s?.timestamp === 'number' ? s.timestamp : Date.now(),
+        final: true,
+        // Real STT confidence is always < 1; injected segments mimic that so
+        // legacy consumers behave identically, but origin is what gates them.
+        confidence: typeof s?.confidence === 'number' ? s.confidence : 0.95,
+        origin: 'test',
+      }, true);
+      injected++;
+    }
+    console.log(`[TestInjection] Injected ${injected} transcript segment(s) with origin 'test'.`);
+    return { success: true, injected };
   });
 
   safeHandle('get-recent-meetings', async () => {
@@ -7920,6 +9704,18 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
 
     const anyOk = results.some((r) => r.ok);
+    // The failure branch interpolates raw `tccutil` stderr, which is unbounded.
+    // This string lands in the overlay warning banner, which clamps to 2 lines
+    // and has no escape hatch: a native `title=` tooltip never fires during
+    // overlay mouse passthrough, and the global `::-webkit-scrollbar {width:0}`
+    // rules out a scroll region. Truncate at the source so the banner shows a
+    // complete-looking sentence rather than text that silently stops. Full
+    // stderr is already in the log via the console.warn above.
+    const REPAIR_MESSAGE_MAX_CHARS = 180;
+    const truncateForBanner = (text: string): string =>
+      text.length > REPAIR_MESSAGE_MAX_CHARS
+        ? `${text.slice(0, REPAIR_MESSAGE_MAX_CHARS).trimEnd()}…`
+        : text;
     return {
       ok: anyOk,
       bundleId,
@@ -7927,10 +9723,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       promptRelaunch: anyOk,
       message: anyOk
         ? 'Permissions reset. Quit Natively completely (Cmd+Q) and reopen — macOS will ask you to grant Microphone and Screen Recording again. Approve both to restore audio capture.'
-        : `Permission reset failed for ${bundleId}. ${results
-            .filter((r) => !r.ok)
-            .map((r) => `${r.service}: ${r.output}`)
-            .join('; ')}`,
+        : truncateForBanner(
+            `Permission reset failed for ${bundleId}. ${results
+              .filter((r) => !r.ok)
+              .map((r) => `${r.service}: ${r.output}`)
+              .join('; ')}`,
+          ),
     };
   });
 
@@ -7968,7 +9766,39 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   // MODE 1: Assist (Passive observation)
+  // ── Usage-ledger feature instrumentation (phase 4) ─────────────────────────
+  //
+  // `runTracked` emits feature_started and exactly one terminal event. The
+  // feature name comes from the ACTIVE MODE and is only a NAMED feature when
+  // that mode is a built-in — a custom mode a user renamed "Technical
+  // Interview" reports the honest `mode_execution` instead (§31).
+  //
+  // Everything is wrapped: instrumentation must never be able to fail the answer
+  // it measures, so a failure to resolve the mode degrades to `mode_execution`
+  // rather than throwing into the handler.
+  const _usageFeature = (): any => {
+    try {
+      const { featureForMode } = require('./services/usageInstrumentation');
+      const { ModesManager: _MMUsage } = require('./services/ModesManager');
+      return featureForMode(_MMUsage.getInstance().getActiveMode());
+    } catch {
+      return 'mode_execution';
+    }
+  };
+  const _tracked = async <T>(fn: () => Promise<T>, failedIf?: (r: T) => boolean): Promise<T> => {
+    try {
+      const { runTracked } = require('./services/usageInstrumentation');
+      return await runTracked(_usageFeature(), fn, failedIf ? { failedIf } : undefined);
+    } catch (e: any) {
+      // Only a require()/wiring failure lands here; runTracked rethrows the
+      // handler's own error untouched, so this cannot swallow a real one.
+      if (e && e.__usageWrapperFailure) return fn();
+      throw e;
+    }
+  };
+
   safeHandle('generate-assist', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const insight = await intelligenceManager.runAssistMode();
@@ -7985,6 +9815,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.insight === null || r.insight === undefined);
   });
 
   // MODE 2: What Should I Say (Primary auto-answer)
@@ -8003,6 +9834,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       imagePaths?: string[],
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
+      return _tracked(async () => {
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -8135,6 +9967,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           }
         }
 
+        // Diagnostic (2026-08-02): the renderer's own "[DOM Context] Forwarding…"
+        // notice is a console.debug in the RENDERER, which is not forwarded to the
+        // main-process console — so from a user's terminal log there was no way to
+        // tell a capture that never arrived from one that arrived and was ignored
+        // downstream. Those two have completely different fixes. Log it once here,
+        // at the main-process boundary where the value is authoritative.
+        console.log('[WTA] domContext at IPC boundary:', {
+          received: typeof options?.domContext === 'string' ? options.domContext.length : 0,
+          envelope: Boolean(options?.domContextEnvelope),
+          effective: effectiveDomContext ? effectiveDomContext.length : 0,
+        });
+
         // Question and imagePaths are now optional - IntelligenceManager infers from transcript
         const answer = await intelligenceManager.runWhatShouldISay(
           question,
@@ -8183,16 +10027,23 @@ export function initializeIpcHandlers(appState: AppState): void {
         };
       } catch (error: any) {
         console.error('[IPC] generate-what-to-say error:', error);
+        // Returns an error object rather than throwing. runTracked's default
+        // predicate reads the truthy `error` field and records this as FAILED —
+        // a dispute report must never imply service was delivered when it was
+        // not (§6). The two early returns above use the same shape and are
+        // classified the same way, which is the point of the shared wrapper.
         return {
           answer: null,
           question: question || 'unknown',
           error: error?.message || 'unknown_error',
         };
       }
+      });
     },
   );
 
   safeHandle('generate-clarify', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const clarification = await intelligenceManager.runClarify();
@@ -8218,6 +10069,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.clarification === null || r.clarification === undefined);
   });
 
   // Shared helper: validate, then run images through the vision-first ImageOptimizer
@@ -8253,6 +10105,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   }
 
   safeHandle('generate-code-hint', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -8307,9 +10160,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   safeHandle('generate-brainstorm', async (_, imagePaths?: string[], problemStatement?: string) => {
+    return _tracked(async () => {
     try {
       // If no explicit images were passed from the frontend, fall back to the
       // screenshot queue so the AI can always "see" the user's screen.
@@ -8363,6 +10218,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    });
   });
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
@@ -8375,7 +10231,12 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('set-action-button-mode', (_, mode: 'recap' | 'brainstorm') => {
     const { SettingsManager } = require('./services/SettingsManager');
     const sm = SettingsManager.getInstance();
-    sm.set('actionButtonMode', mode);
+    if (!sm.set('actionButtonMode', mode)) {
+      // R-24: the write was refused (degraded settings store). Returning
+      // success — and broadcasting below — put every window on a value disk
+      // never received, which silently reverted on the next launch.
+      return { success: false, error: 'settings_store_degraded' };
+    }
 
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) {
@@ -8388,6 +10249,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // MODE 3: Follow-Up (Refinement)
   safeHandle('generate-follow-up', async (_, intent: string, userRequest?: string) => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const refined = await intelligenceManager.runFollowUp(intent, userRequest);
@@ -8404,10 +10266,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.refined === null || r.refined === undefined);
   });
 
   // MODE 4: Recap (Summary)
   safeHandle('generate-recap', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const summary = await intelligenceManager.runRecap();
@@ -8424,10 +10288,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.summary === null || r.summary === undefined);
   });
 
   // MODE 6: Follow-Up Questions
   safeHandle('generate-follow-up-questions', async () => {
+    return _tracked(async () => {
     try {
       const intelligenceManager = appState.getIntelligenceManager();
       const questions = await intelligenceManager.runFollowUpQuestions();
@@ -8444,6 +10310,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       throw error;
     }
+    }, (r: any) => !r || r.questions === null || r.questions === undefined);
   });
 
   // MODE 5: Manual Answer (Fallback)
@@ -8569,6 +10436,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             text: segment.text,
             timestamp: segment.timestamp ?? Date.now(),
             final: segment.final ?? true,
+            origin: 'test',
           },
           true,
         );
@@ -8608,12 +10476,25 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const filePath = result.filePaths[0];
 
-      // Update backend state immediately
-      appState.updateGoogleCredentials(filePath);
+      // Update backend state immediately. Persist ONLY if the file validated —
+      // storing an unusable path is what produced the ENOENT crash loop, since
+      // the failure surfaces later from inside the Speech SDK.
+      const verdict = appState.updateGoogleCredentials(filePath);
+      if (!verdict.usable) {
+        return { success: false, error: describeServiceAccountRejection(verdict.reason) };
+      }
 
-      // Persist the path for future sessions
+      // Persist the path for future sessions. setGoogleServiceAccountPath
+      // returns whether the write reached disk — reporting success on a failed
+      // write would show the filename as saved and lose it on restart.
       const { CredentialsManager } = require('./services/CredentialsManager');
-      CredentialsManager.getInstance().setGoogleServiceAccountPath(filePath);
+      if (!CredentialsManager.getInstance().setGoogleServiceAccountPath(filePath)) {
+        return {
+          success: false,
+          error: 'The key file is valid, but saving it failed. It will work until you quit. '
+            + 'Check that the app can write to its data folder, then try again.',
+        };
+      }
 
       return { success: true, path: filePath };
     } catch (error: any) {
@@ -8681,6 +10562,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ==========================================
 
   safeHandle('generate-followup-email', async (_, input: any) => {
+    return _tracked(async () => {
     try {
       const { FOLLOWUP_EMAIL_PROMPT, GROQ_FOLLOWUP_EMAIL_PROMPT } = require('./llm/prompts');
       const { buildFollowUpEmailPromptInput } = require('./utils/emailUtils');
@@ -8690,9 +10572,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Build the context string from input
       const contextString = buildFollowUpEmailPromptInput(input);
 
+      // Prompt System v2 (flag promptSystemV2): one provider-neutral email
+      // contract replaces the Gemini/Groq prompt pair. The transport shape is
+      // unchanged (instructions concatenated into the user message with
+      // skipSystemPrompt=true). Flag off → legacy constants, unchanged.
+      let v2EmailPrompt: string | null = null;
+      try {
+        const { resolveV2SystemPrompt } = require('./llm/promptSystemV2');
+        v2EmailPrompt = resolveV2SystemPrompt({ action: 'followup_email', tier: 'cloud', activeMode: null });
+      } catch { /* legacy fallback below */ }
+
       // Build prompts
-      const geminiPrompt = `${FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
-      const groqPrompt = `${GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
+      const geminiPrompt = `${v2EmailPrompt ?? FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
+      const groqPrompt = `${v2EmailPrompt ?? GROQ_FOLLOWUP_EMAIL_PROMPT}\n\nMEETING DETAILS:\n${contextString}`;
 
       // Use chatWithGemini with alternateGroqMessage for fallback
       const emailBody = await llmHelper.chatWithGemini(
@@ -8708,6 +10600,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       console.error('Error generating follow-up email:', error);
       throw error;
     }
+    });
   });
 
   safeHandle('extract-emails-from-transcript', async (_, transcript: Array<{ text: string }>) => {
@@ -8767,6 +10660,29 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Store active query abort controllers for cancellation
   const activeRAGQueries = new Map<string, AbortController>();
 
+  // Phase 6 (answer-pipeline-rebuild) concurrency fix: a NEW query of the same
+  // class (same meetingId, or live, or global) starting while a PRIOR one of
+  // that class is still streaming previously had no backend-side supersession
+  // at all — only the renderer finalized its own stale message bubble
+  // (forceFinalizeStaleRagStream in NativelyInterface.tsx), while the old
+  // backend generator kept running and kept emitting rag:stream-chunk events.
+  // Those late chunks then got appended into whatever text buffer was current
+  // by the time they arrived — corrupting the NEW answer with leftover tokens
+  // from the abandoned one. rag:cancel-query exists but is never invoked by
+  // any renderer call site, and (by its own pre-existing comment) can't even
+  // reach `live-` keys. Fixed at the source: abort any still-active query
+  // matching this class BEFORE minting a new one, mirroring the same
+  // "abort the old, start the new" pattern ipcHandlers.ts's manual-chat
+  // stream supersession (_chatStreamsBySender) already uses.
+  function abortPriorRAGQueriesOfClass(matchesClass: (key: string) => boolean): void {
+    for (const [key, controller] of activeRAGQueries) {
+      if (matchesClass(key)) {
+        try { controller.abort(); } catch { /* noop */ }
+        activeRAGQueries.delete(key);
+      }
+    }
+  }
+
   // Query meeting with RAG (meeting-scoped)
   safeHandle(
     'rag:query-meeting',
@@ -8791,6 +10707,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { fallback: true };
       }
 
+      abortPriorRAGQueriesOfClass((key) => key.startsWith(`meeting-${meetingId}-`));
       const abortController = new AbortController();
       const queryKey = `meeting-${meetingId}-${crypto.randomUUID()}`;
       activeRAGQueries.set(queryKey, abortController);
@@ -8803,7 +10720,18 @@ export function initializeIpcHandlers(appState: AppState): void {
           event.sender.send('rag:stream-chunk', { meetingId, chunk });
         }
 
-        event.sender.send('rag:stream-complete', { meetingId });
+        // Code-review finding (2026-07-28): RAGManager's generator `break`s
+        // (returns normally) rather than throwing when aborted, so this line
+        // was previously reached unconditionally even for a query that was
+        // just superseded by abortPriorRAGQueriesOfClass above. The renderer
+        // has no per-query correlation for rag:stream-complete (it acts on
+        // "whatever is currently the last streaming message"), so a stale
+        // complete event for the OLD query could finalize the NEW,
+        // still-empty placeholder as done — silently swallowing the new
+        // answer. Gate on the same abort check the chunk loop already uses.
+        if (!abortController.signal.aborted) {
+          event.sender.send('rag:stream-complete', { meetingId });
+        }
         return { success: true };
       } catch (error: any) {
         if (error.name !== 'AbortError') {
@@ -8841,14 +10769,21 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { fallback: true };
     }
 
+    // Auto-supersede any still-active LIVE query before starting this one —
+    // see abortPriorRAGQueriesOfClass's doc comment. rag:cancel-query can't
+    // reach `live-` keys (its own comment below), so this is the ONLY
+    // supersession path for this class; without it a rapid-fire follow-up
+    // question mid-stream would leave the old generator running forever,
+    // its late chunks bleeding into whatever answer is on screen by then.
+    abortPriorRAGQueriesOfClass((key) => key.startsWith('live-'));
     const abortController = new AbortController();
     // Date.now() alone collides when two queries fire in the same ms — the
     // second `set` would overwrite the first AbortController, the first
     // stream would become un-cancellable, and the `finally` `delete` would
     // evict the wrong entry. UUID guarantees uniqueness.
     // (Note: rag:cancel-query only matches `meeting-` and `global` prefixes,
-    // so `live-` keys aren't cancellable through that path — pre-existing
-    // behaviour, not regressed by this change.)
+    // so `live-` keys aren't cancellable through THAT path — mitigated above
+    // by auto-superseding on the next live query instead.)
     const queryKey = `live-${crypto.randomUUID()}`;
     activeRAGQueries.set(queryKey, abortController);
 
@@ -8860,7 +10795,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         event.sender.send('rag:stream-chunk', { live: true, chunk });
       }
 
-      event.sender.send('rag:stream-complete', { live: true });
+      // See the meeting-scoped handler's identical comment above — a stale
+      // complete event for a superseded live query would otherwise finalize
+      // the NEW placeholder as done before its first real chunk arrives.
+      if (!abortController.signal.aborted) {
+        event.sender.send('rag:stream-complete', { live: true });
+      }
       return { success: true };
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -8871,7 +10811,14 @@ export function initializeIpcHandlers(appState: AppState): void {
           return { fallback: true };
         }
         console.error('[RAG] Live query error:', error);
-        event.sender.send('rag:stream-error', { live: true, error: msg });
+        // No rag:stream-error here (F-118): the {success:false} return below
+        // makes the renderer fall through to regular live chat, so a terminal
+        // error event would DOUBLE-SIGNAL — the error handler stapled
+        // "[RAG Error: …]" into the bubble and cleared streaming state, and
+        // the fallback then streamed fresh tokens into that torn-down row.
+        // For the live class the fallback owns the UX; the meeting/global
+        // handlers keep their terminal events because nothing falls back.
+        // Live-reproduced in scripts/audit/F-118-repro.mjs.
       }
       return { success: false, error: error.message };
     } finally {
@@ -8887,6 +10834,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { fallback: true };
     }
 
+    abortPriorRAGQueriesOfClass((key) => key.startsWith('global-'));
     const abortController = new AbortController();
     // See live-${...} comment above for why Date.now() alone is unsafe.
     const queryKey = `global-${crypto.randomUUID()}`;
@@ -8900,7 +10848,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         event.sender.send('rag:stream-chunk', { global: true, chunk });
       }
 
-      event.sender.send('rag:stream-complete', { global: true });
+      // See the meeting-scoped handler's identical comment above.
+      if (!abortController.signal.aborted) {
+        event.sender.send('rag:stream-complete', { global: true });
+      }
       return { success: true };
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -9084,6 +11035,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       const status = orchestrator.getStatus();
       const activeResume = (orchestrator as any)?.activeResume?.structured_data ?? null;
       const activeJD = (orchestrator as any)?.activeJD?.structured_data ?? null;
+      // Indexing runs in the main process and outlives the Profile Intelligence
+      // panel (a React modal — closing it unmounts a subtree, it does NOT cancel
+      // this handler). The panel's local uploading state dies with that unmount,
+      // so main has to hand it back or a reopen mid-ingest renders the empty
+      // upload slot and invites a duplicate upload. NOT covered by
+      // aot_pipeline_running: that is JD-side and, per the comment above,
+      // deliberately excluded from the resume readiness signal.
+      const { DocType: StatusDocType } = require('../premium/electron/knowledge/types');
       return {
         hasProfile: status.hasResume,
         profileMode: status.activeMode,
@@ -9096,6 +11055,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         jd_structured_extraction_complete: Boolean(activeJD),
         jdFactsReady: Boolean(activeJD),
         aot_pipeline_running: Boolean((orchestrator as any)?.getAOTPipeline?.()?.isRunning?.()),
+        resume_indexing_in_flight: Boolean((orchestrator as any)?.isIngesting?.(StatusDocType.RESUME)),
+        jd_indexing_in_flight: Boolean((orchestrator as any)?.isIngesting?.(StatusDocType.JD)),
         // D3: surface how the resume was parsed so the UI can hint that a
         // heuristic (LLM-down) profile may be re-extracted for richer facts.
         extractionMode: activeResume
@@ -9124,7 +11085,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       orchestrator.setKnowledgeMode(enabled);
 
       const { SettingsManager } = require('./services/SettingsManager');
-      SettingsManager.getInstance().set('knowledgeMode', enabled);
+      if (!SettingsManager.getInstance().set('knowledgeMode', enabled)) {
+        // R-24: the write was refused (degraded settings store). Returning
+        // success — and broadcasting below — put every window on a value disk
+        // never received, which silently reverted on the next launch.
+        return { success: false, error: 'settings_store_degraded' };
+      }
 
       return { success: true };
     } catch (error: any) {
@@ -9139,7 +11105,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.RESUME);
+      // Both tiers in ONE transaction. Deleting only Tier 1 here left Tier 2's
+      // PII-bearing knowledge_cards orphaned — the user asked for their résumé
+      // to be removed and half of it stayed on disk. Tier 1 (premium
+      // KnowledgeDatabaseManager) and Tier 2 (this repo's DatabaseManager) wrap
+      // the SAME better-sqlite3 connection, so runInTransaction() is a genuine
+      // cross-tier rollback rather than call sequencing.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.RESUME, 'resume');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -9265,7 +11238,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { success: false, error: 'Knowledge engine not initialized' };
       }
       const { DocType } = require('../premium/electron/knowledge/types');
-      orchestrator.deleteDocumentsByType(DocType.JD);
+      // Same cross-tier transaction as profile:delete above — see the comment
+      // there for why a Tier-1-only delete is a partial delete.
+      const { deleteProfileTransactional } = require('./services/knowledge/deleteProfileTransactional') as typeof import('./services/knowledge/deleteProfileTransactional');
+      deleteProfileTransactional(orchestrator, DocType.JD, 'jd');
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
@@ -9385,32 +11361,14 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
       const engine = orchestrator.getCompanyResearchEngine();
 
-      // Wire search provider: Tavily (user key) → Natively API (fallback) → none (LLM-only)
-      const { CredentialsManager } = require('./services/CredentialsManager');
-      const cm = CredentialsManager.getInstance();
-      const tavilyApiKey = cm.getTavilyApiKey();
-      if (tavilyApiKey) {
-        const {
-          TavilySearchProvider,
-        } = require('../premium/electron/knowledge/TavilySearchProvider');
-        engine.setSearchProvider(new TavilySearchProvider(tavilyApiKey));
-      } else {
-        const nativelyKey = cm.getNativelyApiKey();
-        if (nativelyKey) {
-          const {
-            NativelySearchProvider,
-          } = require('../premium/electron/knowledge/NativelySearchProvider');
-          // Pass the real trial token when key is the __trial__ sentinel so the
-          // server can authenticate via x-trial-token instead of the invalid key.
-          const trialToken = nativelyKey === TRIAL_SENTINEL_KEY ? cm.getTrialToken() : undefined;
-          engine.setSearchProvider(
-            new NativelySearchProvider(nativelyKey, trialToken ?? undefined),
-          );
-          console.log(
-            '[IPC] Company research: using Natively API search (no Tavily key configured)',
-          );
-        }
-      }
+      // Wire search provider: Tavily (user key) → Natively API (fallback) → none (LLM-only).
+      // Shared cascade with the AOT pipeline (see resolveCompanySearchProvider) so the
+      // manual and automatic paths cannot drift. Null clears any stale provider left
+      // from a session where keys were since removed.
+      const {
+        resolveCompanySearchProvider,
+      } = require('./services/resolveCompanySearchProvider');
+      engine.setSearchProvider(resolveCompanySearchProvider());
 
       // Build full JD context so the dossier is tailored to the exact role
       const profileData = orchestrator.getProfileData();
@@ -9540,6 +11498,346 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   // ==========================================
+  // Role Insight IPC Handlers
+  // ==========================================
+  //
+  // Every handler resolves the service through the orchestrator and returns a
+  // structured {success,...} envelope rather than throwing, matching the rest of
+  // the Profile Intelligence surface. `error` strings here are user-facing —
+  // they render directly in the panel's error state.
+
+  const getRoleInsightService = (): any | null => {
+    const orchestrator = appState.getKnowledgeOrchestrator();
+    if (!orchestrator || typeof orchestrator.getRoleInsightService !== 'function') return null;
+    return orchestrator.getRoleInsightService();
+  };
+
+  safeHandle('roleInsight:get-status', async () => {
+    try {
+      const service = getRoleInsightService();
+      if (!service) {
+        // F10 (code review 2026-08-05): fabricating hasResume:false here made
+        // an attach failure (e.g. locked SQLite at startup) render as
+        // "No résumé yet — add it in Identity" for a user whose résumé is
+        // fine, sending them on a futile re-upload loop. Report the REAL
+        // source presence from the orchestrator and let available:false carry
+        // the actual condition.
+        let hasResume = false;
+        let hasJobDescription = false;
+        try {
+          const st = appState.getKnowledgeOrchestrator()?.getStatus?.();
+          hasResume = !!st?.hasResume;
+          hasJobDescription = !!st?.hasActiveJD;
+        } catch { /* orchestrator itself unavailable — falses are then true */ }
+        return {
+          available: false,
+          hasResume, hasJobDescription, hasAnalysis: false,
+          analysing: false, stage: null, outdated: false, outdatedReasons: [],
+          resumeName: '', jdTitle: '', jdCompany: '',
+        };
+      }
+      return { available: true, ...service.getStatus() };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:get-status error:', error);
+      return { available: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:get-report', async (event, analysisId?: string) => {
+    try {
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available in this build.' };
+      const report = service.getReport(typeof analysisId === 'string' ? analysisId : undefined);
+
+      // Auto-refresh (2026-08-04): when the stored analysis no longer matches
+      // the live sources, re-run in the background instead of parking an
+      // "Out of date" banner on the user. The service is single-flight and
+      // attempts each source state at most once, so a failing analysis cannot
+      // loop. License-gated like manual analyse — this spends tokens.
+      if (report?.outdated && isProOrTrialActive() && service.maybeAutoRefresh()) {
+        const sender = event.sender;
+        const started = Date.now();
+        const pump = setInterval(() => {
+          try {
+            const st = service.getStatus();
+            const done = !st.analysing;
+            if (!sender.isDestroyed()) {
+              sender.send('role-insight-progress', { stage: st.stage, analysing: st.analysing });
+            }
+            // Self-clears on completion (after emitting the final
+            // analysing:false, which is the renderer's refresh signal) or on a
+            // 5-minute hard cap so a hung run can never leak the interval.
+            if (done || sender.isDestroyed() || Date.now() - started > 300_000) {
+              clearInterval(pump);
+            }
+          } catch {
+            clearInterval(pump);
+          }
+        }, 400);
+      }
+
+      return { success: true, report };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:get-report error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:list-history', async () => {
+    try {
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.', history: [] };
+      return { success: true, history: service.listHistory(20) };
+    } catch (error: any) {
+      return { success: false, error: error.message, history: [] };
+    }
+  });
+
+  safeHandle('roleInsight:analyse', async (event, options: { jobUrl?: string; skipExternalVerification?: boolean } = {}) => {
+    try {
+      if (!isProOrTrialActive()) {
+        return {
+          success: false,
+          error: 'Pro license required. Please activate a license key to use Role Insight.',
+        };
+      }
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available in this build.' };
+
+      const jobUrl = typeof options?.jobUrl === 'string' && options.jobUrl.trim() ? options.jobUrl.trim() : undefined;
+
+      // Stream stage changes to the renderer so the analysing state shows real
+      // progress. Polled via get-status too, so a dropped event is not fatal.
+      const sender = event.sender;
+      const pump = setInterval(() => {
+        try {
+          if (sender.isDestroyed()) return;
+          const st = service.getStatus();
+          sender.send('role-insight-progress', { stage: st.stage, analysing: st.analysing });
+        } catch { /* renderer gone */ }
+      }, 400);
+
+      try {
+        const report = await service.analyse({
+          jobUrl,
+          skipExternalVerification: options?.skipExternalVerification === true,
+        });
+        return { success: true, report };
+      } finally {
+        // F4 (code review 2026-08-05): the interval is cleared synchronously
+        // here, so without an explicit final event no tick ever observes
+        // analysing:false — and a panel that REMOUNTED mid-run (its awaited
+        // promise died with the old mount) treats that falling edge as its
+        // only completion signal, staying stuck on the stage screen forever.
+        clearInterval(pump);
+        try {
+          if (!sender.isDestroyed()) {
+            const st = service.getStatus();
+            sender.send('role-insight-progress', { stage: st.stage, analysing: st.analysing });
+          }
+        } catch { /* renderer gone */ }
+      }
+    } catch (error: any) {
+      if (error?.name === 'AnalysisCancelledError') {
+        return { success: false, cancelled: true, error: 'Analysis cancelled.' };
+      }
+      if (error?.name === 'MissingSourceError') {
+        return { success: false, missingSources: error.missing, error: error.message };
+      }
+      const service = getRoleInsightService();
+      const diag = service?.getLastError?.()?.diagnosticId;
+      console.error('[IPC] roleInsight:analyse error:', error);
+      return {
+        success: false,
+        error: error?.message || 'The analysis could not be completed.',
+        diagnosticId: diag,
+      };
+    }
+  });
+
+  safeHandle('roleInsight:cancel', async () => {
+    try {
+      getRoleInsightService()?.cancel();
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:apply-correction', async (_, args: any) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.' };
+      if (!args?.analysisId || !args?.kind) return { success: false, error: 'Invalid correction request.' };
+      const report = service.applyCorrection({
+        analysisId: String(args.analysisId),
+        requirementId: args.requirementId ? String(args.requirementId) : null,
+        kind: String(args.kind),
+        detail: typeof args.detail === 'string' ? args.detail : undefined,
+        evidenceText: typeof args.evidenceText === 'string' ? args.evidenceText : undefined,
+        priority: args.priority,
+        mandatory: args.mandatory === true,
+        evidenceId: typeof args.evidenceId === 'string' ? args.evidenceId : undefined,
+      });
+      if (!report) return { success: false, error: 'That analysis no longer exists.' };
+      return { success: true, report };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:apply-correction error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  safeHandle('roleInsight:answer-clarification', async (_, args: any) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.' };
+      if (!args?.analysisId || !args?.requirementId || !args?.answer) {
+        return { success: false, error: 'Invalid clarification request.' };
+      }
+      const report = service.answerClarification({
+        analysisId: String(args.analysisId),
+        requirementId: String(args.requirementId),
+        answer: String(args.answer),
+        detail: typeof args.detail === 'string' ? args.detail : undefined,
+      });
+      if (!report) return { success: false, error: 'That analysis no longer exists.' };
+      return { success: true, report };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:answer-clarification error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Distinct from apply-correction on purpose: this is the ONLY route by which
+  // anything the user says inside Role Insight becomes permanent Profile
+  // Intelligence evidence, so the UI can gate it behind an explicit second step.
+  safeHandle('roleInsight:save-to-profile', async (_, args: any) => {
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      const service = getRoleInsightService();
+      if (!service) return { success: false, error: 'Role Insight is not available.' };
+      if (!args?.analysisId || !args?.requirementId || !args?.claim) {
+        return { success: false, error: 'Invalid save request.' };
+      }
+      return await service.saveToProfile({
+        analysisId: String(args.analysisId),
+        requirementId: String(args.requirementId),
+        claim: String(args.claim),
+      });
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:save-to-profile error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Paste a job description as text. Written to a temp file and pushed through
+  // the SAME orchestrator.ingestDocument path as an uploaded file, so the
+  // canonical Profile Intelligence data model is never bypassed. The temp path
+  // is registered by main (not supplied by the renderer), so the
+  // selected-path allowlist is respected rather than worked around.
+  safeHandle('roleInsight:paste-jd', async (_, text: string) => {
+    let tempPath: string | null = null;
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (typeof text !== 'string' || text.trim().length < 200) {
+        return { success: false, error: 'Paste the full job description — this looks too short to analyse.' };
+      }
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) return { success: false, error: 'Knowledge engine not initialized.' };
+
+      const os = require('os');
+      const fsp = require('fs/promises');
+      tempPath = path.join(os.tmpdir(), `natively-jd-${Date.now()}.txt`);
+      await fsp.writeFile(tempPath, text, 'utf8');
+      registerSelectedProfilePath(tempPath);
+
+      const resolved = consumeSelectedProfilePath(tempPath);
+      if (!resolved) return { success: false, error: 'Could not stage the pasted job description.' };
+
+      const { DocType } = require('../premium/electron/knowledge/types');
+      const result = await orchestrator.ingestDocument(resolved, DocType.JD);
+      if (result?.success) {
+        try {
+          orchestrator.setKnowledgeMode(true);
+          const { SettingsManager } = require('./services/SettingsManager');
+          SettingsManager.getInstance().set('knowledgeMode', true);
+        } catch (e) {
+          console.warn('[IPC] roleInsight:paste-jd: failed to auto-enable knowledge mode', e);
+        }
+      }
+      return result;
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:paste-jd error:', error);
+      return { success: false, error: error.message };
+    } finally {
+      if (tempPath) {
+        try { require('fs').unlinkSync(tempPath); } catch { /* best effort */ }
+      }
+    }
+  });
+
+  // Import a job description from a URL via Tavily extraction, then ingest it
+  // through the normal path. Fails with a clear message rather than silently
+  // falling back, so the user knows the URL was not read.
+  safeHandle('roleInsight:import-jd-url', async (_, url: string) => {
+    let tempPath: string | null = null;
+    try {
+      if (!isProOrTrialActive()) return { success: false, error: 'Pro license required.' };
+      if (typeof url !== 'string' || !/^https?:\/\//i.test(url.trim())) {
+        return { success: false, error: 'Enter a valid job posting URL starting with http:// or https://' };
+      }
+      const orchestrator = appState.getKnowledgeOrchestrator();
+      if (!orchestrator) return { success: false, error: 'Knowledge engine not initialized.' };
+
+      const { resolveCompanySearchProvider } = require('./services/resolveCompanySearchProvider');
+      const provider = resolveCompanySearchProvider();
+      if (!provider || typeof provider.extractUrl !== 'function') {
+        return {
+          success: false,
+          error: 'Reading a job URL needs a Tavily API key. Add one under Tavily Search, or paste the job description instead.',
+        };
+      }
+
+      const { resolveFromUrl } = require('../premium/electron/knowledge/roleInsight/JdSourceResolver');
+      const resolvedJd = await resolveFromUrl(url.trim(), provider, '');
+      if (!resolvedJd) {
+        return {
+          success: false,
+          error: 'That page could not be read. Paste the job description text instead.',
+        };
+      }
+
+      const os = require('os');
+      const fsp = require('fs/promises');
+      tempPath = path.join(os.tmpdir(), `natively-jd-${Date.now()}.txt`);
+      await fsp.writeFile(tempPath, resolvedJd.text, 'utf8');
+      registerSelectedProfilePath(tempPath);
+      const staged = consumeSelectedProfilePath(tempPath);
+      if (!staged) return { success: false, error: 'Could not stage the imported job description.' };
+
+      const { DocType } = require('../premium/electron/knowledge/types');
+      const result = await orchestrator.ingestDocument(staged, DocType.JD);
+      if (result?.success) {
+        try {
+          orchestrator.setKnowledgeMode(true);
+          const { SettingsManager } = require('./services/SettingsManager');
+          SettingsManager.getInstance().set('knowledgeMode', true);
+        } catch { /* non-fatal */ }
+      }
+      return { ...result, sourceUrl: url.trim() };
+    } catch (error: any) {
+      console.error('[IPC] roleInsight:import-jd-url error:', error);
+      return { success: false, error: error.message };
+    } finally {
+      if (tempPath) {
+        try { require('fs').unlinkSync(tempPath); } catch { /* best effort */ }
+      }
+    }
+  });
+
+  // ==========================================
   // Tavily Search API Credentials
   // ==========================================
 
@@ -9570,6 +11868,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
     });
     return;
+  });
+
+  // Interface Opacity "hold to preview" (Settings > General): the renderer
+  // hides the settings/launcher DOM while previewing (see
+  // startPreviewingOpacity() in SettingsOverlay.tsx). This pair additionally
+  // strips the launcher window's own native vibrancy/background so what's
+  // left behind the hidden DOM is the real desktop, not an opaque material —
+  // see WindowHelper.setLauncherOpacityPreview() for why that's needed.
+  safeHandle('set-launcher-opacity-preview', async (_, active: boolean) => {
+    appState.getWindowHelper().setLauncherOpacityPreview(!!active);
   });
 
   // ── Permissions ──────────────────────────────────────────────
@@ -9615,16 +11923,59 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { microphone: mic, screen, platform: 'darwin' };
     }
-    // Windows/Linux: no TCC — permissions handled by OS at install/first-use time
+    // F-706: Windows 10/11 DOES expose a queryable microphone privacy state —
+    // Electron's own typings document getMediaAccessStatus('microphone') as
+    // @platform win32,darwin, and note the global setting that controls it.
+    // Reporting a hardcoded 'granted' meant that with the per-app or global
+    // microphone toggle off, onboarding never prompted, the launcher's
+    // permission check stayed green, and capture silently yielded nothing with
+    // no diagnosable cause. Screen capture has no equivalent Windows gate, so
+    // 'granted' remains correct there.
+    if (process.platform === 'win32') {
+      let microphone: string = 'granted';
+      try {
+        // Any non-'granted' value (denied / restricted / not-determined) must
+        // surface; fall back to 'granted' only if the API itself is unavailable,
+        // so a query failure can never LOCK a working machine out of capture.
+        microphone = systemPreferences.getMediaAccessStatus('microphone') || 'granted';
+      } catch {
+        microphone = 'granted';
+      }
+      return { microphone, screen: 'granted', platform: 'win32' };
+    }
+    // Linux: no queryable per-app permission model here.
     return { microphone: 'granted', screen: 'granted', platform: process.platform };
   });
 
   safeHandle('permissions:request-mic', async () => {
-    if (process.platform !== 'darwin') return true;
+    // CR-03: askForMediaAccess is documented @platform darwin and is a no-op
+    // elsewhere. Returning a bare `true` off darwin told the renderer the grant
+    // SUCCEEDED, so the Windows onboarding re-read an unchanged 'denied' and
+    // presented a control that could never turn green. Report honestly: false
+    // means "this platform cannot grant programmatically" — the caller's remedy
+    // is permissions:open-mic-settings.
+    if (process.platform !== 'darwin') return false;
     try {
       return await systemPreferences.askForMediaAccess('microphone');
     } catch {
       return false;
+    }
+  });
+
+  // CR-03: on win32 there is NO per-app grant API — the privacy panel is the
+  // only remedy, and before this the renderer had no way to reach it (its
+  // settings link early-returned for non-darwin). The platform decision lives in
+  // src/lib/micPermissionPolicy so main and renderer cannot disagree about which
+  // platforms have a reachable panel.
+  safeHandle('permissions:open-mic-settings', async () => {
+    const uri = micSettingsUri(process.platform);
+    if (!uri) return { ok: false, reason: 'no-settings-panel' };
+    try {
+      await shell.openExternal(uri);
+      return { ok: true };
+    } catch (e: any) {
+      console.warn('[IPC] permissions:open-mic-settings failed:', e?.message || e);
+      return { ok: false, reason: 'open-failed' };
     }
   });
 
@@ -9831,6 +12182,111 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── CONTEXT INTELLIGENCE V3 — the rollout opt-in (§3 Stage 1) ─────────────
+  //
+  // Originally the Stage 1 "internal users, opt-in" switch. DEFAULT_ENABLED
+  // flipped to true on 2026-07-30 (flag.ts is the source of truth); this now
+  // persists an explicit OPT-OUT as much as an opt-in — clearing it returns to
+  // whatever flag.ts declares, so this comment can never go stale again.
+  safeHandle('context-intelligence:flag-get', async () => {
+    try {
+      const { isContextIntelligenceV3Enabled, readPersistedSetting, DEFAULT_ENABLED } =
+        require('./context-intelligence/contracts/flag');
+      return {
+        ok: true,
+        enabled: isContextIntelligenceV3Enabled(),
+        persisted: readPersistedSetting(),
+        default: DEFAULT_ENABLED,
+        envOverride: process.env.NATIVELY_CONTEXT_INTELLIGENCE_V3 ?? null,
+      };
+    } catch (e: any) {
+      return { ok: false, error: e.message };
+    }
+  });
+
+  safeHandle('context-intelligence:flag-set', async (_, input: { enabled?: boolean | null }) => {
+    try {
+      const { writePersistedSetting, isContextIntelligenceV3Enabled } =
+        require('./context-intelligence/contracts/flag');
+      const v = input?.enabled;
+      if (v !== null && typeof v !== 'boolean') return { success: false, error: 'invalid_value' };
+      writePersistedSetting(v ?? null);
+      console.log(`[IPC] Context Intelligence V3 opt-in set to ${JSON.stringify(v)}`);
+      return { success: true, enabled: isContextIntelligenceV3Enabled() };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:flag-set error:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
+  // ── CONTEXT INTELLIGENCE V3 — rollout telemetry (§4/§5, Phase 10) ─────────
+  //
+  // Read-only. Counters, enum tallies, ids and durations — never evidence text
+  // (the trace is redacted at construction and this module only counts).
+  // Exposed so a rollout stage can be gated on measured rates instead of a
+  // description of rates, and so §5's abort conditions are evaluated rather
+  // than remembered.
+  safeHandle('context-intelligence:rollout-metrics', async (_, input?: { baselineContamination?: number | null; baselineP95Ms?: number | null; minTurns?: number }) => {
+    try {
+      const { getRolloutMetrics, evaluateAbortConditions } = require('./context-intelligence/observability/rollout-metrics');
+      return { ok: true, metrics: getRolloutMetrics(), abort: evaluateAbortConditions(input ?? {}) };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:rollout-metrics error:', e);
+      return { ok: false, error: e.message };
+    }
+  });
+
+  // ── CONTEXT INTELLIGENCE V3 — the Answer policy control (§6, Phase 7) ─────
+  //
+  // One GET carrying every decision the renderer needs — whether V3 is on,
+  // whether the control binds to anything in this mode, the resolved value and
+  // where it came from — so the renderer renders and never decides. The two
+  // labels ship from here too: FORBIDDEN_UI_TERMS is enforced against this
+  // module's exports by test, and a renderer-side string would escape that.
+  safeHandle('context-intelligence:answer-policy-get', async (_, input: { modeId?: string; templateType?: string }) => {
+    try {
+      const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
+      const { resolveAnswerPolicy, shouldOfferAnswerPolicyControl, ANSWER_POLICY_LABELS } = require('./context-intelligence/policies/answer-policy');
+      const { getStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
+      const templateType = String(input?.templateType ?? 'general');
+      const key = String(input?.modeId ?? templateType);
+      const userChoice = getStoredAnswerPolicy(key);
+      const resolved = resolveAnswerPolicy({ modeId: templateType, userChoice });
+      return {
+        v3Enabled: isContextIntelligenceV3Enabled(),
+        offered: shouldOfferAnswerPolicyControl(templateType),
+        answerPolicy: resolved.answerPolicy,
+        source: resolved.source,
+        modeIsStrictByDefault: resolved.modeIsStrictByDefault,
+        labels: ANSWER_POLICY_LABELS,
+      };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:answer-policy-get error:', e);
+      // Fail toward "legacy UI": a renderer that cannot learn the policy state
+      // must keep showing the old control, not hide both.
+      return { v3Enabled: false, offered: false, answerPolicy: null, source: 'error', labels: {} };
+    }
+  });
+
+  safeHandle('context-intelligence:answer-policy-set', async (_, input: { modeId?: string; templateType?: string; policy?: string | null }) => {
+    try {
+      const { setStoredAnswerPolicy } = require('./context-intelligence/policies/answer-policy-store');
+      const key = String(input?.modeId ?? input?.templateType ?? '');
+      const p = input?.policy ?? null;
+      // Only the two legal values or an explicit clear; anything else is
+      // rejected rather than coerced — the store validates on read as well,
+      // but a bad write should fail loudly at the boundary it crossed.
+      if (p !== null && p !== 'use_references_when_relevant' && p !== 'only_answer_from_references') {
+        return { success: false, error: 'invalid_policy' };
+      }
+      setStoredAnswerPolicy(key, p as any);
+      return { success: true };
+    } catch (e: any) {
+      console.error('[IPC] context-intelligence:answer-policy-set error:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
   safeHandle('modes:delete', async (_, id: string) => {
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
@@ -9856,6 +12312,28 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
       const { ModesManager } = require('./services/ModesManager');
+      // Abort AND INVALIDATE every in-flight chat stream BEFORE the mode
+      // flips. A turn planned under mode A must not keep streaming into a UI
+      // whose badge now says mode B — with no per-message mode marker in the
+      // renderer, that answer is indistinguishable from a B answer carrying
+      // A's evidence and policy. Same bug family as BUG-MODE-BLEEDING below,
+      // one layer up: that fix cleared the CONTEXT the next turn would read;
+      // this stops the PREVIOUS turn's output from outliving the mode it was
+      // decided under.
+      //
+      // Defect G (2026-08-01): abort() alone was a RACE, not a decision — the
+      // provider stream could finish before the abort landed, and because the
+      // registry entry survived, every streamId supersession guard
+      // (`_chatStreamsBySender.get(senderId)?.streamId !== myStreamId`) still
+      // said "I am current", so the old mode's answer was delivered as the new
+      // mode's. Deleting the registry entries (mirroring
+      // gemini-chat-stream-stop) is what makes those ~10 streamId guards
+      // deterministic: a stream started under the old mode can never look
+      // current again after the switch, no matter how the abort raced.
+      {
+        const { abortAndInvalidateChatStreams } = require('./services/chatStreamRegistry') as typeof import('./services/chatStreamRegistry');
+        abortAndInvalidateChatStreams(_chatStreamsBySender);
+      }
       // BUG-MODE-BLEEDING fix: clear mode-specific session context BEFORE switching modes
       // so Interview mode resume/JD context doesn't bleed into the new mode's responses.
       try {
@@ -9864,13 +12342,49 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch {
         /* non-fatal — session may not exist during startup */
       }
+      // Answer-pipeline-rebuild Phase 3 (2026-07-28), same bug class as the
+      // BUG-MODE-BLEEDING fix immediately above: _manualConversationMemory
+      // (conversationMemoryV2's bare/refinement follow-up recall) records
+      // each turn's mode but never checks it back on read — a follow-up in a
+      // NEW mode after switching away from a document-grounded mode could
+      // re-inject that mode's prior answer as "PRIOR EXCHANGE"/"PRIOR
+      // ANSWER" context, bypassing the new mode's own source-isolation
+      // contract. Cleared here, not just on window-destroy (the only other
+      // clearSession call site), for the same reason IntelligenceManager's
+      // context is cleared here: mode is a global (ModesManager singleton)
+      // switch, so stale prior-mode turns must not survive it.
+      try { _manualConversationMemory.clearAllSessions(); } catch { /* non-fatal */ }
+      // V3 conversation state carries the previous turns' referents and source
+      // ids; a follow-up in the NEW mode must not resolve against them.
+      try { require('./context-intelligence/question/conversation-state-store').clearConversationState(); } catch { /* non-fatal */ }
+      // Code-review finding (2026-07-28): sibling per-session store with the
+      // same latent gap (see CodingConversationState.clearAllSessions's own
+      // comment) — cleared alongside conversation memory for defense in
+      // depth, not because a live path currently reaches it unguarded.
+      try { _manualCodingState.clearAllSessions(); } catch { /* non-fatal */ }
 
       ModesManager.getInstance().setActiveMode(id);
-      // Broadcast mode change to all windows so indicators update immediately
+      // Supersede in-flight LIVE answers too (the abort loop above only covers
+      // manual chat streams): a WTA generation planned under the old mode must
+      // not finalize into a UI now showing the new one.
+      try { appState.getIntelligenceManager()?.supersedeLiveAnswers?.(); } catch { /* non-fatal */ }
+      // Broadcast mode change to all windows so indicators update immediately.
+      // fileCount/indexedCount ride along so the chat surface can show "no
+      // sources" at question time — Settings badges were honest, but the
+      // surface where the user actually ASKS showed only the mode name, and a
+      // mode with zero attached files answered "the résumé doesn't mention it".
       const activeMode = id ? ModesManager.getInstance().getActiveMode() : null;
       const activeName = activeMode?.name ?? null;
+      let fileCount = 0; let indexedCount = 0;
+      try {
+        if (activeMode) {
+          const statuses = ModesManager.getInstance().getReferenceFileIndexStatuses?.(activeMode.id) ?? [];
+          fileCount = statuses.length;
+          indexedCount = statuses.filter((st: any) => st?.status === 'indexed' || (st?.chunkCount ?? 0) > 0).length;
+        }
+      } catch { /* indicator only */ }
       BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName });
+        if (!win.isDestroyed()) win.webContents.send('mode-changed', { id, name: activeName, fileCount, indexedCount });
       });
       // Phase 3 — re-bind dynamic action engine so the new mode's trigger pack
       // takes effect immediately. New (sessionId, modeId) pair flushes the per-
@@ -9908,9 +12422,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         void (async () => {
           try {
             await ModesManager.getInstance().prewarmModeReferenceIndex(activeMode.id);
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId: activeMode.id });
-            });
           } catch (warmErr: any) {
             console.warn('[IPC] mode reference prewarm failed (non-fatal):', warmErr?.message);
           }
@@ -9948,6 +12459,13 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('modes:upload-reference-file', async (_, modeId: string) => {
+    // Bug fix 2026-07-28 (code review): the .doc friendly-message check
+    // below used to read the thrown error's own path field, but the Error
+    // thrown by SafeDocumentTextExtractor's extension whitelist never sets
+    // one, so `ext` was always '' and this branch could never fire.
+    // Capture the known selected path up front instead — same pattern
+    // profile:upload-resume already uses correctly.
+    let selectedPath: string | undefined;
     try {
       if (!isProOrTrialActive()) return { success: false, error: 'pro_required' };
       const result: any = await dialog.showOpenDialog({
@@ -9958,19 +12476,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         ],
       });
       if (result.canceled || !result.filePaths?.[0]) return { success: false, cancelled: true };
+      selectedPath = result.filePaths[0];
       const { ingestModeReferenceFile } = require('./services/ModeReferenceFileIngestion') as typeof import('./services/ModeReferenceFileIngestion');
       const file = await ingestModeReferenceFile({
         modeId,
-        filePath: result.filePaths[0],
-        onIndexStatus: (phase, fileId) => {
+        filePath: selectedPath!,  // guarded + assigned on the straight line above
+        onIndexStatus: (status, fileId) => {
           BrowserWindow.getAllWindows().forEach((win) => {
-            if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase });
+            if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId, fileId, phase: status });
           });
         },
       });
       return { success: true, file };
     } catch (error: any) {
-      const ext = path.extname(String(error?.path || '')).toLowerCase();
+      const ext = path.extname(String(selectedPath || '')).toLowerCase();
       if (ext === '.doc') {
         return { success: false, error: 'Legacy Word .doc files are not supported. Save the file as .docx and upload it again.' };
       }
@@ -10452,7 +12971,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // confirmation; only flip the toggle if the user picks "Allow".
       if (e?.name === 'LANBindConfirmationRequired') {
         const win = appState.getMainWindow() ?? undefined;
-        const response = dialog.showMessageBoxSync(win as BrowserWindow | undefined, {
+        const lanBindDialogOptions: Electron.MessageBoxSyncOptions = {
           type: 'warning',
           message: 'Allow LAN access?',
           detail:
@@ -10460,7 +12979,12 @@ export function initializeIpcHandlers(appState: AppState): void {
           buttons: ['Cancel', 'Allow LAN access'],
           defaultId: 0,
           cancelId: 0,
-        });
+        };
+        // Electron types (options) and (parent, options) but not (undefined, options);
+        // picking the overload by parent presence leaves the runtime call unchanged.
+        const response = win
+          ? dialog.showMessageBoxSync(win, lanBindDialogOptions)
+          : dialog.showMessageBoxSync(lanBindDialogOptions);
         if (response !== 1) {
           return { ok: false, declined: true };
         }
@@ -10681,9 +13205,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // strip prior-assistant turns from the snapshot (topic-collapse), and block
       // an invalid answer from being saved (contamination loop).
       let phoneDocGrounded = false;
+      // F-502: pin the mode id at t0 as well. phoneDocGrounded is captured here,
+      // BEFORE the awaits, but every mode read inside streamChat resolved the
+      // LIVE ModesManager singleton — so a `modes:set-active` landing mid-request
+      // made retrieval read a DIFFERENT mode's documents than the contract this
+      // turn was planned against. The phone surface is the worse half: unlike
+      // desktop it never registers in _chatStreamsBySender, so modes:set-active
+      // does not abort it either.
+      let phonePinnedModeId: string | null = null;
       try {
         const { ModesManager } = require('./services/ModesManager');
-        phoneDocGrounded = ModesManager.getInstance().getActiveModeInfo()?.documentGroundedCustomModeActive === true;
+        const phoneModeInfo = ModesManager.getInstance().getActiveModeInfo();
+        phoneDocGrounded = phoneModeInfo?.documentGroundedCustomModeActive === true;
+        phonePinnedModeId = phoneModeInfo?.id ?? null;
       } catch { /* mode unavailable — treat as non-doc-grounded */ }
 
       // Doc-grounded strict-isolation (audit #3, 2026-07-05): mirror the
@@ -10712,7 +13246,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       intelligenceManager.addTranscript(
-        { text: message, speaker: 'user', timestamp: Date.now(), final: true },
+        { text: message, speaker: 'user', timestamp: Date.now(), final: true, origin: 'manual_chat' },
         true,
       );
 
@@ -10751,6 +13285,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             phoneRouteOptions = {
               answerType: phonePlan?.answerType || 'unknown_answer',
               forbiddenContextLayers: phonePlan?.forbiddenContextLayers,
+              // F-502: t0-pinned mode — see phonePinnedModeId above.
+              pinnedModeId: phonePinnedModeId,
             };
           }
         } catch { /* plan unavailable — fall back to no routeOptions (legacy behavior) */ }
@@ -10832,8 +13368,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch);
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
-            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId });
-            win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId, source: 'phone' });
+            win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
             intelligenceManager.addAssistantMessage(clarify, undefined, 'phone_mirror');
             intelligenceManager.logUsage('chat', message, clarify);
             if (isIntelligenceFlagEnabled('trace')) {
@@ -10845,15 +13381,28 @@ export function initializeIpcHandlers(appState: AppState): void {
           // Best-effort — never break the phone path on the ownership check.
           if (isIntelligenceFlagEnabled('trace')) console.warn('[SOURCE-GUARD] phone ownership check skipped (non-fatal):', pOwnErr?.message);
         }
-        const stream = llmHelper.streamChat(message, undefined, context, CHAT_MODE_PROMPT, false, false, [], phoneController.signal, undefined, phoneRouteOptions);
+        const stream = llmHelper.streamChat(message, undefined, context, resolveManualChatBasePrompt(llmHelper, resolveCodingPromptSignals({ answerType: phoneRouteOptions?.answerType as any, question: message })), false, false, [], phoneController.signal, undefined, phoneRouteOptions);
         let full = '';
         let phoneSuperseded = false;
         // Deadline-guarded (Issue 1) — this is a live streaming surface too: a hung
         // provider must never block it forever. Uses the standard chat first-useful
         // budget; an inter-token stall guard protects long answers.
+        //
+        // CR-05: this passed NEITHER route flag, so it always took the 7s cloud
+        // cap. Both defaults are wrong here for the same reasons the manual-chat
+        // site documents, and the rationale is surface-agnostic:
+        //   • viaServerCascade — the natively-api server cuts over to the next
+        //     provider at AI_TTFT_BUDGET_MS (10s). Aborting at 7s tore the HTTP
+        //     request down 3s BEFORE the rescue, producing exactly the "did not
+        //     produce an answer in time" outcome F-301 exists to eliminate.
+        //   • isLocal — a local model cold-loads its weights (8-12s for a 7-9B)
+        //     before the first token, so 7s aborted every cold local generation
+        //     on the phone path to zero tokens.
+        const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
+        const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer'),
+          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {
@@ -10868,7 +13417,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             try { phoneMirror.publishToken(String(myStreamId), token); } catch (_) {}
             // streamId lets the desktop renderer drop tokens from a superseded
             // chat stream (audit finding #3); backward-compatible optional arg.
-            win?.webContents.send('gemini-stream-token', token, { streamId: myStreamId });
+            win?.webContents.send('gemini-stream-token', token, { streamId: myStreamId, source: 'phone' });
             full += token;
           },
           onCleanup: () => { try { phoneController.abort(); } catch { /* noop */ } },
@@ -10878,7 +13427,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             phoneMirror.publishDone(String(myStreamId), full);
           } catch (_) {}
-          win?.webContents.send('gemini-stream-done', { streamId: myStreamId });
+          win?.webContents.send('gemini-stream-done', { streamId: myStreamId, source: 'phone' });
           // Document-grounded: block a greeting/empty answer from SessionTracker
           // so it can't contaminate the next turn (same backstop as the desktop
           // path, minus the regenerate — the phone surface keeps it simple).
@@ -10902,7 +13451,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           try {
             phoneMirror.publishError(String(myStreamId), err?.message || 'stream error');
           } catch (_) {}
-          win?.webContents.send('gemini-stream-error', err?.message || 'stream error');
+          // Tagged so the desktop renderer can tell this is a PHONE stream's
+          // failure: untagged, it defaced whatever desktop bubble happened to
+          // be streaming ("[Error: …]" appended to an unrelated answer).
+          win?.webContents.send('gemini-stream-error', err?.message || 'stream error', { streamId: null, source: 'phone-mirror' });
         }
       }
     } else if (cmd.type === 'screenshot') {
@@ -10959,11 +13511,6 @@ export function initializeIpcHandlers(appState: AppState): void {
         const file = await ingestModeReferenceFile({
           modeId: params.modeId,
           filePath: candidate,
-          onIndexStatus: (phase, fileId) => {
-            BrowserWindow.getAllWindows().forEach((win) => {
-              if (!win.isDestroyed()) win.webContents.send('mode-file-index-status', { modeId: params.modeId, fileId, phase });
-            });
-          },
         });
         return { success: true, file };
       } catch (error: any) {
@@ -11164,6 +13711,7 @@ export function initializeIpcHandlers(appState: AppState): void {
           timestamp: Date.now(),
           final: seg.final !== false,
           confidence: typeof seg.confidence === 'number' ? seg.confidence : 0.9,
+          origin: 'test',
         } as any);
         return { success: true };
       } catch (e: any) {
@@ -11303,9 +13851,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // makes the model greet instead of answer).
       if (params.injectAsTranscript !== false) {
         for (const t of params.priorTurns ?? []) {
-          im.addTranscript({ speaker: t.speaker, text: t.text, timestamp: Date.now(), final: true, confidence: 0.95 } as any, true);
+          im.addTranscript({ speaker: t.speaker, text: t.text, timestamp: Date.now(), final: true, confidence: 0.95, origin: 'test' } as any, true);
         }
-        im.addTranscript({ speaker: 'interviewer', text: params.question, timestamp: Date.now(), final: true, confidence: 0.95 } as any, true);
+        im.addTranscript({ speaker: 'interviewer', text: params.question, timestamp: Date.now(), final: true, confidence: 0.95, origin: 'test' } as any, true);
       }
       const builtContext = params.context ?? im.getFormattedContext(180);
       return await new Promise((resolve) => {
@@ -11460,6 +14008,42 @@ export function initializeIpcHandlers(appState: AppState): void {
           .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
           .finally(() => clearTimeout(timer));
       });
+    });
+
+    // E2E-only: expose LLMHelper.getLastProviderModel() — the server-chosen
+    // model reported by the Natively SSE stream's inline `model` field (see
+    // LLMHelper.ts streamNativelyApi parsing). Lets the harness confirm which
+    // real provider/model actually served each request instead of assuming
+    // the configured cascade default.
+    safeHandle('__e2e__:last-provider-model', async () => {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        return { success: true, model: llmHelper.getLastProviderModel?.() ?? null };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
+    });
+
+    // E2E-only: reset the IntelligenceManager's rolling transcript between
+    // independent manual-chat reps. `gemini-chat-stream` (the real handler
+    // __e2e__:manual-ask also drives) auto-injects up to 100s of rolling
+    // context via `intelligenceManager.getFormattedContext(100)` and appends
+    // each answer via `addAssistantMessage` — so back-to-back manual asks in
+    // one session are NOT independent samples unless this is cleared between
+    // them (mirrors what __e2e__:ask already does via `im.reset?.()`).
+    safeHandle('__e2e__:reset-session', async () => {
+      try {
+        const im = appState.getIntelligenceManager();
+        im.reset?.();
+        // Also clear the last-reported provider/model so a rep that errors or
+        // times out before any SSE `model` chunk arrives can't be misattributed
+        // to whatever model served the previous rep (harness data-quality gap).
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        llmHelper.resetLastProviderModel?.();
+        return { success: true };
+      } catch (e: any) {
+        return { success: false, error: e?.message || String(e) };
+      }
     });
 
     // Force pro-active state for E2E (modes:* handlers are pro-gated). Uses the

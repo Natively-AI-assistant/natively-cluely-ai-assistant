@@ -39,16 +39,16 @@ const RU: Record<string, string> = {
     'AI Providers': 'AI-провайдеры',
     'Skills': 'Навыки',
     'Calendar': 'Календарь',
-    'Could not connect Google Calendar. Try again, or ask Natively support to add your Google account as a test user while verification is pending.':
-        'Не удалось подключить Google Календарь. Повторите попытку или попросите поддержку Natively добавить ваш аккаунт Google в список тестовых пользователей, пока проверка не завершена.',
-    'Google Calendar authorization is not available for this account yet. Ask Natively support to add your Google account as a test user, then try again.':
-        'Авторизация Google Календаря пока недоступна для этого аккаунта. Попросите поддержку Natively добавить ваш аккаунт Google в список тестовых пользователей, затем повторите попытку.',
-    'Google Calendar authorization was cancelled. Approve the Google consent prompt to connect your calendar.':
-        'Авторизация Google Календаря была отменена. Подтвердите доступ в окне согласия Google, чтобы подключить календарь.',
-    'Google Calendar is not configured for this build. Add a valid Google OAuth client ID, restart Natively, and try again.':
-        'Google Календарь не настроен в этой сборке. Добавьте действительный идентификатор OAuth-клиента Google, перезапустите Natively и повторите попытку.',
-    'Google Calendar authorization timed out. Try connecting again.':
-        'Время ожидания авторизации Google Календаря истекло. Повторите подключение.',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        'Не удалось подключить Google Календарь. Повторите попытку или обратитесь в поддержку Natively.',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        'Этот аккаунт Google ещё не добавлен в список тестовых пользователей. Обратитесь в поддержку Natively и повторите попытку.',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Авторизация Google Календаря отменена. Подтвердите доступ в окне согласия и повторите попытку.',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        'Google Календарь не настроен в этой сборке. Добавьте действительный идентификатор OAuth-клиента и перезапустите Natively.',
+    'Google Calendar authorization timed out. Try again.':
+        'Время ожидания авторизации Google Календаря истекло. Повторите попытку.',
     'Could not connect Google Calendar': 'Не удалось подключить Google Календарь',
     'Audio': 'Звук',
     'Keybinds': 'Горячие клавиши',
@@ -278,16 +278,16 @@ const ZH: Record<string, string> = {
     'Settings': '设置',
     'General': '通用',
     'Close': '关闭',
-    'Could not connect Google Calendar. Try again, or ask Natively support to add your Google account as a test user while verification is pending.':
-        '无法连接 Google 日历。请重试；在验证完成前，也可以联系 Natively 支持人员将您的 Google 账号添加为测试用户。',
-    'Google Calendar authorization is not available for this account yet. Ask Natively support to add your Google account as a test user, then try again.':
-        '此账号暂时无法使用 Google 日历授权。请联系 Natively 支持人员将您的 Google 账号添加为测试用户，然后重试。',
-    'Google Calendar authorization was cancelled. Approve the Google consent prompt to connect your calendar.':
-        'Google 日历授权已取消。请在 Google 同意页面批准授权以连接日历。',
-    'Google Calendar is not configured for this build. Add a valid Google OAuth client ID, restart Natively, and try again.':
-        '此版本未配置 Google 日历。请添加有效的 Google OAuth 客户端 ID，重启 Natively 后重试。',
-    'Google Calendar authorization timed out. Try connecting again.':
-        'Google 日历授权超时。请重试连接。',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        '无法连接 Google 日历。请重试或联系 Natively 支持。',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        '此 Google 账号尚未获批为测试用户。请联系 Natively 支持后重试。',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Google 日历授权已取消。请批准同意请求后重试。',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        '此版本未配置 Google 日历。请添加有效的 OAuth 客户端 ID 并重启 Natively。',
+    'Google Calendar authorization timed out. Try again.':
+        'Google 日历授权超时。请重试。',
     'Could not connect Google Calendar': '无法连接 Google 日历',
 };
 
@@ -305,16 +305,16 @@ const JA: Record<string, string> = {
     'Settings': '設定',
     'General': '一般',
     'Close': '閉じる',
-    'Could not connect Google Calendar. Try again, or ask Natively support to add your Google account as a test user while verification is pending.':
-        'Google カレンダーに接続できませんでした。もう一度お試しいただくか、確認が完了するまで Google アカウントをテストユーザーとして追加するよう Natively サポートに依頼してください。',
-    'Google Calendar authorization is not available for this account yet. Ask Natively support to add your Google account as a test user, then try again.':
-        'このアカウントでは Google カレンダーの認証をまだ利用できません。Google アカウントをテストユーザーとして追加するよう Natively サポートに依頼してから、もう一度お試しください。',
-    'Google Calendar authorization was cancelled. Approve the Google consent prompt to connect your calendar.':
-        'Google カレンダーの認証がキャンセルされました。カレンダーを接続するには、Google の同意画面で許可してください。',
-    'Google Calendar is not configured for this build. Add a valid Google OAuth client ID, restart Natively, and try again.':
-        'このビルドでは Google カレンダーが設定されていません。有効な Google OAuth クライアント ID を追加し、Natively を再起動してからもう一度お試しください。',
-    'Google Calendar authorization timed out. Try connecting again.':
-        'Google カレンダーの認証がタイムアウトしました。もう一度接続してください。',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        'Google カレンダーに接続できませんでした。再試行するか、Natively サポートにお問い合わせください。',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        'この Google アカウントはまだテストユーザーとして承認されていません。Natively サポートに連絡してから再試行してください。',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Google カレンダーの認証がキャンセルされました。同意画面で許可してから再試行してください。',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        'このビルドでは Google カレンダーが設定されていません。有効な OAuth クライアント ID を追加して Natively を再起動してください。',
+    'Google Calendar authorization timed out. Try again.':
+        'Google カレンダーの認証がタイムアウトしました。再試行してください。',
     'Could not connect Google Calendar': 'Google カレンダーに接続できませんでした',
 };
 
@@ -331,16 +331,16 @@ const ES: Record<string, string> = {
     'Settings': 'Ajustes',
     'General': 'General',
     'Close': 'Cerrar',
-    'Could not connect Google Calendar. Try again, or ask Natively support to add your Google account as a test user while verification is pending.':
-        'No se pudo conectar Google Calendar. Inténtalo de nuevo o pide al equipo de soporte de Natively que añada tu cuenta de Google como usuario de prueba mientras la verificación esté pendiente.',
-    'Google Calendar authorization is not available for this account yet. Ask Natively support to add your Google account as a test user, then try again.':
-        'La autorización de Google Calendar aún no está disponible para esta cuenta. Pide al equipo de soporte de Natively que añada tu cuenta de Google como usuario de prueba y vuelve a intentarlo.',
-    'Google Calendar authorization was cancelled. Approve the Google consent prompt to connect your calendar.':
-        'Se canceló la autorización de Google Calendar. Aprueba la solicitud de consentimiento de Google para conectar tu calendario.',
-    'Google Calendar is not configured for this build. Add a valid Google OAuth client ID, restart Natively, and try again.':
-        'Google Calendar no está configurado en esta compilación. Añade un ID de cliente OAuth de Google válido, reinicia Natively y vuelve a intentarlo.',
-    'Google Calendar authorization timed out. Try connecting again.':
-        'La autorización de Google Calendar agotó el tiempo de espera. Intenta conectarlo de nuevo.',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        'No se pudo conectar Google Calendar. Inténtalo de nuevo o contacta con soporte de Natively.',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        'Esta cuenta de Google aún no es un usuario de prueba aprobado. Contacta con soporte de Natively y vuelve a intentarlo.',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Se canceló la autorización de Google Calendar. Aprueba la solicitud de consentimiento y vuelve a intentarlo.',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        'Google Calendar no está configurado en esta compilación. Añade un ID de cliente OAuth válido y reinicia Natively.',
+    'Google Calendar authorization timed out. Try again.':
+        'La autorización de Google Calendar agotó el tiempo de espera. Vuelve a intentarlo.',
     'Could not connect Google Calendar': 'No se pudo conectar Google Calendar',
 };
 

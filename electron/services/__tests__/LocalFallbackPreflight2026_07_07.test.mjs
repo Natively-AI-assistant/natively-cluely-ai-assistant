@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 
@@ -58,7 +59,15 @@ describe('LocalFallbackAssets (2026-07-07)', () => {
   });
 
   test('resolvePackagedModelPath finds the bundled MiniLM assets', () => {
-    const repoRoot = path.resolve(new URL('..', import.meta.url).pathname, '..', '..', '..');
+    // Two bugs lived in this one line, and both made the assertion below skip
+    // silently rather than fail:
+    //   1. `.pathname` on Windows is "/C:/..." — path.resolve turns that into
+    //      "C:\C:\...", a path that can never exist.
+    //   2. `new URL('..')` already yields electron/services/, so three more
+    //      `..` overshot the repo root by one level — wrong on macOS too.
+    // `new URL('.')` is this file's own directory (__tests__), and three `..`
+    // from there is the repo root on both platforms.
+    const repoRoot = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', '..');
     const candidate = path.join(repoRoot, 'resources', 'models', 'Xenova', 'all-MiniLM-L6-v2', 'tokenizer.json');
     if (!fs.existsSync(candidate)) {
       // CI may not have downloaded models; this test only runs when assets are present.

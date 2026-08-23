@@ -1,9 +1,73 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { MessageSquare, Camera, Zap, User } from 'lucide-react';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getModifierSymbol } from '../utils/platformUtils';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
+import {
+    clampOverlayOpacity,
+    getDefaultOverlayOpacity,
+    getGlassOverlayAppearance,
+    getOverlayAppearance,
+    OVERLAY_OPACITY_DEFAULT,
+} from '../lib/overlayAppearance';
+import { useToggleInit } from './settings/useToggleInit';
+
+/**
+ * The quick-settings popup's switch (`sm` variant: a 30x13.64 track — the
+ * canonical toggle scaled uniformly to the width this 180px popup can afford,
+ * so track AND knob keep the reference proportions; see the
+ * `.t-toggle.t-toggle-sm` comment in index.css). Same shared `.t-toggle`
+ * contract as the main settings panels: track colours, thumb fill, curves, and press
+ * character all come from index.css, so this reads identically to every other
+ * toggle in the app. Only the `active:scale-[0.92]` press feedback on the
+ * whole button is local, layered on top of (not replacing) the shared thumb's
+ * own press-squish.
+ *
+ * The knob is deliberately NOT overridden here. An earlier version passed a
+ * `knobClassName` (`bg-black` on dark) through a `t-toggle-thumb-custom`
+ * opt-out class; that opt-out outranked the caller's own utility and reset
+ * background-color to transparent, so every knob in this popup rendered
+ * INVISIBLE — the reported "toggles look wrong in the meeting overlay's
+ * settings". Track classes still flow through `onClassName`/`offClassName`,
+ * but note that only their box-shadow (the ON glow) and `glass-toggle-track`
+ * survive the cascade — the shared `--toggle-on`/`--toggle-off` fills win
+ * over their `bg-*` utility on purpose (see the `:root` block in index.css).
+ *
+ * `shrink-0` matters: this popup is a fixed 180px window, and without it the
+ * flex row squashes the track while the absolutely-positioned thumb keeps its
+ * full width. The box itself (width/height/padding) is owned entirely by
+ * index.css — utilities here would only lose to it on specificity and drift.
+ *
+ * `useToggleInit()` is currently inert — see useToggleInit's docstring; the
+ * CSS bounce it used to arm was replaced by a plain transition.
+ */
+const PopupToggle: React.FC<{
+    checked: boolean;
+    onChange: () => void;
+    label: string;
+    disabled?: boolean;
+    /** Track classes when on — only the box-shadow glow survives the cascade. */
+    onClassName: string;
+    /** Track classes when off — carries `glass-toggle-track` for glass themes. */
+    offClassName: string;
+}> = ({ checked, onChange, label, disabled = false, onClassName, offClassName }) => {
+    const toggleInit = useToggleInit();
+    return (
+        <button
+            type="button"
+            role="switch"
+            data-on={String(checked)}
+            aria-checked={checked}
+            aria-label={label}
+            disabled={disabled}
+            onClick={() => { toggleInit.arm(); onChange(); }}
+            className={`t-toggle t-toggle-sm shrink-0 active:scale-[0.92] ${checked ? onClassName : offClassName} ${toggleInit.className}`}
+        >
+            <span className="t-toggle-thumb" aria-hidden="true" />
+        </button>
+    );
+};
 
 const SettingsPopup = () => {
     const { shortcuts } = useShortcuts();
@@ -13,6 +77,17 @@ const SettingsPopup = () => {
         return localStorage.getItem('natively_groq_fast_text') === 'true';
     });
     const [profileMode, setProfileMode] = useState(false);
+    // Context Intelligence V3 (Phase 7): when the V3 flag is on, the Profile
+    // Mode toggle is HIDDEN — under V3 source authority decides per turn when
+    // profile evidence applies, and a global override is the compensation
+    // control §6 removes. Flag off (the default) renders it unchanged.
+    const [ciV3Enabled, setCiV3Enabled] = useState(false);
+    useEffect(() => {
+        // All decisions main-side; this only reads the flag.
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
     const [hasProfile, setHasProfile] = useState(false);
     const [isPremium, setIsPremium] = useState(false);
 
@@ -21,6 +96,26 @@ const SettingsPopup = () => {
     const [hasStoredKey, setHasStoredKey] = useState<Record<string, boolean>>({});
     const [interfaceTheme, setInterfaceTheme] = useState<MeetingInterfaceTheme>(() => {
         return getMeetingInterfaceTheme();
+    });
+
+    // Overlay opacity — same localStorage key + init logic SettingsOverlay.tsx
+    // and App.tsx use ('natively_overlay_opacity', theme-aware default when
+    // unset). This window (the settings-popup BrowserWindow, ?window=settings)
+    // is a SEPARATE Electron window from both the real meeting overlay
+    // (?window=overlay) and the launcher — App.tsx's own `overlayOpacity`
+    // state exists in this window's App.tsx instance too, but its live IPC
+    // listener is deliberately gated `if (!isOverlayWindow) return;`
+    // (App.tsx ~719), so it would be a stale mount-time snapshot here, not
+    // live-tracking the opacity slider while this popup stays open. Reading
+    // and subscribing independently, the same way `interfaceTheme` above
+    // already does for itself in this exact component, keeps this correct
+    // without touching App.tsx (which has unrelated work in progress on it
+    // right now — see git status).
+    const [overlayOpacity, setOverlayOpacity] = useState<number>(() => {
+        const stored = localStorage.getItem('natively_overlay_opacity');
+        const parsed = stored ? parseFloat(stored) : NaN;
+        const isUserSet = Number.isFinite(parsed) && parsed !== OVERLAY_OPACITY_DEFAULT;
+        return isUserSet ? clampOverlayOpacity(parsed) : getDefaultOverlayOpacity();
     });
 
     // Load credentials func
@@ -66,7 +161,33 @@ const SettingsPopup = () => {
         };
         loadProfile();
 
-        return () => window.removeEventListener('focus', handleFocus);
+        // Settings staleness fix (2026-08-21): this window mounts ONCE at app
+        // start and is hidden/shown afterwards, so the mount fetches above go
+        // stale. The focus handler never fires for the overlay-anchored
+        // popover (main shows it with showInactive()), so re-pull everything
+        // pull-based each time the main process shows the window. Broadcast-
+        // synced state (undetectable, groq mode, opacity, theme) already stays
+        // live via its own listeners.
+        // @ts-ignore
+        const unsubscribeShown = window.electronAPI?.onSettingsWindowShown?.(() => {
+            loadCredentials();
+            loadProfile();
+            try {
+                // Undetectable's INITIAL fetch is mount-only; its change
+                // listener only covers changes made while this window exists.
+                window.electronAPI?.getUndetectable?.().then((state: boolean) => setIsUndetectable(state));
+            } catch { /* non-fatal */ }
+            try {
+                (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+                    .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+                    .catch(() => { /* keep last known */ });
+            } catch { /* non-fatal */ }
+        });
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            unsubscribeShown?.();
+        };
     }, []);
 
     // Sync meeting interface theme from localStorage and main process
@@ -86,6 +207,24 @@ const SettingsPopup = () => {
             window.removeEventListener('storage', handleStorage);
             unsubscribe?.();
         };
+    }, []);
+
+    // Sync overlay opacity live while this popup window stays open. Real-time
+    // slider drags (SettingsOverlay.tsx handleOpacityChange) broadcast via
+    // `window.electronAPI.setOverlayOpacity()` at 60fps — never through
+    // localStorage (that's debounced 150ms and only for persistence), so a
+    // `storage` listener alone would miss the live drag entirely. The main
+    // process relays every call to ALL BrowserWindows via
+    // `BrowserWindow.getAllWindows().forEach(...)` (electron/ipcHandlers.ts
+    // `set-overlay-opacity`), this popup window included, which is exactly
+    // what `onOverlayOpacityChanged` below picks up — the identical listener
+    // NativelyInterface's own overlay window uses (App.tsx ~720-722) for the
+    // real panel shell.
+    useEffect(() => {
+        const unsubscribe = window.electronAPI?.onOverlayOpacityChanged?.((opacity: number) => {
+            setOverlayOpacity(opacity);
+        });
+        return () => unsubscribe?.();
     }, []);
 
     // Fetch initial undetectable state from main process (source of truth)
@@ -218,11 +357,43 @@ const SettingsPopup = () => {
         ? 'border-white/10 bg-white/5 text-slate-400 glass-shortcut-key'
         : 'border-black/10 bg-black/[0.04] text-slate-600 glass-shortcut-key';
     const defaultToggleTrackClass = isDarkBg ? 'bg-white/10 glass-toggle-track' : 'bg-black/[0.22] glass-toggle-track';
-    const toggleKnobClass = isDarkBg ? 'bg-black shadow-sm' : 'bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]';
+
+    // Real per-theme panel material — same computation NativelyInterface uses
+    // for its own shell (NativelyInterface.tsx ~1531-1537) and ResizeToggle
+    // uses for itself (ResizeToggle.tsx): isGlassTheme ?
+    // getGlassOverlayAppearance() : getOverlayAppearance(opacity, theme).
+    // Applied as an inline style on the contentRef div below, alongside the
+    // existing overlay-shell-surface class + popupPanelClass. This is what
+    // makes DEFAULT theme (and light/dark within it) actually track the live
+    // overlay-opacity slider and getOverlayAppearance()'s real recipe,
+    // instead of the static bg-[#1E1E1E]/80 / bg-[#F3F4F6]/92 fixed-opacity
+    // classes popupPanelClass has always used. For liquid-glass this
+    // resolves to {} (no inline properties) — the ancestor
+    // [data-interface-theme="liquid-glass"] .overlay-shell-surface
+    // !important CSS rule (index.css ~407, matched via the data-interface-
+    // theme attribute App.tsx already puts on an ancestor of <SettingsPopup/>
+    // in the isSettingsWindow branch) already governs this correctly with no
+    // changes needed — verified below. For modern this is non-empty but the
+    // !important [data-interface-theme="modern"] .overlay-shell-surface rule
+    // (index.css ~1320) still wins over it the same way (stylesheet
+    // !important always beats inline normal-priority), also already correct
+    // before this change.
+    const isGlassTheme = interfaceTheme === 'liquid-glass';
+    const appearance = useMemo(
+        () =>
+            isGlassTheme
+                ? getGlassOverlayAppearance()
+                : getOverlayAppearance(overlayOpacity, isLightTheme ? 'light' : 'dark'),
+        [isGlassTheme, overlayOpacity, isLightTheme]
+    );
 
     return (
         <div className="w-fit h-fit bg-transparent flex flex-col">
-            <div ref={contentRef} className={`w-[180px] backdrop-blur-md border rounded-[14px] overflow-hidden shadow-2xl p-1.5 flex flex-col animate-scale-in origin-top-left overlay-shell-surface ${popupPanelClass}`}>
+            <div
+                ref={contentRef}
+                className={`w-[180px] backdrop-blur-md border rounded-[14px] overflow-hidden shadow-2xl p-1.5 flex flex-col animate-scale-in origin-top-left overlay-shell-surface ${popupPanelClass}`}
+                style={{ ...appearance.shellStyle }}
+            >
                 <div className="relative z-[1] flex flex-col">
 
                 {/* Undetectability */}
@@ -236,19 +407,20 @@ const SettingsPopup = () => {
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>{isUndetectable ? 'Undetectable' : 'Detectable'}</span>
                     </div>
-                    <button
-                        onClick={() => {
+                    <PopupToggle
+                        checked={isUndetectable}
+                        label={isUndetectable ? 'Undetectable' : 'Detectable'}
+                        onChange={() => {
                             const newState = !isUndetectable;
                             setIsUndetectable(newState);
                             localStorage.setItem('natively_undetectable', String(newState));
                             window.electronAPI?.setUndetectable(newState);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${isUndetectable
-                            ? (isDarkBg ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]' : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]')
-                            : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${isUndetectable ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName={isDarkBg
+                            ? 'bg-white shadow-[0_2px_8px_rgba(255,255,255,0.2)]'
+                            : 'bg-slate-900 shadow-[0_2px_8px_rgba(15,23,42,0.18)]'}
+                        offClassName={defaultToggleTrackClass}
+                    />
                 </div>
 
 
@@ -256,44 +428,46 @@ const SettingsPopup = () => {
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!(hasStoredKey.groq || hasStoredKey.natively) ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!(hasStoredKey.groq || hasStoredKey.natively) ? "Requires Groq or Natively API key" : ""}>
                     <div className="flex items-center gap-2.5">
                         <Zap
-                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-orange-500' : inactiveIconColorClass}`}
+                            className={`w-4 h-4 transition-colors ${useGroqFastText ? 'text-accent-primary' : inactiveIconColorClass}`}
                             fill={useGroqFastText ? "currentColor" : "none"}
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Fast Response</span>
                     </div>
-                    <button
-                        onClick={() => {
+                    <PopupToggle
+                        checked={useGroqFastText}
+                        label="Fast Response"
+                        disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
+                        onChange={() => {
                             if (!(hasStoredKey.groq || hasStoredKey.natively)) return;
                             setUseGroqFastText(!useGroqFastText);
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${useGroqFastText ? 'bg-orange-500 shadow-[0_2px_10px_rgba(249,115,22,0.3)]' : defaultToggleTrackClass}`}
-                        disabled={!(hasStoredKey.groq || hasStoredKey.natively)}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${useGroqFastText ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                        offClassName={defaultToggleTrackClass}
+                    />
                 </div>
 
                 {/* Interviewer Transcript Toggle */}
                 <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group cursor-default ${itemHoverClass} ${glassRowClass}`}>
                     <div className="flex items-center gap-2.5">
                         <MessageSquare
-                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-emerald-400' : inactiveIconColorClass}`}
+                            className={`w-3.5 h-3.5 transition-colors ${showTranscript ? 'text-accent-primary' : inactiveIconColorClass}`}
                             fill={showTranscript ? "currentColor" : "none"}
                         />
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Transcript</span>
                     </div>
-                    <button
-                        onClick={() => {
+                    <PopupToggle
+                        checked={showTranscript}
+                        label="Transcript"
+                        onChange={() => {
                             const newState = !showTranscript;
                             setShowTranscript(newState);
                             localStorage.setItem('natively_interviewer_transcript', String(newState));
                             // Dispatch event for same-window listeners
                             window.dispatchEvent(new Event('storage'));
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${showTranscript ? 'bg-emerald-500 shadow-[0_2px_10px_rgba(16,185,129,0.3)]' : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${showTranscript ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                        offClassName={defaultToggleTrackClass}
+                    />
                 </div>
 
                 {/* Interview Mode (Brainstorm) Toggle */}
@@ -307,7 +481,7 @@ const SettingsPopup = () => {
                             strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-violet-400' : inactiveIconColorClass}`}
+                            className={`w-3.5 h-3.5 transition-colors ${actionButtonMode === 'brainstorm' ? 'text-accent-primary' : inactiveIconColorClass}`}
                         >
                             <line x1="6" y1="3" x2="6" y2="15" />
                             <circle cx="18" cy="6" r="3" />
@@ -316,8 +490,10 @@ const SettingsPopup = () => {
                         </svg>
                         <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Interview Mode</span>
                     </div>
-                    <button
-                        onClick={async () => {
+                    <PopupToggle
+                        checked={actionButtonMode === 'brainstorm'}
+                        label="Interview Mode"
+                        onChange={async () => {
                             const newMode: 'recap' | 'brainstorm' = actionButtonMode === 'brainstorm' ? 'recap' : 'brainstorm';
                             setActionButtonModeState(newMode);
                             try {
@@ -325,14 +501,14 @@ const SettingsPopup = () => {
                                 await window.electronAPI?.setActionButtonMode?.(newMode);
                             } catch (e) { console.error(e); }
                         }}
-                        className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${actionButtonMode === 'brainstorm' ? 'bg-violet-500 shadow-[0_2px_10px_rgba(139,92,246,0.3)]' : defaultToggleTrackClass}`}
-                    >
-                        <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${actionButtonMode === 'brainstorm' ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                    </button>
+                        onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                        offClassName={defaultToggleTrackClass}
+                    />
                 </div>
 
-                {/* Profile Mode Toggle */}
-                {hasProfile && (
+                {/* Profile Mode Toggle — hidden under Context Intelligence V3,
+                    where source authority replaces the global override (§6). */}
+                {hasProfile && !ciV3Enabled && (
                     <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition-colors duration-200 group ${!isPremium ? 'opacity-50 grayscale cursor-not-allowed' : `${itemHoverClass} ${glassRowClass} cursor-default`}`} title={!isPremium ? 'Requires Pro license to be active' : ''}>
                         <div className="flex items-center gap-2.5">
                             <User
@@ -341,8 +517,11 @@ const SettingsPopup = () => {
                             />
                             <span className={`text-[12px] font-medium transition-colors ${labelColorClass}`}>Profile Mode</span>
                         </div>
-                        <button
-                            onClick={async () => {
+                        <PopupToggle
+                            checked={profileMode && isPremium}
+                            label="Profile Mode"
+                            disabled={!isPremium}
+                            onChange={async () => {
                                 if (!isPremium) return;
                                 const newState = !profileMode;
                                 setProfileMode(newState);
@@ -351,11 +530,9 @@ const SettingsPopup = () => {
                                     await window.electronAPI?.profileSetMode?.(newState);
                                 } catch (e) { console.error(e); }
                             }}
-                            className={`w-[30px] h-[18px] rounded-full p-[1.5px] transition-all duration-300 ease-spring active:scale-[0.92] ${profileMode && isPremium ? 'bg-accent-primary shadow-[0_2px_10px_rgba(var(--color-accent-primary),0.3)]' : defaultToggleTrackClass}`}
-                            disabled={!isPremium}
-                        >
-                            <div className={`w-[15px] h-[15px] rounded-full transition-transform duration-300 ease-spring ${toggleKnobClass} ${profileMode && isPremium ? 'translate-x-[12px]' : 'translate-x-0'}`} />
-                        </button>
+                            onClassName="bg-accent-primary shadow-[0_2px_10px_var(--accent-shadow-20)]"
+                            offClassName={defaultToggleTrackClass}
+                        />
                     </div>
                 )}
 

@@ -260,14 +260,11 @@ test('every preload ipcRenderer.invoke channel has a matching ipcMain.handle reg
   // Known-stale invokes: channels exposed in preload that have no handler.
   // These are pre-existing issues unrelated to the skills fix — fail loudly
   // if a NEW one appears, but don't block on the existing backlog.
-  const KNOWN_STALE = new Set([
-    // toggleAdvancedSettings → 'toggle-advanced-settings' is exposed in preload
-    // (electron/preload.ts:937) but no handler registers the channel. Renderer
-    // invokes silently reject — pre-existing tech debt, separate cleanup.
-    'toggle-advanced-settings',
-    // M5 cleanup of stealth-tap:permission-granted / request-permission /
-    // is-active was completed alongside this commit — entries removed here.
-  ]);
+  // The stale backlog is CLEAR (F-121 removed the last entry,
+  // toggle-advanced-settings, together with its dead preload method). Keep
+  // the set so a future intentional exemption has a place to live, but any
+  // addition should carry a written justification.
+  const KNOWN_STALE = new Set([]);
 
   const missing = [...channels].filter(ch => !registered.has(ch) && !KNOWN_STALE.has(ch)).sort();
   assert.deepStrictEqual(missing, [],

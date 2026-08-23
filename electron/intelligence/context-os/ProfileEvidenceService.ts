@@ -159,6 +159,12 @@ export class ProfileEvidenceService {
       : factual.some((it) => it.supports.property === contract.requestedProperty);
 
     return {
+      // Phase 6 Slice 4 (context-rebuild, 2026-07-25): packId was missing
+      // from this return path (found while making EvidencePack.packId
+      // mandatory, item 5) — the OTHER return path above already sets it
+      // via emptyEvidencePack(). Same `${turnId}:pack:1` convention as
+      // EvidenceOrchestrator.ts/generationContext.ts.
+      packId: `${contract.turnId}:pack:1`,
       turnId: contract.turnId,
       sourceOwner: contract.sourceOwner,
       requestedProperty: contract.requestedProperty,

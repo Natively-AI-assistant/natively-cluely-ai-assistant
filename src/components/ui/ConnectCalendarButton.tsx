@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useT } from '../../i18n';
 import { AlertCircle, ArrowRight, Loader, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { getCalendarConnectErrorMessage } from '../../lib/calendarConnectError';
+import { getCalendarConnectErrorMessage } from '../../lib/calendarConnectError.mjs';
 // Static import keeps Vite from warning about a "mixed" dynamic+static import
 // graph for analytics.service (App.tsx, Launcher.tsx, NativelyInterface.tsx,
 // and SettingsOverlay.tsx all import it statically). The previous
@@ -223,7 +223,7 @@ const ConnectCalendarButton: React.FC<ConnectCalendarButtonProps> = ({ className
                 </span>
             </button>
             {connectError && (
-                <p role="alert" className="mt-2 flex max-w-[260px] items-start gap-1.5 text-left text-[11px] leading-snug text-red-300">
+                <p role="alert" className="mt-2 flex max-h-16 max-w-[260px] items-start gap-1.5 overflow-y-auto pr-1 text-left text-[11px] leading-snug text-red-300">
                     <AlertCircle size={13} className="mt-0.5 shrink-0" />
                     <span>{connectError}</span>
                 </p>

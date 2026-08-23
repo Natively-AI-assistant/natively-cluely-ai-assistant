@@ -383,7 +383,7 @@ export const SkillsSettings: React.FC = () => {
         s.length <= n ? s : `${s.slice(0, n).trimEnd()}…`;
 
     return (
-        <div className="space-y-5 animated fadeIn select-text pb-4">
+        <div className="space-y-5 animated fadeIn select-text pb-4" data-settings-stagger>
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <h3 className="text-lg font-bold text-text-primary mb-1">{t('Skills')}</h3>
@@ -422,8 +422,8 @@ export const SkillsSettings: React.FC = () => {
                 className={[
                     'rounded-xl border transition-colors p-4 bg-bg-card',
                     isDragging
-                        ? 'border-accent-primary bg-accent-primary/5'
-                        : 'border-dashed border-border-subtle hover:border-accent-primary/40',
+                        ? 'border-accent-primary bg-accent-subtle'
+                        : 'border-dashed border-border-subtle hover:border-accent-border',
                 ].join(' ')}
             >
                 <div className="flex items-center justify-between gap-4">
@@ -454,7 +454,7 @@ export const SkillsSettings: React.FC = () => {
                         <span
                             className={[
                                 'inline-flex items-center px-4 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0',
-                                'bg-accent-primary hover:bg-accent-primary/90 text-white',
+                                'bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg',
                                 uploading ? 'opacity-60 pointer-events-none' : '',
                             ].join(' ')}
                         >
@@ -529,7 +529,7 @@ export const SkillsSettings: React.FC = () => {
                         <button
                             onClick={handleInstall}
                             disabled={installing}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-xs font-semibold transition-colors disabled:opacity-60"
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-colors disabled:opacity-60"
                         >
                             <Check size={13} strokeWidth={2.5} />
                             {installing ? t('Installing…') : t('Install')}
@@ -690,7 +690,7 @@ export const SkillsSettings: React.FC = () => {
                             </div>
                             <button
                                 onClick={openFolder}
-                                className="px-4 py-2 rounded-lg bg-accent-primary hover:bg-accent-primary/90 text-white text-xs font-semibold transition-colors shrink-0"
+                                className="px-4 py-2 rounded-lg bg-legacy-action-bg hover:bg-legacy-action-hover text-legacy-action-fg text-xs font-semibold transition-colors shrink-0"
                             >
                                 {t('Open Folder')}
                             </button>

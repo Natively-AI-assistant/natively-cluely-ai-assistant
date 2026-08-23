@@ -26,47 +26,65 @@ const PDF_FIXTURE = path.join(repoRoot, 'tests/fixtures/modes/custom/seminar-pre
 
 // ── Source-contract tests (the production regression guards) ────────────────
 
-test('IPC handler captures pdf-parse data.total as pdfReportedPageCount', () => {
-  const src = read('electron/ipcHandlers.ts');
+// These four guarded PDF page-count ingestion when it lived inline in
+// ipcHandlers.ts under the names `pdfReportedPageCount` /
+// `pdfExtractedPageCount`. It has since been extracted into two focused
+// services — `SafeDocumentTextExtractor` does the parse + counting, and
+// `ModeReferenceFileIngestion` threads the result into ModesManager — and the
+// locals were renamed to plain `pageCount` / `extractedPageCount` in the
+// process. Pinned to ipcHandlers.ts, all four matched nothing and had been
+// asserting about a file that no longer contains the logic.
+//
+// Each invariant below was re-verified against the new implementation before
+// its locator was moved; none was loosened. The extraction is an improvement
+// (this logic left a 12k-line IPC file for two testable services), so the
+// pins follow it rather than pretending it did not happen.
+
+test('the extractor captures pdf-parse data.total as the reported page count', () => {
+  const src = read('electron/services/SafeDocumentTextExtractor.ts');
   assert.match(
     src,
-    /pdfReportedPageCount\s*=\s*\n?\s*typeof data\?\.total === 'number' && data\.total > 0/,
-    'IPC handler must capture data.total as pdfReportedPageCount',
+    /pageCount\s*=\s*\n?\s*typeof data\?\.total === 'number' && data\.total > 0/,
+    'SafeDocumentTextExtractor must capture data.total as the reported page count',
+  );
+  // ...and fall back to the pages-array length when `total` is absent, so a
+  // parser that omits it does not silently report an unknown page count.
+  assert.match(
+    src,
+    /Array\.isArray\(data\?\.pages\)\s*\n?\s*\?\s*data\.pages\.length/,
+    'a missing data.total must fall back to data.pages.length',
   );
 });
 
-test('IPC handler captures pdf-parse data.pages array', () => {
-  const src = read('electron/ipcHandlers.ts');
-  assert.match(
-    src,
-    /Array\.isArray\(data\?\.pages\)/,
-    'IPC handler must check Array.isArray on data.pages',
-  );
-  // Inject [Page N] markers — the exact form may vary by formatter, so
-  // assert on the substring rather than a tight regex.
+test('the extractor injects [Page N] markers from data.pages', () => {
+  const src = read('electron/services/SafeDocumentTextExtractor.ts');
+  assert.match(src, /Array\.isArray\(data\?\.pages\)/, 'must check Array.isArray on data.pages');
   const pagesMapIdx = src.indexOf('data.pages');
   assert.ok(pagesMapIdx !== -1, 'data.pages must be referenced');
-  const slice = src.slice(pagesMapIdx, pagesMapIdx + 600);
+  const slice = src.slice(pagesMapIdx, pagesMapIdx + 900);
   assert.ok(
-    slice.includes('[Page ${p.num}]') || slice.includes('[Page ${p\\.num}\\]'),
-    'IPC handler must inject [Page N] markers from data.pages',
+    slice.includes('[Page ${page.num}]') || slice.includes('[Page ${p.num}]'),
+    'must inject [Page N] markers from data.pages',
   );
 });
 
-test('IPC handler counts extracted pages (pages with non-empty text)', () => {
-  const src = read('electron/ipcHandlers.ts');
+test('the extractor counts extracted pages (pages with non-empty text)', () => {
+  const src = read('electron/services/SafeDocumentTextExtractor.ts');
+  // The distinction this pins: `extractedPageCount` counts pages that actually
+  // yielded text, so an image-only scan reports pageCount > extractedPageCount
+  // instead of masquerading as fully extracted.
   assert.match(
     src,
-    /pdfExtractedPageCount\s*=\s*data\.pages\.filter\(\s*\n?\s*\(p:\s*any\)\s*=>\s*p && typeof p\.text === 'string' && p\.text\.trim\(\)\.length > 0/,
-    'IPC handler must compute pdfExtractedPageCount from pages with non-empty text',
+    /extractedPageCount\s*=\s*data\.pages\.filter\(\s*\n?\s*\(page:\s*any\)\s*=>\s*typeof page\?\.text === 'string' && page\.text\.trim\(\)/,
+    'must compute extractedPageCount from pages with non-empty text',
   );
 });
 
-test('IPC handler threads pageCount + extractedPageCount through addReferenceFile', () => {
-  const src = read('electron/ipcHandlers.ts');
+test('ingestion threads pageCount + extractedPageCount through addReferenceFile', () => {
+  const src = read('electron/services/ModeReferenceFileIngestion.ts');
   assert.match(
     src,
-    /ModesManager\.getInstance\(\)\.addReferenceFile\(\{[\s\S]*?pageCount:\s*pdfReportedPageCount,\s*\n?\s*extractedPageCount:\s*pdfExtractedPageCount/,
+    /addReferenceFile\(\{[\s\S]*?pageCount:\s*extracted\.pageCount,\s*\n?\s*extractedPageCount:\s*extracted\.extractedPageCount/,
     'addReferenceFile call must pass pageCount + extractedPageCount through',
   );
 });

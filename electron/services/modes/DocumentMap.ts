@@ -424,12 +424,70 @@ export function sentenceAwareWindows(text: string, targetWords: number, overlapW
     if (!clean) return [];
     const wordCount = (s: string) => (s.match(/\S+/g) || []).length;
     if (wordCount(clean) <= targetWords) return [clean];
+    // Hard word-cap fallback for text the sentence splitter cannot DIVIDE —
+    // deliberately NOT for a sentence that is merely long.
+    //
+    // Two different situations reach the one-piece case, and they want opposite
+    // treatment:
+    //
+    //   (a) A genuine, over-long sentence. Splitting it is actively harmful: the
+    //       RFC 8259 case this file's test is built on split "Implementations
+    //       MUST NOT add a byte order mark" so that a chunk carried "byte order
+    //       mark" WITHOUT "MUST NOT" — a retrieved fragment that states the
+    //       opposite of the source. Semantic integrity beats the word cap here,
+    //       and `SentenceAwareChunking` pins that.
+    //
+    //   (b) A body with no sentence structure at all. This used to hit the same
+    //       `return [clean]` and hand back the WHOLE text as one window, with
+    //       `targetWords` silently ignored. That is not an edge case here:
+    //       realtime STT emits unpunctuated transcripts (Soniox sends none at
+    //       all), as do OCR dumps, table/CSV extractions and minified content. A
+    //       5600-word document became ONE chunk — retrieval granularity gone, and
+    //       the embedder truncates at its token limit, so most of the document
+    //       was never searchable.
+    //
+    // A length ceiling separates them. Real sentences, even legal or normative
+    // ones, do not run to hundreds of words; text claiming to be a single
+    // sentence several times the window size is unpunctuated prose, not a clause
+    // worth protecting. Below the ceiling we keep it whole and accept one
+    // oversized chunk; above it we window by words.
+    //
+    // The discriminator is STRUCTURE first, length only as a backstop.
+    //
+    // A piece is windowed when it is over-long AND either
+    //   (a) it contains no sentence-terminal punctuation at all — then it is not
+    //       a sentence in any meaningful sense, it is an unpunctuated transcript
+    //       or an OCR/table dump, and there is no clause to protect; or
+    //   (b) it is longer than a generous absolute ceiling — the backstop for a
+    //       structureless run that happens to carry one trailing period, which
+    //       would otherwise slip past (a) and reproduce the original bug.
+    //
+    // Length alone was NOT enough, and picking `3x` first was a mistake worth
+    // recording: a `3 * 140 = 420` ceiling exactly swallowed a 420-word
+    // three-paragraph fixture (ModeLocalRerank's), collapsing three chunks into
+    // one. Any single number is arbitrary at its boundary; whether the text has
+    // sentences at all is not.
+    const HAS_SENTENCE_PUNCTUATION = /[.!?]/;
+    const ABSOLUTE_CEILING_WORDS = targetWords * 3;
+    const wordWindows = (s: string): string[] => {
+        const w = s.match(/\S+/g) || [];
+        if (w.length <= targetWords) return [s];
+        const structureless = !HAS_SENTENCE_PUNCTUATION.test(s);
+        if (!structureless && w.length <= ABSOLUTE_CEILING_WORDS) return [s];
+        const step = Math.max(1, targetWords - overlapWords);
+        const out: string[] = [];
+        for (let i = 0; i < w.length; i += step) {
+            out.push(w.slice(i, i + targetWords).join(' '));
+            if (i + targetWords >= w.length) break;
+        }
+        return out;
+    };
     const sentences: string[] = [];
     for (const part of clean.split(/(?<=[.!?][")\]]?)\s+(?=[A-Z0-9"[(])/)) {
         const p = part.trim();
-        if (p) sentences.push(p);
+        if (p) sentences.push(...wordWindows(p));
     }
-    if (sentences.length <= 1) return [clean];
+    if (sentences.length <= 1) return sentences.length === 1 ? [sentences[0]] : [clean];
     const windows: string[] = [];
     let cur: string[] = [];
     let curWords = 0;

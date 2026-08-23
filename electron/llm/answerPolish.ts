@@ -477,7 +477,7 @@ export function cleanAnswerArtifacts(text: string): string {
   // Collapse the blank-line runs the removals leave behind.
   out = out.replace(/\n{3,}/g, '\n\n');
 
-  fences.forEach((f, i) => { out = out.replace(`FENCE${i}`, f); });
+  fences.forEach((f, i) => { out = out.replace(`FENCE${i}`, () => f); });
   return out.trim();
 }
 

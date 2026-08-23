@@ -13,7 +13,7 @@
  * Static assets (manifest.json, popup.html, icons) are copied verbatim to dist/.
  */
 import { build } from 'esbuild';
-import { cp, mkdir, rm } from 'node:fs/promises';
+import { cp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,14 +46,24 @@ async function run() {
     logLevel: 'warning',
   });
 
-  // Copy static assets verbatim.
-  for (const asset of ['manifest.json', 'popup.html']) {
-    await cp(path.join(srcDir, asset), path.join(outDir, asset)).catch(async () => {
-      // manifest lives at package root, popup.html in src — try root fallback.
-      const alt = path.join(rootDir, asset);
-      if (existsSync(alt)) await cp(alt, path.join(outDir, asset));
-    });
+  // Copy static assets. popup.html is verbatim; the manifest gets one DEV-ONLY
+  // transform: the broad host patterns move from optional to REQUIRED for the
+  // unpacked build. Chrome auto-grants required host permissions on an unpacked
+  // load (no store review, no per-site prompts), so the desktop Cmd/Ctrl+Shift+Y
+  // hotkey captures ANY site out of the box during development. The Web Store
+  // package strips these back to loopback-only (scripts/build-store.js), keeping
+  // the shipped privacy model: optional grants, per-site or one-click all-sites.
+  const DEV_BROAD_HOSTS = ['https://*/*', 'http://*/*'];
+  {
+    const manifestSrc = path.join(srcDir, 'manifest.json');
+    const manifest = JSON.parse(await readFile(manifestSrc, 'utf8'));
+    manifest.host_permissions = [
+      ...(manifest.host_permissions ?? []),
+      ...DEV_BROAD_HOSTS.filter((h) => !(manifest.host_permissions ?? []).includes(h)),
+    ];
+    await writeFile(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
+  await cp(path.join(srcDir, 'popup.html'), path.join(outDir, 'popup.html'));
 
   // Icons directory is optional.
   const iconsDir = path.join(rootDir, 'icons');

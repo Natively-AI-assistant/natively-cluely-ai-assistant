@@ -37,7 +37,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import Module from 'node:module';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
@@ -59,10 +59,11 @@ const distDir = (() => {
       process.platform === 'win32' ? 'junction' : 'dir',
     );
     try {
-      execSync(`node node_modules/.bin/tsc -p electron/tsconfig.json --outDir ${target}`, {
-        cwd: repoRoot,
-        stdio: 'pipe',
-      });
+      execFileSync(process.execPath, [
+        path.join('node_modules', 'typescript', 'bin', 'tsc'),
+        '-p', path.join('electron', 'tsconfig.json'),
+        '--outDir', target,
+      ], { cwd: repoRoot, stdio: 'pipe' });
     } catch (_tscErr) { /* expected — tsc returns 1 on unrelated type errors */ }
   }
   return path.resolve(repoRoot, 'dist-electron');

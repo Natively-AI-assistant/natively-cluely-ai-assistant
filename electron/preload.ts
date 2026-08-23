@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
+import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 
 /**
  * Metadata the companion extension sends with a captured page (drives the
@@ -17,6 +18,19 @@ interface DomCaptureMeta {
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
+  sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
+  onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
+  sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
+  setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
+  dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>;
+  sendOverlayUiAction: (action: { type: string }) => Promise<void>;
+  sendOverlayGroupDrag: (delta: {
+    dx?: number;
+    dy?: number;
+    phase?: 'start' | 'move' | 'end';
+  }) => Promise<void>;
+  isOverlayGroupDragManaged: () => Promise<boolean>;
+  onOverlayUiAction: (callback: (action: { type: string }) => void) => () => void;
   getRecognitionLanguages: () => Promise<Record<string, any>>;
   getScreenshots: () => Promise<Array<{ path: string; preview: string }>>;
   deleteScreenshot: (path: string) => Promise<{ success: boolean; error?: string }>;
@@ -48,6 +62,7 @@ interface ElectronAPI {
 
   analyzeImageFile: (path: string) => Promise<void>;
   quitApp: () => Promise<void>;
+  restartApp: () => Promise<void>;
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
@@ -69,6 +84,10 @@ interface ElectronAPI {
     isOllama: boolean;
   }>;
   getAvailableOllamaModels: () => Promise<string[]>;
+  /** Whether a denied data scope would ACTUALLY be handled on-device, split by
+   *  whether the turn needs vision. Shares the enforcement predicate — see the
+   *  handler comment in ipcHandlers.ts. */
+  getLocalFallbackStatus: () => Promise<{ text: boolean; vision: boolean }>;
   getProviderStatuses: () => Promise<any[]>;
   getProviderStatus: (id: string) => Promise<any | null>;
   onProviderStatusChanged: (callback: (status: any) => void) => () => void;
@@ -96,8 +115,14 @@ interface ElectronAPI {
   setOpenaiApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setClaudeApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setDeepseekApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setNvidiaNimApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => Promise<{ success: boolean; error?: string }>;
   getAvailableLiteLLMModels: () => Promise<string[]>;
+  refreshLiteLLMModels: () => Promise<string[]>;
+  getCloudFetchedModels: () => Promise<{ models: Record<string, { id: string; label: string }[]>; fetchedAt: Record<string, number> }>;
+  getDisabledProviders: () => Promise<string[]>;
+  setDisabledProviders: (providers: string[]) => Promise<{ success: boolean; error?: string }>;
+  setCloudEnabledModels: (provider: string, models: string[]) => Promise<{ success: boolean; error?: string }>;
   setNativelyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   // ── In-app review / testimonial prompt ─────────────────────────────────
   reviewGetPromptState: () => Promise<{
@@ -149,7 +174,7 @@ interface ElectronAPI {
     error?: string;
     status?: number;
   }>;
-  getNativelyUsage: () => Promise<{
+  getNativelyUsage: (force?: boolean) => Promise<{
     ok: boolean;
     plan?: string;
     quota?: {
@@ -168,6 +193,9 @@ interface ElectronAPI {
     hasOpenaiKey: boolean;
     hasClaudeKey: boolean;
     hasDeepseekKey: boolean;
+    hasNvidiaNimKey?: boolean;
+    disabledProviders?: string[];
+    cloudEnabledModels?: Record<string, string[]>;
     hasNativelyKey: boolean;
     googleServiceAccountPath: string | null;
     sttProvider: string;
@@ -235,6 +263,7 @@ interface ElectronAPI {
       | 'azure'
       | 'ibmwatson'
       | 'soniox'
+      | 'nvidia_nim'
       | 'natively'
       | 'local-whisper',
   ) => Promise<{ success: boolean; error?: string }>;
@@ -301,9 +330,10 @@ interface ElectronAPI {
   setIbmWatsonApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
   setGroqSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setSonioxApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+  setNvidiaNimSttModel: (model: string) => Promise<{ success: boolean; error?: string }>;
   setIbmWatsonRegion: (region: string) => Promise<{ success: boolean; error?: string }>;
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
     apiKey: string,
     region?: string,
   ) => Promise<{ success: boolean; error?: string }>;
@@ -337,7 +367,7 @@ interface ElectronAPI {
   getSttLanguage: () => Promise<string>;
   getAiResponseLanguage: () => Promise<string>;
   onSttLanguageAutoDetected: (callback: (bcp47: string) => void) => () => void;
-  onSystemAudioPermissionDenied: (callback: (message: string) => void) => () => void;
+  onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => () => void;
   getSystemAudioPermissionWarning: () => Promise<string | null>;
   onDeviceSelectionApplied: (
     callback: (payload: {
@@ -356,10 +386,8 @@ interface ElectronAPI {
       maxAttempts: number;
       terminal?: boolean;
       stuck?: boolean;
+      titleKey?: string;
     }) => void,
-  ) => () => void;
-  onAudioInputAutoSwitched: (
-    callback: (payload: { from: string; to: string; reason: string; message?: string }) => void,
   ) => () => void;
 
   // STT Status Events
@@ -416,6 +444,11 @@ interface ElectronAPI {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => Promise<{ success: boolean; error?: string }>;
   endMeeting: () => Promise<{ success: boolean; error?: string }>;
+  /** Test-only (deep-run 2 issue 10): inject transcript segments with origin
+   *  'test'. No-ops unless NATIVELY_TEST_TRANSCRIPT_INJECTION=1 AND the build
+   *  is unpackaged — the gate lives in the main-process handler. */
+  debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>)
+    => Promise<{ success: boolean; injected?: number; error?: string }>;
   finalizeMicSTT: () => Promise<void>;
   getRecentMeetings: () => Promise<
     Array<{ id: string; title: string; date: string; duration: string; summary: string }>
@@ -427,6 +460,11 @@ interface ElectronAPI {
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
+  getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>;
+  setContextDebugLevel: (level: 'off' | 'standard' | 'verbose') => Promise<{ ok: boolean; error?: string }>;
+  openContextDebugFolder: () => Promise<{ ok: boolean; error?: string }>;
+  clearContextDebugLogs: () => Promise<{ ok: boolean; removed?: number; error?: string }>;
+  exportContextDebugSession: () => Promise<{ ok: boolean; path?: string; error?: string }>;
   getHindsightConfig: () => Promise<{ baseUrl: string; hasApiKey: boolean; autoStart: boolean; serverCommand: string; llmProvider: string; available: boolean; mode: 'local' | 'cloud'; synthetic: boolean; explicitlyDisabled: boolean; authFailed: boolean }>;
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => Promise<{ success: boolean; healthy?: boolean; error?: string }>;
   testHindsightConnection: () => Promise<{ healthy: boolean; error?: string }>;
@@ -605,7 +643,6 @@ interface ElectronAPI {
   onWindowMaximizedChanged: (callback: (isMaximized: boolean) => void) => () => void;
   onEnsureExpanded: (callback: () => void) => () => void;
   onToggleExpand: (callback: () => void) => () => void;
-  toggleAdvancedSettings: () => Promise<void>;
   openSettingsTab: (tab: string) => Promise<void>;
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void;
   setOverlayMousePassthrough: (enabled: boolean) => Promise<{ success: boolean }>;
@@ -622,9 +659,10 @@ interface ElectronAPI {
   ) => Promise<void>;
   onGeminiStreamToken: (callback: (token: string, meta?: { streamId?: number }) => void) => () => void;
   onGeminiStreamDone: (callback: (data?: { finalText?: string; streamId?: number }) => void) => () => void;
-  onGeminiStreamError: (callback: (error: string) => void) => () => void;
+  onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => () => void;
 
   onUndetectableChanged: (callback: (state: boolean) => void) => () => void;
+  onSettingsWindowShown: (callback: () => void) => () => void;
   onGroqFastTextChanged: (callback: (enabled: boolean) => void) => () => void;
   onModelChanged: (callback: (modelId: string) => void) => () => void;
 
@@ -694,13 +732,13 @@ interface ElectronAPI {
   }>;
   ragRetryEmbeddings: () => Promise<{ success: boolean }>;
   onRAGStreamChunk: (
-    callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; chunk: string }) => void,
   ) => () => void;
   onRAGStreamComplete: (
-    callback: (data: { meetingId?: string; global?: boolean }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean }) => void,
   ) => () => void;
   onRAGStreamError: (
-    callback: (data: { meetingId?: string; global?: boolean; error: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; error: string }) => void,
   ) => () => void;
 
   // Keybind Management
@@ -724,6 +762,15 @@ interface ElectronAPI {
     }>
   >;
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => () => void;
+  /**
+   * Global shortcuts the OS currently refuses to hand over. Snapshot
+   * counterpart to onKeybindRegistrationFailed — the boot-time registration
+   * pass fires before any window exists, so a renderer that only listens
+   * misses every conflict that was present at launch.
+   */
+  getKeybindRegistrationFailures: () => Promise<
+    Array<{ id: string; accelerator: string }>
+  >;
 
   // Global shortcut events (stealth: fired even when window is not focused)
   onGlobalShortcut: (callback: (data: { action: string }) => void) => () => void;
@@ -740,6 +787,14 @@ interface ElectronAPI {
    *  enabled — the tap captures below the IME and breaks composition, so
    *  the renderer falls back to plain DOM focus on click. */
   stealthTapShouldAutoEngage: () => Promise<boolean>;
+  /** Re-probe the IME list mid-session (renderer calls this on window focus)
+   *  so a Pinyin/Hangul source added AFTER mount updates the auto-engage
+   *  decision. Was missing from the bridge — the renderer's optional call
+   *  silently no-op'd and the stale mount-time value swallowed CJK
+   *  composition keystrokes (F-116). */
+  stealthTapRefreshIme: () => Promise<boolean>;
+  /** Ollama runtime failure notifications (F-119). */
+  onOllamaError: (cb: (data: { message: string }) => void) => () => void;
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => () => void;
   onStealthKeyCaptured: (
     cb: (ev: { keyCode: number; chars: string; flags: number; isKeyDown: boolean }) => void,
@@ -798,16 +853,66 @@ interface ElectronAPI {
   }>;
   profileResetNegotiation: () => Promise<{ success: boolean; error?: string }>;
 
+  // Role Insight — résumé × job-description requirement analysis.
+  // Report/status payloads are intentionally `any` here: their shape is owned by
+  // premium/electron/knowledge/roleInsight/types.ts, and duplicating it in the
+  // preload contract would create two definitions free to drift apart.
+  roleInsightGetStatus: () => Promise<any>;
+  roleInsightGetReport: (analysisId?: string) => Promise<{ success: boolean; report?: any; error?: string }>;
+  roleInsightListHistory: () => Promise<{ success: boolean; history: any[]; error?: string }>;
+  roleInsightAnalyse: (options?: { jobUrl?: string; skipExternalVerification?: boolean }) => Promise<{
+    success: boolean;
+    report?: any;
+    error?: string;
+    cancelled?: boolean;
+    missingSources?: string[];
+    diagnosticId?: string;
+  }>;
+  roleInsightCancel: () => Promise<{ success: boolean; error?: string }>;
+  roleInsightApplyCorrection: (args: {
+    analysisId: string;
+    requirementId?: string | null;
+    kind: string;
+    detail?: string;
+    evidenceText?: string;
+    priority?: string;
+    mandatory?: boolean;
+    evidenceId?: string;
+  }) => Promise<{ success: boolean; report?: any; error?: string }>;
+  roleInsightAnswerClarification: (args: {
+    analysisId: string;
+    requirementId: string;
+    answer: string;
+    detail?: string;
+  }) => Promise<{ success: boolean; report?: any; error?: string }>;
+  roleInsightSaveToProfile: (args: {
+    analysisId: string;
+    requirementId: string;
+    claim: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  roleInsightPasteJd: (text: string) => Promise<{ success: boolean; error?: string }>;
+  roleInsightImportJdUrl: (url: string) => Promise<{ success: boolean; error?: string; sourceUrl?: string }>;
+  onRoleInsightProgress: (
+    callback: (payload: { stage: string | null; analysing: boolean }) => void,
+  ) => () => void;
+
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
 
   // Overlay Opacity (Stealth Mode)
   setOverlayOpacity: (opacity: number) => Promise<void>;
   onOverlayOpacityChanged: (callback: (opacity: number) => void) => () => void;
+  setLauncherOpacityPreview: (active: boolean) => Promise<void>;
 
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+
+  // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
+  getAmbientChatEnabled: () => Promise<boolean>;
+  setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  getAutoAnswerEnabled: () => Promise<boolean>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
@@ -931,7 +1036,8 @@ interface ElectronAPI {
     persisted?: boolean;
     error?: string;
   }>;
-  e2eInvoke: (channel: string, ...args: any[]) => Promise<any>;
+  /** Present only in NATIVELY_E2E=1 sessions (F-117). */
+  e2eInvoke?: (channel: string, ...args: any[]) => Promise<any>;
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
@@ -943,6 +1049,11 @@ interface ElectronAPI {
     switches: string[];
     hasLiveTranscriptCapable?: boolean;
   }) => Promise<any>;
+  /** Context Intelligence V3 — the two-option Answer policy control (§6).
+   *  All decisions (v3Enabled, offered, labels) are made main-side; the
+   *  renderer only renders what this returns. */
+  answerPolicyGet: (input: { modeId?: string; templateType?: string }) => Promise<any>;
+  answerPolicySet: (input: { modeId?: string; templateType?: string; policy?: string | null }) => Promise<{ success: boolean; error?: string }>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>;
   modesGetReferenceFiles: (
@@ -957,7 +1068,7 @@ interface ElectronAPI {
   modesGetReferenceFileStatus: (
     modeId: string,
   ) => Promise<{ success: boolean; statuses?: Array<{ fileId: string; fileName: string; status: string; chunkCount: number }>; error?: string }>;
-  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => () => void;
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId: string; phase: 'indexing' | 'done' }) => void) => () => void;
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => () => void;
   knowledgeListPacks: (modeId: string) => Promise<{ success: boolean; packs: Array<{ id: string; sourceId: string; fileName: string; cardCount: number; entityCount: number; relationCount: number; packVersion: number; updatedAt: string }>; error?: string }>;
   knowledgeGetPack: (fileId: string) => Promise<{ success: boolean; pack: any | null; error?: string }>;
@@ -1053,6 +1164,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('update-content-dimensions', dimensions),
   updateContentDimensionsCentered: (dimensions: { width: number; height: number }) =>
     ipcRenderer.invoke('update-content-dimensions-centered', dimensions),
+  // ── Overlay aux windows (pill / resize toggle) coordination ──────────────
+  // Overlay renderer → main → aux windows: UI-state broadcast.
+  sendOverlayUiState: (state: Record<string, unknown>) =>
+    ipcRenderer.invoke('overlay-ui-state', state),
+  onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => {
+    const subscription = (_: any, state: Record<string, unknown>) => callback(state);
+    ipcRenderer.on('overlay-ui-state', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-ui-state', subscription);
+    };
+  },
+  // Overlay renderer → main: live panel right edge (toggle window rides it).
+  sendOverlayToggleAnchor: (payload: { panelRight: number }) =>
+    ipcRenderer.invoke('overlay-toggle-anchor', payload),
+  // Overlay renderer → main: hover hit-test (margins click-through gate).
+  setOverlayHoverInteractive: (interactive: boolean) =>
+    ipcRenderer.invoke('overlay-hover-interactive', interactive),
+  // Any Natively window → main: dismiss the overlay dropdowns (settings /
+  // model selector). Used by the click-catcher, the aux windows, and the
+  // overlay renderer's click-outside handler.
+  dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) =>
+    ipcRenderer.invoke('overlay-popovers:dismiss', opts),
+  // Aux windows → main → overlay renderer: user actions.
+  sendOverlayUiAction: (action: { type: string }) =>
+    ipcRenderer.invoke('overlay-ui-action', action),
+  // Pill window → main: drag the overlay group as one (macOS: the pill is a
+  // child window and must drag its parent; Windows: bypasses the modal move loop).
+  sendOverlayGroupDrag: (delta: { dx?: number; dy?: number; phase?: 'start' | 'move' | 'end' }) =>
+    ipcRenderer.invoke('overlay-group-drag', delta),
+  isOverlayGroupDragManaged: () => ipcRenderer.invoke('overlay-group-drag-managed'),
+  onOverlayUiAction: (callback: (action: { type: string }) => void) => {
+    const subscription = (_: any, action: { type: string }) => callback(action);
+    ipcRenderer.on('overlay-ui-action', subscription);
+    return () => {
+      ipcRenderer.removeListener('overlay-ui-action', subscription);
+    };
+  },
   getRecognitionLanguages: () => ipcRenderer.invoke('get-recognition-languages'),
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   takeSelectiveScreenshot: () => ipcRenderer.invoke('take-selective-screenshot'),
@@ -1171,6 +1319,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   analyzeImageFile: (path: string) => ipcRenderer.invoke('analyze-image-file', path),
   quitApp: () => ipcRenderer.invoke('quit-app'),
+  restartApp: () => ipcRenderer.invoke('restart-app'),
   toggleWindow: () => ipcRenderer.invoke('toggle-window'),
   showWindow: (inactive?: boolean) => ipcRenderer.invoke('show-window', inactive),
   hideWindow: () => ipcRenderer.invoke('hide-window'),
@@ -1198,7 +1347,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('ensure-expanded', subscription);
     };
   },
-  toggleAdvancedSettings: () => ipcRenderer.invoke('toggle-advanced-settings'),
+  // toggleAdvancedSettings was removed (F-121): it invoked
+  // 'toggle-advanced-settings', a channel no handler ever registered — any
+  // caller got a silent "No handler registered" rejection. Zero call sites.
   openSettingsTab: (tab: string) => ipcRenderer.invoke('settings:open-tab', tab),
   onOpenSettingsTab: (callback: (tab: string) => void) => {
     const subscription = (_: any, tab: string) => callback(tab);
@@ -1298,6 +1449,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Model Management
   getCurrentLlmConfig: () => ipcRenderer.invoke('get-current-llm-config'),
   getAvailableOllamaModels: () => ipcRenderer.invoke('get-available-ollama-models'),
+  getLocalFallbackStatus: () => ipcRenderer.invoke('get-local-fallback-status'),
   getProviderStatuses: () => ipcRenderer.invoke('get-provider-statuses'),
   getProviderStatus: (id: string) => ipcRenderer.invoke('get-provider-status', id),
   onProviderStatusChanged: (callback: (status: any) => void) => {
@@ -1311,7 +1463,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('switch-to-ollama', model, url),
   switchToGemini: (apiKey?: string, modelId?: string) =>
     ipcRenderer.invoke('switch-to-gemini', apiKey, modelId),
-  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) =>
+  testLlmConnection: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) =>
     ipcRenderer.invoke('test-llm-connection', provider, apiKey),
   selectServiceAccount: () => ipcRenderer.invoke('select-service-account'),
 
@@ -1321,8 +1473,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setOpenaiApiKey: (apiKey: string) => ipcRenderer.invoke('set-openai-api-key', apiKey),
   setClaudeApiKey: (apiKey: string) => ipcRenderer.invoke('set-claude-api-key', apiKey),
   setDeepseekApiKey: (apiKey: string) => ipcRenderer.invoke('set-deepseek-api-key', apiKey),
+  setNvidiaNimApiKey: (apiKey: string) => ipcRenderer.invoke('set-nvidia-nim-api-key', apiKey),
   setLitellmConfig: (config: { apiKey: string; baseURL: string; maxTokens?: number }) => ipcRenderer.invoke('set-litellm-config', config),
   getAvailableLiteLLMModels: () => ipcRenderer.invoke('get-available-litellm-models'),
+  refreshLiteLLMModels: () => ipcRenderer.invoke('refresh-litellm-models'),
+  getCloudFetchedModels: () => ipcRenderer.invoke('get-cloud-fetched-models'),
+  getDisabledProviders: () => ipcRenderer.invoke('get-disabled-providers'),
+  setDisabledProviders: (providers: string[]) => ipcRenderer.invoke('set-disabled-providers', providers),
+  setCloudEnabledModels: (provider: string, models: string[]) => ipcRenderer.invoke('set-cloud-enabled-models', provider, models),
   setNativelyApiKey: (apiKey: string) => ipcRenderer.invoke('set-natively-api-key', apiKey),
 
   // ── In-app review / testimonial prompt ─────────────────────────────────
@@ -1342,12 +1500,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     display_name_publicly: boolean;
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
-  getNativelyUsage: () => ipcRenderer.invoke('get-natively-usage'),
+  getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
+  // R-10 resolution flow: ambiguous credential stores (names + last-4 only).
+  getAmbiguousCredentialStores: () => ipcRenderer.invoke('credentials:get-ambiguous-stores'),
+  resolveAmbiguousCredentialStores: (choice: 'keyring' | 'fallback' | 'merge') =>
+    ipcRenderer.invoke('credentials:resolve-ambiguous-stores', choice),
 
   // Permissions
   checkPermissions: () => ipcRenderer.invoke('permissions:check'),
   requestMicPermission: () => ipcRenderer.invoke('permissions:request-mic'),
+  openMicSettings: () => ipcRenderer.invoke('permissions:open-mic-settings'),
 
   // Free Trial
   startTrial: () => ipcRenderer.invoke('trial:start'),
@@ -1374,6 +1537,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       | 'azure'
       | 'ibmwatson'
       | 'soniox'
+      | 'nvidia_nim'
       | 'natively'
       | 'local-whisper',
   ) => ipcRenderer.invoke('set-stt-provider', provider),
@@ -1388,9 +1552,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setIbmWatsonApiKey: (apiKey: string) => ipcRenderer.invoke('set-ibmwatson-api-key', apiKey),
   setGroqSttModel: (model: string) => ipcRenderer.invoke('set-groq-stt-model', model),
   setSonioxApiKey: (apiKey: string) => ipcRenderer.invoke('set-soniox-api-key', apiKey),
+  setNvidiaNimSttModel: (model: string) => ipcRenderer.invoke('set-nvidia-nim-stt-model', model),
   setIbmWatsonRegion: (region: string) => ipcRenderer.invoke('set-ibmwatson-region', region),
   testSttConnection: (
-    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox',
+    provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim',
     apiKey: string,
     region?: string,
   ) => ipcRenderer.invoke('test-stt-connection', provider, apiKey, region),
@@ -1553,8 +1718,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('stt-language-auto-detected', subscription);
     };
   },
-  onSystemAudioPermissionDenied: (callback: (message: string) => void) => {
-    const subscription = (_: any, message: string) => callback(message);
+  onSystemAudioPermissionDenied: (callback: (message: string, titleKey?: string) => void) => {
+    // `titleKey` is the i18n key for the banner heading (main.ts
+    // permissionTitleKey). Optional second argument — older main-process
+    // emitters send only `message`, in which case the renderer falls back to
+    // a generic title.
+    const subscription = (_: any, message: string, titleKey?: string) => callback(message, titleKey);
     ipcRenderer.on('system-audio-permission-denied', subscription);
     return () => {
       ipcRenderer.removeListener('system-audio-permission-denied', subscription);
@@ -1584,21 +1753,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       maxAttempts: number;
       terminal?: boolean;
       stuck?: boolean;
+      titleKey?: string;
     }) => void,
   ) => {
     const subscription = (_: any, payload: any) => callback(payload);
     ipcRenderer.on('audio-capture-failed', subscription);
     return () => {
       ipcRenderer.removeListener('audio-capture-failed', subscription);
-    };
-  },
-  onAudioInputAutoSwitched: (
-    callback: (payload: { from: string; to: string; reason: string; message?: string }) => void,
-  ) => {
-    const subscription = (_: any, payload: any) => callback(payload);
-    ipcRenderer.on('audio-input-auto-switched', subscription);
-    return () => {
-      ipcRenderer.removeListener('audio-input-auto-switched', subscription);
     };
   },
 
@@ -1659,7 +1820,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  onModeChanged: (callback: (data: { id: string | null; name: string | null }) => void) => {
+  onModeChanged: (callback: (data: { id: string | null; name: string | null; fileCount?: number; indexedCount?: number }) => void) => {
     const subscription = (_: any, data: { id: string | null; name: string | null }) =>
       callback(data);
     ipcRenderer.on('mode-changed', subscription);
@@ -1671,6 +1832,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Meeting Lifecycle
   startMeeting: (metadata?: any) => ipcRenderer.invoke('start-meeting', metadata),
   endMeeting: () => ipcRenderer.invoke('end-meeting'),
+  debugInjectTranscript: (segments: Array<{ speaker?: string; text: string; timestamp?: number; confidence?: number }>) =>
+    ipcRenderer.invoke('debug-inject-transcript', segments),
   finalizeMicSTT: () => ipcRenderer.invoke('finalize-mic-stt'),
   getRecentMeetings: () => ipcRenderer.invoke('get-recent-meetings'),
   getMeetingDetails: (id: string) => ipcRenderer.invoke('get-meeting-details', id),
@@ -1680,6 +1843,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
   getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
   setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
+  getContextDebugConfig: () => ipcRenderer.invoke('context-debug:get-config'),
+  setContextDebugLevel: (level: 'off' | 'standard' | 'verbose') => ipcRenderer.invoke('context-debug:set-level', { level }),
+  openContextDebugFolder: () => ipcRenderer.invoke('context-debug:open-folder'),
+  clearContextDebugLogs: () => ipcRenderer.invoke('context-debug:clear'),
+  exportContextDebugSession: () => ipcRenderer.invoke('context-debug:export'),
   getHindsightConfig: () => ipcRenderer.invoke('hindsight-config:get'),
   setHindsightConfig: (cfg: { baseUrl?: string; apiKey?: string; autoStart?: boolean; serverCommand?: string; llmProvider?: string }) => ipcRenderer.invoke('hindsight-config:set', cfg),
   testHindsightConnection: () => ipcRenderer.invoke('hindsight-config:test'),
@@ -1908,8 +2076,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
-  onGeminiStreamError: (callback: (error: string) => void) => {
-    const subscription = (_: any, error: string) => callback(error);
+  onGeminiStreamError: (callback: (error: string, meta?: { streamId?: number | null; source?: string }) => void) => {
+    const subscription = (_: any, error: string, meta?: { streamId?: number | null; source?: string }) => callback(error, meta);
     ipcRenderer.on('gemini-stream-error', subscription);
     return () => {
       ipcRenderer.removeListener('gemini-stream-error', subscription);
@@ -2048,6 +2216,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
 
+  // Settings staleness fix (2026-08-21): the settings window is created once at
+  // app start and only hidden/shown afterwards, so mount-time fetches go stale.
+  // The focus-refresh path never fires for the overlay-anchored popover — it is
+  // shown with showInactive(). This event fires on EVERY show, both paths.
+  onSettingsWindowShown: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on('settings-window-shown', subscription);
+    return () => {
+      ipcRenderer.removeListener('settings-window-shown', subscription);
+    };
+  },
+
   onOverlayMousePassthroughChanged: (callback: (enabled: boolean) => void) => {
     const subscription = (_: any, enabled: boolean) => callback(enabled);
     ipcRenderer.on('overlay-mouse-passthrough-changed', subscription);
@@ -2178,6 +2358,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('embedding:incompatible-provider-warning', subscription);
     };
   },
+  // Silent-degradation notices (F-120): EmbeddingPipeline has always
+  // broadcast these; nothing consumed them, so a fallback embedding provider
+  // (semantic-search quality drop) and a failed space persist (vectors stuck
+  // "pending" until re-index) were invisible to the user.
+  onEmbeddingDegraded: (
+    callback: (data: { kind: 'fallback' | 'persist-failed'; fallbackProvider?: string; reason?: string }) => void,
+  ) => {
+    const onFallback = (_: any, data: any) => callback({ kind: 'fallback', ...data });
+    const onPersistFailed = (_: any, data: any) => callback({ kind: 'persist-failed', ...data });
+    ipcRenderer.on('embedding:fallback-activated', onFallback);
+    ipcRenderer.on('embedding:space-persist-failed', onPersistFailed);
+    return () => {
+      ipcRenderer.removeListener('embedding:fallback-activated', onFallback);
+      ipcRenderer.removeListener('embedding:space-persist-failed', onPersistFailed);
+    };
+  },
   // Automatic background re-index progress (fired when the embedding space changes,
   // e.g. after a Gemini embedding-model upgrade). started → progress* → complete.
   onReindexProgress: (
@@ -2201,7 +2397,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reindexIncompatibleMeetings: () => ipcRenderer.invoke('rag:reindex-incompatible-meetings'),
 
   onRAGStreamChunk: (
-    callback: (data: { meetingId?: string; global?: boolean; chunk: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; chunk: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-chunk', subscription);
@@ -2217,7 +2413,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   onRAGStreamError: (
-    callback: (data: { meetingId?: string; global?: boolean; error: string }) => void,
+    callback: (data: { meetingId?: string; global?: boolean; live?: boolean; error: string }) => void,
   ) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('rag:stream-error', subscription);
@@ -2231,6 +2427,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setKeybind: (id: string, accelerator: string) =>
     ipcRenderer.invoke('keybinds:set', id, accelerator),
   resetKeybinds: () => ipcRenderer.invoke('keybinds:reset'),
+  getKeybindRegistrationFailures: () =>
+    ipcRenderer.invoke('keybinds:get-registration-failures'),
   onKeybindsUpdate: (callback: (keybinds: Array<any>) => void) => {
     const subscription = (_: any, keybinds: any) => callback(keybinds);
     ipcRenderer.on('keybinds:update', subscription);
@@ -2243,6 +2441,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('keybinds:registration-failed', subscription);
     return () => {
       ipcRenderer.removeListener('keybinds:registration-failed', subscription);
+    };
+  },
+  onKeybindRegistrationSucceeded: (callback: (data: { id: string; accelerator: string }) => void) => {
+    const subscription = (_: any, data: { id: string; accelerator: string }) => callback(data);
+    ipcRenderer.on('keybinds:registration-succeeded', subscription);
+    return () => {
+      ipcRenderer.removeListener('keybinds:registration-succeeded', subscription);
     };
   },
 
@@ -2263,6 +2468,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stealthTapStop: () => ipcRenderer.invoke('stealth-tap:stop'),
   stealthTapStart: () => ipcRenderer.invoke('stealth-tap:start'),
   stealthTapShouldAutoEngage: () => ipcRenderer.invoke('stealth-tap:should-auto-engage'),
+  stealthTapRefreshIme: () => ipcRenderer.invoke('stealth-tap:refresh-ime'),
+  // Ollama runtime failures (unreachable / no models, after the fallback also
+  // failed). Main has always broadcast 'ollama-error'; the bridge never
+  // exposed it, so the notification went nowhere (F-119).
+  onOllamaError: (cb: (data: { message: string }) => void) => {
+    const sub = (_: any, data: { message: string }) => cb(data);
+    ipcRenderer.on('ollama-error', sub);
+    return () => {
+      ipcRenderer.removeListener('ollama-error', sub);
+    };
+  },
   onStealthTapState: (cb: (state: { active: boolean; reason?: string }) => void) => {
     const sub = (_: any, state: { active: boolean; reason?: string }) => cb(state);
     ipcRenderer.on('stealth-tap-state', sub);
@@ -2315,13 +2531,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   profileGetNegotiationState: () => ipcRenderer.invoke('profile:get-negotiation-state'),
   profileResetNegotiation: () => ipcRenderer.invoke('profile:reset-negotiation'),
 
+  // Role Insight
+  roleInsightGetStatus: () => ipcRenderer.invoke('roleInsight:get-status'),
+  roleInsightGetReport: (analysisId?: string) => ipcRenderer.invoke('roleInsight:get-report', analysisId),
+  roleInsightListHistory: () => ipcRenderer.invoke('roleInsight:list-history'),
+  roleInsightAnalyse: (options?: { jobUrl?: string; skipExternalVerification?: boolean }) =>
+    ipcRenderer.invoke('roleInsight:analyse', options ?? {}),
+  roleInsightCancel: () => ipcRenderer.invoke('roleInsight:cancel'),
+  roleInsightApplyCorrection: (args: any) => ipcRenderer.invoke('roleInsight:apply-correction', args),
+  roleInsightAnswerClarification: (args: any) => ipcRenderer.invoke('roleInsight:answer-clarification', args),
+  roleInsightSaveToProfile: (args: any) => ipcRenderer.invoke('roleInsight:save-to-profile', args),
+  roleInsightPasteJd: (text: string) => ipcRenderer.invoke('roleInsight:paste-jd', text),
+  roleInsightImportJdUrl: (url: string) => ipcRenderer.invoke('roleInsight:import-jd-url', url),
+  onRoleInsightProgress: (callback: (payload: { stage: string | null; analysing: boolean }) => void) => {
+    const listener = (_event: any, payload: any) => callback(payload);
+    ipcRenderer.on('role-insight-progress', listener);
+    return () => ipcRenderer.removeListener('role-insight-progress', listener);
+  },
+
   // Tavily Search API
   setTavilyApiKey: (apiKey: string) => ipcRenderer.invoke('set-tavily-api-key', apiKey),
 
   // Dynamic Model Discovery
-  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', apiKey: string) =>
+  fetchProviderModels: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim', apiKey: string) =>
     ipcRenderer.invoke('fetch-provider-models', provider, apiKey),
-  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek', modelId: string) =>
+  setProviderPreferredModel: (provider: 'gemini' | 'groq' | 'openai' | 'claude' | 'deepseek' | 'nvidia_nim' | 'litellm', modelId: string) =>
     ipcRenderer.invoke('set-provider-preferred-model', provider, modelId),
 
   // License Management
@@ -2356,10 +2590,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('overlay-opacity-changed', subscription);
     };
   },
+  setLauncherOpacityPreview: (active: boolean) => ipcRenderer.invoke('set-launcher-opacity-preview', active),
 
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+
+  // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
+  getAmbientChatEnabled: () => ipcRenderer.invoke('get-ambient-chat-enabled'),
+  setAmbientChatEnabled: (enabled: boolean) => ipcRenderer.invoke('set-ambient-chat-enabled', enabled),
+  getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
+  setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
   getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
   setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),
@@ -2463,11 +2704,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     key?: string;
     persist?: boolean;
   }) => ipcRenderer.invoke('modes:generate-from-brief', params),
-  // E2E test bridge — generic invoke for the __e2e__:* handlers, which only exist
-  // when the main process was started with NATIVELY_E2E=1. No-op surface in a
-  // shipped app (the handlers aren't registered, so invoke rejects).
-  e2eInvoke: (channel: string, ...args: any[]) =>
-    ipcRenderer.invoke(channel, ...args),
+  // E2E test bridge — generic invoke for the __e2e__:* handlers. GATED on the
+  // same env that registers those handlers: the previous comment claimed this
+  // was a "no-op surface in a shipped app", but NATIVELY_E2E gates only the
+  // __e2e__:* HANDLERS, not the channel argument — an unconditional
+  // passthrough let any renderer code reach every production channel
+  // ('quit-app', 'set-openai-api-key', 'delete-meeting', …), defeating the
+  // curated bridge's containment (F-117, live-reproduced in
+  // scripts/audit/F-117-repro.mjs). Undefined in shipped sessions.
+  ...(process.env.NATIVELY_E2E === '1'
+    ? {
+        e2eInvoke: (channel: string, ...args: any[]) =>
+          ipcRenderer.invoke(channel, ...args),
+      }
+    : {}),
   modesUpdate: (
     id: string,
     updates: { name?: string; templateType?: string; customContext?: string; sourceContract?: any },
@@ -2480,6 +2730,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     switches: string[];
     hasLiveTranscriptCapable?: boolean;
   }) => ipcRenderer.invoke('modes:build-user-source-contract', input),
+  answerPolicyGet: (input: { modeId?: string; templateType?: string }) =>
+    ipcRenderer.invoke('context-intelligence:answer-policy-get', input),
+  answerPolicySet: (input: { modeId?: string; templateType?: string; policy?: string | null }) =>
+    ipcRenderer.invoke('context-intelligence:answer-policy-set', input),
   modesDelete: (id: string) => ipcRenderer.invoke('modes:delete', id),
   modesSetActive: (id: string | null) => ipcRenderer.invoke('modes:set-active', id),
   modesGetReferenceFiles: (modeId: string) =>
@@ -2489,6 +2743,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modesDeleteReferenceFile: (id: string) => ipcRenderer.invoke('modes:delete-reference-file', id),
   modesGetReferenceFileStatus: (modeId: string) =>
     ipcRenderer.invoke('modes:get-reference-file-status', modeId),
+  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId: string; phase: 'indexing' | 'done' }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('mode-file-index-status', subscription);
+    return () => {
+      ipcRenderer.removeListener('mode-file-index-status', subscription);
+    };
+  },
   knowledgeListPacks: (modeId: string) => ipcRenderer.invoke('knowledge:list-packs', modeId),
   knowledgeGetPack: (fileId: string) => ipcRenderer.invoke('knowledge:get-pack', fileId),
   knowledgeRegeneratePack: (params: { fileId: string; modeId: string; fileName: string }) =>
@@ -2501,13 +2762,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) =>
     ipcRenderer.invoke('knowledge:restore-card-version', params),
   knowledgeGetCardHistory: (cardId: string) => ipcRenderer.invoke('knowledge:get-card-history', cardId),
-  onModeFileIndexStatus: (callback: (data: { modeId: string; fileId?: string }) => void) => {
-    const subscription = (_: any, data: { modeId: string; fileId?: string }) => callback(data);
-    ipcRenderer.on('mode-file-index-status', subscription);
-    return () => {
-      ipcRenderer.removeListener('mode-file-index-status', subscription);
-    };
-  },
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);
     ipcRenderer.on('knowledge-index-progress', subscription);
@@ -2552,6 +2806,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('dom-context-received', subscription);
     return () => {
       ipcRenderer.removeListener('dom-context-received', subscription);
+    };
+  },
+  // Cmd/Ctrl+Shift+Y page capture fell back to a screenshot — the notice says
+  // why (extension not connected, site not granted, timeout, …) so the overlay
+  // can show it instead of the fallback happening silently.
+  // The ⌘/Ctrl+Y capture hotkey just started — an in-flight capture the next
+  // "What should I say?" should briefly wait for (one-motion ⌘Y→Enter).
+  onPageCaptureStarted: (callback: () => void) => {
+    const subscription = () => callback();
+    ipcRenderer.on(PAGE_CAPTURE_STARTED_CHANNEL, subscription);
+    return () => {
+      ipcRenderer.removeListener(PAGE_CAPTURE_STARTED_CHANNEL, subscription);
+    };
+  },
+  onPageCaptureFallback: (callback: (notice: PageCaptureFallbackNotice) => void) => {
+    const subscription = (_: unknown, notice: PageCaptureFallbackNotice) => callback(notice);
+    ipcRenderer.on(PAGE_CAPTURE_FALLBACK_CHANNEL, subscription);
+    return () => {
+      ipcRenderer.removeListener(PAGE_CAPTURE_FALLBACK_CHANNEL, subscription);
     };
   },
 } as ElectronAPI);

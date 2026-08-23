@@ -50,7 +50,7 @@ import { execFileSync } from 'node:child_process';
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 
-const GDRIVE_FOLDER_ID = '18efvri8m_JBwuVdD3AxrCG8QZ_SbghSn';
+const GDRIVE_FOLDER_ID = process.env.GDRIVE_FOLDER_ID || '1z-qmuddJ8SiKyepCd4OprJPds5tWkXGb';
 // Drive's rclone backend needs the folder id passed via `--drive-root-folder-id`
 // when the destination path itself starts with `/` (i.e. rooted). The curly-brace
 // path syntax (`gdrive:{folderid}/`) is ambiguous: if a sibling folder whose

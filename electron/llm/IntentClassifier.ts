@@ -151,7 +151,7 @@ class ZeroShotClassifier {
                 const pending = this.pendingRequests.get(msg.requestId as number);
                 if (!pending) return;
                 clearTimeout(pending.timer);
-                this.pendingRequests.delete(msg.requestId);
+                this.pendingRequests.delete(msg.requestId as number);  // same cast as the .get() above
 
                 if (msg.type === 'error') {
                     pending.reject(new Error(msg.error || 'Worker error'));
@@ -196,6 +196,27 @@ class ZeroShotClassifier {
                     this.latchNonRecoverableLoadError(`Worker exited with code ${code} before model loaded`);
                 }
             });
+
+            // Do not let this worker hold the Node event loop open.
+            //
+            // MUST be called AFTER every listener above is attached: attaching a
+            // 'message' listener implicitly re-references the underlying
+            // MessagePort, so an unref() placed next to `new Worker()` is undone
+            // by the very next line. (Verified: process._getActiveHandles() showed
+            // a lone surviving MessagePort in exactly that arrangement.)
+            //
+            // In the Electron main process the loop is anchored by `app` and the
+            // open windows, so this cannot cause a premature exit — the worker
+            // still receives and answers every message exactly as before.
+            //
+            // Under `node --test` (--test-isolation=process) there is no such
+            // anchor, and a referenced worker meant each test file importing this
+            // module passed all of its assertions and then never exited, so the
+            // suite could not terminate and no acceptance gate was measurable.
+            // See docs/context-intelligence-v3/01_INVESTIGATION_REPORT.md F21.
+            // Optional call: test doubles substitute a mock Worker that does not
+            // implement unref(). A hard call throws there and disables the model.
+            this.worker.unref?.();
         }
         return this.worker;
     }
@@ -288,8 +309,52 @@ class ZeroShotClassifier {
         return {
             isPackaged,
             localModelPath: path.join(process.resourcesPath || '', 'models'),
-            cacheDir: path.join(__dirname, '../../resources/models'),
+            cacheDir: ZeroShotClassifier.resolveDevModelRoot(),
         };
+    }
+
+    /**
+     * Model root for the UNPACKAGED path.
+     *
+     * This was `path.join(__dirname, '../../resources/models')`, which is only
+     * right when running from SOURCE (electron/llm/ -> repo root). Under the
+     * compiled layout __dirname is dist-electron/electron/llm/, so it resolved to
+     * `dist-electron/resources/models` — a directory the build never creates and
+     * `scripts/download-models.js` never verifies. transformers.js then treated
+     * it as a cache and downloaded into it, and a partial download there loads as
+     * "Protobuf parsing failed" while the real, VERIFY-OK tree sat unused at the
+     * repo root. (Seen in CI: the same run logs `[download-models] VERIFY OK` and
+     * then fails to parse a model out of the dist-electron copy.)
+     *
+     * Prefer whichever candidate actually holds the model directory, so both the
+     * source and compiled layouts land on the tree download-models.js populates.
+     */
+    private static resolveDevModelRoot(): string {
+        // Walk up to the REPO ROOT (the directory holding package.json) and use
+        // its resources/models. That is the one download-models.js populates and
+        // verifies; anything under dist-electron/ is a transformers.js download
+        // cache that nothing checks, and preferring "first candidate that exists"
+        // picks it precisely because a partial download created it.
+        const seen = new Set<string>();
+        let dir = __dirname;
+        for (let i = 0; i < 6; i++) {
+            if (seen.has(dir)) break;
+            seen.add(dir);
+            try {
+                if (fs.existsSync(path.join(dir, 'package.json'))) {
+                    const root = path.join(dir, 'resources', 'models');
+                    if (fs.existsSync(path.join(root, 'Xenova', 'mobilebert-uncased-mnli'))) return root;
+                }
+            } catch { /* unreadable level — keep walking */ }
+            const parent = path.dirname(dir);
+            if (parent === dir) break;
+            dir = parent;
+        }
+        const cwdRoot = path.join(process.cwd(), 'resources', 'models');
+        try {
+            if (fs.existsSync(path.join(cwdRoot, 'Xenova', 'mobilebert-uncased-mnli'))) return cwdRoot;
+        } catch { /* fall through */ }
+        return path.join(__dirname, '../../resources/models');
     }
 
     /**
@@ -465,7 +530,7 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
     // classifying a JD-comparison question ("The JD calls for 8+ years and
     // deep Go or Java expertise — how do you stack up there?") as `coding`
     // intent at 0.95 confidence. That intent flows into AnswerPlanner.planAnswer
-    // (electron/llm/AnswerPlanner.ts:2596's `input.intentResult?.intent ===
+    // (AnswerPlanner.ts's coding branch `input.intentResult?.intent ===
     // 'coding'` check), which OVERRIDES the otherwise-correct jd_fit_answer
     // routing (see the AnswerPlanner-level "stack up" fix in the same
     // campaign) and forces `coding_question_answer` — forbidding resume/jd
@@ -475,7 +540,15 @@ function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null
     // to `[IntelligenceEngine] Temporal RAG { ..., intent: 'coding', ... }`.
     // Same idiom-neutralization shape as the sibling fixes in
     // AnswerPlanner.ts/IntentClassifier.ts (premium)/HybridSearchEngine.ts.
-    const textNoStackUpIdiom = text.replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up');
+    const textNoStackUpIdiom = text
+        .replace(/\bstack(s|ed)?\s+up\b/g, 'measure$1 up')
+        // WTA audit F1 (2026-08-18): same neutralization as AnswerPlanner's
+        // textNoTechStack — demonstrative/possessive "stack" and choice-verb +
+        // "the stack" are tech-stack references, not the data-structure noun.
+        // Without this, "Why did you choose that stack?" fast-paths to
+        // coding@0.95 and overrides correct project routing downstream.
+        .replace(/\b(that|this|your|our|their|my)\s+stack\b/g, '$1 techstack')
+        .replace(/\b(chose|choose|chosen|choosing|pick|picked|picking|selected|select|use|used|using|went with|decided? on)\s+the\s+stack\b/g, '$1 the techstack');
 
     // DSA/coding interview patterns. Keep this deterministic and run it
     // BEFORE behavioral/example matching so prompts like "give me an example

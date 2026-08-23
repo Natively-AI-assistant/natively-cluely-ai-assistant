@@ -197,31 +197,86 @@ const PROFILE_TYPE_SET = new Set([
   'project_followup_answer',
 ]);
 
+// Phase 6 Slice 3 (context-rebuild, 2026-07-25) staleness fix: 'document_list_answer'
+// and 'document_definition_answer' are not (and, per AnswerPlanner.ts's real
+// AnswerType union, never have been in this pass's history) real AnswerType
+// values — dead entries, harmless (Set.has() on them just returns false) but
+// removed since they were found while auditing this set for
+// resolveCanonicalTurn's answerType/questionKind precedence rule.
+// 'document_structure_answer' and 'exact_numeric_answer' are real doc-family
+// AnswerType values that were missing from this set — added.
 const DOC_TYPE_SET = new Set([
   'lecture_answer',
   'definitional_answer',
   'list_answer',
+  'exact_numeric_answer',
+  'document_structure_answer',
   'document_followup_answer',
   'document_absent_fact_refusal',
-  'document_list_answer',
-  'document_definition_answer',
   'source_code_evidence_answer',
   'project_link_answer',
 ]);
 
+// Phase 6 Slice 3 (context-rebuild, 2026-07-25) staleness fix: 'technical_concept_answer'
+// is one of AnswerPlanner.ts's five generic coding/technical answer types
+// (forbiddenLayersFor's own switch case groups it with the other four,
+// Slice 2's RC3 fix) but was missing from this set — found while auditing
+// for resolveCanonicalTurn's precedence rule. Without it, a question like
+// "Explain BFS" (technical_concept_answer, no RE_CODING match in its text)
+// fell through to deriveQuestionKind's regex fallback and landed on
+// 'general' instead of 'coding_question' — silently using
+// probeOrderFor('general') (which probes profile/JD/reference-files first)
+// instead of probeOrderFor('coding_question') for a question type Slice 2
+// just confirmed must NEVER see profile/JD context.
 const CODING_TYPE_SET = new Set([
   'coding_question_answer',
   'dsa_question_answer',
   'system_design_answer',
   'debugging_question_answer',
+  'technical_concept_answer',
 ]);
+
+/**
+ * Exported (Phase 6 Slice 3, context-rebuild, 2026-07-25) for
+ * resolveCanonicalTurn.ts's precedence-rule fallback: when `planTurn` itself
+ * fails/throws, `CanonicalTurn.resolvedQuestionKind` falls back to this
+ * DIRECT answerType→bucket mapping (the same one `deriveQuestionKind` uses
+ * internally when an `answerType` is available) instead of `'general'` by
+ * default. Returns `null` when `answerType` doesn't fall into any of the
+ * four direct buckets (e.g. `sales_answer`, `follow_up_answer`) — those
+ * answer types only resolve a `QuestionKind` via `planTurn`'s regex fallback
+ * over the question TEXT, which this function deliberately does not
+ * reimplement (no question text is required to call it).
+ */
+export function mapAnswerTypeToQuestionKind(answerType: string | null | undefined): QuestionKind | null {
+  if (!answerType) return null;
+  if (PROFILE_TYPE_SET.has(answerType)) return 'profile_question';
+  if (JD_TYPE_SET.has(answerType)) return 'jd_question';
+  if (CODING_TYPE_SET.has(answerType)) return 'coding_question';
+  if (DOC_TYPE_SET.has(answerType)) return 'doc_question';
+  return null;
+}
 
 // Lightweight regex fallback used when `answerType` is not provided. These
 // MUST stay in sync with AnswerPlanner's IDENTITY_PATTERNS / JD_*_CUE_RE so
 // a route through the planner is equivalent to a route through AnswerPlanner.
 const RE_IDENTITY = /\b(what(?:'s| is)?\s+(my|your|his|her)\s+name\b|who\s+am\s+i\b|tell\s+me\s+about\s+yourself\b|introduce\s+(yourself|urself|myself|me)\b|walk\s+me\s+through\s+(your|my)\s+(background|experience|resume|cv|career|journey|profile)\b)/i;
-const RE_JD_SUMMARY = /\b(this|the)\s+(job|role|position|posting|listing|opening)\b/i;
+// R-07: this must mirror the framing gate resolveJdSourceType actually uses —
+// AnswerPlanner's JD_REFERENCE_CUE_RE — not a narrower noun phrase. The previous
+// value had NO alternative for a bare "JD" or for "job description", so
+// "What are the key responsibilities in this JD?" fell through to `general` and
+// lost JD grounding entirely, which is worse than landing in the wrong family.
+const RE_JD_SUMMARY = /\bjd\b|\b(this|the)\s+(job\s*description|role|position|job|posting|listing|opening|vacancy)\b|\bjob\s*description\b|\bfor\s+(this|the)\s+(role|position|job)\b/i;
 const RE_JD_REQUIREMENTS = /\b(require(?:d|ment|ments)?|responsibilit(?:y|ies)|qualifications?|must[- ]haves?|duties)\b/i;
+// R-07: split, because only the WRITE-VERB half is a JD veto in AnswerPlanner.
+// hasWriteCodeVerb (AnswerPlanner:1605) is /\b(write|implement|code|program|solve)\b/;
+// promoting the whole of RE_CODING above the JD gate vetoed JD on words
+// AnswerPlanner never vetoes on, so "What are the requirements for this system
+// design role?" and "Tell me about the algorithm experience required for this
+// position" were routed to the coding family. The topic half is still a coding
+// signal — it just must not outrank an explicit JD framing.
+const RE_CODING_WRITE_VERB = /\b(write|implement|code|program|solve)\b/i;
+const RE_CODING_TOPIC = /\b(coding[- ]?interview|dsa|algorithm(?:ic)?|big[- ]?o|system[- ]?design|debug(ging)?)\b/i;
 const RE_CODING = /\b(write|implement|code|coding[- ]?interview|dsa|algorithm(?:ic)?|big[- ]?o|system[- ]?design|debug(ging)?)\b/i;
 const RE_DOC = /\b(according\s+to\s+(the|this)\s+(doc|file|paper|deck|notes?|transcript)|in\s+(the|this)\s+(doc|file|paper|deck)|summar(?:i[sz]e|ise)\s+(the|this)\s+(doc|file|paper|deck))\b/i;
 
@@ -237,10 +292,26 @@ function deriveQuestionKind(input: TurnPlanInput): { kind: QuestionKind; reason:
   const q = (input.question || '').trim();
   if (!q) return { kind: 'general', reason: 'empty_question' };
   if (RE_IDENTITY.test(q)) return { kind: 'profile_question', reason: 'regex_identity' };
-  if (RE_JD_REQUIREMENTS.test(q)) return { kind: 'jd_question', reason: 'regex_jd_requirements' };
-  if (RE_JD_SUMMARY.test(q)) return { kind: 'jd_question', reason: 'regex_jd_summary' };
-  if (RE_CODING.test(q)) return { kind: 'coding_question', reason: 'regex_coding' };
+  // F-304: mirror AnswerPlanner's two gates around the JD cue, and check
+  // coding/doc FIRST. This fallback claimed to "stay in sync with
+  // AnswerPlanner's IDENTITY_PATTERNS / JD_*_CUE_RE" but had neither of
+  // resolveJdSourceType's guards:
+  //   1. a coding verb ALWAYS vetoes the JD route (AnswerPlanner:1374), and
+  //   2. no JD framing => no JD route (AnswerPlanner:1394).
+  // RE_JD_REQUIREMENTS matches the bare words required/qualifications/duties
+  // anywhere, so "Write a function that returns the required buffer size" was
+  // routed jd_question — probing profile_jd/profile_resume, never
+  // reference_files, and switching ON seedCandidateBackground for a coding
+  // question. AnswerPlanner routes the identical text to the coding family.
+  // Only the write-verb half vetoes JD, matching AnswerPlanner's hasWriteCodeVerb.
+  if (RE_CODING_WRITE_VERB.test(q)) return { kind: 'coding_question', reason: 'regex_coding' };
   if (RE_DOC.test(q)) return { kind: 'doc_question', reason: 'regex_doc' };
+  const jdFramed = RE_JD_SUMMARY.test(q);
+  if (RE_JD_REQUIREMENTS.test(q) && jdFramed) return { kind: 'jd_question', reason: 'regex_jd_requirements' };
+  if (jdFramed) return { kind: 'jd_question', reason: 'regex_jd_summary' };
+  // Topic-only coding words apply AFTER the JD gate, so an explicitly JD-framed
+  // question is never stolen by "algorithm"/"system design"/"debug".
+  if (RE_CODING_TOPIC.test(q)) return { kind: 'coding_question', reason: 'regex_coding_topic' };
   return { kind: 'general', reason: 'regex_general' };
 }
 

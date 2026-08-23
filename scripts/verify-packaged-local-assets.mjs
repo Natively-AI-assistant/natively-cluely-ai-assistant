@@ -13,8 +13,12 @@
 //   node scripts/verify-packaged-local-assets.mjs --app <path-to-.app|unpacked>
 //     verifies the GENERATED package contents.
 //
-// Exit code 1 on any missing required asset. The bge reranker is OPTIONAL
-// (lazy-downloaded) and intentionally NOT checked here.
+// Exit code 1 on any missing required asset — including the bge reranker:
+// REQUIRED_MODEL_FILES below lists all four of its files, so a package missing
+// the reranker FAILS this gate. (Stale-comment fix 2026-08-13: this header
+// previously claimed the reranker was "OPTIONAL … intentionally NOT checked
+// here", contradicting the list 20 lines down; the rerankerDownloadProvider
+// lazy-download path exists only as a dev/self-heal fallback.)
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,13 +61,23 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   '**/localRerankerWorker.js',
   '**/rerankerDownloadWorker.js',
   '**/whisperWorker.js',
-  '**/vectorSearchWorker.js',
   '**/node_modules/better-sqlite3/**',
   '**/node_modules/keytar/**',
   '**/node_modules/sqlite-vec/**',
   '**/node_modules/sqlite-vec-*/**',
   '**/node_modules/sharp/**',
-  '**/node_modules/@img/sharp*/**',
+  // 2026-08-02: sharp's TRANSITIVE runtime deps must be unpacked too. sharp
+  // was unpacked but detect-libc/semver/@img/colour were not, and Node
+  // resolution from the unpacked PHYSICAL path never re-enters app.asar —
+  // workers loading sharp via @huggingface/transformers died with
+  // "Cannot find module 'detect-libc'" (ModelPreloader + IntentClassifier
+  // degraded in the shipped 2.8.5). The scope-wide @img glob replaces the
+  // narrower '@img/sharp*' one so @img/colour is covered as well; the
+  // closure-based guard in OnnxWorkerIsolationHardening2026_07_05.test.mjs
+  // recomputes sharp's real dependency tree so future dep drift is caught.
+  '**/node_modules/detect-libc/**',
+  '**/node_modules/semver/**',
+  '**/node_modules/@img/**',
 ];
 
 // Required built worker scripts (only checked after build:electron has run).
@@ -73,7 +87,6 @@ const REQUIRED_WORKER_FILES = [
   'dist-electron/electron/rag/localRerankerWorker.js',
   'dist-electron/electron/rag/rerankerDownloadWorker.js',
   'dist-electron/electron/audio/whisper/whisperWorker.js',
-  'dist-electron/electron/rag/vectorSearchWorker.js',
 ];
 
 // Required native binaries for the packaged app (the asarUnpack globs must place

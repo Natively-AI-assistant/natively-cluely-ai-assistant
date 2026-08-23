@@ -30,7 +30,20 @@ async function ensureLoaded(msg: any): Promise<void> {
     pipe = await pipeline(
       'zero-shot-classification',
       'Xenova/mobilebert-uncased-mnli',
-      { local_files_only: !!msg.isPackaged, session_options: getBoundedOnnxSessionOptions() }
+      {
+        local_files_only: !!msg.isPackaged,
+      // dtype MUST be explicit on transformers.js v3. v2 defaulted to the
+      // quantized variant; v3 ignores `quantized` and defaults to fp32, so a
+      // bare pipeline() call asks for onnx/model.onnx — while the installer
+      // ships onnx/model_quantized.onnx and NOTHING else (see
+      // LocalFallbackAssets.ts and scripts/verify-packaged-local-assets.mjs).
+      // In a packaged build that is local_files_only, so the load fails and the
+      // feature silently degrades. scripts/download-models.js already documents
+      // this trap for the DOWNLOAD side; these consumers were missed.
+      // localRerankerWorker already passes `dtype: msg.dtype || 'q8'`.
+      dtype: 'q8',
+        session_options: getBoundedOnnxSessionOptions(),
+      }
     );
     console.log('[IntentClassifierWorker] Zero-shot classifier loaded successfully.');
     parentPort!.postMessage({ type: 'status', status: { type: 'ready', backend: 'onnx', modelPath: msg.localModelPath } });

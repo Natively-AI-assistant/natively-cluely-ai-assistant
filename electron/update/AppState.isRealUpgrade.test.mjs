@@ -68,6 +68,11 @@ try {
       if (r[i] > c[i]) return true;
       if (r[i] < c[i]) return false;
     }
+    // F-708: equal after stripping pre-release suffixes. A prerelease is older
+    // than the stable of the same version, so beta -> stable IS an upgrade.
+    // Every other equal case stays false. Keep in sync with electron/main.ts.
+    const isPre = (v) => /-/.test(v.replace(/^v/, ''));
+    if (isPre(current) && !isPre(remote)) return true;
     return false;
   };
 }
@@ -128,4 +133,22 @@ test('v2.7.0-not-newer-than-2.8.0 (the prod bug from the user report)', () => {
   // Pre-fix: update-available event fired, broadcast went to renderer.
   // Post-fix: we ignore + broadcast update-not-available with ignored=true.
   assert.equal(isRealUpgrade('2.8.0', '2.7.0'), false);
+});
+
+
+// ── F-708 (audit/autopilot-2026-08-18) ────────────────────────────────────────
+// stripPre is applied to BOTH operands, so 2.1.0-beta.2 -> 2.1.0 compared equal
+// and a user on a prerelease was told "update not available" for the matching
+// stable — stuck until the next minor. Prereleases do ship here (tags
+// v2.1.0-beta.1/.2; generateUpdatesFilesForAllChannels: true).
+test('F-708: a prerelease accepts the matching stable as an upgrade', () => {
+  assert.equal(isRealUpgrade('2.1.0-beta.2', '2.1.0'), true);
+  assert.equal(isRealUpgrade('v2.1.0-beta.1', '2.1.0'), true);
+});
+
+test('F-708: every other equal-version case stays blocked', () => {
+  assert.equal(isRealUpgrade('2.1.0', '2.1.0'), false, 'same stable');
+  assert.equal(isRealUpgrade('2.1.0', '2.1.0-beta.2'), false, 'stable must not accept a prerelease');
+  assert.equal(isRealUpgrade('2.1.0-beta.1', '2.1.0-beta.1'), false, 'same prerelease');
+  assert.equal(isRealUpgrade('2.2.0', '2.1.0'), false, 'downgrade still blocked');
 });

@@ -12,10 +12,18 @@
 // default. The Intelligence OS facades (ProfileTreeService, LiveTranscriptBrain,
 // ContextRouter) are a canonical READ/DECISION layer that sits BESIDE the
 // existing, benchmark-green answer paths — turning a flag on never changes an
-// answer unless a caller is also wired to consult the facade. The only flag that
-// can change LIVE behavior is `durableMemoryWindow` (it points the long-range
-// follow-up memory at the transcript store that actually survives eviction), and
-// it is default-OFF so the current path is byte-for-byte unchanged until opted in.
+// answer unless a caller is also wired to consult the facade.
+//
+// CORRECTED 2026-08-05 (settings-surface audit): this header used to claim
+// `durableMemoryWindow` was "the only flag that can change LIVE behavior". That
+// is false and has been for some time. IntelligenceEngine now calls
+// SessionTracker.getDurableContext() UNCONDITIONALLY for the long-range memory
+// window (see IntelligenceEngine.ts's "correctness always uses the durable
+// source for long windows" comment) — durable recall ships for everyone, flag or
+// not. The flag's only remaining reader is LiveTranscriptBrain.getMemoryWindow(),
+// a facade method with no production callers. It is therefore NOT a user-facing
+// control and has been removed from the Settings UI; do not re-expose it without
+// first giving it a real call site.
 //
 // Decision precedence per flag (highest first):
 //   1. env override on/off   → that value
@@ -39,10 +47,11 @@ export type IntelligenceFlagKey =
   | 'durableMemoryWindow'
   // ── Full Intelligence OS rollout set (Phase 3). Every entry default OFF so the
   //    current behavior is preserved until a caller is wired AND the flag is on.
-  | 'intelligenceOsEnabled'        // umbrella (Phase 19 rollout)
   | 'profileTreeV2'                // Phase 4 — route identity through ProfileTreeService
   | 'contextRouterV2'              // Phase 6 — consult the consolidated ContextRouter
   | 'liveTranscriptBrain'          // Phase 7 — consult LiveTranscriptBrain
+  | 'questionLedgerShadow'         // WTA audit Phase 2 — QuestionLedger shadow/parity (observe-only)
+  | 'wtaClauseCoverageRepair'      // WTA audit Part 11 — focused append-only repair for uncovered clauses
   | 'promptAssemblerV2'            // Phase 9
   | 'answerDiversityGuard'         // Phase 5 — wire AnswerDiversityGuard into delivery
   | 'meetingMemoryV2'              // Phase 10
@@ -50,7 +59,6 @@ export type IntelligenceFlagKey =
   | 'meetingModeAutoDetect'        // Meeting Notes V3 — detect mode from transcript/calendar
   | 'followUpDraftV2'              // Meeting Notes V3 — LLM-based follow-up draft generator
   | 'speakerLabelsV1'             // Meeting Notes V3 — editable speaker labels
-  | 'meetingNotesStructuredOutput' // Meeting Notes V3 — provider-native JSON where available
   | 'meetingSummaryLlmPolish'      // Meeting Notes V3 — constrained LLM polish of the Summary
   | 'speakerDiarizationV1'         // Meeting Notes V3 — provider (Deepgram) diarization, opt-in
   | 'globalSearchV2'               // Phase 11
@@ -189,7 +197,111 @@ export type IntelligenceFlagKey =
   // its verdict is still traced (`answer_relevance_discard`/`_would_fire`)
   // so real production score distributions can be collected before this is
   // re-enabled — mirrors the `ragConfidenceGate` observe-only precedent.
-  | 'answerRelevanceGuardLive';
+  | 'answerRelevanceGuardLive'
+  // ── REMOVED 2026-08-05 (settings-surface audit) ──────────────────────────
+  // `turnIdentityV2`, `canonicalTurnManualChat`, `assistantClaimsEnforcement`
+  // and `modePolicyShadowObservation` were deleted here. Each was documented
+  // as shadow-wired into ipcHandlers.ts; none of that wiring ever landed —
+  // the flags had ZERO references outside this registry, and the three
+  // source-pinned tests that asserted the wiring existed
+  // (CanonicalTurnManualChatShadowWiring / ModePolicyShadowWiring /
+  // GuardSiteAttemptParity) were failing on `main` for exactly that reason.
+  // The modules they were meant to gate (turnIdentity.ts, resolveCanonicalTurn.ts,
+  // modePolicy.ts, assistantClaimsPrecedenceCheck.ts) are still present and
+  // still unit-tested standalone; re-add a flag WITH its call site when one
+  // is actually wired, rather than shipping a user-visible toggle for it first.
+  // ── Atomic JD profile-pack generation (Phase 6 Slice 5, context-rebuild) ─
+  // KnowledgeOrchestrator.ingestDocument's JD branch fires
+  // aotPipeline.runForJD(...).then(...) without awaiting it, then returns
+  // {success:true} immediately — a real race (Ingestion Audit §A.6.3): the
+  // IPC caller sees success before the JD OKF profile pack (gap analysis,
+  // negotiation script, mock questions, culture mapping, then
+  // _generateProfileOkfPack('jd')) has been generated. Closing this fully
+  // means awaiting the AOT pipeline before ingestDocument returns for a JD —
+  // a genuine, user-facing slower upload-ack (AOT runs real LLM calls), not
+  // a free fix like the resume branch's setImmediate removal. Ships dev/
+  // test-only first (pattern 1) so the race-free sequence is exercised and
+  // tested without changing production upload latency until a documented
+  // promotion decision. See 05_MIGRATION_PLAN.md's Slice 5 STATUS note.
+  | 'atomicJdProfilePackGeneration'
+  // ── Pronoun-regex shadow observation (Phase 6 Slice 4 item 2, follow-up
+  // pass, context-rebuild) ──────────────────────────────────────────────
+  // KnowledgeOrchestrator.processQuestion's pronoun-presence gate
+  // (isGenericKnowledgeQuestion/CANDIDATE_FRAMING_REGEX) is the confirmed
+  // root cause (RC2, live-reproduced 4/4) of a 3-way retrieval fork for
+  // the same answerType/contractHash. Retiring it as the live decision-
+  // maker is a genuinely consequential deletion of a currently-LIVE gate
+  // with real user traffic — correctly deferred pending a live-trace
+  // campaign per 05_MIGRATION_PLAN.md's Slice 4 STATUS note. This flag
+  // gates a SHADOW-ONLY observation (mirrors the CanonicalTurnV2 shadow-
+  // wiring precedent in ipcHandlers.ts for Slice 3): on every real
+  // processQuestion() call, additionally compute isLayerAllowed(plan,
+  // 'resume') and log agreement/divergence against the legacy gate's own
+  // decision — a pure side-channel trace, zero change to
+  // processQuestion's return value. Exists so a future promotion decision
+  // is evidence-based (real traffic, not this pass's synthetic corpus).
+  // Pattern 1 (dev/test-only default).
+  | 'pronounRegexShadowObservation'
+  // ── Impossible-evidence-state gate, Stage 0 shadow (answer-pipeline-
+  // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md)
+  // ──────────────────────────────────────────────────────────────────────
+  // The manual-chat-no-mode path's evidence-selection ALREADY produces a
+  // typed EvidencePack when profile capabilities are granted
+  // (ProfileEvidenceService.retrieveEvidence, gated by contextOsEvidencePackEnabled)
+  // — but nothing validates the pack against `profileContextPolicy` before
+  // the prompt is built. RC-9 (live-confirmed, 2026-07-27) is the concrete
+  // failure this closes: a misclassified `unknown_answer`/`allowed` turn
+  // gets profile capability granted and consulted with no relevance check,
+  // 100% deterministic leak. This flag gates a SHADOW-ONLY validator
+  // (checkImpossibleEvidenceState in evidencePackValidation.ts): for every
+  // manual-chat-no-mode turn where a TurnContextContract was built, run the
+  // typed pack through the forbidden-direction checks only (profile item
+  // present when profileContextPolicy==='forbidden'; an 'allowed'-policy
+  // profile item with no requestedProperty-tied reasonIncluded) and log
+  // agreement/divergence — ZERO change to the prompt, the pack, or any
+  // return value. The design's own asymmetric-staging analysis is why
+  // required-direction enforcement (a genuinely different, higher-risk
+  // check) is explicitly OUT of scope for this flag: RC-8 (also live-
+  // confirmed the same day) shows a required-direction false-positive turns
+  // a fixable heuristic bug into a permanent structural refusal if enforced
+  // before its own dedicated shadow period. Pattern 1 (dev/test-only
+  // default), mirrors modePolicyShadowObservation/pronounRegexShadowObservation
+  // immediately above.
+  | 'contextOsImpossibleStateGateShadow'
+  // ── Impossible-evidence-state gate, Stage 1 enforcement (answer-pipeline-
+  // rebuild Phase 2, docs/answer-pipeline-rebuild/03_EVIDENCEPACK_DESIGN.md)
+  // ──────────────────────────────────────────────────────────────────────
+  // The first REAL behavior change in the design's asymmetric rollout —
+  // separate flag from contextOsImpossibleStateGateShadow (Stage 0,
+  // observation-only) since this stage actually narrows what the legacy
+  // fast path injects. Mirrors _contractAllowsProfile's established pattern
+  // in ipcHandlers.ts (ANDed into sourceOwnershipAllowsProfile, so it can
+  // only narrow the legacy decision, never widen it — leak-safe by
+  // construction) and fails OPEN on any internal error (a gate failure must
+  // never break chat). Forbidden-direction ONLY (checks #1/#2) — the design
+  // doc's own risk analysis is why required-direction enforcement must wait:
+  // RC-8 (a real, live false-refusal bug from the same session this gate
+  // was designed in) shows that direction is unsafe to enforce before its
+  // own dedicated shadow period. NOTE (corrected 2026-07-28, code-review
+  // finding): checkImpossibleEvidenceState DOES now flag 'required'-policy
+  // packs too (check #3, added for Stage 2's shadow observation) — this
+  // flag's enforcement gate stays safe not because the function never
+  // flags required, but because its enforceableViolations filter matches
+  // ONLY the forbidden-direction violation code by name. See that filter's
+  // own comment in ipcHandlers.ts before ever widening it.
+  // Pattern 1 (dev/test-only default).
+  | 'contextOsImpossibleStateGateEnforceForbidden'
+  // ── Prompt System v2 (2026-08-01) ─────────────────────────────────────────
+  // One provider-neutral composer (electron/llm/promptSystemV2.ts) replaces the
+  // legacy UNIVERSAL_*/TINY_*/GROQ_*/OPENAI_*/CLAUDE_* constants and the
+  // ## ACTIVE MODE template suffix on every legacy-prompt surface (the
+  // Context-Intelligence-V3-null fallback plus the surfaces V3 never adopted:
+  // followup, follow-up questions, recap, code hint, title, summary JSON,
+  // follow-up email). Default OFF everywhere — flag-off behavior is
+  // byte-for-byte the legacy constants. Rollout: enable per the mode-by-mode
+  // order in the migration notes; the legacy constants are removable only
+  // after this flag has been default-ON through a full release cycle.
+  | 'promptSystemV2';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -238,10 +350,11 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
     setting: 'intelligenceDurableMemoryWindow',
     default: false,
   },
-  intelligenceOsEnabled: { env: 'NATIVELY_INTELLIGENCE_OS', setting: 'intelligenceOsEnabled', default: false },
   profileTreeV2: { env: 'NATIVELY_PROFILE_TREE_V2', setting: 'profileTreeV2Enabled', default: false },
   contextRouterV2: { env: 'NATIVELY_CONTEXT_ROUTER_V2', setting: 'contextRouterV2Enabled', default: false },
   liveTranscriptBrain: { env: 'NATIVELY_LIVE_TRANSCRIPT_BRAIN', setting: 'liveTranscriptBrainEnabled', default: false },
+  questionLedgerShadow: { env: 'NATIVELY_QUESTION_LEDGER_SHADOW', setting: 'questionLedgerShadowEnabled', default: false },
+  wtaClauseCoverageRepair: { env: 'NATIVELY_WTA_CLAUSE_COVERAGE_REPAIR', setting: 'wtaClauseCoverageRepairEnabled', default: false },
   promptAssemblerV2: { env: 'NATIVELY_PROMPT_ASSEMBLER_V2', setting: 'promptAssemblerV2Enabled', default: false },
   answerDiversityGuard: { env: 'NATIVELY_ANSWER_DIVERSITY_GUARD', setting: 'answerDiversityGuardEnabled', default: false },
   meetingMemoryV2: { env: 'NATIVELY_MEETING_MEMORY_V2', setting: 'meetingMemoryV2Enabled', default: false },
@@ -253,9 +366,6 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   meetingModeAutoDetect: { env: 'NATIVELY_MEETING_MODE_AUTODETECT', setting: 'meetingModeAutoDetectEnabled', default: true },
   followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', default: true },
   speakerLabelsV1: { env: 'NATIVELY_SPEAKER_LABELS_V1', setting: 'speakerLabelsV1Enabled', default: true },
-  // Provider-native JSON mode is not implemented (the validate→repair→fallback ladder makes
-  // it unnecessary for correctness); kept OFF as a reserved flag.
-  meetingNotesStructuredOutput: { env: 'NATIVELY_MEETING_NOTES_STRUCTURED_OUTPUT', setting: 'meetingNotesStructuredOutputEnabled', default: false },
   // Constrained LLM polish of the Summary (note-content-only, "no new tokens" gated). ON by
   // default — it can only improve readability and always falls back to the deterministic
   // summary, so it never hallucinates or blocks.
@@ -390,6 +500,23 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // silently exercised by every dev-context test run the way the Context OS
   // rollout flags intentionally are.
   answerRelevanceGuardLive: { env: 'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE', setting: 'answerRelevanceGuardLiveEnabled', default: false },
+  atomicJdProfilePackGeneration: { env: 'NATIVELY_ATOMIC_JD_PROFILE_PACK', setting: 'atomicJdProfilePackGenerationEnabled', default: isInternalDevTestContext },
+  pronounRegexShadowObservation: { env: 'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION', setting: 'pronounRegexShadowObservationEnabled', default: isInternalDevTestContext },
+  contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: isInternalDevTestContext },
+  contextOsImpossibleStateGateEnforceForbidden: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_ENFORCE_FORBIDDEN', setting: 'contextOsImpossibleStateGateEnforceForbiddenEnabled', default: isInternalDevTestContext },
+  // Prompt System v2 — PROMOTED TO DEFAULT ON (2026-08-02) after the full
+  // benchmark campaign: 8 runs × 600 scenarios vs the frozen legacy prompts
+  // (benchmarks/prompt-v2-vs-legacy/results/COMPLETE-WIN.md). Final warm-cache
+  // run: 31/32 categories won — every mode, every judge dimension, hard
+  // violations 299 vs 341, confidential leaks 1 vs 8, correct silence 12/32 vs
+  // 2/32, every format rule, every latency statistic, −61% input tokens. The
+  // sole residual (trailing_offer, 2 responses in 600) is noise-floor.
+  // Unconditional `true` (not isInternalDevTestContext) for flag parity with
+  // production — the 2026-07-14 flag-parity incident is why dev/test must
+  // exercise what ships. Kill-switch: NATIVELY_PROMPT_SYSTEM_V2=0 or the
+  // promptSystemV2Enabled setting reverts to the legacy constants everywhere
+  // (every call site is `resolveV2SystemPrompt(...) ?? legacy`).
+  promptSystemV2: { env: 'NATIVELY_PROMPT_SYSTEM_V2', setting: 'promptSystemV2Enabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
@@ -470,12 +597,6 @@ export const isJitFinalAnswerEnforced = (): boolean =>
  */
 export const isDurableMemoryWindowEnabled = (): boolean =>
   isIntelligenceFlagEnabled('durableMemoryWindow');
-
-/**
- * True when the umbrella `intelligenceOsEnabled` flag is on. A sub-feature flag
- * still gates its own behavior; this is just the master switch a rollout can use.
- */
-export const isIntelligenceOsEnabled = (): boolean => isIntelligenceFlagEnabled('intelligenceOsEnabled');
 
 /**
  * True when the observe-only retrieval-confidence telemetry should be computed

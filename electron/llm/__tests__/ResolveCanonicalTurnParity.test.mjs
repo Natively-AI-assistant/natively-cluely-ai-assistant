@@ -128,7 +128,15 @@ describe('resolveCanonicalTurn: direct-helper parity across answer surfaces', ()
       name: 'hypothetical Rust answer excludes profile facts',
       input: input('How would you use Rust for a command-line tool?', 'what_to_answer'),
       answerType: 'technical_concept_answer',
-      questionKind: 'general',
+      // Phase 6 Slice 3 (context-rebuild, 2026-07-25): was 'general' — a
+      // stale expectation pinning a real bug in TurnPlanner.ts's
+      // CODING_TYPE_SET, which was missing 'technical_concept_answer'
+      // (one of AnswerPlanner.ts's own five generic coding/technical answer
+      // types). The test's actual guarantee — no profile facts are seeded
+      // (seedCandidateBackground: false below) — is unchanged by the fix,
+      // since neither 'general' nor 'coding_question' triggers seeding; the
+      // fix only makes the classification itself correct.
+      questionKind: 'coding_question',
       seedCandidateBackground: false,
     },
     {

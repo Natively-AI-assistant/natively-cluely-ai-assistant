@@ -170,7 +170,11 @@ describe('Issue #303: skill picker dropdown in overlay chat input', () => {
 
   test('selectSkill sets inputValue to /skill-id with trailing space', () => {
     const source = read('src/components/NativelyInterface.tsx');
-    assert.match(source, /setInputValue\(`\/\$\{skill\.id\} `\)/,
+    // The prefix is dynamic now — `const prefix = inputValue.startsWith('$') ? '$' : '/'`
+    // — so a skill can be invoked with either sigil. The invariant is the
+    // COMPLETION shape: the chosen prefix, the skill id, and a TRAILING SPACE so
+    // the caret lands ready for the query. Only the hardcoded `/` was stale.
+    assert.match(source, /setInputValue\(`(?:\/|\$\{prefix\})\$\{skill\.id\} `\)/,
       'selectSkill must complete to /skill-id with trailing space so user can type query');
   });
 });

@@ -23,14 +23,13 @@
 //     looking value to kind:'comp' (value-level guard) so the negotiation-only
 //     boundary cannot be bypassed by mislabeling.
 //
-// WIRING STATUS (2026-06-07c): this module + `resolveSessionFollowup` are the
-// VALIDATED long-range follow-up MODEL, exercised end-to-end by the follow-up /
-// long-session benchmarks (100% resolution across all context-age buckets, 0
-// cross-mode leaks). The LIVE IntelligenceEngine currently uses single-prior-turn
-// resolution (FollowUpResolver) + the transcript-window extractor; adopting this
-// store on the live hot path is the next integration step (behind a flag). Treat the
-// privacy/mode-boundary guarantees here as proven-by-test, ENFORCED wherever this
-// store is the resolver — not yet the live default.
+// WIRING STATUS (updated 2026-08-18, WTA audit): this module +
+// `resolveSessionFollowup` ARE the live default on the WTA hot path —
+// liveSessionMemoryConfig resolves `default_on`, so IntelligenceEngine's
+// follow-up block builds a fresh SessionMemory from the durable window on
+// every press (single-prior-turn FollowUpResolver is the fallback branch and
+// the kill-switch escape hatch). The privacy/mode-boundary guarantees here
+// are therefore LIVE guarantees, not just proven-by-test.
 
 export type MemoryMode = 'general' | 'interview' | 'technical-interview' | 'looking-for-work'
   | 'coding' | 'sales' | 'lecture' | 'team-meet' | 'recruiting' | 'negotiation';

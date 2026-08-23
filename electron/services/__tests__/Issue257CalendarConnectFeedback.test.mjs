@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getCalendarConnectErrorMessage } from '../../../src/lib/calendarConnectError.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
@@ -16,17 +17,50 @@ function read(relativePath) {
     return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('calendar connect error formatter separates user denial from Google test-user blocking', () => {
-    const source = read('src/lib/calendarConnectError.ts');
+test('calendar connect error formatter handles main-process failure shapes', () => {
     const i18nSource = read('src/i18n.tsx');
 
-    assert.match(source, /access_denied/, 'formatter must recognize Google OAuth access_denied failures');
-    assert.match(source, /authorization was cancelled/, 'access_denied must be shown as a declined consent prompt');
-    assert.match(source, /status=403/, 'formatter must recognize blocked Google OAuth exchange failures');
-    assert.match(source, /test user/, 'blocked Google OAuth exchange failures must mention the current test-user limitation');
-    assert.match(source, /Could not connect Google Calendar/, 'formatter must provide a fallback connection failure message');
-    assert.match(source, /translate\(DEFAULT_CALENDAR_CONNECT_ERROR\)/, 'known calendar failures must use the active UI translator');
+    assert.equal(
+        getCalendarConnectErrorMessage('access_denied'),
+        'Google Calendar authorization was cancelled. Approve the consent prompt and try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('exchange_failed status=403 access_denied'),
+        'This Google account is not an approved test user yet. Contact Natively support, then try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('access_denied: App has not completed verification'),
+        'This Google account is not an approved test user yet. Contact Natively support, then try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage("access_denied: The developer hasn't given you access. This app is currently being tested."),
+        'This Google account is not an approved test user yet. Contact Natively support, then try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage(new Error('GOOGLE_CLIENT_ID is not configured')),
+        'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('Calendar auth timed out — port released.'),
+        'Google Calendar authorization timed out. Try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage(),
+        'Could not connect Google Calendar. Try again or contact Natively support.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('x'.repeat(120)),
+        `Could not connect Google Calendar: ${'x'.repeat(77)}...`,
+    );
     assert.match(i18nSource, /Google Calendar authorization timed out/, 'calendar failure translations must be registered');
+});
+
+test('calendar auth preserves OAuth details and propagates browser launch failures', () => {
+    const source = read('electron/services/CalendarManager.ts');
+
+    assert.match(source, /qs\.get\('error_description'\)/, 'OAuth callback details must reach the renderer-facing error mapper');
+    assert.match(source, /shell\.openExternal\(authUrl\)\.catch\(/, 'browser launch rejection must be observed');
+    assert.match(source, /finish\(\(\) => reject\(err\)\)/, 'browser launch rejection must close the loopback server and reject the auth flow');
 });
 
 test('launcher calendar button surfaces calendarConnect failure instead of silently idling', () => {
@@ -38,6 +72,7 @@ test('launcher calendar button surfaces calendarConnect failure instead of silen
     assert.match(source, /setConnectError\(getCalendarConnectErrorMessage\(err,\s*t\)\)/, 'thrown errors must set localized visible error text');
     assert.match(source, /connectError &&/, 'launcher button must render the error below the button');
     assert.match(source, /<p role="alert"/, 'launcher errors must be announced to assistive technology');
+    assert.match(source, /max-h-16[^"]*overflow-y-auto/, 'launcher errors must remain readable inside the fixed-height card');
 });
 
 test('settings calendar tab surfaces calendarConnect failure instead of silently idling', () => {

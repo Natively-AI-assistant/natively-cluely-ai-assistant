@@ -30,7 +30,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
@@ -49,7 +49,7 @@ Module._load = function patchedLoad(request, _parent, _isMain) {
     return origLoad.apply(this, arguments);
 };
 
-const { NativelyProSTT } = await import(path.join(distRoot, 'NativelyProSTT.js'));
+const { NativelyProSTT } = await import(pathToFileURL(path.join(distRoot, 'NativelyProSTT.js')).href);
 
 test('closeUpstream() must clear reconnectTimer, stabilityTimer, and pendingConnectTimer', async () => {
     const stt = new NativelyProSTT('close-upstream-key', 'mic');

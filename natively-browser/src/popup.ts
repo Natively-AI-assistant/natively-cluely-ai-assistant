@@ -18,6 +18,8 @@ const pairBtn = $<HTMLButtonElement>('pairBtn');
 const connectBtn = $<HTMLButtonElement>('connectBtn');
 const captureBtn = $<HTMLButtonElement>('captureBtn');
 const unpairBtn = $<HTMLButtonElement>('unpairBtn');
+const allSitesBtn = $<HTMLButtonElement>('allSitesBtn');
+const allSitesHint = $<HTMLElement>('allSitesHint');
 const msg = $('msg');
 
 function send<R>(message: unknown): Promise<R> {
@@ -31,6 +33,11 @@ function setDot(color: 'green' | 'red' | 'amber' | 'grey'): void {
 function setMsg(text: string, kind: 'ok' | 'err' | 'warn' | ''): void {
   msg.textContent = text;
   msg.className = 'msg' + (kind ? ` ${kind}` : '');
+}
+
+/** "https://www.youtube.com/*" -> "www.youtube.com" (display only). */
+function hostOf(origin: string): string {
+  return String(origin || '').replace(/^[a-z]+:\/\//i, '').replace(/\/\*$/, '');
 }
 
 function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' | 'warn' } {
@@ -51,6 +58,8 @@ function describe(outcome: DomPostOutcome): { text: string; kind: 'ok' | 'err' |
       return { text: 'Desktop rejected the request.', kind: 'err' };
     case 'http-error':
       return { text: `Unexpected response (${outcome.status}).`, kind: 'err' };
+    case 'needs-host-permission':
+      return { text: `Chrome needs permission for ${hostOf(outcome.origin)}.`, kind: 'warn' };
     case 'error':
       return { text: outcome.message, kind: 'err' };
   }
@@ -141,12 +150,44 @@ pairBtn.addEventListener('click', async () => {
 captureBtn.addEventListener('click', async () => {
   captureBtn.disabled = true;
   setMsg('Capturing…', '');
-  const report = await send<CaptureReport>({ type: 'capture' });
+  let report = await send<CaptureReport>({ type: 'capture' });
+
+  // This click is a user gesture, and chrome.permissions.request requires one.
+  // A site outside the coding registry (a ChatGPT thread, a YouTube page, an
+  // internal wiki) has no granted host, so ask for exactly this origin — never
+  // a wildcard — and retry once. Denial just falls through to the normal
+  // message; nothing else changes.
+  if (report.outcome.kind === 'needs-host-permission') {
+    const origin = report.outcome.origin;
+    setMsg(`Requesting access to ${hostOf(origin)}…`, '');
+    const grant = await send<{ granted: boolean }>({ type: 'grant-host', value: origin });
+    if (grant?.granted) {
+      setMsg('Permission granted — capturing…', '');
+      report = await send<CaptureReport>({ type: 'capture' });
+    }
+  }
+
   captureBtn.disabled = false;
   const d = describe(report.outcome);
   const suffix = report.outcome.kind === 'success' && report.chars ? ` (${report.chars} chars)` : '';
   setMsg(d.text + suffix, d.kind);
   if (report.outcome.kind === 'unauthorized') await refreshStatus();
+});
+
+// One-time blanket grant: a single Chrome prompt covering https://*/* +
+// http://*/* (declared in optional_host_permissions), after which the desktop
+// hotkey captures ANY site — no per-site grants. This click is the required
+// user gesture; the gesture survives the SW round-trip because we await it.
+allSitesBtn.addEventListener('click', async () => {
+  allSitesBtn.disabled = true;
+  const r = await send<{ granted: boolean; alreadyHad?: boolean }>({ type: 'grant-all-sites' });
+  allSitesBtn.disabled = false;
+  if (r?.granted) {
+    setMsg(r.alreadyHad ? 'Already allowed on all sites.' : 'Allowed on all sites — the hotkey now works everywhere.', 'ok');
+    await refreshAllSites();
+  } else {
+    setMsg('Not granted — per-site capture still works.', 'warn');
+  }
 });
 
 unpairBtn.addEventListener('click', async () => {
@@ -160,3 +201,16 @@ pairInput.addEventListener('keydown', (e) => {
 });
 
 void refreshStatus();
+void refreshAllSites();
+
+/** Hide the all-sites button once granted; show the explainer while offered. */
+async function refreshAllSites(): Promise<void> {
+  try {
+    const r = await send<{ granted: boolean }>({ type: 'all-sites-status' });
+    const granted = !!r?.granted;
+    allSitesBtn.classList.toggle('hidden', granted);
+    allSitesHint.classList.toggle('hidden', granted);
+  } catch {
+    /* leave defaults */
+  }
+}

@@ -49,9 +49,11 @@ import {
 // without intent this list forces an explicit update — it pins the public surface the
 // settings UI enumerates.
 const EXPECTED_KEYS = [
+  // WTA audit flags (2026-08-18, default OFF).
+  'questionLedgerShadow',
+  'wtaClauseCoverageRepair',
   'trace',
   'durableMemoryWindow',
-  'intelligenceOsEnabled',
   'profileTreeV2',
   'contextRouterV2',
   'liveTranscriptBrain',
@@ -62,7 +64,6 @@ const EXPECTED_KEYS = [
   'meetingModeAutoDetect',
   'followUpDraftV2',
   'speakerLabelsV1',
-  'meetingNotesStructuredOutput',
   'meetingSummaryLlmPolish',
   'speakerDiarizationV1',
   'globalSearchV2',
@@ -107,6 +108,22 @@ const EXPECTED_KEYS = [
   'contextOsEnforceSourceCapabilities',
   'contextOsPropertyValidation',
   'contextOsMultiFamilyEvidenceEnabled',
+  // Answer-relevance semantic guard (campaign2 longsession, 2026-07-19). Was
+  // already missing from this list before Slice 1/2 of the context-rebuild
+  // (found 2026-07-25 — this file has its
+  // own independent hardcoded key list from IntelligenceFlags.test.mjs's,
+  // so the earlier fix there did not cover this one).
+  'answerRelevanceGuardLive',
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only.
+  'atomicJdProfilePackGeneration',
+  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
+  'pronounRegexShadowObservation',
+  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
+  // 2026-07-28) — dev/test-only.
+  'contextOsImpossibleStateGateShadow',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Prompt System v2 (2026-08-01) — default OFF everywhere.
+  'promptSystemV2',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -139,12 +156,16 @@ const DEFAULT_ON_KEYS = new Set([
   'contextOsRecapFollowupEnabled',
   'contextOsEvidencePackEnabled',
   'contextOsMemorySafetyEnabled',
+  // Prompt System v2 — promoted to production default-ON (2026-08-02) after the
+  // 8-run benchmark campaign (see the intelligenceFlags.ts promotion comment).
+  'promptSystemV2',
 ]);
 
 const ALL_ENV_VARS = [
+  'NATIVELY_QUESTION_LEDGER_SHADOW',
+  'NATIVELY_WTA_CLAUSE_COVERAGE_REPAIR',
   'NATIVELY_INTELLIGENCE_TRACE',
   'NATIVELY_DURABLE_MEMORY_WINDOW',
-  'NATIVELY_INTELLIGENCE_OS',
   'NATIVELY_PROFILE_TREE_V2',
   'NATIVELY_CONTEXT_ROUTER_V2',
   'NATIVELY_LIVE_TRANSCRIPT_BRAIN',
@@ -155,7 +176,6 @@ const ALL_ENV_VARS = [
   'NATIVELY_MEETING_MODE_AUTODETECT',
   'NATIVELY_FOLLOWUP_DRAFT_V2',
   'NATIVELY_SPEAKER_LABELS_V1',
-  'NATIVELY_MEETING_NOTES_STRUCTURED_OUTPUT',
   'NATIVELY_MEETING_SUMMARY_LLM_POLISH',
   'NATIVELY_SPEAKER_DIARIZATION_V1',
   'NATIVELY_GLOBAL_SEARCH_V2',
@@ -194,6 +214,10 @@ const ALL_ENV_VARS = [
   'NATIVELY_CONTEXT_OS_ENFORCE_CAPABILITIES',
   'NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION',
   'NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE',
+  'NATIVELY_ANSWER_RELEVANCE_GUARD_LIVE',
+  'NATIVELY_PROMPT_COMPOSER_V2',
+  'NATIVELY_ATOMIC_JD_PROFILE_PACK',
+  'NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION',
 ];
 
 function clearAllEnv() {

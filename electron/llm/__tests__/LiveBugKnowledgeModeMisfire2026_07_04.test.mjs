@@ -33,6 +33,28 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 
+// Split a call's argument text on commas at depth 0 only, so nested calls,
+// object/array literals and ternaries do not produce phantom arguments.
+function splitTopLevelArgs(argText) {
+  const out = [];
+  let depth = 0, cur = '', quote = null;
+  for (let i = 0; i < argText.length; i++) {
+    const ch = argText[i];
+    if (quote) {
+      cur += ch;
+      if (ch === quote && argText[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; cur += ch; continue; }
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') depth--;
+    if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; continue; }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
 describe('Bug 1: internal action LLMs must not go through the knowledge-mode intent gate', () => {
   const sites = [
     { file: 'electron/llm/ClarifyLLM.ts', label: 'ClarifyLLM' },
@@ -50,7 +72,27 @@ describe('Bug 1: internal action LLMs must not go through the knowledge-mode int
         // The 5th positional arg (ignoreKnowledgeMode) must be `true`. We check
         // the raw call text ends with ", true)" before the closing paren (the
         // regex above already stripped the trailing ");").
-        assert.match(m[1].trim(), /,\s*true\s*$/, `${label} streamChat call missing ignoreKnowledgeMode=true: ${m[0].slice(0, 120)}`);
+        // Check the POSITION, not the tail. `ignoreKnowledgeMode` is streamChat's
+        // 5th positional parameter; it used to be the last argument these call
+        // sites passed, so `/,\s*true\s*$/` worked by accident. They now pass
+        // skipModeInjection, scopes, signal, thinkingBudget and routeOptions
+        // after it, and the tail check started failing on calls that were still
+        // perfectly correct.
+        //
+        // Splitting on TOP-LEVEL commas (parens/brackets/braces/strings tracked)
+        // is also stricter than what it replaces: the old form would have been
+        // satisfied by any trailing `true` in any position, including an
+        // unrelated boolean, while this one names the argument that matters.
+        const args = splitTopLevelArgs(m[1]);
+        assert.ok(
+          args.length >= 5,
+          `${label} streamChat call has too few arguments to carry ignoreKnowledgeMode: ${m[0].slice(0, 120)}`,
+        );
+        assert.equal(
+          args[4],
+          'true',
+          `${label} streamChat call missing ignoreKnowledgeMode=true at arg 5: ${m[0].slice(0, 120)}`,
+        );
       }
     });
   }

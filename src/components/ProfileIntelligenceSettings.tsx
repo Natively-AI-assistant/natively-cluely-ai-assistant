@@ -2,12 +2,23 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
     X, RefreshCw, Upload, Briefcase, Trash2, Check, Globe,
     Building2, Search, AlertCircle, AlertTriangle, Gift, Info, Star, Sparkles,
-    User, CheckCircle, ArrowUpRight, Paperclip, Plus, FileText,
-    GraduationCap, FolderKanban, Layers, Mail,
+    User, CheckCircle, ArrowUpRight, ChevronRight, Paperclip, FileText,
+    GraduationCap, FolderKanban, Layers, Mail, MessageSquare, Target,
 } from 'lucide-react';
-import { PremiumUpgradeModal } from '../premium';
+import { ThinkingOrb } from 'thinking-orbs';
+import { useToggleInit } from './settings/useToggleInit';
+import { PremiumUpgradeModal, RoleInsightPanel } from '../premium';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { truncateResumeSummary } from '../utils/resumeSummary.mjs';
+import { CHECKOUT_URLS } from '../config/urls';
+
+const openExternal = (url: string) => {
+    if ((window as any).electronAPI?.openExternal) {
+        (window as any).electronAPI.openExternal(url);
+    } else {
+        window.open(url, '_blank', 'noopener,noreferrer');
+    }
+};
 
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 const PI_CSS = `
@@ -28,11 +39,31 @@ const PI_CSS = `
         --pi-input-border: rgba(255,255,255,0.10);
         --pi-danger: #ef4444;
         --pi-danger-bg: rgba(239,68,68,0.12);
-        --pi-accent: #818cf8;
+        --pi-accent: var(--periwinkle-300);
+        --pi-on-accent: var(--periwinkle-on-accent-dark);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-300) 8%, transparent);
+        /* Smoked variant of --pi-accent-subtle, for the cover-letter sheet. The
+           25% black scrim takes the composited sheet from rgb(30,29,35) to
+           rgb(23,22,27) over the #111 panel — ~0.76x, i.e. 25% darker, while
+           staying ~6 levels above the panel so the sheet still reads as a
+           distinct surface. Own token, not a change to --pi-accent-subtle,
+           which badges and other cards still use at full brightness. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-300) 6%, rgba(0,0,0,0.25));
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-300) 20%, transparent);
+        --pi-accent-icon: var(--periwinkle-400);
+        --pi-badge-text: var(--pi-accent);
+        --pi-badge-border: var(--pi-accent-border);
+        --pi-cta-accent-text: var(--periwinkle-400);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-300) 30%, transparent);
         --pi-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
         --pi-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-        --pi-input-border-focus: rgba(129,140,248,0.40);
-        --pi-input-bg-focus: rgba(129,140,248,0.04);
+        /* Expo-out. Almost all of the distance is covered in the first third,
+           then it glides for a long time — which is what buys a slow animation
+           the right to be slow: it reads as settling, not as waiting. This is
+           the curve for anything that travels far or lands late. */
+        --pi-ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-300) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-300) 4%, transparent);
         --pi-cta-bg: #ffffff;
         --pi-cta-text: #141414;
         --pi-cta-ring: rgba(0,0,0,0.08);
@@ -59,9 +90,24 @@ const PI_CSS = `
         --pi-item-hover: rgba(0,0,0,0.03);
         --pi-item-active: rgba(0,0,0,0.06);
         --pi-input-border: rgba(0,0,0,0.10);
-        --pi-accent: #6366f1;
-        --pi-input-border-focus: rgba(99,102,241,0.40);
-        --pi-input-bg-focus: rgba(99,102,241,0.04);
+        --pi-accent: var(--periwinkle-600);
+        --pi-on-accent: var(--periwinkle-on-accent-light);
+        --pi-accent-subtle: color-mix(in srgb, var(--periwinkle-600) 8%, transparent);
+        /* NO black scrim here. Dark mode's 25% smoke, applied over white, lands
+           on rgb(187,185,192) — a muddy grey slab, which is what it looked like
+           when it shipped. A light theme expresses "deeper surface" by taking
+           the tint up, not the luminance down, so this deepens the periwinkle
+           wash from 8% to 14%: rgb(237,230,249), ~18 levels under the page, and
+           still unmistakably lavender rather than grey. */
+        --pi-letter-bg: color-mix(in srgb, var(--periwinkle-600) 14%, transparent);
+        --pi-accent-border: color-mix(in srgb, var(--periwinkle-600) 16%, transparent);
+        --pi-accent-icon: var(--periwinkle-700);
+        --pi-badge-text: var(--pi-accent);
+        --pi-badge-border: var(--pi-accent-border);
+        --pi-cta-accent-text: var(--periwinkle-700);
+        --pi-cta-accent-border: color-mix(in srgb, var(--periwinkle-600) 24%, transparent);
+        --pi-input-border-focus: color-mix(in srgb, var(--periwinkle-600) 40%, transparent);
+        --pi-input-bg-focus: color-mix(in srgb, var(--periwinkle-600) 4%, transparent);
         --pi-cta-bg: #000000;
         --pi-cta-text: #ffffff;
         --pi-cta-ring: rgba(255,255,255,0.10);
@@ -72,12 +118,38 @@ const PI_CSS = `
 
     /* ── Keyframes ── */
     @keyframes pi-list-in {
-        from { opacity: 0; transform: translateY(4px); }
+        from { opacity: 0; transform: translateY(8px); }
         to   { opacity: 1; transform: translateY(0); }
     }
-    @keyframes pi-panel-fade {
-        from { opacity: 0; transform: translateY(4px); }
-        to   { opacity: 1; transform: translateY(0); }
+    /* Section swap. The panel enters from the direction the user travelled in
+       the nav — pick something lower down and the new panel rises from below —
+       so the sidebar keeps reading as a place rather than a set of buttons.
+       The blur is doing the same job it does in any crossfade: without it you
+       see two distinct slabs overlapping, with it the eye reads one shape
+       resolving into focus. 4px is enough; blur gets expensive fast. */
+    @keyframes pi-panel-in-down {
+        from { opacity: 0; transform: translateY(16px); filter: blur(6px); }
+        45%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    @keyframes pi-panel-in-up {
+        from { opacity: 0; transform: translateY(-16px); filter: blur(6px); }
+        45%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+    }
+    /* The section's own blocks then arrive one at a time. Each one rises and
+       comes forward at once — the scale is what turns "it faded in" into "it
+       arrived", and it is the reason the cascade can run this long without
+       reading as lag: at any moment something is still landing. Opacity
+       finishes at 60% so a block is legible well before it stops moving. */
+    @keyframes pi-section-in {
+        from { opacity: 0; transform: translateY(16px) scale(0.985); }
+        60%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pi-fade-only {
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
     @keyframes pi-check-in {
         from { opacity: 0; transform: scale(0.5); }
@@ -97,8 +169,82 @@ const PI_CSS = `
         0%, 100% { opacity: 0.55; }
         50%       { opacity: 1; }
     }
-    .pi-panel-fade { animation: pi-panel-fade 180ms var(--pi-ease-out) both; }
-    .pi-list-item  { animation: pi-list-in 280ms var(--pi-ease-out) both; }
+    /* Indexing → indexed handoff. The orb settles rather than vanishing (it
+       shrinks INTO the result instead of being cut), then the extracted card
+       rises the same way every other section in this panel arrives, so the
+       finish reads as one motion instead of two unrelated ones. */
+    @keyframes pi-handoff-out {
+        from { opacity: 1; transform: scale(1);    filter: blur(0px); }
+        to   { opacity: 0; transform: scale(0.94); filter: blur(2px); }
+    }
+    @keyframes pi-handoff-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.985); }
+        60%  { opacity: 1; }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    /* fill-mode backwards, never both. A finished "both" animation keeps its
+       transform applied forever, which leaves every animated block a permanent
+       stacking context — that is exactly how the Settings cards ended up
+       burying their own dropdowns. "backwards" holds the from-state only
+       during the delay and hands the element back to its own (identical)
+       style the moment it finishes. */
+    .pi-panel-fade { animation: pi-panel-in-down 420ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade[data-dir='up'] { animation-name: pi-panel-in-up; }
+
+    /* Blocks arrive one by one. 55ms apart is the sweet spot: wide enough to
+       read as a sequence rather than a wave, tight enough that the whole
+       column is in motion at once instead of queueing. The steps shrink as
+       they go — a constant delay makes the tail feel like it stalled, while a
+       decelerating one lets the section close itself out. Nothing here blocks
+       input: the panel is clickable from the first frame. */
+    .pi-panel-fade > * { animation: pi-section-in 520ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade > *:nth-child(1)     { animation-delay: 40ms; }
+    .pi-panel-fade > *:nth-child(2)     { animation-delay: 95ms; }
+    .pi-panel-fade > *:nth-child(3)     { animation-delay: 150ms; }
+    .pi-panel-fade > *:nth-child(4)     { animation-delay: 205ms; }
+    .pi-panel-fade > *:nth-child(5)     { animation-delay: 255ms; }
+    .pi-panel-fade > *:nth-child(6)     { animation-delay: 300ms; }
+    .pi-panel-fade > *:nth-child(7)     { animation-delay: 340ms; }
+    .pi-panel-fade > *:nth-child(8)     { animation-delay: 375ms; }
+    .pi-panel-fade > *:nth-child(9)     { animation-delay: 405ms; }
+    .pi-panel-fade > *:nth-child(n+10)  { animation-delay: 430ms; }
+
+    /* Some sections (Company Intel) render their blocks inside one flex column
+       instead of returning them flat. The cascade only reaches direct children,
+       so that whole column used to arrive as a single slab while Identity and
+       Profile came in one card at a time. Marking the column pi-cascade hands
+       the beat down to its children and takes the wrapper itself out of the
+       sequence — without that the two transforms would compound and the lower
+       cards would travel twice as far as they should.
+       The ramp picks up one step in, since the section header above it has
+       already taken the first beat. */
+    .pi-panel-fade > .pi-cascade { animation: none; }
+    .pi-panel-fade > .pi-cascade > * { animation: pi-section-in 520ms var(--pi-ease-expo) backwards; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(1)     { animation-delay: 95ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(2)     { animation-delay: 150ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(3)     { animation-delay: 205ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(4)     { animation-delay: 255ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(5)     { animation-delay: 300ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(6)     { animation-delay: 340ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(7)     { animation-delay: 375ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(8)     { animation-delay: 405ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(9)     { animation-delay: 430ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(10)    { animation-delay: 450ms; }
+    .pi-panel-fade > .pi-cascade > *:nth-child(n+11)  { animation-delay: 465ms; }
+
+    .pi-list-item  { animation: pi-list-in 420ms var(--pi-ease-expo) backwards; }
+    /* fill-mode "forwards" is the deliberate exception to the backwards-only
+       rule above: this element is unmounted the instant the animation ends, so
+       it can never persist a transform (and therefore never becomes a lingering
+       stacking context). Holding the end state stops it flashing back to full
+       opacity if React's unmount lands a frame late. */
+    .pi-handoff-out { animation: pi-handoff-out 240ms var(--pi-ease-out) forwards; }
+    /* -self animates the block itself (the empty slot, which owns its own
+       border and background); the child form staggers the file row and the
+       snapshot card, matching .pi-cascade's beat. */
+    .pi-handoff-in-self,
+    .pi-handoff-in > * { animation: pi-handoff-in 560ms var(--pi-ease-expo) backwards; }
+    .pi-handoff-in > *:nth-child(2) { animation-delay: 110ms; }
     .pi-spinner    { animation: pi-spin 0.8s linear infinite; }
     .pi-save-pulse { animation: pi-save-pulse 360ms var(--pi-ease-spring); }
     .pi-skeleton   {
@@ -119,18 +265,25 @@ const PI_CSS = `
     .pi-press-soft:active { transform: scale(0.92); }
 
     /* ── Sliding selection indicator ── */
+    /* Travels on transform, not top. Animating "top" relayouts the nav on
+       every frame; translateY runs on the compositor and the pill is the one
+       thing on this screen the eye actually follows. */
     .pi-sel-indicator {
         position: absolute;
-        left: 8px; right: 8px;
+        top: 0; left: 8px; right: 8px;
         background: var(--pi-item-active);
         border-radius: 6px;
         pointer-events: none;
         z-index: 0;
+        will-change: transform;
+        /* Expo covers most of the gap in the first ~120ms, so the pill still
+           answers the click instantly and then takes its time arriving. That
+           is what lets it run at 380ms without feeling laggy. */
         transition:
-            top 280ms cubic-bezier(0.23, 1, 0.32, 1),
-            height 280ms cubic-bezier(0.23, 1, 0.32, 1),
-            opacity 200ms ease;
+            transform 380ms var(--pi-ease-expo),
+            opacity 240ms ease;
     }
+    /* First paint: land on the active item, don't slide down from the top. */
     .pi-sel-indicator[data-instant='true'] { transition: opacity 160ms ease; }
 
     /* ── Nav items ── */
@@ -142,23 +295,37 @@ const PI_CSS = `
         user-select: none; margin-bottom: 2px;
         position: relative; z-index: 1;
         transition: background 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
-        animation: pi-list-in 280ms var(--pi-ease-out) both;
+        /* backwards, not both. A finished "both" animation keeps applying its
+           to-state transform from the animation origin, which sits above
+           declared styles in the cascade — so :active below could never take
+           effect and the rows had no press feedback at all once they had
+           settled. */
+        animation: pi-list-in 420ms var(--pi-ease-expo) backwards;
     }
     .pi-nav-item:hover { background: var(--pi-item-hover); }
     .pi-nav-item.active { color: var(--pi-primary); }
     .pi-nav-item:active { transform: scale(0.97); }
 
-    /* Staggered nav entry */
-    .pi-nav-item:nth-child(2) { animation-delay: 0ms; }
-    .pi-nav-item:nth-child(3) { animation-delay: 30ms; }
-    .pi-nav-item:nth-child(4) { animation-delay: 60ms; }
-    .pi-nav-item:nth-child(5) { animation-delay: 90ms; }
-    .pi-nav-item:nth-child(6) { animation-delay: 120ms; }
-    .pi-nav-item:nth-child(n+7) { animation-delay: 150ms; }
+    /* Staggered nav entry, on the same 55ms beat as the panel's blocks so the
+       two columns read as one entrance rather than two animations that
+       happened to fire together. nth-child starts at 2 — child 1 is the
+       selection indicator. */
+    .pi-nav-item:nth-child(2)   { animation-delay: 0ms; }
+    .pi-nav-item:nth-child(3)   { animation-delay: 55ms; }
+    .pi-nav-item:nth-child(4)   { animation-delay: 110ms; }
+    .pi-nav-item:nth-child(5)   { animation-delay: 160ms; }
+    .pi-nav-item:nth-child(6)   { animation-delay: 205ms; }
+    .pi-nav-item:nth-child(7)   { animation-delay: 245ms; }
+    .pi-nav-item:nth-child(n+8) { animation-delay: 280ms; }
 
     /* Nav icon */
-    .pi-nav-item svg { color: var(--pi-tertiary); flex-shrink: 0; }
-    .pi-nav-item.active svg { color: var(--pi-secondary); }
+    .pi-nav-item svg {
+        color: var(--pi-tertiary); flex-shrink: 0;
+        transition: color 180ms ease, transform 260ms var(--pi-ease-spring);
+    }
+    /* A hair of scale on the active icon. Nobody will name it; it is the
+       difference between the row looking selected and looking alive. */
+    .pi-nav-item.active svg { color: var(--pi-secondary); transform: scale(1.08); }
 
     /* ── Content boxes ── */
     .pi-content-box {
@@ -172,10 +339,10 @@ const PI_CSS = `
     .pi-content-box:focus-within {
         border-color: var(--pi-input-border-focus);
         background: var(--pi-input-bg-focus);
-        box-shadow: 0 0 0 3px rgba(129,140,248,0.12);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-300) 12%, transparent);
     }
     .pi-root[data-theme='light'] .pi-content-box:focus-within {
-        box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--periwinkle-600) 12%, transparent);
     }
 
     /* ── Textarea / Input ── */
@@ -192,23 +359,13 @@ const PI_CSS = `
     }
     .pi-input::placeholder { color: var(--pi-tertiary); }
 
-    /* ── Toggle track/thumb ── */
-    .pi-toggle-track {
-        width: 44px; height: 24px; border-radius: 12px; position: relative;
-        cursor: pointer; flex-shrink: 0;
-        background: rgba(255,255,255,0.12);
-        transition: background 220ms var(--pi-ease-out);
-    }
-    .pi-toggle-track[data-checked='true'] { background: var(--pi-accent); }
-    .pi-toggle-track[data-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
-    .pi-root[data-theme='light'] .pi-toggle-track { background: rgba(0,0,0,0.12); }
-    .pi-toggle-thumb {
-        position: absolute; top: 3px; left: 3px;
-        width: 18px; height: 18px; border-radius: 50%;
-        background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-        transition: transform 260ms var(--pi-ease-spring);
-    }
-    .pi-toggle-track[data-checked='true'] .pi-toggle-thumb { transform: translateX(20px); }
+    /* ── Toggle (shared .t-toggle primitive) ── */
+    /* Colors now come from the shared Apple-style palette in index.css
+       (--toggle-off/--toggle-on) rather than the panel's own accent, so this
+       block only needs to beat the shared rule's specificity, not repaint it. */
+    .pi-root .t-toggle { background: var(--toggle-off); }
+    .pi-root .t-toggle[aria-checked='true'] { background: var(--toggle-on); }
+    .pi-root .t-toggle[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 
     /* ── Toggle card (neutral — no accent tint when on; the toggle itself signals state) ── */
     .pi-toggle-card {
@@ -275,7 +432,7 @@ const PI_CSS = `
     .pi-pill-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); color: var(--pi-primary); }
     .pi-pill-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-pill-btn--primary { background: var(--pi-accent); color: #fff; border-color: transparent; }
+    .pi-pill-btn--primary { background: var(--pi-accent); color: var(--pi-on-accent); border-color: transparent; }
     .pi-pill-btn--primary:hover:not(:disabled) { filter: brightness(1.1); }
     .pi-pill-btn--danger { color: var(--pi-danger); }
     .pi-pill-btn--danger:hover:not(:disabled) { background: var(--pi-danger-bg); color: var(--pi-danger); border-color: var(--pi-danger-bg); }
@@ -340,7 +497,7 @@ const PI_CSS = `
         border-radius: var(--pi-r-md); margin-bottom: 6px;
     }
     .pi-upload-btn {
-        display: flex; align-items: center; gap: 7;
+        display: flex; align-items: center; gap: 7px;
         padding: 7px 18px; background: var(--pi-btn-bg);
         border: 1px solid var(--pi-btn-border); border-radius: 20px;
         color: var(--pi-primary); font-size: 12px; font-weight: 500;
@@ -350,15 +507,6 @@ const PI_CSS = `
     .pi-upload-btn:hover:not(:disabled) { background: var(--pi-btn-bg-hover); }
     .pi-upload-btn:active:not(:disabled) { transform: scale(0.97); }
     .pi-upload-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .pi-add-file-btn {
-        display: flex; align-items: center; gap: 6;
-        background: none; border: none; cursor: pointer;
-        color: var(--pi-tertiary); font-size: 12px; font-family: inherit;
-        padding: 6px 2px; margin-top: 2px;
-        transition: color 180ms var(--pi-ease-out), transform 140ms var(--pi-ease-out);
-    }
-    .pi-add-file-btn:hover { color: var(--pi-primary); }
-    .pi-add-file-btn:active { transform: scale(0.97); }
 
     /* ── Sub-list staggered reveal ── */
     .pi-stagger > .pi-list-item:nth-child(1) { animation-delay: 0ms; }
@@ -395,12 +543,27 @@ const PI_CSS = `
     .pi-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
     /* ── Reduced motion ── */
+    /* Reduced motion means less movement, not no feedback: the opacity change
+       is what tells you the panel actually swapped, so it stays. */
     @media (prefers-reduced-motion: reduce) {
-        .pi-panel-fade { animation: none; }
-        .pi-list-item  { animation-duration: 100ms; animation-delay: 0ms !important; }
+        .pi-panel-fade,
+        .pi-panel-fade[data-dir='up'] { animation: pi-fade-only 200ms ease backwards; }
+        .pi-panel-fade > *,
+        .pi-panel-fade > .pi-cascade > * { animation: none; }
+        .pi-sel-indicator { transition: opacity 160ms ease; }
+        .pi-nav-item svg, .pi-nav-item.active svg { transition: color 180ms ease; transform: none; }
+        .pi-nav-item { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
+        .pi-list-item  { animation: pi-fade-only 160ms ease backwards; animation-delay: 0ms !important; }
         .pi-press:active, .pi-press-soft:active { transform: none; }
         .pi-cta--shimmer::after { animation: none; }
         .pi-skeleton { animation: none; opacity: 0.5; }
+        /* The handoff keeps its crossfade — that opacity change is the only
+           signal that indexing finished — but loses the travel, the scale and
+           the blur, and the stagger collapses to a single beat. */
+        .pi-handoff-out { animation: pi-fade-only 160ms ease reverse forwards; }
+        .pi-handoff-in-self,
+        .pi-handoff-in > * { animation: pi-fade-only 200ms ease backwards; }
+        .pi-handoff-in > *:nth-child(2) { animation-delay: 0ms; }
     }
 `;
 
@@ -494,6 +657,55 @@ function useDisplayedStatus(rawStatus: string | undefined): string | undefined {
     return displayed;
 }
 
+// ─── Indexing → indexed handoff ───────────────────────────────────────────────
+// React swaps the orb for the extracted card in a single frame, which reads as a
+// glitch rather than a finish. This sequences it: the orb holds one extra beat
+// to play its exit, then the result arrives.
+//
+// Both phases come out of ONE state deliberately. With two independent flags the
+// frame that drops the orb and the frame that adds the result's entrance class
+// are different frames, so the result paints once at full opacity before
+// snapping back to the animation's 0% — a visible flicker at exactly the moment
+// this is supposed to smooth over.
+const HANDOFF_OUT_MS = 240;
+// 560ms entrance + the 110ms stagger on the second child. Keep in sync with
+// .pi-handoff-in and its nth-child(2) delay above — retuning either there
+// without updating this leaves the block stranded on 'arriving' early or late.
+const HANDOFF_IN_MS = 670;
+function useIndexHandoff(indexing: boolean): { settling: boolean; arriving: boolean } {
+    const [phase, setPhase] = useState<'idle' | 'settling' | 'arriving'>('idle');
+    const prevIndexingRef = useRef(indexing);
+
+    // The falling edge is handled DURING render, not in an effect. Effects run
+    // after paint, so reacting there lets the browser paint one frame of the
+    // finished result at full opacity before the orb has even begun its exit —
+    // measured, not theorised: a reduced-motion frame sampler caught the result
+    // at opacity 1 two milliseconds in. Setting state during render re-renders
+    // before paint, so that frame never reaches the screen. A fresh upload
+    // landing mid-handoff resets to idle: the orb is coming back, and finishing
+    // the previous exit would fight the new entrance.
+    if (prevIndexingRef.current !== indexing) {
+        prevIndexingRef.current = indexing;
+        setPhase(indexing ? 'idle' : 'settling');
+    }
+
+    // One timer per phase, each cancelled by its own cleanup. Scheduling both
+    // hops up front instead would mean the settling → arriving re-render tore
+    // down the timer that ends the handoff, stranding it on 'arriving'.
+    useEffect(() => {
+        if (phase === 'settling') {
+            const t = setTimeout(() => setPhase('arriving'), HANDOFF_OUT_MS);
+            return () => clearTimeout(t);
+        }
+        if (phase === 'arriving') {
+            const t = setTimeout(() => setPhase('idle'), HANDOFF_IN_MS);
+            return () => clearTimeout(t);
+        }
+    }, [phase]);
+
+    return { settling: phase === 'settling', arriving: phase === 'arriving' };
+}
+
 const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
     const displayedStatus = useDisplayedStatus(status);
     const badge = displayedStatus ? PI_INDEX_BADGES[displayedStatus] : undefined;
@@ -510,17 +722,10 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
         return () => { if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current); };
     }, [badge?.label]);
     if (!badge) return <span style={{ width: 100, flexShrink: 0 }} />;
-    const isInProgress = displayedStatus === 'uploading' || displayedStatus === 'processing';
     return (
-        <span style={{ display: 'grid', gridTemplateColumns: '14px 6px 80px', alignItems: 'center', width: 100, flexShrink: 0 }}>
-            <span aria-hidden="true" style={{ gridColumn: 1, display: 'flex', alignItems: 'center', opacity: isInProgress ? 1 : 0, transition: 'opacity 180ms ease-out', flexShrink: 0 }}>
-                <svg className="pi-spinner" width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" />
-                    <path d="M7 1.5 A5.5 5.5 0 0 1 12.5 7" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-            </span>
+        <span style={{ display: 'grid', gridTemplateColumns: '20px 80px', alignItems: 'center', width: 100, flexShrink: 0 }}>
             <span title={badge.title} style={{
-                gridColumn: 3, justifySelf: 'start' as const,
+                gridColumn: 2, justifySelf: 'start' as const,
                 fontSize: 9.5, fontWeight: 600, letterSpacing: 0.2, padding: '2px 6px',
                 borderRadius: 999, color: badge.color, background: badge.bg, flexShrink: 0,
                 textTransform: 'uppercase' as const,
@@ -535,25 +740,45 @@ const PIIndexBadge: React.FC<{ status?: string }> = ({ status }) => {
 };
 
 // ─── FileUploadEmpty — Modes-style empty state ────────────────────────────────
+// No `uploading` state: the caller swaps this whole block for FileUploadIndexing
+// while an ingest is in flight, so a "Processing…" button here would be dead.
 interface FileUploadEmptyProps {
     hint: string;
-    uploading: boolean;
     hasAccess: boolean;
     onBrowse: () => void;
     onNeedUpgrade: () => void;
+    /** Entrance class when this slot is what a finished indexing run landed on
+        (i.e. the ingest failed and dropped the user back to the upload CTA). */
+    enterClass?: string;
 }
-const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }: FileUploadEmptyProps) => (
-    <div className="pi-file-empty" style={{ gap: 12 }}>
+const FileUploadEmpty = ({ hint, hasAccess, onBrowse, onNeedUpgrade, enterClass }: FileUploadEmptyProps) => (
+    <div className={`pi-file-empty${enterClass ? ` ${enterClass}` : ''}`} style={{ gap: 12 }}>
         <p style={{ fontSize: 12, color: 'var(--pi-tertiary)', margin: 0 }}>{hint}{!hasAccess ? ' Requires Pro.' : ''}</p>
         <button
             className="pi-upload-btn"
-            disabled={uploading}
             onClick={() => { if (!hasAccess) { onNeedUpgrade(); return; } onBrowse(); }}
         >
-            {uploading
-                ? <><RefreshCw size={13} className="pi-spinner" /> Processing…</>
-                : <><Paperclip size={13} /> Upload file</>}
+            <Paperclip size={13} /> Upload file
         </button>
+    </div>
+);
+
+// ─── FileUploadIndexing — in-flight ingest ────────────────────────────────────
+// Reuses the empty slot's container so the empty → indexing → filled sequence
+// keeps one silhouette and the panel doesn't jump as the state advances.
+// The orb ships two tuned size presets (64 / 20); 64 is the one that reads as a
+// deliberate "working" surface rather than a button spinner, so it gets the
+// block the empty slot was already occupying. `theme` stays on its default
+// `auto` — it walks up to .pi-root's data-theme, which is the same signal the
+// panel's own light/dark tokens key off.
+// The orb is aria-hidden and the <p> carries the announcement: labelling both
+// makes a screen reader read the state twice. role="status" (implicitly polite)
+// is the whole announcement contract here — the badge no longer has an
+// in-progress branch to carry it.
+const FileUploadIndexing = ({ label, settling }: { label: string; settling?: boolean }) => (
+    <div className={`pi-file-empty${settling ? ' pi-handoff-out' : ''}`} style={{ gap: 14 }} role="status">
+        <ThinkingOrb state="composing" size={64} speed={1.10} aria-hidden="true" />
+        <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: 0 }}>{label}</p>
     </div>
 );
 
@@ -561,26 +786,447 @@ const FileUploadEmpty = ({ hint, uploading, hasAccess, onBrowse, onNeedUpgrade }
 const NAV_ITEMS = [
     { id: 'identity',    label: 'Identity',           Icon: User },
     { id: 'insights',    label: 'Profile',            Icon: FileText },
+    // Role Insight reads the résumé and JD that Profile owns, so it sits
+    // directly after it — ahead of the outbound artifacts (Company Intel,
+    // Cover Letter) that come later in the user's actual sequence.
+    { id: 'roleinsight', label: 'Role Insight',       Icon: Target },
     { id: 'company',     label: 'Company Intel',      Icon: Building2 },
     { id: 'coverletter', label: 'Cover Letter',       Icon: Mail },
     { id: 'tavily',      label: 'Tavily Search',      Icon: Globe },
 ];
 
+// ─── Pro Gate ─────────────────────────────────────────────────────────────────
+// Mirrors the Modes Manager's Pro gate (same Apple-style hero + bento grid
+// language) so the two premium surfaces feel like one product, not two.
+const PI_GATE_FEATURES: Array<{
+    key: string;
+    label: string;
+    desc?: string;
+    hex: string;
+    Icon: typeof User;
+    col: string;
+    row: string;
+    type: 'hero' | 'wide' | 'small';
+}> = [
+    { key: 'identity', label: 'Identity', desc: 'Who you are, extracted from your resume.', hex: '#a78bfa', Icon: User, col: '1 / 3', row: '1 / 3', type: 'hero' },
+    // NOTE: wide-card descriptions must reliably render as ONE line at 11px in
+    // the ~170px text column (see ModesProGate reference, which uses the same
+    // single-line rule). Row 1 and row 3 are now sized to that one-line content
+    // (see PI_GATE_ROW_PX below), not a fixed budget copied from Modes — a
+    // wrapped second line is now guarded by WebkitLineClamp: 1 (it will
+    // ellipsize instead of crowding the card). Keep these short; verify with
+    // the pi-gate screenshot/measurement script before lengthening any of them
+    // again.
+    { key: 'profile', label: 'Profile', desc: 'Every skill and role mapped.', hex: '#34d399', Icon: FileText, col: '3 / 5', row: '1 / 2', type: 'wide' },
+    { key: 'company', label: 'Company Intel', hex: '#fbbf24', Icon: Building2, col: '3 / 4', row: '2 / 3', type: 'small' },
+    { key: 'cover', label: 'Cover Letter', hex: '#fb7185', Icon: Mail, col: '4 / 5', row: '2 / 3', type: 'small' },
+    { key: 'talking', label: 'Talking Points', desc: 'Every fit gap answered.', hex: '#f472b6', Icon: MessageSquare, col: '1 / 3', row: '3 / 4', type: 'wide' },
+    { key: 'search', label: 'Web Search', desc: 'Live research, on demand.', hex: '#38bdf8', Icon: Globe, col: '3 / 5', row: '3 / 4', type: 'wide' },
+];
+
+// Row heights are content-sized (measured against real rendered card content
+// via the getBoundingClientRect verification harness), NOT copy-pasted from
+// ModesProGate's fixed 258px/3-equal-rows grid — PI's card copy has a
+// different length profile than Modes', so an equal-thirds split leaves the
+// wide cards' single-line descriptions swimming in empty vertical space.
+//
+// Derivation (re-derive with the harness before changing — do not eyeball):
+//   row(core) = ink + 2*padding; row(track) = core + 14
+//   (the "+14" is .pig-bento-shell's 6px padding + 1px border, both sides)
+// Row 1 & row 3 both hold a wide card (Profile / Talking Points & Web Search)
+// and are kept EQUAL so the top and bottom wide rows read as symmetric, not
+// like a layout bug. Measured wide-card ink (icon + title + 1-line desc) is
+// ~32.5px; with the card's own 13px vertical padding, core ≈ 58.5 → row ≈ 73.
+//
+// Row 2 (the two small cards, Company Intel / Cover Letter) is NOT free —
+// the hero spans rows 1+2, so heroCore = row1 + row2 + gap(12) - 14. Measured
+// hero ink (icon + title + 2-line desc) is ~117px; with the hero's own 16px
+// padding, its target core is ~150 (unchanged from the pre-existing,
+// never-complained-about hero). That fixes row2 = 150 - row1 - 12 + 14 = 83,
+// independent of what the small cards themselves would otherwise need — they
+// simply inherit whatever room row2 ends up with and center within it.
+const PI_GATE_ROW_PX = { row1: 73, row2: 83, row3: 73 } as const;
+const PI_GATE_GAP_PX = 12;
+const PI_GATE_GRID_HEIGHT_PX =
+    PI_GATE_ROW_PX.row1 + PI_GATE_ROW_PX.row2 + PI_GATE_ROW_PX.row3 + PI_GATE_GAP_PX * 2;
+
+const PI_GATE_CSS = `
+    .pi-pro-gate {
+        --pig-bg: #141414;
+        --pig-hero: #ffffff;
+        --pig-sub: rgba(255,255,255,0.5);
+        --pig-sub-low: rgba(255,255,255,0.4);
+        --pig-border: rgba(255,255,255,0.05);
+        --pig-shell-bg: rgba(255,255,255,0.02);
+        --pig-shell-border: rgba(255,255,255,0.04);
+        --pig-shell-hover: rgba(255,255,255,0.08);
+        --pig-core-bg1: rgba(255,255,255,0.05);
+        --pig-core-bg2: rgba(255,255,255,0.01);
+        --pig-core-shadow1: rgba(255,255,255,0.12);
+        --pig-core-shadow2: rgba(255,255,255,0.04);
+        --pig-cta-bg: #ffffff;
+        --pig-cta-text: #141414;
+        --pig-cta-ring: rgba(0,0,0,0.08);
+        --pig-close-bg: rgba(255,255,255,0.06);
+        --pig-close-hover: rgba(255,255,255,0.12);
+        --pig-glow-op: 0.15;
+        --pig-glow-hover: 0.25;
+        --pig-noise: 0.04;
+    }
+    .pi-pro-gate[data-theme='light'] {
+        --pig-bg: #fbfbfd;
+        --pig-hero: #1d1d1f;
+        --pig-sub: #86868b;
+        --pig-sub-low: #6e6e73;
+        --pig-border: rgba(0,0,0,0.08);
+        --pig-shell-bg: #f5f5f7;
+        --pig-shell-border: rgba(0,0,0,0.05);
+        --pig-shell-hover: rgba(0,0,0,0.1);
+        --pig-core-bg1: #ffffff;
+        --pig-core-bg2: #fdfdfd;
+        --pig-core-shadow1: rgba(0,0,0,0.02);
+        --pig-core-shadow2: #ffffff;
+        --pig-cta-bg: #000000;
+        --pig-cta-text: #ffffff;
+        --pig-cta-ring: rgba(255,255,255,0.1);
+        --pig-close-bg: rgba(0,0,0,0.05);
+        --pig-close-hover: rgba(0,0,0,0.1);
+        --pig-glow-op: 0.05;
+        --pig-glow-hover: 0.1;
+        --pig-noise: 0;
+    }
+
+    @keyframes pig-fade-up {
+        from { opacity: 0; transform: translateY(8px) scale(0.99); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes pig-fade-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    .pig-hero { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both; }
+    .pig-sub  { animation: pig-fade-up 800ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both; }
+    .pig-grid { animation: pig-fade-up 900ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both; }
+    .pig-foot { animation: pig-fade-in 800ms cubic-bezier(0.16, 1, 0.3, 1) 500ms both; }
+
+    .pig-bento-shell {
+        padding: 6px;
+        background: var(--pig-shell-bg);
+        border-radius: 24px;
+        border: 1px solid var(--pig-shell-border);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms cubic-bezier(0.23, 1, 0.32, 1), border 300ms ease;
+        cursor: default;
+    }
+    .pig-bento-shell:hover {
+        transform: scale(1.02);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        border: 1px solid var(--pig-shell-hover);
+    }
+    .pig-bento-core {
+        background: linear-gradient(135deg, var(--pig-core-bg1) 0%, var(--pig-core-bg2) 100%);
+        box-shadow: inset 0 1px 1px var(--pig-core-shadow1), inset 0 0 0 1px var(--pig-core-shadow2);
+        border-radius: calc(24px - 6px);
+        overflow: hidden;
+        position: relative;
+        height: 100%;
+        width: 100%;
+    }
+    .pig-bento-core::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: var(--pig-noise);
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        z-index: 10;
+    }
+    .pig-glow {
+        position: absolute;
+        width: 120px; height: 120px;
+        border-radius: 50%;
+        filter: blur(40px);
+        opacity: var(--pig-glow-op);
+        pointer-events: none;
+        transition: opacity 300ms ease;
+        z-index: 0;
+    }
+    .pig-bento-shell:hover .pig-glow { opacity: var(--pig-glow-hover); }
+    .pig-bento-content { position: relative; z-index: 1; height: 100%; }
+
+    .pig-cta-group {
+        padding: 6px 6px 6px 20px;
+        height: 44px;
+        border-radius: 22px;
+        background: var(--pig-cta-bg);
+        color: var(--pig-cta-text);
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        border: none;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease;
+    }
+    .pig-cta-group:hover { transform: scale(0.97); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    .pig-cta-group:active { transform: scale(0.94); }
+    .pig-cta-icon-ring {
+        width: 32px; height: 32px;
+        border-radius: 16px;
+        background: var(--pig-cta-ring);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1);
+    }
+    .pig-cta-group:hover .pig-cta-icon-ring { transform: translateX(2px) scale(1.05); }
+
+    .pig-close-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 50%; border: none;
+        background: var(--pig-close-bg);
+        color: var(--pig-sub);
+        cursor: pointer; transition: background 150ms ease, transform 150ms ease, color 150ms ease;
+    }
+    .pig-close-btn:hover { background: var(--pig-close-hover); color: var(--pig-hero); }
+    .pig-close-btn:active { transform: scale(0.9); }
+
+    .pig-text-btn {
+        background: transparent; border: none; padding: 0; cursor: pointer;
+        font-size: 12px; color: var(--pig-sub-low); text-align: left;
+        display: flex; align-items: center; gap: 4px; transition: color 200ms ease;
+    }
+    .pig-text-btn:hover { color: var(--pig-sub); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .pig-hero, .pig-sub, .pig-grid, .pig-foot { animation-duration: 200ms; animation-timing-function: ease; }
+        .pig-bento-shell { transition-duration: 0ms; }
+        .pig-bento-shell:hover { transform: none; }
+    }
+`;
+
+function ProfileIntelligenceProGate({ onOpenNativelyAPI, onClose }: {
+    onOpenNativelyAPI?: () => void;
+    onClose?: () => void;
+}) {
+    const theme = useResolvedTheme();
+
+    return (
+        <div className="pi-pro-gate" data-theme={theme} style={{
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', height: '100%',
+            background: 'var(--pig-bg)', overflow: 'hidden',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif',
+            WebkitFontSmoothing: 'antialiased',
+        } as React.CSSProperties}>
+            <style>{PI_GATE_CSS}</style>
+
+            {/* ── Header ──────────────────────────────────────────────────────── */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                padding: '16px 20px', flexShrink: 0,
+            }}>
+                {onClose && (
+                    <button className="pig-close-btn" onClick={onClose}>
+                        <X size={14} strokeWidth={2.5} />
+                    </button>
+                )}
+            </div>
+
+            {/* ── Main content ────────────────────────────────────────────────── */}
+            <div style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                padding: '0 32px',
+            }}>
+                <div style={{ textAlign: 'center', marginBottom: 36, maxWidth: 400 }}>
+                    <h1 className="pig-hero" style={{
+                        margin: '0 0 10px', fontSize: 34, fontWeight: 700,
+                        letterSpacing: '-0.04em', lineHeight: 1.1,
+                        color: 'var(--pig-hero)',
+                    }}>
+                        Every answer.<br/>Grounded in you.
+                    </h1>
+                    <p className="pig-sub" style={{
+                        margin: 0, fontSize: 15, lineHeight: 1.4, fontWeight: 400,
+                        color: 'var(--pig-sub)', letterSpacing: '-0.01em',
+                    }}>
+                        Six intelligence layers turn your background into evidence-backed, personalized answers. Designed for professionals.
+                    </p>
+                </div>
+
+                <div className="pig-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gridTemplateRows: `${PI_GATE_ROW_PX.row1}px ${PI_GATE_ROW_PX.row2}px ${PI_GATE_ROW_PX.row3}px`,
+                    gap: PI_GATE_GAP_PX,
+                    width: '100%',
+                    maxWidth: 520,
+                    height: PI_GATE_GRID_HEIGHT_PX,
+                    marginBottom: 24,
+                }}>
+                    {PI_GATE_FEATURES.map(f => {
+                        const isHero = f.type === 'hero';
+                        const isSmall = f.type === 'small';
+                        return (
+                            <div key={f.key} className="pig-bento-shell" style={{ gridColumn: f.col, gridRow: f.row }}>
+                                <div className="pig-bento-core">
+                                    <div className="pig-glow" style={{
+                                        background: f.hex,
+                                        ...(isHero ? { top: -20, left: -20 } : isSmall ? { bottom: -20, right: -20 } : { top: -30, left: '42%' }),
+                                    }} />
+                                    {isHero ? (
+                                        // Hero card: normal top-down flow, no push-to-bottom — the same
+                                        // pixels that read as a dead gap in the middle read as intentional
+                                        // framing once they sit as trailing space below the text instead.
+                                        <div className="pig-bento-content" style={{
+                                            padding: 16,
+                                            display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                                            gap: 14,
+                                            height: '100%',
+                                        }}>
+                                            <div style={{
+                                                width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                                                background: `color-mix(in srgb, ${f.hex} 15%, var(--pig-core-bg1))`,
+                                                border: `1px solid color-mix(in srgb, ${f.hex} 30%, transparent)`,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: 'var(--pig-hero)',
+                                            }}>
+                                                <f.Icon size={20} strokeWidth={1.5} />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 600, color: 'var(--pig-hero)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                                                    {f.label}
+                                                </h3>
+                                                {f.desc && (
+                                                    <p style={{ margin: 0, fontSize: 12, color: 'var(--pig-sub)', lineHeight: 1.4 }}>
+                                                        {f.desc}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="pig-bento-content" style={{
+                                            padding: isSmall ? 0 : '13px 16px',
+                                            display: 'flex',
+                                            flexDirection: isSmall ? 'column' : 'row',
+                                            alignItems: 'center',
+                                            justifyContent: isSmall ? 'center' : 'flex-start',
+                                            gap: isSmall ? 6 : 12,
+                                            height: '100%',
+                                        }}>
+                                            <div style={{
+                                                width: isSmall ? 'auto' : 28,
+                                                height: isSmall ? 'auto' : 28,
+                                                borderRadius: isSmall ? 0 : 10, flexShrink: 0,
+                                                background: isSmall ? 'transparent' : `color-mix(in srgb, ${f.hex} 15%, var(--pig-core-bg1))`,
+                                                border: isSmall ? 'none' : `1px solid color-mix(in srgb, ${f.hex} 30%, transparent)`,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                color: isSmall ? f.hex : 'var(--pig-hero)',
+                                            }}>
+                                                <f.Icon size={isSmall ? 18 : 16} color={isSmall ? f.hex : 'currentColor'} strokeWidth={1.5} />
+                                            </div>
+                                            <div style={{
+                                                display: 'flex', flexDirection: 'column',
+                                                alignItems: isSmall ? 'center' : 'flex-start',
+                                                minWidth: isSmall ? undefined : 0,
+                                            }}>
+                                                {/* lineHeight is explicit (not inherited) so this card's fit is a
+                                                    self-contained calculation against its own content-sized row
+                                                    (PI_GATE_ROW_PX), not dependent on an ancestor's line-height.
+                                                    WebkitLineClamp is 1 (not 2): the row is sized for exactly one
+                                                    line of description, so a future longer string should ellipsize
+                                                    instead of crowding the card's padding. */}
+                                                <h3 style={{ margin: 0, fontSize: isSmall ? 11 : 14, lineHeight: 1.2, fontWeight: 600, color: 'var(--pig-hero)', letterSpacing: '-0.02em', marginBottom: isSmall ? 0 : 2 }}>
+                                                    {f.label}
+                                                </h3>
+                                                {f.desc && (
+                                                    <p style={{
+                                                        margin: 0, fontSize: 11, color: 'var(--pig-sub)', lineHeight: 1.25,
+                                                        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                                                    } as React.CSSProperties}>
+                                                        {f.desc}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* ── Footer ──────────────────────────────────────────────────────── */}
+            <div className="pig-foot" style={{
+                padding: '24px 32px',
+                borderTop: '1px solid var(--pig-border)',
+                display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+                flexShrink: 0, background: 'var(--pig-bg)',
+            }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                    {onOpenNativelyAPI && (
+                        <button className="pig-text-btn" onClick={onOpenNativelyAPI}>
+                            I have a license <ChevronRight size={12} />
+                        </button>
+                    )}
+                </div>
+
+                <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--pig-sub-low)', letterSpacing: '-0.01em', lineHeight: 1.4 }}>
+                    Currently your answers carry no personal context.<br/>
+                    <span style={{ color: '#fbbf24' }}>Unlock Pro to ground every answer in your identity, experience, and research.</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="pig-cta-group" onClick={() => openExternal(CHECKOUT_URLS.apiMax)}>
+                        Unlock Pro
+                        <div className="pig-cta-icon-ring">
+                            <ArrowUpRight size={14} strokeWidth={2.5} />
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function ProfileIntelligenceSettings({
     onClose,
+    onOpenNativelyAPI,
 }: {
     onClose: () => void;
+    onOpenNativelyAPI?: () => void;
 }) {
     const cachedPremium = readPremiumCache();
+    // Safe as a panel-level call ONLY because this panel renders exactly one
+    // switch. Add a second and it must move into a per-switch component.
+    const piToggleInit = useToggleInit();
     const [isPremium, setIsPremium] = useState(cachedPremium.isPremium);
     const [premiumPlan, setPremiumPlan] = useState<string>(cachedPremium.plan);
     const [isTrialActive] = useState(false);
     const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+    const [licenseLoaded, setLicenseLoaded] = useState(false);
     const hasProfileAccess = isPremium || isTrialActive;
     const theme = useResolvedTheme();
 
     const [activeSection, setActiveSection] = useState('identity');
+    // Which way the user just travelled through the nav. The incoming panel
+    // enters from that side, so moving down the list pulls content up from
+    // below and moving back up drops it in from above — the sidebar stays a
+    // place you move through rather than a row of buttons that swap a screen.
+    const [navDir, setNavDir] = useState<'down' | 'up'>('down');
+    const panelScrollRef = useRef<HTMLDivElement | null>(null);
+
+    // Single entry point for section changes so direction is never computed in
+    // one call site and forgotten in the next (Role Insight jumps here too).
+    const goToSection = (id: string) => {
+        if (id === activeSection) return;
+        const from = NAV_ITEMS.findIndex(n => n.id === activeSection);
+        const to = NAV_ITEMS.findIndex(n => n.id === id);
+        setNavDir(from >= 0 && to >= 0 && to < from ? 'up' : 'down');
+        setActiveSection(id);
+    };
 
     // ── Sliding indicator refs ─────────────────────────────────────────────────
     const navItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -597,8 +1243,22 @@ export function ProfileIntelligenceSettings({
     const [profileUploading, setProfileUploading] = useState(false);
     const [profileUploadStatus, setProfileUploadStatus] = useState<string | undefined>(undefined);
     const [profileError, setProfileError] = useState('');
+    // Nothing sets `cancelled` any more — the X button used to, but that only
+    // silenced this renderer while main finished the ingest anyway. Retained as
+    // a no-op guard so the upload paths keep their shape; don't go hunting for
+    // the writer.
     const profileAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
     const [profileData, setProfileData] = useState<any>(null);
+    // Set when this mount ADOPTED an ingest that was already running in main —
+    // i.e. the user uploaded, closed the panel, and reopened it. There is no
+    // local promise to resume from (the old one's continuation died with the
+    // previous mount), so the poll below is the only thing that can finalize it.
+    const profileDetachedRef = useRef(false);
+    // Bumped whenever a detached ref is set. The refs themselves cannot start the
+    // poll below — ref writes do not re-render — and relying on the accompanying
+    // setUploading(true) to do it only works while `uploading` happens to be
+    // false at that moment. This makes adoption an explicit render signal.
+    const [adoptTick, setAdoptTick] = useState(0);
 
     // ── Hero stat (static rounded value, no count-up) ────────────────────────
     const heroYearsRounded = (profileStatus.totalExperienceYears != null && Number.isFinite(profileStatus.totalExperienceYears))
@@ -610,6 +1270,23 @@ export function ProfileIntelligenceSettings({
     const [jdUploadStatus, setJdUploadStatus] = useState<string | undefined>(undefined);
     const [jdError, setJdError] = useState('');
     const jdAbortRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+    const jdDetachedRef = useRef(false);
+
+    // Which slot shows the orb. Gated on the DISPLAYED status, not `uploading`:
+    // useDisplayedStatus holds an in-progress state for MIN_INDEXING_MS so a
+    // sub-second ingest still reads as work rather than a flicker, and the floor
+    // outlives `uploading` by up to that long. Gating on `uploading` would drop
+    // the orb early and hand the tail back to the badge. Both flags move
+    // together on every path (local upload, adopted ingest, failure), so this is
+    // a strict superset of `uploading` — including the window the adopt-poll
+    // comment below guards, where clearing `uploading` first would flash the
+    // empty upload slot.
+    const displayedProfileStatus = useDisplayedStatus(profileUploadStatus);
+    const displayedJdStatus = useDisplayedStatus(jdUploadStatus);
+    const profileIndexing = displayedProfileStatus === 'uploading' || displayedProfileStatus === 'processing';
+    const jdIndexing = displayedJdStatus === 'uploading' || displayedJdStatus === 'processing';
+    const profileHandoff = useIndexHandoff(profileIndexing);
+    const jdHandoff = useIndexHandoff(jdIndexing);
 
     // Tavily
     const [tavilyApiKey, setTavilyApiKey] = useState('');
@@ -629,6 +1306,10 @@ export function ProfileIntelligenceSettings({
 
     // ── Measure & update indicator on section change ───────────────────────────
     useLayoutEffect(() => {
+        // Land every section at its own top. Inheriting the previous section's
+        // scroll offset makes the entrance animation start mid-content, which
+        // reads as a glitch rather than a transition.
+        if (panelScrollRef.current) panelScrollRef.current.scrollTop = 0;
         const el = navItemRefs.current.get(activeSection);
         if (!el) { setIndicatorState(prev => ({ ...prev, visible: false })); return; }
         setIndicatorState(prev => ({
@@ -648,14 +1329,33 @@ export function ProfileIntelligenceSettings({
                 if (plan) setPremiumPlan(plan);
                 else if (!live) setPremiumPlan('');
                 writePremiumCache(live, plan);
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
         } else {
             window.electronAPI?.licenseCheckPremium?.().then((live: boolean) => {
                 setIsPremium(!!live);
                 writePremiumCache(!!live, premiumPlan);
-            }).catch(() => {});
+            }).catch(() => {}).finally(() => setLicenseLoaded(true));
         }
-        window.electronAPI?.profileGetStatus?.().then(setProfileStatus).catch(() => {});
+        // Adopt any ingest still running in main. Closing the panel unmounts this
+        // component but does NOT cancel the upload — main runs it to completion —
+        // so on reopen we re-derive the indexing state instead of rendering the
+        // empty upload slot (which invited a duplicate upload of the same file).
+        window.electronAPI?.profileGetStatus?.().then((status: any) => {
+            setProfileStatus(status);
+            if (status?.resume_indexing_in_flight) {
+                profileDetachedRef.current = true;
+                setProfileUploading(true);
+                setProfileUploadStatus('processing');
+            }
+            if (status?.jd_indexing_in_flight) {
+                jdDetachedRef.current = true;
+                setJdUploading(true);
+                setJdUploadStatus('processing');
+            }
+            if (status?.resume_indexing_in_flight || status?.jd_indexing_in_flight) {
+                setAdoptTick(t => t + 1);
+            }
+        }).catch(() => {});
         window.electronAPI?.profileGetProfile?.().then((data: any) => {
             setProfileData(data);
             if (data?.coverLetter) setCoverLetter(data.coverLetter);
@@ -684,6 +1384,71 @@ export function ProfileIntelligenceSettings({
         }).catch(() => {});
     }, []);
 
+    // Finalize an ADOPTED ingest. Only runs for uploads this mount inherited —
+    // when doResumeUpload/doJdUpload own the request their awaited promise
+    // already reports the outcome, so polling would double-handle it.
+    useEffect(() => {
+        if (!profileDetachedRef.current && !jdDetachedRef.current) return;
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const finish = (
+            setUploading: (v: boolean) => void,
+            setStatus: (v: string | undefined) => void,
+            ok: boolean,
+        ) => {
+            setUploading(false);
+            setStatus(ok ? 'ready' : 'failed');
+            // NOT guarded by `stopped`: clearing `uploading` re-runs this effect
+            // and tears it down, so a stopped-guard here would leave the badge
+            // pinned on ready/failed forever. Matches the local-upload path,
+            // which fires the same unguarded reset.
+            setTimeout(() => setStatus(undefined), 3000);
+        };
+        const tick = async () => {
+            try {
+                const st: any = await window.electronAPI?.profileGetStatus?.();
+                if (stopped || !st) return;
+                const resumeSettled = profileDetachedRef.current && !st.resume_indexing_in_flight;
+                const jdSettled = jdDetachedRef.current && !st.jd_indexing_in_flight;
+
+                // Load the profile BEFORE clearing `uploading`. Both empty-slot
+                // guards are `!<has data> && !<uploading>`, and the JD one reads
+                // profileData.hasActiveJD — a different source than the status
+                // flags. Clearing `uploading` first leaves a render where neither
+                // holds and the panel flashes the empty upload slot: exactly the
+                // symptom this whole change removes.
+                const data = (resumeSettled || jdSettled)
+                    ? await window.electronAPI?.profileGetProfile?.()
+                    : null;
+                if (stopped) return;
+                if (data) setProfileData(data);
+                setProfileStatus(st);
+
+                if (resumeSettled) {
+                    profileDetachedRef.current = false;
+                    const ok = Boolean(st.hasProfile);
+                    // A background ingest that failed would otherwise land the
+                    // user on a bare empty slot with no explanation — the local
+                    // upload path sets profileError here, so this one must too.
+                    if (!ok) setProfileError('Indexing failed. Please upload the file again.');
+                    finish(setProfileUploading, setProfileUploadStatus, ok);
+                }
+                if (jdSettled) {
+                    jdDetachedRef.current = false;
+                    // Judge by the same field the JD empty-slot guard renders on.
+                    const ok = Boolean(data?.hasActiveJD ?? st.jd_structured_extraction_complete);
+                    if (!ok) setJdError('Indexing failed. Please upload the file again.');
+                    finish(setJdUploading, setJdUploadStatus, ok);
+                }
+            } catch { /* transient IPC failure — keep polling */ }
+            if (!stopped && (profileDetachedRef.current || jdDetachedRef.current)) {
+                timer = setTimeout(tick, 1500);
+            }
+        };
+        timer = setTimeout(tick, 1500);
+        return () => { stopped = true; if (timer) clearTimeout(timer); };
+    }, [profileUploading, jdUploading, adoptTick]);
+
     const handleRemoveTavilyKey = async () => {
         if (!confirm('Remove your Tavily API key?')) return;
         try {
@@ -698,6 +1463,7 @@ export function ProfileIntelligenceSettings({
     const doResumeUpload = async (filePath: string) => {
         const token = { cancelled: false };
         profileAbortRef.current = token;
+        profileDetachedRef.current = false; // this mount owns the request
         setProfileError(''); setProfileUploading(true); setProfileUploadStatus('uploading');
         try {
             setProfileUploadStatus('processing');
@@ -731,6 +1497,7 @@ export function ProfileIntelligenceSettings({
     const doJdUpload = async (filePath: string) => {
         const token = { cancelled: false };
         jdAbortRef.current = token;
+        jdDetachedRef.current = false; // this mount owns the request
         setJdError(''); setJdUploading(true); setJdUploadStatus('uploading');
         try {
             setJdUploadStatus('processing');
@@ -757,13 +1524,27 @@ export function ProfileIntelligenceSettings({
         }
     };
 
+    // The Pro gate lives HERE, not only on the buttons. FileUploadEmpty already
+    // checks `hasAccess` before calling onBrowse, so the empty-state path was
+    // covered — but the "Re-upload" button in the heuristic-extraction notice
+    // wires `onClick={browseResume}` directly, with no check. That button renders
+    // whenever `hasProfile && extractionMode === 'heuristic'`, which a user whose
+    // Pro/trial has LAPSED still satisfies (the stored profile outlives the
+    // entitlement), so it was a live bypass straight to the file picker.
+    //
+    // Gating at the shared entry point instead of at each call site makes the
+    // invariant hold for every present and future button. The check in
+    // FileUploadEmpty stays: it also decides the "Requires Pro." hint, so it is
+    // doing UI work, not just guarding — and a double gate here is idempotent.
     const browseResume = async () => {
+        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doResumeUpload(fileResult.filePath);
     };
 
     const browseJD = async () => {
+        if (!hasProfileAccess) { setIsPremiumModalOpen(true); return; }
         const fileResult = await window.electronAPI?.profileSelectFile?.();
         if (fileResult?.cancelled || !fileResult?.filePath) return;
         await doJdUpload(fileResult.filePath);
@@ -785,12 +1566,25 @@ export function ProfileIntelligenceSettings({
     // Section renderers
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Context Intelligence V3: source authority replaces the Persona Engine
+    // global override (§6) — same gate SettingsPopup applies to Profile Mode.
+    // Under V3 this toggle changed nothing on the wired surfaces; a control
+    // that implies control it doesn't have is worse than none.
+    const [ciV3Enabled, setCiV3Enabled] = React.useState(false);
+    React.useEffect(() => {
+        (window.electronAPI as any)?.answerPolicyGet?.({ templateType: 'general' })
+            .then((st: any) => setCiV3Enabled(Boolean(st?.v3Enabled)))
+            .catch(() => setCiV3Enabled(false));
+    }, []);
+
     const renderIdentity = () => {
         const isActive = profileStatus.profileMode && hasProfileAccess;
         const isDisabled = !profileStatus.hasProfile || !hasProfileAccess;
         return (
         <>
-            {/* Persona Engine toggle card */}
+            {/* Persona Engine toggle card — hidden under Context Intelligence
+                V3 (source authority replaces the global override, §6). */}
+            {!ciV3Enabled && (
             <div
                 className="pi-toggle-card"
                 data-on={isActive ? 'true' : 'false'}
@@ -804,35 +1598,60 @@ export function ProfileIntelligenceSettings({
                             : 'Dormant. Your profile is loaded but not shaping answers yet.'}
                     </p>
                 </div>
-                <div
-                    className="pi-toggle-track"
-                    data-checked={profileStatus.profileMode && hasProfileAccess ? 'true' : 'false'}
-                    data-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? 'true' : 'false'}
+                <button
+                    type="button"
+                    role="switch"
+                    data-on={String(!!(profileStatus.profileMode && hasProfileAccess))}
+                    aria-checked={!!(profileStatus.profileMode && hasProfileAccess)}
+                    aria-disabled={(!profileStatus.hasProfile || !hasProfileAccess) ? true : undefined}
+                    aria-label="Persona Engine"
                     onClick={async () => {
                         if (!profileStatus.hasProfile || !hasProfileAccess) return;
                         const newState = !profileStatus.profileMode;
                         try {
                             await window.electronAPI?.profileSetMode?.(newState);
+                            // Armed next to the state change, not before the
+                            // await: data-on only flips when this resolves, and
+                            // is-init must not land in an earlier render.
+                            piToggleInit.arm();
                             setProfileStatus(prev => ({ ...prev, profileMode: newState }));
                         } catch { /**/ }
                     }}
+                    className={`t-toggle t-toggle-lg w-11 h-6 shrink-0 rounded-full p-[3px] flex items-center ${piToggleInit.className}`}
                 >
-                    <div className="pi-toggle-thumb" />
-                </div>
+                    <span className="t-toggle-thumb" aria-hidden="true" />
+                </button>
             </div>
+            )}
 
-            {/* Resume */}
-            <h3 className="pi-section-label">Resume</h3>
-            {!profileStatus.hasProfile && !profileUploading ? (
+            {/* Resume — header + descriptor, same shape as Company Intel's so the
+                two sections read as one product. The descriptor says what the file
+                *powers*; the faint hint inside the dropzone stays the CTA. Three
+                type levels (hero / secondary / tertiary) keep them from colliding.
+                It deliberately does NOT enumerate "roles, projects, skills" — in the
+                filled state the snapshot card directly below renders exactly those,
+                and the line would read as that card's caption instead of the
+                section's descriptor. Kept to a single line: at 12px the content
+                column is wide enough that one sentence never wraps, so the header
+                block stays a tight two-line unit above the card. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Resume</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Grounds every answer in what you've actually done, instead of generic advice.
+                </p>
+            </div>
+            {profileIndexing || profileHandoff.settling ? (
+                <FileUploadIndexing label="Reading your resume…" settling={profileHandoff.settling} />
+            ) : !profileStatus.hasProfile ? (
                 <FileUploadEmpty
                     hint="Add your resume as real-time context."
-                    uploading={profileUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseResume}
                     onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    enterClass={profileHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+                <div className={profileHandoff.arriving ? 'pi-handoff-in' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '13px 1fr 100px 20px', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', borderRadius: 'var(--pi-r-md)' }}>
                         <FileText size={13} style={{ color: 'var(--pi-secondary)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -841,19 +1660,21 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={profileUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={profileUploading}
+                            title={profileUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete resume'}
+                            style={{ background: 'none', border: 'none', cursor: profileUploading ? 'not-allowed' : 'pointer', opacity: profileUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!profileUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (profileUploading) {
-                                    profileAbortRef.current.cancelled = true;
-                                    setProfileUploading(false);
-                                    setProfileUploadStatus(undefined);
-                                    setProfileStatus({ hasProfile: false, profileMode: false });
-                                    const cancelData = await window.electronAPI?.profileGetProfile?.();
-                                    setProfileData(cancelData ?? null);
-                                    return;
-                                }
+                                // Previously this set profileAbortRef.cancelled and rendered
+                                // { hasProfile: false } — but that flag only silences this
+                                // renderer. Main runs ingestDocument to completion and then
+                                // enables knowledge mode, so "cancel" produced a UI claiming
+                                // no profile while the resume was in fact saved and live.
+                                // The button is disabled mid-ingest rather than lying.
+                                if (profileUploading) return;
                                 if (!confirm('Delete your resume and its extracted data?')) return;
                                 try {
                                     await window.electronAPI?.profileDelete?.();
@@ -914,11 +1735,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!profileUploading && (
-                        <button className="pi-add-file-btn" onClick={browseResume}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {profileError && (
@@ -927,18 +1743,27 @@ export function ProfileIntelligenceSettings({
                 </div>
             )}
 
-            {/* Job Description */}
-            <h3 className="pi-section-label">Job Description</h3>
-            {!profileData?.hasActiveJD && !jdUploading ? (
+            {/* Job Description — same header + descriptor pattern. Company Intel
+                keys off this JD's extracted company name, so the descriptor names
+                that downstream payoff rather than restating the upload CTA. */}
+            <div style={{ marginBottom: 10 }}>
+                <h3 className="pi-section-label" style={{ margin: 0 }}>Job Description</h3>
+                <p style={{ fontSize: 12, color: 'var(--pi-secondary)', margin: '4px 0 0', lineHeight: 1.5 }}>
+                    Frames answers around what this specific role asks for, and powers Company Intel.
+                </p>
+            </div>
+            {jdIndexing || jdHandoff.settling ? (
+                <FileUploadIndexing label="Reading the job description…" settling={jdHandoff.settling} />
+            ) : !profileData?.hasActiveJD ? (
                 <FileUploadEmpty
                     hint="Add a job description as real-time context."
-                    uploading={jdUploading}
                     hasAccess={hasProfileAccess}
                     onBrowse={browseJD}
                     onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+                    enterClass={jdHandoff.arriving ? 'pi-handoff-in-self' : undefined}
                 />
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                <div className={jdHandoff.arriving ? 'pi-handoff-in' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '13px 1fr 100px 20px', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--pi-btn-bg)', border: '1px solid var(--pi-btn-border)', borderRadius: 'var(--pi-r-md)' }}>
                         <FileText size={13} style={{ color: 'var(--pi-secondary)', flexShrink: 0 }} />
                         <span style={{ fontSize: 12, color: 'var(--pi-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -949,16 +1774,17 @@ export function ProfileIntelligenceSettings({
                         <PIIndexBadge status={jdUploadStatus} />
                         <button
                             className="pi-press-soft"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.color = 'var(--pi-danger)')}
+                            disabled={jdUploading}
+                            title={jdUploading
+                                ? 'Indexing — this finishes in the background and cannot be stopped. Delete it once it completes.'
+                                : 'Delete job description'}
+                            style={{ background: 'none', border: 'none', cursor: jdUploading ? 'not-allowed' : 'pointer', opacity: jdUploading ? 0.4 : 1, color: 'var(--pi-tertiary)', padding: 4, display: 'flex', borderRadius: 4, transition: 'color 180ms ease' }}
+                            onMouseEnter={e => { if (!jdUploading) e.currentTarget.style.color = 'var(--pi-danger)'; }}
                             onMouseLeave={e => (e.currentTarget.style.color = 'var(--pi-tertiary)')}
                             onClick={async () => {
-                                if (jdUploading) {
-                                    jdAbortRef.current.cancelled = true;
-                                    setJdUploading(false);
-                                    setJdUploadStatus(undefined);
-                                    return;
-                                }
+                                // Same lie as the resume X — the abort flag only silenced
+                                // this renderer while main finished the JD ingest.
+                                if (jdUploading) return;
                                 try {
                                     await window.electronAPI?.profileDeleteJD?.();
                                     const data = await window.electronAPI?.profileGetProfile?.();
@@ -988,7 +1814,7 @@ export function ProfileIntelligenceSettings({
                                     )}
                                 </div>
                                 {jd.compensation_hint && (
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#34d399' }}>{jd.compensation_hint}</div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--pi-hero)' }}>{jd.compensation_hint}</div>
                                 )}
                                 {reqs.length > 0 && (
                                     <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1010,11 +1836,6 @@ export function ProfileIntelligenceSettings({
                             </div>
                         );
                     })()}
-                    {!jdUploading && (
-                        <button className="pi-add-file-btn" onClick={browseJD}>
-                            <Plus size={12} /> Replace file
-                        </button>
-                    )}
                 </div>
             )}
             {jdError && (
@@ -1022,6 +1843,31 @@ export function ProfileIntelligenceSettings({
                     {jdError}
                 </div>
             )}
+
+            {/* Scope note — applies to BOTH files above, so it closes the section
+                rather than sitting under either card. Deliberately borderless: a
+                third bordered box after two would read as another upload target.
+                11px/tertiary puts it below the cards' own hint text in the type
+                hierarchy, which is what a footnote should be.
+
+                The two named modes are the ONLY ones whose policy opts into
+                profile hydration — MODE_POLICIES.profileSources is non-empty for
+                'looking-for-work' and 'technical-interview' and [] for general,
+                sales, recruiting, team-meet, lecture and seminar (see
+                electron/context-intelligence/policies/mode-policy-registry.ts).
+                Custom modes fall back to 'general', so they get nothing either.
+                If that registry gains a profile-aware mode, this line must move
+                with it. */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginTop: 2 }}>
+                <Info size={12} style={{ color: 'var(--pi-tertiary)', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 11, color: 'var(--pi-tertiary)', margin: 0, lineHeight: 1.5 }}>
+                    Used only in{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Looking for work</span>{' '}
+                    and{' '}
+                    <span style={{ color: 'var(--pi-secondary)', fontWeight: 500 }}>Technical Interview</span>{' '}
+                    modes. Other modes never receive them.
+                </p>
+            </div>
 
         </>
         );
@@ -1123,8 +1969,8 @@ export function ProfileIntelligenceSettings({
                     the user gets a clear next step. */}
                 {!hasProfile && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <FileText size={18} style={{ color: 'var(--pi-accent)' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <FileText size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
@@ -1408,8 +2254,8 @@ export function ProfileIntelligenceSettings({
                     (Cover Letter parity), but the user gets a clear next step. */}
                 {!hasJD && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
@@ -1424,8 +2270,8 @@ export function ProfileIntelligenceSettings({
                     stays, the missing-name card explains the gap. */}
                 {hasJD && !companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Company name not detected</div>
@@ -1444,8 +2290,8 @@ export function ProfileIntelligenceSettings({
                 )}
                 {!companyDossier && !companyResearching && companyName && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Building2 size={18} style={{ color: '#D9A7E8' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Building2 size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to research</div>
@@ -1455,7 +2301,7 @@ export function ProfileIntelligenceSettings({
                         </div>
                         <button
                             className="pi-pill-btn pi-press"
-                            style={{ color: '#D9A7E8', borderColor: 'rgba(217,167,232,0.25)', background: 'rgba(217,167,232,0.08)', fontWeight: 600, padding: '8px 20px' }}
+                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
                             onClick={doCompanyResearch}
                         >
                             Research Now
@@ -1463,7 +2309,7 @@ export function ProfileIntelligenceSettings({
                     </div>
                 )}
                 {companyResearching && companyName && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Work Culture skeleton — overall rating + 4 sub-ratings grid.
                             Card shell is solid (no pulse); only the inner text placeholders breathe. */}
                         <div>
@@ -1585,27 +2431,22 @@ export function ProfileIntelligenceSettings({
 
                         {/* Source-of-truth disclaimer — green "Scraped / Live Web Data" when
                             Tavily ran, amber "LLM-Generated / Training Data Only" otherwise. */}
-                        <div style={{ border: '1px solid rgba(217,167,232,0.14)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ border: '1px solid var(--pi-badge-border)', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                             <div className="pi-skeleton" style={{ height: 11, width: 11, borderRadius: '50%', flexShrink: 0 }} />
                             <div className="pi-skeleton" style={{ height: 9, width: '70%', borderRadius: 3 }} />
                         </div>
                     </div>
                 )}
                 {companyDossier && !companyResearching && companyName && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="pi-cascade" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {companyDossier.culture_ratings && (
                             <div>
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Work Culture</div>
                                 <div style={{ border: '1px solid var(--pi-border)', borderRadius: 8, padding: '12px 14px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--pi-border)' }}>
-                                        <div>
-                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                                                <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
-                                                <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
-                                            </div>
-                                            {companyDossier.culture_ratings.review_count && (
-                                                <div style={{ fontSize: 10, color: 'var(--pi-tertiary)', marginTop: 4 }}>{companyDossier.culture_ratings.review_count}</div>
-                                            )}
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                            <span style={{ fontSize: 40, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, color: 'var(--pi-hero)', fontVariantNumeric: 'tabular-nums' }}>{companyDossier.culture_ratings.overall?.toFixed(1)}</span>
+                                            <span style={{ fontSize: 14, color: 'var(--pi-tertiary)' }}> / 5</span>
                                         </div>
                                         <StarRating value={companyDossier.culture_ratings.overall} size={14} />
                                     </div>
@@ -1728,7 +2569,7 @@ export function ProfileIntelligenceSettings({
                                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--pi-hero)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Core Values</div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                                     {companyDossier.core_values.map((v: string, i: number) => (
-                                        <span key={i} style={{ fontSize: 11, color: '#D9A7E8', padding: '3px 10px', borderRadius: 20, background: 'rgba(217,167,232,0.08)', border: '1px solid rgba(217,167,232,0.18)' }}>{v}</span>
+                                        <span key={i} style={{ fontSize: 11, color: 'var(--pi-badge-text)', padding: '3px 10px', borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)' }}>{v}</span>
                                     ))}
                                 </div>
                             </div>
@@ -1878,9 +2719,9 @@ export function ProfileIntelligenceSettings({
                     Each placeholder rect breathes; the card shell stays solid. */}
                 {showSkeleton && (
                     <div>
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.18)', background: 'rgba(96,165,250,0.04)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Header row */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(96,165,250,0.18)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <div className="pi-skeleton" style={{ height: 12, width: 50, borderRadius: 20 }} />
                                     <div className="pi-skeleton" style={{ height: 13, width: 110, borderRadius: 3 }} />
@@ -1905,8 +2746,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: no resume yet — always wins over any cached letter */}
                 {!hasResume && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No resume yet</div>
@@ -1920,8 +2761,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: resume present, no active JD yet */}
                 {hasResume && !hasJD && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>No job description yet</div>
@@ -1935,8 +2776,8 @@ export function ProfileIntelligenceSettings({
                 {/* Empty: resume + JD present, no letter generated yet */}
                 {showGenerateCTA && (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 24px', border: '1px dashed var(--pi-border)', borderRadius: 12, gap: 12 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Mail size={18} style={{ color: '#60a5fa' }} />
+                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--pi-accent-subtle)', border: '1px solid var(--pi-badge-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Mail size={18} style={{ color: 'var(--pi-accent-icon)' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)', marginBottom: 4 }}>Ready to write</div>
@@ -1946,7 +2787,7 @@ export function ProfileIntelligenceSettings({
                         </div>
                         <button
                             className="pi-pill-btn pi-press"
-                            style={{ color: '#60a5fa', borderColor: 'rgba(96,165,250,0.25)', background: 'rgba(96,165,250,0.08)', fontWeight: 600, padding: '8px 20px' }}
+                            style={{ color: 'var(--pi-cta-accent-text)', borderColor: 'var(--pi-cta-accent-border)', background: 'var(--pi-accent-subtle)', fontWeight: 600, padding: '8px 20px' }}
                             onClick={() => doGenerate(false)}
                         >
                             Generate Letter
@@ -1959,11 +2800,11 @@ export function ProfileIntelligenceSettings({
                 {showOutput && (
                     <div style={{ opacity: coverLetterGenerating ? 0.45 : 1, transition: 'opacity 0.3s', pointerEvents: coverLetterGenerating ? 'none' : 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {/* Single continuous letter card — prose, not discrete step-cards like negotiation */}
-                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(96,165,250,0.18)', background: 'rgba(96,165,250,0.04)' }}>
+                        <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid var(--pi-badge-border)', background: 'var(--pi-letter-bg)' }}>
                             {/* Card header */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(96,165,250,0.18)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid var(--pi-badge-border)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: '#60a5fa', background: 'rgba(96,165,250,0.12)', padding: '2px 7px', borderRadius: 20 }}>
+                                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', color: 'var(--pi-badge-text)', background: 'var(--pi-accent-subtle)', padding: '2px 7px', borderRadius: 20 }}>
                                         COVER
                                     </span>
                                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--pi-primary)' }}>Tailored Letter</span>
@@ -2015,9 +2856,22 @@ export function ProfileIntelligenceSettings({
         );
     };
 
+    // Role Insight owns all of its own state; the panel only needs to know
+    // whether the user has access and how to jump to the sections that supply
+    // its sources. That keeps this already-large component from growing another
+    // dozen useState hooks.
+    const renderRoleInsight = () => (
+        <RoleInsightPanel
+            hasAccess={hasProfileAccess}
+            onNeedUpgrade={() => setIsPremiumModalOpen(true)}
+            onGoToProfile={() => goToSection('identity')}
+        />
+    );
+
     const SECTION_RENDERERS: Record<string, () => React.ReactNode> = {
         identity: renderIdentity,
         insights: renderInsights,
+        roleinsight: renderRoleInsight,
         tavily: renderTavily,
         company: renderCompany,
         coverletter: renderCoverLetter,
@@ -2029,6 +2883,37 @@ export function ProfileIntelligenceSettings({
         isTrialActive && !isPremium  ? 'pi-cta--trial'   : '',
         !isPremium && !isTrialActive  ? 'pi-cta--shimmer' : '',
     ].filter(Boolean).join(' ');
+
+    // ── Shared premium-modal lifecycle handlers (used by both the gate and the
+    //    unlocked panel's own CTA, so activating/deactivating behaves the same
+    //    regardless of which surface triggered the modal) ──────────────────────
+    const handlePremiumActivated = async () => {
+        setIsPremium(true);
+        try {
+            const details = await window.electronAPI?.licenseGetDetails?.();
+            const plan = details?.plan ?? '';
+            if (plan) setPremiumPlan(plan);
+            writePremiumCache(true, plan);
+        } catch { writePremiumCache(true, premiumPlan); }
+        const status = await window.electronAPI?.profileGetStatus?.();
+        if (status) setProfileStatus(status);
+    };
+    const handlePremiumDeactivated = () => {
+        setIsPremium(false); setPremiumPlan('');
+        writePremiumCache(false, '');
+        setProfileStatus(prev => ({ ...prev, profileMode: false }));
+    };
+
+    // ── Non-pro users see the gate (wait for license verification) ────────────
+    if (!hasProfileAccess) {
+        if (!licenseLoaded) return null;
+        return (
+            <ProfileIntelligenceProGate
+                onOpenNativelyAPI={onOpenNativelyAPI}
+                onClose={onClose}
+            />
+        );
+    }
 
     return (
         <div
@@ -2067,7 +2952,7 @@ export function ProfileIntelligenceSettings({
                         className="pi-sel-indicator"
                         data-instant={!indicatorState.ready}
                         style={{
-                            top: indicatorState.top,
+                            transform: `translateY(${indicatorState.top}px)`,
                             height: indicatorState.height,
                             opacity: indicatorState.visible ? 1 : 0,
                         }}
@@ -2081,7 +2966,7 @@ export function ProfileIntelligenceSettings({
                                 else navItemRefs.current.delete(id);
                             }}
                             className={`pi-nav-item${activeSection === id ? ' active' : ''}`}
-                            onClick={() => setActiveSection(id)}
+                            onClick={() => goToSection(id)}
                         >
                             <Icon size={15} />
                             <span>{label}</span>
@@ -2113,9 +2998,10 @@ export function ProfileIntelligenceSettings({
 
             {/* ── Right panel ── */}
             <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                {/* Scrollable content — key triggers blur-fade animation on each switch */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', boxSizing: 'border-box' }}>
-                    <div key={activeSection} className="pi-panel-fade">
+                {/* Scrollable content — key remounts the block on each switch, which
+                    is what re-fires the directional blur-in below it. */}
+                <div ref={panelScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '24px 32px', boxSizing: 'border-box' }}>
+                    <div key={activeSection} className="pi-panel-fade" data-dir={navDir}>
                         {(SECTION_RENDERERS[activeSection] ?? renderIdentity)()}
                     </div>
                 </div>
@@ -2125,22 +3011,8 @@ export function ProfileIntelligenceSettings({
                 isOpen={isPremiumModalOpen}
                 onClose={() => setIsPremiumModalOpen(false)}
                 isPremium={isPremium}
-                onActivated={async () => {
-                    setIsPremium(true);
-                    try {
-                        const details = await window.electronAPI?.licenseGetDetails?.();
-                        const plan = details?.plan ?? '';
-                        if (plan) setPremiumPlan(plan);
-                        writePremiumCache(true, plan);
-                    } catch { writePremiumCache(true, premiumPlan); }
-                    const status = await window.electronAPI?.profileGetStatus?.();
-                    if (status) setProfileStatus(status);
-                }}
-                onDeactivated={() => {
-                    setIsPremium(false); setPremiumPlan('');
-                    writePremiumCache(false, '');
-                    setProfileStatus(prev => ({ ...prev, profileMode: false }));
-                }}
+                onActivated={handlePremiumActivated}
+                onDeactivated={handlePremiumDeactivated}
             />
         </div>
     );
