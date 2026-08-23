@@ -17,9 +17,24 @@ const {
   process.cwd(), 'dist-electron/electron/context-intelligence/policies/mode-policy-registry.js')).href);
 
 describe('registry completeness', () => {
-  test('contains exactly the EIGHT built-in modes — including seminar', () => {
-    assert.equal(MODE_IDS.length, 8);
-    assert.ok(MODE_IDS.includes('seminar'), 'seminar is the 8th built-in and was missing from six legacy lists');
+  test('contains exactly the built-in modes MODE_TEMPLATES ships', () => {
+    // Listed rather than counted: `assert.equal(MODE_IDS.length, 8)` failed with
+    // "expected 8, got 9" when call-center landed, which names neither the mode
+    // nor the file to edit. Keep this in sync with MODE_TEMPLATES in
+    // services/ModesManager.ts — imported there would drag DB init and prompt
+    // warnings into a pure registry test, so it is mirrored, not imported.
+    assert.deepEqual([...MODE_IDS].sort(), [
+      'call-center',        // 9th built-in, 2026-08-23
+      'general',
+      'lecture',
+      'looking-for-work',
+      'recruiting',
+      'sales',
+      'seminar',
+      'team-meet',
+      'technical-interview',
+    ].sort());
+    assert.ok(MODE_IDS.includes('seminar'), 'seminar is a built-in and was missing from six legacy lists');
     assert.ok(MODE_IDS.includes('general'), 'general is the auto-seeded mode omitted from every hand-written list of six');
   });
 

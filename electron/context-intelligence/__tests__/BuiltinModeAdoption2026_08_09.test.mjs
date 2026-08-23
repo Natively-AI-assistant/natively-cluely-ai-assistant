@@ -71,7 +71,9 @@ describe('planBuiltinAdoption on the reported real-world table', () => {
   });
 
   test('seeds exactly the types nothing was adopted for', () => {
-    assert.deepEqual(plan.seed.sort(), ['lecture', 'recruiting', 'sales', 'seminar']);
+    // 'call-center' joined the built-ins on 2026-08-23. REAL_ROWS predates it,
+    // so nothing adopts it and it seeds like the rest.
+    assert.deepEqual(plan.seed.sort(), ['call-center', 'lecture', 'recruiting', 'sales', 'seminar']);
   });
 
   test('adopted + seeded covers every built-in template exactly once', () => {
@@ -103,7 +105,7 @@ describe('general properties', () => {
     const rows = REAL_ROWS.map((r) => ({ ...r, isBuiltin: ['m1', 'm2', 'm3', 'm5'].includes(r.id) }));
     const plan = planBuiltinAdoption(rows);
     assert.deepEqual(plan.adopt, [], 'already-built-in rows are not re-adopted');
-    assert.deepEqual(plan.seed.sort(), ['lecture', 'recruiting', 'sales', 'seminar']);
+    assert.deepEqual(plan.seed.sort(), ['call-center', 'lecture', 'recruiting', 'sales', 'seminar']);
   });
 
   test('whitespace and case in a name do not silently qualify', () => {
