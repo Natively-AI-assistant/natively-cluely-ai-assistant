@@ -178,4 +178,6 @@ export interface AutoAnswerTelemetryEvent {
     skipReason?: AutoAnswerSkipReason;
     state?: AutoAnswerState;
     action?: AutoAnswerPolicyAction;
+    /** False when NO speech_edge has ever arrived this meeting — dual-channel gating is inert (stale native module?). */
+    channelEdgesSeen?: boolean;
 }

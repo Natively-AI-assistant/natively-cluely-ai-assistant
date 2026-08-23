@@ -206,6 +206,8 @@ export class IntelligenceManager extends EventEmitter {
 
     // ── Auto Answer V3 narrow APIs (V2 §43) ──
     isManualAnswerActive(): boolean { return this.engine.isManualAnswerActive(); }
+    /** A What-to-Answer stream is live (any kind: manual, automatic, speculative). */
+    isAnswerStreaming(): boolean { return this.engine.isAnswerStreaming(); }
     noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {
         this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
     }

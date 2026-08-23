@@ -316,6 +316,7 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                 let currentFinalText = '';
                 let nonFinalText = '';
+                let endpointSeen = false;
 
                 for (const token of tokens) {
                     if (!token.text) continue;
@@ -327,8 +328,13 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                     if (token.text === '<end>') {
                         console.log('[SonioxStreaming] Received <end> endpoint detection marker');
-                        // Auto Answer V3 endpoint normalization (additive).
-                        try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break parsing */ }
+                        // Auto Answer V3 endpoint normalization (additive). NOT
+                        // emitted here: live-verified (2026-08-24) that <end>
+                        // arrives as the LAST token of the SAME message as the
+                        // utterance's final tokens, and an endpoint emitted
+                        // before those finals is wiped by the consumer's
+                        // new-evidence reset. Deferred below the transcript emits.
+                        endpointSeen = true;
                         continue;
                     }
 
@@ -355,6 +361,11 @@ export class SonioxStreamingSTT extends EventEmitter {
                         isFinal: false,
                         confidence: 1.0,
                     });
+                }
+
+                // 3. Endpoint AFTER the finals it closes (see the note above).
+                if (endpointSeen) {
+                    try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break parsing */ }
                 }
 
                 // Session finished

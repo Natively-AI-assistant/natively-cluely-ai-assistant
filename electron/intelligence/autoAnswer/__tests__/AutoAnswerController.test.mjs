@@ -516,3 +516,71 @@ test('generation guard (async path): a question superseded while the embedder is
   assert.ok(!h.texts().includes('Why did you choose Kafka?'), 'Q1 must not dispatch after Q2 became current');
   assert.deepEqual(h.texts(), ['How would you scale this to ten million users?'], 'Q2 completes normally');
 });
+
+// ── Code-review findings (2026-08-24) ─────────────────────────────────────
+
+test('review#1: a dispatch the engine answers with SILENCE (planner cooldown) must not latch Auto Answer busy forever', async () => {
+  // The engine path for a silent planner decision never changes mode, so no
+  // mode_changed→idle ever fires. The controller must learn the outcome from
+  // the dispatch promise itself.
+  const h = makeHarness();
+  // Model the engine: dispatch resolves quickly having produced NO stream.
+  h.host.dispatch = (q, o) => { h.state.dispatched.push({ question: q, reuseSpeculative: o.reuseSpeculative }); return Promise.resolve(null); };
+  h.host.answerStreamActive = () => false;
+  h.interviewerFinal(Q);
+  await h.advance(QUIET);
+  assert.equal(h.texts().length, 1, 'Q1 dispatched');
+  // NOTE: no onEngineIdle — the planner stayed silent and no stream ever ran.
+  await h.advance(5000);
+  h.interviewerFinal('How would you scale this to ten million users?');
+  await h.advance(QUIET);
+  assert.equal(h.texts().length, 2, 'Q2 must dispatch: nothing is actually streaming');
+  assert.equal(h.texts()[1], 'How would you scale this to ten million users?');
+});
+
+test('review#1: a dispatch whose promise settles while a stream RUNS (speculative accept) stays in flight until idle', async () => {
+  const h = makeHarness();
+  let streaming = false;
+  h.host.dispatch = (q, o) => { h.state.dispatched.push({ question: q, reuseSpeculative: o.reuseSpeculative }); streaming = true; return Promise.resolve(null); };
+  h.host.answerStreamActive = () => streaming;
+  h.interviewerFinal(Q);
+  await h.advance(QUIET);
+  assert.equal(h.texts().length, 1);
+  await h.advance(3000);
+  h.interviewerFinal('How would you scale this to ten million users?');
+  await h.advance(QUIET);
+  assert.equal(h.texts().length, 1, 'single-flight holds while the stream runs');
+  assert.equal(h.controller.queueDepth(), 1);
+  streaming = false;
+  h.controller.onEngineIdle();
+  await h.flush();
+  assert.equal(h.texts().length, 2, 'the queued question fires when the stream really ends');
+});
+
+test('review#8: a meeting with transcripts but ZERO speech edges warns ONCE that the dual-channel gate is inert', async () => {
+  const h = makeHarness();
+  const logs = [];
+  h.host.log = (l) => logs.push(l);
+  h.interviewerFinal(Q);                       // no edge() calls at all
+  await h.advance(QUIET);
+  assert.equal(h.texts().length, 1, 'still dispatches (deterministic path)');
+  assert.equal(logs.filter(l => l.includes('no speech_edge')).length, 1, 'warned');
+  const cand = h.state.events.find(e => e.name === 'auto_answer_candidate');
+  assert.equal(cand.channelEdgesSeen, false, 'telemetry marks the inert gate');
+  h.controller.onEngineIdle();
+  await h.advance(5000);
+  h.interviewerFinal('How would you scale this to ten million users?');
+  await h.advance(QUIET);
+  assert.equal(logs.filter(l => l.includes('no speech_edge')).length, 1, 'once per meeting, not per candidate');
+
+  const g = makeHarness();
+  const glogs = [];
+  g.host.log = (l) => glogs.push(l);
+  g.edge('interviewer', true);
+  await g.advance(500);
+  g.edge('interviewer', false);
+  g.interviewerFinal(Q);
+  await g.advance(QUIET);
+  assert.equal(glogs.filter(l => l.includes('no speech_edge')).length, 0, 'a healthy bridge never warns');
+  assert.equal(g.state.events.find(e => e.name === 'auto_answer_candidate').channelEdgesSeen, true);
+});

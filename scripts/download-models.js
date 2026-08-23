@@ -20,9 +20,12 @@ const REQUIRED_MODEL_FILES = [
     'Xenova/bge-reranker-base/tokenizer.json',
     'Xenova/bge-reranker-base/tokenizer_config.json',
     'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
-    // Auto Answer V3 TurnPredictor (Smart Turn v3.1, 8 MB int8). Shipped like the
-    // Xenova assets; the RUNTIME tolerates its absence (predict() → null), the
-    // packaged build does not (same contract as every other model here).
+];
+
+// OPTIONAL assets (review#9): verified with a WARNING, never a failure — the
+// runtime degrades without them. The packaged-release gate
+// (verify-packaged-local-assets.mjs) is the one place they stay REQUIRED.
+const OPTIONAL_MODEL_FILES = [
     'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx',
 ];
 
@@ -88,6 +91,12 @@ function verifyModels() {
         for (const m of missing) console.error('  ✗', m);
         process.exit(1);
     }
+    for (const rel of OPTIONAL_MODEL_FILES) {
+        const full = path.join(modelsDir, rel);
+        let ok = false;
+        try { ok = fs.existsSync(full) && fs.statSync(full).size > 0; } catch { ok = false; }
+        if (!ok) console.warn(`[download-models] optional asset missing (feature degrades gracefully): ${rel}`);
+    }
     console.log('[download-models] VERIFY OK — all required core-fallback model files present.');
 }
 
@@ -143,7 +152,15 @@ async function downloadModels() {
         // 4. Smart Turn v3.1 (Auto Answer V3 TurnPredictor). Raw ONNX, not a
         //    transformers.js pipeline: fetched by URL and sha256-verified against
         //    resources/models/pipecat-ai/smart-turn-v3/manifest.json.
-        await downloadSmartTurn(modelsDir);
+        //    OPTIONAL (review#9): the runtime degrades to the deterministic
+        //    endpoint path without it, so a blocked download must not fail the
+        //    install. Release builds are still gated by
+        //    verify-packaged-local-assets.mjs, which requires the file.
+        try {
+            await downloadSmartTurn(modelsDir);
+        } catch (e) {
+            console.warn('[download-models] smart-turn-v3.1 download failed (optional; Auto Answer runs deterministic-only):', e?.message ?? e);
+        }
 
         console.log('[download-models] All models downloaded successfully!');
     } catch (e) {

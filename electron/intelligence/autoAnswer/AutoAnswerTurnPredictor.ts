@@ -53,6 +53,8 @@ export interface TurnPredictor {
 export interface AsyncTurnPredictor extends TurnPredictor {
     /** Feed interviewer-channel PCM (int16 LE bytes) at `sampleRate` Hz. */
     pushPcm(chunk: Buffer, sampleRate: number): void;
+    /** The interviewer resumed speaking: whatever the model said about the PREVIOUS silence is void (review#7). */
+    onInterviewerSpeechStart(atMs: number): void;
     /** The interviewer channel went silent: run one inference on the buffered audio. */
     onInterviewerSpeechStop(atMs: number): void;
     subscribe(listener: (prediction: TurnPrediction, atMs: number) => void): () => void;
@@ -185,6 +187,10 @@ export class SmartTurnPredictor implements AsyncTurnPredictor {
     private sessionPromise: Promise<SmartTurnSession | null> | null = null;
     private unavailableLogged = false;
     private inflight = false;
+    /** The running infer() promise, awaited by dispose() so release() never races run() (review#4). */
+    private inflightPromise: Promise<void> | null = null;
+    /** Monotonic epoch: bumped by dispose(); a session load or inference from an older epoch is void. */
+    private epoch = 0;
     private latest: { prediction: TurnPrediction; atMs: number } | null = null;
     private listeners = new Set<(p: TurnPrediction, atMs: number) => void>();
 
@@ -208,6 +214,14 @@ export class SmartTurnPredictor implements AsyncTurnPredictor {
         return this.latest.prediction;
     }
 
+    onInterviewerSpeechStart(_atMs: number): void {
+        // A resume invalidates the cached judgment: it was about a silence that
+        // is over. Without this, a confident prediction from the previous stop
+        // (inside PREDICTION_TTL_MS) shortens the wait for a NEW mid-question
+        // pause, and a same-tier deadline can never move later again.
+        this.latest = null;
+    }
+
     onInterviewerSpeechStop(atMs: number): void {
         void this.infer(atMs);
     }
@@ -215,19 +229,37 @@ export class SmartTurnPredictor implements AsyncTurnPredictor {
     /** Buffered audio for tests/diagnostics. */
     bufferedSamples(): number { return this.ring.length(); }
 
-    /** Release the inference session (meeting stop / app quit). Safe to call repeatedly; lazily re-created on next use. */
+    /**
+     * Release the inference session (meeting stop / toggle off / app quit).
+     * Awaits any in-flight inference first — releasing an ORT session under a
+     * running run() is the recorded SIGABRT class — and voids a session load
+     * still in progress so it is released the moment it resolves, never kept
+     * past before-quit. Safe to call repeatedly; lazily re-created on next use.
+     */
     async dispose(): Promise<void> {
+        this.epoch++;
         const session = this.session;
+        const pendingLoad = this.sessionPromise;
         this.session = null;
         this.sessionPromise = null;
         this.latest = null;
         this.ring.clear();
+        if (this.inflightPromise) { try { await this.inflightPromise; } catch { /* never throws, belt anyway */ } }
         if (session?.release) { try { await session.release(); } catch { /* best effort */ } }
+        // A load that resolves AFTER dispose: ensureSession's epoch check keeps
+        // it out of this.session; here we make sure it is also released.
+        if (pendingLoad && pendingLoad !== null) {
+            try {
+                const late = await pendingLoad;
+                if (late && late !== session && late.release) { try { await late.release(); } catch { /* best effort */ } }
+            } catch { /* best effort */ }
+        }
     }
 
     private async ensureSession(): Promise<SmartTurnSession | null> {
         if (this.session) return this.session;
         if (this.sessionPromise) return this.sessionPromise;
+        const epochAtStart = this.epoch;
         this.sessionPromise = (async () => {
             try {
                 const modelPath = this.deps.resolveAssetPath();
@@ -235,9 +267,15 @@ export class SmartTurnPredictor implements AsyncTurnPredictor {
                     this.logOnce(`[SmartTurn] asset not found (${SMART_TURN_ASSET_RELATIVE_PATH}); Auto Answer continues on the deterministic path`);
                     return null;
                 }
-                this.session = await this.deps.createSession(modelPath);
+                const session = await this.deps.createSession(modelPath);
+                if (this.epoch !== epochAtStart) {
+                    // dispose() ran while we were loading: this session must not
+                    // go live. dispose() releases it via the captured promise.
+                    return session;
+                }
+                this.session = session;
                 this.deps.log?.('[SmartTurn] session ready');
-                return this.session;
+                return session;
             } catch (err) {
                 this.logOnce(`[SmartTurn] session failed to load: ${(err as Error)?.message ?? err}; deterministic path unaffected`);
                 return null;
@@ -249,12 +287,25 @@ export class SmartTurnPredictor implements AsyncTurnPredictor {
     private async infer(atMs: number): Promise<void> {
         if (this.inflight) return; // one inference per speech stop; a stop during inference is the same silence
         this.inflight = true;
+        const run = this.inferInner(atMs);
+        this.inflightPromise = run;
+        try { await run; } finally {
+            this.inflight = false;
+            if (this.inflightPromise === run) this.inflightPromise = null;
+        }
+    }
+
+    private async inferInner(atMs: number): Promise<void> {
+        const epochAtStart = this.epoch;
         try {
             const session = await this.ensureSession();
             if (!session) return;
             if (this.ring.length() < SMART_TURN_SAMPLE_RATE / 4) return; // < 250 ms of audio: nothing to judge
             const waveform = normalizeWaveform(this.ring.snapshot());
             const features = await this.deps.extractFeatures(waveform);
+            // dispose() may have run during the feature await; run() on a
+            // released ORT session aborts the process (review#4).
+            if (this.epoch !== epochAtStart || this.session !== session) return;
             const p = await session.run(features);
             if (!Number.isFinite(p)) return;
             const pEndpoint = Math.max(0, Math.min(1, p));
@@ -270,8 +321,6 @@ export class SmartTurnPredictor implements AsyncTurnPredictor {
             for (const l of this.listeners) { try { l(prediction, atMs); } catch { /* listener faults never propagate */ } }
         } catch (err) {
             this.deps.log?.(`[SmartTurn] inference failed: ${(err as Error)?.message ?? err}`);
-        } finally {
-            this.inflight = false;
         }
     }
 

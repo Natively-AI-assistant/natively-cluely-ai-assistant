@@ -292,3 +292,102 @@ test('controller: an async predictor feeds the fusion tier-2 through subscribe()
   assert.equal(h.texts().length, 1);
   assert.equal(h.state.dispatched[0].question.endpointSource, 'semantic');
 });
+
+test('review#4: dispose() during an in-flight inference never lets run() touch a released session', async () => {
+  const events = [];
+  let released = false;
+  let releaseFeatures;
+  const predictor = new SmartTurnPredictor({
+    now: () => 1_000_000,
+    resolveAssetPath: () => '/models/smart-turn.onnx',
+    createSession: async () => ({
+      run: async () => { events.push(released ? 'run-after-release' : 'run'); return 0.9; },
+      release: async () => { released = true; events.push('release'); },
+    }),
+    extractFeatures: () => new Promise((resolve) => { releaseFeatures = () => resolve({ data: new Float32Array(64000), dims: [1, 80, 800] }); }),
+  });
+  predictor.pushPcm(Buffer.alloc(16000 * 2), 16000);
+  predictor.onInterviewerSpeechStop(1_000_000);
+  for (let i = 0; i < 5; i++) await flush();            // parked inside extractFeatures
+  const disposed = predictor.dispose();                 // meeting stop / toggle off / before-quit
+  await flush();
+  releaseFeatures();                                    // the feature frontend resolves late
+  await disposed;
+  for (let i = 0; i < 5; i++) await flush();
+  assert.ok(!events.includes('run-after-release'), `ORT run() on a released session SIGABRTs the main process: ${events.join(',')}`);
+  assert.ok(events.includes('release'), 'the session was actually released');
+});
+
+test('review#4: dispose() during a PENDING session load leaves no live session behind', async () => {
+  let resolveSession;
+  let releases = 0;
+  const predictor = new SmartTurnPredictor({
+    now: () => 1_000_000,
+    resolveAssetPath: () => '/models/smart-turn.onnx',
+    createSession: () => new Promise((resolve) => {
+      resolveSession = () => resolve({ run: async () => 0.9, release: async () => { releases++; } });
+    }),
+    extractFeatures: async () => ({ data: new Float32Array(64000), dims: [1, 80, 800] }),
+  });
+  predictor.pushPcm(Buffer.alloc(16000 * 2), 16000);
+  predictor.onInterviewerSpeechStop(1_000_000);
+  for (let i = 0; i < 5; i++) await flush();            // parked inside createSession
+  const disposed = predictor.dispose();
+  resolveSession();                                     // the load completes AFTER dispose
+  await disposed;
+  for (let i = 0; i < 8; i++) await flush();
+  assert.equal(predictor.isAvailable(), false, 'no session may survive dispose');
+  assert.equal(releases, 1, 'the late-arriving session must be released, not leaked past before-quit');
+});
+
+test('review#5/6: an endpoint AFTER its finals shortens the wait; one BEFORE them is (by design) wiped by the new evidence — adapters must order endpoint last', () => {
+  // The correct adapter order (Deepgram text-carrying speech_final; Soniox
+  // <end> deferred below the finals; Deepgram empty-transcript speech_final):
+  const good = makeTurns();
+  good.final('Why did you choose Kafka?');
+  good.tm.onProviderEndpoint({ type: 'utterance_end', timestamp: good.clock.now() }); // Soniox <end>, same message, AFTER the final
+  good.clock.advance(CONFIRM_MID_MS);
+  assert.equal(good.commits.length, 1, 'the provider endpoint committed at its budget');
+  assert.equal(good.commits[0].endpointSource, 'utterance_end');
+
+  // The broken order (what Soniox produced before the fix): endpoint first,
+  // then the finals of the SAME utterance → the deadline falls back to the window.
+  const bad = makeTurns();
+  bad.final('Why did you');                       // an earlier fragment so the endpoint has an accumulation
+  bad.tm.onProviderEndpoint({ type: 'utterance_end', timestamp: bad.clock.now() });
+  bad.final('choose Kafka?');                     // the finals the endpoint was actually about
+  bad.clock.advance(CONFIRM_MID_MS);
+  assert.equal(bad.commits.length, 0, 'endpoint-before-final is treated as a resume: window tier');
+  bad.clock.advance(QUIET - CONFIRM_MID_MS);
+  assert.equal(bad.commits.length, 1);
+  assert.equal(bad.commits[0].endpointSource, 'quiet_window');
+});
+
+test('review#7: a prediction cached from the PREVIOUS silence must not shorten the wait for a NEW one', async () => {
+  // Smart Turn said 0.97 about silence #1. The interviewer resumed ("…and
+  // also—"), paused again mid-question; the fresh inference is still running.
+  // predict() must NOT hand the old 0.97 to the new silence: a stale confident
+  // prediction cannot be undone (same-tier deadlines only move earlier).
+  let p = 0.97;
+  const clock = { t: 1_000_000 };
+  const predictor = new SmartTurnPredictor({
+    now: () => clock.t,
+    resolveAssetPath: () => '/models/smart-turn.onnx',
+    createSession: async () => ({ run: async () => p }),
+    extractFeatures: async () => ({ data: new Float32Array(64000), dims: [1, 80, 800] }),
+  });
+  predictor.pushPcm(Buffer.alloc(16000 * 2), 16000);
+  predictor.onInterviewerSpeechStop(clock.t);
+  for (let i = 0; i < 5; i++) await flush();
+  assert.equal(predictor.predict({ partialTranscript: '', recentTranscript: [], speechDurationMs: 0, silenceMs: 0 })?.pEndpoint, 0.97, 'fresh for silence #1');
+
+  clock.t += 500;
+  predictor.onInterviewerSpeechStart?.(clock.t);          // the interviewer RESUMED — the old judgment is void
+  clock.t += 700;                                          // still inside PREDICTION_TTL_MS of the old result
+  p = 0.2;                                                 // what the model would say about the new, mid-question pause
+  assert.equal(
+    predictor.predict({ partialTranscript: '', recentTranscript: [], speechDurationMs: 700, silenceMs: 0 }),
+    null,
+    'the previous silence\'s prediction must not leak into the new one',
+  );
+});

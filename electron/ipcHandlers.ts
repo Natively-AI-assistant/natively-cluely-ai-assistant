@@ -12429,6 +12429,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           appState.applyAutoAnswerThresholds?.(activeMode.templateType);
         } else if (appStateIntMgr && !id) {
           appStateIntMgr.clearDynamicActionContext();
+          // Mode cleared: back to the registry's no-mode Auto Answer bar
+          // instead of keeping the previous mode's thresholds (review#10).
+          appState.applyAutoAnswerThresholds?.(null);
         }
       } catch {
         /* non-fatal */

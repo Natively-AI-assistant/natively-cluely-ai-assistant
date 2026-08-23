@@ -1220,6 +1220,7 @@ import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
 import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
+import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
@@ -3194,11 +3195,15 @@ export class AppState {
     speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
     noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
+    // The promise settles when the engine has fully decided the trigger; the
+    // controller uses it to clear its in-flight latch when the planner stayed
+    // silent and no stream (and therefore no idle event) ever happened.
     dispatch: (question, { reuseSpeculative }) => {
-      void this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
+      return this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
     },
+    answerStreamActive: () => this.intelligenceManager.isAnswerStreaming(),
     // V3 Amendment 4: the ONE offer card, rendered through the existing Dynamic
     // Action surface (DynamicActionBar/Card). Tab or click commits; the
     // What-to-Answer hotkey commits through manual_answer_started → retract.
@@ -3214,6 +3219,11 @@ export class AppState {
       } catch { /* telemetry must never break the pipeline */ }
     },
   }, {
+    // review#10: the controller's compiled-in default is the INTERVIEW bar
+    // (the detector constants); production must boot on the registry's
+    // no-mode default (the stricter MEETING bar) and re-resolve on every
+    // mode change INCLUDING a mode clear.
+    thresholds: resolveAutoAnswerThresholds(null),
     // Tier-2 endpoint evidence: Smart Turn v3.1 on the interviewer audio
     // (V3 Amendment 2). Asset missing → predict() null → deterministic path.
     turnPredictor: this.smartTurnPredictor,
@@ -3242,7 +3252,6 @@ export class AppState {
   /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
   public applyAutoAnswerThresholds(modeTemplateType: string | null | undefined): void {
     try {
-      const { resolveAutoAnswerThresholds } = require('./context-intelligence/policies/mode-policy-registry') as typeof import('./context-intelligence/policies/mode-policy-registry');
       this.autoAnswerController.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
     } catch { /* keep the current thresholds */ }
   }
@@ -6053,6 +6062,10 @@ export class AppState {
           modeTemplateType: activeMode.templateType,
         });
         this.applyAutoAnswerThresholds(activeMode.templateType);
+      } else {
+        // No active mode: the registry's no-mode default (meeting bar), not
+        // whatever the previous mode left behind (review#10).
+        this.applyAutoAnswerThresholds(null);
       }
     } catch (err) {
       // Auxiliary feature — never block meeting start.
@@ -8473,12 +8486,48 @@ if (process.env.THINKING_MATRIX === '1') {
       appState.restartCapturesAfterResume().catch((err) =>
         console.error('[Main] restartCapturesAfterResume threw:', err)
       );
+      // Sleep/wake is one of the named causes of the OS silently dropping a
+      // global-shortcut (RegisterHotKey on Windows, Carbon/IOKit on macOS)
+      // registration — see KeybindManager.HEALTH_CHECK_INTERVAL_MS. Until the
+      // 10 s health poll re-registers, pressing the chord falls through to the
+      // foreground app: e.g. CommandOrControl+Enter drops a newline into the
+      // focused answer field, CommandOrControl+1..7 type digits, etc. Revalidate
+      // immediately on resume so that leak window closes at wake, not up to 10 s
+      // later. revalidateShortcuts() only re-registers what was actually lost
+      // (never unregisters), so this is safe and idempotent on both platforms.
+      try {
+        KeybindManager.getInstance().revalidateShortcuts();
+      } catch (err) {
+        console.error('[Main] revalidateShortcuts on resume threw:', err);
+      }
     });
     powerMonitor.on('suspend', () => {
       console.log('[Main] powerMonitor: system suspending. Captures will be recreated on resume if a meeting is active.');
     });
   } catch (err) {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
+  }
+
+  // A display add/remove (docking, external monitor, and on Windows the virtual-
+  // desktop / workspace switches that ride on it) is the other named cause of
+  // the OS silently dropping global-shortcut registrations. Same leak as the
+  // resume path: until the 10 s health poll notices, the app's own chord
+  // falls through to whatever app is focused. Revalidate on the display change
+  // so the recovery is immediate. Idempotent (only re-registers what was lost),
+  // safe on both platforms; display-added/removed are far less chatty than
+  // display-metrics-changed, which fires continuously during window drags.
+  try {
+    const revalidateOnDisplayChange = () => {
+      try {
+        KeybindManager.getInstance().revalidateShortcuts();
+      } catch (err) {
+        console.error('[Main] revalidateShortcuts on display change threw:', err);
+      }
+    };
+    screen.on('display-added', revalidateOnDisplayChange);
+    screen.on('display-removed', revalidateOnDisplayChange);
+  } catch (err) {
+    console.warn('[Main] screen display listeners unavailable — display-change shortcut recovery disabled:', err);
   }
 
   // Pre-create detached overlay companion windows in background for faster first open

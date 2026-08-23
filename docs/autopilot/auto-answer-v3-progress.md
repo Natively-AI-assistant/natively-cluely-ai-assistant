@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 7 complete — CAMPAIGN COMPLETE (branch local, no PR opened, no push)
+## Status: phase 7 complete + post-campaign code-review repairs (2026-08-24) — branch local, no PR, no push
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -695,6 +695,33 @@ construction; the toggle stays DEFAULT OFF.
 5. Settings-store-degraded path for the toggle (renderer rollback).
 6. Packaged build including `pipecat-ai/smart-turn-v3/` under `resources/models/` on both installers.
 
+### Post-campaign code-review repairs (2026-08-24)
+`/code-review` (high) returned 10 findings. Each was REPRODUCED before fixing (red test, or a live-provider probe
+with keys from `.env`); two of its sub-claims were refuted and left alone (Smart Turn padding side — the Python
+reference right-pads too; offer-card "leak" — refuted by the reviewer itself).
+
+| # | Finding | Verified by | Fix |
+|---|---|---|---|
+| 1 | `automaticAnswerInFlight` latch sticks when the planner answers with silence (no mode change → no idle event) → Auto Answer dead for the meeting | red controller test | `dispatch` may return a promise; on settle with `answerStreamActive()` false the controller clears in-flight, emits completed, dequeues. Harness models streaming (dispatch starts, idle ends) |
+| 2 | The engine's own SPECULATIVE prefetch read as a manual press → every committed question silenced as `manual_answer_active` while speculation ran (the common case!) | red engine test on the real `runWhatShouldISay` sync prefix | `speculativeGenerationId` stamped per run; `isManualAnswerActive` excludes it; new `isAnswerStreaming()` |
+| 3 | Barge-in during the planner await (mode still idle) cancelled nothing; the answer then streamed over the user | red engine test (planner parked on a controlled promise) | `automaticTriggerPending/Cancelled` window: `cancelAutomaticAnswer` flips it pre-stream; `handleSuggestionTrigger` aborts after the planner and emits `suggestion_skipped user_barge_in` |
+| 4 | `dispose()` released the ORT session under an in-flight `infer()` (the recorded SIGABRT class, now on the main process); a session resolving after dispose leaked past before-quit | 2 red predictor tests (stub session records use-after-release) | epoch counter + in-flight promise: dispose awaits the inference, voids a pending load and releases the late session; `inferInner` re-checks epoch/session identity after each await |
+| 5 | Soniox `<end>` arrives as the LAST token of the SAME message as the finals; the adapter emitted `endpoint` mid-loop → the subsequent `ingest(final)` re-arm wiped it → the primary STT never benefited from tier 1 | **live Soniox probe** (stt-rt-preview, real key): `…"dog"./F "<end>"/F` in one message | endpoint deferred below the transcript emits; TurnManager mechanism test pins endpoint-after-final vs before |
+| 6 | Deepgram delivers `speech_final=true` on trailing EMPTY-transcript results; `if (!transcript) return` dropped the strongest tier-1 signal | **live Deepgram probe** (nova-2, real key): two `is_final=true speech_final=true transcript=""` results + UtteranceEnd at +1 s | emit `endpoint {speech_final}` before the empty-transcript return (text-carrying finals keep transcript-then-endpoint order) |
+| 7 | A confident prediction cached from the PREVIOUS silence (≤ 2 s TTL) shortened the wait for a NEW mid-question pause; same-tier deadlines only move earlier so the fresh lower prediction could not undo it | red predictor test | `onInterviewerSpeechStart` clears the cached prediction; controller calls it on the interviewer start edge |
+| 8 | A stale native binary (no third `start()` callback) leaves the dual-channel gate silently INERT — auto-fires with no user-silence/barge-in and nothing distinguishes it | by construction (verdict with zero edges = dispatch) + test | one-time per-meeting warning when a candidate commits with zero `speech_edge` events ever seen; `channelEdgesSeen` on candidate telemetry |
+| 9 | The optional Smart Turn asset was REQUIRED in install verify and preflight: a blocked download failed `npm install`; a missing file flipped preflight to non-recoverable | confirmed in `LocalFallbackPreflight` + `download-models` code | new `OPTIONAL_MODEL_FILES` class: download non-fatal (warn), dev verify warns, preflight untouched by it; the packaged-RELEASE gate still requires it. Verified both ways by moving the file aside |
+| 10 | Two disagreeing threshold defaults (controller booted on the interview bar 0.88; registry says no-mode = meeting bar 0.94) and thresholds were never applied when no mode is active / on mode clear | code trace | controller constructed with `resolveAutoAnswerThresholds(null)`; `applyAutoAnswerThresholds(null)` on the no-mode meeting-start branch and the modes:set-active clear branch |
+
+New tests: +7 controller/fusion (`review#…` named), +5 engine (`AutoAnswerEngineReview2026_08_24.test.mjs`).
+Auto Answer suite 183/183 · engine review+gate 16/16 · preflight/install trio 25/25 · evaluator gate green ·
+both typechecks 0 · `npm test` 8498 / 8433 / **2** (only the allowed Ollama pair — the other pre-existing failures
+were repaired by a parallel session's uncommitted edits to two test files, which are NOT part of this branch).
+Labels: findings 1–8 fixes **Covered by automated tests**; 5/6 adapter ordering additionally **Tested physically
+on macOS against live Deepgram and Soniox**; 9 verified by running both verify scripts with the asset removed and
+restored; 10's registry resolution **Covered by automated tests**, its main.ts/ipc wiring **Reviewed but not
+executed**.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
@@ -703,6 +730,7 @@ construction; the toggle stays DEFAULT OFF.
 - Two dispatch-time identity checks in `AutoAnswerController.dispatch()`/hold timer are unreachable defense in
   depth (kept per V2 §46; probes show no test reds when they are deleted alone).
 - The policy's user-silence line is only unit-tested; the channel gate independently enforces the invariant.
+- Review finding #8's secondary point stands: Rust `reset_channel` has no lib.rs caller (start() reports a silent edge instead) — equivalent behaviour, dead-ish utility kept for its tests.
 - Dialect adapters are models of provider behaviour; Flux/AssemblyAI have no adapter in the repo.
 - Declarative questions stay `expectedFail` (text harness carries no audio); the real model was only probed with
   synthetic audio.

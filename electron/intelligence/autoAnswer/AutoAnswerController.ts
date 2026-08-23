@@ -69,7 +69,17 @@ export interface AutoAnswerControllerHost {
     speculativeSnapshot?(): SpeculativeSnapshot;
     /** Tell the engine which candidate is current so a speculative run it starts is keyed to it. */
     noteCandidate?(questionId: string, candidateGeneration: number): void;
-    dispatch(question: AutoAnswerQuestion, options: { reuseSpeculative: boolean }): void;
+    /**
+     * Start the automatic answer. The returned promise (if any) must settle
+     * when the engine has fully decided the trigger — after the stream when
+     * one ran, quickly when the planner stayed silent. The controller clears
+     * its in-flight state on settle when `answerStreamActive()` is false,
+     * because a silent planner decision never changes the engine mode and no
+     * `mode_changed → idle` ever fires (review#1, 2026-08-24).
+     */
+    dispatch(question: AutoAnswerQuestion, options: { reuseSpeculative: boolean }): void | Promise<unknown>;
+    /** A What-to-Answer stream is live right now (engine mode === 'what_to_say'). */
+    answerStreamActive?(): boolean;
     /** Render the ONE offer card (replaces any previous one). Absent host → offers are telemetry only. */
     offer?(question: AutoAnswerQuestion): void;
     /** Remove the offer card (expired / replaced / committed / topic change / meeting stop). */
@@ -128,6 +138,9 @@ export class AutoAnswerController {
     private automaticAnswerInFlight = false;
     /** Monotonic token so an awaited dedup/dispatch can tell it was superseded. */
     private evaluation = 0;
+    /** speech_edge events received this meeting; zero at commit time = the dual-channel gate is inert. */
+    private edgesSeen = 0;
+    private noEdgesWarned = false;
 
     constructor(private readonly host: AutoAnswerControllerHost, options: AutoAnswerControllerOptions = {}) {
         this.clock = options.clock ?? systemClock;
@@ -202,10 +215,12 @@ export class AutoAnswerController {
 
     onSpeechEdge(edge: SpeechEdge): void {
         if (!this.host.isEnabled()) return;
+        this.edgesSeen++;
         const significance = this.channels.noteEdge(edge);
         if (edge.channel === 'interviewer') {
             if (edge.speaking) {
                 this.interviewerSpeechStartedAt = edge.atMs;
+                if (this.predictor && isAsyncPredictor(this.predictor)) this.predictor.onInterviewerSpeechStart(edge.atMs);
                 this.turns.onSpeechStarted('interviewer', edge.atMs);
                 this.cancelRhetoricalHold();
             } else {
@@ -294,8 +309,17 @@ export class AutoAnswerController {
             return;
         }
         const question = decision.question!;
+        // A meeting that has produced transcripts but not a single speech_edge
+        // means the native bridge is not delivering them (stale .node binary
+        // that ignores the third start() callback?). The dual-channel gate is
+        // then INERT — no user-silence hold, no barge-in — and without this
+        // line the degradation is indistinguishable from the gated path (review#8).
+        if (this.edgesSeen === 0 && !this.noEdgesWarned) {
+            this.noEdgesWarned = true;
+            this.host.log?.('[AutoAnswer] no speech_edge events received this meeting — dual-channel gating (user-silence, overlap veto, barge-in) is INACTIVE. Rebuild the native module (npm run build:native)?');
+        }
         this.emit({
-            name: 'auto_answer_candidate', questionId: id, provider: candidate.sttProvider,
+            name: 'auto_answer_candidate', questionId: id, provider: candidate.sttProvider, channelEdgesSeen: this.edgesSeen > 0,
             dialogueAct: question.dialogueAct, questionConfidence: question.confidence,
             completionConfidence: question.completionConfidence, answerability: question.answerability,
             endpointSource: question.endpointSource, candidateWordCount: wordCount(candidate.text),
@@ -528,12 +552,33 @@ export class AutoAnswerController {
         this.automaticAnswerInFlight = true;
         this.setState('answering');
         try {
-            this.host.dispatch(question, { reuseSpeculative });
+            const result = this.host.dispatch(question, { reuseSpeculative });
+            // The engine can conclude the trigger WITHOUT ever streaming (the
+            // planner returns 'silent' inside its cooldown, or the engine's own
+            // throttle drops it). No mode change fires then, so the settle of
+            // the dispatch promise is the only signal — without this the
+            // in-flight latch sticks for the rest of the meeting (review#1).
+            void Promise.resolve(result)
+                .catch((err) => { this.host.log?.(`[AutoAnswer] dispatch rejected: ${(err as Error)?.message ?? err}`); })
+                .then(() => this.onDispatchSettled(question));
         } catch (err) {
             this.host.log?.(`[AutoAnswer] dispatch failed: ${(err as Error)?.message ?? err}`);
             this.automaticAnswerInFlight = false;
             this.setState('listening');
         }
+    }
+
+    /** The engine finished deciding/answering `question` (or a speculative stream is still carrying it). */
+    private onDispatchSettled(question: AutoAnswerQuestion): void {
+        if (!this.automaticAnswerInFlight) return;                 // idle event already handled it
+        if (this.current?.question.id !== question.id) return;      // a newer dispatch owns the flag
+        // A live stream (accepted speculative run) keeps carrying the answer;
+        // its completion arrives as mode_changed → idle.
+        try { if (this.host.answerStreamActive?.()) return; } catch { /* treat as not streaming */ }
+        this.automaticAnswerInFlight = false;
+        this.emit({ name: 'auto_answer_completed', questionId: question.id });
+        if (this.state === 'answering') this.setState(this.queue.depth() ? 'queued' : 'listening');
+        this.tryDequeue();
     }
 
     private tryDequeue(): void {
@@ -662,6 +707,8 @@ export class AutoAnswerController {
         this.pendingIdStartedAt = null;
         this.lastDispatchedText = null;
         this.automaticAnswerInFlight = false;
+        this.edgesSeen = 0;
+        this.noEdgesWarned = false;
         this.questionSequence = 0;
         this.evaluation++;
     }

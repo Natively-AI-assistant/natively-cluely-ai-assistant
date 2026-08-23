@@ -242,6 +242,21 @@ export class IntelligenceEngine extends EventEmitter {
     private automaticGenerationId: number | null = null;
     private nextRunIsAutomatic = false;
     /**
+     * Generation id of the engine's own SPECULATIVE prefetch, or null. Without
+     * it, isManualAnswerActive read the prefetch (mode 'what_to_say', no
+     * automatic id) as a manual press and silenced every committed question
+     * while speculation was running (review#2, 2026-08-24).
+     */
+    private speculativeGenerationId: number | null = null;
+    /**
+     * An AUTOMATIC trigger is between handleSuggestionTrigger entry and its
+     * stream start (parked at the planner). cancelAutomaticAnswer() flips
+     * `automaticTriggerCancelled` in that window so a user barge-in during the
+     * classifier await still cancels (review#3, 2026-08-24).
+     */
+    private automaticTriggerPending = false;
+    private automaticTriggerCancelled = false;
+    /**
      * Auto Answer V3: the controller's current candidate id, so a speculative
      * run started by maybeSpeculate is keyed to it (V3 Amendment 6 reuse).
      */
@@ -742,7 +757,25 @@ export class IntelligenceEngine extends EventEmitter {
         // intent classifier's score. Only an EXPLICIT sub-threshold value skips.
         if (trigger.confidence !== undefined && trigger.confidence < 0.5) return;
 
+        if (trigger.automatic) { this.automaticTriggerPending = true; this.automaticTriggerCancelled = false; }
+        try {
+            await this.handleSuggestionTriggerInner(trigger);
+        } finally {
+            if (trigger.automatic) { this.automaticTriggerPending = false; this.automaticTriggerCancelled = false; }
+        }
+    }
+
+    private async handleSuggestionTriggerInner(trigger: SuggestionTrigger): Promise<void> {
         const plannerDecision = await this.planSuggestionTrigger(trigger);
+        // A user barge-in landed while we were at the planner: the user is
+        // answering the question themselves — do not stream over them.
+        if (trigger.automatic && this.automaticTriggerCancelled) {
+            console.log('[IntelligenceEngine] Automatic trigger dropped: cancelled during planning (user_barge_in)');
+            try {
+                this.emit('suggestion_skipped', { reason: 'user_barge_in', question: trigger.lastQuestion ?? '', confidence: plannerDecision.confidence });
+            } catch { /* a listener must never break the trigger path */ }
+            return;
+        }
         if (plannerDecision.kind === 'silent') {
             console.log('[IntelligenceEngine] Planner stayed silent', { reason: plannerDecision.reason, confidence: plannerDecision.confidence });
             // A throttled turn used to end here with NO signal of any kind: no
@@ -815,7 +848,16 @@ export class IntelligenceEngine extends EventEmitter {
      */
     /** Auto Answer V3: a manual What-to-Answer is the live run (never superseded by an automatic one). */
     isManualAnswerActive(): boolean {
-        return this.activeMode === 'what_to_say' && this.automaticGenerationId !== this.currentGenerationId;
+        if (this.activeMode !== 'what_to_say') return false;
+        // The engine's own speculative prefetch and an automatic run are NOT
+        // the user's manual press; only a run that is neither counts.
+        return this.automaticGenerationId !== this.currentGenerationId
+            && this.speculativeGenerationId !== this.currentGenerationId;
+    }
+
+    /** Auto Answer V3: any What-to-Answer stream is live (manual, automatic or speculative). */
+    isAnswerStreaming(): boolean {
+        return this.activeMode === 'what_to_say';
     }
 
     /** Auto Answer V3: the controller's current candidate, for keying the speculative prefetch. */
@@ -855,7 +897,17 @@ export class IntelligenceEngine extends EventEmitter {
     }
 
     cancelAutomaticAnswer(reason: 'user_barge_in'): boolean {
-        if (this.activeMode !== 'what_to_say') return false;
+        // The stream has not started yet (parked at the planner/classifier):
+        // flag the pending trigger so handleSuggestionTrigger aborts before
+        // runWhatShouldISay instead of streaming over the user's own speech.
+        if (this.activeMode !== 'what_to_say') {
+            if (this.automaticTriggerPending) {
+                this.automaticTriggerCancelled = true;
+                console.log(`[IntelligenceEngine] Automatic trigger cancelled pre-stream (${reason})`);
+                return true;
+            }
+            return false;
+        }
         if (this.automaticGenerationId === null || this.automaticGenerationId !== this.currentGenerationId) return false;
         if (!this.whatToAnswerCancellationToken) return false;
         this.whatToAnswerCancellationToken.abort(reason);
@@ -1053,9 +1105,10 @@ export class IntelligenceEngine extends EventEmitter {
         // resumes after this point, it can only observe itself as superseded; it
         // must never mint a newer id and overtake this request.
         const generationId = ++this.currentGenerationId;
-        // Stamp the automatic run's identity before any await: a manual press
-        // racing in mints a newer id and the automatic one is no longer live.
+        // Stamp the run's identity before any await: a manual press racing in
+        // mints a newer id and the automatic/speculative one is no longer live.
         this.automaticGenerationId = this.nextRunIsAutomatic ? generationId : null;
+        this.speculativeGenerationId = isSpeculative ? generationId : null;
         this.nextRunIsAutomatic = false;
         const isWtaSuperseded = () => (
             this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken

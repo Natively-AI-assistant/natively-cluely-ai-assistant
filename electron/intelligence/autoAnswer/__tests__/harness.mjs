@@ -55,13 +55,20 @@ export function makeHarness(overrides = {}, options = {}) {
     recentTurns: () => state.turns,
     speculativeSnapshot: () => state.speculative,
     noteCandidate: (id, gen) => state.noted.push({ id, gen }),
-    dispatch: (q, o) => state.dispatched.push({ question: q, reuseSpeculative: o.reuseSpeculative }),
+    // Models the real engine: a dispatch starts a stream (answerStreamActive
+    // true) that ends when the engine reports idle. Tests that model a
+    // NON-streaming outcome (planner silent) override dispatch/answerStreamActive.
+    dispatch: (q, o) => { state.dispatched.push({ question: q, reuseSpeculative: o.reuseSpeculative }); state.streaming = true; },
+    answerStreamActive: () => state.streaming === true,
     offer: (q) => state.offered.push(q),
     cancelAutomaticAnswer: (reason) => { state.cancelled.push(reason); return true; },
     telemetry: (e) => { state.events.push(e); if (e.name === 'auto_answer_ignored') state.skips.push(e.skipReason); },
     log: () => {},
   };
   const controller = new Controller.AutoAnswerController(host, { clock, embed: null, ...options });
+  // mode_changed → idle implies no stream is live; keep the model consistent.
+  const origIdle = controller.onEngineIdle.bind(controller);
+  controller.onEngineIdle = () => { state.streaming = false; origIdle(); };
   controller.onMeetingStart();
 
   const seg = (speaker, text, final = true, extra = {}) => ({
