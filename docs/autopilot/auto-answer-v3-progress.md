@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 6 complete
+## Status: phase 7 complete — CAMPAIGN COMPLETE (branch local, no PR opened, no push)
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -575,6 +575,179 @@ Deviations: the card reuses the Dynamic Action card verbatim (label "Answer this
 description) rather than a bespoke look — the prompt says reuse the existing surface, do not build a new one.
 Open question for the human: the listening-mode bar (0.97) effectively makes lecture/seminar offer-only; confirm.
 
+### Phase 7 — full validation and final report
+
+#### Commands executed (in order, this checkout, macOS host, 2026-08-23) — results
+| Step | Command | Result |
+|---|---|---|
+| 0 | `npm run build:electron` | OK |
+| 1 | Auto Answer unit+replay suite (`node --test electron/intelligence/autoAnswer/__tests__/*.test.mjs`) | **176 / 176** |
+| 2 | Extractor tests (TranscriptQuestionExtractor, ExtractorPunctuationNeutral, ScaffoldMisfireExtraction) | 91 / 91 |
+| 3 | Planner tests (PlannerDecision, TurnPlanner, TurnPlannerFallbackParity, IntelligenceEnginePlanner) | 38 / 38 |
+| 4 | Manual WTA regression (AutoAnswer gate, SuggestedAnswerSupersession, WhatToAnswerSnapshotWiring, SessionTrackerTurnIdentitySupersession) | 51 / 51 |
+| 5 | `npm test` (full suite) | tests 8476 · pass 8407 · **fail 6** — see note |
+| 6 | `npm run test:intelligence` | 1897 / 1885 / 3 (identical pre-existing set) |
+| 7 | `npm run typecheck:electron` | 0 errors |
+| 8 | `npm run typecheck:ts7` (renderer) | 0 errors |
+| 9 | `npm run build` (full production build: tsc + vite) | OK |
+| 10 | Replay fixtures (`AutoAnswerReplay.test.mjs`, after re-running build:electron — `npm run build` cleans `dist-electron`) | 70 / 70 |
+| 11 | `node electron/intelligence/autoAnswer/__tests__/evaluator.mjs --gate` | GATE PASS (see metrics) |
+| 12 | `cargo test` (native-module) | 26 / 26 |
+Also: `npm run verify:packaged-local-assets` OK in Phase 5; `build:native` OK in Phase 2. NOT run: a Windows host,
+a live meeting with a real STT provider, a packaged app launch.
+
+Full-suite note: the 6 failures are the 2 Ollama environmental + 3 ProviderVisibilityFilters + 1 ModesManager (433).
+They differ from the Phase 0 baseline only because a PARALLEL SESSION has uncommitted edits in
+`electron/services/__tests__/ModesManager.test.mjs` and `ProviderVisibilityFilters.test.mjs` in this shared working
+tree (repairing the pre-existing Call-Center / Groq drift). Those files are not part of this branch. The Nemotron
+`dualChannel` timeout from the Phase 6 run did not recur (passes here). This campaign added ZERO failures.
+
+#### Per-phase summary (exact counts at each phase's commit)
+| Phase | Commit | New tests | Auto Answer suite | Full suite |
+|---|---|---|---|---|
+| 0 forensics | be212045 | — | — | 8300 / 8230 / 7 (baseline) |
+| 1 hotfixes | a38e7b4e | 16 | 16 | 8316 / 8246 / 7 |
+| 2 channel state machine | fc064982 | 13 TS + 6 Rust | 29 | 8329 / 8259 / 7 · cargo 26 |
+| 3 subsystem | 97aa58cc | 76 (Phase 1/2 ported) | 76 | 8376 / 8306 / 7 |
+| 4 replay harness | 1a24749a | 71 (34 fixtures × dialects) | 147 | 8447 / 8377 / 7 |
+| 5 fusion + Smart Turn | dfabd93e | 17 | 164 | 8464 / 8394 / 7 |
+| 6 ternary + offer card | 501558b3 | 12 | 176 | 8476 / 8405 / 7+1 flake |
+| 7 validation | (this commit) | 0 | 176 | 8476 / 8407 / 6 (see note) |
+(Foreign commit on the branch: d780eb16, a parallel session's cosmetic SettingsOverlay copy/icon change.)
+
+#### Toggle-OFF pin
+`AutoAnswerController.test.mjs` → 'toggle OFF: nothing is armed, nothing is evaluated, no telemetry': with
+`isEnabled()` false, `ingest`/`onSpeechEdge` return before touching state — no timer, no telemetry, no candidate
+handed to the engine. AppState's OFF path is: transcript → `controller.ingest` (no-op) → hotkey remains the only
+path to an answer; the engine's `maybeSpeculate` and manual `runWhatShouldISay` are byte-for-byte unchanged
+(audited: the only lines removed from `IntelligenceEngine.ts` across the branch are inside `handleSuggestionTrigger`,
+and the additions to `runWhatShouldISay` are the `automaticGenerationId` stamp).
+
+#### Manual WTA regression trace (against the Phase 0 notes §7)
+Hotkey/button → IPC `generate-what-to-say` → (NEW: `appState.onManualWhatToAnswer()` retracts any offer card — a
+try/catch'd no-op otherwise) → `IntelligenceManager.runWhatShouldISay(..., {skipCooldown, forceFresh})` →
+`IntelligenceEngine.runWhatShouldISay`: `forceFresh` clears the speculative cache → `shouldThrottleTrigger` bypass →
+`whatToAnswerCancellationToken.abort('superseded')` → new generation id (NEW: `automaticGenerationId = null` because
+`nextRunIsAutomatic` is false for a manual run → `cancelAutomaticAnswer` can never abort it) → `setMode('what_to_say')`
+→ stream. Unchanged order, unchanged semantics; 51 regression tests green.
+
+#### Validation label per behavioural change
+| Change | Label |
+|---|---|
+| Hard cap, pending TTL/rearm, dedup, generation, toggle-off (Phase 1 → ported into the controller) | Covered by automated tests |
+| Settings persistence propagation (setter → IPC → renderer rollback) | Reviewed but not executed |
+| `confidence: 0.9` removal / planner fallthrough | Covered by automated tests (type + planner tests) |
+| Rust channel state machine (both platform branches via injected flag) | Covered by automated macOS branch tests · Covered by automated Windows branch tests · Build validated on macOS · Reviewed but not executed on Windows |
+| napi third callback → capture classes → AppState | Reviewed but not executed · Requires physical macOS verification · Requires physical Windows verification |
+| User-silence / overlap / barge-in gating, bleed guard | Covered by automated tests |
+| `cancelAutomaticAnswer` against a live stream | Reviewed but not executed |
+| Turn reconstruction, detector bands/acts, dedup 3 layers, queue, policy, state machine, generation guards, telemetry shape | Covered by automated tests |
+| AppState ↔ IntelligenceManager ↔ Engine wiring (`runAutoAnswer` → planner → WTA, keyed speculative reuse, LocalEmbeddingProvider in main) | Reviewed but not executed · Requires physical macOS verification · Requires physical Windows verification |
+| Replay harness, dialect parity, adversarial buckets, evaluator | Covered by automated tests (dialects are MODELS of provider behaviour, not recordings) |
+| Endpoint fusion, budgets, rhetorical hold, ring buffer, predictor fallback, Smart Turn adapter logic | Covered by automated tests |
+| Real Smart Turn session + Whisper-mel frontend | Tested physically on macOS (standalone probe, synthetic audio — NOT a live meeting) · Requires physical Windows verification |
+| Provider `'endpoint'` emission (Deepgram / Soniox / OpenAI) | Reviewed but not executed |
+| Per-mode thresholds, offer lifecycle | Covered by automated tests |
+| Offer card push/retract IPC, renderer removal, accept → `handleWhatToSay` | Reviewed but not executed · Requires physical macOS verification · Requires physical Windows verification |
+| Asset pipeline (manifest, sha256 download, REQUIRED lists) | Tested physically on macOS (download + verify ran here) · Build validated on macOS (`verify:packaged-local-assets`) · Reviewed but not executed on Windows |
+
+#### V2 §34 invariants → enforcing tests
+| # | Invariant | Test(s) |
+|---|---|---|
+| 1 | One conversational question → at most one Auto Answer | Controller 'fragmented positive: three finals become ONE question and ONE trigger'; every replay fixture's `triggerCount` in every dialect |
+| 2 | A finalized segment alone never guarantees an answer | Controller 'continuation: "How would you design" alone never answers…'; the 12 negative tests; fixtures negative_01–10, question_then_continued_speech |
+| 3 | A question can span multiple finals | Controller 'fragmented positive…'; TurnManager 'every final and partial restarts the quiet window…'; fixtures fragmented_positive, code_switching_pause, continuation |
+| 4 | New evidence invalidates an incomplete candidate | Components 'state machine: new transcript evidence invalidates an incomplete candidate'; TurnManager 'holdOpen()…'; Fusion 'new interviewer evidence after an endpoint resets to the window tier' |
+| 5 | Stop invalidates all pending work | Controller 'stop/restart: no stale answer after stop…'; Offer '…meeting stopping takes the card down'; fixture stop_restart |
+| 6 | Manual answer has priority | Controller 'manual precedence: a streaming manual answer is never superseded'; Components 'Policy: manual precedence beats queueing'; fixture manual_precedence; `cancelAutomaticAnswer` scope (Controller barge-in tests) |
+| 7 | Two Auto Answers never stream concurrently | Controller 'single-flight: a second real question during a streaming automatic answer queues…'; Offer 'auto requires an idle engine…' |
+| 8 | Duplicates do not create duplicate answers | Controller dedup ×3; Offer '…does not offer twice'; fixture dedup_pair |
+| 9 | Social/backchannel speech does not trigger | Controller negatives ×12; Components 'Detector: V2 §16 example acts'; fixtures negative_* |
+| 10 | Punctuation absence does not hide a real question | Controller positive 'how would you design this system'; Components 'Detector: no punctuation…'; fixture no_punctuation |
+| 11 | Provider differences do not change semantics | Replay 'parity <fixture>' × 34 (5 non-canonical dialects each) |
+No invariant is without a test. Residual: invariant 11 is proven against MODELLED dialects; live-provider parity is
+a physical-verification item.
+
+#### Placeholder thresholds awaiting the audio corpus (V3 Amendment 8 — OUT OF SCOPE for this run)
+Recording and labelling 30–50 real dual-channel sessions is human work; none of the numbers below is fitted.
+Dual-channel: USER_SILENCE_MS 700 · OVERLAP_VETO_MS 400 · HOLD_BUDGET_MS 2500 · bleed guard (VAD-backed rule).
+Turn/endpoint: QUIET_WINDOW fast 700 / balanced 1100 / relaxed 1800 · HARD_CAP_MS 2500 · CANDIDATE_GAP_MS 4000 ·
+REVISION_WINDOW_MS 1500 · CONFIDENT/LIKELY/POSSIBLE_ENDPOINT_P 0.90/0.70/0.45 · CONFIRM_HIGH/MID 250/600 ·
+DEFAULT_ENDPOINT_CONFIDENCE provider 0.80 / speech_final 0.85 / utterance_end 0.75 · RHETORICAL_HOLD_MS 600 ·
+PREDICTION_TTL_MS 2000 · Smart Turn min-audio 250 ms.
+Detector (extractor scale): ANSWER 0.88 · SPECULATION 0.82 · WAIT 0.65 · IMPERATIVE_ASK_FLOOR 0.80 · DIRECTED_BONUS
+0.08 · FOLLOW_UP_BONUS 0.06 · ENDPOINT_BONUS {0.08,0.06,0.05,0.04,0.02,0} · ENDPOINT_COMPLETION {0.92…0.60} ·
+ACT_CAP {incomplete 0.30, rhetorical 0.30, pause 0.20, confirmation 0.20, backchannel 0.10, social 0.40, statement 0.45}
+· EXPOSITION_PENALTY 0.25.
+Dedup/reuse: DEDUP_JACCARD_THRESHOLD 0.80 · DEDUP_JACCARD_CLEAR_BELOW 0.25 · REUSE_THRESHOLD 0.90 · DEDUP_WINDOW 5.
+Queue/offer: MAX_QUEUE_DEPTH 1 · QUEUE_TTL_MS 6000 · QUEUE_RETRY_MS 500 · OFFER_TTL_MS 10000.
+Per-mode bars: interview 0.88/0.65/0.82 · meeting 0.94/0.75/0.88 · listening 0.97/0.80/0.92.
+Gate for defaulting the toggle ON (V3 A8: fire precision ≥ 0.90 on the audio corpus) is therefore NOT met by
+construction; the toggle stays DEFAULT OFF.
+
+#### Requires physical verification (macOS AND Windows unless noted)
+1. Live meeting with each STT provider, toggle ON: finals/partials/endpoints reach the controller; the VAD edge
+   timing (600 ms system / 500 ms mic hangover) relative to transcript finals; dispatch latency as measured.
+2. The napi `on_speech_edge` callback on the packaged native module (Windows build of `channel_state.rs` not compiled here).
+3. Barge-in cancel against a real streaming automatic answer; the offer card's Tab/click/hotkey commit and retraction.
+4. Smart Turn on Windows (onnxruntime-node CPU EP); app quit with Auto Answer ON after a meeting (ORT teardown —
+   `process.exit()` with a live session SIGABRTs under Electron 43's Node; sessions are released on stop/before-quit).
+5. Settings-store-degraded path for the toggle (renderer rollback).
+6. Packaged build including `pipecat-ai/smart-turn-v3/` under `resources/models/` on both installers.
+
 ## Known residuals
+- Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
+  is in a worker. Follow-up: move to a worker.
+- `process.exit()` with a live onnxruntime-node session SIGABRTs (reproduced; mitigated by releasing the session on
+  meeting stop and before-quit; hard-exit paths run without a session by construction — not proven on a real quit).
+- Two dispatch-time identity checks in `AutoAnswerController.dispatch()`/hold timer are unreachable defense in
+  depth (kept per V2 §46; probes show no test reds when they are deleted alone).
+- The policy's user-silence line is only unit-tested; the channel gate independently enforces the invariant.
+- Dialect adapters are models of provider behaviour; Flux/AssemblyAI have no adapter in the repo.
+- Declarative questions stay `expectedFail` (text harness carries no audio); the real model was only probed with
+  synthetic audio.
+- Balanced quiet window moved 900 → 1100 ms (prompt's preset values); provider-endpoint dialects decide at 850 ms
+  (the USER_SILENCE floor), the window dialects at 1100.
+- `cargo clippy` has 7 pre-existing errors on main (not in this branch's files); `build:native` uses `cargo build`.
+- Pre-existing failing tests (Ollama ×2, ProviderVisibilityFilters ×3, ModesManager) untouched; a parallel session is
+  editing two of those files in this working tree.
+- The `natively-api` submodule pointer is dirty in the working tree (not this campaign's; never staged).
+
+## Suggested PR
+**Title:** `feat(auto-answer): V3 — speaker-aware question-opportunity pipeline with endpoint fusion and offer card`
+
+**Body:**
+
+Rebuilds Auto Answer (Settings > General, default OFF) from PR #497's fixed 900 ms debounce into the layered pipeline
+of `docs/specs/auto-answer-v2-spec.md.md` + `auto-answer-v3-amendments.md`. Seven commits, one per phase;
+`docs/autopilot/auto-answer-v3-progress.md` is the full record (call graph, per-phase counts, mutation-probe map,
+validation labels, residuals).
+
+What a question goes through now (`electron/intelligence/autoAnswer/`): every transcript segment → TurnManager
+reconstructs the complete utterance from its finals (three fragments = one question = one trigger) and commits on an
+adaptive quiet window bounded by a hard cap, shortened by provider endpoints (Deepgram speech_final/UtteranceEnd,
+Soniox <end>, OpenAI server VAD) and by Smart Turn v3.1 on the interviewer audio → Detector wraps the existing
+`extractLatestQuestion` and adds completion, dialogue act, directedness and an answerability composite → three-layer
+dedup (normalized, the existing Jaccard, MiniLM cosine on survivors) → pure Policy (the PR #497 gate kept inside it)
+→ ternary auto | offer | silent with per-mode bars in the mode policy registry → dual-channel gate (user silent,
+no overlap, interviewer not resumed, rhetorical hold) → the existing What-to-Answer generation, reusing the
+speculative cache by question id. The mic is a first-class input: a user who starts answering cancels the candidate;
+a user who talks over a streaming automatic answer cancels it (never a manual one); a Rust joint-state tracker feeds
+both channels' edges over the existing native bridge with the mic-VAD platform split carried on every transition.
+
+Invariants (spec V2 §34), each pinned by tests: never answer something not asked, never answer Q1 after Q2, one
+answer per question, manual answers never superseded, no concurrent automatic answers, stop invalidates everything,
+provider parity across six dialects. Toggle OFF is byte-identical to today (pinned). No cloud LLM in the detection
+path. No new npm packages or crates; one optional 8 MB ONNX asset shipped through the existing model mechanism, and
+Auto Answer works without it.
+
+Validation: 176 Auto Answer tests on an injected fake clock (zero real sleeps) incl. 34 adversarial fixtures × 6
+provider dialects; every critical guard mutation-probed; offline evaluator precision 1.0 / recall 0.90 (the two
+audio-dependent declarative fixtures are the only misses, flagged expectedFail) / zero false, duplicate or premature
+triggers; full suite adds zero failures; electron + renderer typechecks, production build, packaged-asset verify and
+cargo test green. Labels are honest: the live wiring (native bridge, providers, engine, offer card IPC) is
+"Reviewed but not executed" and requires physical macOS and Windows verification; every threshold is an unfitted
+placeholder until the dual-channel audio corpus (human work, out of scope) exists — which is also why the toggle
+stays default OFF.
 
 ## Abort record (if any)
