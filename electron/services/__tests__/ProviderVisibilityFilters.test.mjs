@@ -26,7 +26,11 @@ function modelAvailableSource() {
     const src = read(IPC);
     const start = src.indexOf('      const modelAvailable = (modelId: string): boolean => {');
     assert.ok(start >= 0, 'modelAvailable() should exist in ipcHandlers');
-    const end = src.indexOf('      if (modelAvailable(defaultModel)) return null;', start);
+    // Anchor on the CALL, not the whole line. The line has already grown a guard
+    // clause once ('!_isRetiredGroqId(defaultModel) && ...', 2026-08-23) and
+    // pinning the exact text made this suite red for a change that did not touch
+    // the invariant it guards.
+    const end = src.indexOf('modelAvailable(defaultModel)', start);
     assert.ok(end > start, 'modelAvailable() should be followed by the defaultModel check');
     return src.slice(start, end);
 }
