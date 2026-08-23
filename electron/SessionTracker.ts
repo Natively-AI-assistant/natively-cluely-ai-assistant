@@ -74,6 +74,15 @@ export interface SuggestionTrigger {
      * can cancel exactly that stream and never a manual What-to-Answer.
      */
     automatic?: boolean;
+    // ── Auto Answer V3 identity/quality fields (all optional, V2 §26) ──
+    questionId?: string;
+    answerability?: number;
+    dialogueAct?: string;
+    isFollowUp?: boolean;
+    endpointSource?: string;
+    candidateGeneration?: number;
+    /** The controller verified (by id or embedding cosine) that the speculative cache answers THIS question. */
+    reuseSpeculative?: boolean;
 }
 
 // Context item matching Swift ContextManager structure

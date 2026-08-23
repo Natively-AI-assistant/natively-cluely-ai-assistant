@@ -199,6 +199,35 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.cancelAutomaticAnswer(reason);
     }
 
+    // ── Auto Answer V3 narrow APIs (V2 §43) ──
+    isManualAnswerActive(): boolean { return this.engine.isManualAnswerActive(); }
+    noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {
+        this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
+    }
+    getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
+        return this.engine.getSpeculativeSnapshot();
+    }
+    runAutoAnswer(
+        question: Parameters<IntelligenceEngine['runAutoAnswer']>[0],
+        options: { reuseSpeculative: boolean },
+    ): Promise<void> {
+        return this.engine.runAutoAnswer(question, { ...options, context: this.getFormattedContext(120) });
+    }
+    /**
+     * The ONE canonical live read surface (V2 §11/§27). Lazily built over the
+     * manager's session with the deterministic extractor; the session instance
+     * is stable for the manager's lifetime.
+     */
+    getLiveTranscriptBrain(): import('./intelligence/LiveTranscriptBrain').LiveTranscriptBrain {
+        if (!this.liveTranscriptBrain) {
+            const { LiveTranscriptBrain } = require('./intelligence/LiveTranscriptBrain') as typeof import('./intelligence/LiveTranscriptBrain');
+            const { extractLatestQuestion } = require('./llm/transcriptQuestionExtractor') as typeof import('./llm/transcriptQuestionExtractor');
+            this.liveTranscriptBrain = new LiveTranscriptBrain(this.session as any, extractLatestQuestion as any);
+        }
+        return this.liveTranscriptBrain;
+    }
+    private liveTranscriptBrain: import('./intelligence/LiveTranscriptBrain').LiveTranscriptBrain | null = null;
+
     // ============================================
     // Mode Executors (delegates to engine)
     // ============================================

@@ -242,6 +242,12 @@ export class IntelligenceEngine extends EventEmitter {
     private automaticGenerationId: number | null = null;
     private nextRunIsAutomatic = false;
     /**
+     * Auto Answer V3: the controller's current candidate id, so a speculative
+     * run started by maybeSpeculate is keyed to it (V3 Amendment 6 reuse).
+     */
+    private currentAutoCandidateId: string | null = null;
+    private speculativeQuestionId: string | null = null;
+    /**
      * The question that stamped `lastTriggerTime`. Lets the cooldown distinguish a
      * restated FRAGMENT of the same utterance (throttle) from a genuinely new
      * question (answer). Null ⇒ the cooldown behaves exactly as it always has.
@@ -547,6 +553,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
+            this.speculativeQuestionId = this.currentAutoCandidateId;
             this.runWhatShouldISay(text, confidence || 0.8, undefined, { speculative: true })
                 .catch(err => console.error('[IntelligenceEngine] Speculative run error:', err));
         }, this.SPECULATIVE_DEBOUNCE_MS);
@@ -757,9 +764,14 @@ export class IntelligenceEngine extends EventEmitter {
             const expired = Date.now() > this.speculativeTextExpiry;
             const stale = expired || !trigger.lastQuestion; // empty question — reject conservatively
             if (!stale) {
-                const similarity = speculativeQuestionSimilarity(this.speculativeText, trigger.lastQuestion);
+                // Keyed reuse (V3 Amendment 6): the controller already verified
+                // identity by questionId or embedding cosine; Jaccard is the fallback.
+                const similarity = trigger.reuseSpeculative
+                    ? 1
+                    : speculativeQuestionSimilarity(this.speculativeText, trigger.lastQuestion);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
+                this.speculativeQuestionId = null;
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
                     console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
@@ -795,6 +807,47 @@ export class IntelligenceEngine extends EventEmitter {
      * manual press (a newer generation) or an idle engine returns false and
      * nothing is touched.
      */
+    /** Auto Answer V3: a manual What-to-Answer is the live run (never superseded by an automatic one). */
+    isManualAnswerActive(): boolean {
+        return this.activeMode === 'what_to_say' && this.automaticGenerationId !== this.currentGenerationId;
+    }
+
+    /** Auto Answer V3: the controller's current candidate, for keying the speculative prefetch. */
+    noteAutoAnswerCandidate(questionId: string, _candidateGeneration: number): void {
+        this.currentAutoCandidateId = questionId;
+    }
+
+    /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
+    getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
+        const live = this.speculativeText !== null && Date.now() <= this.speculativeTextExpiry;
+        return { questionId: live ? this.speculativeQuestionId : null, text: live ? this.speculativeText : null };
+    }
+
+    /**
+     * Auto Answer V3 dispatch (V2 §44). Delegates to the existing suggestion
+     * path — planner, speculative reuse, runWhatShouldISay — carrying the
+     * question's identity and quality fields; it does NOT create a second
+     * generation stack.
+     */
+    async runAutoAnswer(question: {
+        id: string; text: string; confidence: number; answerability: number; dialogueAct: string;
+        isFollowUp: boolean; endpointSource?: string; candidateGeneration: number;
+    }, options: { reuseSpeculative: boolean; context: string }): Promise<void> {
+        return this.handleSuggestionTrigger({
+            context: options.context,
+            lastQuestion: question.text,
+            confidence: question.confidence,
+            automatic: true,
+            questionId: question.id,
+            answerability: question.answerability,
+            dialogueAct: question.dialogueAct,
+            isFollowUp: question.isFollowUp,
+            endpointSource: question.endpointSource,
+            candidateGeneration: question.candidateGeneration,
+            reuseSpeculative: options.reuseSpeculative,
+        });
+    }
+
     cancelAutomaticAnswer(reason: 'user_barge_in'): boolean {
         if (this.activeMode !== 'what_to_say') return false;
         if (this.automaticGenerationId === null || this.automaticGenerationId !== this.currentGenerationId) return false;

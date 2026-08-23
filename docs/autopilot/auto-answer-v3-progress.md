@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 2 complete
+## Status: phase 3 complete
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -306,6 +306,101 @@ VAD" directly — the suppressor IS the VAD stage on both channels (system audio
 it exists because the Windows mic is RMS-only and interviewer audio through speakers would otherwise cancel
 every auto answer on Windows without headphones. Open question for the human: whether barge-in should PAUSE
 rather than cancel (spec allows either; cancel was chosen as the simpler, token-saving option).
+
+### Phase 3 — the AutoAnswer subsystem
+`electron/intelligence/autoAnswer/` (all NEW):
+- `AutoAnswerTypes.ts` — V2 §4 verbatim + V3: `TranscriptEndpointEvent.confidence?`, skip reasons
+  `user_answering`/`user_barge_in` (+ the PR #497/Phase 1 lifecycle reasons), `AutoAnswerPolicyAction` with `offer`,
+  `AutoAnswerCandidate` (carries `meetingGeneration` from accumulation START), structured telemetry event shape.
+- `AutoAnswerTurnManager.ts` — V2 §5-§8: partial+final ingestion; utterance reconstruction (`joinFinals`); quiet
+  window = pace preset `QUIET_WINDOW_MS {fast 700, balanced 1100, relaxed 1800}` restarted by every interviewer
+  final/partial/speech-start; `HARD_CAP_MS=2500` from the first final (Phase 1 folded); user final or
+  `CANDIDATE_GAP_MS=4000` closes the accumulation; undispatched commits are REVISED in place by a fast continuation
+  (`REVISION_WINDOW_MS=1500`, extended to the gap by `holdOpen()` when the detector said incomplete) but NEVER by a
+  final that follows a sentence already closed with terminal punctuation (`looksLikeContinuation`); provider
+  endpoints commit immediately with source+confidence (Phase 5 consumes this).
+- `AutoAnswerDetector.ts` — V2 §9-§17: wraps `extractLatestQuestion` (canonical layer, NOT duplicated) and reuses
+  `questionShapes.ts`; adds completion (bare interrogative stub / dangling tail / ellipsis), dialogue acts
+  (pause_request via `WAIT_IDIOM`, confirmation, rhetorical, backchannel, statement, social, coding/behavioral/
+  technical/follow_up/general), directedness (2nd person / imperative vs exposition), and the composite
+  `answerability` ON THE EXTRACTOR'S SCALE (measured: interrogatives 0.95, imperatives 0.80, "One more question —
+  tell me…" 0.40 → `IMPERATIVE_ASK_FLOOR`, rhetorical 0.80 → act cap, "How would you" 0.95 → incomplete). Named
+  constants `ANSWER_THRESHOLD=0.88`, `SPECULATION_THRESHOLD=0.82`, `WAIT_THRESHOLD=0.65`, per-source
+  `ENDPOINT_BONUS`/`ENDPOINT_COMPLETION`, `ACT_CAP`, all commented unfitted.
+- `AutoAnswerDedup.ts` — V2 §21/V3 A6: normalized equality → existing `speculativeQuestionSimilarity` (Jaccard,
+  reused not rewritten; `DEDUP_JACCARD_THRESHOLD=0.80`, ambiguity band ≥0.25) → embedding cosine on survivors only
+  (`REUSE_THRESHOLD=0.90`), cached by questionId, window `DEDUP_WINDOW=5`. Embedder injected; absent/failing →
+  cheap layers decide.
+- `AutoAnswerQueue.ts` — V2 §22: `MAX_QUEUE_DEPTH=1` single slot, same-id replace, oldest evicted,
+  `QUEUE_TTL_MS=6000`, generation eviction.
+- `AutoAnswerPolicy.ts` — V2 §40/V3 A4: PURE; CALLS `evaluateAutoAnswerGate` for the lifecycle half (the 11 gate
+  tests keep their exact meaning — `autoAnswerGate.ts` is kept, not deleted) then the ternary `auto|offer|silent`
+  + `wait|queue`; manual precedence before anything else; thresholds injected (Phase 6 per-mode).
+- `AutoAnswerChannelGate.ts` — the Phase 2 dual-channel logic extracted as a pure verdict (`dispatch|hold|drop`).
+- `AutoAnswerController.ts` — the facade: state machine (V2 §18), ids `${meetingGen}-q${seq}` (V2 §20), generation
+  guards (V2 §28/§46: meeting at accumulation start, question identity, async-stale re-check), telemetry (V2 §29,
+  NO text — a test greps every event), every skip reason machine-readable (V2 §30), speculative reuse keyed by
+  questionId then embedding cosine then the engine's Jaccard (V3 A6). `ingest()` returns before touching state
+  when the toggle is OFF.
+- `__tests__/harness.mjs`, `AutoAnswerController.test.mjs` (51), `AutoAnswerComponents.test.mjs` (25). The Phase
+  1/2 scheduler tests were PORTED onto the controller (every scenario kept), `autoAnswerScheduler.ts` and its two
+  test files removed (the direct `scheduleAutoAnswer` path is gone per the spec).
+
+Integration:
+- `electron/main.ts` — AppState constructs the controller (host callbacks over IntelligenceManager; telemetry →
+  `TelemetryService.track` with ids/acts/scores only; embedder lazily `new LocalEmbeddingProvider()`); the transcript
+  handler calls `controller.ingest(segment)` for EVERY segment (any speaker, partial or final); `speech_edge` →
+  `controller.onSpeechEdge`; `startMeetingTransition` → `onMeetingStart`; stop / toggle-off → `onMeetingStop`;
+  `mode_changed idle` → `onEngineIdle`.
+- `electron/IntelligenceManager.ts` — narrow APIs (V2 §43): `getLiveTranscriptBrain()` (ONE lazily built brain over
+  the stable session — the canonical read surface, V2 §11), `runAutoAnswer`, `isManualAnswerActive`,
+  `noteAutoAnswerCandidate`, `getSpeculativeSnapshot`.
+- `electron/IntelligenceEngine.ts` — `runAutoAnswer(question, {reuseSpeculative})` delegates to
+  `handleSuggestionTrigger` with the optional identity fields (V2 §44, no second generation stack);
+  `handleSuggestionTrigger` accepts keyed reuse without Jaccard; `maybeSpeculate` stamps the controller's candidate
+  id on the speculative cache (`speculativeQuestionId`); `isManualAnswerActive`, `getSpeculativeSnapshot`.
+- `electron/SessionTracker.ts` — `SuggestionTrigger` gains optional `questionId, answerability, dialogueAct,
+  isFollowUp, endpointSource, candidateGeneration, reuseSpeculative` (V2 §26; existing callers untouched).
+
+Deviations from spec (recorded):
+- Layer-3 embeddings use the bundled `Xenova/all-MiniLM-L6-v2` (384-d) — bge-small is NOT bundled (Phase 0 §11).
+- Speculation is not started by the controller; the engine's existing `maybeSpeculate` on interviewer partials IS
+  the speculative WTA infrastructure (V2 §19 "do not duplicate"). The controller keys that cache to its candidate
+  id and marks state `speculating`; a second speculative trigger would double-spend tokens.
+- Balanced quiet window moves 900 → 1100 ms (the prompt's Phase 5 preset values); Phase 5 fusion shrinks it for
+  confident endpoints.
+- `confirmation` ("Can you hear me?") is reported under skip reason `not_question` (the V2 §30 enum has no
+  `confirmation`; the dialogue act still says `confirmation` in telemetry).
+- V2 §3's `AutoAnswerDecision.ts`/`AutoAnswerQuestion.ts` are folded into Types/Detector (the prompt's file list
+  governs). `AutoAnswerDedup.ts` and `AutoAnswerChannelGate.ts` are additional files inside the subsystem directory.
+
+Mutation probes (each deletion → exactly the named test(s) red; diff-verified restore):
+| Guard | Test that reds |
+|---|---|
+| dedup cheap layers (controller) | dedup: a paraphrase…; dedup layer 3… |
+| dedup verdict (policy) | Policy: healthy input…; both dedup tests |
+| meeting generation (policy gate + dispatch re-check, deleted TOGETHER) | generation guard: a stop→start…; Policy: healthy input… |
+| async stale re-check after the embedder await | generation guard (async path)… — this probe also exposed and fixed a real bug: in-flight was marked before the await, so a stale drop left Q2 queued forever |
+| manual precedence (policy) | manual precedence: …never superseded; Policy: manual precedence…; Policy: healthy input… |
+| single-flight queue (policy) | Policy: healthy input… |
+| user-silence hold (channel gate) | user silent: …USER_SILENCE_MS…; generation guard: a newer question…; channel gate: reset… |
+| hard cap (turn manager) | hard cap: …HARD_CAP_MS (controller + TurnManager) |
+| dispatch-time question-identity line in `dispatch()` and the hold-timer identity line | NO test reds when deleted — they are unreachable defense in depth (a new commit always clears the old hold timer first; the queue path checks identity on its own line). Kept because V2 §46 mandates the check; recorded honestly as redundant. |
+
+Tests: Auto Answer suite 76/76 (zero real sleeps). Existing `AutoAnswer.test.mjs` (gate + canAutoAnswer) 11/11.
+`typecheck:electron` 0 errors · `typecheck:ts7` (renderer) 0 errors · `npm run build` OK · `npm test` tests 8376 · pass 8306 · fail 7 (identical pre-existing set, diff-verified) · `test:intelligence` 1897 / 1885 / 3 (identical pre-existing set).
+
+Validation labels:
+- Subsystem behaviour (turn reconstruction, detector bands, dedup, queue, policy, state machine, generation guards,
+  channel gating, telemetry shape, toggle-OFF): **Covered by automated tests**.
+- AppState/IntelligenceManager/IntelligenceEngine wiring (host callbacks, `runAutoAnswer` → planner →
+  `runWhatShouldISay`, keyed speculative reuse against a live speculative stream, LocalEmbeddingProvider in the
+  main process): **Reviewed but not executed** (typecheck + build + existing engine tests only; no live meeting).
+- **Requires physical macOS verification** and **Requires physical Windows verification** for the end-to-end
+  toggle-ON behaviour with a real STT provider.
+
+Open questions for the human: (1) the balanced window 900→1100 ms; (2) whether `offer` should already be wired
+to a surface in Phase 3 (it is telemetry-only until Phase 6 by design).
 
 ## Known residuals
 

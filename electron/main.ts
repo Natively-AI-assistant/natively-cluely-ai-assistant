@@ -1218,7 +1218,7 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
-import { AutoAnswerScheduler } from "./intelligence/autoAnswerScheduler"
+import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
@@ -3176,39 +3176,55 @@ export class AppState {
   // against the in-flight speculative run, rejects on the mismatch, bumps
   // currentGenerationId — cancelling the correctly-prefetched answer — and then
   // generates one for the PREVIOUS question.
-  // The timer, hard cap, pending-rearm slot and dedup live in
-  // AutoAnswerScheduler (electron/intelligence/autoAnswerScheduler.ts) so they
-  // run against an injected clock in tests. AppState owns only the wiring.
-  private readonly autoAnswerScheduler = new AutoAnswerScheduler({
+  // Auto Answer V3 (Settings > General, default OFF). AppState owns wiring and
+  // lifecycle only; the controller owns turn accumulation, endpoint reasoning,
+  // question identity, answerability, dedup, queueing, the dual-channel gate
+  // and every skip reason (electron/intelligence/autoAnswer/). With the toggle
+  // OFF `ingest` returns before touching any state — hotkey-only, as before.
+  private readonly autoAnswerController = new AutoAnswerController({
     isEnabled: () => this._autoAnswerEnabled,
     isMeetingActive: () => this.isMeetingActive,
     meetingGeneration: () => this._meetingGeneration,
-    lastInterviewerTurn: () => this.intelligenceManager.getLastInterviewerTurn(),
     engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
+    manualAnswerActive: () => this.intelligenceManager.isManualAnswerActive(),
+    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(60) as any,
+    speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
+    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
     cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
-    onSkip: (reason) => {
-      if (this._verboseLogging) console.log(`[Main] Auto Answer skipped: ${reason}`);
-    },
-    dispatch: (lastQuestion) => {
-      // No fabricated confidence (V2 §13): the trigger carries none until the
-      // Auto Answer detector supplies a real one, and the planner falls back to
-      // the intent classifier's own score in its absence.
-      void this.intelligenceManager.handleSuggestionTrigger({
-        context: this.intelligenceManager.getFormattedContext(120),
-        lastQuestion,
-        automatic: true,
-      }).catch((error) => {
+    dispatch: (question, { reuseSpeculative }) => {
+      void this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
     },
+    log: (line) => { if (this._verboseLogging) console.log(line); },
+    telemetry: (event) => {
+      // Structured, NO transcript text (V2 §29): ids, acts, scores, reasons, timings only.
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        const { name, meetingGeneration, provider, ...properties } = event;
+        telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
+      } catch { /* telemetry must never break the pipeline */ }
+    },
+  }, {
+    // Layer-3 dedup / speculative reuse over the bundled local embedder
+    // (Xenova/all-MiniLM-L6-v2). Lazily constructed; any failure → null →
+    // the cheap layers decide (V2 §38: never depend on a model asset).
+    embed: async (text: string) => {
+      try {
+        let embedder = this.autoAnswerEmbedder;
+        if (!embedder) {
+          const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+          embedder = new LocalEmbeddingProvider();
+          this.autoAnswerEmbedder = embedder;
+        }
+        return await embedder!.embed(text);
+      } catch { return null; }
+    },
   });
-
-  private scheduleAutoAnswer(): void {
-    this.autoAnswerScheduler.noteInterviewerFinal();
-  }
+  private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
   private cancelAutoAnswer(): void {
-    this.autoAnswerScheduler.cancel();
+    this.autoAnswerController.onMeetingStop();
   }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
@@ -3403,12 +3419,19 @@ export class AppState {
         punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
       });
 
-      // Auto Answer (Settings > General, default OFF): a FINAL interviewer
-      // turn is the trigger — see scheduleAutoAnswer() for why the native
-      // VAD's speech_ended is the wrong seam for this.
-      if (segment.isFinal && speaker === 'interviewer') {
-        this.scheduleAutoAnswer();
-      }
+      // Auto Answer V3 (Settings > General, default OFF): every segment, any
+      // speaker, partial or final — the controller decides whether anything
+      // happens (V2 §24). Returns immediately when the toggle is off.
+      this.autoAnswerController.ingest({
+        speaker,
+        text: segment.text,
+        timestamp: Date.now(),
+        final: segment.isFinal,
+        confidence: segment.confidence,
+        origin: 'stt',
+        sttProvider: effectiveSttId,
+        punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
+      });
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
@@ -3807,7 +3830,7 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
-      if (this.systemAudioCapture === capture) this.autoAnswerScheduler.noteSpeechEdge(edge);
+      if (this.systemAudioCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -3998,7 +4021,7 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
-      if (this.microphoneCapture === capture) this.autoAnswerScheduler.noteSpeechEdge(edge);
+      if (this.microphoneCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();
@@ -5825,7 +5848,7 @@ export class AppState {
 
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
-    this.cancelAutoAnswer();
+    this.autoAnswerController.onMeetingStart();
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown
@@ -6651,7 +6674,7 @@ export class AppState {
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-mode-changed', { mode })
       // A candidate parked because the engine was busy may now dispatch.
-      if (mode === 'idle') this.autoAnswerScheduler.noteEngineIdle()
+      if (mode === 'idle') this.autoAnswerController.onEngineIdle()
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
