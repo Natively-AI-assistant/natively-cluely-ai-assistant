@@ -144,15 +144,27 @@ test('TurnManager: pace presets are the quiet window; reset() cancels everything
   assert.equal(relaxed.clock.pendingCount(), 0);
 });
 
-test('TurnManager: a provider endpoint commits immediately with its source and confidence', () => {
+test('TurnManager: a provider endpoint commits after its confidence budget, with its source and confidence', () => {
   const t = makeTurns();
   t.final('Why did you choose Kafka?');
   t.clock.advance(100);
   t.tm.onProviderEndpoint({ type: 'speech_final', timestamp: t.clock.now(), confidence: 0.93 });
+  t.clock.advance(TurnManager.CONFIRM_HIGH_MS - 1);
+  assert.equal(t.commits.length, 0);
+  t.clock.advance(1);
   assert.equal(t.commits.length, 1);
   assert.equal(t.commits[0].endpointSource, 'speech_final');
   assert.equal(t.commits[0].endpointConfidence, 0.93);
-  assert.equal(t.tm.isArmed(), false, 'the quiet window was cancelled by the commit');
+  assert.equal(t.tm.isArmed(), false);
+
+  // No confidence → the per-source default (speech_final 0.85 → CONFIRM_MID_MS).
+  const u = makeTurns();
+  u.final('Why did you choose Kafka?');
+  u.tm.onProviderEndpoint({ type: 'speech_final', timestamp: u.clock.now() });
+  u.clock.advance(TurnManager.CONFIRM_MID_MS - 1);
+  assert.equal(u.commits.length, 0);
+  u.clock.advance(1);
+  assert.equal(u.commits.length, 1);
 });
 
 // ── Detector ──────────────────────────────────────────────────────────────

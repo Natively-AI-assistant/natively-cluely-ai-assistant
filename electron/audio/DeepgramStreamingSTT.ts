@@ -221,6 +221,11 @@ export class DeepgramStreamingSTT extends EventEmitter {
                             confidence: alt?.confidence ?? 1.0,
                             ...(speakerId ? { speakerId } : {}),
                         });
+                        // Auto Answer V3 endpoint normalization (additive): Deepgram
+                        // distinguishes is_final (segment) from speech_final (utterance).
+                        if (isFinal && data.speech_final === true) {
+                            this.emit('endpoint', { type: 'speech_final' });
+                        }
                     } catch (err) {
                         console.error('[DeepgramStreaming] Parse error:', err);
                     }
@@ -251,6 +256,13 @@ export class DeepgramStreamingSTT extends EventEmitter {
                     this.stabilityTimer = null;
                     if (this.isOpen) this.reconnectAttempts = 0;
                 }, 5000);
+            });
+
+            // UtteranceEnd (utterance_end_ms above) — the fallback endpoint when
+            // no speech_final fired for the utterance. Additive; nothing else
+            // consumes it.
+            this.live.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+                try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* listeners never break the socket */ }
             });
 
             this.live.on(LiveTranscriptionEvents.Error, (err: any) => {

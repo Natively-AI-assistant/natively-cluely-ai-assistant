@@ -85,7 +85,7 @@ export function toDialect(events, dialect) {
         out.push(...partials);
         if (joined) {
           out.push({ at: endAt, speaker: u.speaker, final: true, text: joined });
-          if (u.speaker === 'interviewer') out.push({ at: endAt + 1, endpoint: { type: 'provider', confidence: FLUX_EOT_CONFIDENCE } });
+          if (u.speaker === 'interviewer') out.push({ at: endAt + 1, endpoint: { type: 'speech_final', confidence: FLUX_EOT_CONFIDENCE } });
         }
         break;
       case 'nova':
@@ -98,7 +98,7 @@ export function toDialect(events, dialect) {
         break;
       case 'assemblyai':
         out.push(...partials, ...finals);
-        if (finals.length && u.speaker === 'interviewer') out.push({ at: endAt + 1, endpoint: { type: 'provider', confidence: ASSEMBLY_EOT_CONFIDENCE } });
+        if (finals.length && u.speaker === 'interviewer') out.push({ at: endAt + 1, endpoint: { type: 'speech_final', confidence: ASSEMBLY_EOT_CONFIDENCE } });
         break;
       case 'elevenlabs':
         out.push(...finals);           // finals only, no partials, no endpoint

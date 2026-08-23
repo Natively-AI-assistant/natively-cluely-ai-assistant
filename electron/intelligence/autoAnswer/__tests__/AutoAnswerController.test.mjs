@@ -16,6 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   makeHarness, QUIET, HARD_CAP_MS, USER_SILENCE_MS, OVERLAP_VETO_MS, HOLD_BUDGET_MS, QUEUE_TTL_MS, QUEUE_RETRY_MS,
+  RHETORICAL_HOLD_MS,
 } from './harness.mjs';
 
 const Q = 'Why did you choose PostgreSQL?';
@@ -98,13 +99,20 @@ test('a partial restarts the quiet window (the interviewer is still talking)', a
 test('hard cap: finals faster than the quiet window still commit at HARD_CAP_MS', async () => {
   const h = makeHarness();
   const t0 = h.clock.now();
-  for (let i = 0; i < 40 && h.texts().length === 0; i++) {
-    h.interviewerFinal(i === 0 ? 'Tell me about' : i === 1 ? 'a time you' : i === 2 ? 'disagreed with' : i === 3 ? 'your manager' : 'and kept going');
+  const committed = () => h.state.events.filter(e => e.name === 'auto_answer_candidate').length;
+  const words = ['Tell me about', 'a time you', 'disagreed with', 'your manager', 'and what', 'you did', 'about it', 'in the end'];
+  for (let i = 0; i < 40 && committed() === 0; i++) {
+    h.interviewerFinal(words[i % words.length]);
     await h.advance(300);
   }
-  assert.equal(h.texts().length, 1, 'the window must not be starved');
+  assert.equal(committed(), 1, 'the window must not be starved: the candidate committed');
   const elapsed = h.clock.now() - t0;
   assert.ok(elapsed >= HARD_CAP_MS && elapsed < HARD_CAP_MS + 300, `committed at +${elapsed}ms`);
+  // While the interviewer keeps talking nothing is dispatched (rhetorical hold
+  // cancels on resume); once they stop, exactly one answer.
+  assert.deepEqual(h.texts(), []);
+  await h.advance(QUIET + RHETORICAL_HOLD_MS);
+  assert.equal(h.texts().length, 1);
 });
 
 // ── negatives (V2 §32/§49) ────────────────────────────────────────────────
@@ -408,6 +416,8 @@ test('overlap veto: both channels active at the boundary holds, then fires', asy
   await h.advance(50);
   assert.deepEqual(h.texts(), [], 'held: the boundary was not clean');
   await h.advance(OVERLAP_VETO_MS);
+  assert.deepEqual(h.texts(), [], 'overlap cleared; the rhetorical hold (600 ms from the interviewer end) still runs');
+  await h.advance(RHETORICAL_HOLD_MS - OVERLAP_VETO_MS - 50);
   assert.deepEqual(h.texts(), [Q]);
 });
 

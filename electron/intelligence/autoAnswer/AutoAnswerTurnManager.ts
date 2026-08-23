@@ -34,6 +34,30 @@ export const QUIET_WINDOW_MS: Record<AutoAnswerPace, number> = {
 export const HARD_CAP_MS = 2500;
 /** Silence after which the next interviewer final is a NEW candidate, not a continuation. Unfitted placeholder. */
 export const CANDIDATE_GAP_MS = 4000;
+
+// ── Endpoint fusion (V3 Amendment 3). Starting values, tuned only via the harness. ──
+/** p >= CONFIDENT_ENDPOINT_P → commit after CONFIRM_HIGH_MS of continued silence. */
+export const CONFIDENT_ENDPOINT_P = 0.90;
+export const CONFIRM_HIGH_MS = 250;
+/** LIKELY_ENDPOINT_P <= p < CONFIDENT_ENDPOINT_P → CONFIRM_MID_MS. */
+export const LIKELY_ENDPOINT_P = 0.70;
+export const CONFIRM_MID_MS = 600;
+/** POSSIBLE_ENDPOINT_P <= p < LIKELY_ENDPOINT_P → the pace preset; below → hold (the hard cap still applies). */
+export const POSSIBLE_ENDPOINT_P = 0.45;
+/** Provider signals that carry no confidence of their own (Deepgram speech_final / UtteranceEnd, Soniox <end>). */
+export const DEFAULT_ENDPOINT_CONFIDENCE: Record<'provider' | 'speech_final' | 'utterance_end', number> = {
+    provider: 0.80,
+    speech_final: 0.85,
+    utterance_end: 0.75,
+};
+
+/** The adaptive wait after an endpoint signal of confidence `p` (ms), or null for "hold" (no shortening). */
+export function confirmBudgetMs(p: number, pace: AutoAnswerPace): number | null {
+    if (p >= CONFIDENT_ENDPOINT_P) return CONFIRM_HIGH_MS;
+    if (p >= LIKELY_ENDPOINT_P) return CONFIRM_MID_MS;
+    if (p >= POSSIBLE_ENDPOINT_P) return QUIET_WINDOW_MS[pace];
+    return null;
+}
 /**
  * A final landing this soon after a commit that has NOT been dispatched yet is
  * a revision of the same question (V2 §22 rule 2), not a second question.
@@ -66,6 +90,11 @@ interface Accumulation {
 export class AutoAnswerTurnManager {
     private acc: Accumulation | null = null;
     private timer: ClockTimer | null = null;
+    /** Which tier owns the current deadline; a lower tier never overrides a higher one (provider > local > window). */
+    private deadlineTier: 'window' | 'local' | 'provider' = 'window';
+    private deadlineAt: number | null = null;
+    private pendingSource: AutoAnswerEndpointSource = 'quiet_window';
+    private pendingConfidence: number | undefined;
     private pace: AutoAnswerPace;
     private generationCounter = 0;
     /** Last committed candidate, kept so a fast follow-on final can revise it. */
@@ -189,16 +218,46 @@ export class AutoAnswerTurnManager {
 
     /**
      * A provider endpoint (Deepgram speech_final / UtteranceEnd, Flux EndOfTurn,
-     * AssemblyAI end_of_turn). Phase 5 fuses confidence into the wait budget;
-     * here it is recorded and commits immediately when confident.
+     * AssemblyAI end_of_turn, Soniox <end>). Tier 1 of the fusion: its
+     * confidence sets the confirm budget and overrides any local/window deadline.
      */
     onProviderEndpoint(event: TranscriptEndpointEvent): void {
         this.events.onEndpointEvent?.(event);
-        // Deterministic floor: a provider endpoint with no finals yet is noise.
-        if (!this.acc || this.acc.segments.length === 0) return;
-        const source: AutoAnswerEndpointSource = event.type === 'speech_final' ? 'speech_final'
-            : event.type === 'utterance_end' ? 'utterance_end' : 'provider';
-        this.commit(source, event.confidence);
+        // Only the two END signals propose a deadline; speech_started / partial /
+        // segment_final are resumes or evidence, handled by ingest/onSpeechStarted.
+        if (event.type !== 'speech_final' && event.type !== 'utterance_end') return;
+        const source: AutoAnswerEndpointSource = event.type;
+        const p = event.confidence ?? DEFAULT_ENDPOINT_CONFIDENCE[source];
+        this.proposeEndpoint('provider', source, p);
+    }
+
+    /**
+     * Tier 2 of the fusion: the local TurnPredictor's endpoint probability for
+     * the current silence (Smart Turn on the interviewer audio). Never
+     * overrides a provider deadline; shortens the window when confident.
+     */
+    onLocalPrediction(pEndpoint: number): void {
+        this.proposeEndpoint('local', 'semantic', pEndpoint);
+    }
+
+    private proposeEndpoint(tier: 'provider' | 'local', source: AutoAnswerEndpointSource, p: number): void {
+        // Deterministic floor: an endpoint with no finals yet is noise.
+        if (!this.acc || this.acc.segments.length === 0 || this.acc.firstFinalAt === null) return;
+        const rank = { window: 0, local: 1, provider: 2 } as const;
+        if (this.deadlineAt !== null && rank[tier] < rank[this.deadlineTier]) return;
+        const budget = confirmBudgetMs(p, this.pace);
+        const now = this.clock.now();
+        if (budget === null) {
+            // "Hold": do not shorten; the quiet window / hard cap already armed stand.
+            return;
+        }
+        const capRemaining = HARD_CAP_MS - (now - this.acc.firstFinalAt);
+        const delay = Math.max(0, Math.min(budget, capRemaining));
+        // Only ever move the deadline EARLIER within a tier; a later proposal of
+        // the same tier must not extend a confident one.
+        const proposedAt = now + delay;
+        if (this.deadlineAt !== null && rank[tier] === rank[this.deadlineTier] && proposedAt > this.deadlineAt) return;
+        this.setDeadline(proposedAt, tier, source, p);
     }
 
     /** Meeting stop/start: nothing armed may survive. */
@@ -210,20 +269,36 @@ export class AutoAnswerTurnManager {
 
     // ── internals ─────────────────────────────────────────────────────────
 
+    /** New interviewer evidence: back to the window tier (a TurnResumed wipes any endpoint proposal). */
     private arm(now: number): void {
         this.disarm();
         const acc = this.acc;
         if (!acc || acc.firstFinalAt === null) return; // partials alone never commit
         const capRemaining = HARD_CAP_MS - (now - acc.firstFinalAt);
         const delay = Math.max(0, Math.min(QUIET_WINDOW_MS[this.pace], capRemaining));
+        this.setDeadline(now + delay, 'window', 'quiet_window', undefined);
+    }
+
+    private setDeadline(at: number, tier: 'window' | 'local' | 'provider', source: AutoAnswerEndpointSource, confidence: number | undefined): void {
+        if (this.timer !== null) { this.clock.clearTimeout(this.timer); this.timer = null; }
+        this.deadlineAt = at;
+        this.deadlineTier = tier;
+        this.pendingSource = source;
+        this.pendingConfidence = confidence;
+        const delay = Math.max(0, at - this.clock.now());
         this.timer = this.clock.setTimeout(() => {
             this.timer = null;
-            this.commit('quiet_window');
+            this.deadlineAt = null;
+            this.commit(this.pendingSource, this.pendingConfidence);
         }, delay);
     }
 
     private disarm(): void {
         if (this.timer !== null) { this.clock.clearTimeout(this.timer); this.timer = null; }
+        this.deadlineAt = null;
+        this.deadlineTier = 'window';
+        this.pendingSource = 'quiet_window';
+        this.pendingConfidence = undefined;
     }
 
     private commit(source: AutoAnswerEndpointSource, confidence?: number): void {

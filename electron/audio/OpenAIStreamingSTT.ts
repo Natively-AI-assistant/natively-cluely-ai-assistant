@@ -640,6 +640,8 @@ export class OpenAIStreamingSTT extends EventEmitter {
                     console.log(`[OpenAIStreaming] Final transcript received`, { length: finalText.length });
                     this._emitTranscript(finalText, true);
                 }
+                // Auto Answer V3 endpoint normalization (additive): server VAD end.
+                try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break the socket */ }
                 break;
             }
             case 'input_audio_buffer.committed':

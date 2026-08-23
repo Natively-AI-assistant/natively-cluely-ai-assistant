@@ -67,6 +67,8 @@ export class AutoAnswerChannelGate {
 
     isUserSpeaking(): boolean { return this.userSpeaking; }
     isInterviewerSpeaking(): boolean { return this.interviewerSpeaking; }
+    /** Epoch ms of the interviewer channel's last speech→silence edge, or null. */
+    getLastInterviewerEndedAt(): number | null { return this.lastInterviewerEndedAt; }
 
     /**
      * Record a transition. Returns the significance of a USER START edge

@@ -33,9 +33,17 @@ import type {
     AutoAnswerCandidate, AutoAnswerPace, AutoAnswerQuestion, AutoAnswerSkipReason, AutoAnswerState,
     AutoAnswerTelemetryEvent, TranscriptEndpointEvent,
 } from './AutoAnswerTypes';
+import type { AsyncTurnPredictor, TurnPredictor } from './AutoAnswerTurnPredictor';
 
 /** Retry cadence while a question waits for the engine (cooldown has no event). Unfitted placeholder. */
 export const QUEUE_RETRY_MS = 500;
+/**
+ * Post-commit rhetorical hold (V3 Amendment 3): measured from the
+ * interviewer's end of speech, cancelled if they resume ("Why do we do it
+ * that way? Well, because…"). A quiet-window commit has usually waited this
+ * long already; an instant provider/predictor commit pays it. Unfitted placeholder.
+ */
+export const RHETORICAL_HOLD_MS = 600;
 
 export interface SpeculativeSnapshot {
     /** The questionId the engine's speculative run was keyed on, if the controller supplied one. */
@@ -72,6 +80,11 @@ export interface AutoAnswerControllerOptions {
     thresholds?: AutoAnswerThresholds;
     channelTuning?: Partial<AutoAnswerChannelTuning>;
     pace?: AutoAnswerPace;
+    /**
+     * Tier-2 endpoint evidence (V3 Amendment 2/3). Optional: absent → the
+     * provider endpoint + quiet window decide, exactly as before.
+     */
+    turnPredictor?: TurnPredictor | AsyncTurnPredictor | null;
 }
 
 interface Committed {
@@ -96,7 +109,13 @@ export class AutoAnswerController {
     /** startedAt of the accumulation behind `current`, to recognise a revision. */
     private currentStartedAt: number | null = null;
     private holdTimer: ClockTimer | null = null;
+    /** A post-commit rhetorical hold is running for `current` (distinct from channel holds for telemetry). */
+    private rhetoricalHold = false;
     private retryTimer: ClockTimer | null = null;
+    private readonly predictor: TurnPredictor | AsyncTurnPredictor | null;
+    private unsubscribePredictor: (() => void) | null = null;
+    /** Epoch ms the interviewer last started speaking (for the predictor's speechDurationMs). */
+    private interviewerSpeechStartedAt: number | null = null;
     private lastDispatchedText: string | null = null;
     private automaticAnswerInFlight = false;
     /** Monotonic token so an awaited dedup/dispatch can tell it was superseded. */
@@ -107,6 +126,13 @@ export class AutoAnswerController {
         this.dedup = new AutoAnswerDedup(options.embed ?? null);
         this.channels = new AutoAnswerChannelGate(options.channelTuning);
         this.thresholds = options.thresholds ?? DEFAULT_THRESHOLDS;
+        this.predictor = options.turnPredictor ?? null;
+        if (this.predictor && isAsyncPredictor(this.predictor)) {
+            this.unsubscribePredictor = this.predictor.subscribe((prediction) => {
+                if (!this.host.isEnabled()) return;
+                this.turns.onLocalPrediction(prediction.pEndpoint);
+            });
+        }
         this.turns = new AutoAnswerTurnManager({
             onCommit: (c) => this.onCommit(c),
             onRevision: (c) => this.onRevision(c),
@@ -157,6 +183,7 @@ export class AutoAnswerController {
         if (!this.host.isEnabled()) return;
         if (!this.host.isMeetingActive()) return;
         if (this.state === 'idle') this.setState('listening');
+        if (segment.speaker === 'interviewer' && (segment.text ?? '').trim()) this.cancelRhetoricalHold();
         this.turns.ingest(segment, this.host.meetingGeneration());
     }
 
@@ -164,8 +191,14 @@ export class AutoAnswerController {
         if (!this.host.isEnabled()) return;
         const significance = this.channels.noteEdge(edge);
         if (edge.channel === 'interviewer') {
-            if (edge.speaking) this.turns.onSpeechStarted('interviewer', edge.atMs);
-            else this.turns.onSpeechEnded('interviewer', edge.atMs);
+            if (edge.speaking) {
+                this.interviewerSpeechStartedAt = edge.atMs;
+                this.turns.onSpeechStarted('interviewer', edge.atMs);
+                this.cancelRhetoricalHold();
+            } else {
+                this.turns.onSpeechEnded('interviewer', edge.atMs);
+                this.consultPredictor(edge.atMs);
+            }
             return;
         }
         // 'overlap' (the user began while the interviewer was still talking) is
@@ -360,9 +393,10 @@ export class AutoAnswerController {
         }
     }
 
-    /** The dual-channel gate: dispatch now, hold, or drop. */
+    /** The dual-channel gate, then the rhetorical hold: dispatch now, hold, or drop. */
     private gateAndDispatch(committed: Committed): void {
-        const verdict = this.channels.verdict(this.clock.now());
+        const now = this.clock.now();
+        const verdict = this.channels.verdict(now);
         if (verdict.kind === 'drop') {
             this.turns.markDispatched();
             this.skip(verdict.reason, committed.question);
@@ -378,7 +412,53 @@ export class AutoAnswerController {
             }, verdict.holdMs);
             return;
         }
+        // Post-commit rhetorical hold (V3 Amendment 3), measured from the last
+        // evidence of interviewer activity — the later of the VAD end and the
+        // last transcript update — so a quiet-window commit (already ≥ 1100 ms
+        // past that) pays nothing and only an instant endpoint commit waits.
+        const endedAt = Math.max(this.channels.getLastInterviewerEndedAt() ?? 0, committed.candidate.lastUpdatedAt);
+        const rhetoricalRemaining = RHETORICAL_HOLD_MS - (now - endedAt);
+        if (rhetoricalRemaining > 0) {
+            this.clearHold();
+            this.rhetoricalHold = true;
+            this.holdTimer = this.clock.setTimeout(() => {
+                this.holdTimer = null;
+                this.rhetoricalHold = false;
+                if (this.current !== committed) return;
+                this.decide(committed, false);
+            }, rhetoricalRemaining);
+            return;
+        }
         this.dispatch(committed);
+    }
+
+    /** The interviewer resumed inside the rhetorical hold: the question was not for us (yet). */
+    private cancelRhetoricalHold(): void {
+        if (!this.rhetoricalHold || this.holdTimer === null) return;
+        this.clearHold();
+        this.rhetoricalHold = false;
+        const q = this.current?.question;
+        this.skip('rhetorical', q);
+        // The commit stays undispatched, so a continuation revises it in place
+        // and a self-answer ("…? Because hot keys.") is re-judged as rhetorical.
+        this.turns.holdOpen();
+        this.setState('possible_question');
+    }
+
+    /** Ask the local TurnPredictor about this silence (Tier 2). Audio predictors answer via subscribe(). */
+    private consultPredictor(atMs: number): void {
+        if (!this.predictor) return;
+        try {
+            if (isAsyncPredictor(this.predictor)) this.predictor.onInterviewerSpeechStop(atMs);
+            const candidate = this.turns.getCandidate();
+            const prediction = this.predictor.predict({
+                partialTranscript: candidate?.text ?? '',
+                recentTranscript: this.turnsBefore(candidate ?? { text: '', segments: [], startedAt: atMs, lastUpdatedAt: atMs, generation: 0, endpointSource: 'vad' }),
+                speechDurationMs: this.interviewerSpeechStartedAt !== null ? Math.max(0, atMs - this.interviewerSpeechStartedAt) : 0,
+                silenceMs: 0,
+            });
+            if (prediction) this.turns.onLocalPrediction(prediction.pEndpoint);
+        } catch { /* the predictor must never break the deterministic path (V2 §38) */ }
     }
 
     private dispatch(committed: Committed): void {
@@ -510,6 +590,14 @@ export class AutoAnswerController {
 
     private clearHold(): void {
         if (this.holdTimer !== null) { this.clock.clearTimeout(this.holdTimer); this.holdTimer = null; }
+        this.rhetoricalHold = false;
+    }
+
+    /** Release the predictor subscription (tests / teardown). */
+    dispose(): void {
+        this.unsubscribePredictor?.();
+        this.unsubscribePredictor = null;
+        this.resetAll();
     }
 
     private startRetry(): void {
@@ -541,6 +629,10 @@ export class AutoAnswerController {
         this.questionSequence = 0;
         this.evaluation++;
     }
+}
+
+function isAsyncPredictor(p: TurnPredictor | AsyncTurnPredictor): p is AsyncTurnPredictor {
+    return typeof (p as AsyncTurnPredictor).subscribe === 'function';
 }
 
 function wordCount(text: string): number {

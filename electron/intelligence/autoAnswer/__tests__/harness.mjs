@@ -25,7 +25,9 @@ export const { QUIET_WINDOW_MS, HARD_CAP_MS } = TurnManager;
 export const QUIET = QUIET_WINDOW_MS.balanced;
 export const { USER_SILENCE_MS, OVERLAP_VETO_MS, HOLD_BUDGET_MS } = ChannelGate;
 export const { QUEUE_TTL_MS } = Queue;
-export const { QUEUE_RETRY_MS } = Controller;
+export const { QUEUE_RETRY_MS, RHETORICAL_HOLD_MS } = Controller;
+export const { CONFIRM_HIGH_MS, CONFIRM_MID_MS, CONFIDENT_ENDPOINT_P, LIKELY_ENDPOINT_P, POSSIBLE_ENDPOINT_P, confirmBudgetMs } = TurnManager;
+export const Predictor = dist('AutoAnswerTurnPredictor.js');
 
 export const flush = () => new Promise((r) => setImmediate(r));
 

@@ -41,6 +41,8 @@ const REQUIRED_MODEL_FILES = [
   'Xenova/bge-reranker-base/tokenizer.json',
   'Xenova/bge-reranker-base/tokenizer_config.json',
   'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
+  'pipecat-ai/smart-turn-v3/manifest.json',
+  'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx',
 ];
 
 // Required dependency directories in node_modules.

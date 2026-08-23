@@ -1219,6 +1219,7 @@ import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
+import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
@@ -3181,6 +3182,8 @@ export class AppState {
   // question identity, answerability, dedup, queueing, the dual-channel gate
   // and every skip reason (electron/intelligence/autoAnswer/). With the toggle
   // OFF `ingest` returns before touching any state — hotkey-only, as before.
+  /** Built before the controller (field order) so the controller can subscribe to it. */
+  private readonly smartTurnPredictor = createSmartTurnPredictor((line) => { if (this._verboseLogging) console.log(line); });
   private readonly autoAnswerController = new AutoAnswerController({
     isEnabled: () => this._autoAnswerEnabled,
     isMeetingActive: () => this.isMeetingActive,
@@ -3206,6 +3209,9 @@ export class AppState {
       } catch { /* telemetry must never break the pipeline */ }
     },
   }, {
+    // Tier-2 endpoint evidence: Smart Turn v3.1 on the interviewer audio
+    // (V3 Amendment 2). Asset missing → predict() null → deterministic path.
+    turnPredictor: this.smartTurnPredictor,
     // Layer-3 dedup / speculative reuse over the bundled local embedder
     // (Xenova/all-MiniLM-L6-v2). Lazily constructed; any failure → null →
     // the cheap layers decide (V2 §38: never depend on a model asset).
@@ -3225,6 +3231,16 @@ export class AppState {
 
   private cancelAutoAnswer(): void {
     this.autoAnswerController.onMeetingStop();
+    // Free the Smart Turn ORT session between meetings (and on toggle-off).
+    // It is lazily re-created on the next interviewer speech-stop. Also keeps
+    // a live ORT session out of any hard-exit path: process.exit() with one
+    // loaded SIGABRTs (reproduced under Electron 43's Node).
+    void this.smartTurnPredictor.dispose();
+  }
+
+  /** before-quit: release the Smart Turn session before the process winds down. */
+  public disposeAutoAnswerForShutdown(): void {
+    void this.smartTurnPredictor.dispose();
   }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
@@ -3390,6 +3406,17 @@ export class AppState {
       : stt instanceof NativelyProSTT ? 'natively'
       : stt instanceof GoogleSTT ? 'google'
       : sttProvider;
+
+    // Auto Answer V3 provider endpoints (Deepgram speech_final / UtteranceEnd,
+    // Soniox <end>, OpenAI server VAD). Interviewer channel only; additive
+    // event that only the controller consumes. Providers without the event
+    // simply never emit it — the quiet window remains the floor.
+    if (speaker === 'interviewer') {
+      (stt as any).on?.('endpoint', (ev: { type: 'speech_final' | 'utterance_end'; confidence?: number }) => {
+        if (!this._autoAnswerEnabled) return;
+        this.autoAnswerController.onProviderEndpoint({ type: ev.type, timestamp: Date.now(), confidence: ev.confidence });
+      });
+    }
 
     // Wire Transcript Events
     stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string }) => {
@@ -3816,6 +3843,9 @@ export class AppState {
       // transcript (F-102).
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.write(chunk);
+        // Smart Turn ring buffer (256 KB, interviewer channel only). Cheap
+        // int16 copy; skipped entirely while Auto Answer is off.
+        if (this._autoAnswerEnabled) this.smartTurnPredictor.pushPcm(chunk, capture.getSampleRate?.() ?? 16000);
       }
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -8786,6 +8816,7 @@ if (process.env.THINKING_MATRIX === '1') {
     // audio handles start tearing down.
     try {
       appState.stopDefaultOutputWatcherForShutdown?.();
+      appState.disposeAutoAnswerForShutdown?.();
     } catch (e) {
       console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
     }

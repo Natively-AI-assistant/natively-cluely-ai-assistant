@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 4 complete
+## Status: phase 5 complete
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -444,6 +444,87 @@ Dialect adapters are MODELS of provider behaviour (from the providers' documente
 **Requires physical verification** against each live provider remains (V2 §48 step 9).
 Deviations: the fixture `follow_up` judges `isFollowUp` on the SECOND dispatch in a dedicated test (the first
 dispatch is the Redis question). Open questions: none.
+
+### Phase 5 — endpoint fusion, TurnPredictor, Smart Turn v3.1
+**Provider-file notice (stated before editing, per the ground rules):** endpoint normalization genuinely required
+touching three STT adapters, each ADDITIVELY (a new `'endpoint'` event; no existing event or payload changed):
+- `electron/audio/DeepgramStreamingSTT.ts` — `speech_final` (present in the Transcript payload, dropped before) and
+  `LiveTranscriptionEvents.UtteranceEnd` (`utterance_end_ms: 1000` was already requested, the event was unhandled).
+- `electron/audio/SonioxStreamingSTT.ts` — the `<end>` endpoint marker (was only logged) → `utterance_end`.
+- `electron/audio/OpenAIStreamingSTT.ts` — `input_audio_buffer.speech_stopped` (server VAD) → `utterance_end`.
+Flux and AssemblyAI have NO adapter in this repo; their dialects exist only in the replay harness (normalized to
+`speech_final` + their EOT confidence).
+
+- `AutoAnswerTurnPredictor.ts` — NEW: `TurnPredictor` EXACTLY as V2 §37 (input `{partialTranscript, recentTranscript,
+  speechDurationMs, silenceMs}` → `{pContinuation, pEndpoint, pQuestionComplete, estimatedRemainingSpeechMs?}`), with
+  `| null` = no opinion (the prompt's "missing asset → predictor returns null"); `AsyncTurnPredictor` extension
+  (`pushPcm`, `onInterviewerSpeechStop`, `subscribe`) for audio evidence that arrives after a speech stop;
+  `PcmRingBuffer` (8 s × 16 kHz int16 = 256 KB); `SmartTurnPredictor` with INJECTED asset resolver / session
+  factory / feature extractor (tests use stubs); `createSmartTurnPredictor()` = production wiring: asset via the
+  shared `resolveLocalModelAsset`, `onnxruntime-node` session with `getBoundedOnnxSessionOptions`, Whisper log-mel
+  via `@huggingface/transformers`' `WhisperFeatureExtractor` (80 mel / n_fft 400 / hop 160 / 8 s → [1,80,800]),
+  HF `do_normalize` reproduced (zero-mean unit-var). One inference per interviewer speech-stop; prediction TTL 2 s;
+  absence logged ONCE; `dispose()` releases the session.
+- `AutoAnswerTurnManager.ts` — fusion tiers `provider > local > window` (`proposeEndpoint`): a lower tier never
+  overrides a higher one; within a tier a deadline only moves EARLIER; any new interviewer evidence (final, partial,
+  speech-start) resets to the window tier (TurnResumed). Adaptive budgets `confirmBudgetMs(p, pace)`: p ≥ 0.90 →
+  250 ms; 0.70–0.90 → 600 ms; 0.45–0.70 → pace preset; < 0.45 → hold (no shortening); all under `HARD_CAP_MS`.
+  Provider signals without confidence use `DEFAULT_ENDPOINT_CONFIDENCE` (speech_final 0.85, utterance_end 0.75).
+- `AutoAnswerController.ts` — `RHETORICAL_HOLD_MS=600` post-commit hold measured from the last evidence of
+  interviewer activity (max of VAD end and last transcript update): a quiet-window commit pays nothing, an instant
+  endpoint/predictor commit waits; cancelled on interviewer resume (speech-start or interviewer transcript) with
+  skip `rhetorical` — the commit stays undispatched and is held open so the continuation revises it (a self-answer
+  is then re-judged `rhetorical` by the detector). Predictor wiring: `onInterviewerSpeechStop` + sync `predict()`
+  on the interviewer VAD end; async results via `subscribe()` → `turns.onLocalPrediction`.
+- `electron/main.ts` — interviewer STT `'endpoint'` → `controller.onProviderEndpoint`; system-audio `data` chunks →
+  `smartTurnPredictor.pushPcm` (only while the toggle is ON); predictor passed to the controller; session released
+  on meeting stop / toggle off and in `before-quit` (`disposeAutoAnswerForShutdown`).
+- Asset (same mechanism as the Xenova models): tracked `resources/models/pipecat-ai/smart-turn-v3/manifest.json`
+  (url, sha256, bytes, license); `scripts/download-models.js` gains a manifest-driven, sha256-verified, idempotent
+  download (plain https, redirects, `.part` + rename); `.onnx` stays gitignored; listed in all three REQUIRED lists
+  (`download-models.js`, `LocalFallbackAssets.ts`, `verify-packaged-local-assets.mjs`) so packaging carries it.
+  Downloaded here and verified: 8,679,180 bytes, sha256 `fb68d55c…`.
+- Real-model check (macOS host, Node 25 and Electron 43's Node): session loads, `[1,80,800]` features, inference
+  ~50–75 ms warm on this CPU (the blog's 12 ms is without the JS feature frontend), p≈0.97 on synthetic tones/noise.
+  **Teardown hazard reproduced:** `process.exit()` with a live onnxruntime-node session SIGABRTs ("mutex lock
+  failed") under BOTH Node 25 and Electron 43; a natural exit is clean. Normal quit is `app.quit()` (natural), and
+  the session is released on meeting stop and before-quit, so no session exists on the hard-exit paths
+  (single-instance `process.exit(0)` runs before any meeting; the signal path calls `app.exit(0)` after DB close).
+  Recorded as a residual requiring physical verification.
+- Declarative fixtures: NOT flipped. The replay harness is text-only (no audio in fixtures), so the real model cannot
+  pass them there; they stay `expectedFail: true` and the evaluator reports them under `expected_fail_still_failing`.
+- `__tests__/AutoAnswerFusion.test.mjs` — NEW: 17 tests (budget boundaries, priority, hold/never-extend, TurnResumed
+  reset, hard cap under continuous finals + confident endpoints, predictor-absent fallback, sync/async predictors,
+  rhetorical-hold cancel and landing time, ring buffer wrap/overflow, PCM decode + 48 kHz decimation, waveform
+  normalisation, Smart Turn adapter: one inference per stop / TTL / missing asset logged once / failed session /
+  < 250 ms audio skipped / 8 s window / async feed into tier 2).
+
+Evaluator after Phase 5: precision 1.0 · recall 0.90 (expected-fail only) · false/duplicate/premature 0 ·
+endpoint_to_decision_ms median: flux/nova/assemblyai 850, canonical/elevenlabs/rest-whisper 1100. The 850 ms floor on
+endpoint dialects is `USER_SILENCE_MS` (700) from the VAD end — V3 Amendment 1 outranks the 250 ms confirm.
+
+Mutation probes (each deletion → named test(s) red; diff-verified restore): fusion priority (tier rank check) →
+'fusion priority…'; CONFIRM_HIGH band → 'adaptive budget boundaries' + 3; hold band (<0.45) → 'a low-confidence
+endpoint holds…' + boundaries; hard cap inside proposeEndpoint → 'hard cap under continuous finals…'; rhetorical
+cancel → 'rhetorical hold: an interviewer resume…'; rhetorical hold itself → 4 tests incl. 'with no resume the
+dispatch lands at RHETORICAL_HOLD_MS…'.
+
+Tests/validation: Auto Answer suite 164/164; evaluator gate passes. `typecheck:electron` 0 · `typecheck:ts7` 0 ·
+`verify:packaged-local-assets` OK (Smart Turn included) · `npm run build` OK · `npm test` tests 8464 · pass 8394 ·
+fail 7 (identical pre-existing set) · `cargo test` 26 passed.
+Validation labels:
+- Fusion, budgets, rhetorical hold, ring buffer, predictor fallback, Smart Turn adapter logic: **Covered by
+  automated tests**.
+- Real Smart Turn session + feature frontend: **Tested physically on macOS** (standalone Node/Electron-Node probe,
+  synthetic audio only — NOT a live meeting, NOT labelled speech). **Requires physical Windows verification** (ORT
+  CPU EP + onnxruntime-node on Windows; the code path is identical but was not executed there).
+- Provider adapters (Deepgram/Soniox/OpenAI `'endpoint'` emission) and the AppState PCM/endpoint wiring:
+  **Reviewed but not executed** against live providers.
+Deviations: `TurnPredictor.predict` returns `TurnPrediction | null` (the prompt mandates null on a missing asset; V2
+§37 has no null). Smart Turn runs on the main thread (every other ORT consumer is in a worker) — ~50–75 ms once per
+interviewer speech-stop; moving it to a worker is a recorded follow-up. Open question for the human: whether the
+postinstall hard-requirement on the Smart Turn download is acceptable (it mirrors the Xenova assets; the RUNTIME
+never requires it).
 
 ## Known residuals
 
