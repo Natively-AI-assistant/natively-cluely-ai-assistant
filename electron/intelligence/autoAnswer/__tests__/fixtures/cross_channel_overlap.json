@@ -1,0 +1,75 @@
+{
+  "name": "cross_channel_overlap",
+  "bucket": "dual_channel",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "How would you scale this"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "How would you scale this"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "How would you scale this to ten million users?"
+    },
+    {
+      "at": 1000,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "to ten million users?"
+    },
+    {
+      "at": 1150,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    },
+    {
+      "at": 800,
+      "edge": {
+        "channel": "user",
+        "speaking": true
+      }
+    },
+    {
+      "at": 1300,
+      "edge": {
+        "channel": "user",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": true,
+    "question": "How would you scale this to ten million users?",
+    "triggerCount": 1
+  }
+}

@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 3 complete
+## Status: phase 4 complete
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -401,6 +401,49 @@ Validation labels:
 
 Open questions for the human: (1) the balanced window 900→1100 ms; (2) whether `offer` should already be wired
 to a surface in Phase 3 (it is telemetry-only until Phase 6 by design).
+
+### Phase 4 — replay harness, provider-dialect parity, adversarial fixtures, offline evaluator
+- `__tests__/replay.mjs` — fixture loader, dialect adapters, `replay()` (runs a fixture through the real controller on
+  the fake clock), `judge()`. Dialects: `canonical`, `flux` (turn-level final + EndOfTurn confidence 0.8), `nova`
+  (is_final fragments + speech_final + UtteranceEnd at +1000), `assemblyai` (finals + end_of_turn 0.85), `elevenlabs`
+  (finals only), `rest-whisper` (one batch final per utterance at +800 upload latency, no partials/endpoints).
+- `__tests__/fixtures/*.json` — 34 fixtures, generated from one script for consistency: 8 positives, fragmented,
+  no-punctuation, 10 negatives, continuation, dedup pair, follow-up ("And why?"), question-then-continued-speech,
+  manual precedence, stop/restart, user-answers-promptly, user-silent-fast-fire, interviewer self-answer within hold,
+  cross-channel overlap, code-switching pause, barge-in, 2× declarative (`expectedFail: true`).
+- `__tests__/AutoAnswerReplay.test.mjs` — bucket coverage test; per-fixture canonical assertion (expectedFail fixtures
+  are asserted to STILL fail so the flag can only be flipped deliberately); per-fixture parity across all dialects
+  (shouldAnswer / question / triggerCount identical; latency free). **No `knownGap` was needed — REST-Whisper parity
+  holds** because the quiet window operates on batch finals too.
+- `__tests__/evaluator.mjs` + `npm run test:auto-answer:eval` (separate slow target, `--gate` fails on any false or
+  premature trigger) and `npm run test:auto-answer` (the subsystem suite alone).
+
+Harness findings that changed the subsystem (all now tested):
+1. Provider-endpoint dialects commit INSTANTLY, which exposed that "user silent for USER_SILENCE_MS" was only a
+   backward-looking check. It is now a post-commit window measured from the interviewer's end of speech
+   (`lastInterviewerEndedAt`), so an instant endpoint still gives the user 700 ms to start answering first. A
+   quiet-window commit has already waited, so no latency is added there.
+2. User speech that BEGAN while the interviewer was still talking is an `overlap` (hold within budget), not
+   `user_answering` (drop) — the cross-channel-overlap fixture diverged by dialect before this.
+3. An accumulation abandoned by a user turn now emits `user_answering` (TurnManager `onDiscard`) — it was a silent drop.
+4. Detector: `SELF_ANSWERED` ("Why do we shard by user id? Because hot keys." → rhetorical) and `DEFERRAL`
+   ("How would you scale this if... Actually, before that, let me…" → pause_request).
+
+Evaluator (204 runs = 34 × 6): question_precision 1.0 · question_recall 0.90 (the 12 expected-fail declarative runs
+are the only misses) · answer_opportunity_precision 1.0 · recall 0.90 · false_trigger_rate 0 · duplicate_trigger_rate 0 ·
+premature_trigger_rate 0 · question_reconstruction_accuracy 1.0 · endpoint_to_decision_ms median: canonical/elevenlabs/
+rest-whisper 1100, flux/nova/assemblyai 850 · median_decision_to_first_token_ms: null (no LLM offline) ·
+calibration: 0.9-1.0 bucket n=129 observed precision 0.93, 0.4-0.5 n=12 precision 1.0 (candidates inside positive
+fixtures that are not the dispatched question), ≤0.3 precision 0. Calibration is heuristic-vs-label only; it is NOT a
+probability until the audio corpus exists (V3 Amendment 8 — human work, out of scope).
+
+Tests: Auto Answer suite 147/147 (76 unit + 71 replay/parity). `npm test` → tests 8447 · pass 8377 · fail 7 (identical
+pre-existing set) · skipped 63. `typecheck:electron` 0 errors.
+Validation labels: replay harness, dialect parity, adversarial buckets, evaluator: **Covered by automated tests**.
+Dialect adapters are MODELS of provider behaviour (from the providers' documented event shapes), not recordings —
+**Requires physical verification** against each live provider remains (V2 §48 step 9).
+Deviations: the fixture `follow_up` judges `isFollowUp` on the SECOND dispatch in a dedicated test (the first
+dispatch is the Redis question). Open questions: none.
 
 ## Known residuals
 

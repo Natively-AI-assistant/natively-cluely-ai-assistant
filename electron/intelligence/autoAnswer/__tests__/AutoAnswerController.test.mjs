@@ -349,14 +349,30 @@ test('user speaking when the gate fires: dropped as user_answering, never held',
   const h = makeHarness();
   h.edge('interviewer', true);
   await h.advance(1000);
-  h.edge('user', true);
-  await h.advance(100);
   h.edge('interviewer', false);
   h.interviewerFinal(Q);
+  await h.advance(200);
+  h.edge('user', true);                 // began AFTER the interviewer stopped: answering
   await h.advance(QUIET);
   assert.deepEqual(h.texts(), []);
   assert.ok(h.state.skips.includes('user_answering'));
   assert.equal(h.controller.isHolding(), false);
+});
+
+test('user speech that began while the interviewer was still talking is an overlap: held, then fires once they stop', async () => {
+  const h = makeHarness();
+  h.edge('interviewer', true);
+  await h.advance(1000);
+  h.edge('user', true);                 // talking over the last words
+  await h.advance(100);
+  h.edge('interviewer', false);
+  h.interviewerFinal(Q);
+  await h.advance(QUIET);
+  assert.deepEqual(h.texts(), [], 'held while the overlap continues');
+  assert.equal(h.controller.isHolding(), true);
+  h.edge('user', false);
+  await h.advance(USER_SILENCE_MS);
+  assert.deepEqual(h.texts(), [Q]);
 });
 
 test('user silent: the dispatch is held until USER_SILENCE_MS of silence', async () => {

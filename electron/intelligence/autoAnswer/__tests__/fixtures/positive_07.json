@@ -1,0 +1,61 @@
+{
+  "name": "positive_07",
+  "bucket": "positive",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "One more question —"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "One more question —"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "One more question — tell me about your biggest failure."
+    },
+    {
+      "at": 1000,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "tell me about your biggest failure."
+    },
+    {
+      "at": 1150,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": true,
+    "question": "One more question — tell me about your biggest failure.",
+    "triggerCount": 1
+  }
+}

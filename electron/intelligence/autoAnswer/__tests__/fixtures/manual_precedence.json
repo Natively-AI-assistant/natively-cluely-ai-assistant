@@ -1,0 +1,83 @@
+{
+  "name": "manual_precedence",
+  "bucket": "manual",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Tell me about a time"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "Tell me about a time"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Tell me about a time you disagreed"
+    },
+    {
+      "at": 1000,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "you disagreed"
+    },
+    {
+      "at": 1000,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Tell me about a time you disagreed with your manager."
+    },
+    {
+      "at": 1450,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "with your manager."
+    },
+    {
+      "at": 1600,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    },
+    {
+      "at": 1800,
+      "manual": true
+    },
+    {
+      "at": 7600,
+      "manualDone": true
+    }
+  ],
+  "expected": {
+    "shouldAnswer": false,
+    "triggerCount": 0,
+    "skipReason": [
+      "manual_answer_active"
+    ]
+  }
+}

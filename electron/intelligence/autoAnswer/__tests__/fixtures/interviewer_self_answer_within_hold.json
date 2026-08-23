@@ -1,0 +1,87 @@
+{
+  "name": "interviewer_self_answer_within_hold",
+  "bucket": "rhetorical",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Why do we shard"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "Why do we shard"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Why do we shard by user id?"
+    },
+    {
+      "at": 1000,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "by user id?"
+    },
+    {
+      "at": 1150,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    },
+    {
+      "at": 1400,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 1500,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Because hot keys."
+    },
+    {
+      "at": 1950,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "Because hot keys."
+    },
+    {
+      "at": 2100,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": false,
+    "triggerCount": 0,
+    "noOffer": true
+  }
+}

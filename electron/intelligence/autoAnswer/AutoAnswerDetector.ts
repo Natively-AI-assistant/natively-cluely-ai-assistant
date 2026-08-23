@@ -86,6 +86,10 @@ const EXPOSITION = /^(companies|teams|people|engineers|organizations|most (compa
 const SECOND_PERSON = /\b(you|your|you're|you've|yourself)\b/i;
 /** A short interrogative that leans on the previous exchange: "And why?", "So what about latency?", "Why not?". */
 const SHORT_FOLLOW_UP = /^(and|so|but|what about|how about|why|why not|and why|and how|and then|okay and|ok and)\b/i;
+/** The interviewer answered their own question in the same breath: "Why do we shard by user id? Because hot keys." */
+const SELF_ANSWERED = /\?\s+(because|since|well,?|so,?|it'?s|that'?s|the (reason|answer)|we (do|did|use)|obviously|of course|mainly|mostly)\b/i;
+/** The question was set aside before it was finished: "How would you scale this if... Actually, before that, let me…" */
+const DEFERRAL = /(\.\.\.|…)\s+\S|\b(actually,? (before|first|hold|wait|let me)|before that,? let me|first,? let me|let me (give you|set|provide|first)|hold that thought|one sec(ond)?,? first)\b/i;
 const CODING_ASK = /\b(implement|write (a|the|some)? ?(function|code|program|class|method)|solve|code (up|this)|algorithm|time complexity|big[- ]?o|data structure|hash ?map|linked list|binary tree|two pointers|dynamic programming)\b/i;
 
 export interface DetectParams {
@@ -226,6 +230,8 @@ function classifyAct(
     if (TRAILING_ELLIPSIS.test(text) || BARE_INTERROGATIVE.test(text)) return 'incomplete';
     if (!endsWithMark && DANGLING_TAIL.test(text) && punctuationSource !== 'unavailable') return 'incomplete';
     if (WAIT_IDIOM.test(text) || /^(let me think|one (sec|moment)|hold on|bear with me)\b/i.test(text)) return 'pause_request';
+    if (SELF_ANSWERED.test(text)) return 'rhetorical';
+    if (DEFERRAL.test(text)) return 'pause_request';
     if (CONFIRMATION.test(text)) return 'confirmation';
     if (RHETORICAL.test(text)) return 'rhetorical';
     if (BACKCHANNEL.test(text) && words.length <= 4) return 'backchannel';

@@ -111,6 +111,12 @@ export class AutoAnswerController {
             onCommit: (c) => this.onCommit(c),
             onRevision: (c) => this.onRevision(c),
             onEndpointEvent: (e) => this.onEndpointEvent(e),
+            onDiscard: (c, reason) => {
+                // The user took the floor before the interviewer's turn was
+                // judged: they did not need help. Machine-readable, never silent.
+                this.skip(reason === 'user_turn' ? 'user_answering' : 'incomplete', undefined, { candidateWordCount: wordCount(c.text) });
+                if (this.state === 'possible_question' || this.state === 'speculating') this.setState('listening');
+            },
         }, this.clock, options.pace ?? 'balanced');
     }
 
@@ -162,6 +168,8 @@ export class AutoAnswerController {
             else this.turns.onSpeechEnded('interviewer', edge.atMs);
             return;
         }
+        // 'overlap' (the user began while the interviewer was still talking) is
+        // a hold for the channel gate at dispatch time, never a cancellation.
         if (significance !== 'user_speech') return;
 
         if (this.automaticAnswerInFlight && this.host.cancelAutomaticAnswer('user_barge_in')) {

@@ -47,6 +47,8 @@ export interface TurnManagerEvents {
     onRevision?(candidate: AutoAnswerCandidate): void;
     /** Normalized endpoint event, for telemetry and Phase 5 fusion. */
     onEndpointEvent?(event: TranscriptEndpointEvent): void;
+    /** An accumulation with finals was abandoned without a commit (a user turn closed it). */
+    onDiscard?(candidate: AutoAnswerCandidate, reason: 'user_turn' | 'gap'): void;
 }
 
 interface Accumulation {
@@ -108,7 +110,7 @@ export class AutoAnswerTurnManager {
     ingest(segment: TranscriptSegment, meetingGeneration?: number): void {
         const now = this.clock.now();
         if (segment.speaker !== 'interviewer') {
-            if (segment.final && (segment.text ?? '').trim()) this.closeAccumulation();
+            if (segment.final && (segment.text ?? '').trim()) this.closeAccumulation('user_turn');
             return;
         }
         const text = (segment.text ?? '').trim();
@@ -149,7 +151,7 @@ export class AutoAnswerTurnManager {
             this.lastCommit = null;
         }
 
-        if (this.acc && now - this.acc.lastUpdatedAt > CANDIDATE_GAP_MS) this.closeAccumulation();
+        if (this.acc && now - this.acc.lastUpdatedAt > CANDIDATE_GAP_MS) this.closeAccumulation('gap');
         if (!this.acc) {
             this.acc = {
                 meetingGeneration,
@@ -235,9 +237,11 @@ export class AutoAnswerTurnManager {
         this.events.onCommit(candidate);
     }
 
-    private closeAccumulation(): void {
+    private closeAccumulation(reason: 'user_turn' | 'gap'): void {
         this.disarm();
+        const acc = this.acc;
         this.acc = null;
+        if (acc && acc.segments.length > 0) this.events.onDiscard?.(this.snapshot(acc, 'quiet_window'), reason);
         // A user turn means the previous commit is answered/abandoned; no revision after it.
         if (this.lastCommit) this.lastCommit.dispatched = true;
     }

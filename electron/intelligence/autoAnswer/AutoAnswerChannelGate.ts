@@ -40,16 +40,24 @@ export type ChannelVerdict =
     | { kind: 'hold'; holdMs: number }
     | { kind: 'drop'; reason: 'user_answering' | 'incomplete' };
 
-/** What a user START edge means for whatever is currently armed or streaming. */
-export type UserStartSignificance = 'user_speech' | 'possible_bleed';
+/**
+ * What a user START edge means for whatever is currently armed or streaming:
+ * 'user_speech' — the user began after the interviewer stopped (answering / barge-in);
+ * 'overlap'     — the user began while the interviewer was still talking (a hold, not a drop);
+ * 'possible_bleed' — an RMS-only mic edge during interviewer speech (speaker bleed on Windows).
+ */
+export type UserStartSignificance = 'user_speech' | 'overlap' | 'possible_bleed';
 
 export class AutoAnswerChannelGate {
     private readonly tuning: AutoAnswerChannelTuning;
     private userSpeaking = false;
     private interviewerSpeaking = false;
     private lastUserEndedAt: number | null = null;
+    private lastInterviewerEndedAt: number | null = null;
     private lastBothEndedAt: number | null = null;
     private userEdgesVadBacked = true;
+    /** The current user speech began while the interviewer was still talking (an overlap, not an answer). */
+    private userStartOverlapped = false;
     /** When the current candidate first entered a hold, or null. Reset by the controller per candidate. */
     private holdStartedAt: number | null = null;
 
@@ -75,16 +83,18 @@ export class AutoAnswerChannelGate {
         this.userEdgesVadBacked = edge.userEdgesVadBacked;
         if (edge.channel === 'user') {
             this.userSpeaking = edge.speaking;
-            if (!edge.speaking) this.lastUserEndedAt = edge.atMs;
+            if (edge.speaking) this.userStartOverlapped = this.interviewerSpeaking;
+            else this.lastUserEndedAt = edge.atMs;
         } else {
             this.interviewerSpeaking = edge.speaking;
+            if (!edge.speaking) this.lastInterviewerEndedAt = edge.atMs;
         }
         const isBoth = this.userSpeaking && this.interviewerSpeaking;
         if (wasBoth && !isBoth) this.lastBothEndedAt = edge.atMs;
 
         if (edge.channel !== 'user' || !edge.speaking) return null;
-        const clean = !this.interviewerSpeaking || edge.userEdgesVadBacked;
-        return clean ? 'user_speech' : 'possible_bleed';
+        if (!this.interviewerSpeaking) return 'user_speech';
+        return edge.userEdgesVadBacked ? 'overlap' : 'possible_bleed';
     }
 
     /** Start a fresh hold budget (a new candidate was committed). */
@@ -94,19 +104,34 @@ export class AutoAnswerChannelGate {
     reset(): void {
         this.holdStartedAt = null;
         this.lastUserEndedAt = null;
+        this.lastInterviewerEndedAt = null;
         this.lastBothEndedAt = null;
+        this.userStartOverlapped = false;
     }
 
     /** Evaluate at the moment of dispatch. */
     verdict(now: number): ChannelVerdict {
         const { userSilenceMs, overlapVetoMs, holdBudgetMs } = this.tuning;
-        const cleanUserSpeech = this.userSpeaking && (!this.interviewerSpeaking || this.userEdgesVadBacked);
-        if (cleanUserSpeech) {
+        // The user is talking and it began AFTER the interviewer stopped: they
+        // are answering. (A start during interviewer speech is an overlap and
+        // holds below; an RMS-only edge during interviewer speech may be bleed.)
+        const answering = this.userSpeaking && !this.userStartOverlapped
+            && (!this.interviewerSpeaking || this.userEdgesVadBacked);
+        if (answering) {
             this.holdStartedAt = null;
             return { kind: 'drop', reason: 'user_answering' };
         }
         let holdMs = 0;
         const both = this.userSpeaking && this.interviewerSpeaking;
+        // Post-commit silence window (V3 Amendment 1): USER_SILENCE_MS of
+        // dual-channel silence after the interviewer's end of speech, so a
+        // provider endpoint that commits instantly still gives the user their
+        // chance to answer first. A quiet-window commit has already waited.
+        if (this.lastInterviewerEndedAt !== null) {
+            holdMs = Math.max(holdMs, userSilenceMs - (now - this.lastInterviewerEndedAt));
+        }
+        // The user is still talking over the boundary: hold, within budget.
+        if (this.userSpeaking) holdMs = Math.max(holdMs, overlapVetoMs);
         // The interviewer resumed inside the quiet window: the question may not
         // be over. Re-check on the veto cadence; the next final restarts the
         // quiet window properly. Precision over latency.
