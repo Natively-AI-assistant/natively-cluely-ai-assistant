@@ -86,10 +86,26 @@ const EXPOSITION = /^(companies|teams|people|engineers|organizations|most (compa
 const SECOND_PERSON = /\b(you|your|you're|you've|yourself)\b/i;
 /** A short interrogative that leans on the previous exchange: "And why?", "So what about latency?", "Why not?". */
 const SHORT_FOLLOW_UP = /^(and|so|but|what about|how about|why|why not|and why|and how|and then|okay and|ok and)\b/i;
-/** The interviewer answered their own question in the same breath: "Why do we shard by user id? Because hot keys." */
-const SELF_ANSWERED = /\?\s+(because|since|well,?|so,?|it'?s|that'?s|the (reason|answer)|we (do|did|use)|obviously|of course|mainly|mostly)\b/i;
+/**
+ * The material AFTER a question opens like an ANSWER to it. Whether that makes
+ * the question rhetorical depends on who it was aimed at: "Why do we shard by
+ * user id? Because hot keys." is self-answered, but "Are you familiar with
+ * CoderPad? Because that's what we'll be using…" is a DIRECTED question plus
+ * an explanation — live-run 2026-08-24 lost the only real ask of a session to
+ * this distinction, so the second-person guard below exists.
+ */
+const SELF_ANSWER_LEAD = /^(because|since|well,?|so,?|it'?s|that'?s|the (reason|answer)|we (do|did|use)|obviously|of course|mainly|mostly)\b/i;
 /** The question was set aside before it was finished: "How would you scale this if... Actually, before that, let me…" */
 const DEFERRAL = /(\.\.\.|…)\s+\S|\b(actually,? (before|first|hold|wait|let me)|before that,? let me|first,? let me|let me (give you|set|provide|first)|hold that thought|one sec(ond)?,? first)\b/i;
+/**
+ * A candidate-directed imperative at the START of a clause (after at most
+ * discourse tokens): "One more question — tell me about…", "Solve this…".
+ * Deliberately NOT the shared IMPERATIVE_ASK, which matches a bare verb
+ * anywhere and lifted "…and I recommend maybe SHARING your screen…" to the
+ * floor (live-run false positive, 2026-08-24). First-person narration
+ * ("I recommend…", "we're going to share…") never anchors a clause here.
+ */
+const CLAUSE_IMPERATIVE = /(?:^|[.!?;:\u2014-]\s*)(?:(?:ok(?:ay)?|so|now|alright|great|please|and|next|one more question|next question|last question|first question)[,.!\u2014:-]?\s+)*(?:please\s+)?(tell me|tell us|walk me through|walk us through|talk me through|explain|describe|give me|show me|list|name|compare|summari[sz]e|define|discuss|solve|implement|write|design|build|code)\b/i;
 const CODING_ASK = /\b(implement|write (a|the|some)? ?(function|code|program|class|method)|solve|code (up|this)|algorithm|time complexity|big[- ]?o|data structure|hash ?map|linked list|binary tree|two pointers|dynamic programming)\b/i;
 
 export interface DetectParams {
@@ -112,6 +128,8 @@ export interface DetectorScores {
     answerability: number;
     dialogueAct: AutoAnswerDialogueAct;
     extracted: ExtractedQuestion;
+    /** The text an answer should address: the extracted question when the turn carried more than it. */
+    questionText: string;
 }
 
 /** The pure scoring half, exported for the harness and calibration report. */
@@ -135,25 +153,47 @@ export function scoreCandidate(params: DetectParams): DetectorScores {
     const priorExchange = params.recentTurns.some(t => t.role === 'interviewer') && params.recentTurns.some(t => t.role === 'user');
     const shortFollowUp = priorExchange && SHORT_FOLLOW_UP.test(text) && text.split(/\s+/).length <= 5;
     if (shortFollowUp && !extracted.isFollowUp) extracted.isFollowUp = true;
+
+    // A real interviewer turn is often MORE than the question: preamble before
+    // it, elaboration after it ("…are you familiar with CoderPad? Because
+    // that's what we'll be using…"). Split at the LAST '?' so the ask itself
+    // is judged, with the after-text deciding deferral/self-answer (live-run
+    // 2026-08-24). No '?': the whole turn is the region, as before.
+    const split = splitAtLastQuestionMark(text);
+
     // The extractor may pick an OLDER turn as the latest question (e.g. the
     // new candidate is a statement). Auto Answer only ever answers the
     // candidate itself, so a mismatch means "this candidate is not the question".
-    const keyedOnCandidate = sameUtterance(extracted.latestQuestion, text);
+    const keyedOnCandidate = sameUtterance(extracted.latestQuestion, text)
+        || (split !== null && tokenContainment(extracted.latestQuestion, split.questionRegion) >= 0.6);
     let questionConfidence = keyedOnCandidate ? extracted.confidence : 0;
 
-    const hasImperative = IMPERATIVE_ASK.test(text) || TASK_DIRECTIVE.test(text);
-    if (keyedOnCandidate && hasImperative) questionConfidence = Math.max(questionConfidence, IMPERATIVE_ASK_FLOOR);
+    // What gets scored — and, on dispatch, ANSWERED — is the question, not the
+    // surrounding turn. The extractor often returns the WHOLE turn as
+    // latestQuestion; when the turn has after-question material, the question
+    // region is the tighter, correct ask.
+    const questionText = split !== null && keyedOnCandidate
+        ? (tokenContainment(extracted.latestQuestion, split.questionRegion) >= 0.6 && extracted.latestQuestion
+            ? extracted.latestQuestion.trim()
+            : split.questionRegion)
+        : text;
 
-    const act = classifyAct(text, extracted, keyedOnCandidate, punctuationSource);
+    const hasImperative = IMPERATIVE_ASK.test(questionText) || TASK_DIRECTIVE.test(questionText);
+    // The FLOOR needs a clause-anchored directed ask; the broad shared shapes
+    // match bare verbs inside first-person narration (see CLAUSE_IMPERATIVE).
+    const directedImperative = CLAUSE_IMPERATIVE.test(questionText) || TASK_DIRECTIVE.test(questionText);
+    if (keyedOnCandidate && directedImperative) questionConfidence = Math.max(questionConfidence, IMPERATIVE_ASK_FLOOR);
+
+    const act = classifyAct(text, extracted, keyedOnCandidate, punctuationSource, split);
 
     // Completion: per-source baseline, then the textual incompleteness cues.
     let completionConfidence = ENDPOINT_COMPLETION[source];
     if (act === 'incomplete') completionConfidence = Math.min(completionConfidence, 0.3);
 
-    // Directedness (V2 §17).
+    // Directedness (V2 §17), judged on the question itself.
     let directedness = 0.5;
-    if (SECOND_PERSON.test(text) || AUX_SECOND_PERSON.test(text) || hasImperative) directedness = 1.0;
-    if (EXPOSITION.test(text) || SELF_NARRATION.test(text)) directedness = Math.min(directedness, 0.2);
+    if (SECOND_PERSON.test(questionText) || AUX_SECOND_PERSON.test(questionText) || hasImperative) directedness = 1.0;
+    if (EXPOSITION.test(questionText) || SELF_NARRATION.test(questionText)) directedness = Math.min(directedness, 0.2);
 
     // Composite on the extractor scale.
     let answerability = questionConfidence;
@@ -165,7 +205,33 @@ export function scoreCandidate(params: DetectParams): DetectorScores {
     if (cap !== undefined) answerability = Math.min(answerability, cap);
     answerability = clamp01(answerability);
 
-    return { questionConfidence, completionConfidence, directedness, answerability, dialogueAct: act, extracted };
+    return { questionConfidence, completionConfidence, directedness, answerability, dialogueAct: act, extracted, questionText };
+}
+
+/**
+ * Split a turn at its LAST '?': the sentence ending there is the question
+ * region; whatever follows is the after-text. Null when there is no '?' or
+ * nothing follows it (the existing whole-turn paths handle those).
+ */
+export function splitAtLastQuestionMark(text: string): { questionRegion: string; afterRaw: string } | null {
+    const lastQm = text.lastIndexOf('?');
+    if (lastQm < 0) return null;
+    const afterRaw = text.slice(lastQm + 1).trim();
+    if (!afterRaw) return null;
+    const before = text.slice(0, lastQm + 1);
+    const sentenceStart = Math.max(before.lastIndexOf('.', lastQm - 1), before.lastIndexOf('!', lastQm - 1), before.lastIndexOf('?', lastQm - 1));
+    const questionRegion = before.slice(sentenceStart + 1).trim();
+    return { questionRegion, afterRaw };
+}
+
+/** Fraction of `needle`'s normalized tokens present in `haystack`'s. */
+export function tokenContainment(needle: string, haystack: string): number {
+    const nq = normalizeForCompare(needle).split(' ').filter(Boolean);
+    if (nq.length === 0) return 0;
+    const have = new Set(normalizeForCompare(haystack).split(' ').filter(Boolean));
+    let hit = 0;
+    for (const t of nq) if (have.has(t)) hit++;
+    return hit / nq.length;
 }
 
 export class AutoAnswerDetector {
@@ -188,7 +254,7 @@ export class AutoAnswerDetector {
 function buildQuestion(params: DetectParams, s: DetectorScores): AutoAnswerQuestion {
     return {
         id: params.questionId,
-        text: params.candidate.text.trim(),
+        text: s.questionText.trim(),
         confidence: s.questionConfidence,
         answerability: s.answerability,
         completionConfidence: s.completionConfidence,
@@ -221,7 +287,21 @@ function classifyAct(
     extracted: ExtractedQuestion,
     keyedOnCandidate: boolean,
     punctuationSource: string | undefined,
+    split: { questionRegion: string; afterRaw: string } | null = null,
 ): AutoAnswerDialogueAct {
+    // The turn carries material AFTER its question. What that material IS
+    // decides the act (live-run 2026-08-24):
+    //   deferral  ("Actually, before that, let me…")        → the ask is parked
+    //   an answer ("Because hot keys.") to a NON-directed q  → rhetorical
+    //   elaboration on a DIRECTED q ("Because that's what
+    //   we'll be using…")                                    → judge the question itself
+    if (split !== null && keyedOnCandidate) {
+        if (DEFERRAL.test(split.afterRaw)) return 'pause_request';
+        const directedQuestion = SECOND_PERSON.test(split.questionRegion) || AUX_SECOND_PERSON.test(split.questionRegion)
+            || IMPERATIVE_ASK.test(split.questionRegion) || TASK_DIRECTIVE.test(split.questionRegion);
+        if (SELF_ANSWER_LEAD.test(split.afterRaw) && !directedQuestion) return 'rhetorical';
+        return classifyAct(split.questionRegion, extracted, keyedOnCandidate, punctuationSource, null);
+    }
     const words = text.split(/\s+/).filter(Boolean);
     const endsWithMark = /[?.!]$/.test(text);
     // The interrogative-lead stub "How would you" is incomplete regardless of
@@ -230,7 +310,7 @@ function classifyAct(
     if (TRAILING_ELLIPSIS.test(text) || BARE_INTERROGATIVE.test(text)) return 'incomplete';
     if (!endsWithMark && DANGLING_TAIL.test(text) && punctuationSource !== 'unavailable') return 'incomplete';
     if (WAIT_IDIOM.test(text) || /^(let me think|one (sec|moment)|hold on|bear with me)\b/i.test(text)) return 'pause_request';
-    if (SELF_ANSWERED.test(text)) return 'rhetorical';
+    if (/\?\s+\S/.test(text) && SELF_ANSWER_LEAD.test((splitAtLastQuestionMark(text)?.afterRaw ?? ''))) return 'rhetorical';
     if (DEFERRAL.test(text)) return 'pause_request';
     if (CONFIRMATION.test(text)) return 'confirmation';
     if (RHETORICAL.test(text)) return 'rhetorical';

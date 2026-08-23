@@ -63,6 +63,8 @@ export function confirmBudgetMs(p: number, pace: AutoAnswerPace): number | null 
  * a revision of the same question (V2 §22 rule 2), not a second question.
  */
 export const REVISION_WINDOW_MS = 1500;
+/** An identical final re-delivered inside this window is the relay's duplicate, not new speech. */
+export const DUPLICATE_FINAL_WINDOW_MS = 500;
 
 export interface TurnManagerEvents {
     /** The quiet window / cap / endpoint committed a candidate. */
@@ -194,6 +196,15 @@ export class AutoAnswerTurnManager {
         }
         const acc = this.acc;
         if (acc.firstFinalAt === null) acc.firstFinalAt = now;
+        // The STT relay re-emits the same final within ~100 ms (observed live,
+        // 2026-08-24): joining both doubles the question text. Same rule as
+        // SessionTracker.addTranscript's dedup — identical text, tight window.
+        const prev = acc.segments[acc.segments.length - 1];
+        if (prev && prev.text.trim() === text && now - acc.lastUpdatedAt < DUPLICATE_FINAL_WINDOW_MS) {
+            acc.lastUpdatedAt = now;
+            this.arm(now);           // the duplicate still restarts the quiet window
+            return;
+        }
         acc.segments.push(segment);
         acc.latestPartial = '';
         acc.lastUpdatedAt = now;

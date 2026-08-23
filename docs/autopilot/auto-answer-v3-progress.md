@@ -722,6 +722,35 @@ on macOS against live Deepgram and Soniox**; 9 verified by running both verify s
 restored; 10's registry resolution **Covered by automated tests**, its main.ts/ipc wiring **Reviewed but not
 executed**.
 
+### Live-run repairs (2026-08-24, after the first physical toggle-ON session)
+First real session (YouTube mock interview, Soniox relay): the pipeline ran and every candidate was evaluated, but
+every skip was wrong or debatable. The persisted transcripts (natively.db) were replayed VERBATIM through the
+controller to reproduce each decision offline, then fixed:
+
+1. **Directed question + elaboration killed as rhetorical.** The session's only real ask — "I'm just curious: are
+   you familiar with CoderPad? **Because** that's what we're going to be using throughout…" — hit the `? Because`
+   self-answered pattern. Fix: the turn is split at its LAST '?'; the after-text decides the act (DEFERRAL →
+   pause_request; an answer-lead after a NON-directed question → rhetorical; elaboration after a DIRECTED
+   question → judge the question region itself), and the dispatched `question.text` becomes the question region,
+   not the whole turn. The interviewer_self_answer fixture ("Why do we shard by user id? Because hot keys." — no
+   second person) still never fires.
+2. **Duplicate relay finals doubled the candidate text** ("I'm good. How are you? I'm good. How are you?").
+   Fix: TurnManager drops an identical final re-delivered within `DUPLICATE_FINAL_WINDOW_MS=500` (the same rule
+   SessionTracker already applies), still restarting the quiet window.
+3. **False positive found while replaying the logistics meeting** (never fired live, but fired offline): the shared
+   `IMPERATIVE_ASK` matches a bare verb anywhere, so "…and I recommend maybe SHARING your screen…" reached the
+   imperative floor. Fix: the floor now requires a clause-anchored candidate-directed imperative
+   (`CLAUSE_IMPERATIVE`/`TASK_DIRECTIVE`); first-person narration never anchors it. The extractor's honest 0.40
+   stands and the turn is silent.
+
+Verification: 4 new regression tests carry the VERBATIM live texts (live#1/1b/2/3, incl. the full 14-final
+logistics meeting pinned to zero answers and zero offers); both real meetings replayed offline — meeting 1 now
+fires the greeting and the CoderPad question, meeting 2 stays silent; Auto Answer suite 187/187; evaluator gate
+green (precision 1.0, recall unchanged); full suite 8510 / 8445 / 2 (Ollama pair only); both typechecks clean.
+
+Unrelated live observation, NOT this branch: the STT relay auto-detected `de-DE` mid-session on English video
+audio (gen 5), which degraded every transcript of that meeting — a NativelyProSTT/relay language-pinning issue.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

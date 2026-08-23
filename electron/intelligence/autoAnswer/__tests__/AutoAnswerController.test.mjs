@@ -584,3 +584,55 @@ test('review#8: a meeting with transcripts but ZERO speech edges warns ONCE that
   assert.equal(glogs.filter(l => l.includes('no speech_edge')).length, 0, 'a healthy bridge never warns');
   assert.equal(g.state.events.find(e => e.name === 'auto_answer_candidate').channelEdgesSeen, true);
 });
+
+// ── Live-run repros (2026-08-24): a real YouTube mock interview, real texts ──
+
+test('live#1: a directed question followed by ELABORATION ("…CoderPad? Because that\'s what we\'ll use…") must answer the question', async () => {
+  // Verbatim from meeting 71a57234: the only real ask of the session was
+  // classified rhetorical by the self-answered heuristic ("? Because").
+  const h = makeHarness();
+  h.interviewerFinal('Um, we\'re going to');
+  await h.advance(600);
+  h.interviewerFinal('probably just jump right into this interview. I');
+  await h.advance(600);
+  h.interviewerFinal("'m just curious: are you familiar with CoderPad? Because that's what we're going to be using throughout, I think it might be easiest to kind of share code.");
+  await h.advance(QUIET + USER_SILENCE_MS + 2000);
+  assert.equal(h.texts().length, 1, `skips: ${h.state.skips.join(',')}`);
+  assert.ok(/are you familiar with CoderPad\?/i.test(h.texts()[0]), `the QUESTION is dispatched, not the whole turn: ${JSON.stringify(h.texts()[0])}`);
+  assert.ok(!/easiest to kind of share code/i.test(h.texts()[0]), 'the elaboration stays out of the dispatched question');
+});
+
+test('live#1b: a NON-directed self-answered question still never fires (the fixture case)', async () => {
+  const h = makeHarness();
+  h.interviewerFinal('Why do we shard by user id? Because hot keys.');
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.deepEqual(h.texts(), []);
+  assert.ok(h.state.skips.includes('rhetorical') || h.state.skips.includes('not_question'), h.state.skips.join(','));
+});
+
+test('live#2: a duplicate relay final does not double the question text', async () => {
+  const h = makeHarness();
+  h.interviewerFinal(Q);
+  await h.advance(60);                          // the relay re-emits the same final ~60 ms later
+  h.interviewerFinal(Q);
+  await h.advance(QUIET + 100);
+  assert.deepEqual(h.texts(), [Q], 'one clean question, not "…? …?" twice');
+});
+
+test('live#3: fourteen finals of screen-sharing logistics (meeting 54f832cc verbatim) produce ZERO answers and zero offers', async () => {
+  const segs = [
+    [0, 'Cool. All right, so'], [2049, "we're going to kind of just jump right into"], [4099, 'the problem.'],
+    [6129, 'So for the purpose of this problem, and'], [8228, 'let me share— I just want to make sure you can'],
+    [10209, "access this coder link, so I'm"], [12269, 'going to share this— and I'],
+    [12847, 'recommend maybe sharing your screen or, um, I guess we also can just work off of this.'],
+    [15947, 'So I should be able to see your— what you typed in.'],
+    [21973, 'I opened the chat. I can'], [23994, "click on this link, and it'"], [26052, 'll take me to the coder pad.'],
+    [28149, 'My name is Kylie, and'], [29588, "I will enter. And so, I can see that you're in this coder pad as well, and then—"],
+  ];
+  const h = makeHarness();
+  let t = 0;
+  for (const [at, text] of segs) { if (at > t) { await h.advance(at - t); t = at; } h.interviewerFinal(text); }
+  await h.advance(HARD_CAP_MS + QUIET + 3000);
+  assert.deepEqual(h.texts(), [], `dispatched: ${JSON.stringify(h.texts())}`);
+  assert.deepEqual(h.state.offered, [], 'not even offered');
+});
