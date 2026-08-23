@@ -56,7 +56,7 @@ export interface TieredModels {
   tier3: string;
 }
 
-interface FamilyState {
+export interface FamilyState {
   /** The original hardcoded baseline (never changes) */
   baseline: string;
   /** Current Tier 1 (promoted stable) */
@@ -89,7 +89,11 @@ const BASELINE_MODELS: Record<ModelFamily, string> = {
   [ModelFamily.GEMINI_FLASH]: 'gemini-3.7-flash',
   [ModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [ModelFamily.CLAUDE]: 'claude-sonnet-4-6',
-  [ModelFamily.GROQ_LLAMA]: 'meta-llama/llama-4-scout-17b-16e-instruct',
+  // Groq retired llama-4-scout on 2026-07-17. qwen3.6-27b is the only model
+  // left in Groq's catalogue that accepts image input. The enum key stays
+  // GROQ_LLAMA because it is the persisted state key — renaming it would
+  // orphan every existing model_versions.json entry.
+  [ModelFamily.GROQ_LLAMA]: 'qwen/qwen3.6-27b',
 };
 
 /** Hardcoded baseline models for text Tier 1 */
@@ -98,7 +102,8 @@ const TEXT_BASELINE_MODELS: Record<TextModelFamily, string> = {
   [TextModelFamily.GEMINI_FLASH]: 'gemini-3.7-flash',
   [TextModelFamily.GEMINI_PRO]: 'gemini-3.1-pro-preview',
   [TextModelFamily.CLAUDE]: 'claude-sonnet-4-6',
-  [TextModelFamily.GROQ]: 'llama-3.3-70b-versatile',
+  // Groq retired llama-3.3-70b-versatile on 2026-08-16.
+  [TextModelFamily.GROQ]: 'qwen/qwen3.6-27b',
 };
 
 /** Vision-capable model ordering for screenshot analysis */
@@ -119,8 +124,23 @@ export const TEXT_PROVIDER_ORDER: TextModelFamily[] = [
   TextModelFamily.GEMINI_PRO,
 ];
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const DISCOVERY_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+/**
+ * Model ids the upstream provider has switched off. reconcileBaselines() drops
+ * any persisted tier holding one of these straight back to the baseline.
+ *
+ * The version comparison alone is not enough: it keeps a persisted `latest`
+ * whenever its parsed version is >= the new baseline's, and a retirement is not
+ * a version bump. Groq's llama-4-scout parses as 4.0 and its replacement
+ * qwen3.6-27b as 3.6, so a pure version check would have kept serving a model
+ * that now 404s. Compare by id, not by number.
+ */
+// Single source: groqModels.ts (code-review 2026-08-23 — retirement knowledge
+// belongs to the Groq authority module; re-imported here for the reconciler).
+import { RETIRED_MODEL_IDS, isRetiredModelId, groqSupportsImages } from '../llm/groqModels';
+export { isRetiredModelId };
 const PERSISTENCE_FILENAME = 'model_versions.json';
 const MAX_DISCOVERY_FAILURES_BEFORE_BACKOFF = 3;
 const DISCOVERY_BACKOFF_MULTIPLIER = 2; // exponential backoff on repeated failures
@@ -318,8 +338,14 @@ export function classifyModel(modelId: string): ModelFamily | null {
     return ModelFamily.CLAUDE;
   }
 
-  // Groq Llama Scout (vision-capable)
-  if (lower.includes('llama') && lower.includes('scout')) {
+  // Groq's vision-capable model. Was llama-4-scout until Groq retired it on
+  // 2026-07-17; qwen3.6-27b is now the only Groq id that accepts images, so
+  // discovery has to match it or this family never leaves its baseline.
+  // Code-review 2026-08-23: a bare 'qwen' substring put EVERY qwen — Groq has
+  // repeatedly hosted text-only qwens (qwen3-32b, QwQ) — into the VISION
+  // family while groqSupportsImages simultaneously said supportsImages:false
+  // for the same id. The two vision predicates must be the same predicate.
+  if (lower.includes('scout') || groqSupportsImages(lower)) {
     return ModelFamily.GROQ_LLAMA;
   }
 
@@ -354,12 +380,65 @@ export function classifyTextModel(modelId: string): TextModelFamily | null {
     return TextModelFamily.CLAUDE;
   }
 
-  // Groq text models — broader: llama, mixtral, gemma (NOT scout-only like vision)
-  if (lower.includes('llama') || lower.includes('mixtral') || lower.includes('gemma')) {
+  // Groq text models — broader than vision. The llama/mixtral/gemma terms are
+  // retired upstream but kept so ids from a self-hosted or gateway catalogue
+  // still classify; qwen/gpt-oss/compound are what Groq actually serves now.
+  if (lower.includes('llama') || lower.includes('mixtral') || lower.includes('gemma')
+    || lower.includes('qwen') || lower.includes('gpt-oss') || lower.includes('compound')) {
     return TextModelFamily.GROQ;
   }
 
   return null;
+}
+
+/** True if `modelId` is a model the upstream provider has switched off. */
+
+
+/**
+ * Bring one persisted family entry back in line with the current hardcoded
+ * baseline. Mutates `entry`; returns true if anything changed.
+ *
+ * Exported as a pure function so the reconciliation rules are testable without
+ * an Electron `app` (the manager reads its persist path from app.getPath()).
+ *
+ * Three independent reasons to reset, and the third is the one a version
+ * comparison alone cannot see: a retirement is not a version bump. Groq's
+ * llama-4-scout parses as 4.0 and its replacement qwen3.6-27b as 3.6, so
+ * `latest` would have survived the version check and kept 404ing.
+ */
+export function reconcileFamilyEntry(entry: FamilyState, currentBaseline: string): boolean {
+  const baselineVersion = parseModelVersion(currentBaseline);
+  const baselineMismatch = entry.baseline !== currentBaseline;
+  const tier1Retired = RETIRED_MODEL_IDS.has(entry.tier1);
+  // Code-review 2026-08-23: a retired `latest` ALONE must trigger — the old
+  // trigger set only looked at baseline/tier1, so a healthy baseline let a
+  // retired discovery-promoted `latest` keep serving tier 2/3 retries
+  // (404 forever), contradicting RETIRED_MODEL_IDS's own contract.
+  const latestRetired = RETIRED_MODEL_IDS.has(entry.latest);
+  const tier1OlderThanBaseline = !!(
+    baselineVersion &&
+    entry.tier1Version &&
+    compareVersions(entry.tier1Version, baselineVersion) < 0
+  );
+
+  if (!baselineMismatch && !tier1OlderThanBaseline && !tier1Retired && !latestRetired) return false;
+
+  entry.baseline = currentBaseline;
+  entry.tier1 = currentBaseline;
+  entry.tier1Version = baselineVersion;
+  entry.previousTier1 = null;
+
+  const latestStillValid =
+    !RETIRED_MODEL_IDS.has(entry.latest) &&
+    baselineVersion &&
+    entry.latestVersion &&
+    compareVersions(entry.latestVersion, baselineVersion) >= 0;
+  if (!latestStillValid) {
+    entry.latest = currentBaseline;
+    entry.latestVersion = baselineVersion;
+  }
+  entry.previousLatest = null;
+  return true;
 }
 
 // ─── Service Class ──────────────────────────────────────────────────────
@@ -773,6 +852,11 @@ export class ModelVersionManager {
     let best: { modelId: string; version: ModelVersion } | null = discovered.get(family) || null;
 
     for (const modelId of modelIds) {
+      // Code-review 2026-08-23: admission never consulted the retirement
+      // list, so a catalogue still listing a deprecated-but-announced id that
+      // out-versions the baseline was promoted here and reset by the next
+      // reconcile pass — a promote→reset flap every discovery cycle.
+      if (isRetiredModelId(modelId)) continue;
       const classified = classifyModel(modelId);
       if (classified !== family) continue;
 
@@ -1021,9 +1105,11 @@ export class ModelVersionManager {
           return parsed;
         }
 
-        // Schema migration: v3 → v4 (forces baseline reconciliation for stale Gemini 1.5 entries)
-        if (parsed.schemaVersion === 3) {
-          console.log('[ModelVersionManager] Migrating v3 → v4 state (reconciling stale baselines)');
+        // Schema migration: v3/v4 → v5. Both are pure baseline reconciliations
+        // (v4 cleared stale Gemini 1.5 entries; v5 clears the Groq Llama ids
+        // Groq switched off in 2026), so they share one branch.
+        if (parsed.schemaVersion === 3 || parsed.schemaVersion === 4) {
+          console.log(`[ModelVersionManager] Migrating v${parsed.schemaVersion} → v${SCHEMA_VERSION} state (reconciling stale baselines)`);
           this.reconcileBaselines(parsed);
           parsed.schemaVersion = SCHEMA_VERSION;
           return parsed;
@@ -1095,32 +1181,13 @@ export class ModelVersionManager {
     for (const [family, currentBaseline] of Object.entries(expected)) {
       const entry = state.families[family];
       if (!entry) continue;
-
-      const baselineVersion = parseModelVersion(currentBaseline);
-      const baselineMismatch = entry.baseline !== currentBaseline;
-      const tier1OlderThanBaseline =
-        baselineVersion &&
-        entry.tier1Version &&
-        compareVersions(entry.tier1Version, baselineVersion) < 0;
-
-      if (baselineMismatch || tier1OlderThanBaseline) {
+      const before = { baseline: entry.baseline, tier1: entry.tier1, latest: entry.latest };
+      if (reconcileFamilyEntry(entry, currentBaseline)) {
         console.log(
           `[ModelVersionManager] 🔄 Reconciling stale family "${family}": ` +
-          `baseline ${entry.baseline} → ${currentBaseline}, tier1 ${entry.tier1} → ${currentBaseline}`
+          `baseline ${before.baseline} → ${entry.baseline}, ` +
+          `tier1 ${before.tier1} → ${entry.tier1}, latest ${before.latest} → ${entry.latest}`
         );
-        entry.baseline = currentBaseline;
-        entry.tier1 = currentBaseline;
-        entry.tier1Version = baselineVersion;
-        entry.previousTier1 = null;
-        const latestStillValid =
-          baselineVersion &&
-          entry.latestVersion &&
-          compareVersions(entry.latestVersion, baselineVersion) >= 0;
-        if (!latestStillValid) {
-          entry.latest = currentBaseline;
-          entry.latestVersion = baselineVersion;
-        }
-        entry.previousLatest = null;
       }
     }
   }

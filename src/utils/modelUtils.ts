@@ -28,9 +28,14 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     groq: {
         hasKeyCheck: (creds) => !!creds?.hasGroqKey,
-        ids: ['llama-3.3-70b-versatile'],
-        names: ['Groq Llama 3.3'],
-        descs: ['Ultra Fast'],
+        // Groq retired every Llama id it hosted (llama-3.3-70b-versatile on
+        // 2026-08-16, llama-4-scout on 2026-07-17). qwen3.6-27b leads because it
+        // is the only Groq model that still accepts images, so it covers both the
+        // text and the screenshot paths; the GPT-OSS pair is here so a user who
+        // wants a text-only production-tier model can switch the default.
+        ids: ['qwen/qwen3.6-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
+        names: ['Groq Qwen 3.6', 'Groq GPT-OSS 120B', 'Groq GPT-OSS 20B'],
+        descs: ['Ultra Fast • Multimodal', 'Highest Quality • Text-only', 'Fastest • Text-only'],
         pmKey: 'groqPreferredModel'
     },
     deepseek: {

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { loadNativeModule } from './nativeModuleLoader';
+import { normalizeSpeechEdge } from './speechEdge';
 
 // RustMicCapture is the native Rust class (napi-rs) that captures microphone input.
 // Uses LAZY init — the native monitor is NOT created in the constructor. Constructing
@@ -154,6 +155,15 @@ export class MicrophoneCapture extends EventEmitter {
                     return;
                 }
                 this.emit('speech_ended');
+            }, (err: Error | null, edge: any) => {
+                // Joint dual-channel transition (Auto Answer V3, Amendment 1).
+                // Optional third callback; absent consumers cost nothing.
+                if (err) {
+                    console.error('[MicrophoneCapture] Speech edge callback error:', err);
+                    return;
+                }
+                const normalized = normalizeSpeechEdge(edge);
+                if (normalized) this.emit('speech_edge', normalized);
             });
 
             // Enable pre-warm for the NEXT stop() cycle only after the JS-side

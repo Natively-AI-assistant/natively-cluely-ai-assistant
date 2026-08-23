@@ -54,6 +54,7 @@ const BUILTIN_TEMPLATE_TO_FEATURE: Record<string, FeatureName> = {
     'looking-for-work': FEATURE.JD_ANALYSIS,
     'team-meet': FEATURE.MEETING_COPILOT,
     'seminar': FEATURE.MEETING_COPILOT,
+    'call-center': FEATURE.MEETING_COPILOT,
     'lecture': FEATURE.MEETING_COPILOT,
 };
 

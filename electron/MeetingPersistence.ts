@@ -8,7 +8,7 @@ import { DatabaseManager, Meeting } from './db/DatabaseManager';
 import { GROQ_TITLE_PROMPT, GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
-import { cleanMeetingTitle, cleanString, isAnswerFragmentTitle } from './services/meeting/MeetingSummaryV3';
+import { cleanMeetingTitle, cleanString, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
 import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
 import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
@@ -302,7 +302,11 @@ export class MeetingPersistence {
                 // never reach here — this branch is skipped when metadata.title
                 // is set — so their length is left alone.
                 const cleanedTitle = cleanMeetingTitle(generatedTitle);
-                if (cleanedTitle && isAnswerFragmentTitle(cleanedTitle)) {
+                // Catch-all (session E, 2026-08-23): an answer-shaped source
+                // is rejected whatever the clamp salvages — the rule lives in
+                // MeetingSummaryV3 beside its sibling shape rules and applies
+                // the same fence/[[GIST]] pre-strip cleanMeetingTitle does.
+                if (cleanedTitle && (isAnswerFragmentTitle(cleanedTitle) || isAnswerShapedGeneration(generatedTitle))) {
                     // RC-7 adjacent (2026-08-21): the model answered the
                     // transcript instead of naming it ("Here's the C++
                     // implementation", "cpp"). Keep the default title; the

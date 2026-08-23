@@ -327,6 +327,8 @@ export class SonioxStreamingSTT extends EventEmitter {
 
                     if (token.text === '<end>') {
                         console.log('[SonioxStreaming] Received <end> endpoint detection marker');
+                        // Auto Answer V3 endpoint normalization (additive).
+                        try { this.emit('endpoint', { type: 'utterance_end' }); } catch { /* never break parsing */ }
                         continue;
                     }
 

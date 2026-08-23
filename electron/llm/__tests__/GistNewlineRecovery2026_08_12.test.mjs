@@ -100,6 +100,33 @@ describe('spokenFormatViolations — recovery is containment, not absolution', (
     });
 });
 
+describe('bullet-prefixed marker (live session E, 2026-08-23)', () => {
+    test('"- [[GIST]] …" is honored as the gist and flagged recovered', () => {
+        const r = v2.splitGistLine('The answer body.\n-[[GIST]] Use backtracking to build valid parentheses.');
+        assert.equal(r.gist, 'Use backtracking to build valid parentheses.');
+        assert.equal(r.body, 'The answer body.');
+        assert.equal(r.recovered, true);
+    });
+
+    test('a marker after real prose on the same line still stays visible', () => {
+        const r = v2.splitGistLine('You sort them [[GIST]] first, then subtract.');
+        assert.equal(r.gist, null);
+    });
+});
+
+describe('glued marker after a completed sentence (live session E press 26, 2026-08-23)', () => {
+    test('"…of 2n. [[GIST]] essence" recovers the gist and keeps the prose', () => {
+        const r = v2.splitGistLine('The stack never exceeds the required length of 2n. [[GIST]] Use backtracking to build valid parentheses.');
+        assert.equal(r.gist, 'Use backtracking to build valid parentheses.');
+        assert.equal(r.body, 'The stack never exceeds the required length of 2n.');
+        assert.equal(r.recovered, true);
+    });
+
+    test('a mid-sentence marker still stays visible', () => {
+        assert.equal(v2.splitGistLine('You sort them [[GIST]] first, then subtract.').gist, null);
+    });
+});
+
 describe('prompt contract states the same-line rule', () => {
     test('the glance-layer instruction forbids a break after the marker', () => {
         const prompt = v2.buildSystemPromptV2({ mode: 'general', action: 'answer', tier: 'cloud' });

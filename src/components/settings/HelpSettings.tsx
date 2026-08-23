@@ -1112,7 +1112,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                                         </span>
                                         <button onClick={() => { (window as any).electronAPI?.openExternal('https://console.groq.com/keys') }} className="text-accent-primary hover:underline text-[10px] flex items-center gap-1"><ExternalLink size={10} /> Get Key</button>
                                     </h5>
-                                    <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>llama-3.3-70b-versatile</strong>.</p>
+                                    <p className="text-[11px] opacity-80 mb-2">Ultra-fast inference using LPU hardware. Default model: <strong>qwen/qwen3.6-27b</strong>.</p>
                                     <span className={kbdClass}>gsk_...</span>
                                 </div>
                                 <div className="p-3 rounded-xl border bg-bg-item-surface border-border-subtle hover:border-border-muted transition-colors">

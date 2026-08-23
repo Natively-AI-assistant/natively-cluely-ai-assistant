@@ -1,0 +1,103 @@
+{
+  "name": "dedup_pair",
+  "bucket": "dedup",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "What was your hardest"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "What was your hardest"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "What was your hardest technical problem?"
+    },
+    {
+      "at": 1000,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "technical problem?"
+    },
+    {
+      "at": 1150,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    },
+    {
+      "at": 4150,
+      "engineIdle": true
+    },
+    {
+      "at": 7150,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 7250,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "What was the most difficult"
+    },
+    {
+      "at": 7700,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "What was the most difficult"
+    },
+    {
+      "at": 7700,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "What was the most difficult technical problem you faced?"
+    },
+    {
+      "at": 8150,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "technical problem you faced?"
+    },
+    {
+      "at": 8300,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": true,
+    "question": "What was your hardest technical problem?",
+    "triggerCount": 1
+  }
+}

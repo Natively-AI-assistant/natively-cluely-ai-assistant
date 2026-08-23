@@ -68,6 +68,7 @@ import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
+import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone } from './llm/groqModels';
 const execAsync = promisify(exec);
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 
@@ -118,7 +119,22 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // serial Gemini cascade (flash-lite → flash → pro) — flash-lite leads, flash and
 // pro are pure pre-first-token fallbacks. The former VISION_HEDGE_ENABLED /
 // TEXT_HEDGE_ENABLED / GEMINI_TEXT_HEDGE_CONFIG knobs were removed.
-const GROQ_MODEL = "llama-3.3-70b-versatile"
+// Groq retired every Llama id it hosted: `llama-3.3-70b-versatile` shut down
+// 2026-08-16 and `meta-llama/llama-4-scout-17b-16e-instruct` on 2026-07-17.
+// `qwen/qwen3.6-27b` is the replacement for BOTH paths — it is the only model
+// left in Groq's catalogue that accepts image input, so text and vision share
+// one id. The user's pick in the model selector still wins; these are only the
+// baseline used when nothing is chosen and by the Fast Text / emergency paths.
+//
+// The id is PREVIEW tier, so the text paths ladder down to a production-tier
+// model when it is retired — see electron/llm/groqModels.ts. Vision does not
+// ladder: if this id goes, Groq hosts nothing that accepts an image, and the
+// vision chain is meant to fall through to another provider.
+const GROQ_MODEL = GROQ_PRIMARY_MODEL
+import { GROQ_VISION_MODEL } from './llm/groqModels'
+// Groq rejects a request carrying more than 5 images. Every other vision
+// provider here takes as many as we send, so the cap lives on the Groq path.
+const GROQ_VISION_MAX_IMAGES = 5
 const OPENAI_MODEL = "gpt-5.4"
 const CLAUDE_MODEL = "claude-sonnet-4-6"
 const DEEPSEEK_MODEL = "deepseek-v4-flash"
@@ -1320,6 +1336,12 @@ export class LLMHelper {
 
   // --- Model Type Checkers ---
   private isOpenAiModel(modelId: string): boolean {
+    // Groq hosts OpenAI's open-weight models under 'openai/gpt-oss-…', so the
+    // bare "openai" substring matched them and routed the picker's new Groq
+    // models to api.openai.com (404 model_not_found on every turn — code-
+    // review 2026-08-23). Excluding Groq-hosted ids HERE fixes every dispatch
+    // site at once, independent of branch ordering.
+    if (this.isGroqModel(modelId)) return false;
     return modelId.startsWith("gpt-") || modelId.startsWith("o1-") || modelId.startsWith("o3-") || modelId.includes("openai");
   }
 
@@ -1434,8 +1456,17 @@ export class LLMHelper {
     return 4096 * 4; // unknown model → conservative
   }
 
+  // MIRRORS isKnownGroqModel() in ipcHandlers.ts and the auto-default check in
+  // CredentialsManager.setNativelyApiKey(). All three must agree about what a
+  // Groq id looks like, or the picker offers a model routing rejects.
+  //
+  // `openai/gpt-oss-*` is Groq-hosted, NOT the OpenAI API — it is gated by the
+  // Groq key. This check must therefore run before any OpenAI classification.
   private isGroqModel(modelId: string): boolean {
-    return modelId.startsWith("llama-") || modelId.startsWith("mixtral-") || modelId.startsWith("gemma-") || modelId.startsWith("meta-llama/") || modelId.startsWith("qwen/") || modelId.startsWith("qwen-");
+    // Delegates to the ONE shared predicate (groqModels.ts) — the three
+    // hand-synced copies had already drifted (code-review 2026-08-23).
+    const { isGroqModelId } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    return isGroqModelId(modelId);
   }
 
   private isGeminiModel(modelId: string): boolean {
@@ -3284,7 +3315,7 @@ let isMultimodal = !!(imagePaths?.length);
             break;
           case 'groq':
             if (cloudIsMultimodal) {
-              providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths!, openaiSystemPrompt) });
+              providers.push({ name: `Groq (${GROQ_VISION_MODEL})`, execute: () => this.generateWithGroqMultimodal(cloudUserContent, cloudImagePaths!, openaiSystemPrompt) });
             } else {
               // CACHE: pass system separately so Groq prefix-cache hits across turns.
               providers.push({ name: routedProvider.name, execute: () => this.generateWithGroq(cloudUserContent, routedProvider.model || textGroq, skipSystemPrompt ? undefined : finalGroqPrompt) });
@@ -3598,6 +3629,61 @@ let isMultimodal = !!(imagePaths?.length);
    * string when `systemPrompt` is omitted — callers should migrate to the
    * two-arg form.
    */
+  /**
+   * Every Groq TEXT chat completion goes through here.
+   *
+   * LADDER: the default Groq id is PREVIEW tier and Groq discontinues preview
+   * models without notice. On a model-gone error ONLY, retry once on the
+   * production-tier fallback so a retirement degrades to a slightly different
+   * answer instead of a dead provider.
+   *
+   * Auth failures and rate limits are deliberately NOT retried — laddering there
+   * fires a second doomed request and reports the wrong remedy to the user
+   * ("model retired" when the key is simply invalid).
+   *
+   * Streaming callers are safe because this resolves the create() call, which
+   * happens BEFORE the first token is yielded; a mid-stream failure is never
+   * retried, since that would duplicate output.
+   *
+   * The VISION paths deliberately do NOT come through here: groqFallbackFor()
+   * only ladders text ids, and if GROQ_VISION_MODEL is retired Groq hosts
+   * nothing that accepts an image — the vision chain must fall through to
+   * another provider rather than silently answer text-only.
+   */
+  private async createGroqCompletion(request: any, opts?: { signal?: AbortSignal }): Promise<any> {
+    if (!this.groqClient) throw new Error("Groq client not initialized");
+    // KNOWN-GONE MEMO (code-review 2026-08-23): after a retirement, every call
+    // used to pay a doomed full-payload round trip to the dead model before
+    // laddering — callers keep passing the module const. Skip straight to the
+    // fallback rung when this process has already seen the model die.
+    const { markGroqModelGone, isGroqModelKnownGone } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    if (isGroqModelKnownGone(request?.model)) {
+      const memoFallback = groqFallbackFor(request?.model);
+      if (memoFallback) {
+        return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
+      }
+    }
+    try {
+      return await this.groqClient.chat.completions.create(request, opts as any);
+    } catch (err: any) {
+      const gone = !opts?.signal?.aborted && isGroqModelGone(err);
+      // NOTIFY DISCOVERY BEFORE the exhausted-ladder throw (code-review
+      // 2026-08-23): the old order (`if (!fallback) throw`) meant a model-gone
+      // on an OFF-LADDER id — exactly the discovery-promoted tier ids that
+      // only rediscovery can heal — never fired onModelError, so the Groq
+      // path stayed dead until the next scheduled discovery instead of
+      // self-healing.
+      if (gone) {
+        markGroqModelGone(request?.model);
+        this.modelVersionManager.onModelError(request?.model).catch(() => { });
+      }
+      const fallback = gone ? groqFallbackFor(request?.model) : null;
+      if (!fallback) throw err;
+      console.warn(`[LLMHelper] Groq model ${request?.model} is gone — retrying on ${fallback}`);
+      return await this.groqClient.chat.completions.create({ ...request, model: fallback }, opts as any);
+    }
+  }
+
   private async generateWithGroq(userMessage: string, modelId: string = GROQ_MODEL, systemPrompt?: string): Promise<string> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.groqClient) throw new Error("Groq client not initialized");
@@ -3612,7 +3698,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
     messages.push({ role: "user", content: userMessage });
 
-    const response = await this.groqClient.chat.completions.create({
+    const response = await this.createGroqCompletion({
       model: modelId,
       messages,
       temperature: 0.4,
@@ -4347,7 +4433,7 @@ let isMultimodal = !!(imagePaths?.length);
 
 
   /**
-   * Non-streaming multimodal response from Groq using Llama 4 Scout
+   * Non-streaming multimodal response from Groq (GROQ_VISION_MODEL).
    */
   private async generateWithGroqMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string): Promise<string> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
@@ -4363,7 +4449,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const contentParts: any[] = [{ type: "text", text: userMessage }];
-    for (const p of imagePaths) {
+    for (const p of imagePaths.slice(0, GROQ_VISION_MAX_IMAGES)) {
       if (fs.existsSync(p)) {
         const { mimeType, data } = await this.processImage(p);
         contentParts.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } });
@@ -4372,10 +4458,13 @@ let isMultimodal = !!(imagePaths?.length);
     messages.push({ role: "user", content: contentParts });
 
     const request = {
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: GROQ_VISION_MODEL,
       messages,
       temperature: 1,
-      max_completion_tokens: 28672,
+      // Groq caps qwen3.6-27b at 16,384 completion tokens. The old 28,672 was
+      // llama-4-scout's ceiling; asking for more than a model's limit is a 400,
+      // not a silent clamp.
+      max_completion_tokens: 16384,
       top_p: 1,
       stream: false as const,
       stop: null as string[] | null
@@ -4790,7 +4879,7 @@ let isMultimodal = !!(imagePaths?.length);
    * and Gemini-only for multimodal (images)
    *
    * TEXT-ONLY FALLBACK CHAIN:
-   * 1. Groq (llama-3.3-70b-versatile) - Primary
+   * 1. Groq (qwen/qwen3.6-27b) - Primary
    * 2. Gemini Flash - 1st fallback
    * 3. Gemini Flash + Pro parallel - 2nd fallback
    * 4. Gemini Flash retries (max 3) - Last resort
@@ -4937,11 +5026,11 @@ let isMultimodal = !!(imagePaths?.length);
         providers.push({ name: `Gemini Pro (${textGeminiPro})`, execute: () => this.streamWithGeminiModel(userContent, textGeminiPro, imagePaths, geminiSystemForCache, abortSignal) });
       }
       if (this.groqClient) {
-        providers.push({ name: `Groq (meta-llama/llama-4-scout-17b-16e-instruct)`, execute: () => this.streamWithGroqMultimodal(userContent, imagePaths!, openaiSystemPrompt, abortSignal) });
+        providers.push({ name: `Groq (${GROQ_VISION_MODEL})`, execute: () => this.streamWithGroqMultimodal(userContent, imagePaths!, openaiSystemPrompt, abortSignal) });
       }
     } else {
       // TEXT-ONLY PROVIDER ORDER: [Natively] -> Codex CLI -> OpenAI -> Claude -> Gemini Flash-Lite -> Gemini Flash -> Gemini Pro -> Groq
-      // Groq is demoted to LAST because llama-3.3-70b-versatile has a 12k TPM
+      // Groq is demoted to LAST because the free Groq tier has a low TPM
       // rate-limit that 413s on context-heavy prompts (e.g. a full meeting
       // summary + transcript shovelled into the fallback Gemini call).
       // Gemini cascade handles the same prompts at much higher quotas.
@@ -5189,7 +5278,7 @@ let isMultimodal = !!(imagePaths?.length);
           open: (sig, att) => this.streamWithGeminiModel(userContent, tierModel(ModelFamily.GEMINI_PRO, att) || GEMINI_PRO_MODEL, imagePaths, systemPrompt, sig) });
       }
       if (this.groqClient) {
-        cloud.push({ id: 'groq', name: 'Groq Llama-4 Scout', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
+        cloud.push({ id: 'groq', name: `Groq (${GROQ_VISION_MODEL})`, isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithGroqMultimodal(userContent, imagePaths, systemPrompt, sig) });
       }
       if (this.hasNatively()) {
@@ -6797,7 +6886,8 @@ let isMultimodal = !!(imagePaths?.length);
 
     // GROQ FAST TEXT OVERRIDE (Text-Only)
     // Two paths: local Groq key → call Groq directly; Natively API only → send fast_mode:true
-    // to the server so it routes to its internal Groq pool (llama-3.3-70b-versatile).
+    // to the server, which serves its own fast tier (Gemini Flash-Lite → MiniMax);
+    // it has not routed fast_mode through Groq since the Llama retirements.
     //
     // Gate: only short-circuit to fast paths when the user's picked model is one of
     // the providers fast-mode actually routes to. Otherwise picking Gemini/Claude/OpenAI
@@ -7645,7 +7735,7 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'groq', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.groqClient.chat.completions.create(request, { signal: abortSignal });
+    const stream = await this.createGroqCompletion(request, { signal: abortSignal });
 
     try {
       for await (const chunk of stream) {
@@ -7676,7 +7766,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const contentParts: any[] = [{ type: "text", text: userMessage }];
-    for (const p of imagePaths) {
+    for (const p of imagePaths.slice(0, GROQ_VISION_MAX_IMAGES)) {
       if (fs.existsSync(p)) {
         // Process image: resize to max 1536px + JPEG 80% to stay within Groq's request size limit
         const { mimeType, data } = await this.processImage(p);
@@ -7687,7 +7777,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (abortSignal?.aborted) return;
     const stream = await this.groqClient.chat.completions.create({
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      model: GROQ_VISION_MODEL,
       messages,
       stream: true,
       max_tokens: 8192,
@@ -9027,7 +9117,7 @@ let isMultimodal = !!(imagePaths?.length);
       try {
         console.log(`[LLMHelper] 🚀 Mode-specific Groq stream starting...`);
         await this.rateLimiters.groq.acquire();
-        const stream = await this.groqClient.chat.completions.create({
+        const stream = await this.createGroqCompletion({
           model: GROQ_MODEL,
           messages: [{ role: "user", content: groqMessage }],
           stream: true,
@@ -9318,7 +9408,7 @@ let isMultimodal = !!(imagePaths?.length);
       try {
         const groqPrompt = groqSystemPrompt || systemPrompt;
         const response = await this.withTimeout(
-          this.groqClient.chat.completions.create({
+          this.createGroqCompletion({
             model: GROQ_MODEL,
             messages: [
               { role: "system", content: groqPrompt },

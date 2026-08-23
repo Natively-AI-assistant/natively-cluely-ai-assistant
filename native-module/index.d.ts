@@ -12,7 +12,7 @@ export declare class MicrophoneCapture {
    * diagnostics and HFP/Bluetooth-degradation detection only.
    */
   getNativeSampleRate(): number
-  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
+  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null, onSpeechEdge?: (((err: Error | null, arg: SpeechEdgeEvent) => any)) | undefined | null): void
   stop(): void
 }
 
@@ -69,7 +69,7 @@ export declare class SystemAudioCapture {
    * HFP/Bluetooth-degradation detection only. NOT the rate of emitted bytes.
    */
   getNativeSampleRate(): number
-  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null): void
+  start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null, onSpeechEdge?: (((err: Error | null, arg: SpeechEdgeEvent) => any)) | undefined | null): void
   stop(): void
 }
 
@@ -172,6 +172,24 @@ export interface OverlayBoundsInput {
   y: number
   width: number
   height: number
+}
+
+/**
+ * One joint-state transition from the dual-channel tracker
+ * (`channel_state.rs`), delivered to JS through the optional third `start()`
+ * callback of both captures. `atMs` is epoch ms (Date.now() timeline).
+ */
+export interface SpeechEdgeEvent {
+  /** "interviewer" | "user" */
+  channel: string
+  speaking: boolean
+  /** "neither" | "interviewer_speaking" | "user_speaking" | "both" */
+  joint: string
+  atMs: number
+  /** ms since the OTHER channel's last edge; -1 when it has none yet. */
+  msSinceOtherEdge: number
+  /** false on Windows (mic is RMS-only, PR #497): user edges are weak evidence. */
+  userEdgesVadBacked: boolean
 }
 
 /**

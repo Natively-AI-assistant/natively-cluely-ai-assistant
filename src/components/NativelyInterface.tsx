@@ -6710,7 +6710,13 @@ Provide only the answer, nothing else.`;
       // We split by code blocks to keep the "Code Solution" UI intact for the code parts
       // But use ReactMarkdown for the text parts around it
       if (msg.isCode || (msg.role === 'system' && msg.text.includes('```'))) {
-        const parts = msg.text.split(/(```[\s\S]*?(?:```|$))/g);
+        // Teleprompter gist on CODE answers (live report 2026-08-23:
+        // "[[GIST]] Use a hash map for O(n) lookup" painted literally): this
+        // branch returned before the gist split below ever ran, so every
+        // fenced answer rendered the marker as text. Split it off here and
+        // render the same bottom chip the prose surfaces use.
+        const { body: codeGistBody, gist: codeGistLine } = splitGistLine(msg.text);
+        const parts = codeGistBody.split(/(```[\s\S]*?(?:```|$))/g);
         return (
           // code-card-mount-in: a one-time cross-fade (@starting-style, see
           // index.css) for the FIRST render of this branch — i.e. exactly
@@ -6811,6 +6817,7 @@ Provide only the answer, nothing else.`;
                   </div>
                 );
               })}
+              {codeGistLine ? <div className="overlay-gist-chip">{codeGistLine}</div> : null}
             </div>
           </div>
         );
@@ -9150,7 +9157,9 @@ Provide only the answer, nothing else.`;
                           if (m === 'gemini-3.6-flash') return 'Gemini 3.6 Flash';
                           if (m === 'gemini-3.1-flash-lite') return 'Gemini 3.1 Flash Lite';
                           if (m === 'gemini-3.1-pro-preview') return 'Gemini 3.1 Pro';
-                          if (m === 'llama-3.3-70b-versatile') return 'Groq Llama 3.3';
+                          if (m === 'qwen/qwen3.6-27b') return 'Groq Qwen 3.6';
+                          if (m === 'openai/gpt-oss-120b') return 'Groq GPT-OSS 120B';
+                          if (m === 'openai/gpt-oss-20b') return 'Groq GPT-OSS 20B';
                           if (m === 'gpt-5.4') return 'GPT 5.4';
                           if (m === 'claude-sonnet-4-6') return 'Sonnet 4.6';
                           return m;

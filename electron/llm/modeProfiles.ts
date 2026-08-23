@@ -42,7 +42,9 @@ export type ModeTemplateType =
     // electron/services/modeSourceContract.ts (ContractTemplateType).
     // Drift is guarded by the type system — a fourth site that uses the
     // union without updating would compile-error.
-    | 'seminar';
+    | 'seminar'
+    // 9th built-in (2026-08-23): support / call-center.
+    | 'call-center';
 
 /** The slice of the active mode the planner needs. Built by
  *  ModesManager.getActiveModeInfo() (cached) and threaded through
@@ -119,6 +121,9 @@ const NEUTRAL: ModeContextProfile = {
  */
 export const MODE_CONTEXT_PROFILES: Record<ModeTemplateType, ModeContextProfile> = {
     'general': NEUTRAL,
+    // 9th built-in (2026-08-23): support calls answer from live context +
+    // reference files; no candidate-profile fallback shape applies.
+    'call-center': NEUTRAL,
     'technical-interview': NEUTRAL,
     'looking-for-work': NEUTRAL,
     'sales': {

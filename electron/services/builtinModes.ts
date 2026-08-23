@@ -32,6 +32,7 @@ export const BUILTIN_MODE_LABELS = {
   'technical-interview': 'Technical Interview',
   'lecture': 'Lecture',
   'seminar': 'Seminar',
+  'call-center': 'Call Center',
 } as const;
 
 export type BuiltinModeTemplate = keyof typeof BUILTIN_MODE_LABELS;

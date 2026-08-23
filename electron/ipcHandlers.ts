@@ -153,14 +153,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       } catch { /* optional */ }
 
       const has = (value?: string) => !!(value && value.trim().length > 0);
-      const isKnownGroqModel = (modelId: string): boolean => {
-        return modelId.startsWith('llama-')
-          || modelId.startsWith('mixtral-')
-          || modelId.startsWith('gemma-')
-          || modelId.startsWith('meta-llama/')
-          || modelId.startsWith('qwen/')
-          || modelId.startsWith('openai/gpt-oss-'); // Groq-hosted OpenAI OSS models, not OpenAI API models.
-      };
+      // THE shared predicate (groqModels.ts) — the three hand-synced copies
+      // had drifted (code-review 2026-08-23).
+      const { isGroqModelId: isKnownGroqModel, isRetiredModelId: _isRetiredGroqId } =
+        require('./llm/groqModels') as typeof import('./llm/groqModels');
       // Which provider a model id belongs to. Mirrors the family checks below, kept
       // as one helper so the disabled-provider test and the credential test can
       // never disagree about what a given id is. The renderer's
@@ -237,7 +233,14 @@ export function initializeIpcHandlers(appState: AppState): void {
         return true;
       };
 
-      if (modelAvailable(defaultModel)) return null;
+      // RETIRED-DEFAULT REPAIR (code-review 2026-08-23): a Groq key makes any
+      // Groq-prefixed id "available", so a persisted default that Groq has
+      // SHUT DOWN (llama-3.3-70b-versatile, scout — the auto-installed
+      // defaults of earlier builds) passed the availability check and 404'd
+      // forever; groqFallbackFor deliberately refuses off-ladder ids, so the
+      // runtime ladder couldn't heal it either. A retired id is never
+      // available, whatever keys exist — fall through to the repair logic.
+      if (!_isRetiredGroqId(defaultModel) && modelAvailable(defaultModel)) return null;
 
       let litellmFallbackModel: string | null = null;
       if (has(cm.getLitellmBaseURL())) {
@@ -269,7 +272,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
-        : modelAvailable('llama-3.3-70b-versatile') ? 'llama-3.3-70b-versatile'
+        : modelAvailable('qwen/qwen3.6-27b') ? 'qwen/qwen3.6-27b'
         : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
@@ -5805,8 +5808,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('set-auto-answer-enabled', async (_, enabled: boolean) => {
-    appState.setAutoAnswerEnabled(enabled);
-    return { success: true };
+    const persisted = appState.setAutoAnswerEnabled(Boolean(enabled));
+    return persisted
+      ? { success: true }
+      : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
   });
 
   safeHandle('get-code-verification', async () => {
@@ -8869,17 +8874,38 @@ export function initializeIpcHandlers(appState: AppState): void {
             },
           );
         } else if (provider === 'groq') {
-          response = await axios.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            {
-              model: 'llama-3.3-70b-versatile',
-              messages: [{ role: 'user', content: 'Hello' }],
-            },
-            {
-              headers: { Authorization: `Bearer ${apiKey}` },
-              timeout: 15000,
-            },
-          );
+          // Walk the ladder instead of pinning one id. The preferred Groq model
+          // is PREVIEW tier and Groq discontinues preview models without notice —
+          // pinning one turns its retirement into "your API key doesn't work",
+          // which is what users saw when llama-3.3-70b-versatile was switched off.
+          // Only a model-gone error advances; a bad key or a rate limit still
+          // fails immediately with its own message.
+          const { GROQ_TEXT_MODEL_LADDER, isGroqModelGone } = require('./llm/groqModels');
+          let lastGroqError: any = null;
+          for (const candidate of GROQ_TEXT_MODEL_LADDER) {
+            try {
+              response = await axios.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                {
+                  model: candidate,
+                  messages: [{ role: 'user', content: 'Hello' }],
+                },
+                {
+                  headers: { Authorization: `Bearer ${apiKey}` },
+                  timeout: 15000,
+                },
+              );
+              if (candidate !== GROQ_TEXT_MODEL_LADDER[0]) {
+                console.warn(`[IPC] Groq test: ${GROQ_TEXT_MODEL_LADDER[0]} is gone; the key works on ${candidate}`);
+              }
+              lastGroqError = null;
+              break;
+            } catch (groqErr: any) {
+              lastGroqError = groqErr;
+              if (!isGroqModelGone(groqErr)) break;
+            }
+          }
+          if (lastGroqError) throw lastGroqError;
         } else if (provider === 'openai') {
           response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
@@ -9835,6 +9861,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
       return _tracked(async () => {
+      // Auto Answer V3: a manual What-to-Answer (hotkey, button, or an accepted
+      // offer card) commits whatever Auto Answer was offering — retract the card.
+      try { appState.onManualWhatToAnswer?.(); } catch { /* never block the answer */ }
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -12397,6 +12426,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             modeId: activeMode.id,
             modeTemplateType: activeMode.templateType,
           });
+          appState.applyAutoAnswerThresholds?.(activeMode.templateType);
         } else if (appStateIntMgr && !id) {
           appStateIntMgr.clearDynamicActionContext();
         }

@@ -2,7 +2,7 @@ import type { IntentResult } from './IntentClassifier';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
 import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';
-import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords } from './speakability';
+import { classifyTargetSpeakability, classifyShortBand, shortBandTargetWords, HARD_MAX_WORDS, SPOKEN_FULL_MAX_WORDS } from './speakability';
 import { applyModeFallback, type ActiveModeInfo } from './modeProfiles';
 import { classifyDocumentQuestionShape } from './documentGroundedPrompt';
 import { includesPlannerTerm } from '../services/modes/retrievalTextMatch';
@@ -2248,11 +2248,33 @@ const SPEAKABLE_RENDERING_DIRECTIVE =
  */
 export const renderLengthDirectiveForPlan = (plan: AnswerPlan): string => {
   if (plan.answerStyle && plan.answerStyle !== 'default') return '';
+  // Coding output owns its own length (the contract's sections + code).
+  if (isCodingAnswerType(plan.answerType)) return '';
   const tier = classifyTargetSpeakability(plan.answerType, plan.answerStyle, plan.question);
-  if (tier !== 'SPOKEN_SHORT') return '';
+  // STRUCTURED_FULL is INTENTIONALLY long (speakability.ts: "must never be
+  // length-trimmed" — code, system design, lecture notes, evidence quotes,
+  // explicit step-by-step asks). Code-review 2026-08-23: the first ceiling
+  // draft capped these at 130 words, contradicting the module contract and
+  // self-contradicting on exactly the "walk me through it step by step"
+  // questions that select the tier. No directive here, by design.
+  if (tier === 'STRUCTURED_FULL') return '';
+  if (tier === 'SPOKEN_FULL') {
+    // A fuller spoken answer (STAR story, multi-part, pressured negotiation)
+    // has its own budget — SPOKEN_FULL_MAX_WORDS, the same number
+    // speakability's telemetry classifies against. Cap-first framing chosen
+    // by paired live A/B (155w -> 131w on the equivalent outer-cap test).
+    return `LENGTH LIMIT: at most ${SPOKEN_FULL_MAX_WORDS} words (~60 seconds spoken) — a hard cap, not a target. This is a LIVE spoken answer: tell the story or make the case completely, then stop — do not enumerate every angle. If your draft runs past ${SPOKEN_FULL_MAX_WORDS} words, cut whole branches, not adjectives.`;
+  }
   const band = classifyShortBand(plan.answerType, plan.answerStyle, plan.question);
   const t = shortBandTargetWords(band);
-  return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number.`;
+  // The "aim for" phrasing alone was overshot ~50-100% live (sessions D/E:
+  // 124w against a 60w band). The band stays the target; the ceiling gives
+  // the model a hard number to cut against — clamped to HARD_MAX_WORDS so
+  // the prompt can never instruct the model into the range speakability's
+  // telemetry classifies as over_budget (code-review 2026-08-23: 85x1.25=106
+  // crossed the 100-word line and would have corrupted the tuning signal).
+  const ceiling = Math.min(Math.round(t.max * 1.25), HARD_MAX_WORDS);
+  return `LENGTH: aim for about ${t.seconds}s spoken — roughly ${t.min} to ${t.max} words (${t.guidance}). Use fewer if the question is fully answered in fewer; never pad to reach the number. Hard ceiling: never go past ${ceiling} words — if your draft runs longer, cut examples and caveats, keep the point.`;
 };
 
 export const formatAnswerPlanForPrompt = (plan: AnswerPlan, includeVerificationSpec = false): string => {

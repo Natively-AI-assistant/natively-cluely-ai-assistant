@@ -354,6 +354,19 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   // Complexity notation is answer vocabulary, never a meeting name
   // ("The two-pointer approach solves this in O(n) time." — review 2026-08-22).
   /\bO\([^)]{1,12}\)/,
+  // ── Session E live misses (2026-08-23) ────────────────────────────────
+  // First-person answer speech: "I'll switch the solution to C++". A meeting
+  // name never opens with "I " / "I'…" ("I/O Performance Review" is safe —
+  // no space or apostrophe after the I).
+  /^i(?:['’]|\s)/i,
+  // "<language> code <verb>…" describes an answer, it doesn't name a meeting
+  // ("Python code also uses the same backtracking approach"). Verb-anchored
+  // so "Legacy Code Review" stays a valid title.
+  /\bcode (?:also\s+|just\s+)?(?:uses|is|does|works|runs|solves|looks)\b/i,
+  // Malayalam first/second-person pronouns — answer speech in any language
+  // ("ഞാൻ ഇംഗ്ലീഷിൽ സംസാരിക്കാൻ വന്നതാണ്…"). Bare includes: \b is unreliable
+  // outside ASCII. Extend per-script as other languages show up.
+  /ഞാൻ|ഞങ്ങൾ|നിങ്ങൾ|എനിക്ക്/u,
 ];
 
 /** True when a GENERATED title reads as an answer fragment, not a name. */
@@ -366,7 +379,35 @@ export function isAnswerFragmentTitle(title: string): boolean {
   // not pass through this predicate.
   const words = t.split(/\s+/);
   if (words.length === 1 && t === t.toLowerCase() && /^[a-z0-9+#.]+$/.test(t)) return true;
+  // An ENTIRELY-lowercase multi-word Latin title is a truncation fragment
+  // ("ral backend for every keystroke" — the clamp caught a line mid-word,
+  // session E 2026-08-23). Generated titles are Title Case; any uppercase
+  // anywhere ("iOS Migration Kickoff") passes. Code-review 2026-08-23: the
+  // rule requires EVERY word to carry an ASCII letter — a mixed-script title
+  // ("പ്രോജക്ട് sync review") has caseless words that can never satisfy the
+  // Title Case expectation, so it must not be judged by it.
+  if (words.length >= 2 && !/[A-Z]/.test(t) && words.every((w) => /[a-z]/.test(w))) return true;
   return false;
+}
+
+/**
+ * Catch-all for a GENERATED title whose source text is an ANSWER, whatever
+ * the clamp salvages from it: after stripping code fences and the [[GIST]]
+ * tail (the same pre-cleaning cleanMeetingTitle applies), a first content
+ * line over 200 chars is the model answering the transcript — a real title
+ * attempt, even a verbose one with reasoning underneath, keeps its first
+ * line short. Code-review 2026-08-23: the first version of this rule lived
+ * at the call site and measured the RAW first line, so a fence-wrapped
+ * answer ("```\n<450-char explanation>\n```") measured 3 chars and walked
+ * straight past it.
+ */
+export function isAnswerShapedGeneration(rawGenerated: unknown): boolean {
+  let text = String(rawGenerated ?? '').replace(NUL_RE, '');
+  const gistAt = text.indexOf('[[GIST]]');
+  if (gistAt >= 0) text = text.slice(0, gistAt);
+  text = text.replace(FENCE_RE, '');
+  const firstLine = text.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? '';
+  return firstLine.length > 200;
 }
 
 function clamp(value: number, min: number, max: number): number {

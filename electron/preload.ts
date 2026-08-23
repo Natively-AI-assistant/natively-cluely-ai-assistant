@@ -912,7 +912,7 @@ interface ElectronAPI {
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
-  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
@@ -1889,6 +1889,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('intelligence-dynamic-action', subscription);
     return () => {
       ipcRenderer.removeListener('intelligence-dynamic-action', subscription);
+    };
+  },
+  // Auto Answer V3 offer card: main retracts a card by id (expired / replaced / committed).
+  onIntelligenceDynamicActionRetract: (callback: (data: { id: string; reason: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('intelligence-dynamic-action-retract', subscription);
+    return () => {
+      ipcRenderer.removeListener('intelligence-dynamic-action-retract', subscription);
     };
   },
   acceptDynamicAction: (actionId: string) => ipcRenderer.invoke('dynamic-action:accept', actionId),

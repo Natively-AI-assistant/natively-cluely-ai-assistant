@@ -1,0 +1,73 @@
+{
+  "name": "code_switching_pause",
+  "bucket": "fragmented",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "How would you"
+    },
+    {
+      "at": 500,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "How would you"
+    },
+    {
+      "at": 500,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "How would you design the"
+    },
+    {
+      "at": 900,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "design the"
+    },
+    {
+      "at": 900,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "How would you design the system if traffic increased 100x?"
+    },
+    {
+      "at": 1300,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "system if traffic increased 100x?"
+    },
+    {
+      "at": 1450,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": true,
+    "question": "How would you design the system if traffic increased 100x?",
+    "triggerCount": 1
+  }
+}

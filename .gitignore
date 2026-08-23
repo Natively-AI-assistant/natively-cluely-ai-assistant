@@ -507,6 +507,14 @@ docs/*
 # so they are allowlisted out of the blanket `docs/*` ignore above.
 !docs/ts7-upgrade-audit.md
 !docs/ts7-upgrade-report.md
+# Auto Answer V3 campaign — the progress file is the resume contract for the
+# autopilot (a fresh session must be able to continue from it alone) and the
+# two specs govern every phase. Same reasoning as the usage-ledger entries.
+!docs/autopilot/
+!docs/autopilot/auto-answer-v3-progress.md
+!docs/specs/
+!docs/specs/auto-answer-v2-spec.md.md
+!docs/specs/auto-answer-v3-amendments.md
 benchmark-results/
 
 

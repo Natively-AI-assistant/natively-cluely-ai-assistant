@@ -28,6 +28,56 @@ describe('splitGistLine', () => {
     assert.deepEqual(splitGistLine('No gist here.'), { body: 'No gist here.', gist: null });
   });
 
+  test('bullet-prefixed marker is honored as the gist (live session E, 2026-08-23)', () => {
+    const r = splitGistLine('The answer body.\n-[[GIST]] Use backtracking to build valid parentheses.');
+    assert.equal(r.gist, 'Use backtracking to build valid parentheses.');
+    assert.equal(r.body, 'The answer body.');
+    assert.equal(r.recovered, true, 'the bullet shape is prompt drift — lint must see it');
+    const spaced = splitGistLine('Body.\n- [[GIST]] Two pointers from both ends');
+    assert.equal(spaced.gist, 'Two pointers from both ends');
+  });
+
+  test('streaming: a genuine list item starting with "[" is NOT hidden (code-review 2026-08-23)', () => {
+    const r = splitGistLineStreaming('Body.\n- [MDN](https://mdn.io)');
+    assert.match(r.body, /- \[MDN\]/, 'a markdown link bullet must keep painting');
+    const partial = splitGistLineStreaming('Body.\n- [');
+    assert.match(partial.body, /- \[$/, '"- [" alone is a link-in-progress, not a marker prefix');
+  });
+
+  test('streaming: a bare "[" line (no bullet) keeps the pre-existing hide behavior', () => {
+    const r = splitGistLineStreaming('Body.\n[');
+    assert.equal(r.body, 'Body.');
+  });
+
+  test('streaming: a bullet-prefixed partial marker never flashes', () => {
+    const r = splitGistLineStreaming('Body.\n- [[GI');
+    assert.equal(r.body, 'Body.');
+    assert.equal(r.gist, null);
+  });
+
+  test('GLUED marker after a completed sentence is recovered (live E press 26, 2026-08-23)', () => {
+    const r = splitGistLine('The stack never exceeds the required length of 2n. [[GIST]] Use backtracking to build valid parentheses.');
+    assert.equal(r.gist, 'Use backtracking to build valid parentheses.');
+    assert.equal(r.body, 'The stack never exceeds the required length of 2n.');
+    assert.equal(r.recovered, true);
+  });
+
+  test('a mid-SENTENCE marker still stays visible (real prose is never eaten)', () => {
+    const r = splitGistLine('You sort them [[GIST]] first, then subtract.');
+    assert.equal(r.gist, null);
+  });
+
+  test('a glued marker with an over-long tail stays visible (likelier a real closing sentence)', () => {
+    const r = splitGistLine('Done. [[GIST]] ' + 'word '.repeat(15).trim());
+    assert.equal(r.gist, null);
+  });
+
+  test('streaming: a glued partial marker after a sentence never flashes', () => {
+    const r = splitGistLineStreaming('The stack never exceeds 2n. [[GI');
+    assert.equal(r.body, 'The stack never exceeds 2n.');
+    assert.equal(r.gist, null);
+  });
+
   test('marker mid-line is malformed and stays visible', () => {
     assert.equal(splitGistLine('text [[GIST]] inline').gist, null);
   });

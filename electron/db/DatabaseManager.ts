@@ -1414,15 +1414,24 @@ export class DatabaseManager {
             this.db.pragma('user_version = 27');
         }
 
-        // Version 27 → 28: user_titled flag on meetings (RC-7, 2026-08-21).
-        // A user rename was silently overwritten TWICE: by the post-call title
-        // generation in saveMeeting's final write, and unconditionally by
+        // user_titled flag on meetings (RC-7, 2026-08-21). A user rename was
+        // silently overwritten TWICE: by the post-call title generation in
+        // saveMeeting's final write, and unconditionally by
         // replaceDetailedSummary when the deferred V3 summary landed. The flag
         // is set by updateMeetingTitle (the one rename entry point) and makes
         // every generated-title write yield to it.
+        //
+        // APPLIED UNCONDITIONALLY, NOT VERSION-GATED (live incident,
+        // 2026-08-23): this shipped as `if (version < 28)` while a parallel
+        // branch's migrations stamped the same numbers first — the live DB was
+        // observed at user_version 30 WITHOUT the column, so the gate never
+        // ran and EVERY saveMeeting threw "table meetings has no column named
+        // user_titled": meetings (including their generated summaries) were
+        // silently lost. An additive nullable column is idempotent by
+        // construction (the try/catch absorbs "duplicate column"), so it must
+        // not depend on a version counter that concurrent branches can race.
+        try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
         if (version < 28) {
-            console.log('[DatabaseManager] Applying migration v27 → v28: meetings.user_titled');
-            try { this.db.exec("ALTER TABLE meetings ADD COLUMN user_titled INTEGER DEFAULT 0"); } catch (e) { /* Column already exists */ }
             this.db.pragma('user_version = 28');
         }
 

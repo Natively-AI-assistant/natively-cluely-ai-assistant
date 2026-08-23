@@ -869,7 +869,7 @@ export class CredentialsManager {
         if (this.credentials.openaiApiKey) return true;          // gpt-4o / gpt-5 vision
         if (this.credentials.claudeApiKey) return true;          // Claude vision
         if (this.credentials.geminiApiKey) return true;          // Gemini vision
-        if (this.credentials.groqApiKey) return true;            // Groq llama-4-scout vision
+        if (this.credentials.groqApiKey) return true;            // Groq qwen3.6-27b vision
         // Custom providers: only count if they have screenshots scope AND multimodal flag
         const custom = this.credentials.customProviders || [];
         if (custom.some(p => (p as any)?.multimodal === true)) return true;
@@ -1185,13 +1185,26 @@ export class CredentialsManager {
         if (trimmed) {
             // Auto-promote natively to default model unless user already chose a non-Gemini/Groq model
             const current = this.credentials.defaultModel || '';
+            // Only ids the APP itself ever auto-assigns count as auto-defaults
+            // (code-review 2026-08-23): the prefix list had grown to include
+            // 'openai/gpt-oss-' and 'groq/', which the auto paths NEVER set —
+            // they are deliberately pickable in the model selector — so a
+            // user's explicit choice was silently replaced with 'natively' the
+            // moment they added a key, contradicting groqModels.ts's "we do
+            // not silently reroute a model the user picked deliberately".
+            // Auto-assigned ids, past and present: the gemini defaults, the
+            // historical Groq fallbacks (llama-3.3, scout — both retired,
+            // which is exactly why sitting on them must not be treated as a
+            // choice), and the current Groq default qwen/qwen3.6-27b.
+            const AUTO_ASSIGNED_MODEL_IDS = new Set([
+                'gemini', 'llama',
+                'llama-3.3-70b-versatile',
+                'meta-llama/llama-4-scout-17b-16e-instruct',
+                'qwen/qwen3.6-27b',
+            ]);
             const isAutoDefault = !current
                 || current.startsWith('gemini-')
-                || current.startsWith('llama-')
-                || current.startsWith('mixtral-')
-                || current.startsWith('gemma-')
-                || current === 'gemini'
-                || current === 'llama';
+                || AUTO_ASSIGNED_MODEL_IDS.has(current);
             if (isAutoDefault) {
                 this.credentials.defaultModel = 'natively';
                 console.log('[CredentialsManager] Auto-set default model to natively');

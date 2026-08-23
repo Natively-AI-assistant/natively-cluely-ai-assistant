@@ -44,6 +44,7 @@ import {
     MODE_TECHNICAL_INTERVIEW_PROMPT,
     // Campaign-3 (2026-07-19): 8th built-in mode prompt.
     MODE_SEMINAR_PROMPT,
+    MODE_CALL_CENTER_PROMPT,
     SHARED_MODE_PREFIX,
     SHARED_MODE_PREFIX_SHORT,
 } from '../llm/prompts';
@@ -74,7 +75,12 @@ export type ModeTemplateType =
     // Campaign-3 (fix/answer-policy-engine, 2026-07-19): 8th built-in mode.
     // Strict: evidence required, off-document Qs answered general-labeled
     // with a visible "not from your reference files" preamble.
-    | 'seminar';
+    | 'seminar'
+    // 9th built-in (2026-08-23, user request): support/call-center calls.
+    // Closest prior template was Sales, which frames everything as pipeline
+    // (pain points / buying signals) — support calls need issue -> resolution
+    // -> escalation framing instead.
+    | 'call-center';
 
 export interface Mode {
     id: string;
@@ -143,6 +149,10 @@ export const MODE_TEMPLATES: Array<{
     // general-labeled with a visible "not from your reference files" preamble
     // (NEVER a refusal — even strict profiles answer; they just label honestly).
     { type: 'seminar',              label: 'Seminar',              description: 'Strict file-grounded Q&A: answer from your reference files; off-file questions get a visible "general knowledge" label, never a refusal.' },
+    // 9th built-in (2026-08-23): support / call-center calls — issue ->
+    // resolution -> escalation framing (Sales was the closest template and it
+    // frames everything as pipeline, which support notes must not).
+    { type: 'call-center',          label: 'Call Center',          description: 'Support-call notes: customer issue, questions asked, resolution given, and escalations.' },
 ];
 
 // Default note sections seeded when a mode is created from a template
@@ -219,6 +229,15 @@ export const TEMPLATE_NOTE_SECTIONS: Record<ModeTemplateType, Array<{ title: str
         { title: 'If not in your files', description: 'A short, labeled "not from your reference files" note from general knowledge — never fabricated as if from the files.' },
         { title: 'Follow-up you might be asked', description: 'Likely follow-up questions on the same topic the audience or panel could ask next.' },
     ],
+    'call-center': [
+        { title: 'Customer issue', description: 'The problem the customer called about, in their own terms — symptoms, product area, and impact.' },
+        { title: 'Customer context', description: 'Account, plan, environment, versions, prior tickets, and anything identifying the setup.' },
+        { title: 'Questions asked', description: 'Questions the customer asked, including ones answered and ones deferred.' },
+        { title: 'Troubleshooting done', description: 'Steps attempted during the call and their results, in order.' },
+        { title: 'Resolution', description: 'What was resolved on the call and how; state plainly if the issue remains open.' },
+        { title: 'Escalation needed', description: 'Anything requiring escalation, a specialist, engineering, or a callback — with urgency if stated.' },
+        { title: 'Follow-up promised', description: 'Commitments made to the customer: callbacks, emails, refunds, timelines.' },
+    ],
 };
 
 // Campaign-3 (2026-07-19): exported (was `const`) so tests + future UI
@@ -235,6 +254,8 @@ export const TEMPLATE_SYSTEM_PROMPTS: Record<ModeTemplateType, string> = {
     lecture: MODE_LECTURE_PROMPT,
     // Campaign-3 (2026-07-19): 8th built-in mode — file-grounded Q&A.
     seminar: MODE_SEMINAR_PROMPT,
+    // 9th built-in (2026-08-23): support / call-center.
+    'call-center': MODE_CALL_CENTER_PROMPT,
 };
 
 // Startup invariant: every MODE_*_PROMPT must begin with one of the two shared
@@ -556,6 +577,8 @@ export class ModesManager {
         'team-meet',
         'lecture',
         'seminar',
+        // Support calls are not salary negotiations (2026-08-23).
+        'call-center',
     ]);
 
     /**

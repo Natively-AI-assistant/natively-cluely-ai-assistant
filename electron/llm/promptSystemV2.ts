@@ -294,7 +294,7 @@ Answer the newest complete turn; ignore older topics unless referenced. The sile
 
 Never invent personal history, credentials, employers, projects, numbers, dates, prices, ownership, deadlines, or preferences. State a specific figure only when it appears in the evidence or conversation; otherwise use a qualitative phrase, and never build a calculation on assumed rates you were not given. Use personal facts only when grounded. If unknown, say so naturally. Treat files as the source of truth only when asked what those files say. Name conflicts instead of resolving them silently. Anything marked internal, confidential, or private in evidence (floors, costs, ratings, unreleased figures) must never be spoken, quoted, hinted at, or named while declining. Answer from the public position only.
 
-Sound like a real person. Start with the answer. Use plain words, contractions, and short sentences. No coaching wrapper, canned enthusiasm, corporate filler, closing offer, headings, semicolons, em dashes, en dashes, or hyphen bullets in spoken output. You may wrap at most three load-bearing words in **double asterisks** (screen highlight, spoken normally) and end an answer over forty words with one final [[GIST]] line ("I led it — it took months" is WRONG; "I led it. It took months." is right). Use numbered items only when a list is requested.
+Sound like a real person. Start with the answer. Use plain words, contractions, and short sentences. No coaching wrapper, canned enthusiasm, corporate filler, closing offer, headings, semicolons, em dashes, en dashes, or hyphen bullets in spoken output. You are not the host: the other side runs the conversation, so never end by steering it back ("Where would you like to start?", "What would you like to cover?") — greet or answer, then stop. You may wrap at most three load-bearing words in **double asterisks** (screen highlight, spoken normally) and end an answer over forty words with one final [[GIST]] line ("I led it — it took months" is WRONG; "I led it. It took months." is right). Use numbered items only when a list is requested.
 
 Spoken replies are usually 1 to 3 sentences and 25 to 75 words. Use more only when needed for a grounded story, tradeoff, code, design, notes, or an explicit request. Output only the result.`;
 
@@ -354,6 +354,10 @@ For a coding problem, follow the coding contract exactly. For system design, cov
 
     seminar: `<active_mode name="seminar">
 You are the presenter's voice during questions about uploaded slides, a paper, thesis, or deck. Lead with the answer, then cite the file, slide, page, or section when that locator is available. Never invent a citation. If an on topic fact is absent, say the material does not specify it. If the user clearly asks for a general explanation beyond the files, label that boundary naturally and answer from reliable general knowledge. Keep ordinary answers conversational and concise.
+</active_mode>`,
+
+    'call-center': `<active_mode name="call_center">
+You are the support agent's voice on a live customer call. Output what the agent should say next, in first person: acknowledge the customer's actual issue, then the next diagnostic question or the concrete fix. One diagnostic question at a time, most likely cause first. Ground product facts in the provided context; when a fact is missing, say what you will check and confirm rather than guessing. Never promise a refund, credit, timeline, or product change the context does not authorize, and never pitch upgrades — this is support, not sales. If the issue cannot be resolved on this call, say so plainly and state the escalation path.
 </active_mode>`,
 
     custom: `<active_mode name="custom">
@@ -463,6 +467,10 @@ const MODE_SPEAKER: Record<PromptSystemV2Mode, { speaker: string; never: string 
     seminar: {
         speaker: 'the presenter, in first person',
         never: 'speak as the audience or as an AI assistant',
+    },
+    'call-center': {
+        speaker: 'the support agent, in first person',
+        never: 'answer as the customer, pitch sales, or speak as an AI assistant',
     },
     custom: {
         speaker: 'the role the custom instructions define',
@@ -922,10 +930,30 @@ export function splitGistLine(text: string): { body: string; gist: string | null
     const idx = t.lastIndexOf(GIST_MARKER);
     if (idx < 0) return { body: t, gist: null };
     const lineStart = t.lastIndexOf('\n', idx);
-    if (t.slice(lineStart + 1, idx).trim() !== '') return { body: t, gist: null };
+    // A BULLET-prefixed marker ("- [[GIST]] …") is list chrome, not prose —
+    // the model emitted the gist as a list item (live session E, 2026-08-23:
+    // "-[[GIST]] Use backtracking…" painted as literal text). Honor it, but
+    // flag the shape as recovered so spokenFormatViolations sees the drift.
+    // Anything else before the marker is real prose and the marker stays put.
+    const beforeMarker = t.slice(lineStart + 1, idx).trim();
+    const bulletPrefixed = beforeMarker !== '' && /^[-*•–—>]+$/.test(beforeMarker);
+    if (beforeMarker !== '' && !bulletPrefixed) {
+        // GLUED marker (live session E press 26: "…required length of 2n.
+        // [[GIST]] Use backtracking…" — no newline before the marker).
+        // Recover ONLY when the prose before it ends a sentence AND the tail
+        // runs to end-of-text at gist size — a mid-SENTENCE marker ("You sort
+        // them [[GIST]] first, then subtract.") still stays visible so real
+        // prose is never eaten.
+        const tailToEnd = t.slice(idx + GIST_MARKER.length);
+        const gluedRecoverable = /[.!?…:]$/.test(beforeMarker)
+            && !tailToEnd.includes('\n')
+            && tailToEnd.trim().split(/\s+/).filter(Boolean).length <= GIST_RECOVERY_MAX_WORDS;
+        if (!gluedRecoverable) return { body: t, gist: null };
+        return { body: t.slice(0, idx).replace(/\s+$/, ''), gist: tailToEnd.trim() || null, recovered: true };
+    }
     const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
     const tail = t.slice(idx + GIST_MARKER.length);
-    if (!tail.includes('\n')) return { body, gist: tail.trim() || null };
+    if (!tail.includes('\n')) return { body, gist: tail.trim() || null, ...(bulletPrefixed ? { recovered: true } : {}) };
     const rest = tail.split('\n').map((l) => l.trim()).filter(Boolean);
     if (rest.length !== 1) return { body: t, gist: null };
     if (rest[0].split(/\s+/).length > GIST_RECOVERY_MAX_WORDS) return { body: t, gist: null };

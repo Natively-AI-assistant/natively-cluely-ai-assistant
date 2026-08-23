@@ -393,6 +393,7 @@ export interface ElectronAPI {
 
   // Phase 3 — Cluely-style dynamic action cards.
   onIntelligenceDynamicAction: (callback: (data: { action: DynamicActionPayload }) => void) => () => void
+  onIntelligenceDynamicActionRetract: (callback: (data: { id: string; reason: string }) => void) => () => void
   acceptDynamicAction: (actionId: string) => Promise<{ success: boolean; action?: DynamicActionPayload; error?: string }>
   dismissDynamicAction: (actionId: string) => Promise<{ success: boolean; error?: string }>
   listDynamicActions: () => Promise<{ success: boolean; actions: DynamicActionPayload[]; error?: string }>
@@ -642,7 +643,7 @@ export interface ElectronAPI {
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
-  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
+  setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;

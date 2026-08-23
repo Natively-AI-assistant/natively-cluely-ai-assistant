@@ -234,6 +234,20 @@ export class IntelligenceEngine extends EventEmitter {
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
     /**
+     * Generation id of the answer run started by an AUTOMATIC trigger
+     * (SuggestionTrigger.automatic), or null. Lets the dual-channel gate
+     * cancel exactly that stream on user barge-in while a manual
+     * What-to-Answer — a different generation — is untouchable.
+     */
+    private automaticGenerationId: number | null = null;
+    private nextRunIsAutomatic = false;
+    /**
+     * Auto Answer V3: the controller's current candidate id, so a speculative
+     * run started by maybeSpeculate is keyed to it (V3 Amendment 6 reuse).
+     */
+    private currentAutoCandidateId: string | null = null;
+    private speculativeQuestionId: string | null = null;
+    /**
      * The question that stamped `lastTriggerTime`. Lets the cooldown distinguish a
      * restated FRAGMENT of the same utterance (throttle) from a genuinely new
      * question (answer). Null ⇒ the cooldown behaves exactly as it always has.
@@ -539,6 +553,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (this.speculativeText !== null) return;
             if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
             console.log(`[IntelligenceEngine] Speculative inference fired on interim`, { length: text.length, confidence });
+            this.speculativeQuestionId = this.currentAutoCandidateId;
             this.runWhatShouldISay(text, confidence || 0.8, undefined, { speculative: true })
                 .catch(err => console.error('[IntelligenceEngine] Speculative run error:', err));
         }, this.SPECULATIVE_DEBOUNCE_MS);
@@ -661,6 +676,12 @@ export class IntelligenceEngine extends EventEmitter {
         return this.dynamicActionEngine.getTopActions(this.currentSessionId);
     }
 
+    /** Auto Answer V3: an offer card built outside the trigger packs, stored so accept/dismiss find it. */
+    registerDynamicAction(action: DynamicAction): void {
+        if (!this.dynamicActionEngine) this.dynamicActionEngine = new DynamicActionEngine();
+        this.dynamicActionEngine.registerAction(action);
+    }
+
     // For tests — injection seam.
     _setDynamicActionEngineForTest(engine: DynamicActionEngine | null): void {
         this.dynamicActionEngine = engine;
@@ -717,7 +738,9 @@ export class IntelligenceEngine extends EventEmitter {
      * This is the primary auto-trigger path
      */
     async handleSuggestionTrigger(trigger: SuggestionTrigger): Promise<void> {
-        if (trigger.confidence < 0.5) return;
+        // An absent confidence is not a low one: the planner substitutes the
+        // intent classifier's score. Only an EXPLICIT sub-threshold value skips.
+        if (trigger.confidence !== undefined && trigger.confidence < 0.5) return;
 
         const plannerDecision = await this.planSuggestionTrigger(trigger);
         if (plannerDecision.kind === 'silent') {
@@ -747,13 +770,20 @@ export class IntelligenceEngine extends EventEmitter {
             const expired = Date.now() > this.speculativeTextExpiry;
             const stale = expired || !trigger.lastQuestion; // empty question — reject conservatively
             if (!stale) {
-                const similarity = speculativeQuestionSimilarity(this.speculativeText, trigger.lastQuestion);
+                // Keyed reuse (V3 Amendment 6): the controller already verified
+                // identity by questionId or embedding cosine; Jaccard is the fallback.
+                const similarity = trigger.reuseSpeculative
+                    ? 1
+                    : speculativeQuestionSimilarity(this.speculativeText, trigger.lastQuestion);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
+                this.speculativeQuestionId = null;
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
                     console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
                     this.lastTriggerQuestion = trigger.lastQuestion ?? null;
+                    // The running speculative stream IS the automatic answer now.
+                    if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
                     return;
                 }
                 console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
@@ -767,7 +797,70 @@ export class IntelligenceEngine extends EventEmitter {
             ++this.currentGenerationId;
         }
 
-        await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence);
+        // runWhatShouldISay's own default (0.8) applies when the trigger carried none.
+        this.nextRunIsAutomatic = trigger.automatic === true;
+        try {
+            await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
+        } finally {
+            this.nextRunIsAutomatic = false;
+        }
+    }
+
+    /**
+     * Cancel the streaming AUTOMATIC answer on user barge-in (Auto Answer V3,
+     * Amendment 1). Narrow by construction: only the generation an automatic
+     * trigger started, and only while it is the live What-to-Answer run. A
+     * manual press (a newer generation) or an idle engine returns false and
+     * nothing is touched.
+     */
+    /** Auto Answer V3: a manual What-to-Answer is the live run (never superseded by an automatic one). */
+    isManualAnswerActive(): boolean {
+        return this.activeMode === 'what_to_say' && this.automaticGenerationId !== this.currentGenerationId;
+    }
+
+    /** Auto Answer V3: the controller's current candidate, for keying the speculative prefetch. */
+    noteAutoAnswerCandidate(questionId: string, _candidateGeneration: number): void {
+        this.currentAutoCandidateId = questionId;
+    }
+
+    /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
+    getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
+        const live = this.speculativeText !== null && Date.now() <= this.speculativeTextExpiry;
+        return { questionId: live ? this.speculativeQuestionId : null, text: live ? this.speculativeText : null };
+    }
+
+    /**
+     * Auto Answer V3 dispatch (V2 §44). Delegates to the existing suggestion
+     * path — planner, speculative reuse, runWhatShouldISay — carrying the
+     * question's identity and quality fields; it does NOT create a second
+     * generation stack.
+     */
+    async runAutoAnswer(question: {
+        id: string; text: string; confidence: number; answerability: number; dialogueAct: string;
+        isFollowUp: boolean; endpointSource?: string; candidateGeneration: number;
+    }, options: { reuseSpeculative: boolean; context: string }): Promise<void> {
+        return this.handleSuggestionTrigger({
+            context: options.context,
+            lastQuestion: question.text,
+            confidence: question.confidence,
+            automatic: true,
+            questionId: question.id,
+            answerability: question.answerability,
+            dialogueAct: question.dialogueAct,
+            isFollowUp: question.isFollowUp,
+            endpointSource: question.endpointSource,
+            candidateGeneration: question.candidateGeneration,
+            reuseSpeculative: options.reuseSpeculative,
+        });
+    }
+
+    cancelAutomaticAnswer(reason: 'user_barge_in'): boolean {
+        if (this.activeMode !== 'what_to_say') return false;
+        if (this.automaticGenerationId === null || this.automaticGenerationId !== this.currentGenerationId) return false;
+        if (!this.whatToAnswerCancellationToken) return false;
+        this.whatToAnswerCancellationToken.abort(reason);
+        this.automaticGenerationId = null;
+        return true;
     }
 
     private async planSuggestionTrigger(trigger: SuggestionTrigger): Promise<PlannerDecision> {
@@ -788,7 +881,9 @@ export class IntelligenceEngine extends EventEmitter {
 
         return planNextAssistantAction({
             triggerQuestion: trigger.lastQuestion,
-            confidence: trigger.confidence,
+            // 0 is the planner's "no trigger confidence" value: it `||`-falls
+            // through to intentResult.confidence (PlannerDecision.ts).
+            confidence: trigger.confidence ?? 0,
             transcriptContext,
             intentResult,
             hasRecentAssistantResponse: this.session.getAssistantResponseHistory().length > 0,
@@ -958,6 +1053,10 @@ export class IntelligenceEngine extends EventEmitter {
         // resumes after this point, it can only observe itself as superseded; it
         // must never mint a newer id and overtake this request.
         const generationId = ++this.currentGenerationId;
+        // Stamp the automatic run's identity before any await: a manual press
+        // racing in mints a newer id and the automatic one is no longer live.
+        this.automaticGenerationId = this.nextRunIsAutomatic ? generationId : null;
+        this.nextRunIsAutomatic = false;
         const isWtaSuperseded = () => (
             this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken
             || this.currentGenerationId !== generationId
@@ -4088,6 +4187,28 @@ export class IntelligenceEngine extends EventEmitter {
                     }
                 } catch (preErr: any) {
                     console.warn('[IntelligenceEngine] planning-preamble guard skipped:', preErr?.message || preErr);
+                }
+            }
+
+            // STEERING-TAIL STRIP (live session D, 2026-08-23): on a SMALL-TALK
+            // press (greeting/pleasantry), drop a trailing host-style closer
+            // ("Where would you like to start?") — the other side runs the
+            // conversation. Narrow by construction: only small-talk turns enter,
+            // and only a whole trailing sentence matching a known steering shape
+            // is removed. Fails open when stripping would empty the reply.
+            if (!isSpeculative && fullAnswer && !isCodingAnswerType(answerPlan.answerType)) {
+                try {
+                    const { isSmallTalkTurn, stripSteeringTail } = require('./llm/steeringTail') as typeof import('./llm/steeringTail');
+                    const smallTalkSource = question || answerPlan.question || extractedQuestion.latestQuestion || '';
+                    if (isSmallTalkTurn(smallTalkSource)) {
+                        const st = stripSteeringTail(fullAnswer);
+                        if (st.repaired) {
+                            fullAnswer = st.text;
+                            trace.mark('repair_used', { reason: 'steering_tail_stripped' });
+                        }
+                    }
+                } catch (stErr: any) {
+                    console.warn('[IntelligenceEngine] steering-tail guard skipped:', stErr?.message || stErr);
                 }
             }
 

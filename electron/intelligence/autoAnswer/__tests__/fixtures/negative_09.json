@@ -1,0 +1,57 @@
+{
+  "name": "negative_09",
+  "bucket": "negative",
+  "context": [
+    {
+      "role": "interviewer",
+      "text": "Thanks for joining. Let us get started with your background.",
+      "atOffset": -40000
+    },
+    {
+      "role": "user",
+      "text": "Sure. I led the migration to Postgres last year and we used Kafka for events and Redis for caching.",
+      "atOffset": -30000
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": true
+      }
+    },
+    {
+      "at": 100,
+      "speaker": "interviewer",
+      "final": false,
+      "text": "Wouldn't that be nice?"
+    },
+    {
+      "at": 550,
+      "speaker": "interviewer",
+      "final": true,
+      "text": "Wouldn't that be nice?"
+    },
+    {
+      "at": 700,
+      "edge": {
+        "channel": "interviewer",
+        "speaking": false
+      }
+    }
+  ],
+  "expected": {
+    "shouldAnswer": false,
+    "triggerCount": 0,
+    "noOffer": true,
+    "skipReason": [
+      "not_question",
+      "backchannel",
+      "social",
+      "rhetorical",
+      "pause_request",
+      "low_answerability"
+    ]
+  }
+}

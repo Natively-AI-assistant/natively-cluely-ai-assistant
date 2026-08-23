@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, MessageSquareReply
 } from 'lucide-react';
 import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
@@ -2025,20 +2025,31 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <Zap size={20} />
+                                                            <MessageSquareReply size={20} />
                                                         </div>
                                                         <div>
                                                             <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
-                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Answer automatically when the interviewer finishes a question, instead of waiting for the hotkey')}</p>
+                                                            <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
                                                         </div>
                                                     </div>
                                                     <SettingsToggle
                                                         checked={autoAnswerEnabled}
                                                         label={t('Auto Answer')}
-                                                        onChange={() => {
-                                                            const newState = !autoAnswerEnabled;
-                                                            setAutoAnswerEnabled(newState);
-                                                            window.electronAPI?.setAutoAnswerEnabled?.(newState);
+                                                        onChange={async () => {
+                                                            const previous = autoAnswerEnabled;
+                                                            const newState = !previous;
+                                                            setAutoAnswerEnabled(newState); // Optimistic update
+                                                            try {
+                                                                const result = await window.electronAPI?.setAutoAnswerEnabled?.(newState);
+                                                                if (result && !result.success) {
+                                                                    // Rollback on explicit failure (settings store degraded)
+                                                                    setAutoAnswerEnabled(previous);
+                                                                    console.error('[Settings] Failed to set Auto Answer:', result.error);
+                                                                }
+                                                            } catch (err) {
+                                                                setAutoAnswerEnabled(previous);
+                                                                console.error('[Settings] Exception setting Auto Answer:', err);
+                                                            }
                                                         }}
                                                         className={autoAnswerEnabled ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />

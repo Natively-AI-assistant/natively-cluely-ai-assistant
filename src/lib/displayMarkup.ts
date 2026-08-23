@@ -44,10 +44,30 @@ export function splitGistLine(text: string): GistSplit {
   const idx = t.lastIndexOf(GIST_MARKER);
   if (idx < 0) return { body: t, gist: null };
   const lineStart = t.lastIndexOf('\n', idx);
-  if (t.slice(lineStart + 1, idx).trim() !== '') return { body: t, gist: null };
+  // A BULLET-prefixed marker ("- [[GIST]] …", "* [[GIST]] …") is list chrome,
+  // not prose — the model emitted the gist as a list item (live session E,
+  // 2026-08-23: "-[[GIST]] Use backtracking…" painted as literal text). Honor
+  // it, but flag the shape as recovered so the format lint sees the drift.
+  // Anything else before the marker is real prose and the marker stays put.
+  const beforeMarker = t.slice(lineStart + 1, idx).trim();
+  const bulletPrefixed = beforeMarker !== '' && /^[-*•–—>]+$/.test(beforeMarker);
+  if (beforeMarker !== '' && !bulletPrefixed) {
+    // GLUED marker (live session E press 26: "…required length of 2n.
+    // [[GIST]] Use backtracking…" — the model omitted the newline). Recover
+    // ONLY when the prose before the marker ends a sentence AND the tail runs
+    // to end-of-text at gist size — that separates a glued gist from a
+    // mid-SENTENCE contamination ("You sort them [[GIST]] first, then
+    // subtract."), which still stays visible so real prose is never eaten.
+    const tailToEnd = t.slice(idx + GIST_MARKER.length);
+    const gluedRecoverable = /[.!?…:]$/.test(beforeMarker)
+      && !tailToEnd.includes('\n')
+      && tailToEnd.trim().split(/\s+/).filter(Boolean).length <= RECOVERY_MAX_WORDS;
+    if (!gluedRecoverable) return { body: t, gist: null };
+    return { body: t.slice(0, idx).replace(/\s+$/, ''), gist: tailToEnd.trim() || null, recovered: true };
+  }
   const body = t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, '');
   const tail = t.slice(idx + GIST_MARKER.length);
-  if (!tail.includes('\n')) return { body, gist: tail.trim() || null };
+  if (!tail.includes('\n')) return { body, gist: tail.trim() || null, ...(bulletPrefixed ? { recovered: true } : {}) };
   const rest = tail.split('\n').map((l) => l.trim()).filter(Boolean);
   if (rest.length !== 1) return { body: t, gist: null };
   if (rest[0].split(/\s+/).length > RECOVERY_MAX_WORDS) return { body: t, gist: null };
@@ -71,7 +91,27 @@ export function splitGistLineStreaming(text: string): GistSplit {
   if (full.gist !== null) return full;
   const t = (text || '').replace(/\s+$/, '');
   const lineStart = t.lastIndexOf('\n');
-  const lastLine = t.slice(lineStart + 1).trimStart();
+  // Bullet glyphs before a partial marker ("- [[GI") are hidden the same way —
+  // but ONLY once the remainder shows the double bracket. Code-review
+  // 2026-08-23: stripping first meant a genuine streamed list item starting
+  // with a single '[' ("- [MDN](…)") was mistaken for a marker prefix and
+  // flickered out for a frame. A bare "[" as its own line (no bullet) keeps
+  // the pre-existing hide behavior.
+  // GLUED partial mid-line ("…of 2n. [[GI"): hide just the arriving marker,
+  // keep the prose painting. Requires >=2 chars ("[[") and sentence-final
+  // punctuation before it, mirroring splitGistLine's glued-marker recovery.
+  for (let k = Math.min(GIST_MARKER.length, t.length - 1); k >= 2; k--) {
+    const suffix = t.slice(-k);
+    if (!GIST_MARKER.startsWith(suffix)) continue;
+    const before = t.slice(0, t.length - k).replace(/\s+$/, '');
+    if (/[.!?…:]$/.test(before)) return { body: before, gist: null };
+    break;
+  }
+  const rawLastLine = t.slice(lineStart + 1).trimStart();
+  const stripped = rawLastLine.replace(/^[-*•–—>]+\s*/, '');
+  const lastLine = stripped === rawLastLine
+    ? rawLastLine
+    : (stripped.startsWith('[[') ? stripped : '');
   if (lastLine && GIST_MARKER.startsWith(lastLine)) {
     return { body: t.slice(0, lineStart < 0 ? 0 : lineStart).replace(/\s+$/, ''), gist: null };
   }

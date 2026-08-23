@@ -1218,7 +1218,9 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
-import { evaluateAutoAnswerGate } from "./intelligence/autoAnswerGate"
+import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
+import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
+import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
@@ -3175,69 +3177,133 @@ export class AppState {
   // against the in-flight speculative run, rejects on the mismatch, bumps
   // currentGenerationId — cancelling the correctly-prefetched answer — and then
   // generates one for the PREVIOUS question.
-  private autoAnswerTimer: NodeJS.Timeout | null = null;
-  // The turn already dispatched. The planner's 3 s cooldown alone would let a
-  // stable last-turn be re-answered every time the cooldown lapsed.
-  private lastAutoAnsweredQuestion: string | null = null;
-  // Long enough for a multi-segment question ("Tell me about a time..." /
-  // "...where you disagreed with your manager") to coalesce into one trigger;
-  // each new final restarts it.
-  private static readonly AUTO_ANSWER_DEBOUNCE_MS = 900;
-
-  private scheduleAutoAnswer(): void {
-    if (!this._autoAnswerEnabled) return;
-    // The transcript handler also runs during the post-Stop drain window
-    // (`_isDraining`); a meeting that is over must not produce a new answer.
-    if (!this.isMeetingActive) return;
-
-    const generation = this._meetingGeneration;
-    if (this.autoAnswerTimer) clearTimeout(this.autoAnswerTimer);
-
-    this.autoAnswerTimer = setTimeout(() => {
-      this.autoAnswerTimer = null;
-      // Every remaining guard lives in evaluateAutoAnswerGate so it is reachable
-      // from a test. The engine half — mode + cooldown — matters because
-      // `runWhatShouldISay` aborts any live What-to-Answer stream with
-      // 'superseded': without it an auto-trigger would kill the answer the user
-      // just requested by hand. The cooldown is consulted HERE rather than left
-      // to the planner because planSuggestionTrigger runs the zero-shot ONNX
-      // intent classifier BEFORE planNextAssistantAction applies that cooldown,
-      // so the classification would be paid for and thrown away.
-      const decision = evaluateAutoAnswerGate({
-        enabled: this._autoAnswerEnabled,
-        meetingActive: this.isMeetingActive,
-        generationAtSchedule: generation,
-        generationNow: this._meetingGeneration,
-        lastQuestion: this.intelligenceManager.getLastInterviewerTurn(),
-        lastAnsweredQuestion: this.lastAutoAnsweredQuestion,
-        engineAccepting: this.intelligenceManager.canAutoAnswer(),
-      });
-      if (!decision.dispatch) {
-        if (this._verboseLogging) console.log(`[Main] Auto Answer skipped: ${decision.reason}`);
-        return;
-      }
-      const lastQuestion = decision.question;
-      this.lastAutoAnsweredQuestion = lastQuestion;
-
-      // The planner still decides whether the turn is answerable at all; this
-      // confidence reflects a completed STT final, not a claim that every
-      // interviewer sentence is a question.
-      void this.intelligenceManager.handleSuggestionTrigger({
-        context: this.intelligenceManager.getFormattedContext(120),
-        lastQuestion,
-        confidence: 0.9,
-      }).catch((error) => {
+  // Auto Answer V3 (Settings > General, default OFF). AppState owns wiring and
+  // lifecycle only; the controller owns turn accumulation, endpoint reasoning,
+  // question identity, answerability, dedup, queueing, the dual-channel gate
+  // and every skip reason (electron/intelligence/autoAnswer/). With the toggle
+  // OFF `ingest` returns before touching any state — hotkey-only, as before.
+  /** Built before the controller (field order) so the controller can subscribe to it. */
+  private readonly smartTurnPredictor = createSmartTurnPredictor((line) => { if (this._verboseLogging) console.log(line); });
+  private readonly autoAnswerController = new AutoAnswerController({
+    isEnabled: () => this._autoAnswerEnabled,
+    isMeetingActive: () => this.isMeetingActive,
+    meetingGeneration: () => this._meetingGeneration,
+    engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
+    manualAnswerActive: () => this.intelligenceManager.isManualAnswerActive(),
+    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(60) as any,
+    speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
+    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
+    cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
+    dispatch: (question, { reuseSpeculative }) => {
+      void this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
-    }, AppState.AUTO_ANSWER_DEBOUNCE_MS);
+    },
+    // V3 Amendment 4: the ONE offer card, rendered through the existing Dynamic
+    // Action surface (DynamicActionBar/Card). Tab or click commits; the
+    // What-to-Answer hotkey commits through manual_answer_started → retract.
+    offer: (question) => this.showAutoAnswerOffer(question),
+    retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason),
+    log: (line) => { if (this._verboseLogging) console.log(line); },
+    telemetry: (event) => {
+      // Structured, NO transcript text (V2 §29): ids, acts, scores, reasons, timings only.
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        const { name, meetingGeneration, provider, ...properties } = event;
+        telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
+      } catch { /* telemetry must never break the pipeline */ }
+    },
+  }, {
+    // Tier-2 endpoint evidence: Smart Turn v3.1 on the interviewer audio
+    // (V3 Amendment 2). Asset missing → predict() null → deterministic path.
+    turnPredictor: this.smartTurnPredictor,
+    // Layer-3 dedup / speculative reuse over the bundled local embedder
+    // (Xenova/all-MiniLM-L6-v2). Lazily constructed; any failure → null →
+    // the cheap layers decide (V2 §38: never depend on a model asset).
+    embed: async (text: string) => {
+      try {
+        let embedder = this.autoAnswerEmbedder;
+        if (!embedder) {
+          const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
+          embedder = new LocalEmbeddingProvider();
+          this.autoAnswerEmbedder = embedder;
+        }
+        return await embedder!.embed(text);
+      } catch { return null; }
+    },
+  });
+  private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
+
+  /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
+  public onManualWhatToAnswer(): void {
+    this.autoAnswerController.onManualAnswerStarted();
+  }
+
+  /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
+  public applyAutoAnswerThresholds(modeTemplateType: string | null | undefined): void {
+    try {
+      const { resolveAutoAnswerThresholds } = require('./context-intelligence/policies/mode-policy-registry') as typeof import('./context-intelligence/policies/mode-policy-registry');
+      this.autoAnswerController.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
+    } catch { /* keep the current thresholds */ }
   }
 
   private cancelAutoAnswer(): void {
-    if (this.autoAnswerTimer) {
-      clearTimeout(this.autoAnswerTimer);
-      this.autoAnswerTimer = null;
-    }
-    this.lastAutoAnsweredQuestion = null;
+    this.autoAnswerController.onMeetingStop();
+    // Free the Smart Turn ORT session between meetings (and on toggle-off).
+    // It is lazily re-created on the next interviewer speech-stop. Also keeps
+    // a live ORT session out of any hard-exit path: process.exit() with one
+    // loaded SIGABRTs (reproduced under Electron 43's Node).
+    void this.smartTurnPredictor.dispose();
+  }
+
+  /** Stable id prefix so the renderer can replace the card in place and retract it by id. */
+  private static readonly AUTO_ANSWER_OFFER_ID_PREFIX = 'auto-answer-offer:';
+
+  /** Render the offer as a Dynamic Action (reuse, not a new surface — V2 §47 / V3 Amendment 4). */
+  private showAutoAnswerOffer(question: { id: string; text: string; answerability: number; dialogueAct: string }): void {
+    const now = Date.now();
+    let modeId = 'general';
+    let modeTemplateType = 'general';
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const active = ModesManager.getInstance().getActiveMode();
+      if (active) { modeId = active.id; modeTemplateType = active.templateType; }
+    } catch { /* defaults */ }
+    const action = {
+      id: `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${question.id}`,
+      sessionId: `auto-answer-${this._meetingGeneration}`,
+      modeId,
+      modeTemplateType,
+      type: 'auto_answer_offer',
+      label: 'Answer this?',
+      // The detected question IS the card body; it is also the prompt the
+      // renderer hands to handleWhatToSay on accept (manual semantics).
+      description: question.text,
+      confidence: question.answerability,
+      priority: 100,
+      evidenceRefs: [],
+      status: 'shown' as const,
+      createdAt: now,
+      expiresAt: now + 10_000,
+      promptInstruction: question.text,
+    };
+    try { this.intelligenceManager.registerDynamicAction(action); } catch { /* accept still works renderer-side */ }
+    const helper = this.getWindowHelper();
+    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
+    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
+  }
+
+  private retractAutoAnswerOffer(questionId: string, reason: string): void {
+    const id = `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${questionId}`;
+    try { this.intelligenceManager.dismissDynamicAction(id); } catch { /* best effort */ }
+    const helper = this.getWindowHelper();
+    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action-retract', { id, reason });
+    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action-retract', { id, reason });
+  }
+
+  /** before-quit: release the Smart Turn session before the process winds down. */
+  public disposeAutoAnswerForShutdown(): void {
+    void this.smartTurnPredictor.dispose();
   }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
@@ -3404,6 +3470,17 @@ export class AppState {
       : stt instanceof GoogleSTT ? 'google'
       : sttProvider;
 
+    // Auto Answer V3 provider endpoints (Deepgram speech_final / UtteranceEnd,
+    // Soniox <end>, OpenAI server VAD). Interviewer channel only; additive
+    // event that only the controller consumes. Providers without the event
+    // simply never emit it — the quiet window remains the floor.
+    if (speaker === 'interviewer') {
+      (stt as any).on?.('endpoint', (ev: { type: 'speech_final' | 'utterance_end'; confidence?: number }) => {
+        if (!this._autoAnswerEnabled) return;
+        this.autoAnswerController.onProviderEndpoint({ type: ev.type, timestamp: Date.now(), confidence: ev.confidence });
+      });
+    }
+
     // Wire Transcript Events
     stt.on('transcript', (segment: { text: string, isFinal: boolean, confidence: number, speakerId?: string }) => {
       // Accept transcripts while a meeting is active OR while we're draining
@@ -3432,12 +3509,19 @@ export class AppState {
         punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
       });
 
-      // Auto Answer (Settings > General, default OFF): a FINAL interviewer
-      // turn is the trigger — see scheduleAutoAnswer() for why the native
-      // VAD's speech_ended is the wrong seam for this.
-      if (segment.isFinal && speaker === 'interviewer') {
-        this.scheduleAutoAnswer();
-      }
+      // Auto Answer V3 (Settings > General, default OFF): every segment, any
+      // speaker, partial or final — the controller decides whether anything
+      // happens (V2 §24). Returns immediately when the toggle is off.
+      this.autoAnswerController.ingest({
+        speaker,
+        text: segment.text,
+        timestamp: Date.now(),
+        final: segment.isFinal,
+        confidence: segment.confidence,
+        origin: 'stt',
+        sttProvider: effectiveSttId,
+        punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
+      });
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
@@ -3822,6 +3906,9 @@ export class AppState {
       // transcript (F-102).
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.write(chunk);
+        // Smart Turn ring buffer (256 KB, interviewer channel only). Cheap
+        // int16 copy; skipped entirely while Auto Answer is off.
+        if (this._autoAnswerEnabled) this.smartTurnPredictor.pushPcm(chunk, capture.getSampleRate?.() ?? 16000);
       }
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -3834,6 +3921,9 @@ export class AppState {
       if (this.systemAudioCapture === capture) {
         this.googleSTT?.notifySpeechEnded?.();
       }
+    });
+    capture.on('speech_edge', (edge: SpeechEdge) => {
+      if (this.systemAudioCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -4022,6 +4112,9 @@ export class AppState {
       if (this.microphoneCapture === capture) {
         this.googleSTT_User?.notifySpeechEnded?.();
       }
+    });
+    capture.on('speech_edge', (edge: SpeechEdge) => {
+      if (this.microphoneCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();
@@ -5848,7 +5941,7 @@ export class AppState {
 
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
-    this.cancelAutoAnswer();
+    this.autoAnswerController.onMeetingStart();
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown
@@ -5959,6 +6052,7 @@ export class AppState {
           modeId: activeMode.id,
           modeTemplateType: activeMode.templateType,
         });
+        this.applyAutoAnswerThresholds(activeMode.templateType);
       }
     } catch (err) {
       // Auxiliary feature — never block meeting start.
@@ -6660,6 +6754,8 @@ export class AppState {
     })
 
     this.intelligenceManager.on('manual_answer_started', () => {
+      // The hotkey/click commits whatever Auto Answer was offering.
+      this.autoAnswerController.onManualAnswerStarted();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-started')
     })
@@ -6673,6 +6769,8 @@ export class AppState {
     this.intelligenceManager.on('mode_changed', (mode: string) => {
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-mode-changed', { mode })
+      // A candidate parked because the engine was busy may now dispatch.
+      if (mode === 'idle') this.autoAnswerController.onEngineIdle()
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
@@ -7564,13 +7662,23 @@ export class AppState {
     return this._autoAnswerEnabled;
   }
 
-  public setAutoAnswerEnabled(enabled: boolean): void {
+  /**
+   * Returns whether the value was PERSISTED. SettingsManager.set refuses when
+   * the store is degraded (R-15); the in-memory flag is left untouched in that
+   * case so memory, disk and the renderer's toggle cannot disagree.
+   */
+  public setAutoAnswerEnabled(enabled: boolean): boolean {
+    const persisted = SettingsManager.getInstance().set('autoAnswerEnabled', enabled);
+    if (!persisted) {
+      console.warn(`[AppState] autoAnswerEnabled=${enabled} NOT persisted — settings store degraded; keeping ${this._autoAnswerEnabled}`);
+      return false;
+    }
     this._autoAnswerEnabled = enabled;
-    SettingsManager.getInstance().set('autoAnswerEnabled', enabled);
     // Drop anything already armed: turning the toggle off mid-meeting must not
     // let one more auto-answer land a second later.
     if (!enabled) this.cancelAutoAnswer();
     console.log(`[AppState] autoAnswerEnabled set to ${enabled}`);
+    return true;
   }
 
   public setDisguise(mode: 'terminal' | 'settings' | 'activity' | 'none'): void {
@@ -8774,6 +8882,7 @@ if (process.env.THINKING_MATRIX === '1') {
     // audio handles start tearing down.
     try {
       appState.stopDefaultOutputWatcherForShutdown?.();
+      appState.disposeAutoAnswerForShutdown?.();
     } catch (e) {
       console.error('[main] Failed to stop DefaultOutputWatcher during shutdown:', e);
     }

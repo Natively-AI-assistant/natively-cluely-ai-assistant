@@ -60,7 +60,29 @@ export interface TranscriptSegment {
 export interface SuggestionTrigger {
     context: string;
     lastQuestion: string;
-    confidence: number;
+    /**
+     * Trigger-level confidence that `lastQuestion` is an answerable question.
+     * Optional since the Auto Answer V3 campaign: the automatic trigger no
+     * longer fabricates a value, and an absent confidence means "defer to the
+     * planner's own classifier score" (PlannerDecision falls back to
+     * intentResult.confidence).
+     */
+    confidence?: number;
+    /**
+     * True when the trigger came from the Auto Answer path rather than a user
+     * action. The engine records the resulting generation so a user barge-in
+     * can cancel exactly that stream and never a manual What-to-Answer.
+     */
+    automatic?: boolean;
+    // ── Auto Answer V3 identity/quality fields (all optional, V2 §26) ──
+    questionId?: string;
+    answerability?: number;
+    dialogueAct?: string;
+    isFollowUp?: boolean;
+    endpointSource?: string;
+    candidateGeneration?: number;
+    /** The controller verified (by id or embedding cosine) that the speculative cache answers THIS question. */
+    reuseSpeculative?: boolean;
 }
 
 // Context item matching Swift ContextManager structure
