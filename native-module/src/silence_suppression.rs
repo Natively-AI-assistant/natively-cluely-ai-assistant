@@ -171,6 +171,16 @@ pub enum FrameAction {
     Suppress,
 }
 
+/// Speech edge observed on a processed frame (see `SilenceSuppressor::process_edges`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpeechEdge {
+    None,
+    /// First speech frame after silence.
+    Started,
+    /// Hangover elapsed after the last speech frame.
+    Ended,
+}
+
 impl SilenceSuppressor {
     pub fn new(config: SilenceSuppressionConfig) -> Self {
         let now = Instant::now();
@@ -230,6 +240,14 @@ impl SilenceSuppressor {
     /// The frame can be at ANY native sample rate. Internally, we decimate
     /// to 16kHz for the WebRTC VAD check only.
     pub fn process(&mut self, frame: &[i16]) -> (FrameAction, bool) {
+        let (action, edge) = self.process_edges(frame);
+        (action, edge == SpeechEdge::Ended)
+    }
+
+    /// `process` with BOTH edges reported. `Started` fires on the first speech
+    /// frame after silence (the channel state machine for Auto Answer needs
+    /// the rising edge too); `Ended` is exactly the edge `process` reports.
+    pub fn process_edges(&mut self, frame: &[i16]) -> (FrameAction, SpeechEdge) {
         let now = Instant::now();
         let rms = calculate_rms(frame);
 
@@ -253,8 +271,9 @@ impl SilenceSuppressor {
             self.state = SuppressionState::Active;
             self.last_speech_time = now;
             self.frames_sent += 1;
+            let edge = if self.was_speaking { SpeechEdge::None } else { SpeechEdge::Started };
             self.was_speaking = true;
-            return (FrameAction::Send(frame.to_vec()), false);
+            return (FrameAction::Send(frame.to_vec()), edge);
         }
 
         // No speech detected - check state
@@ -274,7 +293,7 @@ impl SilenceSuppressor {
                     // Still in hangover - send full frame
                     self.state = SuppressionState::Hangover;
                     self.frames_sent += 1;
-                    return (FrameAction::Send(frame.to_vec()), false);
+                    return (FrameAction::Send(frame.to_vec()), SpeechEdge::None);
                 }
             }
             SuppressionState::Suppressed => {
@@ -289,14 +308,15 @@ impl SilenceSuppressor {
         self.adaptive_threshold = (self.noise_floor_ema * self.config.adaptive_multiplier)
             .max(self.config.adaptive_min_floor);
 
+        let edge = if speech_just_ended { SpeechEdge::Ended } else { SpeechEdge::None };
         // Check if time for keepalive
         if now.duration_since(self.last_keepalive_time) >= self.config.silence_keepalive_interval {
             self.last_keepalive_time = now;
             self.frames_sent += 1;
-            (FrameAction::SendSilence, speech_just_ended)
+            (FrameAction::SendSilence, edge)
         } else {
             self.frames_suppressed += 1;
-            (FrameAction::Suppress, speech_just_ended)
+            (FrameAction::Suppress, edge)
         }
     }
 
@@ -438,6 +458,28 @@ mod tests {
             action,
             FrameAction::SendSilence | FrameAction::Suppress
         ));
+    }
+
+    #[test]
+    fn test_speech_started_edge_fires_once_per_utterance() {
+        let mut s = SilenceSuppressor::new(SilenceSuppressionConfig {
+            use_vad: false,
+            speech_hangover: Duration::from_millis(0),
+            ..SilenceSuppressionConfig::default()
+        });
+        let loud: Vec<i16> = vec![10_000; 320];
+        let quiet: Vec<i16> = vec![0; 320];
+
+        let (_, e) = s.process_edges(&loud);
+        assert_eq!(e, SpeechEdge::Started, "first speech frame is the rising edge");
+        let (_, e) = s.process_edges(&loud);
+        assert_eq!(e, SpeechEdge::None, "sustained speech is not a new edge");
+        let (_, e) = s.process_edges(&quiet);
+        assert_eq!(e, SpeechEdge::Ended);
+        let (_, e) = s.process_edges(&quiet);
+        assert_eq!(e, SpeechEdge::None, "sustained silence is not a new edge");
+        let (_, e) = s.process_edges(&loud);
+        assert_eq!(e, SpeechEdge::Started, "a second utterance rises again");
     }
 
     #[test]

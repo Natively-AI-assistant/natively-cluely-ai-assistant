@@ -24,6 +24,7 @@
 import type { Clock, ClockTimer } from './autoAnswer/AutoAnswerClock';
 import { systemClock } from './autoAnswer/AutoAnswerClock';
 import { evaluateAutoAnswerGate, type AutoAnswerSkipReason } from './autoAnswerGate';
+import type { SpeechEdge } from '../audio/speechEdge';
 
 /** Quiet window after the last interviewer final; each new final restarts it. */
 export const AUTO_ANSWER_DEBOUNCE_MS = 900;
@@ -39,6 +40,18 @@ export const PENDING_TTL_MS = 6000;
  */
 export const PENDING_RETRY_MS = 500;
 
+// ── Dual-channel preconditions (V3 Amendment 1). All unfitted placeholders. ──
+/** The user channel must have been silent this long before an automatic dispatch. */
+export const USER_SILENCE_MS = 700;
+/** Both channels active inside this window = the boundary is not clean; hold. */
+export const OVERLAP_VETO_MS = 400;
+/**
+ * Total time a committed candidate may be HELD for user-silence / overlap
+ * before it is dropped as `user_answering`. Holds re-arm the timer; this stops
+ * a user who keeps talking from parking a candidate indefinitely.
+ */
+export const HOLD_BUDGET_MS = 2500;
+
 export interface PendingAutoAnswer {
     /** The turn that was gated, verbatim. Rearm only while it is still the latest turn. */
     turn: string;
@@ -50,7 +63,13 @@ export interface PendingAutoAnswer {
 export type AutoAnswerSchedulerSkipReason =
     | AutoAnswerSkipReason
     | 'pending_expired'
-    | 'pending_superseded';
+    | 'pending_superseded'
+    /** The user started answering before the automatic dispatch (V3 Amendment 1). */
+    | 'user_answering'
+    /** The user spoke over a streaming automatic answer; the stream was cancelled. */
+    | 'user_barge_in'
+    /** The interviewer was still speaking through the whole hold budget; the next final re-arms. */
+    | 'incomplete';
 
 export interface AutoAnswerSchedulerHost {
     isEnabled(): boolean;
@@ -62,9 +81,40 @@ export interface AutoAnswerSchedulerHost {
     engineAccepting(): boolean;
     dispatch(question: string): void;
     onSkip?(reason: AutoAnswerSchedulerSkipReason): void;
+    /**
+     * Abort the AUTOMATIC answer currently streaming, if any. Must be a no-op
+     * for a manual What-to-Answer (the user's own request is never killed by
+     * their own speech). Returns whether a stream was cancelled.
+     */
+    cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
 }
 
+/** What the two VAD channels are doing, as last reported by the native tracker. */
+interface ChannelView {
+    userSpeaking: boolean;
+    interviewerSpeaking: boolean;
+    /** Epoch ms of the user channel's last speech→silence edge, or null. */
+    lastUserEndedAt: number | null;
+    /** Epoch ms when the joint state last LEFT 'both', or null. */
+    lastBothEndedAt: number | null;
+    userEdgesVadBacked: boolean;
+}
+
+/** The dual-channel tuning, injectable so a test can isolate each rule. Defaults are the placeholders above. */
+export interface AutoAnswerChannelTuning {
+    userSilenceMs: number;
+    overlapVetoMs: number;
+    holdBudgetMs: number;
+}
+
+export const DEFAULT_CHANNEL_TUNING: AutoAnswerChannelTuning = {
+    userSilenceMs: USER_SILENCE_MS,
+    overlapVetoMs: OVERLAP_VETO_MS,
+    holdBudgetMs: HOLD_BUDGET_MS,
+};
+
 export class AutoAnswerScheduler {
+    private readonly tuning: AutoAnswerChannelTuning;
     private timer: ClockTimer | null = null;
     private retryTimer: ClockTimer | null = null;
     /** First final of the current accumulation, or null when nothing is armed. */
@@ -73,11 +123,25 @@ export class AutoAnswerScheduler {
     /** The turn already dispatched — the planner's cooldown alone would re-answer a stable last turn. */
     private lastAnsweredQuestion: string | null = null;
     private pending: PendingAutoAnswer | null = null;
+    private channels: ChannelView = {
+        userSpeaking: false,
+        interviewerSpeaking: false,
+        lastUserEndedAt: null,
+        lastBothEndedAt: null,
+        userEdgesVadBacked: true,
+    };
+    /** When the current candidate first entered a user-silence/overlap hold, or null. */
+    private holdStartedAt: number | null = null;
+    /** An automatic answer was dispatched and the engine has not reported idle since. */
+    private automaticAnswerInFlight = false;
 
     constructor(
         private readonly host: AutoAnswerSchedulerHost,
         private readonly clock: Clock = systemClock,
-    ) {}
+        tuning: Partial<AutoAnswerChannelTuning> = {},
+    ) {
+        this.tuning = { ...DEFAULT_CHANNEL_TUNING, ...tuning };
+    }
 
     /** A FINAL interviewer transcript segment landed. */
     noteInterviewerFinal(): void {
@@ -101,7 +165,50 @@ export class AutoAnswerScheduler {
 
     /** The engine reported idle (`mode_changed → idle`). Rearm a pending candidate, if any. */
     noteEngineIdle(): void {
+        this.automaticAnswerInFlight = false;
         if (this.pending) this.tryRearm();
+    }
+
+    /**
+     * A joint-state transition from the native dual-channel tracker. The
+     * user's channel is a first-class input: the user starting to answer
+     * cancels an armed/parked candidate (`user_answering`) and cancels a
+     * streaming automatic answer (`user_barge_in`).
+     *
+     * A user edge that begins while the interviewer is still speaking is NOT
+     * treated as the user answering unless the mic edge is VAD-backed: on
+     * Windows the mic is RMS-only and interviewer audio bleeding back through
+     * the speakers looks exactly like that. Such overlaps fall to the overlap
+     * veto (a hold) instead, which costs latency rather than a wrong drop.
+     */
+    noteSpeechEdge(edge: SpeechEdge): void {
+        const wasBoth = this.channels.userSpeaking && this.channels.interviewerSpeaking;
+        this.channels.userEdgesVadBacked = edge.userEdgesVadBacked;
+        if (edge.channel === 'user') {
+            this.channels.userSpeaking = edge.speaking;
+            if (!edge.speaking) this.channels.lastUserEndedAt = edge.atMs;
+        } else {
+            this.channels.interviewerSpeaking = edge.speaking;
+        }
+        const isBoth = this.channels.userSpeaking && this.channels.interviewerSpeaking;
+        if (wasBoth && !isBoth) this.channels.lastBothEndedAt = edge.atMs;
+
+        if (edge.channel !== 'user' || !edge.speaking) return;
+        const cleanUserStart = !this.channels.interviewerSpeaking || edge.userEdgesVadBacked;
+        if (!cleanUserStart) return;
+
+        if (this.automaticAnswerInFlight && this.host.cancelAutomaticAnswer?.('user_barge_in')) {
+            this.automaticAnswerInFlight = false;
+            this.host.onSkip?.('user_barge_in');
+        }
+        if (this.timer !== null || this.pending !== null) {
+            if (this.timer !== null) { this.clock.clearTimeout(this.timer); this.timer = null; }
+            this.firstFinalAt = null;
+            this.holdStartedAt = null;
+            this.pending = null;
+            this.stopRetry();
+            this.host.onSkip?.('user_answering');
+        }
     }
 
     /** Meeting stop/start or toggle off: nothing armed may survive. */
@@ -109,8 +216,14 @@ export class AutoAnswerScheduler {
         if (this.timer !== null) { this.clock.clearTimeout(this.timer); this.timer = null; }
         this.stopRetry();
         this.firstFinalAt = null;
+        this.holdStartedAt = null;
         this.pending = null;
         this.lastAnsweredQuestion = null;
+        this.automaticAnswerInFlight = false;
+        // Channel flags are owned by the native tracker, which re-reports on the
+        // next capture start; only the derived timestamps are ours to drop.
+        this.channels.lastUserEndedAt = null;
+        this.channels.lastBothEndedAt = null;
     }
 
     /** Test/diagnostic visibility only. */
@@ -144,7 +257,57 @@ export class AutoAnswerScheduler {
             this.host.onSkip?.(decision.reason);
             return;
         }
+        if (!this.channelsPermitDispatch()) return;
         this.commit(decision.question);
+    }
+
+    /**
+     * The dual-channel precondition, evaluated at the moment every other guard
+     * has passed. Returns true to dispatch now. Otherwise either re-arms the
+     * timer for the remaining hold (user silent for < USER_SILENCE_MS, or both
+     * channels active inside OVERLAP_VETO_MS) or drops the candidate as
+     * `user_answering` (the user is talking, or the hold budget is spent).
+     */
+    private channelsPermitDispatch(): boolean {
+        const now = this.clock.now();
+        const c = this.channels;
+        const { userSilenceMs, overlapVetoMs, holdBudgetMs } = this.tuning;
+        const cleanUserSpeech = c.userSpeaking && (!c.interviewerSpeaking || c.userEdgesVadBacked);
+        if (cleanUserSpeech) {
+            this.dropHeld('user_answering');
+            return false;
+        }
+        let holdMs = 0;
+        const both = c.userSpeaking && c.interviewerSpeaking;
+        // The interviewer resumed inside the quiet window: the question may not
+        // be over. Re-check on the veto cadence; the next final restarts the
+        // debounce properly. Precision over latency.
+        if (c.interviewerSpeaking) holdMs = Math.max(holdMs, overlapVetoMs);
+        if (both) {
+            holdMs = Math.max(holdMs, overlapVetoMs);
+        } else if (c.lastBothEndedAt !== null) {
+            holdMs = Math.max(holdMs, overlapVetoMs - (now - c.lastBothEndedAt));
+        }
+        if (c.lastUserEndedAt !== null) {
+            holdMs = Math.max(holdMs, userSilenceMs - (now - c.lastUserEndedAt));
+        }
+        if (holdMs <= 0) {
+            this.holdStartedAt = null;
+            return true;
+        }
+        if (this.holdStartedAt === null) this.holdStartedAt = now;
+        const budgetLeft = holdBudgetMs - (now - this.holdStartedAt);
+        if (budgetLeft <= 0) {
+            this.dropHeld(c.userSpeaking ? 'user_answering' : 'incomplete');
+            return false;
+        }
+        this.timer = this.clock.setTimeout(() => this.fire(), Math.max(1, Math.min(holdMs, budgetLeft)));
+        return false;
+    }
+
+    private dropHeld(reason: AutoAnswerSchedulerSkipReason): void {
+        this.holdStartedAt = null;
+        this.host.onSkip?.(reason);
     }
 
     private tryRearm(): void {
@@ -177,11 +340,13 @@ export class AutoAnswerScheduler {
         }
         this.pending = null;
         this.stopRetry();
+        if (!this.channelsPermitDispatch()) return;
         this.commit(decision.question);
     }
 
     private commit(question: string): void {
         this.lastAnsweredQuestion = question;
+        this.automaticAnswerInFlight = true;
         this.host.dispatch(question);
     }
 

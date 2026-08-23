@@ -68,6 +68,12 @@ export interface SuggestionTrigger {
      * intentResult.confidence).
      */
     confidence?: number;
+    /**
+     * True when the trigger came from the Auto Answer path rather than a user
+     * action. The engine records the resulting generation so a user barge-in
+     * can cancel exactly that stream and never a manual What-to-Answer.
+     */
+    automatic?: boolean;
 }
 
 // Context item matching Swift ContextManager structure

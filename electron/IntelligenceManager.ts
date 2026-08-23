@@ -194,6 +194,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.canAutoAnswer();
     }
 
+    /** Barge-in: abort the streaming AUTOMATIC answer only. See IntelligenceEngine.cancelAutomaticAnswer. */
+    cancelAutomaticAnswer(reason: 'user_barge_in'): boolean {
+        return this.engine.cancelAutomaticAnswer(reason);
+    }
+
     // ============================================
     // Mode Executors (delegates to engine)
     // ============================================

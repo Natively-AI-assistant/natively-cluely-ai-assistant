@@ -1219,6 +1219,7 @@ import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { AutoAnswerScheduler } from "./intelligence/autoAnswerScheduler"
+import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
 import { ElevenLabsStreamingSTT } from "./audio/ElevenLabsStreamingSTT"
 import { OpenAIStreamingSTT } from "./audio/OpenAIStreamingSTT"
@@ -3184,6 +3185,7 @@ export class AppState {
     meetingGeneration: () => this._meetingGeneration,
     lastInterviewerTurn: () => this.intelligenceManager.getLastInterviewerTurn(),
     engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
+    cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
     onSkip: (reason) => {
       if (this._verboseLogging) console.log(`[Main] Auto Answer skipped: ${reason}`);
     },
@@ -3194,6 +3196,7 @@ export class AppState {
       void this.intelligenceManager.handleSuggestionTrigger({
         context: this.intelligenceManager.getFormattedContext(120),
         lastQuestion,
+        automatic: true,
       }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
@@ -3803,6 +3806,9 @@ export class AppState {
         this.googleSTT?.notifySpeechEnded?.();
       }
     });
+    capture.on('speech_edge', (edge: SpeechEdge) => {
+      if (this.systemAudioCapture === capture) this.autoAnswerScheduler.noteSpeechEdge(edge);
+    });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
     this.setupAudioRecoveryHandler();
@@ -3990,6 +3996,9 @@ export class AppState {
       if (this.microphoneCapture === capture) {
         this.googleSTT_User?.notifySpeechEnded?.();
       }
+    });
+    capture.on('speech_edge', (edge: SpeechEdge) => {
+      if (this.microphoneCapture === capture) this.autoAnswerScheduler.noteSpeechEdge(edge);
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();

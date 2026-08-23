@@ -234,6 +234,14 @@ export class IntelligenceEngine extends EventEmitter {
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
     /**
+     * Generation id of the answer run started by an AUTOMATIC trigger
+     * (SuggestionTrigger.automatic), or null. Lets the dual-channel gate
+     * cancel exactly that stream on user barge-in while a manual
+     * What-to-Answer — a different generation — is untouchable.
+     */
+    private automaticGenerationId: number | null = null;
+    private nextRunIsAutomatic = false;
+    /**
      * The question that stamped `lastTriggerTime`. Lets the cooldown distinguish a
      * restated FRAGMENT of the same utterance (throttle) from a genuinely new
      * question (answer). Null ⇒ the cooldown behaves exactly as it always has.
@@ -756,6 +764,8 @@ export class IntelligenceEngine extends EventEmitter {
                     console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
                     this.lastTriggerQuestion = trigger.lastQuestion ?? null;
+                    // The running speculative stream IS the automatic answer now.
+                    if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
                     return;
                 }
                 console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
@@ -770,7 +780,28 @@ export class IntelligenceEngine extends EventEmitter {
         }
 
         // runWhatShouldISay's own default (0.8) applies when the trigger carried none.
-        await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
+        this.nextRunIsAutomatic = trigger.automatic === true;
+        try {
+            await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
+        } finally {
+            this.nextRunIsAutomatic = false;
+        }
+    }
+
+    /**
+     * Cancel the streaming AUTOMATIC answer on user barge-in (Auto Answer V3,
+     * Amendment 1). Narrow by construction: only the generation an automatic
+     * trigger started, and only while it is the live What-to-Answer run. A
+     * manual press (a newer generation) or an idle engine returns false and
+     * nothing is touched.
+     */
+    cancelAutomaticAnswer(reason: 'user_barge_in'): boolean {
+        if (this.activeMode !== 'what_to_say') return false;
+        if (this.automaticGenerationId === null || this.automaticGenerationId !== this.currentGenerationId) return false;
+        if (!this.whatToAnswerCancellationToken) return false;
+        this.whatToAnswerCancellationToken.abort(reason);
+        this.automaticGenerationId = null;
+        return true;
     }
 
     private async planSuggestionTrigger(trigger: SuggestionTrigger): Promise<PlannerDecision> {
@@ -963,6 +994,10 @@ export class IntelligenceEngine extends EventEmitter {
         // resumes after this point, it can only observe itself as superseded; it
         // must never mint a newer id and overtake this request.
         const generationId = ++this.currentGenerationId;
+        // Stamp the automatic run's identity before any await: a manual press
+        // racing in mints a newer id and the automatic one is no longer live.
+        this.automaticGenerationId = this.nextRunIsAutomatic ? generationId : null;
+        this.nextRunIsAutomatic = false;
         const isWtaSuperseded = () => (
             this.whatToAnswerCancellationToken !== whatToAnswerCancellationToken
             || this.currentGenerationId !== generationId

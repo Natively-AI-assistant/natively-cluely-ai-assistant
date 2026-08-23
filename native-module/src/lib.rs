@@ -13,6 +13,7 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use ringbuf::traits::Consumer;
 
 pub mod audio_config;
+pub mod channel_state;
 pub mod license;
 pub mod microphone;
 pub mod resampler;
@@ -35,7 +36,7 @@ pub mod keyboard_hook_windows;
 
 use crate::audio_config::{CHUNK_BATCH_COUNT, CHUNK_BATCH_TIMEOUT_MS, DSP_POLL_MS};
 use crate::resampler::Resampler;
-use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor};
+use crate::silence_suppression::{FrameAction, SilenceSuppressionConfig, SilenceSuppressor, SpeechEdge};
 use std::time::Instant;
 
 /// Canonical pipeline sample rate. All STT providers receive audio at this rate,
@@ -129,6 +130,52 @@ impl BatchEmitter {
 // SYSTEM AUDIO CAPTURE (CoreAudio Tap / ScreenCaptureKit on macOS)
 // ============================================================================
 
+/// One joint-state transition from the dual-channel tracker
+/// (`channel_state.rs`), delivered to JS through the optional third `start()`
+/// callback of both captures. `atMs` is epoch ms (Date.now() timeline).
+#[napi(object)]
+pub struct SpeechEdgeEvent {
+    /// "interviewer" | "user"
+    pub channel: String,
+    pub speaking: bool,
+    /// "neither" | "interviewer_speaking" | "user_speaking" | "both"
+    pub joint: String,
+    pub at_ms: f64,
+    /// ms since the OTHER channel's last edge; -1 when it has none yet.
+    pub ms_since_other_edge: f64,
+    /// false on Windows (mic is RMS-only, PR #497): user edges are weak evidence.
+    pub user_edges_vad_backed: bool,
+}
+
+fn speech_edge_event(t: channel_state::ChannelTransition) -> SpeechEdgeEvent {
+    SpeechEdgeEvent {
+        channel: t.channel.as_str().to_string(),
+        speaking: t.speaking,
+        joint: t.joint.as_str().to_string(),
+        at_ms: t.at_ms as f64,
+        ms_since_other_edge: if t.ms_since_other_edge == u64::MAX { -1.0 } else { t.ms_since_other_edge as f64 },
+        user_edges_vad_backed: t.user_edges_vad_backed,
+    }
+}
+
+/// Fold a per-channel edge into the shared tracker and notify JS if the joint
+/// state changed. Lock scope is the update only; the tsfn call is NonBlocking.
+fn report_speech_edge(
+    channel: channel_state::Channel,
+    speaking: bool,
+    tsfn: &Option<ThreadsafeFunction<SpeechEdgeEvent>>,
+) {
+    let Some(tsfn) = tsfn else { return };
+    let now = channel_state::epoch_ms();
+    let transition = match channel_state::global().lock() {
+        Ok(mut tracker) => tracker.on_edge(channel, speaking, now),
+        Err(poisoned) => poisoned.into_inner().on_edge(channel, speaking, now),
+    };
+    if let Some(t) = transition {
+        tsfn.call(Ok(speech_edge_event(t)), ThreadsafeFunctionCallMode::NonBlocking);
+    }
+}
+
 #[napi]
 pub struct SystemAudioCapture {
     stop_signal: Arc<AtomicBool>,
@@ -181,6 +228,7 @@ impl SystemAudioCapture {
         &mut self,
         callback: ThreadsafeFunction<Buffer>,
         on_speech_ended: Option<ThreadsafeFunction<bool>>,
+        on_speech_edge: Option<ThreadsafeFunction<SpeechEdgeEvent>>,
     ) -> napi::Result<()> {
         // Guard against double-start — prevents spawning concurrent threads
         if self.capture_thread.is_some() {
@@ -189,6 +237,9 @@ impl SystemAudioCapture {
 
         let tsfn = callback;
         let speech_ended_tsfn = on_speech_ended;
+        let speech_edge_tsfn = on_speech_edge;
+        // A (re)start means this channel is silent until proven otherwise.
+        report_speech_edge(channel_state::Channel::Interviewer, false, &speech_edge_tsfn);
 
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
@@ -330,7 +381,8 @@ impl SystemAudioCapture {
                     frame_scratch.clear();
                     frame_scratch.extend(frame_buffer.drain(0..chunk_size));
 
-                    let (action, speech_ended) = suppressor.process(&frame_scratch);
+                    let (action, edge) = suppressor.process_edges(&frame_scratch);
+                    let speech_ended = edge == SpeechEdge::Ended;
 
                     match action {
                         FrameAction::Send(data) => {
@@ -348,6 +400,10 @@ impl SystemAudioCapture {
                         }
                     }
 
+                    if edge == SpeechEdge::Started {
+                        report_speech_edge(channel_state::Channel::Interviewer, true, &speech_edge_tsfn);
+                    }
+
                     // Fire speech_ended callback on the exact transition frame.
                     // Flush any pending batch FIRST so STT sees the trailing audio
                     // before being told the utterance ended.
@@ -356,6 +412,7 @@ impl SystemAudioCapture {
                         if let Some(ref se_tsfn) = speech_ended_tsfn {
                             se_tsfn.call(Ok(true), ThreadsafeFunctionCallMode::NonBlocking);
                         }
+                        report_speech_edge(channel_state::Channel::Interviewer, false, &speech_edge_tsfn);
                     }
                 }
 
@@ -463,9 +520,12 @@ impl MicrophoneCapture {
         &mut self,
         callback: ThreadsafeFunction<Buffer>,
         on_speech_ended: Option<ThreadsafeFunction<bool>>,
+        on_speech_edge: Option<ThreadsafeFunction<SpeechEdgeEvent>>,
     ) -> napi::Result<()> {
         let tsfn = callback;
         let speech_ended_tsfn = on_speech_ended;
+        let speech_edge_tsfn = on_speech_edge;
+        report_speech_edge(channel_state::Channel::User, false, &speech_edge_tsfn);
 
         self.stop_signal.store(false, Ordering::SeqCst);
         let stop_signal = self.stop_signal.clone();
@@ -597,7 +657,8 @@ impl MicrophoneCapture {
                     frame_scratch.clear();
                     frame_scratch.extend(frame_buffer.drain(0..chunk_size));
 
-                    let (action, speech_ended) = suppressor.process(&frame_scratch);
+                    let (action, edge) = suppressor.process_edges(&frame_scratch);
+                    let speech_ended = edge == SpeechEdge::Ended;
 
                     match action {
                         FrameAction::Send(data) => {
@@ -613,11 +674,16 @@ impl MicrophoneCapture {
                         }
                     }
 
+                    if edge == SpeechEdge::Started {
+                        report_speech_edge(channel_state::Channel::User, true, &speech_edge_tsfn);
+                    }
+
                     if speech_ended {
                         emitter.flush(&tsfn);
                         if let Some(ref se_tsfn) = speech_ended_tsfn {
                             se_tsfn.call(Ok(true), ThreadsafeFunctionCallMode::NonBlocking);
                         }
+                        report_speech_edge(channel_state::Channel::User, false, &speech_edge_tsfn);
                     }
                 }
 
