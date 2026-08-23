@@ -3199,6 +3199,11 @@ export class AppState {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
     },
+    // V3 Amendment 4: the ONE offer card, rendered through the existing Dynamic
+    // Action surface (DynamicActionBar/Card). Tab or click commits; the
+    // What-to-Answer hotkey commits through manual_answer_started → retract.
+    offer: (question) => this.showAutoAnswerOffer(question),
+    retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason),
     log: (line) => { if (this._verboseLogging) console.log(line); },
     telemetry: (event) => {
       // Structured, NO transcript text (V2 §29): ids, acts, scores, reasons, timings only.
@@ -3229,6 +3234,19 @@ export class AppState {
   });
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
+  /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
+  public onManualWhatToAnswer(): void {
+    this.autoAnswerController.onManualAnswerStarted();
+  }
+
+  /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
+  public applyAutoAnswerThresholds(modeTemplateType: string | null | undefined): void {
+    try {
+      const { resolveAutoAnswerThresholds } = require('./context-intelligence/policies/mode-policy-registry') as typeof import('./context-intelligence/policies/mode-policy-registry');
+      this.autoAnswerController.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
+    } catch { /* keep the current thresholds */ }
+  }
+
   private cancelAutoAnswer(): void {
     this.autoAnswerController.onMeetingStop();
     // Free the Smart Turn ORT session between meetings (and on toggle-off).
@@ -3236,6 +3254,51 @@ export class AppState {
     // a live ORT session out of any hard-exit path: process.exit() with one
     // loaded SIGABRTs (reproduced under Electron 43's Node).
     void this.smartTurnPredictor.dispose();
+  }
+
+  /** Stable id prefix so the renderer can replace the card in place and retract it by id. */
+  private static readonly AUTO_ANSWER_OFFER_ID_PREFIX = 'auto-answer-offer:';
+
+  /** Render the offer as a Dynamic Action (reuse, not a new surface — V2 §47 / V3 Amendment 4). */
+  private showAutoAnswerOffer(question: { id: string; text: string; answerability: number; dialogueAct: string }): void {
+    const now = Date.now();
+    let modeId = 'general';
+    let modeTemplateType = 'general';
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const active = ModesManager.getInstance().getActiveMode();
+      if (active) { modeId = active.id; modeTemplateType = active.templateType; }
+    } catch { /* defaults */ }
+    const action = {
+      id: `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${question.id}`,
+      sessionId: `auto-answer-${this._meetingGeneration}`,
+      modeId,
+      modeTemplateType,
+      type: 'auto_answer_offer',
+      label: 'Answer this?',
+      // The detected question IS the card body; it is also the prompt the
+      // renderer hands to handleWhatToSay on accept (manual semantics).
+      description: question.text,
+      confidence: question.answerability,
+      priority: 100,
+      evidenceRefs: [],
+      status: 'shown' as const,
+      createdAt: now,
+      expiresAt: now + 10_000,
+      promptInstruction: question.text,
+    };
+    try { this.intelligenceManager.registerDynamicAction(action); } catch { /* accept still works renderer-side */ }
+    const helper = this.getWindowHelper();
+    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
+    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
+  }
+
+  private retractAutoAnswerOffer(questionId: string, reason: string): void {
+    const id = `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${questionId}`;
+    try { this.intelligenceManager.dismissDynamicAction(id); } catch { /* best effort */ }
+    const helper = this.getWindowHelper();
+    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action-retract', { id, reason });
+    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action-retract', { id, reason });
   }
 
   /** before-quit: release the Smart Turn session before the process winds down. */
@@ -5989,6 +6052,7 @@ export class AppState {
           modeId: activeMode.id,
           modeTemplateType: activeMode.templateType,
         });
+        this.applyAutoAnswerThresholds(activeMode.templateType);
       }
     } catch (err) {
       // Auxiliary feature — never block meeting start.
@@ -6690,6 +6754,8 @@ export class AppState {
     })
 
     this.intelligenceManager.on('manual_answer_started', () => {
+      // The hotkey/click commits whatever Auto Answer was offering.
+      this.autoAnswerController.onManualAnswerStarted();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-started')
     })

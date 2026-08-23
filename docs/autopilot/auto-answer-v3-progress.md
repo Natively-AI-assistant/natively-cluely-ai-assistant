@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 5 complete
+## Status: phase 6 complete
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -525,6 +525,55 @@ Deviations: `TurnPredictor.predict` returns `TurnPrediction | null` (the prompt 
 interviewer speech-stop; moving it to a worker is a recorded follow-up. Open question for the human: whether the
 postinstall hard-requirement on the Smart Turn download is acceptable (it mirrors the Xenova assets; the RUNTIME
 never requires it).
+
+### Phase 6 — ternary dispatch policy and offer card
+- `electron/context-intelligence/policies/mode-policy-registry.ts` — `ModePolicy.autoAnswer {autoThreshold,
+  offerThreshold, speculationThreshold}` next to `retrievalPolicy` on every built-in mode:
+  INTERVIEW (looking-for-work, technical-interview) 0.88 / 0.65 / 0.82 · MEETING (general, call-center, sales,
+  recruiting, team-meet) 0.94 / 0.75 / 0.88 · LISTENING (lecture, seminar) 0.97 / 0.80 / 0.92;
+  `resolveAutoAnswerThresholds(modeId)` never throws (unknown/custom → the meeting bar). All unfitted placeholders
+  (V2 §19's 0.82/0.88 are the interview pair, as the prompt specifies).
+- `AutoAnswerController.ts` — offer lifecycle: ONE live card (`activeOffer`), replaced in place (`replaced`),
+  `OFFER_TTL_MS=10000` expiry, retracted on topic change (a commit with a different question id), on auto dispatch,
+  on a manual What-to-Answer (`onManualAnswerStarted`), on the user starting to answer, and on meeting stop;
+  offered questions are remembered for dedup. `auto` already required user-silence (channel gate) and engine idle
+  (policy `queue` on `!engineAccepting`), inherited from Phases 2–3.
+- `electron/main.ts` — the offer is rendered through the EXISTING Dynamic Action surface (no new UI): a
+  `DynamicAction` of type `auto_answer_offer` (id `auto-answer-offer:<questionId>`, label "Answer this?",
+  description = the question, `promptInstruction` = the question so the existing accept flow →
+  `handleWhatToSay(question)` answers it with manual semantics; `expiresAt` +10 s), pushed on
+  `intelligence-dynamic-action`; retraction pushed on the new `intelligence-dynamic-action-retract {id, reason}`;
+  registered in the engine's action store so accept/dismiss IPC resolve it; thresholds applied at meeting start and
+  on `modes:set-active` (`applyAutoAnswerThresholds`); `onManualWhatToAnswer()` hooked at the head of the
+  `generate-what-to-say` IPC (the hotkey/button/accepted-card path, which does NOT emit `manual_answer_started`).
+- `electron/IntelligenceEngine.ts` / `IntelligenceManager.ts` / `services/dynamic-actions/DynamicActionEngine.ts` —
+  `registerDynamicAction` / `registerAction` (store an externally built action verbatim).
+- `electron/preload.ts`, `src/types/electron.d.ts` — `onIntelligenceDynamicActionRetract`.
+- `src/components/dynamic-actions/DynamicActionBar.tsx` — subscribes to retract (removes by id) and honours
+  `expiresAt` in its stale prune. `DynamicActionCard.tsx` untouched (V2 §47 otherwise stands).
+- `__tests__/AutoAnswerOffer.test.mjs` — NEW: 12 tests (registry completeness + ordering, per-mode routing with a
+  runtime `setThresholds`, policy bands, auto requires user-silent / engine-idle, offer shown/expire/replace/topic
+  change/commit/user-answering/meeting-stop/dedup).
+
+Mutation probes (each deletion → named test(s) red; diff-verified restore): auto requires user-silent (policy
+line) → 'Policy: healthy input…' ONLY — the controller-level test stays green because the channel gate enforces
+the same invariant independently (defense in depth, recorded); auto requires engine idle → 6 tests; offer band →
+11 tests; offer TTL → 2; topic-change retract → 2; hotkey commit → 1.
+
+Validation: Auto Answer suite 176/176. `typecheck:electron` 0 · `typecheck:ts7` 0 · `npm run build` OK · `npm test`
+tests 8476 · pass 8405 · fail 8 = the 7 pre-existing + ONE new: `electron/audio/whisper/nemotron/__tests__/
+dualChannel.test.mjs:314` ("both channels transcribe concurrently…", a live-Nemotron-ONNX worker test,
+`transcribeAndWait timed out after 20000ms`). Re-run in isolation immediately after: 5/5 pass. The file, the
+Nemotron worker and its inputs are untouched by this branch and outside its impact radius; judged a load-induced
+flake of a live-model test. NOT in the allowed-ignore list → recorded here, not fixed; Phase 7 re-runs the full
+suite. `test:intelligence` 1897 / 1885 / 3 (identical pre-existing set).
+Validation labels: policy bands, per-mode routing, offer lifecycle: **Covered by automated tests**. The Dynamic
+Action push/retract IPC, the renderer removal, and accept → `handleWhatToSay(question)`: **Reviewed but not
+executed** (typechecks on both sides; no renderer run). **Requires physical macOS verification** and **Requires
+physical Windows verification** for the card's appearance and the Tab/click/hotkey commit.
+Deviations: the card reuses the Dynamic Action card verbatim (label "Answer this?" + the question as the
+description) rather than a bespoke look — the prompt says reuse the existing surface, do not build a new one.
+Open question for the human: the listening-mode bar (0.97) effectively makes lecture/seminar offer-only; confirm.
 
 ## Known residuals
 

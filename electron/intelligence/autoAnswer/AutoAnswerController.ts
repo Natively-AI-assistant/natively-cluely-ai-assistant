@@ -44,6 +44,10 @@ export const QUEUE_RETRY_MS = 500;
  * long already; an instant provider/predictor commit pays it. Unfitted placeholder.
  */
 export const RHETORICAL_HOLD_MS = 600;
+/** An offer card auto-expires after this (V3 Amendment 4: "~10 s or on topic change"). Unfitted placeholder. */
+export const OFFER_TTL_MS = 10_000;
+
+export type OfferRetractReason = 'expired' | 'replaced' | 'committed' | 'topic_change' | 'meeting_stop' | 'user_answering';
 
 export interface SpeculativeSnapshot {
     /** The questionId the engine's speculative run was keyed on, if the controller supplied one. */
@@ -66,8 +70,10 @@ export interface AutoAnswerControllerHost {
     /** Tell the engine which candidate is current so a speculative run it starts is keyed to it. */
     noteCandidate?(questionId: string, candidateGeneration: number): void;
     dispatch(question: AutoAnswerQuestion, options: { reuseSpeculative: boolean }): void;
-    /** Phase 6 renders the card; absent host → offers are telemetry only. */
+    /** Render the ONE offer card (replaces any previous one). Absent host → offers are telemetry only. */
     offer?(question: AutoAnswerQuestion): void;
+    /** Remove the offer card (expired / replaced / committed / topic change / meeting stop). */
+    retractOffer?(questionId: string, reason: OfferRetractReason): void;
     cancelAutomaticAnswer(reason: 'user_barge_in'): boolean;
     telemetry?(event: AutoAnswerTelemetryEvent): void;
     /** Verbose log line (reason codes only, never text). */
@@ -113,6 +119,8 @@ export class AutoAnswerController {
     private rhetoricalHold = false;
     private retryTimer: ClockTimer | null = null;
     private readonly predictor: TurnPredictor | AsyncTurnPredictor | null;
+    /** The single live offer card, if any (V3 Amendment 4: one card, replaced in place). */
+    private activeOffer: { question: AutoAnswerQuestion; timer: ClockTimer } | null = null;
     private unsubscribePredictor: (() => void) | null = null;
     /** Epoch ms the interviewer last started speaking (for the predictor's speechDurationMs). */
     private interviewerSpeechStartedAt: number | null = null;
@@ -169,6 +177,11 @@ export class AutoAnswerController {
     }
 
     setThresholds(thresholds: AutoAnswerThresholds): void { this.thresholds = thresholds; }
+    getThresholds(): AutoAnswerThresholds { return this.thresholds; }
+    /** The user pressed the What-to-Answer hotkey / clicked: whatever was offered is committed by them. */
+    onManualAnswerStarted(): void { this.retractOffer('committed'); }
+    /** Test/diagnostic visibility. */
+    getActiveOffer(): AutoAnswerQuestion | null { return this.activeOffer?.question ?? null; }
     setPace(pace: AutoAnswerPace): void { this.turns.setPace(pace); }
     getState(): AutoAnswerState { return this.state; }
     getCurrentQuestion(): AutoAnswerQuestion | null { return this.current?.question ?? null; }
@@ -210,7 +223,8 @@ export class AutoAnswerController {
             this.emit({ name: 'auto_answer_cancelled', questionId: this.current?.question.id, skipReason: 'user_barge_in' });
             this.setState('listening');
         }
-        // The user is answering: whatever is held or queued is theirs now.
+        // The user is answering: whatever is held, queued or offered is theirs now.
+        if (this.activeOffer) this.retractOffer('user_answering');
         if (this.holdTimer !== null || this.queue.depth() > 0) {
             this.clearHold();
             const dropped = this.queue.depth();
@@ -260,6 +274,8 @@ export class AutoAnswerController {
         const meetingGeneration = candidate.meetingGeneration ?? this.host.meetingGeneration();
         const id = this.idFor(candidate);
         this.clearHold();
+        // The interviewer moved on: a standing offer for an OLDER question is stale.
+        if (this.activeOffer && this.activeOffer.question.id !== id) this.retractOffer('topic_change');
 
         let decision;
         try {
@@ -369,8 +385,7 @@ export class AutoAnswerController {
             case 'offer':
                 this.turns.markDispatched();
                 this.dedup.remember({ id: question.id, text: question.text, committedAt: now, meetingGeneration: question.meetingGeneration });
-                this.emit({ name: 'auto_answer_offered', questionId: question.id, answerability: question.answerability, dialogueAct: question.dialogueAct });
-                this.host.offer?.(question);
+                this.showOffer(question);
                 this.setState('listening');
                 return;
             case 'queue': {
@@ -470,6 +485,7 @@ export class AutoAnswerController {
         if (!this.host.isMeetingActive()) { this.skip('meeting_inactive', question); return; }
 
         question.committedAt = now;
+        if (this.activeOffer) this.retractOffer('committed');
         this.lastDispatchedText = question.text;
         this.dedup.remember({ id: question.id, text: question.text, committedAt: now, meetingGeneration: question.meetingGeneration });
         this.turns.markDispatched();
@@ -593,6 +609,25 @@ export class AutoAnswerController {
         this.rhetoricalHold = false;
     }
 
+    private showOffer(question: AutoAnswerQuestion): void {
+        if (this.activeOffer) this.retractOffer('replaced');
+        const timer = this.clock.setTimeout(() => {
+            if (this.activeOffer?.question.id === question.id) this.retractOffer('expired');
+        }, OFFER_TTL_MS);
+        this.activeOffer = { question, timer };
+        this.emit({ name: 'auto_answer_offered', questionId: question.id, answerability: question.answerability, dialogueAct: question.dialogueAct });
+        try { this.host.offer?.(question); } catch (err) { this.host.log?.(`[AutoAnswer] offer failed: ${(err as Error)?.message ?? err}`); }
+    }
+
+    private retractOffer(reason: OfferRetractReason): void {
+        const offer = this.activeOffer;
+        if (!offer) return;
+        this.activeOffer = null;
+        this.clock.clearTimeout(offer.timer);
+        this.emit({ name: 'auto_answer_cancelled', questionId: offer.question.id, action: 'offer', skipReason: reason === 'user_answering' ? 'user_answering' : undefined });
+        try { this.host.retractOffer?.(offer.question.id, reason); } catch { /* never break the pipeline */ }
+    }
+
     /** Release the predictor subscription (tests / teardown). */
     dispose(): void {
         this.unsubscribePredictor?.();
@@ -614,6 +649,7 @@ export class AutoAnswerController {
     }
 
     private resetAll(): void {
+        if (this.activeOffer) this.retractOffer('meeting_stop');
         this.turns.reset();
         this.clearHold();
         this.stopRetry();

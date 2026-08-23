@@ -69,9 +69,15 @@ export const DynamicActionBar: React.FC<Props> = ({
     const off = window.electronAPI?.onIntelligenceDynamicAction?.((data) => {
       if (data?.action) handleIncoming(data.action);
     });
+    // Auto Answer V3 offer card: main retracts by id when the offer expired,
+    // was replaced by a newer question, or was committed via the hotkey.
+    const offRetract = window.electronAPI?.onIntelligenceDynamicActionRetract?.((data) => {
+      if (data?.id) setActions((prev) => prev.filter((a) => a.id !== data.id));
+    });
     return () => {
       try {
         off?.();
+        offRetract?.();
       } catch {
         /* ignore */
       }
@@ -103,7 +109,8 @@ export const DynamicActionBar: React.FC<Props> = ({
     const t = setInterval(() => {
       setActions((prev) => {
         if (prev.length === 0) return prev;
-        return prev.filter((a) => Date.now() - a.createdAt < staleAfterMs);
+        const now = Date.now();
+        return prev.filter((a) => now - a.createdAt < staleAfterMs && (a.expiresAt === undefined || now < a.expiresAt));
       });
     }, 5_000);
     return () => clearInterval(t);

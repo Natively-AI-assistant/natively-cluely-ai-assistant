@@ -99,6 +99,24 @@ export interface ModePolicy {
     maximumAcceptedEvidence: number;
   };
 
+  /**
+   * Auto Answer V3 ternary dispatch thresholds (V3 Amendment 4), per mode,
+   * next to the retrieval scopes. On the extractor-scale answerability
+   * composite (see electron/intelligence/autoAnswer/AutoAnswerDetector.ts):
+   *   >= autoThreshold (and user silent, engine idle) → fire automatically
+   *   >= offerThreshold                               → offer card (hotkey/click commits)
+   *   otherwise                                       → silent
+   * Interview modes get a LOWER bar than meeting modes: a wrong auto-fire in a
+   * meeting occupies the screen in front of colleagues; in an interview the
+   * user is alone with the overlay and a miss costs a keypress. ALL values are
+   * unfitted placeholders until the audio corpus exists (V3 Amendment 5/8).
+   */
+  autoAnswer: {
+    autoThreshold: number;
+    offerThreshold: number;
+    speculationThreshold: number;
+  };
+
   contextBudget: {
     evidenceTokens: number;
     conversationTokens: number;
@@ -141,6 +159,23 @@ const budget = (evidence: number, conv: number, tx: number, screen: number) =>
 const retrieval = (candidates: number, accepted: number) =>
   ({ enabled: true, maximumAttempts: 2 as const, maximumCandidates: candidates, maximumAcceptedEvidence: accepted });
 
+/** Interview-style modes: the user is the candidate; the overlay is theirs alone. */
+const AUTO_ANSWER_INTERVIEW = { autoThreshold: 0.88, offerThreshold: 0.65, speculationThreshold: 0.82 } as const;
+/** Meeting-style modes: colleagues present; fire less, offer more. */
+const AUTO_ANSWER_MEETING = { autoThreshold: 0.94, offerThreshold: 0.75, speculationThreshold: 0.88 } as const;
+/** Listening modes (lecture/seminar): the speaker addresses a room; offers only, in practice. */
+const AUTO_ANSWER_LISTENING = { autoThreshold: 0.97, offerThreshold: 0.80, speculationThreshold: 0.92 } as const;
+/** Unknown/custom modes fall back to the meeting bar (the stricter of the two common ones). */
+export const AUTO_ANSWER_DEFAULT_THRESHOLDS = AUTO_ANSWER_MEETING;
+
+/** Resolve the Auto Answer thresholds for a mode id/template type. Never throws: unknown → the meeting bar. */
+export function resolveAutoAnswerThresholds(modeId: string | null | undefined): {
+  autoThreshold: number; offerThreshold: number; speculationThreshold: number;
+} {
+  if (modeId && isModeId(modeId)) return { ...MODE_POLICIES[modeId].autoAnswer };
+  return { ...AUTO_ANSWER_DEFAULT_THRESHOLDS };
+}
+
 // ── the registry ────────────────────────────────────────────────────────────
 
 export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
@@ -154,6 +189,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 600, 800, 400),
+    autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
   },
 
@@ -173,6 +209,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
   },
 
@@ -188,6 +225,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
   },
 
@@ -204,6 +242,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 200),
+    autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
   },
 
@@ -217,6 +256,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 800, 1400, 400),
+    autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
   },
 
@@ -233,6 +273,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 600, 200),
+    autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
   },
 
@@ -249,6 +290,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 700, 700, 800),
+    autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
   },
 
@@ -262,6 +304,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 500, 1000, 200),
+    autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'OPTIONAL',
   },
 
@@ -278,6 +321,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
     retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 400, 800, 200),
+    autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'VISIBLE',
   },
 };

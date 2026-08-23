@@ -199,6 +199,11 @@ export class IntelligenceManager extends EventEmitter {
         return this.engine.cancelAutomaticAnswer(reason);
     }
 
+    /** Auto Answer V3 offer card: register an externally built action so accept/dismiss IPC resolves it. */
+    registerDynamicAction(action: import('./services/dynamic-actions/DynamicAction').DynamicAction): void {
+        this.engine.registerDynamicAction(action);
+    }
+
     // ── Auto Answer V3 narrow APIs (V2 §43) ──
     isManualAnswerActive(): boolean { return this.engine.isManualAnswerActive(); }
     noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {

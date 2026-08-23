@@ -1891,6 +1891,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('intelligence-dynamic-action', subscription);
     };
   },
+  // Auto Answer V3 offer card: main retracts a card by id (expired / replaced / committed).
+  onIntelligenceDynamicActionRetract: (callback: (data: { id: string; reason: string }) => void) => {
+    const subscription = (_: any, data: any) => callback(data);
+    ipcRenderer.on('intelligence-dynamic-action-retract', subscription);
+    return () => {
+      ipcRenderer.removeListener('intelligence-dynamic-action-retract', subscription);
+    };
+  },
   acceptDynamicAction: (actionId: string) => ipcRenderer.invoke('dynamic-action:accept', actionId),
   dismissDynamicAction: (actionId: string) =>
     ipcRenderer.invoke('dynamic-action:dismiss', actionId),

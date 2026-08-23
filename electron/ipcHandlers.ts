@@ -9861,6 +9861,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
     ) => {
       return _tracked(async () => {
+      // Auto Answer V3: a manual What-to-Answer (hotkey, button, or an accepted
+      // offer card) commits whatever Auto Answer was offering — retract the card.
+      try { appState.onManualWhatToAnswer?.(); } catch { /* never block the answer */ }
       try {
         let screenContext: any;
         let screenContextStatus: 'not_available' | 'available' | 'failed' = 'not_available';
@@ -12423,6 +12426,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             modeId: activeMode.id,
             modeTemplateType: activeMode.templateType,
           });
+          appState.applyAutoAnswerThresholds?.(activeMode.templateType);
         } else if (appStateIntMgr && !id) {
           appStateIntMgr.clearDynamicActionContext();
         }

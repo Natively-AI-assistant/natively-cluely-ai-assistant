@@ -676,6 +676,12 @@ export class IntelligenceEngine extends EventEmitter {
         return this.dynamicActionEngine.getTopActions(this.currentSessionId);
     }
 
+    /** Auto Answer V3: an offer card built outside the trigger packs, stored so accept/dismiss find it. */
+    registerDynamicAction(action: DynamicAction): void {
+        if (!this.dynamicActionEngine) this.dynamicActionEngine = new DynamicActionEngine();
+        this.dynamicActionEngine.registerAction(action);
+    }
+
     // For tests — injection seam.
     _setDynamicActionEngineForTest(engine: DynamicActionEngine | null): void {
         this.dynamicActionEngine = engine;
