@@ -32,11 +32,11 @@ export function getCalendarConnectErrorMessage(error, translate = identity) {
 
     // OAuth callback descriptions can contain access_denied alongside the
     // more specific verification/test-user cause, so classify that first.
-    if (/status=403|forbidden|verification|not (?:been )?verified|currently being tested|test user|access blocked|developer (?:hasn't|has not) given you access/i.test(message)) {
+    if (/has not completed (?:the )?(?:google )?verification|not (?:been )?verified|currently being tested|test user|developer (?:hasn't|has not) given you access/i.test(message)) {
         return translate(GOOGLE_AUTH_BLOCKED_ERROR);
     }
 
-    if (/access_denied/i.test(message)) {
+    if (/^access_denied$/i.test(message)) {
         return translate(GOOGLE_CONSENT_DECLINED_ERROR);
     }
 

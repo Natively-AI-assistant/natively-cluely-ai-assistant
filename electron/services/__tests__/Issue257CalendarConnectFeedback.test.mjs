@@ -26,7 +26,7 @@ test('calendar connect error formatter handles main-process failure shapes', () 
     );
     assert.equal(
         getCalendarConnectErrorMessage('exchange_failed status=403 access_denied'),
-        'This Google account is not an approved test user yet. Contact Natively support, then try again.',
+        'Could not connect Google Calendar: exchange_failed status=403 access_denied',
     );
     assert.equal(
         getCalendarConnectErrorMessage('access_denied: App has not completed verification'),
@@ -35,6 +35,14 @@ test('calendar connect error formatter handles main-process failure shapes', () 
     assert.equal(
         getCalendarConnectErrorMessage("access_denied: The developer hasn't given you access. This app is currently being tested."),
         'This Google account is not an approved test user yet. Contact Natively support, then try again.',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('exchange_failed status=403 rate limit exceeded'),
+        'Could not connect Google Calendar: exchange_failed status=403 rate limit exceeded',
+    );
+    assert.equal(
+        getCalendarConnectErrorMessage('access_denied: forbidden by organization policy'),
+        'Could not connect Google Calendar: access_denied: forbidden by organization policy',
     );
     assert.equal(
         getCalendarConnectErrorMessage(new Error('GOOGLE_CLIENT_ID is not configured')),
