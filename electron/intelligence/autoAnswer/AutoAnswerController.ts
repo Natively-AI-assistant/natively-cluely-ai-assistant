@@ -25,6 +25,10 @@ import type { Clock, ClockTimer } from './AutoAnswerClock';
 import { systemClock } from './AutoAnswerClock';
 import { AutoAnswerTurnManager } from './AutoAnswerTurnManager';
 import { AutoAnswerDetector, scoreCandidate } from './AutoAnswerDetector';
+import {
+    JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, shouldConsultJudge, parseJudgeVerdict, routeForVerdict,
+    type JudgeRequest,
+} from './AutoAnswerJudge';
 import { AutoAnswerDedup, REUSE_THRESHOLD, type Embedder } from './AutoAnswerDedup';
 import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import { AutoAnswerQueue, MAX_QUEUE_DEPTH } from './AutoAnswerQueue';
@@ -33,6 +37,7 @@ import { AutoAnswerChannelGate, type AutoAnswerChannelTuning } from './AutoAnswe
 import type {
     AutoAnswerCandidate, AutoAnswerPace, AutoAnswerQuestion, AutoAnswerSkipReason, AutoAnswerState,
     AutoAnswerTelemetryEvent, TranscriptEndpointEvent,
+    AutoAnswerDecision,
 } from './AutoAnswerTypes';
 import type { AsyncTurnPredictor, TurnPredictor } from './AutoAnswerTurnPredictor';
 
@@ -95,6 +100,17 @@ export interface AutoAnswerControllerHost {
     /** Remove the offer card (expired / replaced / committed / topic change / meeting stop). */
     retractOffer?(questionId: string, reason: OfferRetractReason): void;
     cancelAutomaticAnswer(reason: 'user_barge_in'): boolean;
+    /**
+     * The DYNAMIC judge (2026-08-24, user override of spec V2 §36): a small
+     * fast LLM judges the committed candidate — "complete ask, directed at the
+     * user, worth answering now?". Returns the model's RAW reply; parsing and
+     * validation live in AutoAnswerJudge. Absent hook, rejection, null, or the
+     * deadline → the heuristic detector's verdict stands, byte-identical to
+     * the pre-judge pipeline.
+     */
+    judgeCandidate?(req: JudgeRequest): Promise<string | null>;
+    /** Current mode's display name — judge-prompt context only. */
+    modeName?(): string | null;
     telemetry?(event: AutoAnswerTelemetryEvent): void;
     /** Verbose log line (reason codes only, never text). */
     log?(line: string): void;
@@ -148,6 +164,8 @@ export class AutoAnswerController {
     private automaticAnswerInFlight = false;
     /** Monotonic token so an awaited dedup/dispatch can tell it was superseded. */
     private evaluation = 0;
+    /** Monotonic token so an awaited judge verdict can tell it was superseded. */
+    private judgeSeq = 0;
     /** speech_edge events received this meeting; zero at commit time = the dual-channel gate is inert. */
     private edgesSeen = 0;
     private noEdgesWarned = false;
@@ -382,34 +400,129 @@ export class AutoAnswerController {
             msFromLastSpeechToDecision: now - candidate.lastUpdatedAt,
         });
 
+        this.current = { question, candidate, committedAt: now };
+        this.currentStartedAt = candidate.startedAt;
+
+        // The dynamic judge sits between the heuristic detector and routing.
+        // Incomplete fragments never go (a judge cannot finish half a
+        // sentence — the revision window handles them), trivial backchannels
+        // never go (cost); everything else — including heuristic "statements",
+        // which is where live tasks hid — is judged, with the heuristic
+        // decision as the deadline/error fallback.
+        if (this.host.judgeCandidate && decision.reason !== 'incomplete'
+            && shouldConsultJudge(question.dialogueAct, candidate.text)) {
+            this.consultJudge(id, candidate, question, decision);
+            return;
+        }
+        this.routeHeuristic(id, candidate, question, decision);
+    }
+
+    /** The pre-judge routing, byte-identical to the pipeline before the judge existed. */
+    private routeHeuristic(id: string, candidate: AutoAnswerCandidate, question: AutoAnswerQuestion, decision: AutoAnswerDecision): void {
         if (decision.action === 'wait' && decision.reason === 'incomplete') {
-            // Not finished: the turn manager's revision window will extend it.
-            this.current = { question, candidate, committedAt: now };
-            this.currentStartedAt = candidate.startedAt;
-            this.turns.holdOpen();
-            this.setState('possible_question');
-            this.emit({ name: 'auto_answer_decision', questionId: id, action: 'wait', skipReason: 'incomplete' });
+            this.holdIncomplete(id);
             return;
         }
         if (decision.action === 'ignore') {
-            this.current = { question, candidate, committedAt: now };
-            this.currentStartedAt = candidate.startedAt;
-            // An ignored statement that ended as a SENTENCE is closed; the next
-            // final is a new candidate. Without terminal punctuation the
-            // "statement" may be half a sentence the provider split — leave it
-            // revisable so a fast lowercase continuation merges instead of
-            // becoming a fragment question ("have 6 tries, where you" fired as
-            // a 0.9 general_question on live meeting fd28a1af, 2026-08-24).
-            if (/[.?!]\s*$/.test(candidate.text)) this.turns.markDispatched();
-            this.skip(decision.reason as AutoAnswerSkipReason, question);
-            this.setState('listening');
+            this.ignoreCandidate(candidate, question, decision.reason as AutoAnswerSkipReason);
             return;
         }
-
-        this.current = { question, candidate, committedAt: now };
-        this.currentStartedAt = candidate.startedAt;
         this.setState('question_complete');
         this.evaluate(++this.evaluation);
+    }
+
+    /** Not finished: the turn manager's revision window will extend it. */
+    private holdIncomplete(id: string): void {
+        this.turns.holdOpen();
+        this.setState('possible_question');
+        this.emit({ name: 'auto_answer_decision', questionId: id, action: 'wait', skipReason: 'incomplete' });
+    }
+
+    private ignoreCandidate(candidate: AutoAnswerCandidate, question: AutoAnswerQuestion, reason: AutoAnswerSkipReason): void {
+        // An ignored statement that ended as a SENTENCE is closed; the next
+        // final is a new candidate. Without terminal punctuation the
+        // "statement" may be half a sentence the provider split — leave it
+        // revisable so a fast lowercase continuation merges instead of
+        // becoming a fragment question ("have 6 tries, where you" fired as
+        // a 0.9 general_question on live meeting fd28a1af, 2026-08-24).
+        if (/[.?!]\s*$/.test(candidate.text)) this.turns.markDispatched();
+        this.skip(reason, question);
+        this.setState('listening');
+    }
+
+    /**
+     * Ask the judge, race the deadline on the injected clock, then route. A
+     * newer commit/revision, a meeting stop, or a generation change while
+     * awaiting makes the verdict STALE — dropped, never applied (the newer
+     * commit runs its own judge).
+     */
+    private consultJudge(id: string, candidate: AutoAnswerCandidate, question: AutoAnswerQuestion, decision: AutoAnswerDecision): void {
+        const seq = ++this.judgeSeq;
+        const startedAt = this.clock.now();
+        const generation = question.meetingGeneration;
+        this.setState('possible_question');
+        let timer: ClockTimer | null = null;
+        let timedOut = false;
+        void (async () => {
+            let raw: string | null = null;
+            let outcome: 'verdict' | 'timeout' | 'error' | 'unparseable' = 'verdict';
+            try {
+                raw = await Promise.race([
+                    this.host.judgeCandidate!({
+                        candidateText: candidate.text,
+                        recentTurns: this.turnsBefore(candidate).slice(-JUDGE_CONTEXT_TURNS),
+                        modeName: this.host.modeName?.() ?? null,
+                        questionId: id,
+                    }),
+                    new Promise<null>((resolve) => {
+                        timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
+                    }),
+                ]);
+                if (timedOut) outcome = 'timeout';
+            } catch {
+                outcome = 'error';
+            } finally {
+                if (timer !== null) this.clock.clearTimeout(timer);
+            }
+            const judgeMs = this.clock.now() - startedAt;
+            // Staleness: only the LATEST consult may route, and only while the
+            // world it judged still exists.
+            if (seq !== this.judgeSeq || !this.host.isMeetingActive()
+                || this.host.meetingGeneration() !== generation
+                || this.current?.question.id !== id) {
+                this.emit({ name: 'auto_answer_judged', questionId: id, judgeOutcome: 'stale', judgeMs });
+                return;
+            }
+            const verdict = outcome === 'verdict' ? parseJudgeVerdict(raw, candidate.text) : null;
+            if (!verdict) {
+                if (outcome === 'verdict') outcome = 'unparseable';
+                this.emit({ name: 'auto_answer_judged', questionId: id, judgeOutcome: outcome, judgeMs });
+                this.host.log?.(`[AutoAnswer] judge ${outcome} after ${judgeMs}ms — heuristic verdict stands`);
+                this.routeHeuristic(id, candidate, question, decision);
+                return;
+            }
+            this.emit({
+                name: 'auto_answer_judged', questionId: id, judgeOutcome: 'verdict', judgeMs,
+                judgeIsAsk: verdict.isAsk, judgeDirectedAtUser: verdict.directedAtUser,
+                dialogueAct: verdict.act, answerability: verdict.answerability,
+            });
+            const route = routeForVerdict(verdict);
+            if (route.route === 'wait_incomplete') {
+                this.holdIncomplete(id);
+                return;
+            }
+            if (route.route === 'ignore') {
+                this.ignoreCandidate(candidate, question, route.reason);
+                return;
+            }
+            // The judge is trusted in BOTH directions: it promotes heuristic
+            // statements into asks and vetoes pattern-matched "questions".
+            question.answerability = route.answerability;
+            question.dialogueAct = route.act;
+            if (route.questionText) question.text = route.questionText;
+            this.setState('question_complete');
+            this.evaluate(++this.evaluation);
+        })();
     }
 
     /**
@@ -777,6 +890,7 @@ export class AutoAnswerController {
         this.micEchoWarned = false;
         this.questionSequence = 0;
         this.evaluation++;
+        this.judgeSeq++;
     }
 }
 

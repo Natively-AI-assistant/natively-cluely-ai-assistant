@@ -1219,6 +1219,7 @@ import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
+import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { LegacyAutoAnswerTrigger } from "./intelligence/LegacyAutoAnswerTrigger"
 import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
@@ -3239,6 +3240,25 @@ export class AppState {
     offer: (question) => this.showAutoAnswerOffer(question),
     retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason),
     log: (line) => { if (this._verboseLogging) console.log(line); },
+    // The DYNAMIC judge (user decision 2026-08-24, overriding spec V2 §36's
+    // no-cloud-LLM-in-detection rule): flash-lite-led structured call judges
+    // each consult-worthy candidate. The controller enforces the deadline and
+    // falls back to the heuristic verdict on null/rejection/timeout, so this
+    // hook never blocks the pipeline. NATIVELY_AUTO_ANSWER_JUDGE=off removes
+    // it entirely (pure heuristic pipeline, for A/B and offline use).
+    ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
+      judgeCandidate: async (req) => {
+        const llm = this.processingHelper?.getLLMHelper?.();
+        if (!llm) return null;
+        return await llm.generateContentStructured(buildJudgePrompt(req), { preferFast: true });
+      },
+    }),
+    modeName: () => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        return ModesManager.getInstance().getActiveMode()?.name ?? null;
+      } catch { return null; }
+    },
     telemetry: (event) => {
       // Structured, NO transcript text (V2 §29): ids, acts, scores, reasons, timings only.
       try {

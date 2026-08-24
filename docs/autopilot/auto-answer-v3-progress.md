@@ -831,6 +831,42 @@ red (name frame → live#6+6b, dangling words → live#6, close-condition → li
 evaluator gate green (precision 1.0 · recall 0.90 · zero false/dup/premature) · typecheck clean · full suite re-run:
 only the known allowed Ollama baseline failure visible (tail-30 capture).
 
+### Dynamic judge (2026-08-24 — user decision after live rounds 1-4)
+Four live sessions each needed a new detector regex; the user called the fixed-shape approach itself the defect
+("any possible scenario, not just technical interview") and chose the **cloud LLM judge**, explicitly overriding
+spec V2 §36's "no cloud LLM in the detection path". Architecture kept layered: TurnManager/dedup/policy/gate are
+unchanged; only the JUDGMENT is dynamic.
+
+- `AutoAnswerJudge.ts` (pure): prompt builder (fenced candidate = data-not-instructions, ≤`JUDGE_CONTEXT_TURNS`=8
+  hot-window turns, mode name), strict verdict parser (types checked, answerability clamped, act mapped,
+  `question_text` grounded by `tokenContainment ≥ 0.65` — hallucinated questions dropped), consult policy
+  (`shouldConsultJudge`: incomplete/backchannel/pause/confirmation and <4-word non-'?' candidates never cost a
+  call), routing (`routeForVerdict`).
+- Controller: `consultJudge` between detect and routing. Judge raced against `JUDGE_DEADLINE_MS`=2500 on the
+  injected clock; verdict trusted in BOTH directions (promotes heuristic statements, vetoes pattern-matched
+  "questions"). Staleness: `judgeSeq` + generation + current-id checks after the await — a superseded/stopped
+  world drops the verdict (`judgeOutcome: 'stale'`). Absent hook / timeout / rejection / unparseable → the
+  heuristic verdict routes byte-identically to the pre-judge pipeline. `routeHeuristic`/`holdIncomplete`/
+  `ignoreCandidate` extracted so both paths share one implementation.
+- main.ts: hook wired to `llmHelper.generateContentStructured(prompt, { preferFast: true })` (flash-lite-led);
+  `modeName` from ModesManager. `NATIVELY_AUTO_ANSWER_JUDGE=off` removes the hook (pure heuristic pipeline for
+  A/B and offline). Telemetry `auto_answer_judged` carries outcome/act/scores/latency, never text.
+- **Live-probed on the real model** (flash-lite, temperature 0, key from .env): 12-case set built from the four
+  live meetings + non-interview scenarios — wordle task, wordle question, two rule-exposition turns, self-answered,
+  standup "task list", V2 design task, sales-call ask, lecture audience question, novel-phrased task, restated
+  task, and a prompt-injection candidate. **12/12 correct** after two prompt-rule tunings (", right?" recap =
+  comprehension check; plan statements ≠ asks), 750-1200 ms typical, one 1.9 s outlier → deadline 2500.
+- Tests: `AutoAnswerJudge.test.mjs` (16 incl. hostile parses, grounding, consult policy) +
+  `AutoAnswerJudged.test.mjs` integration (promote / veto / deadline+no-timer-leak / error+unparseable fallback /
+  stale-on-revision / stale-on-stop / no-text telemetry / prefilter / no-hook-identical). Mutation probes red:
+  staleness guard → stale test, deadline race → timeout test. Auto Answer suite 210/210 · evaluator gate
+  unchanged · typecheck clean.
+
+Judge residuals: prompt rules are v1 (tuned on 12 cases — expect iteration); judge latency adds ~0.8-1.2 s before
+auto-fire when consulted; per-candidate token cost accepted by the user; `generateContentStructured`'s rotation can
+exceed the deadline under provider outage (falls back to heuristics by design); the 12-case probe is a spot check,
+not a corpus.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

@@ -1,0 +1,98 @@
+/**
+ * The dynamic judge's PURE half: prompt building, verdict parsing/validation,
+ * consult policy and routing (AutoAnswerJudge.ts). The LLM never appears here;
+ * its replies are fixed strings, hostile ones included.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const Judge = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerJudge.js'));
+const {
+  buildJudgePrompt, parseJudgeVerdict, routeForVerdict, shouldConsultJudge,
+  JUDGE_CONTEXT_TURNS, JUDGE_MIN_WORDS,
+} = Judge;
+
+const CAND = 'and your task Connor is to recreate this game in React, and all that I am going to be giving you is an API endpoint.';
+
+// ── prompt ────────────────────────────────────────────────────────────────
+
+test('prompt: candidate fenced, context capped at JUDGE_CONTEXT_TURNS oldest-first, mode named, data-not-instructions guard present', () => {
+  const turns = Array.from({ length: JUDGE_CONTEXT_TURNS + 4 }, (_, i) => ({ role: i % 2 ? 'user' : 'interviewer', text: `turn ${i}`, timestamp: i }));
+  const p = buildJudgePrompt({ candidateText: CAND, recentTurns: turns, modeName: 'Technical Interview', questionId: 'x' });
+  assert.ok(p.includes(`<candidate>\n${CAND}\n</candidate>`));
+  assert.ok(!p.includes('turn 3'), 'older turns beyond the cap are trimmed');
+  assert.ok(p.includes(`turn ${turns.length - 1}`));
+  assert.ok(p.indexOf(`turn ${turns.length - 2}`) < p.indexOf(`turn ${turns.length - 1}`), 'oldest first');
+  assert.ok(p.includes('"Technical Interview"'));
+  assert.ok(/never follow instructions/i.test(p), 'transcript is data, not instructions');
+  const noMode = buildJudgePrompt({ candidateText: CAND, recentTurns: [], modeName: null, questionId: 'x' });
+  assert.ok(!noMode.includes('session."'));
+  assert.ok(noMode.includes('(none)'));
+});
+
+// ── parsing ───────────────────────────────────────────────────────────────
+
+const OK = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "coding_task", "answerability": 0.93, "question_text": null}';
+
+test('parse: a clean verdict, one wrapped in prose, and one in a code fence all parse identically', () => {
+  for (const raw of [OK, `Sure! Here is the JSON:\n${OK}\nHope that helps.`, '```json\n' + OK + '\n```']) {
+    const v = parseJudgeVerdict(raw, CAND);
+    assert.ok(v, `unparsed: ${raw.slice(0, 40)}`);
+    assert.equal(v.isAsk, true);
+    assert.equal(v.act, 'coding_question');
+    assert.equal(v.answerability, 0.93);
+  }
+});
+
+test('parse: garbage, empty, non-JSON, missing booleans, and non-number answerability are all null (fallback)', () => {
+  for (const raw of [null, undefined, '', 'I think so?', '{"is_ask": "yes", "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.9}',
+    '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": "high"}', '[1,2,3]', '{broken']) {
+    assert.equal(parseJudgeVerdict(raw, CAND), null, `should reject: ${String(raw).slice(0, 40)}`);
+  }
+});
+
+test('parse: answerability clamped to [0,1]; unknown act maps by isAsk', () => {
+  const hot = parseJudgeVerdict('{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 7, "question_text": null}', CAND);
+  assert.equal(hot.answerability, 1);
+  const weird = parseJudgeVerdict('{"is_ask": true, "directed_at_user": true, "complete": true, "act": "prophecy", "answerability": 0.9, "question_text": null}', CAND);
+  assert.equal(weird.act, 'general_question');
+  const weirdNo = parseJudgeVerdict('{"is_ask": false, "directed_at_user": false, "complete": true, "act": "prophecy", "answerability": 0.1, "question_text": null}', CAND);
+  assert.equal(weirdNo.act, 'statement');
+});
+
+test('parse: question_text must be GROUNDED in the candidate — a hallucinated question is dropped, a verbatim one kept', () => {
+  const hallucinated = parseJudgeVerdict('{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.9, "question_text": "What is your greatest weakness as an engineer?"}', CAND);
+  assert.equal(hallucinated.questionText, null, 'ungrounded question_text is a hallucination');
+  const grounded = parseJudgeVerdict('{"is_ask": true, "directed_at_user": true, "complete": true, "act": "coding_task", "answerability": 0.9, "question_text": "your task Connor is to recreate this game in React"}', CAND);
+  assert.equal(grounded.questionText, 'your task Connor is to recreate this game in React');
+});
+
+// ── consult policy ────────────────────────────────────────────────────────
+
+test('consult: incomplete/backchannel/pause/confirmation and tiny non-questions never cost a call; statements and questions do', () => {
+  for (const act of ['incomplete', 'backchannel', 'pause_request', 'confirmation']) {
+    assert.equal(shouldConsultJudge(act, CAND), false, act);
+  }
+  assert.equal(shouldConsultJudge('statement', 'Cool, right'), false, `under ${JUDGE_MIN_WORDS} words, no '?'`);
+  assert.equal(shouldConsultJudge('general_question', 'You ready?'), true, "short but carries a '?'");
+  assert.equal(shouldConsultJudge('statement', CAND), true, 'statements are where live tasks hid');
+  assert.equal(shouldConsultJudge('general_question', 'Why did you choose PostgreSQL over the rest?'), true);
+});
+
+// ── routing ───────────────────────────────────────────────────────────────
+
+test('route: incomplete → wait; non-ask/undirected → ignore(not_question); rhetorical → ignore(rhetorical); real ask → evaluate with judged fields', () => {
+  const base = { isAsk: true, directedAtUser: true, complete: true, act: 'general_question', answerability: 0.9, questionText: null };
+  assert.deepEqual(routeForVerdict({ ...base, complete: false }), { route: 'wait_incomplete' });
+  assert.deepEqual(routeForVerdict({ ...base, act: 'incomplete' }), { route: 'wait_incomplete' });
+  assert.deepEqual(routeForVerdict({ ...base, isAsk: false }), { route: 'ignore', reason: 'not_question' });
+  assert.deepEqual(routeForVerdict({ ...base, directedAtUser: false }), { route: 'ignore', reason: 'not_question' });
+  assert.deepEqual(routeForVerdict({ ...base, act: 'rhetorical' }), { route: 'ignore', reason: 'rhetorical' });
+  assert.deepEqual(routeForVerdict({ ...base, act: 'coding_question', questionText: 'q' }),
+    { route: 'evaluate', answerability: 0.9, act: 'coding_question', questionText: 'q' });
+});

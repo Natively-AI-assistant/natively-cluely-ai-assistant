@@ -156,6 +156,7 @@ export type AutoAnswerTelemetryEventName =
     | 'auto_answer_committed'
     | 'auto_answer_queued'
     | 'auto_answer_deduplicated'
+    | 'auto_answer_judged'
     | 'auto_answer_cancelled'
     | 'auto_answer_completed'
     | 'auto_answer_offered';
@@ -180,4 +181,9 @@ export interface AutoAnswerTelemetryEvent {
     action?: AutoAnswerPolicyAction;
     /** False when NO speech_edge has ever arrived this meeting — dual-channel gating is inert (stale native module?). */
     channelEdgesSeen?: boolean;
+    /** Dynamic-judge fields (auto_answer_judged) — verdict metadata only, never transcript text. */
+    judgeOutcome?: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'stale';
+    judgeIsAsk?: boolean;
+    judgeDirectedAtUser?: boolean;
+    judgeMs?: number;
 }
