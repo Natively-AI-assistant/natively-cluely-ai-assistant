@@ -42,6 +42,8 @@ export interface GenerateStructuredOptions<T> {
   fallback?: () => T;
   /** Disable the one repair retry (default: enabled). */
   disableRepairRetry?: boolean;
+  /** Per-call routing/budget overrides passed straight to LLMHelper.generateMeetingSummary. */
+  callOpts?: { purpose?: 'extraction'; timeoutMs?: number; preferLongContext?: boolean };
 }
 
 export interface GenerateStructuredResult<T> {
@@ -85,7 +87,7 @@ export async function generateStructured<T>(opts: GenerateStructuredOptions<T>):
   // Attempt 1: primary generation.
   let raw = '';
   try {
-    raw = await opts.llmHelper.generateMeetingSummary(system, opts.userContent, system) || '';
+    raw = await opts.llmHelper.generateMeetingSummary(system, opts.userContent, system, opts.callOpts) || '';
   } catch (e) {
     raw = '';
   }
@@ -109,7 +111,7 @@ ${opts.jsonShapeHint}`;
     const repairUser = `Previous output to correct:\n${raw || '(empty)'}`;
     let repairRaw = '';
     try {
-      repairRaw = await opts.llmHelper.generateMeetingSummary(repairSystem, repairUser, repairSystem) || '';
+      repairRaw = await opts.llmHelper.generateMeetingSummary(repairSystem, repairUser, repairSystem, opts.callOpts) || '';
     } catch {
       repairRaw = '';
     }

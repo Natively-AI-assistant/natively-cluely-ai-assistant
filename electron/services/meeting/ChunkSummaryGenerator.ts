@@ -25,6 +25,10 @@ export class ChunkSummaryGenerator {
       jsonShapeHint,
       userContent: params.chunk.text,
       llmHelper: this.llmHelper,
+      // Chunk extraction is a dense structured extraction, not a chat completion: route it
+      // to the gateway's benchmarked extraction path and give it a budget that a dense
+      // answer can actually fit inside. The previous 10s/8s caps selected for sparse output.
+      callOpts: { purpose: 'extraction', timeoutMs: 60000 },
       validate: (raw) => {
         const atoms = this.validator.validateAndRepairAtoms(raw, params.chunk.chunkIndex, {
           allowedSectionTitles: (params.modeNoteSections || []).map(s => s.title),
