@@ -78,7 +78,7 @@ export function buildChunkPrompt(params: {
   // Each section value is an array of finding OBJECTS so section bullets carry the same
   // evidence (speaker + timestamp + quote) as decisions/actions. Omit a section's key when
   // this chunk has nothing for it.
-  const findingShape = `{ "text": "one-sentence finding grounded in this chunk", "evidence": [{ "speakerName": "speaker", "timestampMs": 0, "quote": "short verbatim quote" }], "confidence": "high" }`;
+  const findingShape = `{ "text": "one-sentence finding grounded in this chunk", "evidence": [{ "speakerName": "speaker", "timestampMs": 0, "quote": "short verbatim quote — OPTIONAL: omit the entire evidence key if you have no clean quote" }], "confidence": "high" }`;
   const sectionKeysHint = sectionList.length > 0
     ? `{\n${sectionList.map(s => `    "${s.title.replace(/"/g, "'")}": [${findingShape}]`).join(',\n')}\n  }`
     : `{ "Section title": [${findingShape}] }`;
@@ -90,7 +90,7 @@ MEETING MODE: ${params.modeTemplateType || 'general'}
 CHUNK: ${params.chunk.chunkIndex + 1} of ${params.totalChunks}
 TIME RANGE: ${formatMs(params.chunk.timeRange.startMs)} - ${formatMs(params.chunk.timeRange.endMs)}
 
-${sectionGuidance ? `YOUR PRIMARY TASK — fill these EXACT note sections faithfully. For each, follow its instruction. Put findings under "modeSpecificFindings" keyed by the EXACT section title shown. Each finding is an object with "text" and "evidence" (speaker + timestampMs + a short verbatim quote from this chunk). OMIT a section's key entirely if this chunk contains nothing for it (do not output an empty bullet, a placeholder, or "Not discussed"):
+${sectionGuidance ? `YOUR PRIMARY TASK — fill these EXACT note sections faithfully. For each, follow its instruction. Put findings under "modeSpecificFindings" keyed by the EXACT section title shown. Each finding is an object with "text" and, best-effort, "evidence" (speaker + timestampMs + a short verbatim quote from this chunk) — never drop a finding merely because no clean quote is at hand. OMIT a section's key entirely if this chunk contains nothing for it (do not output an empty bullet, a placeholder, or "Not discussed"):
 
 ${sectionGuidance}
 ` : ''}DENSITY — this is a note-taking product and sparse notes are a product failure:

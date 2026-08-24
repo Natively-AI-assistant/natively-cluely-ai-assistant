@@ -181,7 +181,7 @@ test('sentence-boundary flag survives a trailing stopword and a trailing punctua
 });
 
 test('chunk prompt states a density target and keeps evidence where it matters', () => {
-  const { systemPrompt } = buildChunkPrompt({
+  const { systemPrompt, jsonShapeHint } = buildChunkPrompt({
     chunk: { chunkIndex: 0, timeRange: { startMs: 0, endMs: 60000 }, text: 'x', charCount: 1 },
     totalChunks: 3,
     modeTemplateType: 'sales',
@@ -191,10 +191,30 @@ test('chunk prompt states a density target and keeps evidence where it matters',
   // Density is the whole point: an unstated target plus heavy suppression pressure is why
   // sections came back with 1-3 terse bullets for an hour of conversation.
   assert.match(systemPrompt, /5-12 findings per section/i, 'no explicit density target');
-  assert.match(systemPrompt, /PRECISION rule/i, 'the empty-is-better rule is not scoped to precision');
+  // Pin the SUBSTANCE of the precision clause, not just the phrase "PRECISION rule" — a
+  // softened rewrite like "PRECISION rule, so when in doubt, omit" would reinstate recall
+  // suppression while still matching a bare /PRECISION rule/i check.
+  assert.match(
+    systemPrompt,
+    /PRECISION rule about fabrication[\s\S]*?NOT a licence to omit material that was genuinely discussed/i,
+    'the empty-is-better rule is not scoped to precision, or has been softened back into a recall ceiling'
+  );
 
   // Evidence stays mandatory where it powers jump-to-timestamp, optional where its cost
-  // suppresses bullet count.
+  // suppresses bullet count -- and that policy must agree everywhere the prompt mentions
+  // evidence for a section finding, not only in the "ALSO extract" line. Two other spots in
+  // this same prompt (the primary-task preamble and the findingShape JSON template) used to
+  // state or imply evidence was unconditional, out-voting the new best-effort line 2-to-1.
   assert.match(systemPrompt, /evidence is REQUIRED for decisions and actionItems/i);
   assert.match(systemPrompt, /best-effort for section findings/i);
+  assert.doesNotMatch(
+    systemPrompt,
+    /object with "text" and "evidence"/i,
+    'the primary-task preamble still presents evidence as an unconditional part of a section finding'
+  );
+  assert.match(
+    jsonShapeHint,
+    /OPTIONAL[:\s].*omit the entire evidence key/i,
+    'findingShape (in jsonShapeHint) does not mark evidence optional, contradicting the best-effort policy'
+  );
 });
