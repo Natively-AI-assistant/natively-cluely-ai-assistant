@@ -37,9 +37,20 @@ const MUST_STAY_DISTINCT = [
 // merge 0.727). Between under-merging a paraphrase (one extra near-duplicate bullet) and
 // over-merging chunk-scoped decisions (destroyed coverage), under-merging is the correct
 // failure direction for a fix whose purpose is "notes are too thin".
+//
+// IMPORTANT — the first two rows below are VACUOUS with respect to the Dice/length-ratio
+// code this task changed: both pairs normalize to IDENTICAL strings (stopword/punctuation
+// stripping erases the only difference), so both hit the `na === nb` fast path in similar()
+// and never reach the Dice computation at all. They would still pass if the entire Dice
+// branch were deleted, inverted, or set to an unreachable threshold. The third row is the
+// table's ONLY real assertion about the Dice merge path: it is a genuine reworded
+// restatement (differs by one non-stopword, "finish" vs "complete"), so normalize() leaves
+// it non-identical and it must clear the Dice threshold (0.857 >= 0.8) to merge. Do not
+// remove it when "simplifying" this table — that would silently restore the vacuum.
 const MUST_MERGE = [
   ['Use PostHog for analytics', 'Use PostHog for analytics.'],
   ['Pilot scope moves forward with security review', 'Pilot scope moves forward with a security review'],
+  ['Security review must finish before the pilot starts', 'Security review must complete before the pilot starts'],
 ];
 
 test('similar() does not collapse a specific bullet into a vague one', () => {
