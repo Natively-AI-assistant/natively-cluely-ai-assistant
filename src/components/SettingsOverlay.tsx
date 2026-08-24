@@ -1275,6 +1275,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
+    /**
+     * Commit a speech-model choice.
+     *
+     * Optimistic, then REVERTED if the write did not land. set-nvidia-nim-stt-model
+     * answers {success:false} for an unsupported id and for a degraded credential
+     * store (refuseWriteWhileDegraded), and the previous version neither awaited a
+     * result nor caught a rejection — so a refused write left the UI showing a model
+     * the next session would not load, with an unhandled rejection in the console.
+     */
+    const selectNvidiaNimSttModel = async (id: string) => {
+        const previous = nvidiaNimSttModel;
+        if (previous === id) return;
+        setNvidiaNimSttModel(id);
+        try {
+            const result = await window.electronAPI?.setNvidiaNimSttModel?.(id);
+            if (result && result.success === false) throw new Error(result.error || 'Could not save speech model');
+        } catch (err) {
+            console.error('[Settings] Failed to save NVIDIA NIM speech model:', err);
+            setNvidiaNimSttModel(previous);
+        }
+    };
+
+    /** Arrow-key navigation, which `role="radio"` obliges us to provide. */
+    const nvidiaNimSttModelKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+        const forward = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+        const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+        if (!forward && !back) return;
+        e.preventDefault();
+        const count = NVIDIA_NIM_STT_MODELS.length;
+        const next = (index + (forward ? 1 : -1) + count) % count;
+        void selectNvidiaNimSttModel(NVIDIA_NIM_STT_MODELS[next].id);
+        const group = e.currentTarget.parentElement;
+        (group?.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus();
+    };
+
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
         if (!key.trim()) return;
         // Reject masked values returned by getStoredCredentials ("sk-...XXXX").
@@ -2889,13 +2924,44 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                        {NVIDIA_NIM_STT_MODELS.map((m) => (
-                                                            <button key={m.id} onClick={async () => { setNvidiaNimSttModel(m.id); await window.electronAPI?.setNvidiaNimSttModel?.(m.id); }} className={`rounded-lg px-3 py-2.5 text-left ${nvidiaNimSttModel === m.id ? 'bg-accent-primary text-on-accent shadow-md' : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}>
-                                                                <span className="text-sm font-medium block">{m.label}</span><span className="text-[11px] opacity-70">{m.description}</span>
-                                                            </button>
-                                                        ))}
+                                                    <label id="nvidia-nim-stt-model-label" className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
+                                                    {/* One column, not a 2-col grid: there are THREE models, so a
+                                                        two-up grid leaves a lone orphan on the second row, and the
+                                                        descriptions ("Multilingual streaming ASR (40 locales,
+                                                        auto-detect)") wrap at half width. Mutually exclusive choice,
+                                                        so radiogroup semantics with a roving tabindex — previously
+                                                        three unrelated <button>s whose selected state was carried by
+                                                        colour alone and was invisible to a screen reader. */}
+                                                    <div role="radiogroup" aria-labelledby="nvidia-nim-stt-model-label" className="flex flex-col gap-1.5">
+                                                        {NVIDIA_NIM_STT_MODELS.map((m, i) => {
+                                                            const selected = nvidiaNimSttModel === m.id;
+                                                            return (
+                                                                <button
+                                                                    key={m.id}
+                                                                    type="button"
+                                                                    role="radio"
+                                                                    aria-checked={selected}
+                                                                    tabIndex={selected ? 0 : -1}
+                                                                    onClick={() => void selectNvidiaNimSttModel(m.id)}
+                                                                    onKeyDown={(e) => nvidiaNimSttModelKeyDown(e, i)}
+                                                                    className={`block w-full rounded-lg px-3 py-2.5 text-left
+                                                                        transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]
+                                                                        motion-safe:active:scale-[0.99] ${selected
+                                                                            ? 'bg-accent-primary text-on-accent shadow-sm'
+                                                                            : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}
+                                                                >
+                                                                    {/* No check mark: the selected row inverts from
+                                                                        #1A1A1A to #B9A1F6, which is 7.9:1 apart in
+                                                                        LUMINANCE, not merely a hue shift — so the state
+                                                                        still reads in greyscale and to a colour-blind
+                                                                        viewer, and WCAG 1.4.1 is met without a second
+                                                                        indicator. `aria-checked` above carries it to
+                                                                        screen readers regardless. */}
+                                                                    <span className="text-sm font-medium block leading-tight">{m.label}</span>
+                                                                    <span className={`text-[11px] leading-snug block mt-0.5 ${selected ? 'text-on-accent opacity-70' : 'text-text-tertiary'}`}>{m.description}</span>
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
