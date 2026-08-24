@@ -946,6 +946,27 @@ offer band, busy retry+TTL, lenient mic incl. barge-in, '?' fallback, endpoint c
 telemetry. Suite 228/228 · evaluator gate unchanged · typecheck clean. Replay note: DB replays lack interims, so
 offline judge-call counts overestimate live (every recorded ~2 s pause reads as a stoppage).
 
+### Code-review repairs on the SIMPLE engine (2026-08-25 — /code-review high, 10 findings, 6 mine)
+All six confirmed findings in the simple engine/wiring fixed, each red-first or mutation-probed:
+14. Boot thresholds: engine constructed with `resolveAutoAnswerThresholds(null)` (meeting bar), review#10 parity.
+15. A genuine user answer now bumps `judgeSeq`, clears `retryTimer` and retracts the offer — a dispatch parked
+    behind a busy engine dies when the user takes the floor (probe red).
+16. A judge timeout/error clears `lastJudgedKey`: the next stoppage retries instead of silencing the question
+    forever (probe red).
+17. Interviewer INTERIMS supersede an in-flight verdict (module-doc contract; probe red) — no dispatch after the
+    interviewer audibly resumed.
+18. Punctuation provenance honored: the short-candidate prefilter skips only non-'?', non-interrogative-led
+    fragments, and the no-judge fallback fires on interrogative-led utterances when the provider never guarantees
+    marks (Soniox absence-is-NEUTRAL contract).
+19. Barge-in latency: a genuine-looking user INTERIM (echo/backchannel/word-floor validated) cancels a streaming
+    answer seconds before its final; offer cards get a full lifecycle (replaced/expired/topic_change/
+    meeting_stop/user_answering retraction, TTL on the injected clock).
+The four remaining findings (reducer `slice(0,20)` vs density contract, FollowUpDraftGenerator unfiltered
+sections, legacy MeetingDetails render, LLMHelper zero-headroom outer race) belong to the parallel
+meeting-notes workstream and were left untouched. Cleanup-tier residuals recorded: echo/lenient-mic block
+duplicated between engines (extract when V3 retires), dead `turnsBefore(cutoff)` param. Suite 234/234 ·
+typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

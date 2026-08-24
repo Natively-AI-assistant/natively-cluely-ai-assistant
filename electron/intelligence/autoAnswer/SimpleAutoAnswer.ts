@@ -50,6 +50,10 @@ export const STABILITY_MS = 900;
 export const ENDPOINT_CONFIRM_MS = 350;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
 export const MIN_NEW_WORDS = 4;
+/** Offer card lifetime (mirrors V3's OFFER_TTL_MS). Unfitted placeholder. */
+export const OFFER_TTL_MS = 10_000;
+/** Judge-unavailable fallback on punctuation-less providers: interrogative-led utterances. */
+export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)[,.!\s]+)*(?:how|what|why|when|where|which|who|whose|can|could|would|should|do|does|did|are|is|will|have you|tell me|tell us|walk me|walk us|explain|describe)\b/i;
 /** Busy-engine retry cadence and give-up. */
 export const RETRY_MS = 500;
 export const RETRY_TTL_MS = 8000;
@@ -66,6 +70,7 @@ export interface SimpleAutoAnswerHost {
     recentTurns(): TranscriptTurn[];
     dispatch(question: AutoAnswerQuestion, options: { reuseSpeculative: boolean }): void | Promise<unknown>;
     offer?(question: AutoAnswerQuestion): void;
+    retractOffer?(questionId: string, reason: string): void;
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
     judgeCandidate?(req: JudgeRequest): Promise<string | null>;
@@ -83,6 +88,9 @@ export class SimpleAutoAnswerEngine {
     private sequence = 0;
     private lastJudgedKey = '';
     private lastAnsweredText: string | null = null;
+    /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
+    private punctuationGuaranteed = false;
+    private activeOffer: { id: string; timer: ClockTimer } | null = null;
     private thresholds: AutoAnswerThresholds;
 
     constructor(
@@ -112,13 +120,21 @@ export class SimpleAutoAnswerEngine {
 
         if (segment.speaker === 'interviewer') {
             if (!segment.final) {
-                // Still talking: every interim pushes the stoppage out.
-                if (this.pending.length > 0 || text) this.arm(STABILITY_MS);
+                // Still talking: every interim pushes the stoppage out — and
+                // supersedes any in-flight verdict (review 2026-08-25: a
+                // verdict resolving after the interviewer RESUMED must not
+                // dispatch mid-sentence; the next stoppage re-judges).
+                if (this.pending.length > 0 || text) {
+                    if (text) this.judgeSeq++;
+                    this.arm(STABILITY_MS);
+                }
                 return;
             }
             if (!text) return;
             this.recentInterviewerFinals.push({ text, at: now });
             while (this.recentInterviewerFinals.length > 8) this.recentInterviewerFinals.shift();
+            this.punctuationGuaranteed = (segment as { punctuationSource?: string }).punctuationSource === 'provider' ||
+                (segment as { punctuationSource?: string }).punctuationSource === 'provider_final';
             this.pending.push({ text, at: now });
             this.judgeSeq++;            // supersede any in-flight verdict: it judged less than this
             this.arm(STABILITY_MS);
@@ -126,18 +142,33 @@ export class SimpleAutoAnswerEngine {
         }
 
         // ── user channel: LENIENT (2026-08-24) ────────────────────────────
-        if (!segment.final || !text) return;
+        if (!text) return;
         const recent = this.recentInterviewerFinals.filter(f => now - f.at <= ECHO_WINDOW_MS);
         const words = text.split(/\s+/).filter(Boolean).length;
         const isEcho = recent.some(f => speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY)
             || (words >= ECHO_FRAGMENT_MIN_WORDS && recent.length > 0
                 && tokenContainment(text, recent.map(f => f.text).join(' ')) >= ECHO_FRAGMENT_CONTAINMENT);
-        if (isEcho || USER_BACKCHANNEL.test(text) || words < GENUINE_ANSWER_MIN_WORDS) {
+        const genuine = !isEcho && !USER_BACKCHANNEL.test(text) && words >= GENUINE_ANSWER_MIN_WORDS;
+        if (!segment.final) {
+            // Early barge-in (review 2026-08-25): V3 cancelled at the VAD
+            // edge; here a genuine-looking user INTERIM cancels the streaming
+            // answer seconds before its final would — still text-validated,
+            // so speaker bleed cannot trigger it.
+            if (genuine && this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
+            return;
+        }
+        if (!genuine) {
             this.emit({ name: 'auto_answer_ignored', skipReason: 'backchannel' });
             return;
         }
-        // A genuine sustained answer: the user took the floor.
+        // A genuine sustained answer: the user took the floor. This must also
+        // kill anything in flight — the judge verdict being awaited AND a
+        // dispatch parked behind a busy engine both belong to a question the
+        // user is now answering themselves (review 2026-08-25).
         if (this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
+        this.judgeSeq++;
+        this.clearRetry();
+        this.retractOffer('user_answering');
         if (this.pending.length > 0 || this.timer !== null) {
             this.disarm();
             this.pending = [];
@@ -168,7 +199,12 @@ export class SimpleAutoAnswerEngine {
         // Zero-cost prefilter — the ONLY heuristics left in the hot path.
         if (key === this.lastJudgedKey) return;                     // verdict already stands
         const words = candidate.split(/\s+/).filter(Boolean).length;
-        if (words < MIN_NEW_WORDS && !candidate.includes('?')) {
+        // A short candidate waits for more speech unless it already looks
+        // like a question: a literal '?' (always positive evidence) or an
+        // interrogative lead (which needs no punctuation, per the
+        // punctuationProvenance absence-is-NEUTRAL contract).
+        const tooShort = words < MIN_NEW_WORDS && !candidate.includes('?') && !FALLBACK_INTERROGATIVE.test(candidate);
+        if (tooShort) {
             this.emit({ name: 'auto_answer_ignored', skipReason: 'incomplete', candidateWordCount: words });
             return;
         }
@@ -230,11 +266,14 @@ export class SimpleAutoAnswerEngine {
         if (!verdict) {
             if (outcome === 'verdict') outcome = 'unparseable';
             if (outcome !== 'absent') this.emit({ name: 'auto_answer_judged', questionId: id, judgeOutcome: outcome as 'timeout' | 'error' | 'unparseable', judgeMs });
-            // Near-legacy fallback: with no judge, only an explicit trailing
-            // '?' fires — keeps offline/keyless setups working without the
-            // legacy fire-on-everything behaviour.
-            if (/\?\s*$/.test(candidate)) {
-                this.host.log?.(`[AutoAnswer:simple] judge ${outcome} — '?' fallback dispatch`);
+            // A transient judge failure must not silence the question forever
+            // (review 2026-08-25): clear the key so the next stoppage retries.
+            this.lastJudgedKey = '';
+            // Near-legacy fallback: a trailing '?', or — on providers that
+            // never guarantee punctuation — an interrogative-led utterance.
+            const interrogative = FALLBACK_INTERROGATIVE.test(candidate);
+            if (/\?\s*$/.test(candidate) || (!this.punctuationGuaranteed && interrogative)) {
+                this.host.log?.(`[AutoAnswer:simple] judge ${outcome} — fallback dispatch`);
                 this.deliver(id, candidate, 0.9, 'general_question', committedAt);
             }
             return;
@@ -255,7 +294,12 @@ export class SimpleAutoAnswerEngine {
         if (route.answerability >= this.thresholds.autoThreshold) {
             this.deliver(id, text, route.answerability, route.act, committedAt);
         } else if (route.answerability >= this.thresholds.offerThreshold && this.host.offer) {
+            this.retractOffer('replaced');
             this.host.offer(this.question(id, text, route.answerability, route.act, committedAt));
+            this.activeOffer = {
+                id,
+                timer: this.clock.setTimeout(() => { this.activeOffer = null; this.host.retractOffer?.(id, 'expired'); }, OFFER_TTL_MS),
+            };
             this.emit({ name: 'auto_answer_offered', questionId: id, answerability: route.answerability });
         } else {
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'low_answerability', answerability: route.answerability });
@@ -276,6 +320,7 @@ export class SimpleAutoAnswerEngine {
                 this.retryTimer = this.clock.setTimeout(attempt, RETRY_MS);
                 return;
             }
+            this.retractOffer('topic_change');
             const q = this.question(id, text, answerability, act, committedAt);
             this.lastAnsweredText = text;
             this.pending = [];
@@ -309,9 +354,22 @@ export class SimpleAutoAnswerEngine {
             .slice(-JUDGE_CONTEXT_TURNS);
     }
 
+    private clearRetry(): void {
+        if (this.retryTimer !== null) { this.clock.clearTimeout(this.retryTimer); this.retryTimer = null; }
+    }
+
+    private retractOffer(reason: 'replaced' | 'expired' | 'user_answering' | 'meeting_stop' | 'topic_change'): void {
+        if (!this.activeOffer) return;
+        const { id, timer } = this.activeOffer;
+        this.activeOffer = null;
+        this.clock.clearTimeout(timer);
+        this.host.retractOffer?.(id, reason);
+    }
+
     private reset(): void {
         this.disarm();
-        if (this.retryTimer !== null) { this.clock.clearTimeout(this.retryTimer); this.retryTimer = null; }
+        this.clearRetry();
+        this.retractOffer('meeting_stop');
         this.pending = [];
         this.recentInterviewerFinals = [];
         this.lastJudgedKey = '';

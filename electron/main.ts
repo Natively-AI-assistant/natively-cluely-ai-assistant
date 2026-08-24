@@ -3234,7 +3234,10 @@ export class AppState {
       } catch { /* telemetry must never break the pipeline */ }
     },
     log: (line) => { if (this._verboseLogging) console.log(line); },
-  });
+    retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason as any),
+    // review#10 parity (2026-08-25): boot on the registry's no-mode default
+    // (the stricter MEETING bar), not the compiled-in interview constants.
+  }, undefined, resolveAutoAnswerThresholds(null));
   private readonly legacyAutoAnswer = new LegacyAutoAnswerTrigger({
     isEnabled: () => this._autoAnswerEnabled,
     isMeetingActive: () => this.isMeetingActive,
