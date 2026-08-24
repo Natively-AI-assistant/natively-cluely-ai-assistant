@@ -862,6 +862,14 @@ unchanged; only the JUDGMENT is dynamic.
   staleness guard → stale test, deadline race → timeout test. Auto Answer suite 210/210 · evaluator gate
   unchanged · typecheck clean.
 
+Full-meeting validation on the REAL model (all 58 finals of fd28a1af replayed through the controller with the
+live flash-lite judge, 41 calls, avg ~900 ms): dispatches exactly the two real asks — the wordle question and the
+task, with the judge's grounded `question_text` extraction tightening the dispatch to "your task Connor is to
+recreate this game in Reac t". First run triple-fired on the task RESTATEMENT 30 s later (token dedup cannot see
+"you have to recreate wordle" == the answered task), fixed by SEMANTIC dedup in the judge itself:
+`JudgeRequest.lastAnsweredText` (the controller's `lastDispatchedText`) enters the prompt with a restatement rule;
+re-run → exactly 2 dispatches. Suite 212/212.
+
 Judge residuals: prompt rules are v1 (tuned on 12 cases — expect iteration); judge latency adds ~0.8-1.2 s before
 auto-fire when consulted; per-candidate token cost accepted by the user; `generateContentStructured`'s rotation can
 exceed the deadline under provider outage (falls back to heuristics by design); the 12-case probe is a spot check,

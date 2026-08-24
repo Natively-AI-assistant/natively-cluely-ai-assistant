@@ -38,6 +38,13 @@ export interface JudgeRequest {
     recentTurns: TranscriptTurn[];
     modeName?: string | null;
     questionId: string;
+    /**
+     * The most recently answered ask, so the judge can perform SEMANTIC dedup:
+     * live meeting fd28a1af restated the task 30 s after it was answered
+     * ("And you have to recreate wordle…") and the token-level layers cannot
+     * see that "your task is to recreate this game in React" is the same ask.
+     */
+    lastAnsweredText?: string | null;
 }
 
 export interface JudgeVerdict {
@@ -93,6 +100,9 @@ export function buildJudgePrompt(req: JudgeRequest): string {
         .map(t => `${t.role === 'interviewer' ? 'OTHERS' : 'USER'}: ${t.text}`)
         .join('\n');
     const mode = req.modeName ? `The user is in a "${req.modeName}" session.` : '';
+    const answered = req.lastAnsweredText
+        ? `\nAlready answered for the user this meeting (most recent): "${req.lastAnsweredText}"\nA candidate that merely RESTATES or elaborates an already-answered ask is not a new ask — answerability at most 0.2 — unless it introduces a genuinely new question or changes the requirements.\n`
+        : '';
     return `You watch a live meeting transcript for an assistant that drafts answers for its USER.
 The OTHERS channel is the meeting audio and may carry SEVERAL voices (an interviewer and another participant, a video, etc.).
 ${mode}
@@ -111,7 +121,7 @@ Rules learned from live meetings:
 - A summary of what the speaker just explained that ends in a tag like ", right?" or ", okay?" is a comprehension check — rhetorical, not an ask.
 - Statements about work, plans or logistics that expect at most acknowledgement ("your task list is getting long, we should prioritize it") are NOT asks — an ask requires something to answer or produce.
 
-Recent transcript (oldest first):
+${answered}Recent transcript (oldest first):
 ${context || '(none)'}
 
 <candidate>

@@ -35,6 +35,14 @@ test('prompt: candidate fenced, context capped at JUDGE_CONTEXT_TURNS oldest-fir
   assert.ok(noMode.includes('(none)'));
 });
 
+test('prompt: the already-answered ask appears only when provided (semantic dedup of restatements)', () => {
+  const with_ = buildJudgePrompt({ candidateText: CAND, recentTurns: [], modeName: null, questionId: 'x', lastAnsweredText: 'your task is to recreate this game in React' });
+  assert.ok(with_.includes('Already answered for the user this meeting (most recent): "your task is to recreate this game in React"'));
+  assert.ok(/RESTATES or elaborates/.test(with_));
+  const without = buildJudgePrompt({ candidateText: CAND, recentTurns: [], modeName: null, questionId: 'x', lastAnsweredText: null });
+  assert.ok(!without.includes('Already answered'));
+});
+
 // ── parsing ───────────────────────────────────────────────────────────────
 
 const OK = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "coding_task", "answerability": 0.93, "question_text": null}';

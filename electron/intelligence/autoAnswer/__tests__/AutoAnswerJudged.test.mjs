@@ -156,6 +156,21 @@ test('the judge never sees incomplete fragments or tiny backchannels (prefilter)
   }
 });
 
+test('after a dispatch, later judge calls carry the answered text (semantic dedup of restatements)', async () => {
+  const h = makeHarness();
+  const calls = withJudge(h, async () => verdict({ act: 'coding_task' }));
+  h.interviewerFinal(NOVEL_TASK, { punctuationSource: 'provider' });
+  await h.advance(QUIET + 200);
+  assert.equal(h.texts().length, 1);
+  assert.equal(calls[0].lastAnsweredText ?? null, null, 'nothing answered before the first consult');
+  h.controller.onEngineIdle();
+  await h.advance(6000);
+  h.interviewerFinal('And again, what we want from you is that checkout flow prototype we talked about.', { punctuationSource: 'provider' });
+  await h.advance(QUIET + 200);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].lastAnsweredText, NOVEL_TASK, 'the judge sees what was already answered');
+});
+
 test('no judge hook → byte-identical heuristic pipeline (no judged telemetry at all)', async () => {
   const h = makeHarness();
   h.interviewerFinal(Q, { punctuationSource: 'provider' });

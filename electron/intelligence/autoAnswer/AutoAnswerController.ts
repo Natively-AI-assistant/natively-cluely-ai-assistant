@@ -473,6 +473,10 @@ export class AutoAnswerController {
                         recentTurns: this.turnsBefore(candidate).slice(-JUDGE_CONTEXT_TURNS),
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
+                        // Semantic dedup: the judge sees what was already
+                        // answered, because restatements share too few tokens
+                        // for the Jaccard/normalized layers (live fd28a1af).
+                        lastAnsweredText: this.lastDispatchedText,
                     }),
                     new Promise<null>((resolve) => {
                         timer = this.clock.setTimeout(() => { timedOut = true; resolve(null); }, JUDGE_DEADLINE_MS);
