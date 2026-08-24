@@ -137,3 +137,44 @@ test('polish gate still rejects genuinely invented facts', () => {
       `"${offender}" is not in the notes and must be rejected; got ${JSON.stringify(found)}`);
   }
 });
+
+// KNOWN, ACCEPTED LIMITATION (ruled 2026-08-24): the position-plus-capitalisation heuristic
+// exempts capitalisation at the start of EVERY sentence, not just the very first token of the
+// whole output. That means a hallucinated proper noun that opens a non-first sentence is
+// structurally invisible to the gate: `isFirstWord` forces `isProperNoun` false, and the token
+// is then dropped by the `!isNumberLike && !isCalendar && !isProperNoun` continue before it
+// ever reaches the grounded-set check. The alternative — a closed list of discourse
+// connectives — was rejected: it would silently re-reject legitimate sentence openers outside
+// the list ("Both sides agreed…", "Discussion focused…", "Participants raised…"), reintroducing
+// the exact RC-3 bug intermittently. This test documents the gap; it does NOT assert that
+// fabrication is caught here. If this test starts failing, the heuristic has been tightened —
+// that is a deliberate behaviour change to think about, not a break to paper over.
+test('KNOWN LIMITATION: a hallucinated proper noun opening a non-first sentence is not flagged', () => {
+  const sentenceInitial = 'Pilot scope moves forward with security review. Acme said the deal closes Friday.';
+  assert.deepEqual(newSignificantTokens(sentenceInitial, GROUNDED), [],
+    'documents the accepted gap: sentence-initial hallucinations are invisible to this heuristic');
+
+  // Contrast: the same fabricated token IS caught once it is not sentence-initial — this is
+  // what makes the assertion above meaningful rather than vacuous.
+  const midSentence = 'Pilot scope moves forward with security review at Acme.';
+  assert.ok(newSignificantTokens(midSentence, GROUNDED).includes('Acme'),
+    'sanity check: Acme must still be caught when not sentence-initial, or the test above is vacuous');
+});
+
+// FIX regression guard: `atSentenceStart` must advance BEFORE the stopword / punctuation-only /
+// non-fact-shaped `continue`s inside the loop, or a skipped token leaves it stale for the next
+// real token and silently reintroduces the RC-3 bug for the sentence that follows. Both a
+// stopword-terminated sentence and a sentence separated by a standalone punctuation-only token
+// are covered, so a future reordering of the checks inside the loop is caught here instead of
+// in production.
+test('sentence-boundary flag survives a trailing stopword and a trailing punctuation-only token', () => {
+  const trailingStopword =
+    'Pilot scope moves forward with it. However, security review is required before pilot.';
+  assert.deepEqual(newSignificantTokens(trailingStopword, GROUNDED), [],
+    'a legitimate opener after a stopword-terminated sentence must stay exempt');
+
+  const trailingPunctuationOnlyToken =
+    'Pilot scope moves forward with security review. ... Additionally, manual QA reporting takes two days each week.';
+  assert.deepEqual(newSignificantTokens(trailingPunctuationOnlyToken, GROUNDED), [],
+    'a legitimate opener after a standalone punctuation-only token must stay exempt');
+});
