@@ -23,6 +23,11 @@
 // and to 'technical-interview' for --meeting mode, sourced from ModesManager's
 // TEMPLATE_NOTE_SECTIONS so the measured sections match content the transcript can actually
 // supply. Override either with --sections <modeTemplateType>.
+//
+// --meeting mode shells out to the `sqlite3` CLI (via execFileSync) to read the local DB
+// read-only. That binary ships on macOS and most Linux distros but not on a stock Windows
+// install, so --meeting mode is macOS/Linux-practical; the <transcript.json> file mode has
+// no such dependency and works everywhere.
 if (process.env.RUN_NOTES_QUALITY_PROBE !== '1') {
   console.log('Set RUN_NOTES_QUALITY_PROBE=1 to run. This makes real LLM calls.');
   process.exit(0);
@@ -118,16 +123,23 @@ function loadTranscriptFromDb(idPrefix) {
     throw new Error(`Natively DB not found at ${dbPath}. Set NATIVELY_DB_PATH to override.`);
   }
 
+  // sqlite3's CLI has no first-class bind-parameter flag for a one-shot `sqlite3 db "SQL"`
+  // invocation, so true prepared-statement parameterization isn't available here. Instead
+  // of interpolating argv (idPrefix) or a DB-derived value (meetingId) straight into the SQL
+  // text, run every value through this escaper first — doubling embedded single quotes is
+  // the standard SQL-literal escape and closes the quote-breakout injection path that raw
+  // interpolation of argv left open (idPrefix comes directly from process.argv).
+  const sqlString = (value) => `'${String(value).replace(/'/g, "''")}'`;
   const runSql = (sql) => execFileSync('sqlite3', ['-readonly', '-json', dbPath, sql], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 
-  const meetingsRaw = runSql(`SELECT id FROM meetings WHERE id LIKE '${idPrefix}%' LIMIT 2;`);
+  const meetingsRaw = runSql(`SELECT id FROM meetings WHERE id LIKE ${sqlString(`${idPrefix}%`)} LIMIT 2;`);
   const meetings = meetingsRaw.trim() ? JSON.parse(meetingsRaw) : [];
   if (meetings.length === 0) throw new Error(`No meeting found with id prefix "${idPrefix}".`);
   if (meetings.length > 1) throw new Error(`Meeting id prefix "${idPrefix}" is ambiguous (matches ${meetings.length} meetings).`);
   const meetingId = meetings[0].id;
 
   const rowsRaw = runSql(
-    `SELECT speaker, content, timestamp_ms FROM transcripts WHERE meeting_id = '${meetingId}' ORDER BY timestamp_ms ASC;`
+    `SELECT speaker, content, timestamp_ms FROM transcripts WHERE meeting_id = ${sqlString(meetingId)} ORDER BY timestamp_ms ASC;`
   );
   const rows = rowsRaw.trim() ? JSON.parse(rowsRaw) : [];
   if (rows.length === 0) throw new Error(`Meeting ${idPrefix} has no transcript rows.`);
