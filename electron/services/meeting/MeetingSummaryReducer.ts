@@ -59,7 +59,8 @@ export class MeetingSummaryReducer {
     const risks = assignIds(mergeSimilar(flatMap(atoms, atom => atom.risks), 'risk')) as RiskItem[];
     const topics = dedupeStrings(flatMap(atoms, atom => atom.topics)).slice(0, 20);
     const people = mergePeople(flatMap(atoms, atom => atom.people)).slice(0, 20);
-    const sections = buildSections(params.modeNoteSections || [], atoms);
+    const sectionWarnings: string[] = [];
+    const sections = buildSections(params.modeNoteSections || [], atoms, sectionWarnings);
     const timeline = buildTimeline(atoms, decisions, actionItems, risks);
     // "Summary" (rendered at the top of the notes) = outcome-first, grounded, no filler.
     const tldr = buildSummary(decisions, actionItems, risks, atoms, sections, params.modeTemplateType);
@@ -70,6 +71,7 @@ export class MeetingSummaryReducer {
     const warnings = [...params.normalizedTranscript.qualityWarnings];
     const atomWarnings = dedupeStrings(flatMap(atoms, atom => atom.sourceQualityWarnings || []));
     warnings.push(...atomWarnings);
+    warnings.push(...sectionWarnings);
     if (atoms.length === 0) warnings.push('No summary atoms were produced; notes may be incomplete.');
 
     const generation: MeetingSummaryGenerationMeta = {
@@ -116,7 +118,15 @@ function flatMap<T>(atoms: ChunkMeetingAtoms[], mapper: (atom: ChunkMeetingAtoms
   return atoms.flatMap(mapper).filter(Boolean);
 }
 
-function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeetingAtoms[]): MeetingNoteSection[] {
+// Realistic density is 5-12 findings per section per chunk; a well-covered section across
+// 4-10 chunks can legitimately reach ~120 bullets. This cap exists only to bound pathological
+// input (a runaway chunk count or a misbehaving extractor), not to trim a normal dense
+// meeting — 500 is far above anything the density contract should ever produce. If it ever
+// fires, `buildSections` pushes a warning into `warnings` (below) naming the section and the
+// drop count, so truncation is never silent.
+const SECTION_BULLET_CAP = 500;
+
+function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeetingAtoms[], warnings: string[]): MeetingNoteSection[] {
   const sectionMap = new Map<string, { title: string; bullets: NoteBullet[]; order: number }>();
   const titleCounts = new Map<string, number>();
   let orderCounter = 0;
@@ -144,16 +154,33 @@ function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeet
       const section = sectionMap.get(id)!;
       for (const finding of findings) {
         const text = typeof finding === 'string' ? finding : finding?.text;
-        if (!text || section.bullets.some(b => similar(b.text, text))) continue;
+        if (!text) continue;
         const evidence = (finding && typeof finding === 'object') ? finding.evidence : undefined;
         const confidence = (finding && typeof finding === 'object' && finding.confidence) ? finding.confidence : 'medium';
+        // Keep the RICHER text, mirroring mergeSimilar: the old code dropped whichever
+        // finding arrived second, and chunk 0 always arrives first — so a terse early
+        // bullet permanently shadowed a more specific later one in this exact path.
+        const existing = section.bullets.find(b => similar(b.text, text));
+        if (existing) {
+          if (text.trim().length > (existing.text || '').trim().length) {
+            existing.text = text;
+          }
+          if (evidence?.length) existing.evidence = [...(existing.evidence || []), ...evidence].slice(0, 4);
+          continue;
+        }
         section.bullets.push({ id: `bullet_${crypto.randomUUID()}`, text, ...(evidence?.length ? { evidence } : {}), confidence });
       }
     }
   }
 
   return [...sectionMap.entries()]
-    .map(([id, section]) => ({ id, title: section.title, bullets: section.bullets.slice(0, 20), order: section.order }))
+    .map(([id, section]) => {
+      if (section.bullets.length > SECTION_BULLET_CAP) {
+        const dropped = section.bullets.length - SECTION_BULLET_CAP;
+        warnings.push(`Section "${section.title}" produced ${section.bullets.length} findings; kept the first ${SECTION_BULLET_CAP} chronologically and dropped ${dropped}.`);
+      }
+      return { id, title: section.title, bullets: section.bullets.slice(0, SECTION_BULLET_CAP), order: section.order };
+    })
     .filter(section => section.bullets.length > 0)
     // Next-steps sections are suppressed at the source, so they never reach the
     // notes, the follow-up draft inputs, or any recipe built from `sections`.
