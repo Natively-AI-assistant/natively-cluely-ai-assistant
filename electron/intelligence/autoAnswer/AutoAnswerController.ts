@@ -57,6 +57,12 @@ export const ECHO_FRAGMENT_MIN_WORDS = 2;
 export const ECHO_ACTIVATE_COUNT = 2;
 export const ECHO_FLAG_WINDOW = 4;
 /**
+ * User-channel BACKCHANNELS (live run 8168240a, 2026-08-24): short listening
+ * signals — affirmations, acknowledgements, laughter — possibly repeated
+ * ("yeah, yeah.", "okay, right."). They are not the user answering.
+ */
+export const USER_BACKCHANNEL = /^(?:(?:yeah|yes|yep|yup|ya|mm-?hm+|mhm+|uh-?huh|ok(?:ay)?|right|sure|cool|got it|i see|nice|great|perfect|exactly|interesting|makes sense|sounds good|true|correct|wow|oh|ah|hm+|haha+|alright|of course|fair enough|no problem|totally|absolutely|definitely|indeed|good|fine)[\s,.!?-]*){1,4}$/i;
+/**
  * Post-commit rhetorical hold (V3 Amendment 3): measured from the
  * interviewer's end of speech, cancelled if they resume ("Why do we do it
  * that way? Well, because…"). A quiet-window commit has usually waited this
@@ -272,6 +278,18 @@ export class AutoAnswerController {
             const isEcho = recent.some(f => speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY)
                 || (userWords >= ECHO_FRAGMENT_MIN_WORDS && recent.length > 0
                     && tokenContainment(text, recent.map(f => f.text).join(' ')) >= ECHO_FRAGMENT_CONTAINMENT);
+            // A BACKCHANNEL is not the user taking the floor. "Yeah." from the
+            // mic 372 ms after the wordle question discarded the only real ask
+            // of live run 8168240a (speakers bleeding one word — too short for
+            // both echo checks). And with headphones the user still says
+            // "yeah / mm-hm / right" WHILE the interviewer talks: active
+            // listening must never kill a candidate. Backchannels neither
+            // close the accumulation nor read as answering — and they carry
+            // no evidence about echo, so they leave the echo flags alone.
+            if (!isEcho && USER_BACKCHANNEL.test(text)) {
+                this.emit({ name: 'auto_answer_ignored', skipReason: 'backchannel' });
+                return;
+            }
             this.recentUserEchoFlags.push(isEcho);
             while (this.recentUserEchoFlags.length > ECHO_FLAG_WINDOW) this.recentUserEchoFlags.shift();
             const echoes = this.recentUserEchoFlags.filter(Boolean).length;

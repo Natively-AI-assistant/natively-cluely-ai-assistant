@@ -894,3 +894,31 @@ test('live#7b: GENUINE user speech (words not in recent interviewer speech) stil
   assert.deepEqual(h.texts(), []);
   assert.ok(h.state.skips.includes('user_answering'));
 });
+
+// ── Live-run repro (2026-08-24, session 6): meeting 8168240a — a one-word mic
+// backchannel ("Yeah.") 372ms after the wordle question DISCARDED the only
+// real ask of the run as user_answering. Too short for both echo checks; and
+// with headphones a user still backchannels while the interviewer talks.
+
+test('live#8: user backchannels ("Yeah.", "Mm-hm.") never kill a question (meeting 8168240a verbatim)', async () => {
+  const h = makeHarness();
+  h.interviewerFinal('Okay, have you heard of the popular word game called "wordle"?', { punctuationSource: 'provider' });
+  await h.advance(372);
+  h.userFinal('Yeah.');                                 // verbatim mic blip
+  await h.advance(400);
+  h.userFinal('Mm-hm.');
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.ok(h.texts().some(t => /wordle/.test(t)),
+    `the question must survive backchannels (dispatched: ${JSON.stringify(h.texts())}, skips: ${h.state.skips.join(',')})`);
+  assert.ok(!h.state.skips.includes('user_answering'), `skips: ${h.state.skips.join(',')}`);
+});
+
+test('live#8b: a short GENUINE user answer (own words, not a listening signal) still cancels', async () => {
+  const h = makeHarness();
+  h.interviewerFinal('How many years of React experience do you have?', { punctuationSource: 'provider' });
+  await h.advance(300);
+  h.userFinal('About three years now.');
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.deepEqual(h.texts(), []);
+  assert.ok(h.state.skips.includes('user_answering'));
+});

@@ -900,6 +900,23 @@ dispatches exactly the wordle question + the task ("your task— Connor— is to
 reads as timeout — step the tail. Tests live#7/7b (fragment echo, mutation-probed red; genuine speech). Suite
 214/214 · evaluator gate unchanged · typecheck clean.
 
+### Live-run repairs, round 6 (2026-08-24 — meeting 8168240a; the "Yeah." kill)
+Second physical judge run, again zero answers. Telemetry showed the judge running correctly on every consult
+(~0.9-1.4 s verdicts; it logs nothing to the console, which made it LOOK absent) and everything it saw was
+correctly silent exposition — but the wordle question never REACHED it: a one-word mic final ("Yeah.", speakers
+again, 372 ms after the question; then "Mm-hm.") closed the accumulation as user_turn → `user_answering`. One
+word defeats both echo checks (twin similarity and the ≥2-word containment gate). And the fix matters beyond the
+speaker setup: with headphones a user still backchannels while the interviewer talks.
+13. **User BACKCHANNELS are not the user taking the floor.** `USER_BACKCHANNEL` (short listening signals,
+    possibly repeated, ≤4 tokens: yeah/mm-hm/okay/right/…) on the user channel neither closes the accumulation
+    nor reads as answering, and leaves the echo flags alone. A short GENUINE answer in own words ("About three
+    years now.") still cancels. Trade-off accepted: a question the user answers with a bare "Yes." stays live.
+The task was again absent from the recording — the meeting stopped mid-exposition (34 segments, before
+"your task Connor"): the test needs the video to run ~5 s past the task line.
+Validation: meeting 8168240a replayed verbatim both channels through the REAL judge — the wordle question
+dispatches, zero user_answering skips, everything else silent. Test live#8/8b (backchannel branch
+mutation-probed red). Suite 216/216 · typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
