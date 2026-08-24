@@ -6898,13 +6898,27 @@ export class AppState {
     const { CredentialsManager } = require('./services/CredentialsManager');
     CredentialsManager.getInstance().setSttLanguage(key);
 
-    // 'auto' is only meaningful for NativelyProSTT — other providers fall back to en-US.
-    const sttProvider = CredentialsManager.getInstance().getSttProvider();
-    const effectiveKey = (key === 'auto' && sttProvider !== 'natively') ? 'english-us' : key;
-
-    this.googleSTT?.setRecognitionLanguage(effectiveKey);
-    this.googleSTT_User?.setRecognitionLanguage(effectiveKey);
-    this.processingHelper.getLLMHelper().setSttLanguage(effectiveKey);
+    // 'auto' is forwarded verbatim (changed 2026-08-24). The old collapse to
+    // 'english-us' for every non-Natively provider was stale: each provider
+    // implements its own 'auto' branch and has for some time —
+    //   GoogleSTT            en-US + fr/es/de alternativeLanguageCodes
+    //   DeepgramStreamingSTT language 'multi' (nova-3 multilingual)
+    //   ElevenLabsStreaming  language_code omitted
+    //   NvidiaNimStreaming   null → the model's own multi default
+    //   SonioxStreaming      no hint + enable_language_identification
+    //   LocalWhisperSTT      auto-detect (and self-normalises for Nemotron,
+    //                        which has no auto mode — see modelLanguageSupport)
+    //   RestSTT              language form-field omitted
+    // Collapsing here silently answered "Auto Detect" with English on all of
+    // them, and — now that getSttLanguage() defaults to 'auto' — would have
+    // pinned every untouched install to English instead.
+    //
+    // createSTTProvider() also passes the raw persisted key at construction
+    // time, so removing the collapse makes both call sites agree; they used to
+    // disagree for exactly this value.
+    this.googleSTT?.setRecognitionLanguage(key);
+    this.googleSTT_User?.setRecognitionLanguage(key);
+    this.processingHelper.getLLMHelper().setSttLanguage(key);
   }
 
   public static getInstance(): AppState {

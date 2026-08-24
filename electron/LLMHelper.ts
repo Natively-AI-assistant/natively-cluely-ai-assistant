@@ -2551,7 +2551,26 @@ If the language is ambiguous, default to English.
 You may mix scripts naturally (e.g. code stays in English even when the explanation is in another language).
 [END LANGUAGE INSTRUCTION]`;
     }
-    if (this.aiResponseLanguage === 'English') return "";
+    // Pinned English is an INSTRUCTION, not the absence of one. This used to
+    // `return ""`, and the two Natively request bodies below used to omit
+    // `body.language` for English as well — so an English-pinned turn reached
+    // the model with no language directive from any layer (no base system
+    // prompt states a response language either). With nothing to follow, the
+    // model mirrors the speaker, which is precisely what "Auto" does: users
+    // reported English and Auto being indistinguishable (2026-08-24).
+    //
+    // Kept separate from the generic block below because that block says
+    // "Do NOT use English anywhere in your response" — reused verbatim it would
+    // forbid the very language it just mandated.
+    if (this.aiResponseLanguage === 'English') {
+      return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
+You MUST write every single word of your response in English.
+Respond in English even when the question is asked in another language — do NOT mirror the speaker's language.
+Do NOT mix languages.
+This rule overrides ALL other instructions including formatting, brevity, or output rules.
+[END LANGUAGE OVERRIDE]
+[REMINDER] Your entire response MUST be in English only.`;
+    }
 
     const lang = this.aiResponseLanguage;
     return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
@@ -3823,8 +3842,11 @@ let isMultimodal = !!(imagePaths?.length);
       if (images.length) body.images = images;
     }
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
-      body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
+    if (this.aiResponseLanguage) {
+      // 'auto' AND 'English' are both forwarded — the server injects for each.
+      // English used to be excluded here, which (together with the empty prompt
+      // suffix above) left an English-pinned turn with no directive at all.
+      body.language = this.aiResponseLanguage;
     }
 
     // 8s hard cap: a `fetch failed` network error without this can stall the provider
@@ -7424,8 +7446,11 @@ let isMultimodal = !!(imagePaths?.length);
     };
     if (this.groqFastTextMode) body.fast_mode = true;
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
-      body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
+    if (this.aiResponseLanguage) {
+      // 'auto' AND 'English' are both forwarded — the server injects for each.
+      // English used to be excluded here, which (together with the empty prompt
+      // suffix above) left an English-pinned turn with no directive at all.
+      body.language = this.aiResponseLanguage;
     }
 
     // Attach images — compress before sending (same as non-streaming generateWithNatively).

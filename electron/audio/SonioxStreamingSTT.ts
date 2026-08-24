@@ -85,19 +85,86 @@ export class SonioxStreamingSTT extends EventEmitter {
 
     /** Set recognition language hint using ISO-639-1 code */
     public setRecognitionLanguage(key: string): void {
-        const config = RECOGNITION_LANGUAGES[key];
-        if (config) {
-            this.languageCode = config.iso639;
-            console.log(`[SonioxStreaming] Language hint set to ${this.languageCode}`);
+        const previous = this.languageCode;
 
-            if (this.isActive) {
-                console.log('[SonioxStreaming] Language changed while active. Scheduling debounced restart...');
-                this.scheduleRestart();
-            }
-        } else if (key === 'auto') {
+        // 'auto' MUST be tested before the table lookup. RECOGNITION_LANGUAGES
+        // has a real 'auto' entry whose iso639 is the literal string 'auto', so
+        // the lookup below matched it and pinned `language_hints: ['auto']` —
+        // a language code Soniox does not know. The `else if (key === 'auto')`
+        // this replaces was unreachable dead code (found by
+        // SonioxPinnedLanguageStrict2026_08_24.test.mjs). Harmless-looking
+        // before, actively wrong now that a hint is sent as strict.
+        if (key === 'auto') {
             this.languageCode = undefined;
-            console.log(`[SonioxStreaming] Language hint set to auto`);
+            console.log('[SonioxStreaming] Language hint set to auto');
+        } else {
+            const config = RECOGNITION_LANGUAGES[key];
+            if (!config) {
+                console.warn(`[SonioxStreaming] Unknown language key: ${key} — keeping ${previous ?? 'auto'}`);
+                return;
+            }
+            this.languageCode = config.iso639;
+            console.log(`[SonioxStreaming] Language hint set to ${this.languageCode} (strict)`);
         }
+
+        if (this.languageCode !== previous && this.isActive) {
+            console.log('[SonioxStreaming] Language changed while active. Scheduling debounced restart...');
+            this.scheduleRestart();
+        }
+    }
+
+    /**
+     * The config frame Soniox expects as the first message of a session.
+     *
+     * Extracted from the ws 'open' handler (2026-08-24) so the language
+     * decision is reachable without a live socket — see
+     * electron/audio/__tests__/SonioxPinnedLanguageStrict2026_08_24.test.mjs.
+     *
+     * Language handling, and why it changed:
+     *
+     *   • `enable_language_identification` used to be set UNCONDITIONALLY. That
+     *     is Soniox's auto-detect mode, so a pinned session ran with full
+     *     multilingual detection switched on — the setting looked inert. The
+     *     natively-api relay already scoped this to auto-only; this path did not.
+     *
+     *   • `language_hints_strict` is sent alongside the hint because that is
+     *     Soniox's documented way to restrict recognition
+     *     (https://soniox.com/docs/stt/concepts/language-restrictions).
+     *
+     *     MEASURED 2026-08-24, and it is NOT a guarantee: streaming Spanish and
+     *     German fixtures against stt-rt-v5 while pinning `['en']` returned the
+     *     full Spanish/German transcript, byte-identical with and without the
+     *     strict flag. The flag is accepted (no error, no session kill) and has
+     *     no observable effect on the real-time model. It is kept because it
+     *     costs nothing and is the forward-compatible spelling — NOT because
+     *     the pin is enforced. On stt-rt-v5 a pinned language biases accuracy;
+     *     it does not restrict recognition. The relay's other providers
+     *     (Chirp2 languageCodes, ElevenLabs language_code, Deepgram pinned
+     *     mode) DO restrict.
+     *
+     *     A single hint still covers accents — there is no en-US/en-GB split
+     *     to lose.
+     */
+    private buildConfigFrame(): Record<string, unknown> {
+        const config: Record<string, unknown> = {
+            api_key: this.apiKey,
+            model: 'stt-rt-v5',
+            audio_format: 'pcm_s16le',
+            sample_rate: this.sampleRate,
+            num_channels: this.numChannels,
+            enable_endpoint_detection: true,
+        };
+
+        if (this.languageCode) {
+            config.language_hints = [this.languageCode];
+            config.language_hints_strict = true;
+        } else {
+            // Auto-detect: identify per-token languages so mid-conversation
+            // switches are followed rather than forced into one model.
+            config.enable_language_identification = true;
+        }
+
+        return config;
     }
 
     /**
@@ -261,19 +328,7 @@ export class SonioxStreamingSTT extends EventEmitter {
             console.log('[SonioxStreaming] Connected, sending config...');
 
             // Send initial configuration as first message
-            const config: any = {
-                api_key: this.apiKey,
-                model: 'stt-rt-v5',
-                audio_format: 'pcm_s16le',
-                sample_rate: this.sampleRate,
-                num_channels: this.numChannels,
-                enable_language_identification: true,
-                enable_endpoint_detection: true,
-            };
-
-            if (this.languageCode) {
-                config.language_hints = [this.languageCode];
-            }
+            const config: any = this.buildConfigFrame();
 
             try {
                 // Use ?. (not !) — stop() could theoretically null this.ws between the
