@@ -967,6 +967,45 @@ meeting-notes workstream and were left untouched. Cleanup-tier residuals recorde
 duplicated between engines (extract when V3 retires), dead `turnsBefore(cutoff)` param. Suite 234/234 ·
 typecheck clean.
 
+### Automated A/B/C on the standing test video (2026-08-25)
+The user's own test clip (youtube 5xf4_Kx7azg, 0:00-2:10 = recorded meeting fd28a1af, 58 interviewer finals)
+replayed through ALL THREE engines with the real judge, identical fake clock and a 6 s streaming-engine model.
+Harness `scratchpad/abc-test.mjs`; two segmentations per judged engine — the DB replay (no interims: every
+recorded pause is a stoppage) and a live model (interims every 350 ms while a final-to-final gap < 2.5 s).
+
+| engine | judge calls | dispatched | REAL asks | garbage | $/hr (judge+answer) |
+|---|---|---|---|---|---|
+| legacy | 0 | 17 | 0 | 17 | $2.84 |
+| v3 (db) | 41 | 3 | 2 | 1 | $0.67 |
+| **simple (db)** | 52 | **2** | **2** | **0** | $0.55 |
+| v3 (live) | 25 | 4 | 2 | 2 | $0.77 |
+| **simple (live)** | **7** | **2** | **2** | **0** | **$0.36** |
+
+Legacy is the MOST expensive engine despite a free trigger: every garbage firing burns a full answer generation
+(~$0.006), so the 2-20 cents/hour judge gate saves ~$2.50/hour of wasted answers. Simple is the only engine with
+perfect precision AND recall in both segmentations; V3 leaks fragment dispatches ("your task Connor is" alone).
+
+**Two defects the A/B/C surfaced, both fixed here:**
+20. The prefix-caching prompt reorder (static block first, schema before the candidate) was REVERTED: measured
+    `usageMetadata.cachedContentTokenCount === 0` on every call at this prompt size — implicit caching never
+    engaged, so it bought nothing — while merged-turn asks regressed 3/3 → 0/3 rhetorical, reproducing a live
+    miss visible in the 20:17 telemetry of the V3 run. Rules and schema are the LAST thing the model reads again
+    (also review finding #4's recency shield); the already-answered rule moved to the trailing block too, after
+    it was measured firing on five elaborations of a just-answered task.
+21. Completeness was being judged with the help of context: "…and your task— Connor—" (verbatim, meeting
+    680519c8) read as complete=0.9 WITH context and answered-state, though it is incomplete standalone — the
+    engine dispatched the truncated fragment as the question. New rule: judge completeness on the candidate's
+    own last words, never on what context lets you guess; never extract a fragment as question_text.
+
+**Prompt work is now measured, not argued.** `electron/intelligence/autoAnswer/__tests__/judgeEval.mjs` (manual,
+real-model, never in `npm test`) scores any prompt revision against
+`fixtures/judge-eval-wordle.json` — every candidate the engine actually judges on the test video in both
+segmentations, labeled by whether it carries a not-yet-answered ask:
+`node electron/intelligence/autoAnswer/__tests__/judgeEval.mjs` → precision/recall + each false fire and miss.
+Current: **54 candidates, precision 1.000, recall 1.000**. Independent guards also green: 7/7 merge/rhetorical
+probe, 12/12 scenario probe (sales, lecture, standup, prompt-injection), all three recorded meetings dispatching
+exactly their real asks. Suite 235/235 · typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
