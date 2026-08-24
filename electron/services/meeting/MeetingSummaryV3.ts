@@ -212,6 +212,18 @@ const VALID_TIMELINE_TYPE = new Set<TimelineItemType>(['topic_shift', 'decision'
 const VALID_FOLLOWUP_TYPE = new Set<FollowUpDraftType>(['email', 'slack', 'project_update', 'crm_note', 'study_notes', 'interview_feedback']);
 const VALID_FOLLOWUP_TONE = new Set<FollowUpTone>(['professional', 'warm', 'concise', 'friendly']);
 
+// Realistic density is 5-12 findings per section per chunk; a well-covered section across
+// 4-10 chunks can legitimately reach ~120 bullets. This cap exists only to bound pathological
+// input (a runaway chunk count or a misbehaving extractor), not to trim a normal dense
+// meeting — 500 is far above anything the density contract should ever produce.
+//
+// Single source of truth: MeetingSummaryReducer.buildSections applies this same cap (with its
+// own truncation warning) BEFORE validateMeetingSummaryV3 runs, and sanitizeSections below
+// applies it again as the schema's own floor (so any summary object, not just one produced by
+// the reducer, gets the same protection). Both call sites import this constant so they cannot
+// drift apart.
+export const SECTION_BULLET_CAP = 500;
+
 export function cleanString(value: unknown): string {
   return String(value ?? '').replace(NUL_RE, '').replace(/\s+/g, ' ').trim();
 }
@@ -561,7 +573,7 @@ function sanitizeSections(value: unknown, max: number): MeetingNoteSection[] {
   return arr(value).map((section: any, index: number) => ({
     id: cleanId(section?.id || section?.title || `section_${index}`),
     title: cleanString(section?.title || `Section ${index + 1}`),
-    bullets: sanitizeBullets(section?.bullets, 30),
+    bullets: sanitizeBullets(section?.bullets, SECTION_BULLET_CAP),
     order: num(section?.order) ?? index,
   })).filter((s: MeetingNoteSection) => s.title && s.bullets.length > 0)
     .sort((a, b) => a.order - b.order)

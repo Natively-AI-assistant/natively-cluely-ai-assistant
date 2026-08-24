@@ -16,6 +16,7 @@ import type {
   RiskItem,
   TimelineItem,
 } from './types';
+import { SECTION_BULLET_CAP } from './MeetingSummaryV3';
 
 // ── "Next steps" suppression (2026-08-24, product decision) ───────────────────
 // The labelled "Next steps" block was judged redundant in generated meeting notes
@@ -68,10 +69,13 @@ export class MeetingSummaryReducer {
     const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType);
     const actionConfidence = deriveActionConfidence(actionItems);
     const transcriptCoverage = Math.max(0, Math.min(1, typeof params.transcriptCoverage === 'number' ? params.transcriptCoverage : (params.normalizedTranscript.totalChars > 0 ? 1 : 0)));
-    const warnings = [...params.normalizedTranscript.qualityWarnings];
+    // Order matters: sourceQuality.warnings is capped downstream (sanitizeStringArray keeps
+    // only the FIRST N and silently drops the rest — see MeetingSummaryV3.ts). A section-
+    // truncation warning is the rarest and highest-value signal (it says "notes content was
+    // deleted"), so it must never lose its slot to lower-value transcript/atom warnings in the
+    // exact giant-meeting scenario where truncation actually fires. Put it first.
     const atomWarnings = dedupeStrings(flatMap(atoms, atom => atom.sourceQualityWarnings || []));
-    warnings.push(...atomWarnings);
-    warnings.push(...sectionWarnings);
+    const warnings = [...sectionWarnings, ...atomWarnings, ...params.normalizedTranscript.qualityWarnings];
     if (atoms.length === 0) warnings.push('No summary atoms were produced; notes may be incomplete.');
 
     const generation: MeetingSummaryGenerationMeta = {
@@ -118,13 +122,14 @@ function flatMap<T>(atoms: ChunkMeetingAtoms[], mapper: (atom: ChunkMeetingAtoms
   return atoms.flatMap(mapper).filter(Boolean);
 }
 
-// Realistic density is 5-12 findings per section per chunk; a well-covered section across
-// 4-10 chunks can legitimately reach ~120 bullets. This cap exists only to bound pathological
-// input (a runaway chunk count or a misbehaving extractor), not to trim a normal dense
-// meeting — 500 is far above anything the density contract should ever produce. If it ever
-// fires, `buildSections` pushes a warning into `warnings` (below) naming the section and the
-// drop count, so truncation is never silent.
-const SECTION_BULLET_CAP = 500;
+// SECTION_BULLET_CAP is defined in MeetingSummaryV3.ts and reused here so this reducer-level
+// cap and the schema validator's cap (sanitizeSections -> sanitizeBullets, which runs on the
+// reduced summary immediately after this) can never drift apart. Realistic density is 5-12
+// findings per section per chunk; a well-covered section across 4-10 chunks can legitimately
+// reach ~120 bullets. This cap exists only to bound pathological input (a runaway chunk count
+// or a misbehaving extractor), not to trim a normal dense meeting — 500 is far above anything
+// the density contract should ever produce. If it ever fires, `buildSections` pushes a warning
+// into `warnings` (below) naming the section and the drop count, so truncation is never silent.
 
 function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeetingAtoms[], warnings: string[]): MeetingNoteSection[] {
   const sectionMap = new Map<string, { title: string; bullets: NoteBullet[]; order: number }>();
@@ -165,7 +170,7 @@ function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeet
           if (text.trim().length > (existing.text || '').trim().length) {
             existing.text = text;
           }
-          if (evidence?.length) existing.evidence = [...(existing.evidence || []), ...evidence].slice(0, 4);
+          if (evidence?.length) existing.evidence = [...(existing.evidence || []), ...evidence].slice(0, 3);
           continue;
         }
         section.bullets.push({ id: `bullet_${crypto.randomUUID()}`, text, ...(evidence?.length ? { evidence } : {}), confidence });
@@ -408,7 +413,7 @@ function mergeSimilar<T extends { text: string; evidence?: any[] }>(items: T[], 
     if ((item.text || '').trim().length > (existing.text || '').trim().length) {
       existing.text = item.text;
     }
-    existing.evidence = [...(existing.evidence || []), ...(item.evidence || [])].slice(0, 4);
+    existing.evidence = [...(existing.evidence || []), ...(item.evidence || [])].slice(0, 3);
     if (kind === 'action') {
       const e = existing as any;
       const i = item as any;

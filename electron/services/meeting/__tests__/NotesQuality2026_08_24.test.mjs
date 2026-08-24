@@ -9,6 +9,7 @@ const { similar, MeetingSummaryReducer } = await import(pathToFileURL(path.join(
 const { TranscriptNormalizer } = await import(pathToFileURL(path.join(base, 'TranscriptNormalizer.js')).href);
 const { newSignificantTokens } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
 const { buildChunkPrompt } = await import(pathToFileURL(path.join(base, 'ChunkSummaryGenerator.js')).href);
+const { MeetingSummarySchemaValidator } = await import(pathToFileURL(path.join(base, 'MeetingSummarySchemaValidator.js')).href);
 
 // The old rule was `shared / min(wordCount) >= 0.8` — pure subset containment — so a short
 // vague bullet always matched a longer specific one, and mergeSimilar kept the FIRST-seen
@@ -137,13 +138,24 @@ test('when two mode-section findings merge, the richer text wins (buildSections,
     `the richer text must win in buildSections, got: "${section.bullets[0].text}"`);
 });
 
-test('a section that exceeds the bullet cap truncates AND warns loudly (not silently)', () => {
+test('a section that exceeds the bullet cap truncates AND warns loudly (not silently), through the real validated path', () => {
   // The old cap was 20 — written back when sections yielded 1-3 bullets per chunk. At the
   // new 5-12-findings-per-section-per-chunk density contract, a well-covered section across
   // 4-10 chunks legitimately produces 20-120 bullets, so the old cap bound on every dense
   // meeting and silently deleted the back half of that section with zero warning anywhere.
   // The cap must now sit far above realistic density (asserted here by exceeding it with
   // distinct findings), and firing it must leave a trace in sourceQuality.warnings.
+  //
+  // IMPORTANT (I2c, 2026-08-24 residual review): a prior version of this test asserted only
+  // against `new MeetingSummaryReducer().reduce(...)`'s raw output. That is NOT the path that
+  // ships — `MeetingContextAssembler.assembleSummary` always runs the reduced summary through
+  // `MeetingSummarySchemaValidator.validateAndRepairSummary` before returning/persisting it,
+  // and that validator's own `sanitizeSections` -> `sanitizeBullets` call applies ITS OWN
+  // per-section bullet cap. A prior fix wave raised only the reducer's cap (to 500), leaving
+  // the validator's cap at the old, unrelated value of 30 — the reducer-only test stayed green
+  // while production still truncated every section at 30. This test now asserts on the
+  // VALIDATED output (mirroring the real pipeline), so a cap mismatch between the two layers
+  // fails here.
   const normalized = new TranscriptNormalizer().normalize([
     { speaker: 'Ari', text: 'Talking.', timestamp: 0, final: true },
   ]);
@@ -157,15 +169,20 @@ test('a section that exceeds the bullet cap truncates AND warns loudly (not sile
       topics: [], decisions: [], openQuestions: [], risks: [], deadlines: [],
       actionItems: [], people: [], importantQuotes: [],
       modeSpecificFindings: {
-        // Two DIFFERENT varying numbers (i and i+100000), not the same number repeated —
-        // a repeated number collapses to one token in similar()'s word Set, which raises
-        // the Dice score enough to falsely merge consecutive findings.
-        Notes: [{ text: `Distinct customer point ${i} concerning topic segment ${i + 100000}`, evidence: [], confidence: 'high' }],
+        // Five shared non-stopword tokens ("customer raised concern about workstream") plus
+        // FOUR per-item distinguishing tokens (case/phase/batch/code, each suffixed with i).
+        // Word-set size is 9/9, shared is 5 -> Dice = 2*5/18 = 0.556 -- far below the 0.8
+        // merge threshold with real margin. The PREVIOUS fixture used only two distinguishing
+        // numbers appended to six shared words (8/8 words, 6 shared -> Dice 0.75 against a
+        // 0.80 threshold): one extra shared word anywhere would have tipped it to 0.875 and
+        // collapsed every finding into a single bullet, failing this test for an unrelated
+        // reason. This fixture is robustly dissimilar instead of skimming the threshold.
+        Notes: [{ text: `Customer raised concern about workstream case${i} phase${i} batch${i} code${i}`, evidence: [], confidence: 'high' }],
       },
     });
   }
 
-  const summary = new MeetingSummaryReducer().reduce({
+  const reduced = new MeetingSummaryReducer().reduce({
     title: 'dense meeting',
     atoms,
     normalizedTranscript: normalized,
@@ -173,13 +190,26 @@ test('a section that exceeds the bullet cap truncates AND warns loudly (not sile
     modeNoteSections: [{ title: 'Notes', description: 'general notes' }],
   });
 
-  const section = summary.sections.find(s => s.title === 'Notes');
-  assert.ok(section, 'the Notes section should exist');
-  assert.ok(section.bullets.length > 20, 'the cap must not bind at the old 20-bullet ceiling');
-  assert.ok(section.bullets.length < BULLET_COUNT, 'the cap must still bind on a pathological input');
-  const dropped = BULLET_COUNT - section.bullets.length;
-  const warning = summary.sourceQuality.warnings.find(w => w.includes('Notes') && w.includes(String(dropped)));
-  assert.ok(warning, `expected a warning naming the section and the drop count (${dropped}), got: ${JSON.stringify(summary.sourceQuality.warnings)}`);
+  // Sanity check on the reducer's own (non-binding-in-production) output first.
+  const reducedSection = reduced.sections.find(s => s.title === 'Notes');
+  assert.ok(reducedSection, 'the Notes section should exist in the reducer output');
+  assert.ok(reducedSection.bullets.length > 30, 'the reducer output must exceed the old, wrong 30-bullet cap');
+  assert.ok(reducedSection.bullets.length < BULLET_COUNT, 'the reducer-level cap must still bind on a pathological input');
+
+  // The path that actually ships: run the reduced summary through the schema validator, exactly
+  // as MeetingContextAssembler.assembleSummary does before persisting/rendering/feeding
+  // FollowUpDraftGenerator.
+  const validated = new MeetingSummarySchemaValidator().validateAndRepairSummary(reduced);
+  assert.ok(validated, 'validateAndRepairSummary should accept this summary');
+  const section = validated.sections.find(s => s.title === 'Notes');
+  assert.ok(section, 'the Notes section should survive validation');
+  assert.equal(section.bullets.length, reducedSection.bullets.length,
+    `the validator must not re-truncate below the reducer's own cap; reducer kept ${reducedSection.bullets.length}, validator kept ${section.bullets.length}`);
+  assert.ok(section.bullets.length > 30, 'the VALIDATED (shipped) output must exceed the old, wrong 30-bullet cap');
+
+  const dropped = BULLET_COUNT - reducedSection.bullets.length;
+  const warning = validated.sourceQuality.warnings.find(w => w.includes('Notes') && w.includes(String(dropped)));
+  assert.ok(warning, `expected the truncation warning to survive validation and name the section + drop count (${dropped}), got: ${JSON.stringify(validated.sourceQuality.warnings)}`);
 });
 
 const GROUNDED = `Summary points:

@@ -9434,7 +9434,7 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // ATTEMPT 1: Natively API (if configured — first in chain)
-    // Inner fetch timeout: caller's timeoutMs, default 10s (AbortSignal.timeout in
+    // Inner fetch timeout: caller's timeoutMs, default 8s (AbortSignal.timeout in
     // generateWithNatively). Outer safety net: timeoutMs + 5s (default 10s when the
     // caller passes no opts, so uninvolved callers are unaffected) — the extra slack
     // covers JSON parsing and any overhead after the fetch resolves, mirroring the
