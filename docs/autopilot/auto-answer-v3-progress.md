@@ -772,6 +772,15 @@ chatter pinned silent). Auto Answer suite 189/189 · evaluator gate green (preci
 full suite 8513 / 8448 / 2 (Ollama pair) · typecheck clean. Full-meeting replay: 1 auto answer (the prompt),
 3 offer-band cards (requirement fragments — Tab-gated, never auto), everything else silent.
 
+### A/B harness (2026-08-24, temporary)
+`NATIVELY_AUTO_ANSWER_ENGINE=legacy` routes the trigger through
+`electron/intelligence/LegacyAutoAnswerTrigger.ts` — a byte-faithful reproduction of the PR #497 path (bare 900 ms
+debounce restarted per final, single last turn as the question, hardcoded confidence 0.9, old gate, no rearm, no
+dual-channel/dedup/endpoints, its known starvation defect INCLUDED on purpose). Anything else (or unset) = the V3
+controller. Chosen once at startup; announced by `[AutoAnswer] engine=…` in the log; legacy dispatches/skips are
+prefixed `[AutoAnswer:legacy]`. Smoke-verified by hand (restart-then-fire-once, already_answered dedup). V3 suite
+unaffected (189/189). REMOVE the file and its main.ts wiring when the comparison is done.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

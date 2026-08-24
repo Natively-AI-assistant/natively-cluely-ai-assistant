@@ -1219,6 +1219,7 @@ import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
+import { LegacyAutoAnswerTrigger } from "./intelligence/LegacyAutoAnswerTrigger"
 import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
@@ -1495,6 +1496,7 @@ export class AppState {
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
     this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
+    console.log(`[AutoAnswer] engine=${this.autoAnswerEngineChoice}${this.autoAnswerEngineChoice === 'legacy' ? ' (A/B harness: NATIVELY_AUTO_ANSWER_ENGINE=legacy — PR #497 behaviour, no V3 pipeline)' : ''}`);
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}, autoAnswerEnabled=${this._autoAnswerEnabled}`);
 
     // Context Intelligence debug logging (Developer settings). Bind the level
@@ -3178,6 +3180,33 @@ export class AppState {
   // against the in-flight speculative run, rejects on the mismatch, bumps
   // currentGenerationId — cancelling the correctly-prefetched answer — and then
   // generates one for the PREVIOUS question.
+  /**
+   * A/B HARNESS: `NATIVELY_AUTO_ANSWER_ENGINE=legacy` routes the trigger
+   * through the byte-faithful PR #497 path instead of the V3 controller, so
+   * the two engines can be compared live in one build. Read once at startup;
+   * the log line below states which engine is active. Remove with
+   * LegacyAutoAnswerTrigger when the A/B is done.
+   */
+  private readonly autoAnswerEngineChoice: 'v3' | 'legacy' =
+    (process.env.NATIVELY_AUTO_ANSWER_ENGINE || '').toLowerCase() === 'legacy' ? 'legacy' : 'v3';
+  private readonly legacyAutoAnswer = new LegacyAutoAnswerTrigger({
+    isEnabled: () => this._autoAnswerEnabled,
+    isMeetingActive: () => this.isMeetingActive,
+    meetingGeneration: () => this._meetingGeneration,
+    lastInterviewerTurn: () => this.intelligenceManager.getLastInterviewerTurn(),
+    engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
+    log: (line) => console.log(line),
+    dispatch: (lastQuestion) => {
+      void this.intelligenceManager.handleSuggestionTrigger({
+        context: this.intelligenceManager.getFormattedContext(120),
+        lastQuestion,
+        confidence: 0.9,           // the old hardcoded value — deliberately
+      }).catch((error) => {
+        console.warn('[Main] Automatic interviewer answer failed (legacy):', error);
+      });
+    },
+  });
+
   // Auto Answer V3 (Settings > General, default OFF). AppState owns wiring and
   // lifecycle only; the controller owns turn accumulation, endpoint reasoning,
   // question identity, answerability, dedup, queueing, the dual-channel gate
@@ -3257,6 +3286,7 @@ export class AppState {
   }
 
   private cancelAutoAnswer(): void {
+    this.legacyAutoAnswer.cancelAutoAnswer();
     this.autoAnswerController.onMeetingStop();
     // Free the Smart Turn ORT session between meetings (and on toggle-off).
     // It is lazily re-created on the next interviewer speech-stop. Also keeps
@@ -3518,19 +3548,25 @@ export class AppState {
         punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
       });
 
-      // Auto Answer V3 (Settings > General, default OFF): every segment, any
-      // speaker, partial or final — the controller decides whether anything
-      // happens (V2 §24). Returns immediately when the toggle is off.
-      this.autoAnswerController.ingest({
-        speaker,
-        text: segment.text,
-        timestamp: Date.now(),
-        final: segment.isFinal,
-        confidence: segment.confidence,
-        origin: 'stt',
-        sttProvider: effectiveSttId,
-        punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
-      });
+      // Auto Answer (Settings > General, default OFF). Engine per the A/B
+      // switch: legacy = the PR #497 debounce on interviewer finals only;
+      // v3 = every segment, any speaker, the controller decides (V2 §24).
+      if (this.autoAnswerEngineChoice === 'legacy') {
+        if (segment.isFinal && speaker === 'interviewer') {
+          this.legacyAutoAnswer.scheduleAutoAnswer();
+        }
+      } else {
+        this.autoAnswerController.ingest({
+          speaker,
+          text: segment.text,
+          timestamp: Date.now(),
+          final: segment.isFinal,
+          confidence: segment.confidence,
+          origin: 'stt',
+          sttProvider: effectiveSttId,
+          punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
+        });
+      }
 
       // Feed final transcript to JIT RAG indexer
       if (segment.isFinal && this.ragManager) {
@@ -8503,6 +8539,19 @@ if (process.env.THINKING_MATRIX === '1') {
     });
     powerMonitor.on('suspend', () => {
       console.log('[Main] powerMonitor: system suspending. Captures will be recreated on resume if a meeting is active.');
+    });
+    // Unlocking the session is another moment the OS may have dropped global
+    // shortcut registrations (a lock can outlast a short sleep that never fired
+    // 'resume'). Same idempotent recovery as resume/display — it shrinks the
+    // stealth-OFF leak window further without an always-on keyboard hook. Unlike
+    // audio (which the OS doesn't tear down on lock, so 'lock-screen' is ignored
+    // for captures), shortcuts genuinely can be dropped here.
+    powerMonitor.on('unlock-screen', () => {
+      try {
+        KeybindManager.getInstance().revalidateShortcuts();
+      } catch (err) {
+        console.error('[Main] revalidateShortcuts on unlock-screen threw:', err);
+      }
     });
   } catch (err) {
     console.warn('[Main] powerMonitor unavailable — sleep/wake recovery disabled:', err);
