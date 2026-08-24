@@ -88,6 +88,32 @@ check('an unknown language key falls back to the model default', unknownLang.lan
 const unknownModel = sent('not-a-model', 'auto');
 check('unknown model falls back without crashing', unknownModel.languageCode === 'en-US', unknownModel.languageCode);
 
+// ── The Settings selector must offer only languages the model can serve ──
+const LANGS = require('/tmp/l.cjs').RECOGNITION_LANGUAGES;
+const MODELS_SRC = path.join(ROOT, 'electron/audio/nvidiaNimSttModels.ts');
+const modelsOut = path.join(tmp, 'models.cjs');
+esbuild.buildSync({ entryPoints: [MODELS_SRC], outfile: modelsOut, bundle: true, platform: 'node', format: 'cjs', target: 'node20', logLevel: 'error' });
+const { allowedLanguageKeysForNvidiaModel } = require(modelsOut);
+for (const m of NVIDIA_NIM_STT_MODELS) {
+  const keys = allowedLanguageKeysForNvidiaModel(m.id, LANGS);
+  check(`${m.id}: offers at least one language`, keys && keys.size > 0, `${keys && keys.size}`);
+  const subtags = new Set(m.locales.map((l) => l.split('-')[0].toLowerCase()));
+  const locales = new Set(m.locales.map((l) => l.toLowerCase()));
+  const bogus = [...keys].filter((k) => {
+    if (k === 'auto') return false;
+    const bcp = (LANGS[k].bcp47 || '').toLowerCase();
+    if (locales.has(bcp)) return false;                       // exact locale (nb-NO)
+    const sub = (LANGS[k].iso639 || LANGS[k].bcp47 || '').split('-')[0].toLowerCase();
+    return !subtags.has(sub);                                  // else language subtag (es)
+  });
+  check(`${m.id}: offers NO language the model cannot serve`, bogus.length === 0, bogus.join(',') || 'none');
+  check(`${m.id}: Auto offered only if it self-detects`, keys.has('auto') === !!m.multilingual, `auto=${keys.has('auto')} multilingual=${!!m.multilingual}`);
+  if (m.locales.length === 1 && m.locales[0] === 'en-US') {
+    check(`${m.id}: en-US build does not offer other English accents`, keys.size === 1 && keys.has('english-us'), [...keys].join(','));
+  }
+}
+check('an unknown model imposes no restriction', allowedLanguageKeysForNvidiaModel('nope', LANGS) === null);
+
 Module._load = realLoad;
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nall checks passed');

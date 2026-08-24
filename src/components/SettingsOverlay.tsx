@@ -41,7 +41,7 @@ import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import icon from './icon.png';
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
-import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL } from '../../electron/audio/nvidiaNimSttModels';
+import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -696,6 +696,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // memo that follow depend on it.
     const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
 
+    // Declared here for the same reason sttProvider is: the NVIDIA
+    // language-capability memo below reads it, and which languages that model
+    // can recognise gates the recognition-language selector.
+    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
+
     // Local model language capability (local-whisper provider only).
     // Per-model: which RECOGNITION_LANGUAGES keys the model accepts, whether
     // language is changeable at all, and whether accent/region variants mean
@@ -1041,9 +1046,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
+    // NVIDIA speech models are per-language deployments: the Vietnamese build
+    // serves vi-VN and nothing else, and the streaming English ones serve en-US
+    // only. Offering the full language list under them would let a user pick a
+    // language the selected model cannot recognise. Derived from each model's
+    // documented locales — see allowedLanguageKeysForNvidiaModel.
+    const nvidiaLanguageCapability = useMemo(() => {
+        if (sttProvider !== 'nvidia_nim') return null;
+        if (!availableLanguages || Object.keys(availableLanguages).length === 0) return null;
+        return allowedLanguageKeysForNvidiaModel(nvidiaNimSttModel, availableLanguages);
+    }, [sttProvider, nvidiaNimSttModel, availableLanguages]);
+
     // Language keys the active STT backend accepts. Unrestricted for cloud
     // providers; for local-whisper this is the active model's documented set.
-    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? null;
+    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) => !allowedLanguageKeySet || allowedLanguageKeySet.has(key);
 
     // Helper to get unique groups (restricted to what the active model accepts)
@@ -1175,8 +1191,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         reason?: string;
     } | null>(null);
 
-    // Nvidia Nim speech settings live beside the existing provider state.
-    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');

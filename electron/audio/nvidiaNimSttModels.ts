@@ -12,6 +12,22 @@
  */
 const MULTILINGUAL_LANGUAGE_CODE = 'multi';
 
+/** Locales documented on the Parakeet 1.1B RNNT multilingual card. */
+const PARAKEET_ML_LOCALES = [
+  'ar-AR', 'cs-CZ', 'da-DK', 'de-DE', 'en-GB', 'en-US', 'es-ES', 'es-US', 'fr-CA', 'fr-FR',
+  'he-IL', 'hi-IN', 'it-IT', 'ja-JP', 'ko-KR', 'nb-NO', 'nl-NL', 'pl-PL', 'pt-BR', 'pt-PT',
+  'ru-RU', 'sv-SE', 'th-TH', 'tr-TR',
+] as const;
+
+/**
+ * Nemotron 3.5 advertises "40 languages and locales" with automatic detection.
+ * Its card does not enumerate them, so this reuses the Parakeet multilingual
+ * set — a documented subset — rather than inventing the other sixteen. Being
+ * short here only hides languages that might work; being long would offer ones
+ * that do not.
+ */
+const NEMOTRON_35_LOCALES = PARAKEET_ML_LOCALES;
+
 export const DEFAULT_NVIDIA_NIM_STT_MODEL = 'nemotron-asr-streaming';
 
 export interface NvidiaNimSttModel {
@@ -30,6 +46,11 @@ export interface NvidiaNimSttModel {
    * preference, it is a misconfigured request.
    */
   singleLocale?: boolean;
+  /**
+   * BCP-47 locales the model documents, read off its card. Drives which
+   * recognition languages Settings offers while the model is selected.
+   */
+  locales: readonly string[];
 }
 
 /**
@@ -60,6 +81,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     functionId: 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa',
     languageCode: 'en-US',
     multilingual: false,
+    locales: ['en-US'],
   },
   {
     id: 'nemotron-3.5-asr-streaming-multilingual',
@@ -68,6 +90,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     functionId: 'bb0837de-8c7b-481f-9ec8-ef5663e9c1fa',
     languageCode: MULTILINGUAL_LANGUAGE_CODE,
     multilingual: true,
+    locales: NEMOTRON_35_LOCALES,
   },
   {
     id: 'parakeet-1.1b-rnnt-multilingual-asr',
@@ -76,6 +99,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     functionId: '71203149-d3b7-4460-8231-1be2543a1fca',
     languageCode: MULTILINGUAL_LANGUAGE_CODE,
     multilingual: true,
+    locales: PARAKEET_ML_LOCALES,
   },
   {
     id: 'parakeet-ctc-1.1b-asr',
@@ -85,6 +109,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     languageCode: 'en-US',
     multilingual: false,
     singleLocale: true,
+    locales: ['en-US'],
   },
   {
     id: 'parakeet-ctc-0.6b-asr',
@@ -94,6 +119,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     languageCode: 'en-US',
     multilingual: false,
     singleLocale: true,
+    locales: ['en-US'],
   },
   {
     id: 'parakeet-ctc-0.6b-es',
@@ -103,6 +129,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     languageCode: 'es-US',
     multilingual: false,
     singleLocale: true,
+    locales: ['es-US'],
   },
   {
     id: 'parakeet-ctc-0.6b-zh-cn',
@@ -112,6 +139,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     languageCode: 'zh-CN',
     multilingual: false,
     singleLocale: true,
+    locales: ['zh-CN'],
   },
   {
     id: 'parakeet-ctc-0.6b-zh-tw',
@@ -121,6 +149,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     languageCode: 'zh-TW',
     multilingual: false,
     singleLocale: true,
+    locales: ['zh-TW'],
   },
   {
     id: 'parakeet-ctc-0.6b-vi',
@@ -130,6 +159,7 @@ export const NVIDIA_NIM_STT_MODELS: readonly NvidiaNimSttModel[] = [
     languageCode: 'vi-VN',
     multilingual: false,
     singleLocale: true,
+    locales: ['vi-VN'],
   },
 ] as const;
 
@@ -138,4 +168,45 @@ export const NVIDIA_NIM_STT_MODEL_CONFIG: Record<string, NvidiaNimSttModel> =
 
 export function isNvidiaNimSttModel(model: string): boolean {
   return Object.prototype.hasOwnProperty.call(NVIDIA_NIM_STT_MODEL_CONFIG, model);
+}
+
+/**
+ * Recognition-language keys Settings should offer while `modelId` is selected.
+ *
+ * Resolved per locale, EXACT match first: an en-US deployment offers only
+ * "United States", not the four other English accents that merely share the
+ * `en` subtag and are not served by that build. Only when a locale has no exact
+ * entry does it fall back to the language subtag — NVIDIA ships regional builds
+ * (es-US) the app's table has no exact row for (it carries es-ES), and refusing
+ * to show "Spanish" for a Spanish model would be pedantry. `singleLocale`
+ * already forces the model's own locale onto the wire, so for those the key is
+ * a label choice rather than a routing one.
+ *
+ * `languageTable` is injected rather than imported so this module keeps zero
+ * dependencies and the renderer can call it directly.
+ * Returns null for an unknown model — meaning "no restriction".
+ */
+export function allowedLanguageKeysForNvidiaModel(
+    modelId: string,
+    languageTable: Record<string, { bcp47?: string; iso639?: string }>,
+): Set<string> | null {
+    const model = NVIDIA_NIM_STT_MODEL_CONFIG[modelId];
+    if (!model) return null;
+    const entries = Object.entries(languageTable).filter(([key]) => key !== 'auto');
+    const keys = new Set<string>();
+    for (const locale of model.locales) {
+        const exact = entries.filter(([, e]) => (e.bcp47 || '').toLowerCase() === locale.toLowerCase());
+        if (exact.length) {
+            for (const [key] of exact) keys.add(key);
+            continue;
+        }
+        const subtag = locale.split('-')[0].toLowerCase();
+        for (const [key, e] of entries) {
+            if ((e.iso639 || e.bcp47 || '').split('-')[0].toLowerCase() === subtag) keys.add(key);
+        }
+    }
+    // Only a model that actually detects language may offer Auto. Riva needs a
+    // concrete language_code otherwise, and 'auto' is not one.
+    if (model.multilingual) keys.add('auto');
+    return keys;
 }

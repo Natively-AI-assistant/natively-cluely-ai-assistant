@@ -72,7 +72,12 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     if (cfg.singleLocale) return cfg.languageCode;
     return this.language || cfg.languageCode || 'en-US';
   }
-  start() { if (this.active) return; this.active = true; this.reconnectAttempts = 0; this.connect(); }
+  start() {
+    if (this.active) return;
+    this.active = true;
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
   stop() {
     this.active = false;
     this.clearReconnectTimer();
@@ -80,7 +85,9 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     try { this.stream?.end(); } catch {}
     this.stream = null;
   }
+
   finalize() { try { this.stream?.end(); } catch {} }
+
   write(chunk: Buffer) {
     if (!this.active) return;
     if (!this.stream) {
