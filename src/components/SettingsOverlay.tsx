@@ -2954,7 +2954,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         so radiogroup semantics with a roving tabindex — previously
                                                         three unrelated <button>s whose selected state was carried by
                                                         colour alone and was invisible to a screen reader. */}
-                                                    <div role="radiogroup" aria-labelledby="nvidia-nim-stt-model-label" className="flex flex-col gap-1.5">
+                                                    <div role="radiogroup" aria-labelledby="nvidia-nim-stt-model-label"
+                                                        /* Nine models run ~420px; cap it so the picker cannot
+                                                           dominate the Audio tab. Arrow-key navigation scrolls the
+                                                           focused row into view for free. */
+                                                        className="flex flex-col gap-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-0.5">
                                                         {NVIDIA_NIM_STT_MODELS.map((m, i) => {
                                                             const selected = nvidiaNimSttModel === m.id;
                                                             return (

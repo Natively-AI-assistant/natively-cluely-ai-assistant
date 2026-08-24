@@ -48,7 +48,18 @@ const sent = (model, lang) => {
   return last.writes.find((w) => w.streamingConfig).streamingConfig.config;
 };
 
-check('catalogue has three models', NVIDIA_NIM_STT_MODELS.length === 3, NVIDIA_NIM_STT_MODELS.map((m) => m.id).join(', '));
+check('catalogue is non-empty', NVIDIA_NIM_STT_MODELS.length > 0, `${NVIDIA_NIM_STT_MODELS.length} models`);
+
+// Every function-id must be a real uuid and must not be duplicated except by the
+// two Nemotron profiles, which deliberately share one NIM.
+const byFn = {};
+for (const m of NVIDIA_NIM_STT_MODELS) {
+  check(`${m.id}: function-id is a uuid`, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(m.functionId), m.functionId);
+  (byFn[m.functionId] = byFn[m.functionId] || []).push(m.id);
+}
+for (const [fn, ids] of Object.entries(byFn)) {
+  if (ids.length > 1) check(`shared function-id ${fn.slice(0,8)} is the Nemotron pair only`, ids.every((i) => i.startsWith('nemotron')), ids.join(' + '));
+}
 
 for (const m of NVIDIA_NIM_STT_MODELS) {
   for (const lang of [undefined, 'auto', 'english-us', 'spanish', 'nonsense-key']) {
@@ -58,6 +69,11 @@ for (const m of NVIDIA_NIM_STT_MODELS) {
   }
   const auto = sent(m.id, 'auto');
   check(`${m.id} / auto uses the model default`, auto.languageCode === m.languageCode, `${auto.languageCode} (expected ${m.languageCode})`);
+  if (m.singleLocale) {
+    // A pin must NOT override a single-locale deployment.
+    const pinned = sent(m.id, 'spanish');
+    check(`${m.id} ignores a language pin (single locale)`, pinned.languageCode === m.languageCode, `${pinned.languageCode} (expected ${m.languageCode})`);
+  }
   check(`${m.id} uses its own function-id`, last.md.m['function-id'] === m.functionId, last.md.m['function-id']);
 }
 
@@ -66,7 +82,7 @@ check('multilingual profiles default to Riva auto-detect', multi.every((m) => m.
 const en = sent('nemotron-asr-streaming', 'auto');
 check('English profile defaults to en-US', en.languageCode === 'en-US', en.languageCode);
 const pinned = sent('parakeet-1.1b-rnnt-multilingual-asr', 'spanish');
-check('a pinned language overrides the model default', pinned.languageCode === 'es-ES', pinned.languageCode);
+check('a pinned language overrides the default on a MULTILINGUAL model', pinned.languageCode === 'es-ES', pinned.languageCode);
 const unknownLang = sent('parakeet-1.1b-rnnt-multilingual-asr', 'nonsense-key');
 check('an unknown language key falls back to the model default', unknownLang.languageCode === 'multi', unknownLang.languageCode);
 const unknownModel = sent('not-a-model', 'auto');

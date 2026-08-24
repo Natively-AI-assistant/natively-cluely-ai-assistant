@@ -64,6 +64,12 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   /** The language_code actually sent; never empty. */
   private resolveLanguageCode(): string {
     const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
+    if (!cfg) return this.language || 'en-US';
+    // A single-locale deployment (the per-language Parakeet CTC builds) only
+    // recognises its own language. Forwarding the user's recognition-language
+    // pin there is not honouring a preference, it is sending zh-TW audio config
+    // to a Spanish model — so the model's own locale wins.
+    if (cfg.singleLocale) return cfg.languageCode;
     return this.language || cfg.languageCode || 'en-US';
   }
   start() { if (this.active) return; this.active = true; this.reconnectAttempts = 0; this.connect(); }
