@@ -807,6 +807,25 @@ const ToneDropdown: React.FC<{
 // cross-meeting recall) but are NOT rendered as the primary layout. Set true to surface them.
 const SHOW_STRUCTURED_BLOCKS = false;
 
+// The labelled "Next steps" block is switched off (2026-08-24 product decision): it
+// restated the action items the notes already carry, so every set of notes and every
+// follow-up mail ended with the same list twice. The generator-side switches live in
+// electron/services/meeting/MeetingSummaryReducer.ts (INCLUDE_NEXT_STEPS),
+// FollowUpDraftGenerator.ts and post-call/PostCallWorkflow.ts — flip all four together.
+// This renderer-side one also hides the section on meetings that were ALREADY generated
+// and saved with it, which the generator-side switches cannot reach.
+const SHOW_NEXT_STEPS = false;
+
+// Matches the next-steps note section across built-in templates and user-authored
+// sections: "Next steps", "Owners and next steps", "Asks / next steps",
+// "What happens next", "Recommended next step". Mirrors isNextStepsSectionTitle()
+// in MeetingSummaryReducer.ts (duplicated, not imported — this is renderer code).
+const isNextStepsSectionTitle = (title?: string | null): boolean => {
+    const t = (title || '').trim();
+    if (!t) return false;
+    return /next\s*steps?\b/i.test(t) || /^what\s+happens\s+next\b/i.test(t);
+};
+
 // Not every "quality warning" is a real problem. A note like "Removed 1 empty,
 // duplicate, or interim transcript segment." is a benign cleanup log and should
 // read as low-key info — not an alarming amber warning. Anything about speaker
@@ -1457,7 +1476,9 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     Empty sections are dropped server-side. */}
                                 {isV3Summary && meeting.detailedSummary?.sectionsV3 && meeting.detailedSummary.sectionsV3.length > 0 && (
                                     <>
-                                        {meeting.detailedSummary.sectionsV3.map((section) => (
+                                        {meeting.detailedSummary.sectionsV3
+                                            .filter(section => SHOW_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
+                                            .map((section) => (
                                             <section key={section.id} className="mb-8">
                                                 <h2 className="text-lg font-semibold text-text-primary mb-4">{section.title}</h2>
                                                 <ul className="space-y-3">
@@ -1765,7 +1786,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     Rendered ONLY when PostCallWorkflow has produced them
                                     (schemaVersion === 2). Falls through silently otherwise so
                                     pre-Phase-7 meetings still look the same. */}
-                                {!isV3Summary && meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
+                                {SHOW_NEXT_STEPS && !isV3Summary && meeting.detailedSummary?.actionItemsStructured && meeting.detailedSummary.actionItemsStructured.length > 0 && (
                                     <section className="mb-8">
                                         <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Next Steps')}</h2>
                                         <ul className="space-y-2">

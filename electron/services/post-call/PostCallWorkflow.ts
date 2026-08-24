@@ -128,11 +128,14 @@ export function buildFollowUpDraft(
     return `- ${owner}${item.text}${deadline}`;
   });
 
-  if (nextSteps.length > 0) {
-    lines.push('', 'Next steps:', ...nextSteps);
-  }
+  // The labelled "Next steps" block is switched off (2026-08-24 product decision) —
+  // see INCLUDE_NEXT_STEPS in electron/services/meeting/MeetingSummaryReducer.ts for
+  // the rationale and the other three switches. Flip this one back to true with them.
+  const INCLUDE_NEXT_STEPS: boolean = false;
 
-  if (nextSteps.length === 0) {
+  if (INCLUDE_NEXT_STEPS && nextSteps.length > 0) {
+    lines.push('', 'Next steps:', ...nextSteps);
+  } else {
     lines.push('', 'I will follow up if anything else is needed.');
   }
 

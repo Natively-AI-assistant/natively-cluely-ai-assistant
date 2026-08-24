@@ -42,14 +42,18 @@ test('extractStructuredActionItems merges summary action items without duplicate
   assert.deepEqual(items.map(item => item.text), ['send the recap', 'share the deck']);
 });
 
-test('buildFollowUpDraft includes overview and structured next steps', () => {
+test('buildFollowUpDraft includes the overview and suppresses the next-steps block', () => {
   const draft = buildFollowUpDraft('sales', [
     { id: 'action_1', text: 'send the proposal', owner: 'Me', deadline: 'Friday' },
   ], { overview: 'We aligned on a pilot scope.' });
 
   assert.match(draft, /Thanks for the conversation today/);
   assert.match(draft, /We aligned on a pilot scope/);
-  assert.match(draft, /- Me: send the proposal by Friday/);
+  // INCLUDE_NEXT_STEPS is false in PostCallWorkflow.ts (mirrors MeetingSummaryReducer.ts) —
+  // the labelled next-steps list is omitted and the neutral closing line takes its place.
+  assert.equal(/next steps:/i.test(draft), false, `next-steps block leaked into the draft: ${draft}`);
+  assert.equal(/send the proposal/i.test(draft), false, `action item leaked into the draft: ${draft}`);
+  assert.match(draft, /I will follow up if anything else is needed/);
 });
 
 test('generateCoachingInsights flags sales objection with no captured objection section', () => {

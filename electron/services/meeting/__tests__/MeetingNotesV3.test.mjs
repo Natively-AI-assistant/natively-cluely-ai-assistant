@@ -269,7 +269,11 @@ test('follow-up generator falls back deterministically and maps mode→type', as
     mode: 'team-meet',
   });
   assert.equal(draft.type, 'project_update');
-  assert.match(draft.body, /retention proposal|Decisions confirmed|Next steps/i);
+  assert.match(draft.body, /Decisions:\n- Use PostHog/);
+  // INCLUDE_NEXT_STEPS is false (MeetingSummaryReducer.ts): the deterministic body must
+  // render the decisions block and NOTHING resembling a next-steps / action-item list.
+  assert.equal(/next steps/i.test(draft.body), false, `next-steps block leaked into the fallback body: ${draft.body}`);
+  assert.equal(/retention proposal/i.test(draft.body), false, `action item leaked into the fallback body: ${draft.body}`);
   assert.deepEqual(draft.basedOnDecisionIds, ['d1']);
 });
 
@@ -370,8 +374,12 @@ test('follow-up: recruiter fallback never renders decisions (would leak no-go to
         'recruiting'
       );
   assert.equal(/no-go|no go|systems design/i.test(body), false, 'recruiter fallback leaked a negative decision to the candidate');
-  assert.match(body, /What happens next/);
-  assert.match(body, /Taylor: Schedule onsite/);
+  // INCLUDE_NEXT_STEPS is false: recruiting renders neither a decisions block (by design,
+  // it would leak the no-go) nor a next-steps block, so the emptiness guard must fire and
+  // produce the honest closing line rather than a salutation-plus-sign-off husk.
+  assert.equal(/what happens next/i.test(body), false, `next-steps block leaked into the recruiter fallback: ${body}`);
+  assert.equal(/Schedule onsite/i.test(body), false, `action item leaked into the recruiter fallback: ${body}`);
+  assert.match(body, /we'll be in touch about next steps soon/i);
 });
 
 // ── Long-meeting: no truncation, chunk coverage ──────────────────────────────

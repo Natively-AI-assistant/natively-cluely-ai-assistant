@@ -17,7 +17,7 @@
 
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, FollowUpDraft, FollowUpDraftType, FollowUpTone, MeetingSummaryV3, QuestionItem } from './MeetingSummaryV3';
-import { buildFollowUpBody } from './MeetingSummaryReducer';
+import { buildFollowUpBody, INCLUDE_NEXT_STEPS } from './MeetingSummaryReducer';
 import { generateStructured } from './generateStructured';
 
 export function followUpTypeForMode(mode?: string | null): FollowUpDraftType {
@@ -45,6 +45,13 @@ interface ModeMailProfile {
   register: string;       // voice / relationship
   structure: string;      // what the body should cover, in order
   followUp: string;       // what "following up" actually MEANS for this mode — the point of the message
+  // Next-steps-free variants of the two fields above, used while INCLUDE_NEXT_STEPS
+  // is false (see MeetingSummaryReducer.ts). Kept as separate strings rather than
+  // patched at runtime so restoring the block is a one-line flag flip, and so the
+  // prompt never carries a "list the next steps" instruction and a "do not list the
+  // next steps" rule at the same time.
+  structureNoNextSteps: string;
+  followUpNoNextSteps: string;
   defaultTone: FollowUpTone;
 }
 
@@ -56,6 +63,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Collegial and clear — a peer recapping for peers.',
     structure: 'One-line thanks → what was aligned/decided → concrete next steps with owners and dates → the single most important open question, if any.',
     followUp: 'Confirm the shared understanding and move the work forward: restate what was decided, name who owns each next step and by when, and flag the one open question that most needs an answer.',
+    structureNoNextSteps: 'One-line thanks → what was aligned/decided → the single most important open question, if any.',
+    followUpNoNextSteps: 'Confirm the shared understanding: restate what was decided so everyone leaves with the same picture, and flag the one open question that most needs an answer.',
     defaultTone: 'professional',
   },
   sales: {
@@ -65,6 +74,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Warm, confident, value-led — a trusted advisor, not a pushy seller. Reinforce the value discussed and keep momentum toward the next step.',
     structure: 'Thank them for their time → restate the goal/pain you aligned on in their words → the agreed next step with a clear date/owner → a light, low-pressure call to action. Never invent pricing or commitments.',
     followUp: 'Advance the deal: mirror back the pain/goal they described, tie it to the value discussed, confirm the agreed next step (demo, pilot, sending materials) with a date, and gently address the biggest open objection if one surfaced. Never invent pricing or commitments.',
+    structureNoNextSteps: 'Thank them for their time → restate the goal/pain you aligned on in their words → a light, low-pressure closing line. Never invent pricing or commitments.',
+    followUpNoNextSteps: 'Keep the relationship warm: mirror back the pain/goal they described in their own words, tie it to the value discussed, and gently address the biggest open objection if one surfaced. Never invent pricing or commitments.',
     defaultTone: 'warm',
   },
   recruiting: {
@@ -74,6 +85,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Warm, respectful, and encouraging regardless of outcome — represents the company well. Never disclose an internal hire/no-hire decision to the candidate.',
     structure: 'Thank them for their time → one genuine specific thing that stood out → the concrete next step and rough timeline for hearing back → an invitation to ask questions. No evaluation verdicts.',
     followUp: 'Keep a strong candidate warm and set expectations: thank them, reference one genuine strength they showed (cite from the Strengths section only), state the concrete next stage and rough timeline to hear back, and invite questions. Never reveal an internal hire/no-hire decision or cite Concerns/Compensation sections to the candidate.',
+    structureNoNextSteps: 'Thank them for their time → one genuine specific thing that stood out → an invitation to ask questions. No evaluation verdicts.',
+    followUpNoNextSteps: 'Keep a strong candidate warm: thank them, reference one genuine strength they showed (cite from the Strengths section only), and invite questions. Never reveal an internal hire/no-hire decision or cite Concerns/Compensation sections to the candidate.',
     defaultTone: 'warm',
   },
   'team-meet': {
@@ -83,6 +96,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Crisp, skimmable, action-oriented — an internal status update peers can scan in ten seconds.',
     structure: 'A one-line greeting → short labelled blocks (Decisions, Owners & next steps, Blockers) each with the relevant items → sign-off. Lead with the outcome; keep every line tight.',
     followUp: 'Drive execution: capture what was decided, list each owner and their next step with a date, and surface every blocker or dependency that needs unblocking — so nothing falls through before the next sync.',
+    structureNoNextSteps: 'A one-line greeting → short labelled blocks (Decisions, Blockers) each with the relevant items → sign-off. Lead with the outcome; keep every line tight.',
+    followUpNoNextSteps: 'Keep the team aligned: capture what was decided and surface every blocker or dependency that needs unblocking before the next sync.',
     defaultTone: 'concise',
   },
   'looking-for-work': {
@@ -92,6 +107,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Appreciative, enthusiastic, and professional — a strong post-interview thank-you that reaffirms genuine interest without sounding desperate. You are writing AS the candidate, TO the interviewer.',
     structure: 'Thank them for their time → reference one specific topic from the conversation that resonated → briefly reinforce why you\'re a strong fit → express enthusiasm for next steps. Do not restate your whole résumé.',
     followUp: 'Strengthen your candidacy: thank them, reference a specific topic from the conversation that genuinely resonated, briefly connect one of your strengths to a need they raised, and reaffirm enthusiasm for the next step. If a question was left open in the notes that you can now answer, add a one-line answer.',
+    structureNoNextSteps: 'Thank them for their time → reference one specific topic from the conversation that resonated → briefly reinforce why you\'re a strong fit → close warmly. Do not restate your whole résumé.',
+    followUpNoNextSteps: 'Strengthen your candidacy: thank them, reference a specific topic from the conversation that genuinely resonated, and briefly connect one of your strengths to a need they raised. If a question was left open in the notes that you can now answer, add a one-line answer.',
     defaultTone: 'warm',
   },
   'technical-interview': {
@@ -101,6 +118,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Objective, specific, and evidence-based — an interviewer writing up a debrief for the loop.',
     structure: 'A formatted debrief with clear labelled sections in this order — "Problem:", "Approach:", "Signal:" (correctness, complexity, communication), and "Recommendation:" (advance / more signal needed). Keep each section to 1-2 lines. Do NOT invent a final hire/no-hire if it was not decided.',
     followUp: 'Give the loop a decision-useful debrief: state the problem, the candidate\'s approach and key tradeoffs, the concrete correctness/complexity/communication signal observed, and a clear recommendation (advance / more signal needed / area to probe next round). Base every claim on what actually happened; do not invent a final hire/no-hire.',
+    structureNoNextSteps: 'A formatted debrief with clear labelled sections in this order — "Problem:", "Approach:" and "Signal:" (correctness, complexity, communication). Keep each section to 1-2 lines. Do NOT invent a final hire/no-hire if it was not decided.',
+    followUpNoNextSteps: 'Give the loop a decision-useful debrief: state the problem, the candidate\'s approach and key tradeoffs, and the concrete correctness/complexity/communication signal observed. Base every claim on what actually happened; do not invent a final hire/no-hire.',
     defaultTone: 'professional',
   },
   lecture: {
@@ -110,6 +129,8 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
     register: 'Plain and self-directed — notes-to-self that make revision fast.',
     structure: 'A formatted study recap with clear labelled sections in this order — "Key concepts:", "To remember:" (definitions/formulas), and "To review:" (specific questions before the exam). Keep each section tight. No greeting, no sign-off, no "thanks".',
     followUp: 'Make revision fast: distil the core concepts worth remembering, the exact definitions/formulas to memorize, and the specific questions or confusing points to review before the exam. This is a study aid, not a message to anyone.',
+    structureNoNextSteps: 'A formatted study recap with clear labelled sections in this order — "Key concepts:" and "To remember:" (definitions/formulas). Keep each section tight. No greeting, no sign-off, no "thanks".',
+    followUpNoNextSteps: 'Make revision fast: distil the core concepts worth remembering and the exact definitions/formulas to memorize. This is a study aid, not a message to anyone.',
     defaultTone: 'concise',
   },
 };
@@ -128,6 +149,16 @@ const TYPE_GUIDANCE: Record<FollowUpDraftType, string> = {
   crm_note: 'Write a concise CRM note: account context, pain/need, buying signal, objection, and next step. Factual, no fluff.',
   study_notes: 'Write a short study recap: the core concepts to remember and the questions to review before the exam.',
   interview_feedback: 'Write concise interviewer feedback: the problem, the approach, correctness/complexity signal, communication, and a clear next-step recommendation. Do NOT invent a final hire/no-hire if it was not decided.',
+};
+
+// Next-steps-free counterparts to TYPE_GUIDANCE, used while INCLUDE_NEXT_STEPS is false.
+const TYPE_GUIDANCE_NO_NEXT_STEPS: Record<FollowUpDraftType, string> = {
+  email: 'Write a short professional follow-up email (3-5 sentences). Open with a one-line thanks, state what was aligned/decided, and end with the single most important open question if any.',
+  slack: 'Write a concise Slack-style update (no greeting needed, can use brief bullet emphasis). Lead with the outcome and what was decided.',
+  project_update: 'Write a short project update: what changed since last sync, decisions, and any blocker. Keep it skimmable.',
+  crm_note: 'Write a concise CRM note: account context, pain/need, buying signal, and objection. Factual, no fluff.',
+  study_notes: 'Write a short study recap: the core concepts to remember and the definitions/formulas worth memorizing.',
+  interview_feedback: 'Write concise interviewer feedback: the problem, the approach, correctness/complexity signal, and communication. Do NOT invent a final hire/no-hire if it was not decided.',
 };
 
 const TONE_GUIDANCE: Record<FollowUpTone, string> = {
@@ -185,7 +216,9 @@ export class FollowUpDraftGenerator {
 
     if (summary.whatChanged?.length) parts.push(`What changed:\n${summary.whatChanged.map(s => `- ${s}`).join('\n')}`);
     if (summary.decisions?.length) parts.push(`Decisions:\n${summary.decisions.map(d => `- ${d.text}${d.owner ? ` (${d.owner})` : ''}`).join('\n')}`);
-    if (summary.actionItems?.length) parts.push(`Action items:\n${summary.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}${a.explicitness === 'inferred' ? ' [inferred]' : ''}`).join('\n')}`);
+    // Action items are withheld while INCLUDE_NEXT_STEPS is false: leaving them in
+    // context is what makes the model reproduce a next-steps list even when told not to.
+    if (INCLUDE_NEXT_STEPS && summary.actionItems?.length) parts.push(`Action items:\n${summary.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}${a.explicitness === 'inferred' ? ' [inferred]' : ''}`).join('\n')}`);
     if (summary.openQuestions?.length) parts.push(`Open questions:\n${summary.openQuestions.filter(q => q.status !== 'answered').map(q => `- ${q.text}`).join('\n')}`);
     if (summary.risks?.length) parts.push(`Risks / blockers:\n${summary.risks.map(r => `- ${r.text}${r.severity ? ` [${r.severity}]` : ''}`).join('\n')}`);
 
@@ -195,6 +228,14 @@ export class FollowUpDraftGenerator {
   async generate(params: FollowUpGenerateParams): Promise<FollowUpDraft> {
     const type = params.type || followUpTypeForMode(params.mode);
     const profile = mailProfileForMode(params.mode);
+    // While INCLUDE_NEXT_STEPS is false the prompt is built from the next-steps-free
+    // variants — removing the positive instruction is not enough on its own (a
+    // follow-up email is conventionally expected to end in a next-steps list, so the
+    // model regrows one), hence the explicit prohibition in STRICT RULES below and
+    // the withheld "Action items" input block.
+    const typeGuidance = INCLUDE_NEXT_STEPS ? TYPE_GUIDANCE[type] : TYPE_GUIDANCE_NO_NEXT_STEPS[type];
+    const structure = INCLUDE_NEXT_STEPS ? profile.structure : profile.structureNoNextSteps;
+    const followUpMeaning = INCLUDE_NEXT_STEPS ? profile.followUp : profile.followUpNoNextSteps;
     // Tone: explicit caller wins; otherwise the mode's natural default.
     const tone: FollowUpTone = params.tone || profile.defaultTone;
     const inputs = this.buildInputs(params.summary);
@@ -214,20 +255,20 @@ export class FollowUpDraftGenerator {
     if (!inputs.trim()) return deterministic();
 
     const systemPrompt = `You are the user's assistant, drafting the follow-up they will copy and send after a meeting run in "${params.mode || 'general'}" mode.
-${TYPE_GUIDANCE[type]}
+${typeGuidance}
 ${TONE_GUIDANCE[tone]}
 
 FIRST, understand the meeting from the notes below: what was it about, what actually happened, and what genuinely needs a follow-up. Not every note deserves to be in the message — pick the few things that matter and would be embarrassing to drop.
 
 WHAT "FOLLOWING UP" MEANS HERE:
-${profile.followUp}
+${followUpMeaning}
 
 AUDIENCE & VOICE:
 - Addressed to: ${profile.recipient}
 - Salutation: ${profile.salutation}
 - Sign-off: ${profile.closing}
 - Register: ${profile.register}
-- Cover, in order: ${profile.structure}
+- Cover, in order: ${structure}
 
 STRICT RULES:
 - Ground everything in the notes below. Do NOT invent decisions, owners, deadlines, numbers, pricing, or promises that aren't there.
@@ -237,7 +278,8 @@ STRICT RULES:
 - NEVER emit placeholder syntax — neither bracketed placeholders ([Name]) nor curly braces ({first name} / {interviewer name}). If a name is unknown, phrase around it naturally or use "Hi there," / "Dear Hiring Team,".
 - Keep it tight and copy-paste ready.
 - Do not mention transcripts, AI, summaries, or that this was auto-generated.
-- If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.
+${INCLUDE_NEXT_STEPS ? '- If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.' : `- Do NOT add a next-steps / action-items / to-do list, and do NOT add a "Next steps", "Owners & next steps" or "Action items" heading, bullet list, or closing "next steps are…" line. That block is deliberately omitted — the reader tracks those elsewhere. If one outstanding commitment is genuinely essential to the message, fold it into a sentence; never enumerate it as a labelled list.
+- If the notes genuinely contain no real outcomes, keep it short and honest rather than padding.`}
 
 ${type === 'email' ? 'The "subject" must be grounded in the meeting title or the first takeaway below — a short noun phrase grounded in something in the notes, NOT a list of topics. Example good subject: "Follow-up: Acme Q3 renewal kickoff".' : 'No "subject" key — this draft is not an email.'}
 
