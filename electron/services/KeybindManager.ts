@@ -8,6 +8,7 @@ import {
     beginFullRegistrationPass,
     listRegistrationFailures,
 } from './keybindRegistrationState';
+import { buildChordTable, type Win32Chord } from './winChord';
 
 export interface KeybindConfig {
     id: string;
@@ -139,6 +140,31 @@ export class KeybindManager {
 
     public onShortcutTriggered(callback: (actionId: string) => void) {
         this.onShortcutTriggeredCallbacks.push(callback);
+    }
+
+    /**
+     * The app's global shortcuts as a Win32 chord table for the native stealth
+     * hook (Windows). Only the "printable-leak" subset survives the translation
+     * (Ctrl±Shift + letter/digit/Enter/Space); everything else is dropped and
+     * left to RegisterHotKey. Harmless to call on macOS (returns a table the
+     * macOS tap ignores). See winChord.ts and native-module/src/app_chord.rs.
+     */
+    public getGlobalChordTable(): Win32Chord[] {
+        return buildChordTable(Array.from(this.keybinds.values()));
+    }
+
+    /**
+     * Dispatch an action by id exactly as a fired global shortcut would. Used by
+     * the Windows stealth hook when it swallows one of the app's own chords (so
+     * the chord fires the action instead of leaking into the foreground app).
+     * Guarded to global binds only — the hook is never given non-global ids, but
+     * this keeps a stray id from dispatching an unexpected action. RegisterHotKey
+     * never double-fires because the hook swallowed the key before the OS saw it.
+     */
+    public triggerActionById(actionId: string): void {
+        const kb = this.keybinds.get(actionId);
+        if (!kb || !kb.isGlobal) return;
+        this.onShortcutTriggeredCallbacks.forEach(cb => cb(actionId));
     }
 
     public static getInstance(): KeybindManager {
@@ -579,6 +605,7 @@ export class KeybindManager {
         ipcMain.handle('keybinds:set', (_, id: string, accelerator: string) => {
             console.log(`[KeybindManager] Set ${id} -> ${accelerator}`);
             this.setKeybind(id, accelerator);
+            this.notifyChordsChanged();
             return true;
         });
 
@@ -592,7 +619,49 @@ export class KeybindManager {
         ipcMain.handle('keybinds:reset', () => {
             console.log('[KeybindManager] Reset defaults');
             this.resetKeybinds();
+            this.notifyChordsChanged();
             return this.getAllKeybinds();
         });
+    }
+
+    /**
+     * DEV/TEST ONLY — no-op unless NATIVELY_DEBUG_HOTKEYS=1. Simulate the OS
+     * silently dropping a global-shortcut registration, to verify by hand on
+     * Windows that the hook-level swallow (during stealth typing) and the
+     * always-on shortcut-guard still FIRE the action and don't leak the key into
+     * the foreground app. Unregisters the accelerator without re-registering; the
+     * health poll (or a resume/display/unlock event) recovers it within ~10s, so
+     * press the chord promptly after calling this. Returns true if the drop took.
+     */
+    public debugDropRegistration(id: string): boolean {
+        if (process.env.NATIVELY_DEBUG_HOTKEYS !== '1') return false;
+        const kb = this.keybinds.get(id);
+        if (!kb || !kb.accelerator) return false;
+        try {
+            globalShortcut.unregister(kb.accelerator);
+            const dropped = !globalShortcut.isRegistered(kb.accelerator);
+            console.warn(`[KeybindManager] DEBUG dropped ${kb.accelerator} -> ${id} (dropped=${dropped})`);
+            return dropped;
+        } catch (e) {
+            console.error('[KeybindManager] debugDropRegistration failed:', e);
+            return false;
+        }
+    }
+
+    /**
+     * Tell the stealth shortcut-guard (Windows opt-in) that the chord table
+     * changed, so an already-running guard re-arms with the new accelerators.
+     * Lazy require() to avoid a StealthKeyboardManager ↔ KeybindManager import
+     * cycle; no-op when the guard isn't running or off Windows.
+     */
+    private notifyChordsChanged(): void {
+        if (process.platform !== 'win32') return;
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { StealthKeyboardManager } = require('./StealthKeyboardManager');
+            StealthKeyboardManager.getInstance().refreshShortcutGuard();
+        } catch (e) {
+            console.error('[KeybindManager] notifyChordsChanged failed:', e);
+        }
     }
 }

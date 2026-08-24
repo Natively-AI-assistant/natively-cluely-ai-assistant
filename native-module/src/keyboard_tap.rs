@@ -71,6 +71,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use napi::bindgen_prelude::*;
+
+use crate::app_chord::AppChordInput;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 
 use core_foundation::base::CFRelease;
@@ -214,6 +216,11 @@ pub struct CapturedKey {
     pub is_key_down: bool,
     /// True for a pass-through mouse down outside the overlay bounds.
     pub is_outside_mouse_down: bool,
+    /// Non-empty ⟹ an app hotkey chord fired (Windows hook only). Always empty
+    /// on macOS, where the app's shortcuts are consumed by Carbon/IOKit before
+    /// the tap; present here only to keep the CapturedKey napi shape identical
+    /// across platforms.
+    pub app_chord_id: String,
 }
 
 // ─── The C callback CGEventTap calls for every keystroke ─────────────────
@@ -346,6 +353,7 @@ fn tap_callback_inner(
                     flags: 0,
                     is_key_down: false,
                     is_outside_mouse_down: true,
+                    app_chord_id: String::new(),
                 };
                 send_payload_to_js(&state, payload);
             }
@@ -474,6 +482,7 @@ fn tap_callback_inner(
         flags,
         is_key_down,
         is_outside_mouse_down: false,
+        app_chord_id: String::new(),
     };
 
     send_payload_to_js(&state, payload);
@@ -664,6 +673,14 @@ impl StealthKeyboardTap {
     pub fn start(
         &self,
         callback: ThreadsafeFunction<CapturedKey>,
+        // Accepted for napi-surface parity with the Windows hook, which swallows
+        // and self-dispatches the app's own shortcuts. Unused on macOS: Carbon/
+        // IOKit hotkey processing runs BEFORE the session tap, so the app's
+        // shortcuts are already consumed and never reach this tap.
+        _app_chords: Vec<AppChordInput>,
+        // Shortcut-guard mode flag — parity with the Windows hook. No macOS
+        // analogue (shortcuts never reach this tap), so it is ignored here.
+        _shortcut_only: bool,
         overlay_bounds: Option<OverlayBoundsInput>,
     ) -> Result<bool> {
         if !is_accessibility_granted() {

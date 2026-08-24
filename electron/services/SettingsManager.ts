@@ -9,6 +9,13 @@ export interface AppSettings {
     isUndetectable?: boolean;
     disguiseMode?: 'terminal' | 'settings' | 'activity' | 'none';
     verboseLogging?: boolean;
+    // Windows only, DEFAULT false. When true, an always-on WH_KEYBOARD_LL hook
+    // swallows + self-dispatches the app's own global shortcuts even when stealth
+    // typing is OFF, closing the residual leak where a dropped RegisterHotKey
+    // registration lets a chord's key reach the foreground app. Off by default
+    // because an always-present low-level keyboard hook is more visible to
+    // EDR/AV than one that exists only during stealth-typing sessions.
+    stealthShortcutGuard?: boolean;
     // Context Intelligence debug logging level (Developer settings). The env
     // var NATIVELY_CONTEXT_DEBUG overrides this — precedence is owned by
     // context-intelligence/debug/debug-config.ts, which reads this value

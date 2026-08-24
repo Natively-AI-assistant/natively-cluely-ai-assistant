@@ -907,6 +907,9 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  getStealthShortcutGuard: () => Promise<boolean>;
+  setStealthShortcutGuard: (enabled: boolean) => Promise<{ success: boolean }>;
+  debugDropHotkey: (id: string) => Promise<{ dropped: boolean }>;
 
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
@@ -2603,6 +2606,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  getStealthShortcutGuard: () => ipcRenderer.invoke('get-stealth-shortcut-guard'),
+  setStealthShortcutGuard: (enabled: boolean) => ipcRenderer.invoke('set-stealth-shortcut-guard', enabled),
+  debugDropHotkey: (id: string) => ipcRenderer.invoke('debug:drop-hotkey', id),
 
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => ipcRenderer.invoke('get-ambient-chat-enabled'),

@@ -43,6 +43,11 @@ export class StealthKeyboardManager {
 
     private tap: any | null = null; // StealthKeyboardTap instance from native module
     private active = false;
+    // Shortcut-guard: an always-on shortcut-only use of the SAME native hook
+    // that swallows the app's own chords even when full stealth typing is off.
+    // Opt-in (default off) — see setShortcutGuardEnabled. Windows only.
+    private shortcutGuardEnabled = false;
+    private guardRunning = false;
     private nativeAvailable = false;
     private idleTimer: NodeJS.Timeout | null = null;
     /// Explicit reference to the overlay BrowserWindow that should receive
@@ -298,6 +303,12 @@ export class StealthKeyboardManager {
         if (!this.tap) return false;
         if (this.active) return true;
 
+        // Full stealth typing and the shortcut-guard share the single native
+        // hook instance (ACTIVE_HOOK is one global slot). Free the tap from
+        // guard mode before engaging the full typing tap; stop() restarts the
+        // guard afterwards.
+        this.stopGuard();
+
         // Windows invariant: the hook is engaged ONLY while the overlay is
         // visible. The hook swallows keystrokes system-wide, so engaging it with
         // the overlay hidden (e.g. the hotkey pressed in launcher mode, or after
@@ -330,6 +341,7 @@ export class StealthKeyboardManager {
         let ok = false;
         try {
             const overlayBounds = this.getOverlayBoundsForTap();
+            const appChords = this.getAppChordTable();
             ok = this.tap.start((err: Error | null, ev: CapturedKey) => {
                 if (err) {
                     console.error('[StealthKeyboardManager] tap callback error:', err);
@@ -340,7 +352,7 @@ export class StealthKeyboardManager {
                 // guard, `ev.isKeyDown` below throws → uncaught exception.
                 if (!ev) return;
                 this.handleCapturedKey(ev);
-            }, overlayBounds);
+            }, appChords, /* shortcutOnly */ false, overlayBounds);
         } catch (e) {
             this.active = false;
             this.broadcastState({ active: false }); // correct the optimistic broadcast
@@ -405,6 +417,68 @@ export class StealthKeyboardManager {
         this.tap.stop();
         this.active = false;
         this.broadcastState({ active: false });
+        // Full stealth typing released the tap — restore the shortcut-guard so
+        // the app's chords stay protected while typing is off.
+        this.maybeStartGuard();
+    }
+
+    // ─── Shortcut-guard (opt-in, Windows only) ───────────────────────────
+
+    /**
+     * Enable/disable the always-on shortcut-guard. Persisted by the caller
+     * (SettingsManager 'stealthShortcutGuard'); this only drives the runtime.
+     * No-op off Windows. Enabling starts the guard immediately (unless full
+     * stealth typing is active, in which case stop() will start it later).
+     */
+    public setShortcutGuardEnabled(enabled: boolean): void {
+        if (this.shortcutGuardEnabled === enabled) return;
+        this.shortcutGuardEnabled = enabled;
+        if (enabled) this.maybeStartGuard();
+        else this.stopGuard();
+    }
+
+    /** Re-arm the guard with the current chord table (call after a rebind). */
+    public refreshShortcutGuard(): void {
+        if (!this.guardRunning) return;
+        this.stopGuard();
+        this.maybeStartGuard();
+    }
+
+    /** Start the shortcut-guard if it should run and isn't already. */
+    private maybeStartGuard(): void {
+        if (process.platform !== 'win32') return;
+        if (!this.shortcutGuardEnabled) return;
+        if (this.active) return;        // full stealth typing owns the tap
+        if (this.guardRunning) return;  // already guarding
+        if (!this.tap) return;
+        try {
+            const appChords = this.getAppChordTable();
+            if (appChords.length === 0) return; // nothing to guard
+            const ok = this.tap.start((err: Error | null, ev: CapturedKey) => {
+                if (err) {
+                    console.error('[StealthKeyboardManager] guard callback error:', err);
+                    return;
+                }
+                if (!ev) return;
+                this.handleCapturedKey(ev);
+            }, appChords, /* shortcutOnly */ true, /* overlayBounds */ null);
+            this.guardRunning = !!ok;
+            if (!ok) console.warn('[StealthKeyboardManager] shortcut-guard failed to engage (hook blocked?)');
+        } catch (e) {
+            this.guardRunning = false;
+            console.error('[StealthKeyboardManager] maybeStartGuard threw:', e);
+        }
+    }
+
+    /** Stop the shortcut-guard if running. Safe to call any time. */
+    private stopGuard(): void {
+        if (!this.guardRunning || !this.tap) return;
+        try {
+            this.tap.stop();
+        } catch (e) {
+            console.error('[StealthKeyboardManager] stopGuard threw:', e);
+        }
+        this.guardRunning = false;
     }
 
     private armIdleTimer(): void {
@@ -493,7 +567,50 @@ export class StealthKeyboardManager {
         return bounds;
     }
 
+    /**
+     * The app's global shortcuts as a chord table the native hook can swallow +
+     * self-dispatch. Windows only — macOS consumes shortcuts via Carbon/IOKit
+     * before the tap, so we pass an empty table there (the macOS tap ignores it
+     * anyway). Lazy require() to avoid a KeybindManager ↔ manager import cycle,
+     * matching hideAuxWindowsForStealth's pattern.
+     */
+    private getAppChordTable(): Array<{ vk: number; mods: number; id: string }> {
+        if (process.platform !== 'win32') return [];
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { KeybindManager } = require('./KeybindManager');
+            return KeybindManager.getInstance().getGlobalChordTable();
+        } catch (e) {
+            console.error('[StealthKeyboardManager] getAppChordTable failed:', e);
+            return [];
+        }
+    }
+
+    /** Fire an app shortcut the native hook swallowed, via KeybindManager. */
+    private dispatchAppChord(actionId: string): void {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { KeybindManager } = require('./KeybindManager');
+            KeybindManager.getInstance().triggerActionById(actionId);
+        } catch (e) {
+            console.error('[StealthKeyboardManager] dispatchAppChord failed:', e);
+        }
+    }
+
     private handleCapturedKey(ev: CapturedKey): void {
+        // App-chord: the native hook (Windows) swallowed one of the app's OWN
+        // global shortcuts so it couldn't leak into the foreground app. Dispatch
+        // the action instead of typing it. Never carries chars/keyCode.
+        if (ev.appChordId) {
+            // Fires in BOTH modes: full stealth typing (active) and the always-on
+            // shortcut-guard (guardRunning). Drop only if neither is running
+            // (a late event queued before a stop()).
+            if (!this.active && !this.guardRunning) return;
+            if (this.active) this.armIdleTimer(); // idle auto-stop is a full-mode concept
+            this.dispatchAppChord(ev.appChordId);
+            return;
+        }
+
         if (ev.isOutsideMouseDown) {
             this.stop();
             return;

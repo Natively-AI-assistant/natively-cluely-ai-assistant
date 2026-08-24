@@ -7741,6 +7741,29 @@ export class AppState {
     console.log(`[AppState] ambientChatEnabled set to ${enabled}`);
   }
 
+  public getStealthShortcutGuardEnabled(): boolean {
+    try { return SettingsManager.getInstance().get('stealthShortcutGuard') === true; } catch { return false; }
+  }
+
+  /**
+   * Toggle the Windows opt-in shortcut-guard (always-on hook that swallows the
+   * app's own chords so they can't leak while stealth typing is off). Persists
+   * the setting and applies it live. No-op effect off Windows (the runtime side
+   * short-circuits), but the preference still persists.
+   */
+  public setStealthShortcutGuardEnabled(enabled: boolean): void {
+    SettingsManager.getInstance().set('stealthShortcutGuard', enabled);
+    console.log(`[AppState] stealthShortcutGuard set to ${enabled}`);
+    if (process.platform === 'win32') {
+      try {
+        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+        StealthKeyboardManager.getInstance().setShortcutGuardEnabled(enabled);
+      } catch (e) {
+        console.error('[AppState] failed to apply stealthShortcutGuard at runtime:', e);
+      }
+    }
+  }
+
   public getAutoAnswerEnabled(): boolean {
     return this._autoAnswerEnabled;
   }
@@ -8542,6 +8565,24 @@ if (process.env.THINKING_MATRIX === '1') {
   }
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
+
+  // Opt-in shortcut-guard (Windows only, default off): an always-on hook that
+  // swallows + self-dispatches the app's own chords so a dropped RegisterHotKey
+  // registration can't leak a shortcut character into the foreground app even
+  // when stealth typing is off. Enabled AFTER shortcuts register so the chord
+  // table is populated. Off by default — an always-present low-level keyboard
+  // hook is more visible to EDR/AV than one that exists only during sessions.
+  if (process.platform === 'win32') {
+    try {
+      const enabled = SettingsManager.getInstance().get('stealthShortcutGuard') === true;
+      if (enabled) {
+        const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+        StealthKeyboardManager.getInstance().setShortcutGuardEnabled(true);
+      }
+    } catch (e) {
+      console.error('[Main] failed to init stealth shortcut-guard:', e);
+    }
+  }
 
   // System sleep/wake handling. macOS invalidates CoreAudio AggregateDevice
   // handles on sleep — without this the Process Tap silently stops delivering
