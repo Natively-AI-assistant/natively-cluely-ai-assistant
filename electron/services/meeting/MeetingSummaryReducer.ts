@@ -440,9 +440,21 @@ function dedupeStrings(values: string[]): string[] {
 //
 // Dice coefficient (2·shared / (|A|+|B|)) is symmetric, so containment alone cannot reach
 // 1.0. The length-ratio floor is the second guard: a bullet under 60% the length of another
-// is a DIFFERENT, less specific point however well its words are contained. Both thresholds
-// are locked by the tables in NotesQuality2026_08_24.test.mjs — change one, run that suite.
-const SIMILARITY_DICE_THRESHOLD = 0.7;
+// is a DIFFERENT, less specific point however well its words are contained.
+//
+// THRESHOLD FLOOR — do not lower SIMILARITY_DICE_THRESHOLD below 0.8: for two word sets of
+// EQUAL size, Dice is algebraically identical to the old containment formula
+// (shared / min(|A|,|B|)), so on same-length pairs this rule is only as strict as the number
+// you pick here. Three chunk-scoped decisions that differ by a single distinguishing word —
+// "Decision from early meeting segment" / "...middle..." / "...late..." — score Dice 0.750.
+// They must NOT merge (merging them silently destroys chunk coverage, which is worse than
+// leaving a near-duplicate bullet — see the note on MUST_MERGE below), so the threshold must
+// sit above 0.75. This is locked at 0.8 by
+// `NotesQuality2026_08_24.test.mjs` → `MUST_STAY_DISTINCT` (the early/middle/late row) and by
+// `MeetingSummaryPipeline.test.mjs` → "long transcript chunker preserves early middle and late
+// coverage". Both thresholds below are otherwise locked by the tables in
+// NotesQuality2026_08_24.test.mjs — change one, run that suite.
+const SIMILARITY_DICE_THRESHOLD = 0.8;
 const SIMILARITY_LENGTH_RATIO_FLOOR = 0.6;
 
 export function similar(a: string, b: string): boolean {
