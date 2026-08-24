@@ -17,6 +17,28 @@ import type {
   TimelineItem,
 } from './types';
 
+// ── "Next steps" suppression (2026-08-24, product decision) ───────────────────
+// The labelled "Next steps" block was judged redundant in generated meeting notes
+// and follow-up mail: it restates the action items that already appear in the
+// Action Items block / the mode's own sections, so every artefact ended with the
+// same list twice. It is switched OFF, not deleted.
+//
+// Flip INCLUDE_NEXT_STEPS back to true to restore it in this file. Matching
+// switches (flip all four together) live in:
+//   electron/services/meeting/FollowUpDraftGenerator.ts   (LLM mail prompt + inputs)
+//   electron/services/post-call/PostCallWorkflow.ts        (post-call follow-up draft)
+//   src/components/MeetingDetails.tsx                      (renderer, incl. already-saved notes)
+export const INCLUDE_NEXT_STEPS: boolean = false;
+
+// Note-section titles that ARE the next-steps block, across the built-in mode
+// templates and user-authored sections: "Next steps", "Owners and next steps",
+// "Asks / next steps", "What happens next", "Recommended next step".
+export function isNextStepsSectionTitle(title: string | undefined | null): boolean {
+  const t = (title || '').trim();
+  if (!t) return false;
+  return /next\s*steps?\b/i.test(t) || /^what\s+happens\s+next\b/i.test(t);
+}
+
 export interface ReduceParams {
   title?: string;
   atoms: ChunkMeetingAtoms[];
@@ -133,6 +155,9 @@ function buildSections(modeSections: MeetingModeSectionInput[], atoms: ChunkMeet
   return [...sectionMap.entries()]
     .map(([id, section]) => ({ id, title: section.title, bullets: section.bullets.slice(0, 20), order: section.order }))
     .filter(section => section.bullets.length > 0)
+    // Next-steps sections are suppressed at the source, so they never reach the
+    // notes, the follow-up draft inputs, or any recipe built from `sections`.
+    .filter(section => INCLUDE_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
     .sort((a, b) => a.order - b.order);
 }
 
@@ -264,13 +289,18 @@ function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions:
 export function buildFollowUpBody(decisions: DecisionItem[], actionItems: ActionItem[], mode?: string | null): string {
   // Per-mode scaffold: [salutation, opening, decisionsLabel, nextStepsLabel, emptyLine, signoff]
   // A null salutation/sign-off means "omit" (study notes, interviewer feedback).
-  const S: Record<string, { salutation: string | null; opening: string; decisionsLabel: string; nextStepsLabel: string; empty: string; signoff: string | null }> = {
-    general:              { salutation: 'Hi team,',            opening: 'Thanks for the conversation.',           decisionsLabel: 'Decisions confirmed:', nextStepsLabel: 'Next steps:',        empty: 'No explicit decisions or action items were captured.', signoff: 'Best,' },
+  // `emptyNoNextSteps` overrides `empty` while INCLUDE_NEXT_STEPS is false: with the
+  // action-item block suppressed, "no decisions OR action items were captured" would be
+  // a false statement on a meeting that did produce action items — only the decisions
+  // block can be missing at that point. Modes whose `empty` line never mentions action
+  // items don't need an override.
+  const S: Record<string, { salutation: string | null; opening: string; decisionsLabel: string; nextStepsLabel: string; empty: string; emptyNoNextSteps?: string; signoff: string | null }> = {
+    general:              { salutation: 'Hi team,',            opening: 'Thanks for the conversation.',           decisionsLabel: 'Decisions confirmed:', nextStepsLabel: 'Next steps:',        empty: 'No explicit decisions or action items were captured.', emptyNoNextSteps: 'No explicit decisions were captured.', signoff: 'Best,' },
     sales:                { salutation: 'Hi there,',           opening: 'Thanks for taking the time to meet today.', decisionsLabel: 'What we aligned on:',  nextStepsLabel: 'Next steps:',        empty: 'It was great connecting — I\'ll follow up with next steps shortly.', signoff: 'Best regards,' },
     // Recruiting omits the decisions block from the deterministic fallback entirely:
     // negative-hiring decisions or Concerns would be leaked to the candidate if rendered.
     recruiting:           { salutation: 'Hi there,',           opening: 'Thank you for taking the time to speak with us today.', decisionsLabel: '',                       nextStepsLabel: 'What happens next:',  empty: 'Thanks again — we\'ll be in touch about next steps soon.', signoff: 'Best,' },
-    'team-meet':          { salutation: 'Hi team,',            opening: 'Quick recap from our sync:',             decisionsLabel: 'Decisions:',           nextStepsLabel: 'Owners & next steps:', empty: 'No decisions or action items were captured this time.', signoff: 'Thanks,' },
+    'team-meet':          { salutation: 'Hi team,',            opening: 'Quick recap from our sync:',             decisionsLabel: 'Decisions:',           nextStepsLabel: 'Owners & next steps:', empty: 'No decisions or action items were captured this time.', emptyNoNextSteps: 'No decisions were captured this time.', signoff: 'Thanks,' },
     'looking-for-work':   { salutation: 'Dear interviewer,',   opening: 'Thank you for taking the time to speak with me today.', decisionsLabel: 'What we discussed:',   nextStepsLabel: 'Next steps:',        empty: 'Thank you again for the conversation — I really enjoyed it.', signoff: 'Best regards,' },
     'technical-interview':{ salutation: null,                  opening: 'Interview debrief:',                     decisionsLabel: 'Assessment:',          nextStepsLabel: 'Recommended next step:', empty: 'No decisions were recorded during the session.', signoff: null },
     lecture:              { salutation: null,                  opening: 'Study recap:',                           decisionsLabel: 'Key points:',          nextStepsLabel: 'To review:',         empty: 'No key points were captured.', signoff: null },
@@ -280,18 +310,26 @@ export function buildFollowUpBody(decisions: DecisionItem[], actionItems: Action
   const lines: string[] = [];
   if (p.salutation) lines.push(p.salutation, '');
   lines.push(p.opening);
+  // `rendered` tracks whether ANY substantive block made it into the body. With the
+  // next-steps block suppressed, "decisions.length === 0 && actionItems.length === 0"
+  // is no longer the right emptiness test: a meeting with action items but no
+  // decisions — and every recruiting draft, whose decisionsLabel is deliberately
+  // empty — would otherwise render as salutation + opening + sign-off and nothing else.
+  let rendered = false;
   if (decisions.length > 0 && p.decisionsLabel) {
     lines.push('', p.decisionsLabel, ...decisions.slice(0, 5).map(item => `- ${item.text}`));
+    rendered = true;
   }
-  if (actionItems.length > 0) {
+  if (INCLUDE_NEXT_STEPS && actionItems.length > 0) {
     lines.push('', p.nextStepsLabel, ...actionItems.slice(0, 8).map(item => {
       const owner = item.owner ? `${item.owner}: ` : '';
       const deadline = item.deadline ? ` by ${item.deadline}` : '';
       const inferred = item.explicitness === 'inferred' ? ' (inferred)' : '';
       return `- ${owner}${item.text}${deadline}${inferred}`;
     }));
+    rendered = true;
   }
-  if (decisions.length === 0 && actionItems.length === 0) lines.push('', p.empty);
+  if (!rendered) lines.push('', (!INCLUDE_NEXT_STEPS && p.emptyNoNextSteps) || p.empty);
   if (p.signoff) lines.push('', p.signoff);
   return lines.join('\n');
 }
@@ -336,6 +374,12 @@ function mergeSimilar<T extends { text: string; evidence?: any[] }>(items: T[], 
     if (!existing) {
       merged.push({ ...item });
       continue;
+    }
+    // Keep the RICHER text. The old code kept whichever arrived first, so a terse
+    // restatement could never be improved by a later, more specific one — and a terse
+    // EARLY bullet permanently shadowed the specific later version.
+    if ((item.text || '').trim().length > (existing.text || '').trim().length) {
+      existing.text = item.text;
     }
     existing.evidence = [...(existing.evidence || []), ...(item.evidence || [])].slice(0, 4);
     if (kind === 'action') {
@@ -384,16 +428,39 @@ function dedupeStrings(values: string[]): string[] {
   return out;
 }
 
-function similar(a: string, b: string): boolean {
+// Two bullets are "the same point" only when they overlap SYMMETRICALLY and are of
+// comparable length.
+//
+// The previous rule was `shared / Math.min(aWords.size, bWords.size) >= 0.8` — pure subset
+// containment. Any short generic bullet whose words appear inside a longer specific one
+// scored 1.0, and because mergeSimilar keeps the FIRST-seen item, the specific text was
+// discarded outright. Reproduced 2026-08-24: "Ari will send the packet" swallowed "Ari will
+// send the SOC2 packet to procurement on Friday". That one function explained both "notes
+// are too thin" and "notes miss what mattered".
+//
+// Dice coefficient (2·shared / (|A|+|B|)) is symmetric, so containment alone cannot reach
+// 1.0. The length-ratio floor is the second guard: a bullet under 60% the length of another
+// is a DIFFERENT, less specific point however well its words are contained. Both thresholds
+// are locked by the tables in NotesQuality2026_08_24.test.mjs — change one, run that suite.
+const SIMILARITY_DICE_THRESHOLD = 0.7;
+const SIMILARITY_LENGTH_RATIO_FLOOR = 0.6;
+
+export function similar(a: string, b: string): boolean {
   const na = normalize(a);
   const nb = normalize(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
-  const aWords = new Set(na.split(' '));
-  const bWords = new Set(nb.split(' '));
-  const shared = [...aWords].filter(w => bWords.has(w)).length;
-  const smaller = Math.min(aWords.size, bWords.size) || 1;
-  return shared / smaller >= 0.8;
+  const aWords = new Set(na.split(' ').filter(Boolean));
+  const bWords = new Set(nb.split(' ').filter(Boolean));
+  if (aWords.size === 0 || bWords.size === 0) return false;
+
+  const lengthRatio = Math.min(aWords.size, bWords.size) / Math.max(aWords.size, bWords.size);
+  if (lengthRatio < SIMILARITY_LENGTH_RATIO_FLOOR) return false;
+
+  let shared = 0;
+  for (const word of aWords) if (bWords.has(word)) shared++;
+  const dice = (2 * shared) / (aWords.size + bWords.size);
+  return dice >= SIMILARITY_DICE_THRESHOLD;
 }
 
 function normalize(value: string): string {
