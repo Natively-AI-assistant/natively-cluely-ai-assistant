@@ -1220,6 +1220,7 @@ import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
 import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
 import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
+import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
 import { LegacyAutoAnswerTrigger } from "./intelligence/LegacyAutoAnswerTrigger"
 import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
@@ -3188,8 +3189,52 @@ export class AppState {
    * the log line below states which engine is active. Remove with
    * LegacyAutoAnswerTrigger when the A/B is done.
    */
-  private readonly autoAnswerEngineChoice: 'v3' | 'legacy' =
-    (process.env.NATIVELY_AUTO_ANSWER_ENGINE || '').toLowerCase() === 'legacy' ? 'legacy' : 'v3';
+  private readonly autoAnswerEngineChoice: 'simple' | 'v3' | 'legacy' =
+    (process.env.NATIVELY_AUTO_ANSWER_ENGINE || '').toLowerCase() === 'legacy' ? 'legacy'
+      : (process.env.NATIVELY_AUTO_ANSWER_ENGINE || '').toLowerCase() === 'v3' ? 'v3'
+        : 'simple';
+  /**
+   * The DEFAULT engine (user decision 2026-08-25): "legacy trigger, judge
+   * brain" — interviewer stoppage → one judge call → dispatch/offer/silent.
+   * See SimpleAutoAnswer.ts. V3 stays reachable via
+   * NATIVELY_AUTO_ANSWER_ENGINE=v3 for A/B.
+   */
+  private readonly simpleAutoAnswer = new SimpleAutoAnswerEngine({
+    isEnabled: () => this._autoAnswerEnabled,
+    isMeetingActive: () => this.isMeetingActive,
+    meetingGeneration: () => this._meetingGeneration,
+    engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
+    answerStreamActive: () => this.intelligenceManager.isAnswerStreaming(),
+    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(60) as any,
+    dispatch: (question, { reuseSpeculative }) => {
+      return this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
+        console.warn('[Main] Automatic interviewer answer failed:', error);
+      });
+    },
+    offer: (question) => this.showAutoAnswerOffer(question),
+    cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
+    ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
+      judgeCandidate: async (req) => {
+        const llm = this.processingHelper?.getLLMHelper?.();
+        if (!llm) return null;
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
+      },
+    }),
+    modeName: () => {
+      try {
+        const { ModesManager } = require('./services/ModesManager');
+        return ModesManager.getInstance().getActiveMode()?.name ?? null;
+      } catch { return null; }
+    },
+    telemetry: (event) => {
+      try {
+        const { telemetryService } = require('./services/telemetry/TelemetryService');
+        const { name, meetingGeneration, provider, ...properties } = event;
+        telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
+      } catch { /* telemetry must never break the pipeline */ }
+    },
+    log: (line) => { if (this._verboseLogging) console.log(line); },
+  });
   private readonly legacyAutoAnswer = new LegacyAutoAnswerTrigger({
     isEnabled: () => this._autoAnswerEnabled,
     isMeetingActive: () => this.isMeetingActive,
@@ -3301,13 +3346,16 @@ export class AppState {
   /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
   public applyAutoAnswerThresholds(modeTemplateType: string | null | undefined): void {
     try {
-      this.autoAnswerController.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
+      const t = resolveAutoAnswerThresholds(modeTemplateType);
+      this.autoAnswerController.setThresholds(t);
+      this.simpleAutoAnswer.setThresholds(t);
     } catch { /* keep the current thresholds */ }
   }
 
   private cancelAutoAnswer(): void {
     this.legacyAutoAnswer.cancelAutoAnswer();
     this.autoAnswerController.onMeetingStop();
+    this.simpleAutoAnswer.onMeetingStop();
     // Free the Smart Turn ORT session between meetings (and on toggle-off).
     // It is lazily re-created on the next interviewer speech-stop. Also keeps
     // a live ORT session out of any hard-exit path: process.exit() with one
@@ -3536,7 +3584,8 @@ export class AppState {
     if (speaker === 'interviewer') {
       (stt as any).on?.('endpoint', (ev: { type: 'speech_final' | 'utterance_end'; confidence?: number }) => {
         if (!this._autoAnswerEnabled) return;
-        this.autoAnswerController.onProviderEndpoint({ type: ev.type, timestamp: Date.now(), confidence: ev.confidence });
+        if (this.autoAnswerEngineChoice === 'simple') this.simpleAutoAnswer.onProviderEndpoint();
+        else this.autoAnswerController.onProviderEndpoint({ type: ev.type, timestamp: Date.now(), confidence: ev.confidence });
       });
     }
 
@@ -3575,6 +3624,17 @@ export class AppState {
         if (segment.isFinal && speaker === 'interviewer') {
           this.legacyAutoAnswer.scheduleAutoAnswer();
         }
+      } else if (this.autoAnswerEngineChoice === 'simple') {
+        this.simpleAutoAnswer.ingest({
+          speaker,
+          text: segment.text,
+          timestamp: Date.now(),
+          final: segment.isFinal,
+          confidence: segment.confidence,
+          origin: 'stt',
+          sttProvider: effectiveSttId,
+          punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
+        } as any);
       } else {
         this.autoAnswerController.ingest({
           speaker,
@@ -6007,6 +6067,7 @@ export class AppState {
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
     this.autoAnswerController.onMeetingStart();
+    this.simpleAutoAnswer.onMeetingStart();
 
     // If a previous endMeeting() is still draining STT in the background, wait
     // for it to finish before we boot a new session — otherwise the BG teardown

@@ -925,6 +925,27 @@ floor are ignored (skip `backchannel`). VAD-edge gating unchanged (echo-guarded;
 rather than killing; never the live killer). Trade-off accepted: a bare "Three years." self-answer no longer
 suppresses the auto answer. Test live#9; word floor mutation-probed red. Suite 217/217 · typecheck clean.
 
+### SIMPLE engine (2026-08-25 — user decision: "legacy trigger, judge brain")
+After six rounds the user called V3 "unnecessarily overcomplicated" and legacy "undercomplicated", and asked for
+the middle ground: fire like legacy on interviewer stoppages, but gate every firing through ONE LLM request that
+answers finished/ask/directed/type/follow-up in a single verdict. Built as `SimpleAutoAnswer.ts` (~300 lines) and
+made the DEFAULT engine; `NATIVELY_AUTO_ANSWER_ENGINE=v3|legacy` keeps the old engines for A/B.
+
+Flow: interviewer finals AND interims restart a STABILITY_MS=900 window (provider endpoint shortens to 350) →
+stoppage → zero-cost prefilter (unchanged-text / backchannel / <4-word non-'?' / dup-vs-answered) → one judge
+call → auto ≥ autoThreshold / offer ≥ offerThreshold / silent. In-flight verdicts superseded by new speech
+(judgeSeq). Lenient mic carried over verbatim. Judge unavailable/erroring → near-legacy fallback: only a trailing
+'?' fires. Busy engine → 500 ms retry, 8 s TTL. Cost optimizations: one call per stoppage (V3 re-judged one
+utterance 6×), judge prompt refactored to a byte-identical STATIC prefix (implicit provider caching) with all
+dynamic content trailing.
+
+Validation: all three recorded meetings replayed through the new engine with the REAL judge at production config —
+fd28a1af: wordle question + task, nothing else; 680519c8: both; 8168240a: wordle question only (the task was
+never recorded). 11 engine tests (fake clock/judge): one-call-per-stoppage, interim hold, supersede, prefilter,
+offer band, busy retry+TTL, lenient mic incl. barge-in, '?' fallback, endpoint confirm, stop/no-leaks, no-text
+telemetry. Suite 228/228 · evaluator gate unchanged · typecheck clean. Replay note: DB replays lack interims, so
+offline judge-call counts overestimate live (every recorded ~2 s pause reads as a stoppage).
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
