@@ -1043,6 +1043,40 @@ with one documented false fire (a candidate cut mid-phrase, reachable only in th
 segmentation). Regression after all of it: merge/rhetorical 7/7, fragment 4/4, scenarios 12/12, all three Wordle
 meetings correct, suite 235/235, evaluator gate green, typecheck clean.
 
+### Three more videos: the judge's blind spot was interviewer speech that ISN'T asking (2026-08-25)
+Benched three more clips end-to-end (transcript → speaker labels → dual-channel replay with the live judge):
+`yju4zwKSriI` senior-SWE strings/dictionary (440-1160 s), `svghH8P1uG4` Google number-of-islands (60-780 s),
+`QBHTbtWSECg` **system design** — Design Leetcode (55-775 s), the first non-coding scenario in the bench.
+
+First pass found one coherent failure family: the interviewer talking without asking for anything.
+26. **Speech that REMOVES work is not an ask.** Granting/scoping ("you can totally look up syntax",
+    "authentication and user profiles you can skip", "feel free to use any language"), session logistics
+    ("go ahead and share your screen"), and deferral ("we'll talk about that later" — and naming the subject it
+    defers to does not make it an ask). Five false fires across two videos, all gone.
+27. **Interviewer PARAPHRASE is a comprehension check** ("okay, it sounds more like you want a low-latency
+    platform"), not a new ask — unless a real question follows.
+28. **…but a directive to PRODUCE is an ask**, and the first cut of rule 26 wrongly swallowed it: "let's see how
+    you code this out" must fire. The distinction that works: produce-directives are asks *provided the
+    transcript already says what to produce* — "let's transition to the coding portion" before any problem has
+    been stated is still logistics.
+Results after: senior-SWE 3 dispatches (task, wildcard variant, "without dynamic programming" redirect),
+islands 5 (task, two produce-directives, two probes), system design 4 (leaderboard requirement, consistency
+probe, scale probe, fault-tolerance probe) — every dispatch reviewed and confirmed a genuine interviewer ask.
+12-21 judge calls per 12-minute window, **$0.012-0.021/hour**.
+
+**Discipline note.** A further clause (completeness for a dangling transitive verb, "you could go ahead and
+share") fixed one logistics false fire and broke two other cases — measured aggregate fell from P 0.905/R 1.000
+to P 0.85/R 0.895 — so it was REVERTED. Marginal prompt edits oscillate; the aggregate over all fixtures decides,
+not the case in front of you.
+
+Bench is now five labeled sets in `__tests__/judge-eval/` (146 candidates: wordle 54, google-mock 44,
+system-design 21, senior-swe 15, islands 12), spanning single- and dual-channel, coding and system design.
+**Aggregate: TP 19 · FP 2 · FN 0 — precision 0.905, recall 1.000.** Every real ask across five videos is caught;
+the two false fires are documented in the fixtures with `note` fields (a mid-phrase truncation, and the
+"transition to the coding portion" logistics line). Regression: merge 7/7, fragment 4/4, logistics 3/4 (the
+documented one), scenarios 12/12, all three recorded meetings correct, suite 235/235, evaluator gate green,
+typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
