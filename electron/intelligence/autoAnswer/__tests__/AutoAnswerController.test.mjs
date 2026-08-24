@@ -677,3 +677,47 @@ test('live#4b: requirements listing and confirmations from the same session stil
     assert.deepEqual(h.texts(), [], `${JSON.stringify(text.slice(0, 40))} must stay silent (skips: ${h.state.skips.join(',')})`);
   }
 });
+
+// ── Live-run repro (2026-08-24, session 3): speaker echo into the mic ─────
+
+test('live#5: mic ECHO of the interviewer (speakers, no headphones) must not read as the user answering', async () => {
+  // Observed live: every interviewer final has an identical-length twin on the
+  // user channel ms later, and the mic VAD "speaks" whenever the video does.
+  const h = makeHarness();
+  const speakBoth = async (text, ms = 1500) => {
+    h.edge('interviewer', true);
+    h.edge('user', true);                     // bleed: the mic hears the speakers
+    await h.advance(ms);
+    h.edge('interviewer', false);
+    h.edge('user', false);
+    await h.advance(100);
+    h.interviewerFinal(text);
+    await h.advance(80);
+    h.userFinal(text);                        // the echo transcript, verbatim
+    await h.advance(120);
+  };
+  await speakBoth('Welcome to the interview. How are you doing today?');
+  await h.advance(2500);
+  h.controller.onEngineIdle();
+  await speakBoth('Why did you choose PostgreSQL?');
+  await h.advance(QUIET + USER_SILENCE_MS + HOLD_BUDGET_MS + 2000);
+  assert.ok(
+    h.texts().some(t => /PostgreSQL/.test(t)),
+    `the echoed mic must not suppress the answer (dispatched: ${JSON.stringify(h.texts())}, skips: ${h.state.skips.join(',')})`,
+  );
+});
+
+test('live#5b: GENUINE user speech (different words) still cancels as user_answering', async () => {
+  const h = makeHarness();
+  h.edge('interviewer', true);
+  await h.advance(1200);
+  h.edge('interviewer', false);
+  h.interviewerFinal(Q);
+  await h.advance(200);
+  h.edge('user', true);
+  await h.advance(150);
+  h.userFinal('Well, mostly because of the ecosystem and the tooling around it.');
+  await h.advance(QUIET + HOLD_BUDGET_MS + 2000);
+  assert.deepEqual(h.texts(), []);
+  assert.ok(h.state.skips.includes('user_answering'));
+});

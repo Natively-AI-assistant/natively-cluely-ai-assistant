@@ -781,6 +781,26 @@ controller. Chosen once at startup; announced by `[AutoAnswer] engine=…` in th
 prefixed `[AutoAnswer:legacy]`. Smoke-verified by hand (restart-then-fire-once, already_answered dedup). V3 suite
 unaffected (189/189). REMOVE the file and its main.ts wiring when the comparison is done.
 
+### Live-run repairs, round 3 (2026-08-24 — the A/B session; mic echo)
+The user ran the A/B harness. LEGACY behaved exactly as preserved: it fired constantly on garbage single turns
+("Cool.", ".", "My name is Kylie,") — the recorded PR #497 failure mode, now demonstrated live. V3 answered
+nothing: every candidate skipped `user_answering`. The log showed why — nearly every interviewer final had an
+IDENTICAL-length twin on the USER channel ms later (22/22, 156/156, 5/5), and the mic auto-detected "ml" from
+noise: the MacBook mic was hearing the video through the SPEAKERS. The macOS "VAD-backed = trustworthy" premise
+fails here: speaker bleed IS real speech acoustically, so the WebRTC VAD passes it.
+
+6. **Mic echo detection.** A user final whose text mirrors a recent interviewer final
+   (`speculativeQuestionSimilarity ≥ ECHO_SIMILARITY=0.8` within `ECHO_WINDOW_MS=5000`) is the echo, not the user:
+   it neither closes the accumulation nor counts as the user taking the floor. When ≥`ECHO_ACTIVATE_COUNT=2` of
+   the last `ECHO_FLAG_WINDOW=4` user finals were echoes, echo mode engages: user-channel EDGES are ignored for
+   gating and barge-in (`channels.clearUserSpeech()` on entry), with a one-time log naming the likely cause
+   (speakers without headphones). GENUINE user speech — different words — is not an echo, restores the flags and
+   re-enables the channel; live#5b pins that real speech still cancels as `user_answering`.
+
+Tests live#5/5b (echo suppression must not block the answer; genuine speech must). Auto Answer suite 191/191 ·
+evaluator gate green · full suite 8528 / 8463 / 2 (Ollama pair). With headphones the dual-channel gate operates
+exactly as designed; echo mode is the speakers-degradation path and reads as such in the log.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

@@ -26,6 +26,7 @@ import { systemClock } from './AutoAnswerClock';
 import { AutoAnswerTurnManager } from './AutoAnswerTurnManager';
 import { AutoAnswerDetector, scoreCandidate } from './AutoAnswerDetector';
 import { AutoAnswerDedup, REUSE_THRESHOLD, type Embedder } from './AutoAnswerDedup';
+import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import { AutoAnswerQueue, MAX_QUEUE_DEPTH } from './AutoAnswerQueue';
 import { evaluateAutoAnswerPolicy, DEFAULT_THRESHOLDS, type AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { AutoAnswerChannelGate, type AutoAnswerChannelTuning } from './AutoAnswerChannelGate';
@@ -37,6 +38,15 @@ import type { AsyncTurnPredictor, TurnPredictor } from './AutoAnswerTurnPredicto
 
 /** Retry cadence while a question waits for the engine (cooldown has no event). Unfitted placeholder. */
 export const QUEUE_RETRY_MS = 500;
+
+// ── Mic echo detection (live-run 2026-08-24, session 3). Unfitted placeholders. ──
+/** A user final matching an interviewer final this recent is the speakers echoing into the mic. */
+export const ECHO_WINDOW_MS = 5000;
+/** Token similarity at or above which a user final is that echo. */
+export const ECHO_SIMILARITY = 0.8;
+/** Echo mode engages when at least this many of the last ECHO_FLAG_WINDOW user finals were echoes. */
+export const ECHO_ACTIVATE_COUNT = 2;
+export const ECHO_FLAG_WINDOW = 4;
 /**
  * Post-commit rhetorical hold (V3 Amendment 3): measured from the
  * interviewer's end of speech, cancelled if they resume ("Why do we do it
@@ -141,6 +151,16 @@ export class AutoAnswerController {
     /** speech_edge events received this meeting; zero at commit time = the dual-channel gate is inert. */
     private edgesSeen = 0;
     private noEdgesWarned = false;
+    /**
+     * Mic echo (speakers without headphones): the user channel transcribes the
+     * SAME words as the interviewer channel ms later, and its VAD "speaks"
+     * whenever the video does. While active, user-channel signals are
+     * untrusted — they are the interviewer (live-run 2026-08-24, session 3).
+     */
+    private recentInterviewerFinals: Array<{ text: string; at: number }> = [];
+    private recentUserEchoFlags: boolean[] = [];
+    private micEchoActive = false;
+    private micEchoWarned = false;
 
     constructor(private readonly host: AutoAnswerControllerHost, options: AutoAnswerControllerOptions = {}) {
         this.clock = options.clock ?? systemClock;
@@ -209,13 +229,49 @@ export class AutoAnswerController {
         if (!this.host.isEnabled()) return;
         if (!this.host.isMeetingActive()) return;
         if (this.state === 'idle') this.setState('listening');
-        if (segment.speaker === 'interviewer' && (segment.text ?? '').trim()) this.cancelRhetoricalHold();
+        const text = (segment.text ?? '').trim();
+        if (segment.speaker === 'interviewer' && text) {
+            this.cancelRhetoricalHold();
+            if (segment.final) {
+                this.recentInterviewerFinals.push({ text, at: this.clock.now() });
+                while (this.recentInterviewerFinals.length > 8) this.recentInterviewerFinals.shift();
+            }
+        } else if (segment.speaker !== 'interviewer' && segment.final && text) {
+            // Echo check: a user final that mirrors a recent interviewer final
+            // is the speakers bleeding into the mic, not the user answering.
+            const now = this.clock.now();
+            const isEcho = this.recentInterviewerFinals.some(f =>
+                now - f.at <= ECHO_WINDOW_MS && speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY);
+            this.recentUserEchoFlags.push(isEcho);
+            while (this.recentUserEchoFlags.length > ECHO_FLAG_WINDOW) this.recentUserEchoFlags.shift();
+            const echoes = this.recentUserEchoFlags.filter(Boolean).length;
+            const wasActive = this.micEchoActive;
+            this.micEchoActive = echoes >= ECHO_ACTIVATE_COUNT;
+            if (this.micEchoActive && !wasActive) {
+                this.channels.clearUserSpeech();
+                if (!this.micEchoWarned) {
+                    this.micEchoWarned = true;
+                    this.host.log?.('[AutoAnswer] mic echo detected — the user channel mirrors the interviewer (speakers without headphones?). User-channel gating suspended until genuine user speech.');
+                }
+            }
+            if (!this.micEchoActive && wasActive) this.host.log?.('[AutoAnswer] mic echo cleared — user-channel gating restored.');
+            if (isEcho) {
+                // The echo is the INTERVIEWER's audio: it must neither close the
+                // accumulation nor count as the user taking the floor.
+                this.emit({ name: 'auto_answer_ignored', skipReason: 'not_interviewer' });
+                return;
+            }
+        }
         this.turns.ingest(segment, this.host.meetingGeneration());
     }
 
     onSpeechEdge(edge: SpeechEdge): void {
         if (!this.host.isEnabled()) return;
         this.edgesSeen++;
+        // In echo mode the mic's edges ARE the interviewer's audio: ignore them
+        // for gating and barge-in. Genuine user speech re-enables the channel
+        // through the transcript-level echo check (different words → not echo).
+        if (edge.channel === 'user' && this.micEchoActive) return;
         const significance = this.channels.noteEdge(edge);
         if (edge.channel === 'interviewer') {
             if (edge.speaking) {
@@ -709,6 +765,10 @@ export class AutoAnswerController {
         this.automaticAnswerInFlight = false;
         this.edgesSeen = 0;
         this.noEdgesWarned = false;
+        this.recentInterviewerFinals = [];
+        this.recentUserEchoFlags = [];
+        this.micEchoActive = false;
+        this.micEchoWarned = false;
         this.questionSequence = 0;
         this.evaluation++;
     }

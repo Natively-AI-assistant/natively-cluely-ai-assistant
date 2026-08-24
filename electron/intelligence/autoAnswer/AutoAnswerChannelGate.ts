@@ -102,6 +102,18 @@ export class AutoAnswerChannelGate {
     /** Start a fresh hold budget (a new candidate was committed). */
     resetHold(): void { this.holdStartedAt = null; }
 
+    /**
+     * The "user speech" turned out to be the interviewer echoing through the
+     * speakers into the mic (echo mode): drop every user-derived signal so it
+     * cannot hold or cancel anything.
+     */
+    clearUserSpeech(): void {
+        this.userSpeaking = false;
+        this.userStartOverlapped = false;
+        this.lastUserEndedAt = null;
+        this.lastBothEndedAt = null;
+    }
+
     /** Drop derived timestamps on meeting stop; live flags are re-reported by the tracker on the next start. */
     reset(): void {
         this.holdStartedAt = null;
