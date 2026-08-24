@@ -74,10 +74,10 @@ test('when two items merge, the richer text wins', () => {
     { speaker: 'Bo', text: 'Agreed.', timestamp: 1000, final: true },
     { speaker: 'Ari', text: 'By Friday.', timestamp: 2000, final: true },
   ]);
-  const evidence = [{ speaker: 'Ari', timestamp: 0, quote: 'we will send the packet' }];
+  const evidence = [{ speakerName: 'Ari', timestampMs: 0, quote: 'we will send the packet' }];
   const atom = (chunkIndex, text) => ({
     chunkIndex,
-    timeRange: { start: chunkIndex * 1000, end: chunkIndex * 1000 + 999 },
+    timeRange: { startMs: chunkIndex * 1000, endMs: chunkIndex * 1000 + 999 },
     brief: 'packet discussion',
     topics: ['packet'], decisions: [], openQuestions: [], risks: [], deadlines: [],
     people: [], importantQuotes: [], modeSpecificFindings: {},
@@ -96,6 +96,90 @@ test('when two items merge, the richer text wins', () => {
   assert.equal(summary.actionItems.length, 1, 'the restatement should still merge');
   assert.match(summary.actionItems[0].text, /by Friday/,
     `the richer text must win, got: "${summary.actionItems[0].text}"`);
+});
+
+test('when two mode-section findings merge, the richer text wins (buildSections, not just mergeSimilar)', () => {
+  // mergeSimilar (decisions/actionItems/openQuestions/risks) was fixed to keep the longer
+  // text on a merge. buildSections — the path that fills `summary.sections`, i.e. the actual
+  // notes body — has its OWN similar-bullet merge logic and was not fixed: it used
+  // `if (... || section.bullets.some(...)) continue`, which always keeps whichever finding
+  // arrived first and silently drops the newcomer, richer or not. Chunk 0 always arrives
+  // first, so this is live for exactly the bullets that make up the rendered notes.
+  const normalized = new TranscriptNormalizer().normalize([
+    { speaker: 'Ari', text: 'We will send the packet.', timestamp: 0, final: true },
+  ]);
+  const atom = (chunkIndex, text) => ({
+    chunkIndex,
+    timeRange: { startMs: chunkIndex * 1000, endMs: chunkIndex * 1000 + 999 },
+    brief: 'packet discussion',
+    topics: ['packet'], decisions: [], openQuestions: [], risks: [], deadlines: [],
+    actionItems: [], people: [], importantQuotes: [],
+    modeSpecificFindings: {
+      'Pain points': [{ text, evidence: [], confidence: 'high' }],
+    },
+  });
+
+  const summary = new MeetingSummaryReducer().reduce({
+    title: 'packet',
+    atoms: [
+      atom(0, 'Ari will send the SOC2 packet'),
+      atom(1, 'Ari will send the SOC2 packet by Friday'),
+    ],
+    normalizedTranscript: normalized,
+    modeTemplateType: 'sales',
+    modeNoteSections: [{ title: 'Pain points', description: 'customer pain' }],
+  });
+
+  const section = summary.sections.find(s => s.title === 'Pain points');
+  assert.ok(section, 'the Pain points section should exist');
+  assert.equal(section.bullets.length, 1, 'the restatement should still merge into one bullet');
+  assert.match(section.bullets[0].text, /by Friday/,
+    `the richer text must win in buildSections, got: "${section.bullets[0].text}"`);
+});
+
+test('a section that exceeds the bullet cap truncates AND warns loudly (not silently)', () => {
+  // The old cap was 20 — written back when sections yielded 1-3 bullets per chunk. At the
+  // new 5-12-findings-per-section-per-chunk density contract, a well-covered section across
+  // 4-10 chunks legitimately produces 20-120 bullets, so the old cap bound on every dense
+  // meeting and silently deleted the back half of that section with zero warning anywhere.
+  // The cap must now sit far above realistic density (asserted here by exceeding it with
+  // distinct findings), and firing it must leave a trace in sourceQuality.warnings.
+  const normalized = new TranscriptNormalizer().normalize([
+    { speaker: 'Ari', text: 'Talking.', timestamp: 0, final: true },
+  ]);
+  const BULLET_COUNT = 505; // comfortably above any realistic per-section density
+  const atoms = [];
+  for (let i = 0; i < BULLET_COUNT; i++) {
+    atoms.push({
+      chunkIndex: i,
+      timeRange: { startMs: i * 1000, endMs: i * 1000 + 999 },
+      brief: `finding ${i}`,
+      topics: [], decisions: [], openQuestions: [], risks: [], deadlines: [],
+      actionItems: [], people: [], importantQuotes: [],
+      modeSpecificFindings: {
+        // Two DIFFERENT varying numbers (i and i+100000), not the same number repeated —
+        // a repeated number collapses to one token in similar()'s word Set, which raises
+        // the Dice score enough to falsely merge consecutive findings.
+        Notes: [{ text: `Distinct customer point ${i} concerning topic segment ${i + 100000}`, evidence: [], confidence: 'high' }],
+      },
+    });
+  }
+
+  const summary = new MeetingSummaryReducer().reduce({
+    title: 'dense meeting',
+    atoms,
+    normalizedTranscript: normalized,
+    modeTemplateType: 'general',
+    modeNoteSections: [{ title: 'Notes', description: 'general notes' }],
+  });
+
+  const section = summary.sections.find(s => s.title === 'Notes');
+  assert.ok(section, 'the Notes section should exist');
+  assert.ok(section.bullets.length > 20, 'the cap must not bind at the old 20-bullet ceiling');
+  assert.ok(section.bullets.length < BULLET_COUNT, 'the cap must still bind on a pathological input');
+  const dropped = BULLET_COUNT - section.bullets.length;
+  const warning = summary.sourceQuality.warnings.find(w => w.includes('Notes') && w.includes(String(dropped)));
+  assert.ok(warning, `expected a warning naming the section and the drop count (${dropped}), got: ${JSON.stringify(summary.sourceQuality.warnings)}`);
 });
 
 const GROUNDED = `Summary points:
@@ -207,14 +291,30 @@ test('chunk prompt states a density target and keeps evidence where it matters',
   // state or imply evidence was unconditional, out-voting the new best-effort line 2-to-1.
   assert.match(systemPrompt, /evidence is REQUIRED for decisions and actionItems/i);
   assert.match(systemPrompt, /best-effort for section findings/i);
-  assert.doesNotMatch(
-    systemPrompt,
-    /object with "text" and "evidence"/i,
+  // Pin the SUBSTANCE (the preamble sentence describing a finding object must itself mark
+  // evidence best-effort/optional), not one exact wrong phrasing — a prior version of this
+  // check only forbade the literal string `object with "text" and "evidence"`, so a
+  // reworded regression like `object with "text" plus "evidence"` (still unconditional)
+  // would have slipped straight through it.
+  const findingPreamble = systemPrompt.match(/Each finding is an object with[\s\S]*?\./i);
+  assert.ok(findingPreamble, 'could not locate the primary-task preamble sentence describing a section finding object');
+  assert.match(
+    findingPreamble[0],
+    /best-effort|optional/i,
     'the primary-task preamble still presents evidence as an unconditional part of a section finding'
   );
+  // The optionality statement belongs in prose the model reads as an INSTRUCTION, not
+  // inside jsonShapeHint — the model is told to "Return exactly this JSON shape", so any
+  // sentence living in a shape VALUE risks being copied verbatim into a real bullet's
+  // evidence.quote. Assert it lives in systemPrompt and NOT in jsonShapeHint.
   assert.match(
+    systemPrompt,
+    /OPTIONAL[:\s].*omit the entire ["']?evidence["']? key/i,
+    'the optionality statement for the evidence key is missing from the prompt prose'
+  );
+  assert.doesNotMatch(
     jsonShapeHint,
-    /OPTIONAL[:\s].*omit the entire evidence key/i,
-    'findingShape (in jsonShapeHint) does not mark evidence optional, contradicting the best-effort policy'
+    /OPTIONAL[:\s].*omit the entire/i,
+    'the optionality statement leaked back into jsonShapeHint, where a model could copy it into a real quote'
   );
 });
