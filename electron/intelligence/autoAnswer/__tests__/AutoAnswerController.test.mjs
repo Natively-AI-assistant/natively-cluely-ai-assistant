@@ -721,3 +721,143 @@ test('live#5b: GENUINE user speech (different words) still cancels as user_answe
   assert.deepEqual(h.texts(), []);
   assert.ok(h.state.skips.includes('user_answering'));
 });
+
+// ── Live-run repro (2026-08-24, session 4): meeting fd28a1af — Wordle-in-React
+// coding round. V3 fired ZERO while legacy fired garbage constantly. The two
+// real asking points are the "have you heard of wordle?" question and the task
+// ("and your task Connor is / to recreate this game in Reac / t, …") delivered
+// as unpunctuated statements split across finals. Root causes fixed here:
+// name-interjected task frame + missing recreate verb (DESIGN_TASK), dangling
+// "not" tails, and ignored UNPUNCTUATED statements closing the revision window
+// so the rest of their own sentence came back as a fragment question.
+
+/** All 58 finals of the meeting, verbatim, single (system-audio) channel. */
+const WORDLE_MEETING = [
+  [0, "interviewer", "Yes, I'm ready."],
+  [5121, "interviewer", "Okay, have you heard of the popular word game called \"wordle\"?"],
+  [7219, "interviewer", "Yeah, yeah, I've played it a few times."],
+  [13316, "interviewer", "You've played it, okay, perfect,"],
+  [15428, "interviewer", "so this is going to be very easy for you to understand"],
+  [17412, "interviewer", ". I'm going to give you a link right now to the"],
+  [19454, "interviewer", "world game, let me give it to you here."],
+  [21612, "interviewer", "So this is on the New York Times webs"],
+  [23532, "interviewer", "ite, and you can play around with it a little bit while"],
+  [25565, "interviewer", "I explain to the viewers at home who might not"],
+  [27662, "interviewer", "be familiar with the game what it's about"],
+  [29650, "interviewer", ". Basically, every day a"],
+  [31713, "interviewer", "five-letter word is picked"],
+  [33805, "interviewer", "at random from some word bank"],
+  [35785, "interviewer", ", and you, the player, have"],
+  [37805, "interviewer", "to guess what that five-letter word is."],
+  [39839, "interviewer", "The way that you guess it is you"],
+  [41896, "interviewer", "have 6 tries, where you"],
+  [43936, "interviewer", "basically type in a five-letter word"],
+  [46013, "interviewer", ". And at every try, the"],
+  [47998, "interviewer", "game is going to show, based on,"],
+  [49439, "interviewer", "like, different colors, which letters of the guess that you"],
+  [49472, "interviewer", "attempt."],
+  [50208, "interviewer", "Which."],
+  [54991, "interviewer", "Letters are actually found in the word that you have to find"],
+  [54995, "interviewer", "."],
+  [61100, "interviewer", "Which letters are not in that"],
+  [63152, "interviewer", "word, and which letters are not"],
+  [65229, "interviewer", "only found in that word but are at the"],
+  [67214, "interviewer", "correct position, right?"],
+  [69225, "interviewer", "So for example, if there's a W in position"],
+  [71310, "interviewer", "1 of both the word"],
+  [73323, "interviewer", "that you tried and the final"],
+  [75373, "interviewer", "word, then it would tell you you have a cor"],
+  [77470, "interviewer", "rect letter in the correct position."],
+  [79449, "interviewer", "And so you have 6 tries to get the final"],
+  [81494, "interviewer", "word, and that's the game. It"],
+  [83584, "interviewer", "became super popular over the last few months, it"],
+  [85674, "interviewer", "got acquired by the New York Times from the developer,"],
+  [87601, "interviewer", "and your task Connor is"],
+  [89627, "interviewer", "to recreate this game in Reac"],
+  [91320, "interviewer", "t, and all that I'm going to be giving you is an API endpoint, so I'm going to actually give it to you right now. Here you go."],
+  [91806, "interviewer", "Okay."],
+  [97918, "interviewer", "It's hosted on the frontend expert web"],
+  [100015, "interviewer", "site, and that API endpoint"],
+  [102007, "interviewer", "is very simple: you hit it and you get"],
+  [104033, "interviewer", "a list of five-letter"],
+  [105485, "interviewer", "words back. That is going to be the list from which you pick a random word to"],
+  [105490, "interviewer", "serve."],
+  [111666, "interviewer", "The user as the word of the"],
+  [113644, "interviewer", "game. And you have to recreate"],
+  [115743, "interviewer", "\"wordle,\" you have the freed"],
+  [117725, "interviewer", "om to, you know, kind of add your own creative"],
+  [119762, "interviewer", "twist to it, not as far as the way"],
+  [121859, "interviewer", "the game works, but more as far as, like, the lo"],
+  [123626, "interviewer", "ok of it, you know, how users select letters or select words. I'll leave that up to you."],
+  [124868, "interviewer", "Okay, sounds good."],
+  [129473, "interviewer", "Cool, so this is just an array five-letter words, yep."],];
+
+test('live#6: Wordle coding round (meeting fd28a1af verbatim) fires EXACTLY on the two real asks and nothing else', async () => {
+  const h = makeHarness();
+  // Realistic engine: each dispatched answer streams ~6s, then the engine idles.
+  let idleAt = null;
+  const origDispatch = h.host.dispatch;
+  h.host.dispatch = (q, o) => { origDispatch(q, o); idleAt = h.clock.now() + 6000; };
+  let t = 0;
+  for (const [at, , text] of WORDLE_MEETING) {
+    let cur = t;
+    while (cur < at) {
+      const step = Math.min(500, at - cur);
+      await h.advance(step); cur += step;
+      if (idleAt !== null && h.clock.now() >= idleAt) { idleAt = null; h.controller.onEngineIdle(); }
+    }
+    t = at;
+    h.interviewerFinal(text, { punctuationSource: 'provider' });
+  }
+  await h.advance(HARD_CAP_MS + QUIET + 8000);
+
+  const dispatched = h.state.dispatched.map(d => d.question);
+  assert.equal(dispatched.length, 2, `expected the 2 real asks, got: ${JSON.stringify(dispatched.map(q => q.text.slice(0, 60)))}`);
+  assert.ok(/have you heard of the popular word game/.test(dispatched[0].text));
+  assert.ok(/your task Connor is to recreate this game in Reac/.test(dispatched[1].text), `the TASK must fire (got ${JSON.stringify(dispatched[1].text.slice(0, 80))})`);
+  assert.equal(dispatched[1].dialogueAct, 'coding_question');
+  // No rule-explanation fragment ever fires or is offered.
+  assert.deepEqual(h.state.offered, []);
+});
+
+test('live#6b: the name-interjected task frame fires; near-misses stay silent', async () => {
+  // "your task Connor is to recreate…" — the ask, verbatim.
+  const h = makeHarness();
+  h.interviewerFinal("it got acquired by the New York Times from the developer, and your task Connor is to recreate this game in React, and all that I'm going to be giving you is an API endpoint.", { punctuationSource: 'provider' });
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.equal(h.texts().length, 1, `skips: ${h.state.skips.join(',')}`);
+  assert.equal(h.state.dispatched[0].question.dialogueAct, 'coding_question');
+
+  // Near-misses that must NOT fire: a status-meeting "task list", and the
+  // RESTATEMENT of an already-given task (firing twice would be a duplicate).
+  for (const text of [
+    'Your task list is getting long and we should prioritize it together in the next sprint planning session.',
+    'And you have to recreate "wordle," you have the freedom to, you know, kind of add your own creative twist to it.',
+  ]) {
+    const g = makeHarness();
+    g.interviewerFinal(text, { punctuationSource: 'provider' });
+    await g.advance(HARD_CAP_MS + QUIET + 2000);
+    assert.deepEqual(g.texts(), [], `${JSON.stringify(text.slice(0, 40))} must stay silent`);
+  }
+});
+
+test('live#6c: an ignored UNPUNCTUATED statement stays revisable — its own continuation never becomes a fragment question', async () => {
+  // Meeting fd28a1af verbatim: "The way that you guess it is you" committed as
+  // a statement, then "have 6 tries, where you" arrived 2s later and — with
+  // the revision window closed — fired as a 0.9 general_question.
+  const h = makeHarness();
+  h.interviewerFinal('The way that you guess it is you', { punctuationSource: 'provider' });
+  await h.advance(QUIET + 100);            // commits, skipped as a statement
+  h.interviewerFinal('have 6 tries, where you', { punctuationSource: 'provider' });
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.deepEqual(h.texts(), [], `the sentence's own tail must not fire (skips: ${h.state.skips.join(',')})`);
+
+  // A PUNCTUATED ignored statement is still closed: the next final is a new
+  // candidate, judged on its own (and a real question fires).
+  const g = makeHarness();
+  g.interviewerFinal("That's the game.", { punctuationSource: 'provider' });
+  await g.advance(QUIET + 100);
+  g.interviewerFinal('Why did you choose PostgreSQL?', { punctuationSource: 'provider' });
+  await g.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.deepEqual(g.texts(), ['Why did you choose PostgreSQL?']);
+});

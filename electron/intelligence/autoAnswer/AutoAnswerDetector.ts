@@ -74,7 +74,7 @@ export const EXPOSITION_PENALTY = 0.25;
 
 // ── Shapes this layer owns (the extractor has no opinion on these) ─────────
 /** Ends on a dangling function word / conjunction: the thought is not finished. */
-const DANGLING_TAIL = /\b(and|or|but|so|if|the|a|an|to|of|for|with|about|because|when|where|which|while|that|than|then|as|at|in|on|by|from|into|whether|versus|vs)\s*$/i;
+const DANGLING_TAIL = /\b(and|or|but|so|if|the|a|an|to|of|for|with|about|because|when|where|which|while|that|than|then|as|at|in|on|by|from|into|whether|versus|vs|not|only|also)\s*$/i;
 /** Interrogative lead with nothing (or one token) after "you" and no terminal mark: "How would you", "How would you design". */
 const BARE_INTERROGATIVE = /^(?:and\s+|so\s+|but\s+)?(how|what|why|when|where|which|who)\s+(would|do|did|could|can|should|will|have|are|were|is)\s+you(?:\s+[\w'-]+)?\s*$/i;
 const TRAILING_ELLIPSIS = /(\.\.\.|…)\s*$/;
@@ -111,8 +111,11 @@ const DEFERRAL = /(\.\.\.|…)\s+\S|\b(actually,? (before|first|hold|wait|let me
  * "…we need help designing the actual app", "We need help designing the code
  * that could implement…", "this is very open-ended. You can implement this how
  * you want…". No '?', no clause-initial imperative — but it IS the question.
+ * The name-tolerant frame ("your task,? NAME,? is to…") and the
+ * recreate/rebuild/clone verbs are verbatim from live meeting fd28a1af
+ * (2026-08-24): "and your task Connor is to recreate this game in React".
  */
-const DESIGN_TASK = /\b(we (need|want|would like) (help (you )?|you to |to )?(design|build|implement|creat(e|ing)|writ(e|ing)|cod(e|ing)|solv(e|ing))|need help (design|build|implement|creat|writ|cod|solv)(e|ing)?|help (us |me )?(design|build|implement|creat|writ|cod|solv)(e|ing)?|your (task|job|goal) (is|today|here)|the (task|problem|challenge) (is|today|for you)|i('d| would) like you to (design|build|implement|write|create|solve)|you can implement this|we're going to (have you|ask you to) (design|build|implement|write))\b/i;
+const DESIGN_TASK = /\b(we (need|want|would like) (help (you )?|you to |to )?(design|build|rebuild|implement|creat(e|ing)|re-?creat(e|ing)|writ(e|ing)|cod(e|ing)|solv(e|ing)|clone|cloning)|need help (design|build|rebuild|implement|creat|re-?creat|writ|cod|solv|clon)(e|ing)?|help (us |me )?(design|build|rebuild|implement|creat|re-?creat|writ|cod|solv|clon)(e|ing)?|your (task|job|goal) (is|today|here)|your (task|job|goal),? [\w'-]+,? (is|will be) to|the (task|problem|challenge) (is|today|for you)|i('d| would) like you to (design|build|rebuild|implement|write|create|re-?create|solve|clone)|you can implement this|we're going to (have you|ask you to) (design|build|implement|write))\b/i;
 /** Below this a task-frame match is casual chatter, not a prompt. Unfitted placeholder. */
 export const DESIGN_TASK_MIN_CHARS = 40;
 const CLAUSE_IMPERATIVE = /(?:^|[.!?;:\u2014-]\s*)(?:(?:ok(?:ay)?|so|now|alright|great|please|and|next|one more question|next question|last question|first question)[,.!\u2014:-]?\s+)*(?:please\s+)?(tell me|tell us|walk me through|walk us through|talk me through|explain|describe|give me|show me|list|name|compare|summari[sz]e|define|discuss|solve|implement|write|design|build|code)\b/i;

@@ -801,6 +801,36 @@ Tests live#5/5b (echo suppression must not block the answer; genuine speech must
 evaluator gate green · full suite 8528 / 8463 / 2 (Ollama pair). With headphones the dual-channel gate operates
 exactly as designed; echo mode is the speakers-degradation path and reads as such in the log.
 
+### Live-run repairs, round 4 (2026-08-24 — the A/B session; Wordle coding round, meeting fd28a1af)
+Same video, headphones in (no echo this time): LEGACY again fired garbage constantly ("Cool.", ".", "five-letter.",
+"attempt."), V3 fired ZERO. Replaying the saved meeting verbatim from natively.db found the two real asking points
+and three defects around them:
+
+7. **The task never matched `DESIGN_TASK`.** The ask was "and your task **Connor** is / to **recreate** this game in
+   Reac / t, …" — the frame `your (task|job|goal) (is|today|here)` breaks on the interjected name, and `recreate`
+   defeated the `\b…creat(e…)` verb list. Fixed with a name-tolerant frame that then REQUIRES the infinitive
+   (`your (task|job|goal),? \w+,? (is|will be) to`) so "your task list is getting long" stays silent, plus
+   `recreate|rebuild|clone` in the verb groups. Deliberately NOT added: a bare `you have to recreate…` frame — the
+   interviewer restates the task 30 s later ("And you have to recreate \"wordle\"…") and a frame there would
+   double-fire past the Jaccard dedup.
+8. **Fragment questions from closed revision windows.** An ignored statement always called `markDispatched()`, so
+   when the provider split one sentence across finals, the committed first half ("The way that you guess it is you")
+   closed the window and the SECOND half ("have 6 tries, where you") became a fresh candidate — which the extractor
+   scored 0.9. Now only a statement that ended as a sentence (`/[.?!]$/`) closes; an unpunctuated one stays
+   revisable and `looksLikeContinuation` glues its own tail back on.
+9. **Dangling `not/only/also` tails.** "Which letters are not in that word, and which letters are not" scored 1.0 as
+   a follow-up; those words joined `DANGLING_TAIL` (active only under provider punctuation, as before).
+
+Also observed in replay, deliberately unchanged: queued candidates behind a streaming answer can die at
+`QUEUE_TTL_MS=6000` — real, but not implicated live and the TTL/supersession trade-off needs the corpus.
+
+Tests live#6/6b/6c — live#6 replays all 58 finals of the meeting verbatim with a 6 s streaming-engine model and pins
+EXACTLY two dispatches: the "have you heard of… wordle?" question and the task as a `coding_question`; 6b pins the
+name-interjected frame and its near-misses; 6c pins revisable-vs-closed statements. All three fixes mutation-probed
+red (name frame → live#6+6b, dangling words → live#6, close-condition → live#6+6c). Auto Answer suite 194/194 ·
+evaluator gate green (precision 1.0 · recall 0.90 · zero false/dup/premature) · typecheck clean · full suite re-run:
+only the known allowed Ollama baseline failure visible (tail-30 capture).
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

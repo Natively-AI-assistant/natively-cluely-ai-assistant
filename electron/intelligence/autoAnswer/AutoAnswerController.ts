@@ -394,7 +394,13 @@ export class AutoAnswerController {
         if (decision.action === 'ignore') {
             this.current = { question, candidate, committedAt: now };
             this.currentStartedAt = candidate.startedAt;
-            this.turns.markDispatched(); // an ignored statement is closed; the next final is a new candidate
+            // An ignored statement that ended as a SENTENCE is closed; the next
+            // final is a new candidate. Without terminal punctuation the
+            // "statement" may be half a sentence the provider split — leave it
+            // revisable so a fast lowercase continuation merges instead of
+            // becoming a fragment question ("have 6 tries, where you" fired as
+            // a 0.9 general_question on live meeting fd28a1af, 2026-08-24).
+            if (/[.?!]\s*$/.test(candidate.text)) this.turns.markDispatched();
             this.skip(decision.reason as AutoAnswerSkipReason, question);
             this.setState('listening');
             return;
