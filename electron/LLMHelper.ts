@@ -313,6 +313,16 @@ const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatt
 
 ${IMAGE_TRUST_TRAILER}`
 
+/** Per-call routing/budget overrides for the meeting-notes path. Omitted → today's behaviour. */
+export type MeetingSummaryCallOpts = {
+  /** Routes to the gateway's benchmarked extraction path (larger budget, no MiniMax-M3). */
+  purpose?: 'extraction';
+  /** Overrides BOTH the Natively inner fetch cap and the outer race. Default 10s. */
+  timeoutMs?: number;
+  /** Try the 1M-context Gemini Flash model first, then fall through to the normal ladder. */
+  preferLongContext?: boolean;
+};
+
 /** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
 export interface StreamOutcome {
   /** True when the turn stopped early and the text is INCOMPLETE. */
@@ -3764,7 +3774,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction' }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -3849,15 +3859,18 @@ let isMultimodal = !!(imagePaths?.length);
       body.language = this.aiResponseLanguage;
     }
 
-    // 8s hard cap: a `fetch failed` network error without this can stall the provider
-    // waterfall for 25-30s before the OS-level TCP reset fires.
-    const timeoutMs = 8000;
+    // 8s hard cap by default: a `fetch failed` network error without this can stall the
+    // provider waterfall for 25-30s before the OS-level TCP reset fires. Callers doing a
+    // DENSE structured extraction (meeting notes) pass a larger bound — 8s is far too
+    // short for that, and silently selected for sparse output.
+    const timeoutMs = opts?.timeoutMs ?? 8000;
     // Overall-deadline signal covers BOTH connect AND the body read below. Without
     // a read-phase bound, a server that sends headers then hangs the body would
     // stall `response.json()` forever (the 8s fetch-signal only covers connect).
     // 45s is generous for a non-streaming completion body while still failing in
     // bounded time.
-    const OVERALL_DEADLINE_MS = 45_000;
+    // Must stay above timeoutMs or it becomes the new binding constraint.
+    const OVERALL_DEADLINE_MS = Math.max(45_000, timeoutMs + 15_000);
     const overallController = new AbortController();
     const overallTimer = setTimeout(() => overallController.abort(), OVERALL_DEADLINE_MS);
     let response: Response;
@@ -9357,7 +9370,7 @@ let isMultimodal = !!(imagePaths?.length);
    * 3. Gemini Flash (Retry 2x)
    * 4. Gemini Pro (Retry 5x)
    */
-  public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string): Promise<string> {
+  public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string, opts?: MeetingSummaryCallOpts): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
     // Short-circuit on empty/whitespace context. With no transcript content to
     // summarise, the provider fallback chain (Natively → Codex → Groq → Gemini
@@ -9384,6 +9397,8 @@ let isMultimodal = !!(imagePaths?.length);
     const estimateTokens = (text: string) => Math.ceil(text.length / 4);
     const tokenCount = estimateTokens(context);
     console.log(`[LLMHelper] Estimated tokens: ${tokenCount}`);
+
+    const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
     // ATTEMPT 0: Custom Provider (highest priority — user explicitly chose this)
     if (this.customProvider || this.activeCurlProvider) {
@@ -9420,6 +9435,28 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
+    // ATTEMPT 0.5: long-context single pass, only when the caller asks for it.
+    // gemini-3.7-flash carries a 1M context, so a whole meeting transcript fits in one
+    // call. Falls through to the normal ladder on any failure — this never removes a
+    // provider, it only adds one ahead of them for callers that opted in.
+    if (opts?.preferLongContext && this.client) {
+      try {
+        console.log('[LLMHelper] Attempting long-context (Gemini Flash) for summary...');
+        const text = await this.withTimeout(
+          this.generateWithFlash(contents),
+          opts.timeoutMs ?? 60000,
+          'Long-context Summary'
+        );
+        if (text.trim().length > 0) {
+          console.log('[LLMHelper] ✅ Long-context summary generated successfully.');
+          return this.processResponse(text);
+        }
+        console.warn('[LLMHelper] ⚠️ Long-context returned empty — falling through to the ladder.');
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ Long-context summary failed: ${e.message}. Falling back...`);
+      }
+    }
+
     // ATTEMPT 1: Natively API (if configured — first in chain)
     // Inner fetch timeout: 8s (AbortSignal.timeout in generateWithNatively).
     // Outer safety net: 10s — covers JSON parsing + any overhead after the fetch resolves.
@@ -9427,8 +9464,11 @@ let isMultimodal = !!(imagePaths?.length);
       try {
         console.log(`[LLMHelper] Attempting Natively API for summary...`);
         const text = await this.withTimeout(
-          this.generateWithNatively(`Context:\n${context}`, systemPrompt),
-          10000,
+          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
+            ...(opts?.purpose ? { purpose: opts.purpose } : {}),
+            ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+          }),
+          opts?.timeoutMs ?? 10000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {
@@ -9490,8 +9530,6 @@ let isMultimodal = !!(imagePaths?.length);
         console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping straight to Gemini.`);
       }
     }
-
-    const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
     // 3 attempts with linear backoff before dropping to full Flash.
