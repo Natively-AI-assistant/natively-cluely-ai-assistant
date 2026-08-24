@@ -3,7 +3,7 @@
  * model, so it is invoked manually and never by `npm test`:
  *
  *   GEMINI_API_KEY=… node electron/intelligence/autoAnswer/__tests__/judgeEval.mjs
- *   … [fixtures/judge-eval-wordle.json]        # any labeled candidate set
+ *   … [judge-eval/wordle-coding-round.json]        # any labeled candidate set
  *
  * Why it exists: the judge prompt was twice "improved" by reasoning about it
  * (a prefix-caching reorder, a strengthened merge rule) and both times the
@@ -30,8 +30,10 @@ const { resolveAutoAnswerThresholds } = dist('context-intelligence/policies/mode
 const MODEL = process.env.JUDGE_EVAL_MODEL ?? 'gemini-3.1-flash-lite';
 const CONCURRENCY = 6;
 const TH = resolveAutoAnswerThresholds('technical-interview');
-const SET_PATH = process.argv[2] ?? path.join(__dirname, 'fixtures/judge-eval-wordle.json');
-const SET = JSON.parse(fs.readFileSync(SET_PATH, 'utf8'));
+const EVAL_DIR = path.join(__dirname, 'judge-eval');
+const SET_PATHS = process.argv.length > 2
+  ? process.argv.slice(2)
+  : fs.readdirSync(EVAL_DIR).filter(f => f.endsWith('.json')).sort().map(f => path.join(EVAL_DIR, f));
 
 function apiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.replace(/^["']|["']$/g, '');
@@ -68,24 +70,29 @@ async function judge(c) {
   return { fires: false, act: 'ERROR', ans: null };
 }
 
-const results = new Array(SET.length);
-let next = 0;
-await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
-  while (true) { const i = next++; if (i >= SET.length) return; results[i] = await judge(SET[i]); }
-}));
+let anyProblem = false;
+for (const SET_PATH of SET_PATHS) {
+  const SET = JSON.parse(fs.readFileSync(SET_PATH, 'utf8'));
+  const results = new Array(SET.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: CONCURRENCY }, async () => {
+    while (true) { const i = next++; if (i >= SET.length) return; results[i] = await judge(SET[i]); }
+  }));
 
-let tp = 0, fp = 0, fn = 0, tn = 0;
-const falses = [], misses = [];
-SET.forEach((c, i) => {
-  const want = c.expect === 'ask', got = results[i].fires;
-  if (want && got) tp++;
-  else if (want) { fn++; misses.push({ i, ...results[i], text: c.text.slice(0, 80) }); }
-  else if (got) { fp++; falses.push({ i, ...results[i], text: c.text.slice(0, 80) }); }
-  else tn++;
-});
-const prec = tp + fp ? tp / (tp + fp) : 1, rec = tp + fn ? tp / (tp + fn) : 1;
-console.log(`${path.basename(SET_PATH)} · ${MODEL} · ${SET.length} candidates`);
-console.log(`TP=${tp} FP=${fp} FN=${fn} TN=${tn}  precision=${prec.toFixed(3)} recall=${rec.toFixed(3)}`);
-for (const f of falses) console.log(`  FALSE FIRE #${f.i} [${f.act} ${f.ans}] ${JSON.stringify(f.text)}`);
-for (const m of misses) console.log(`  MISS      #${m.i} [${m.act} ${m.ans}] ${JSON.stringify(m.text)}`);
-process.exitCode = (fp || fn) ? 1 : 0;
+  let tp = 0, fp = 0, fn = 0, tn = 0;
+  const falses = [], misses = [];
+  SET.forEach((c, i) => {
+    const want = c.expect === 'ask', got = results[i].fires;
+    if (want && got) tp++;
+    else if (want) { fn++; misses.push({ i, ...results[i], note: c.note, text: c.text.slice(0, 80) }); }
+    else if (got) { fp++; falses.push({ i, ...results[i], note: c.note, text: c.text.slice(0, 80) }); }
+    else tn++;
+  });
+  const prec = tp + fp ? tp / (tp + fp) : 1, rec = tp + fn ? tp / (tp + fn) : 1;
+  console.log(`\n${path.basename(SET_PATH)} · ${MODEL} · ${SET.length} candidates`);
+  console.log(`TP=${tp} FP=${fp} FN=${fn} TN=${tn}  precision=${prec.toFixed(3)} recall=${rec.toFixed(3)}`);
+  for (const f of falses) console.log(`  FALSE FIRE #${f.i} [${f.act} ${f.ans}] ${JSON.stringify(f.text)}${f.note ? '\n     note: ' + f.note : ''}`);
+  for (const m of misses) console.log(`  MISS      #${m.i} [${m.act} ${m.ans}] ${JSON.stringify(m.text)}${m.note ? '\n     note: ' + m.note : ''}`);
+  if (fp || fn) anyProblem = true;
+}
+process.exitCode = anyProblem ? 1 : 0;

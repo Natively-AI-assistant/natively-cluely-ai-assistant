@@ -1006,6 +1006,43 @@ Current: **54 candidates, precision 1.000, recall 1.000**. Independent guards al
 probe, 12/12 scenario probe (sales, lecture, standup, prompt-injection), all three recorded meetings dispatching
 exactly their real asks. Suite 235/235 · typecheck clean.
 
+### Second test video: Google mock coding interview (2026-08-25)
+The user pointed at youtube 46dZH7LDbf8 ("Mock Google Coding Interview with a Meta Intern"), interview from 1:50.
+Transcript pulled with yt-dlp into an isolated scratchpad venv (YouTube's timedtext endpoint now needs a
+proof-of-origin token; plain curl returns 0 bytes, and this Python has no CA bundle — pass certifi via
+`SSL_CERT_FILE`). Window 1:50-12:00 = 188 caption cues. Ground truth: TWO asks — the 47-second spoken task
+("design a class supporting insert / remove / get-random with equal probability") and the optimization follow-up
+at ~9:37. Everything else is the candidate thinking aloud or the interviewer answering the candidate.
+
+This video is much harder than the Wordle clip and it broke things the Wordle set never touched:
+22. **Announced-but-undelivered structure fired early.** "…design a class that supports these three operations.
+    So, the first operation is inserting a value" was judged complete and answered while the interviewer was
+    still on operation one; operations two and three then fired again as "new requirements". Rule added: a
+    speaker who announces a structure ("these three operations", "a few things", "first… second…") and has not
+    delivered it is INCOMPLETE.
+23. **`PENDING_MAX_AGE_MS` truncated the ask.** A coding-interview problem statement runs 45-60 s; the 30 s
+    accumulation cap silently dropped its opening, so the dispatched question lost the insert operation
+    entirely. Raised to 90 s — measured before/after on this transcript.
+24. **question_text kept only the last part of a multi-part ask.** Extraction clause now demands the WHOLE ask.
+25. **The user's own voice on the shared channel.** Playing a video puts BOTH voices on system audio, so the
+    video candidate's clarifying questions ("Can I code in Python?", "Are these values integers?") read as asks.
+    A rule was added for the two reliable tells (asking the other party to permit/specify something about the
+    task the user was given; reasoning aloud while working) — it helps, but this is mostly an artefact of
+    testing with a video. Proven, not assumed: labelling every cue by speaker (one flash-3.7 pass) and replaying
+    with production channel attribution — interviewer on system audio, candidate on the mic — gives
+    **12 judge calls, 2 dispatches, both real asks, ZERO garbage over 9.8 minutes (~$0.013/hr)**. The
+    single-channel replay of the same window dispatches 15 with 13 garbage. The mic channel is what saves it, so
+    the honest guidance is: video testing over speakers will show false fires that a real meeting will not.
+
+Second permanent fixture: `__tests__/judge-eval/google-mock-interview.json` (44 candidates, dual-channel, both
+segmentations) alongside the Wordle set, now under `__tests__/judge-eval/` with a README — NOT `fixtures/`, which
+`replay.mjs` loads wholesale (a judge set there crashes every replay test with "events is not iterable"; it
+happened twice, the second time because a parallel session helpfully "restored" the file, so `loadFixtures` now
+skips anything without an `events` array). Current baselines: wordle **1.000/1.000**, interview **0.750/1.000**
+with one documented false fire (a candidate cut mid-phrase, reachable only in the pessimistic per-final
+segmentation). Regression after all of it: merge/rhetorical 7/7, fragment 4/4, scenarios 12/12, all three Wordle
+meetings correct, suite 235/235, evaluator gate green, typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

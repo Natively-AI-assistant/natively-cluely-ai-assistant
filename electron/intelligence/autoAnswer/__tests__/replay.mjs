@@ -51,7 +51,11 @@ export function loadFixtures(dir = FIXTURE_DIR) {
     const fixture = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
     fixture.file = f;
     return fixture;
-  });
+  })
+  // Only conversation fixtures live here. Anything else in the directory (a
+  // stray capture, a judge-eval set) is skipped rather than crashing every
+  // replay test with "events is not iterable" — 2026-08-25, twice.
+  .filter(fixture => Array.isArray(fixture.events));
 }
 
 /** Group transcript events into utterances (same speaker, small gaps), carrying their finals and partials. */

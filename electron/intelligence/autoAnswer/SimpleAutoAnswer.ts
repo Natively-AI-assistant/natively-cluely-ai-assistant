@@ -57,8 +57,14 @@ export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)
 /** Busy-engine retry cadence and give-up. */
 export const RETRY_MS = 500;
 export const RETRY_TTL_MS = 8000;
-/** Pending interviewer finals older than this no longer belong to the current thought. */
-export const PENDING_MAX_AGE_MS = 30_000;
+/**
+ * Pending interviewer finals older than this no longer belong to the current
+ * thought. Raised 30s -> 90s on 2026-08-25: a coding-interview problem
+ * statement runs 45-60 s ("design a class that supports these three
+ * operations…"), and a 30 s cap silently dropped its opening, so the answer
+ * was drafted against two thirds of the spec. Unfitted placeholder.
+ */
+export const PENDING_MAX_AGE_MS = 90_000;
 
 export interface SimpleAutoAnswerHost {
     isEnabled(): boolean;
