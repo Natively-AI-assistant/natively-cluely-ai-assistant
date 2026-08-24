@@ -319,8 +319,6 @@ export type MeetingSummaryCallOpts = {
   purpose?: 'extraction';
   /** Overrides BOTH the Natively inner fetch cap and the outer race. Default 10s. */
   timeoutMs?: number;
-  /** Try the 1M-context Gemini Flash model first, then fall through to the normal ladder. */
-  preferLongContext?: boolean;
 };
 
 /** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
@@ -9435,31 +9433,12 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    // ATTEMPT 0.5: long-context single pass, only when the caller asks for it.
-    // gemini-3.7-flash carries a 1M context, so a whole meeting transcript fits in one
-    // call. Falls through to the normal ladder on any failure — this never removes a
-    // provider, it only adds one ahead of them for callers that opted in.
-    if (opts?.preferLongContext && this.client) {
-      try {
-        console.log('[LLMHelper] Attempting long-context (Gemini Flash) for summary...');
-        const text = await this.withTimeout(
-          this.generateWithFlash(contents),
-          opts.timeoutMs ?? 60000,
-          'Long-context Summary'
-        );
-        if (text.trim().length > 0) {
-          console.log('[LLMHelper] ✅ Long-context summary generated successfully.');
-          return this.processResponse(text);
-        }
-        console.warn('[LLMHelper] ⚠️ Long-context returned empty — falling through to the ladder.');
-      } catch (e: any) {
-        console.warn(`[LLMHelper] ⚠️ Long-context summary failed: ${e.message}. Falling back...`);
-      }
-    }
-
     // ATTEMPT 1: Natively API (if configured — first in chain)
-    // Inner fetch timeout: 8s (AbortSignal.timeout in generateWithNatively).
-    // Outer safety net: 10s — covers JSON parsing + any overhead after the fetch resolves.
+    // Inner fetch timeout: caller's timeoutMs, default 10s (AbortSignal.timeout in
+    // generateWithNatively). Outer safety net: timeoutMs + 5s (default 10s when the
+    // caller passes no opts, so uninvolved callers are unaffected) — the extra slack
+    // covers JSON parsing and any overhead after the fetch resolves, mirroring the
+    // headroom generateWithNatively's own OVERALL_DEADLINE_MS gives the body read.
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting Natively API for summary...`);
@@ -9468,7 +9447,7 @@ let isMultimodal = !!(imagePaths?.length);
             ...(opts?.purpose ? { purpose: opts.purpose } : {}),
             ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
           }),
-          opts?.timeoutMs ?? 10000,
+          opts?.timeoutMs ? opts.timeoutMs + 5000 : 10000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {

@@ -43,7 +43,7 @@ export interface GenerateStructuredOptions<T> {
   /** Disable the one repair retry (default: enabled). */
   disableRepairRetry?: boolean;
   /** Per-call routing/budget overrides passed straight to LLMHelper.generateMeetingSummary. */
-  callOpts?: { purpose?: 'extraction'; timeoutMs?: number; preferLongContext?: boolean };
+  callOpts?: { purpose?: 'extraction'; timeoutMs?: number };
 }
 
 export interface GenerateStructuredResult<T> {
