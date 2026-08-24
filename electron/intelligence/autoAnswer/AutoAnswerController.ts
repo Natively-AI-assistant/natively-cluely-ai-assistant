@@ -24,7 +24,7 @@ import type { SpeechEdge } from '../../audio/speechEdge';
 import type { Clock, ClockTimer } from './AutoAnswerClock';
 import { systemClock } from './AutoAnswerClock';
 import { AutoAnswerTurnManager } from './AutoAnswerTurnManager';
-import { AutoAnswerDetector, scoreCandidate } from './AutoAnswerDetector';
+import { AutoAnswerDetector, scoreCandidate, tokenContainment } from './AutoAnswerDetector';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, shouldConsultJudge, parseJudgeVerdict, routeForVerdict,
     type JudgeRequest,
@@ -49,6 +49,10 @@ export const QUEUE_RETRY_MS = 500;
 export const ECHO_WINDOW_MS = 5000;
 /** Token similarity at or above which a user final is that echo. */
 export const ECHO_SIMILARITY = 0.8;
+/** A user final whose tokens are (near-)contained in recent interviewer speech is a mic-caught fragment of it. */
+export const ECHO_FRAGMENT_CONTAINMENT = 0.85;
+/** Containment needs a few words to mean anything ("Yes." is contained in everything). */
+export const ECHO_FRAGMENT_MIN_WORDS = 2;
 /** Echo mode engages when at least this many of the last ECHO_FLAG_WINDOW user finals were echoes. */
 export const ECHO_ACTIVATE_COUNT = 2;
 export const ECHO_FLAG_WINDOW = 4;
@@ -258,8 +262,16 @@ export class AutoAnswerController {
             // Echo check: a user final that mirrors a recent interviewer final
             // is the speakers bleeding into the mic, not the user answering.
             const now = this.clock.now();
-            const isEcho = this.recentInterviewerFinals.some(f =>
-                now - f.at <= ECHO_WINDOW_MS && speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY);
+            // Two echo shapes (live 2026-08-24): a near-identical TWIN of one
+            // interviewer final (round 3), and a FRAGMENT — the mic catches
+            // pieces spanning finals ("Every day.", "It was 6 tries where you
+            // basically—"), too dissimilar pairwise for the twin check but a
+            // token-subset of the recent interviewer speech (round 5).
+            const recent = this.recentInterviewerFinals.filter(f => now - f.at <= ECHO_WINDOW_MS);
+            const userWords = text.split(/\s+/).filter(Boolean).length;
+            const isEcho = recent.some(f => speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY)
+                || (userWords >= ECHO_FRAGMENT_MIN_WORDS && recent.length > 0
+                    && tokenContainment(text, recent.map(f => f.text).join(' ')) >= ECHO_FRAGMENT_CONTAINMENT);
             this.recentUserEchoFlags.push(isEcho);
             while (this.recentUserEchoFlags.length > ECHO_FLAG_WINDOW) this.recentUserEchoFlags.shift();
             const echoes = this.recentUserEchoFlags.filter(Boolean).length;

@@ -875,6 +875,31 @@ auto-fire when consulted; per-candidate token cost accepted by the user; `genera
 exceed the deadline under provider outage (falls back to heuristics by design); the 12-case probe is a spot check,
 not a corpus.
 
+### Live-run repairs, round 5 (2026-08-24 — first physical judge run, meeting 680519c8)
+The user replayed the Wordle video with the judge live; ZERO answers. Telemetry (`auto_answer_judged`) + the saved
+meeting showed three separate causes:
+10. **Merged turns read as closed.** Live interims held the quiet window open, so the wordle question and the
+    video-candidate's "Yeah, yeah, I've played it" merged into ONE candidate (words=19) — and the judge's
+    "same-channel answer = closed" rule correctly-but-wrongly vetoed it as rhetorical. Prompt rule split: a
+    SUBSTANTIVE question directed at the USER stays an ask even when a DIFFERENT voice's reply merged into the
+    turn (question extracted as question_text); only same-voice self-answers and satisfied yes/no confirmations
+    close. Probe: merged wordle 3/3 fire with extraction, self-answer/confirmation/exposition 0/3.
+11. **Judge determinism.** The hook rode `generateContentStructured` (temperature 0.4, no JSON mode — extraction
+    tuning); the merged case fired only 2/3 there vs 3/3 at temp 0 + `responseMimeType: application/json`. New
+    dedicated `LLMHelper.generateJudgeVerdict`: flash-lite → 3.7-flash at temp 0/JSON/256 tokens, structured
+    ladder only as last resort.
+12. **Echo FRAGMENTS.** The speakers-into-mic echo returned as short fragments spanning finals ("Every day.",
+    "It was 6 tries where you basically—") — too dissimilar for the round-3 twin check; they killed candidates as
+    `user_answering`. Fragments are token-SUBSETS: echo now also = `tokenContainment(userFinal, recent
+    interviewer speech) ≥ ECHO_FRAGMENT_CONTAINMENT=0.85` at ≥2 words. Genuine answers (own words) still cancel.
+Also: the user stopped the meeting seconds after the task line — its verdict was still pending (1-q13 incomplete),
+so the task never got its ~2 s to fire; not a defect.
+Validation: meeting 680519c8 replayed verbatim BOTH channels through the REAL judge at the production config —
+dispatches exactly the wordle question + the task ("your task— Connor— is to recreate this game in Reac t"),
+23 judge calls; replay-harness note: a single fake-clock jump past JUDGE_DEADLINE while real network is in flight
+reads as timeout — step the tail. Tests live#7/7b (fragment echo, mutation-probed red; genuine speech). Suite
+214/214 · evaluator gate unchanged · typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

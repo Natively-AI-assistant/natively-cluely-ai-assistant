@@ -3250,7 +3250,7 @@ export class AppState {
       judgeCandidate: async (req) => {
         const llm = this.processingHelper?.getLLMHelper?.();
         if (!llm) return null;
-        return await llm.generateContentStructured(buildJudgePrompt(req), { preferFast: true });
+        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
       },
     }),
     modeName: () => {

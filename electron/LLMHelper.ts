@@ -3417,6 +3417,36 @@ let isMultimodal = !!(imagePaths?.length);
    * Used for structured JSON output tasks (resume/JD/company research).
    * NOTE: Does NOT mutate this.geminiModel — calls Gemini Pro directly to avoid race conditions.
    */
+  /**
+   * The Auto Answer judge's call (2026-08-24): deterministic and JSON-only.
+   * generateContentStructured runs at temperature 0.4 for document extraction,
+   * which made borderline judge verdicts flip live (meeting 680519c8: the
+   * "have you heard of wordle?" candidate judged rhetorical ~1 run in 3; the
+   * same prompt at temperature 0 + responseMimeType json is stable 3/3).
+   * Gemini flash-lite → 3.7-flash directly; any failure falls back to the
+   * generateContentStructured ladder so the judge still answers when Gemini
+   * is down (the controller's deadline bounds the total wait either way).
+   */
+  public async generateJudgeVerdict(message: string): Promise<string> {
+    if (this.client) {
+      for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
+        try {
+          await this.rateLimiters.gemini.acquire();
+          // @ts-ignore
+          const res = await this.client.models.generateContent({
+            model: modelId,
+            contents: [{ role: 'user', parts: [{ text: message }] }],
+            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json' },
+          });
+          const parts = res.candidates?.[0]?.content?.parts ?? [];
+          const text = res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
+          if (text) return text;
+        } catch { /* try the next model, then the structured ladder */ }
+      }
+    }
+    return this.generateContentStructured(message, { preferFast: true });
+  }
+
   public async generateContentStructured(
     message: string,
     // The Gemini block leads with flash-lite (fastest, cheapest) then 3.7-flash.

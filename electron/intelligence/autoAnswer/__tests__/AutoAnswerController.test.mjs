@@ -861,3 +861,36 @@ test('live#6c: an ignored UNPUNCTUATED statement stays revisable — its own con
   await g.advance(HARD_CAP_MS + QUIET + 2000);
   assert.deepEqual(g.texts(), ['Why did you choose PostgreSQL?']);
 });
+
+// ── Live-run repro (2026-08-24, session 5): meeting 680519c8 — mic-caught
+// FRAGMENTS. The speakers-into-mic echo returned as short fragments spanning
+// interviewer finals ("Every day.", "It was 6 tries where you basically—"),
+// too dissimilar pairwise for the round-3 twin check; they killed candidates
+// as user_answering. Fragments are token-SUBSETS of recent interviewer speech.
+
+test('live#7: mic-caught fragments of interviewer speech are echo, not the user answering (meeting 680519c8 verbatim)', async () => {
+  const h = makeHarness();
+  h.interviewerFinal('ite, and you can play around with it a little bit while', { punctuationSource: 'provider' });
+  await h.advance(150);
+  h.userFinal('A little bit.');                        // verbatim mic fragment
+  await h.advance(300);
+  h.interviewerFinal('. Basically, every day a', { punctuationSource: 'provider' });
+  await h.advance(150);
+  h.userFinal('Every day.');                           // second fragment → echo mode arms
+  await h.advance(2000);
+  h.interviewerFinal('Why did you choose PostgreSQL?', { punctuationSource: 'provider' });
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.ok(h.texts().includes('Why did you choose PostgreSQL?'),
+    `fragments must not suppress the answer (dispatched: ${JSON.stringify(h.texts())}, skips: ${h.state.skips.join(',')})`);
+  assert.ok(!h.state.skips.includes('user_answering'), `no user_answering from echo fragments (skips: ${h.state.skips.join(',')})`);
+});
+
+test('live#7b: GENUINE user speech (words not in recent interviewer speech) still reads as answering', async () => {
+  const h = makeHarness();
+  h.interviewerFinal('Why did you choose PostgreSQL?', { punctuationSource: 'provider' });
+  await h.advance(200);
+  h.userFinal('Well mostly because of the ecosystem and the tooling around it.');
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.deepEqual(h.texts(), []);
+  assert.ok(h.state.skips.includes('user_answering'));
+});
