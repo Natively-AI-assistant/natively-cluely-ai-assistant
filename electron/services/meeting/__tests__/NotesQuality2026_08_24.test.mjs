@@ -8,6 +8,7 @@ const base = path.resolve(__dirname, '../../../../dist-electron/electron/service
 const { similar, MeetingSummaryReducer } = await import(pathToFileURL(path.join(base, 'MeetingSummaryReducer.js')).href);
 const { TranscriptNormalizer } = await import(pathToFileURL(path.join(base, 'TranscriptNormalizer.js')).href);
 const { newSignificantTokens } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
+const { buildChunkPrompt } = await import(pathToFileURL(path.join(base, 'ChunkSummaryGenerator.js')).href);
 
 // The old rule was `shared / min(wordCount) >= 0.8` — pure subset containment — so a short
 // vague bullet always matched a longer specific one, and mergeSimilar kept the FIRST-seen
@@ -177,4 +178,23 @@ test('sentence-boundary flag survives a trailing stopword and a trailing punctua
     'Pilot scope moves forward with security review. ... Additionally, manual QA reporting takes two days each week.';
   assert.deepEqual(newSignificantTokens(trailingPunctuationOnlyToken, GROUNDED), [],
     'a legitimate opener after a standalone punctuation-only token must stay exempt');
+});
+
+test('chunk prompt states a density target and keeps evidence where it matters', () => {
+  const { systemPrompt } = buildChunkPrompt({
+    chunk: { chunkIndex: 0, timeRange: { startMs: 0, endMs: 60000 }, text: 'x', charCount: 1 },
+    totalChunks: 3,
+    modeTemplateType: 'sales',
+    modeNoteSections: [{ title: 'Pain points', description: 'customer pain' }],
+  });
+
+  // Density is the whole point: an unstated target plus heavy suppression pressure is why
+  // sections came back with 1-3 terse bullets for an hour of conversation.
+  assert.match(systemPrompt, /5-12 findings per section/i, 'no explicit density target');
+  assert.match(systemPrompt, /PRECISION rule/i, 'the empty-is-better rule is not scoped to precision');
+
+  // Evidence stays mandatory where it powers jump-to-timestamp, optional where its cost
+  // suppresses bullet count.
+  assert.match(systemPrompt, /evidence is REQUIRED for decisions and actionItems/i);
+  assert.match(systemPrompt, /best-effort for section findings/i);
 });
