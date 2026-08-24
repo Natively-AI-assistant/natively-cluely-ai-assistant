@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const base = path.resolve(__dirname, '../../../../dist-electron/electron/services/meeting');
 const { similar, MeetingSummaryReducer } = await import(pathToFileURL(path.join(base, 'MeetingSummaryReducer.js')).href);
 const { TranscriptNormalizer } = await import(pathToFileURL(path.join(base, 'TranscriptNormalizer.js')).href);
+const { newSignificantTokens } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
 
 // The old rule was `shared / min(wordCount) >= 0.8` — pure subset containment — so a short
 // vague bullet always matched a longer specific one, and mergeSimilar kept the FIRST-seen
@@ -94,4 +95,45 @@ test('when two items merge, the richer text wins', () => {
   assert.equal(summary.actionItems.length, 1, 'the restatement should still merge');
   assert.match(summary.actionItems[0].text, /by Friday/,
     `the richer text must win, got: "${summary.actionItems[0].text}"`);
+});
+
+const GROUNDED = `Summary points:
+- Ari: send the SOC2 packet by Friday
+- Pilot scope moves forward with security review
+
+Decisions:
+- Pilot scope moves forward with security review
+
+Section notes:
+- Manual QA reporting takes two days each week
+- Security review is required before pilot`;
+
+// The gate exempted sentence-initial capitalisation only for the FIRST token of the whole
+// output, so any sentence after the first that opened with a capitalised non-stopword was
+// scored as an invented proper noun and killed the entire rewrite. The prompt asks for 3-5
+// sentences, so this fired constantly. Reproduced 2026-08-24.
+test('polish gate accepts sentence-initial connectives', () => {
+  const accepted = [
+    'Pilot scope moves forward with security review. However, security review is required before pilot.',
+    'Pilot scope moves forward with security review. Additionally, manual QA reporting takes two days each week.',
+    'Manual QA reporting takes two days each week. Overall, pilot scope moves forward with security review.',
+    'Ari will send the SOC2 packet by Friday. Meanwhile, security review is required before pilot.',
+  ];
+  for (const text of accepted) {
+    assert.deepEqual(newSignificantTokens(text, GROUNDED), [],
+      `an ordinary sentence opener was scored as a hallucinated proper noun: "${text}"`);
+  }
+});
+
+test('polish gate still rejects genuinely invented facts', () => {
+  const rejected = [
+    ['Pilot scope moves forward with security review at Acme.', 'Acme'],
+    ['Ari will send the SOC2 packet by Friday to 47 reviewers.', '47'],
+    ['Security review is required before pilot, per Deloitte.', 'Deloitte'],
+  ];
+  for (const [text, offender] of rejected) {
+    const found = newSignificantTokens(text, GROUNDED);
+    assert.ok(found.includes(offender),
+      `"${offender}" is not in the notes and must be rejected; got ${JSON.stringify(found)}`);
+  }
 });

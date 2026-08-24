@@ -75,7 +75,10 @@ ${grounded}`;
     });
 
     if (result.ok && result.data && result.data.summary.length > 0) return result.data.summary;
-    return null; // keep deterministic summary
+    // A rejected polish means the user silently receives the mechanical deterministic
+    // summary. That failure was invisible for the entire life of this feature — log it.
+    console.warn(`[SummaryPolisher] Summary polish rejected, keeping deterministic version: ${result.errors.join('; ') || 'unknown'}`);
+    return null;
   }
 
   // Whole-meeting Overview: a single grounded paragraph (up to ~400 words) covering the
@@ -124,7 +127,10 @@ ${grounded}`;
     });
 
     if (result.ok && result.data && result.data.overview) return result.data.overview;
-    return null; // keep deterministic overview
+    // A rejected polish means the user silently receives the mechanical deterministic
+    // overview. That failure was invisible for the entire life of this feature — log it.
+    console.warn(`[SummaryPolisher] Overview polish rejected, keeping deterministic version: ${result.errors.join('; ') || 'unknown'}`);
+    return null;
   }
 }
 
@@ -157,14 +163,23 @@ export function newSignificantTokens(polished: string, grounded: string): string
 
   // Tokenize the polished text preserving original case to detect proper nouns.
   const rawTokens = polished.split(/\s+/);
+  // Sentence-initial capitalisation is not a proper-noun signal. This used to be
+  // `i === 0` — the first token of the ENTIRE output — so every sentence after the first
+  // that opened with a capitalised non-stopword ("However,", "Additionally,") was scored
+  // as an invented proper noun and discarded the whole rewrite. The prompt asks for 3-5
+  // sentences, so the polish was being thrown away constantly, silently, in production.
+  let atSentenceStart = true;
   for (let i = 0; i < rawTokens.length; i++) {
-    const raw = rawTokens[i].replace(/[.,!?;:()"'’“”]/g, '');
+    const rawToken = rawTokens[i];
+    const raw = rawToken.replace(/[.,!?;:()"'’“”]/g, '');
+    const isFirstWord = atSentenceStart;
+    // Advance the flag BEFORE any `continue` below, or a skipped token leaves it stale.
+    if (raw) atSentenceStart = /[.!?]["'’”)]*$/.test(rawToken);
     if (!raw) continue;
     const lower = raw.toLowerCase();
     const lowerCore = lower.replace(/[^a-z0-9%$.]/g, '');
     if (!lowerCore || STOPWORDS.has(lowerCore)) continue;
 
-    const isFirstWord = i === 0; // sentence-initial capitalization is not a proper-noun signal
     const isNumberLike = /\d/.test(lowerCore) || /[%$]/.test(lowerCore);
     const isCalendar = MONTHS.has(lowerCore) || WEEKDAYS.has(lowerCore);
     const isProperNoun = !isFirstWord && /^[A-Z][a-zA-Z'’-]+$/.test(raw);
