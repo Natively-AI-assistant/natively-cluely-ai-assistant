@@ -922,3 +922,17 @@ test('live#8b: a short GENUINE user answer (own words, not a listening signal) s
   assert.deepEqual(h.texts(), []);
   assert.ok(h.state.skips.includes('user_answering'));
 });
+
+// ── Lenient mic (user decision, 2026-08-24): the mic suppresses only on
+// strong evidence — a sustained genuine answer. Short own-word blips
+// ("Three years.") no longer kill a question.
+
+test('live#9: a short genuine-sounding mic blip below the word floor never kills a question', async () => {
+  const h = makeHarness();
+  h.interviewerFinal('How many years of React experience do you have?', { punctuationSource: 'provider' });
+  await h.advance(300);
+  h.userFinal('Three years.');                          // 2 words, not a backchannel word
+  await h.advance(HARD_CAP_MS + QUIET + 2000);
+  assert.equal(h.texts().length, 1, `question must survive the blip (skips: ${h.state.skips.join(',')})`);
+  assert.ok(!h.state.skips.includes('user_answering'));
+});

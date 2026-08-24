@@ -917,6 +917,14 @@ Validation: meeting 8168240a replayed verbatim both channels through the REAL ju
 dispatches, zero user_answering skips, everything else silent. Test live#8/8b (backchannel branch
 mutation-probed red). Suite 216/216 · typecheck clean.
 
+### Lenient mic (2026-08-24 — user decision after rounds 3/5/6)
+Every live mic interaction was FALSE suppression; the user asked whether to de-prioritize mic speech like the
+legacy engine (mic-blind). Decision: **lenient mic** — the mic suppresses only on strong evidence. A user final
+counts as answering only when non-echo, non-backchannel AND ≥ `GENUINE_ANSWER_MIN_WORDS`=4 words; blips below the
+floor are ignored (skip `backchannel`). VAD-edge gating unchanged (echo-guarded; delays within the hold budget
+rather than killing; never the live killer). Trade-off accepted: a bare "Three years." self-answer no longer
+suppresses the auto answer. Test live#9; word floor mutation-probed red. Suite 217/217 · typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

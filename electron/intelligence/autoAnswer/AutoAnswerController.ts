@@ -63,6 +63,15 @@ export const ECHO_FLAG_WINDOW = 4;
  */
 export const USER_BACKCHANNEL = /^(?:(?:yeah|yes|yep|yup|ya|mm-?hm+|mhm+|uh-?huh|ok(?:ay)?|right|sure|cool|got it|i see|nice|great|perfect|exactly|interesting|makes sense|sounds good|true|correct|wow|oh|ah|hm+|haha+|alright|of course|fair enough|no problem|totally|absolutely|definitely|indeed|good|fine)[\s,.!?-]*){1,4}$/i;
 /**
+ * LENIENT MIC (user decision 2026-08-24, after live rounds 3/5/6 all showed
+ * FALSE mic suppression): a user final counts as the user ANSWERING — closing
+ * the candidate — only on strong evidence: non-echo, non-backchannel AND at
+ * least this many words of their own. Blips below the floor never kill a
+ * question (the old engine's mic-blindness is what made it feel reliable);
+ * the trade-off is that a bare "Three years." answer no longer suppresses.
+ */
+export const GENUINE_ANSWER_MIN_WORDS = 4;
+/**
  * Post-commit rhetorical hold (V3 Amendment 3): measured from the
  * interviewer's end of speech, cancelled if they resume ("Why do we do it
  * that way? Well, because…"). A quiet-window commit has usually waited this
@@ -286,7 +295,7 @@ export class AutoAnswerController {
             // listening must never kill a candidate. Backchannels neither
             // close the accumulation nor read as answering — and they carry
             // no evidence about echo, so they leave the echo flags alone.
-            if (!isEcho && USER_BACKCHANNEL.test(text)) {
+            if (!isEcho && (USER_BACKCHANNEL.test(text) || userWords < GENUINE_ANSWER_MIN_WORDS)) {
                 this.emit({ name: 'auto_answer_ignored', skipReason: 'backchannel' });
                 return;
             }
