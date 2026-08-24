@@ -426,6 +426,28 @@ interface SettingsOverlayProps {
     initialHasNativelyKey?: boolean;
 }
 
+/**
+ * Where each speech provider issues API keys. The "Get API Key" button reads
+ * this; a provider missing from it used to render a link that did NOTHING when
+ * clicked — soniox and nvidia_nim were both in that state — so the button is now
+ * hidden unless there is somewhere to send the user.
+ *
+ * nvidia_nim points at the SPEECH catalogue rather than a settings page:
+ * build.nvidia.com/settings/api-keys 404s (it returns the SPA's not-found
+ * shell), and NVIDIA issues keys from a model card's "Generate API Key" button,
+ * so /explore/speech is both a working URL and the right context for an ASR key.
+ */
+const STT_KEY_URLS: Record<string, string> = {
+    groq: 'https://console.groq.com/keys',
+    openai: 'https://platform.openai.com/api-keys',
+    deepgram: 'https://console.deepgram.com',
+    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
+    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
+    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text',
+    soniox: 'https://console.soniox.com/api-keys',
+    nvidia_nim: 'https://build.nvidia.com/explore/speech',
+};
+
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     isOpen,
     onClose,
@@ -2944,21 +2966,29 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                     tabIndex={selected ? 0 : -1}
                                                                     onClick={() => void selectNvidiaNimSttModel(m.id)}
                                                                     onKeyDown={(e) => nvidiaNimSttModelKeyDown(e, i)}
-                                                                    className={`block w-full rounded-lg px-3 py-2.5 text-left
-                                                                        transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]
+                                                                    className={`block w-full rounded-lg px-3 py-2.5 text-left text-text-primary
+                                                                        transition-[background-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]
                                                                         motion-safe:active:scale-[0.99] ${selected
-                                                                            ? 'bg-accent-primary text-on-accent shadow-sm'
-                                                                            : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}
+                                                                            ? 'bg-[color-mix(in_srgb,var(--accent-primary)_12%,var(--bg-input))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_45%,transparent)]'
+                                                                            : 'bg-bg-input hover:bg-bg-elevated'}`}
                                                                 >
-                                                                    {/* No check mark: the selected row inverts from
-                                                                        #1A1A1A to #B9A1F6, which is 7.9:1 apart in
-                                                                        LUMINANCE, not merely a hue shift — so the state
-                                                                        still reads in greyscale and to a colour-blind
-                                                                        viewer, and WCAG 1.4.1 is met without a second
-                                                                        indicator. `aria-checked` above carries it to
-                                                                        screen readers regardless. */}
+                                                                    {/* Selected is a TINT plus a hairline accent ring, not
+                                                                        a solid accent slab: three full-width rows filled
+                                                                        with periwinkle overpowered a settings card, and
+                                                                        the label had to flip to --on-accent to stay
+                                                                        readable, which made the selected row the loudest
+                                                                        thing on the panel.
+                                                                        No check mark is needed even so: the ring is a
+                                                                        STRUCTURAL difference (present vs absent), not a
+                                                                        colour one, so the state survives greyscale and
+                                                                        colour-blind viewing — WCAG 1.4.1 without a second
+                                                                        glyph. `aria-checked` carries it to screen readers.
+                                                                        Opacity modifiers are unavailable here: the theme
+                                                                        colours are bare `var(--x)` with no <alpha-value>,
+                                                                        so `bg-accent-primary/12` would emit invalid CSS —
+                                                                        hence the explicit color-mix. */}
                                                                     <span className="text-sm font-medium block leading-tight">{m.label}</span>
-                                                                    <span className={`text-[11px] leading-snug block mt-0.5 ${selected ? 'text-on-accent opacity-70' : 'text-text-tertiary'}`}>{m.description}</span>
+                                                                    <span className={`text-[11px] leading-snug block mt-0.5 ${selected ? 'text-text-secondary' : 'text-text-tertiary'}`}>{m.description}</span>
                                                                 </button>
                                                             );
                                                         })}
@@ -3176,26 +3206,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <>{t('Test Connection')}</>
                                                             )}
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                const urls: Record<string, string> = {
-                                                                    groq: 'https://console.groq.com/keys',
-                                                                    openai: 'https://platform.openai.com/api-keys',
-                                                                    deepgram: 'https://console.deepgram.com',
-                                                                    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
-                                                                    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
-                                                                    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text'
-                                                                };
-                                                                if (urls[sttProvider]) {
-                                                                    // @ts-ignore
-                                                                    window.electronAPI?.openExternal(urls[sttProvider]);
-                                                                }
-                                                            }}
-                                                            className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                            title={t("Get API Key")}
-                                                        >
-                                                            <ExternalLink size={12} />
-                                                        </button>
+                                                        {STT_KEY_URLS[sttProvider] && (
+                                                            <button
+                                                                // @ts-ignore
+                                                                onClick={() => window.electronAPI?.openExternal(STT_KEY_URLS[sttProvider])}
+                                                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
+                                                                title={t("Get API Key")}
+                                                            >
+                                                                <ExternalLink size={12} />
+                                                            </button>
+                                                        )}
                                                         {sttTestStatus === 'error' && (
                                                             <span className="text-xs text-red-400">{sttTestError}</span>
                                                         )}
