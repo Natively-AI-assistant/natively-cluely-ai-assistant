@@ -1990,6 +1990,13 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [claudeApiKey, setClaudeApiKey] = useState('');
     const [deepseekApiKey, setDeepseekApiKey] = useState('');
     const [nvidiaNimApiKey, setNvidiaNimApiKey] = useState('');
+    /**
+     * The active speech provider, so the remove-key confirmation can warn when
+     * the NVIDIA key it is about to delete is ALSO the one speech is using —
+     * one nvapi- credential authenticates both.
+     */
+    const [activeSttProvider, setActiveSttProvider] = useState<string>('none');
+
 
     // Binds the five key fields to the CLOUD_PROVIDERS table. The useState calls stay
     // separate (they are read individually elsewhere); this is only the lookup the
@@ -2231,6 +2238,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         litellm: creds.hasLitellmBaseURL || false,
                         natively: creds.hasNativelyKey || false
                     });
+                    setActiveSttProvider((creds as any).sttProvider || 'none');
                     // Prefill stored LiteLLM config so re-saving doesn't silently reset it.
                     // (baseURL is config, not a secret; the key stays masked/blank = keep.)
                     // Also clear the fields when another window removes the proxy.
@@ -3052,6 +3060,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
     };
 
+
     const handleRemoveKey = (provider: string, setter: (val: string) => void) => {
         setPendingConfirm({ kind: 'providerKey', provider, setter });
     };
@@ -3074,6 +3083,13 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (result && result.success) {
                 setHasStoredKey(prev => ({ ...prev, [provider]: false }));
                 setter('');
+                // NVIDIA's one key backs speech recognition too, so the main
+                // process may have switched the speech provider off. The Audio
+                // tab re-reads on the credentials-changed broadcast and will
+                // show it as off; this only records WHY in the log.
+                if (provider === 'nvidia_nim' && (result as { sttProviderCleared?: boolean }).sttProviderCleared) {
+                    console.log('[Settings] NVIDIA key removed — speech recognition switched off (it shared this key)');
+                }
             }
         } catch (e) {
             console.error(`Failed to remove ${provider} key:`, e);
@@ -3192,12 +3208,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     description: t('The proxy URL, virtual key, and token limit will be cleared. Discovered models will no longer appear in the model picker.'),
                     confirmLabel: t('Remove'),
                 };
-            case 'providerKey':
+            case 'providerKey': {
+                // NVIDIA issues ONE key for both chat and speech, so removing it
+                // here also disables speech recognition if that is what it is
+                // running on. Said before the click, not discovered afterwards.
+                const alsoDisablesSpeech =
+                    pendingConfirm.provider === 'nvidia_nim' && activeSttProvider === 'nvidia_nim';
                 return {
                     title: `${t('Remove the')} ${pendingConfirm.provider} ${t('API key?')}`,
-                    description: t('The stored key is deleted. You will need to paste it again to re-enable this provider.'),
+                    description: alsoDisablesSpeech
+                        ? t('The stored key is deleted. Speech recognition uses this same key, so it will be switched off too — you will need to pick another speech provider under Audio.')
+                        : t('The stored key is deleted. You will need to paste it again to re-enable this provider.'),
                     confirmLabel: t('Remove key'),
                 };
+            }
             case 'customProvider':
                 return {
                     title: t('Delete this custom provider?'),
