@@ -1284,6 +1284,12 @@ interface ScreenshotCaptureSession {
   overlayBounds: Electron.Rectangle | null;
   overlayDisplayId: number | null;
   restoreWithoutFocus: boolean;
+  // Stealth typing is torn down on the way into a capture: hideWindowsForScreenshot
+  // -> hideMainWindow() -> WindowHelper.stopStealthTyping(). Only the WINDOW was
+  // ever restored, so the overlay came back looking identical with the hook gone
+  // and the user's next keystrokes went to the foreground meeting app. Record it
+  // here so restoreWindowsAfterScreenshot can put it back.
+  wasStealthTypingActive: boolean;
 }
 
 // Premium: Knowledge modules loaded conditionally
@@ -7031,8 +7037,40 @@ export class AppState {
       wasModelSelectorVisible: !!modelSelectorWindow && !modelSelectorWindow.isDestroyed() && modelSelectorWindow.isVisible(),
       overlayBounds: this.windowHelper.getLastOverlayBounds(),
       overlayDisplayId: this.windowHelper.getLastOverlayDisplayId(),
-      restoreWithoutFocus: process.platform === 'darwin' || !restoreFocus
+      restoreWithoutFocus: process.platform === 'darwin' || !restoreFocus,
+      wasStealthTypingActive: this.isStealthTypingActive()
     };
+  }
+
+  /**
+   * Whether stealth typing is engaged right now. Isolated so a missing or stale
+   * manager module can never break a screenshot: capture is the priority, the
+   * restore is best-effort.
+   */
+  private isStealthTypingActive(): boolean {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+      return StealthKeyboardManager.getInstance().isActive();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Re-engage the stealth-typing hook the capture tore down. Availability is
+   * NOT re-checked here: start() already refuses on win32 unless the overlay is
+   * visible, and returns false rather than throwing, so it is the single source
+   * of truth for whether engaging is legal right now.
+   */
+  private restoreStealthTypingAfterScreenshot(): void {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
+      StealthKeyboardManager.getInstance().start();
+    } catch (e) {
+      console.error('[AppState] failed to restore stealth typing after screenshot:', e);
+    }
   }
 
   private getDisplayById(displayId: number | null): Electron.Display | undefined {
@@ -7093,6 +7131,22 @@ export class AppState {
         const { x, y } = modelSelectorWindow.getBounds();
         this.modelSelectorWindowHelper.showWindow(x, y, { activate });
       }
+    }
+
+    // LAST, and the ordering is forced in BOTH directions:
+    //   - start() refuses on win32 unless the overlay is already visible, so it
+    //     cannot run before the main-window restore above;
+    //   - start() calls hideAuxWindowsForStealth(), so running it before the
+    //     Settings / ModelSelector restores would find those windows already
+    //     hidden, do nothing, and they would then be re-shown UNDER an engaged
+    //     hook — visible windows whose input is dead because every keystroke is
+    //     routed to the overlay. That is exactly the state the helper exists to
+    //     prevent.
+    // Consequence, named rather than hidden: Settings + stealth collapses to
+    // stealth-only, which is a valid state, rather than a window that looks
+    // usable and is not.
+    if (session.wasStealthTypingActive) {
+      this.restoreStealthTypingAfterScreenshot();
     }
   }
 
