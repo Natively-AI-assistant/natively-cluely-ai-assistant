@@ -1619,3 +1619,36 @@ Remaining structure of the ~3.1–4.2 s to first token:
 * ~1.5 s to decide — judge, now overlapped with the stability window and close to its floor;
 * ~1.0–2.7 s provider TFFT — not addressable from the client except by generating before the verdict, which
   costs answer-engine occupancy (see the early-ask entry).
+
+### The speculative prefetch had never run (2026-08-26)
+
+Found while running `npm run typecheck:electron` before merging — the config I had been using all session
+(`tsconfig.json`) covers the renderer, not `electron/`:
+
+```
+electron/main.ts(3231,60): error TS2339:
+  Property 'prefetchAutoAnswer' does not exist on type 'IntelligenceManager'.
+```
+
+`prefetchAutoAnswer` was defined on **IntelligenceEngine**, but `main.ts` wired the `prefetchAnswer` host hook
+to the **Manager**, which never delegated it. So since the prefetch landed (0d5bf7fb) every call threw
+`is not a function` directly into `maybePrefetch`'s catch:
+
+```ts
+try { this.host.prefetchAnswer(id, candidate); } catch { /* prefetch is an optimisation; never break the pipeline */ }
+```
+
+A guard whose whole purpose is "an optimisation must never break the pipeline" turned a hard failure into a
+silent one, and nothing else could see it: host hooks are plain callbacks, so a missing method is not a
+compile error at the call site, and the electron typecheck was not being run. Corroborated by the logs — no
+`Auto Answer prefetch fired while the judge decides` line appears in any capture from any session.
+
+**This invalidates one claim made earlier in the campaign**: that `PREFETCH_MIN_INTERVAL_MS` had "spent its
+ration on q1 and q4 so the real question q6 missed the head start". Nothing ever fired. The architectural
+conclusion still stands on its own evidence (prefetching the answer takes `activeMode` out of idle and parks a
+real dispatch behind a junk generation), but the ration was never the reason.
+
+Fixed by adding the delegation, and pinned by a new test (`AutoAnswerHostWiring.test.mjs`) that brace-matches
+the `new SimpleAutoAnswerEngine({…})` literal in main.ts and asserts every `this.intelligenceManager.X(` it
+calls is actually declared on IntelligenceManager — the whole class of silent host-hook mismatch, not just
+this instance. Mutation-probed by deleting the delegation again (1 fail).
