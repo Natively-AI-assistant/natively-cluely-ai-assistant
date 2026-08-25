@@ -107,8 +107,14 @@ describe('complexity notation is rejected only when it IS the answer', () => {
     'O(1)',
     'O(n log n)',
     'O(1) time, O(n) space',
-    // Assertion verb: the phrase claims something about the complexity.
+    // Assertion verb: the phrase claims something about the complexity. These
+    // sit INSIDE the 3-6-word naming window, so only the verb clause catches
+    // them — they are exactly the shape 3208faa7 was built for.
     'Solution runs in O(n) time',
+    'Hash map gives O(1) lookup',
+    'Binary search gives O(log n)',
+    'Two pointers achieve O(n) runtime',
+    'Sorting takes O(n log n) time',
     // Pre-existing rejection (2026-08-22) — must not regress.
     'The two-pointer approach solves this in O(n) time',
   ]) {

@@ -223,8 +223,16 @@ export async function generateTitleFromSummaryWithSource(
     return { title: cleanedTitle, source: 'model' };
 }
 
-/** The one placeholder the save path starts a meeting at. */
-const DEFAULT_MEETING_TITLE_RE = /^untitled\b/i;
+// The two placeholders a meeting can be carrying instead of a real name:
+// "Untitled Session" (this file's save-path default) and "Meeting Notes"
+// (MeetingSummaryReducer's `params.title || 'Meeting Notes'`).
+const DEFAULT_MEETING_TITLE_RE = /^(?:untitled\b|meeting notes$)/i;
+
+/** True when a title is absent or one of the known placeholders — i.e. not a real name. */
+export function isDefaultMeetingTitle(title: string | null | undefined): boolean {
+    const t = typeof title === 'string' ? title.trim() : '';
+    return !t || DEFAULT_MEETING_TITLE_RE.test(t);
+}
 
 /**
  * Regeneration-only title policy (2026-08-26).
@@ -240,8 +248,7 @@ const DEFAULT_MEETING_TITLE_RE = /^untitled\b/i;
 export function shouldReplaceTitleOnRegenerate(existing: string | null | undefined, candidate: GeneratedTitle): boolean {
     if (!candidate?.title) return false;
     if (candidate.source === 'model') return true;
-    const current = typeof existing === 'string' ? existing.trim() : '';
-    return !current || DEFAULT_MEETING_TITLE_RE.test(current);
+    return isDefaultMeetingTitle(existing);
 }
 
 export class MeetingPersistence {
@@ -1170,9 +1177,12 @@ Return ONLY valid JSON (no markdown code blocks):
             // one. shouldReplaceTitleOnRegenerate lets a model-generated title through and
             // holds a fallback back unless the current title is empty/placeholder.
             const regenerated = await generateTitleFromSummaryWithSource(this.llmHelper, v3);
-            const existingTitle = (typeof v3.title === 'string' && v3.title.trim())
-                ? v3.title.trim()
-                : (typeof details.title === 'string' ? details.title.trim() : '');
+            // First NON-PLACEHOLDER of [fresh summary title, DB row title]: the reducer
+            // fills v3.title with 'Meeting Notes' when the meeting has no name, so a
+            // first-non-EMPTY read would hide a good DB title behind that placeholder.
+            const v3Title = typeof v3.title === 'string' ? v3.title.trim() : '';
+            const dbTitle = typeof details.title === 'string' ? details.title.trim() : '';
+            const existingTitle = isDefaultMeetingTitle(v3Title) ? dbTitle : v3Title;
             if (shouldReplaceTitleOnRegenerate(existingTitle, regenerated)) {
                 v3.title = regenerated.title as string;
             } else if (regenerated.title) {

@@ -233,7 +233,10 @@ test('regeneration with a succeeding model still replaces the existing title', a
 test('the fallback still fills an empty or placeholder title (first-generation path)', async () => {
   const candidate = await generateTitleFromSummaryWithSource(fakeLLM(NO_ACTION), SUMMARY);
   assert.equal(candidate.source, 'fallback');
-  for (const existing of ['', '   ', 'Untitled Session', undefined, null]) {
+  // 'Meeting Notes' is MeetingSummaryReducer's own placeholder (`params.title ||
+  // 'Meeting Notes'`), so on regeneration the fresh v3.title carries it whenever the
+  // meeting has no real name — it must not be mistaken for a title worth protecting.
+  for (const existing of ['', '   ', 'Untitled Session', 'Meeting Notes', undefined, null]) {
     assert.equal(shouldReplaceTitleOnRegenerate(existing, candidate), true,
       `a meeting with no real name must take the fallback (existing: ${JSON.stringify(existing)})`);
   }
@@ -251,4 +254,17 @@ test('the regenerate call site applies the predicate (drift pin)', async () => {
   const fs = await import('node:fs');
   const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/MeetingPersistence.ts'), 'utf8');
   assert.match(src, /shouldReplaceTitleOnRegenerate\(existingTitle, regenerated\)/);
+});
+
+// The reducer's placeholder must be recognised on BOTH title sources the regenerate call
+// site reads (fresh v3.title, then the DB row) — otherwise a placeholder in the fresh
+// summary shadows a good stored title and the fallback overwrites it.
+test('isDefaultMeetingTitle knows every placeholder a meeting can be carrying', async () => {
+  const { isDefaultMeetingTitle } = await import(pathToFileURL(path.join(base, 'MeetingPersistence.js')).href);
+  for (const t of ['', '   ', 'Untitled Session', 'untitled session', 'Meeting Notes', 'meeting notes', undefined, null]) {
+    assert.equal(isDefaultMeetingTitle(t), true, `expected placeholder: ${JSON.stringify(t)}`);
+  }
+  for (const t of ['Onboarding Pilot Rollout', 'Meeting Notes for the Q3 Kickoff', 'Untitledly Named Sync']) {
+    assert.equal(isDefaultMeetingTitle(t), false, `expected a real title: ${t}`);
+  }
 });

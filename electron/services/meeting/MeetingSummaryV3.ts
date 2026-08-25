@@ -395,14 +395,16 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
 //
 //   1. ≤2 tokens survive once the notation is removed — the notation IS the title.
 //   2. an assertion verb is present — the phrase claims something about the
-//      complexity ("solves this in O(n) time"), i.e. it is the answer. Same
-//      verb vocabulary as the "<language> code uses/is/…" rule above.
+//      complexity ("solves this in O(n) time", "Hash map gives O(1) lookup"),
+//      i.e. it is the answer. Covers the "<language> code uses/is/…" verbs
+//      above plus the ones a complexity claim actually uses (gives/takes/
+//      costs/…), which land inside the 3-6-word window rule 3 can't see.
 //   3. more than 6 words — the naming prompt asks for 3-6, so anything longer
 //      quoting complexity is a sentence, not a name.
 //
 // Detection is the unchanged pattern; only the decision narrowed.
 const COMPLEXITY_NOTATION_RE = /\bO\([^)]{1,12}\)/g;
-const ASSERTION_VERB_RE = /\b(?:uses|is|does|works|runs|solves|looks)\b/i;
+const ASSERTION_VERB_RE = /\b(?:uses|is|does|works|runs|solves?|looks|gives?|takes|costs|achieves?|yields|requires?|reduces?|needs)\b/i;
 const TITLE_WORD_WINDOW_MAX = 6;
 
 function isComplexityAnswerTitle(t: string): boolean {
