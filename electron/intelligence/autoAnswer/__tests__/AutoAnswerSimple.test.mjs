@@ -24,6 +24,7 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
+const { isMidWordCut } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerText.js'));
 const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, ECHO_MODE_HOLD_MS, EARLY_JUDGE_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
@@ -766,6 +767,31 @@ test('a final cut mid-word is rejoined, and a final cut at a space is not', asyn
   assert.doesNotMatch(judged, /you tobe/, 'never glues across a real space');
 });
 
+test('a contraction cut on either side of its apostrophe is rejoined', async () => {
+  const h = makeSimple(async () => YES());
+  // Verbatim from the live session 2026-08-26: the relay cut "we|'re" and
+  // "I'|m", and an apostrophe is not a \\w, so both survived as "so we 're"
+  // and "this interview. I' m just curious".
+  h.interviewer("All right, so we're going to kind of just jump right into the problem.", false);
+  await h.advance(40);
+  h.interviewer('All right, so we');                    // cut BEFORE the apostrophe
+  await h.advance(40);
+  h.interviewer("'re going to kind of jump in. I'm just curious", false);
+  await h.advance(40);
+  h.interviewer("'re going to kind of jump in. I'");    // cut AFTER the apostrophe
+  await h.advance(40);
+  h.interviewer('m just curious: are you familiar with CoderPad?', false);
+  await h.advance(40);
+  h.interviewer('m just curious: are you familiar with CoderPad?');
+  await h.advance(STABILITY_MS + 400);
+
+  const judged = h.state.judgeCalls.at(-1).candidateText;
+  assert.match(judged, /so we're going/, "closes we|'re");
+  assert.doesNotMatch(judged, /we 're/, 'no "we \'re"');
+  assert.match(judged, /I'm just curious/, "closes I'|m");
+  assert.doesNotMatch(judged, /I' m/, 'no "I\' m"');
+});
+
 test('a cut after punctuation is never glued, even with no space in the interim', async () => {
   const h = makeSimple(async () => YES());
   // The relay sometimes emits no space after a sentence: "…probability.So".
@@ -792,4 +818,24 @@ test('a revised interim makes no seam claim (fall back to a plain space)', async
   await h.advance(STABILITY_MS + 400);
   const judged = h.state.judgeCalls.at(-1).candidateText;
   assert.match(judged, /the hardest bug you have shipped/, 'joined with a space, unchanged behaviour');
+});
+
+test('isMidWordCut: the seam rule, case by case', () => {
+  // GLUE — a word, or a contraction cut on either side of its apostrophe.
+  assert.equal(isMidWordCut('Um, we\'re going to prob', 'Um, we\'re going to probably just jump'), true);
+  assert.equal(isMidWordCut('All right, so we', "All right, so we're going to jump in"), true);
+  assert.equal(isMidWordCut("this interview. I'", "this interview. I'm just curious"), true);
+  assert.equal(isMidWordCut('and where it gets interest', 'and where it gets interesting is'), true);
+
+  // DON'T — a real space, a sentence seam, an em-dash, or two apostrophes
+  // meeting (which is never a split word, only punctuation abutting).
+  assert.equal(isMidWordCut('be able to get a', 'be able to get a random value'), false);
+  assert.equal(isMidWordCut('of equal probability.', 'of equal probability.So just these'), false);
+  assert.equal(isMidWordCut('a couple—', 'a couple—Code'), false);
+  assert.equal(isMidWordCut("it'", "it''x"), false, 'two apostrophes are not a split word');
+
+  // NO CLAIM — the interim was revised, or there is nothing after the cut.
+  assert.equal(isMidWordCut('So tell me about', 'something else entirely'), false);
+  assert.equal(isMidWordCut('exactly this', 'exactly this'), false);
+  assert.equal(isMidWordCut('', 'anything'), false);
 });

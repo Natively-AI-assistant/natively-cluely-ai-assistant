@@ -1652,3 +1652,33 @@ Fixed by adding the delegation, and pinned by a new test (`AutoAnswerHostWiring.
 the `new SimpleAutoAnswerEngine({…})` literal in main.ts and asserts every `this.intelligenceManager.X(` it
 calls is actually declared on IntelligenceManager — the whole class of silent host-hook mismatch, not just
 this instance. Mutation-probed by deleting the delegation again (1 fail).
+
+### Live session 2026-08-26 21:18 — all four mechanisms fired; one seam bug found
+
+75 s of interviewer speech, **5 answers**, versus 1 per 4–7 minutes before this week.
+
+| mechanism | evidence |
+| --- | --- |
+| deferred verdict | fired **3×** (`1-q3`, `1-q13`, `1-q18`) — each a positive verdict superseded by an interim, held, applied 50–170 ms later |
+| speculative prefetch | `Auto Answer prefetch fired while the judge decides` — **twice**, its first ever execution |
+| mid-word seam | `we're going to probably just jump` correctly closed across a `prob|ably` cut |
+| mic echo latch | zero `mic_echo`, zero `user_answering` — clean audio, nothing to suppress |
+
+Latency, candidate → dispatch: 0.94 / 1.17 / 0.87 / 0.94 / 1.26 s. Answer TFFT 1243–2081 ms
+(median ≈ 1960). No parked dispatch despite the prefetch now being live.
+
+**Bug found by the trace: contractions were still split.** The seam rule required word characters on
+*both* sides of the cut, and an apostrophe is not `\w`, so the relay's `we|'re` and `I'|m` cuts survived as
+`"so we 're going"` and `"this interview. I' m just curious"`. An apostrophe now counts as
+word-continuation on either side, while two apostrophes meeting still never glue and the sentence seam
+(`probability.|So`) is untouched.
+
+Mutation-probed: reverting to word-characters-only fails (1), and dropping the both-apostrophes guard fails (1)
+— the second probe initially PASSED, and a direct `isMidWordCut` unit test was added to cover it rather than
+leaving a guard nothing exercised. 57/57, typecheck clean.
+
+**Two quality observations, not fixed** (both are policy calls, not defects):
+* `1-q2` answered *"How are you doing today?"* and `1-q3` answered *"How are you?"* five seconds apart. The
+  duplicate guard compares `lastAnsweredText` exactly, so near-duplicates pass.
+* `1-q13` fired at **a=0.4** on *"I recommend maybe sharing your screen."* — the same weak band flagged in the
+  replay analysis. Everything at 0.9 was a real ask.
