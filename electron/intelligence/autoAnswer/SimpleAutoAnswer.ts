@@ -34,15 +34,39 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { normalizeForCompare, tokenContainment } from './AutoAnswerDetector';
+import { normalizeForCompare, tokenContainment } from './AutoAnswerText';
 import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
-import {
-    ECHO_WINDOW_MS, ECHO_SIMILARITY, ECHO_FRAGMENT_CONTAINMENT, ECHO_FRAGMENT_MIN_WORDS,
-    USER_BACKCHANNEL, GENUINE_ANSWER_MIN_WORDS,
-} from './AutoAnswerController';
 import type { AutoAnswerQuestion, AutoAnswerTelemetryEvent } from './AutoAnswerTypes';
+
+// ── Mic echo detection (live-run 2026-08-24, session 3). Unfitted placeholders. ──
+/** A user final matching an interviewer final this recent is the speakers echoing into the mic. */
+export const ECHO_WINDOW_MS = 5000;
+/** Token similarity at or above which a user final is that echo. */
+export const ECHO_SIMILARITY = 0.8;
+/** A user final whose tokens are (near-)contained in recent interviewer speech is a mic-caught fragment of it. */
+export const ECHO_FRAGMENT_CONTAINMENT = 0.85;
+/** Containment needs a few words to mean anything ("Yes." is contained in everything). */
+export const ECHO_FRAGMENT_MIN_WORDS = 2;
+/** Echo mode engages when at least this many of the last ECHO_FLAG_WINDOW user finals were echoes. */
+export const ECHO_ACTIVATE_COUNT = 2;
+export const ECHO_FLAG_WINDOW = 4;
+/**
+ * User-channel BACKCHANNELS (live run 8168240a, 2026-08-24): short listening
+ * signals — affirmations, acknowledgements, laughter — possibly repeated
+ * ("yeah, yeah.", "okay, right."). They are not the user answering.
+ */
+export const USER_BACKCHANNEL = /^(?:(?:yeah|yes|yep|yup|ya|mm-?hm+|mhm+|uh-?huh|ok(?:ay)?|right|sure|cool|got it|i see|nice|great|perfect|exactly|interesting|makes sense|sounds good|true|correct|wow|oh|ah|hm+|haha+|alright|of course|fair enough|no problem|totally|absolutely|definitely|indeed|good|fine)[\s,.!?-]*){1,4}$/i;
+/**
+ * LENIENT MIC (user decision 2026-08-24, after live rounds 3/5/6 all showed
+ * FALSE mic suppression): a user final counts as the user ANSWERING — closing
+ * the candidate — only on strong evidence: non-echo, non-backchannel AND at
+ * least this many words of their own. Blips below the floor never kill a
+ * question (the old engine's mic-blindness is what made it feel reliable);
+ * the trade-off is that a bare "Three years." answer no longer suppresses.
+ */
+export const GENUINE_ANSWER_MIN_WORDS = 4;
 
 /** The interviewer must be quiet this long before the judge is consulted. Unfitted placeholder. */
 export const STABILITY_MS = 900;
@@ -349,9 +373,14 @@ export class SimpleAutoAnswerEngine {
             return;
         }
         const text = route.questionText ?? candidate;
-        if (route.answerability >= this.thresholds.autoThreshold) {
+        // The JUDGE decides; thresholds no longer arbitrate. A mode can still
+        // veto downward — a stricter bar (the meeting/lecture modes) turns an
+        // 'answer' into an offer rather than firing unasked in a room full of
+        // colleagues — but it can never promote one.
+        const demoted = route.action === 'answer' && route.answerability < this.thresholds.autoThreshold;
+        if (route.action === 'answer' && !demoted) {
             this.deliver(id, text, route.answerability, route.act, committedAt);
-        } else if (route.answerability >= this.thresholds.offerThreshold && this.host.offer) {
+        } else if (this.host.offer) {
             this.retractOffer('replaced');
             this.host.offer(this.question(id, text, route.answerability, route.act, committedAt));
             this.activeOffer = {

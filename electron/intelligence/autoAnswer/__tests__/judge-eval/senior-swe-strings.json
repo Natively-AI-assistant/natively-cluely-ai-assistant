@@ -22,7 +22,7 @@
   "lastAnswered": null,
   "modeName": "Technical Interview",
   "expect": "silent",
-  "note": "KNOWN FALSE FIRE: \"let's transition into the coding portion ... you could go ahead and share\" is session logistics before any problem has been stated, but \"coding portion\" reads as a produce-directive. A completeness clause for dangling transitive verbs fixed this one and cost two other cases (2026-08-25), so it stands as a documented one-off: worst case is a single spurious answer as an interview moves into its coding phase."
+  "note": "WAS a known false fire (\"let's transition into the coding portion ... go ahead and share\") until the judge started returning an explicit action (2026-08-25): session logistics now come back as \"offer\" or \"silent\" rather than being banded into a fire by their score. Kept as a regression guard."
  },
  {
   "text": "up on the screen yep cool awesome um so",

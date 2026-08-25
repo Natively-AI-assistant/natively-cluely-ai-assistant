@@ -1160,6 +1160,29 @@ are gone with the engine they tested. The replacement safety net is the five lab
 test:auto-answer:eval` is now `test:auto-answer:judge`. Suite 34/34, judge fixtures unchanged
 (P 0.905 / R 1.000), all three recorded meetings still dispatch exactly their real asks, typecheck clean.
 
+### The judge returns the decision, not a number to band (2026-08-25)
+Telemetry said the offer card was dead: **3 offers in 131 real decisions (2%)**. The cause was structural — the
+model does not emit a spectrum, it emits roughly three values (0, ~0.9, 1.0), so the 0.65-0.88 band almost never
+caught anything and the per-mode offer thresholds were decorative.
+
+The verdict now carries an explicit `action` — `answer` | `offer` | `silent` — and the engine obeys it. Thresholds
+survive only as a one-way valve: a stricter mode can DEMOTE an answer to an offer (so a meeting-grade bar loses
+the interruption, never the signal) but can never promote one. A reply that omits `action` still parses: the old
+banding is the fallback, so a degraded model degrades rather than breaks.
+
+Defining "offer" took two passes, and the first one is instructive. Written as "something the user plainly answers
+better themselves", the model reclassified *"have you heard of wordle?"* as an offer — reasonable English, exactly
+wrong product: questions about the user's own experience are the whole point of drafting. Narrowed to logistics,
+scheduling and pure pleasantries, with an explicit note that "the user could answer it themselves" is not grounds
+to withhold.
+
+Measured consequence: the screen-share false fire on the senior-SWE video is **gone** — session logistics now come
+back as `offer`/`silent` instead of being banded into a fire. Aggregate over the five video sets improves to
+**precision 0.950 / recall 1.000** (was 0.905/1.000); one documented false fire remains (the mid-phrase
+truncation). Live action probe 6/6 (coding task and probing question → answer; screen check and "are you ready?"
+→ offer; exposition and granting permission → silent). Suite 39/39, all three recorded meetings unchanged,
+typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

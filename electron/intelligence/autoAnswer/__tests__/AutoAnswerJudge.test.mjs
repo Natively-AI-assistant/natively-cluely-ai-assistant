@@ -110,13 +110,29 @@ test('consult: incomplete/backchannel/pause/confirmation and tiny non-questions 
 
 // ── routing ───────────────────────────────────────────────────────────────
 
-test('route: incomplete → wait; non-ask/undirected → ignore(not_question); rhetorical → ignore(rhetorical); real ask → evaluate with judged fields', () => {
-  const base = { isAsk: true, directedAtUser: true, complete: true, act: 'general_question', answerability: 0.9, questionText: null };
+test('route: incomplete → wait; non-ask/undirected/silent → ignore; rhetorical → ignore; a real ask → evaluate carrying the action', () => {
+  const base = { isAsk: true, directedAtUser: true, complete: true, act: 'general_question', answerability: 0.9, questionText: null, action: 'answer' };
   assert.deepEqual(routeForVerdict({ ...base, complete: false }), { route: 'wait_incomplete' });
   assert.deepEqual(routeForVerdict({ ...base, act: 'incomplete' }), { route: 'wait_incomplete' });
   assert.deepEqual(routeForVerdict({ ...base, isAsk: false }), { route: 'ignore', reason: 'not_question' });
   assert.deepEqual(routeForVerdict({ ...base, directedAtUser: false }), { route: 'ignore', reason: 'not_question' });
   assert.deepEqual(routeForVerdict({ ...base, act: 'rhetorical' }), { route: 'ignore', reason: 'rhetorical' });
+  // The action is authoritative: 'silent' never reaches the engine, whatever the score.
+  assert.deepEqual(routeForVerdict({ ...base, action: 'silent', answerability: 0.99 }), { route: 'ignore', reason: 'low_answerability' });
   assert.deepEqual(routeForVerdict({ ...base, act: 'coding_question', questionText: 'q' }),
-    { route: 'evaluate', answerability: 0.9, act: 'coding_question', questionText: 'q' });
+    { route: 'evaluate', action: 'answer', answerability: 0.9, act: 'coding_question', questionText: 'q' });
+  assert.deepEqual(routeForVerdict({ ...base, action: 'offer', answerability: 0.4 }),
+    { route: 'evaluate', action: 'offer', answerability: 0.4, act: 'general_question', questionText: null });
+});
+
+test('parse: a reply with no action falls back to the old banding, so a degraded model still works', () => {
+  const noAction = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.95, "question_text": null}';
+  assert.equal(parseJudgeVerdict(noAction, CAND).action, 'answer');
+  const mid = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.7, "question_text": null}';
+  assert.equal(parseJudgeVerdict(mid, CAND).action, 'offer');
+  const low = '{"is_ask": false, "directed_at_user": false, "complete": true, "act": "statement", "answerability": 0.1, "question_text": null}';
+  assert.equal(parseJudgeVerdict(low, CAND).action, 'silent');
+  // An explicit action always wins over the number.
+  const explicit = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "action": "offer", "answerability": 1, "question_text": null}';
+  assert.equal(parseJudgeVerdict(explicit, CAND).action, 'offer');
 });

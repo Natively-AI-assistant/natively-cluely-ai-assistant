@@ -64,7 +64,9 @@ async function judge(c) {
       const raw = j.candidates?.[0]?.content?.parts?.map(p => p.text).join('') ?? null;
       const v = parseJudgeVerdict(raw, c.text);
       const r = v ? routeForVerdict(v) : null;
-      return { fires: r?.route === 'evaluate' && r.answerability >= TH.autoThreshold, act: v?.act ?? 'UNPARSED', ans: v?.answerability ?? null };
+      // The judge's own action decides (2026-08-25); the thresholds only ever
+      // demote. "fires" here means it would draft an answer unasked.
+      return { fires: r?.route === 'evaluate' && r.action === 'answer', act: v?.act ?? 'UNPARSED', ans: v?.answerability ?? null, action: v?.action };
     } catch { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); }
   }
   return { fires: false, act: 'ERROR', ans: null };
@@ -91,8 +93,8 @@ for (const SET_PATH of SET_PATHS) {
   const prec = tp + fp ? tp / (tp + fp) : 1, rec = tp + fn ? tp / (tp + fn) : 1;
   console.log(`\n${path.basename(SET_PATH)} · ${MODEL} · ${SET.length} candidates`);
   console.log(`TP=${tp} FP=${fp} FN=${fn} TN=${tn}  precision=${prec.toFixed(3)} recall=${rec.toFixed(3)}`);
-  for (const f of falses) console.log(`  FALSE FIRE #${f.i} [${f.act} ${f.ans}] ${JSON.stringify(f.text)}${f.note ? '\n     note: ' + f.note : ''}`);
-  for (const m of misses) console.log(`  MISS      #${m.i} [${m.act} ${m.ans}] ${JSON.stringify(m.text)}${m.note ? '\n     note: ' + m.note : ''}`);
+  for (const f of falses) console.log(`  FALSE FIRE #${f.i} [${f.act} ${f.action} ${f.ans}] ${JSON.stringify(f.text)}${f.note ? '\n     note: ' + f.note : ''}`);
+  for (const m of misses) console.log(`  MISS      #${m.i} [${m.act} ${m.action} ${m.ans}] ${JSON.stringify(m.text)}${m.note ? '\n     note: ' + m.note : ''}`);
   if (fp || fn) anyProblem = true;
 }
 process.exitCode = anyProblem ? 1 : 0;

@@ -18,7 +18,7 @@
 
 import type { TranscriptTurn } from '../../llm/transcriptCleaner';
 import type { AutoAnswerDialogueAct } from './AutoAnswerTypes';
-import { tokenContainment } from './AutoAnswerDetector';
+import { tokenContainment } from './AutoAnswerText';
 
 /**
  * Judge must answer inside this or the heuristic verdict stands. Live-probed
@@ -47,6 +47,16 @@ export interface JudgeRequest {
     lastAnsweredText?: string | null;
 }
 
+/**
+ * What the judge decides to DO. Replaces banding `answerability` against
+ * thresholds (2026-08-25): across 131 real decisions only 3 ever landed in the
+ * offer band, because the model does not emit a spectrum — it emits roughly
+ * three values (0, ~0.9, 1.0). The band was therefore decorative and the offer
+ * card nearly dead code. Asking for the decision directly makes "offer" a
+ * deliberate verdict instead of an accident of where two constants sit.
+ */
+export type JudgeAction = 'answer' | 'offer' | 'silent';
+
 export interface JudgeVerdict {
     /** The candidate contains a question or task someone is expected to act on. */
     isAsk: boolean;
@@ -59,6 +69,8 @@ export interface JudgeVerdict {
     answerability: number;
     /** The extracted ask itself, when the turn carried more than it. */
     questionText: string | null;
+    /** What to do about it. Absent from an older/degraded reply → derived from answerability. */
+    action: JudgeAction;
 }
 
 /** Heuristic acts so certain (and so cheap) the judge is never consulted. */
@@ -158,8 +170,13 @@ answerability = how much the USER wants a drafted answer RIGHT NOW:
 - 0.3-0.5 — audio/screen/logistics checks ("can you see my screen?").
 - 0.0-0.2 — anything not an ask, and any restatement of an ask already answered.
 
+action — what the assistant should DO, and the field that actually decides:
+- "answer" — draft the answer now. This is the DEFAULT for every real ask the USER must handle next, and it explicitly INCLUDES questions about the user's own experience, background, projects and opinions ("have you heard of wordle?", "tell me about a time you disagreed", "why did you pick Postgres?"). Drafting those is the entire point: that the user could answer in their own words is not a reason to withhold it.
+- "offer"  — narrow. Only asks where an unrequested answer would be noise rather than help: audio/screen/tooling logistics ("can you see my screen?", "can I get you to share your tab?"), scheduling, and pure social pleasantries ("how's your morning going?"). The UI shows a one-tap card instead of drafting.
+- "silent" — not an ask, not for the USER, unfinished, or already answered.
+
 Reply with ONLY this JSON object, no prose, no code fences:
-{"is_ask": boolean, "directed_at_user": boolean, "complete": boolean, "act": "question"|"follow_up"|"coding_task"|"behavioral"|"technical"|"rhetorical"|"statement"|"social"|"incomplete", "answerability": number 0..1, "question_text": string|null}
+{"is_ask": boolean, "directed_at_user": boolean, "complete": boolean, "act": "question"|"follow_up"|"coding_task"|"behavioral"|"technical"|"rhetorical"|"statement"|"social"|"incomplete", "action": "answer"|"offer"|"silent", "answerability": number 0..1, "question_text": string|null}
 question_text: the ask itself, quoted VERBATIM from the candidate — the WHOLE ask, so a task stated in several parts keeps all of them, not just the last part. Use null when the entire candidate is the ask, or when there is no ask.
 `;
 
@@ -191,13 +208,20 @@ export function parseJudgeVerdict(raw: string | null | undefined, candidateText:
         const grounded = tokenContainment(obj.question_text, candidateText) >= JUDGE_CONTAINMENT_MIN;
         questionText = grounded ? obj.question_text.trim() : null;
     }
-    return { isAsk, directedAtUser: directed, complete, act, answerability, questionText };
+    // `action` is authoritative when present. A reply that omits it (older
+    // prompt, degraded model) still works: fall back to the old banding so the
+    // parser never gets stricter than the model it is reading.
+    const rawAction = String(obj.action ?? '').toLowerCase();
+    const action: JudgeAction = rawAction === 'answer' || rawAction === 'offer' || rawAction === 'silent'
+        ? rawAction
+        : (!isAsk || !directed ? 'silent' : answerability >= 0.88 ? 'answer' : answerability >= 0.65 ? 'offer' : 'silent');
+    return { isAsk, directedAtUser: directed, complete, act, answerability, questionText, action };
 }
 
 export type JudgedRoute =
     | { route: 'wait_incomplete' }
     | { route: 'ignore'; reason: 'not_question' | 'low_answerability' | 'rhetorical' }
-    | { route: 'evaluate'; answerability: number; act: AutoAnswerDialogueAct; questionText: string | null };
+    | { route: 'evaluate'; action: JudgeAction; answerability: number; act: AutoAnswerDialogueAct; questionText: string | null };
 
 /**
  * Turn a verdict into the controller's routing. The judge is TRUSTED in both
@@ -211,5 +235,6 @@ export function routeForVerdict(v: JudgeVerdict): JudgedRoute {
     if (!v.isAsk) return { route: 'ignore', reason: 'not_question' };
     if (v.act === 'rhetorical') return { route: 'ignore', reason: 'rhetorical' };
     if (!v.directedAtUser) return { route: 'ignore', reason: 'not_question' };
-    return { route: 'evaluate', answerability: v.answerability, act: v.act, questionText: v.questionText };
+    if (v.action === 'silent') return { route: 'ignore', reason: 'low_answerability' };
+    return { route: 'evaluate', action: v.action, answerability: v.answerability, act: v.act, questionText: v.questionText };
 }
