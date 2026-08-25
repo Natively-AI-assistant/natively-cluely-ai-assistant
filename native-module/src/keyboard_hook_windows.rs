@@ -812,9 +812,36 @@ fn unicode_for_key(
     let mut buf = [0u16; 8];
     // wFlags = 0x4 → do not alter kernel keyboard state (preserve dead keys).
     let n = unsafe { ToUnicodeEx(vk, scan, &key_state, &mut buf, 0x4, hkl) };
-    if n <= 0 {
-        // 0 = no translation; <0 = dead key (no standalone char to emit).
+    if n == 0 {
+        // No translation for this key in this state. Nothing was written to the
+        // buffer, so its contents are stale and must not be read.
         return String::new();
+    }
+    if n < 0 {
+        // DEAD KEY (accent / diacritic). ToUnicodeEx has, where the layout
+        // allows, written the SPACING form of the accent to the buffer — e.g.
+        // U+00B4 ACUTE ACCENT rather than U+0301 COMBINING ACUTE ACCENT. Only
+        // buf[0] is meaningful; the rest of the buffer is stale.
+        //
+        // Returning "" here loses the key outright. The caller only hands an
+        // empty result back to the OS on the AltGr path, so a PLAIN dead key
+        // would fall through to `LRESULT(1)` and be swallowed — reaching
+        // neither the overlay nor the foreground app. That silently kills every
+        // accent key on German T1, AZERTY, Spanish, Nordic and US-International.
+        //
+        // "If possible" in the Win32 docs is load-bearing: a layout may write
+        // nothing at all, in which case there is genuinely no character.
+        //
+        // NOT dead-key COMPOSITION. wFlags=0x4 deliberately stops the kernel
+        // accumulating the dead key (composing would corrupt what every other
+        // app on the machine sees), so an acute accent followed by `e` yields
+        // two characters, not one precomposed glyph. Visible and correctable
+        // beats silently eaten. Real composition must be built and validated on
+        // Windows.
+        return match buf.first() {
+            None | Some(&0) => String::new(),
+            Some(&unit) => String::from_utf16_lossy(&[unit]),
+        };
     }
     let n = (n as usize).min(buf.len());
     String::from_utf16_lossy(&buf[..n])
