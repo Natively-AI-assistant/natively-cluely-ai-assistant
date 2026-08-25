@@ -3185,6 +3185,23 @@ export class AppState {
    * See SimpleAutoAnswer.ts. V3 stays reachable via
    * NATIVELY_AUTO_ANSWER_ENGINE=v3 for A/B.
    */
+  /**
+   * DEV-ONLY transcript trace. Every routine log in this app carries lengths
+   * and reasons, never words (pinned by SensitiveLogRedaction), which makes a
+   * live run hard to read: you can see that a candidate was judged, not WHAT
+   * was judged. This is the one deliberate exception, and it reuses the
+   * Context-Intelligence content gate rather than adding a second concept —
+   * dev build AND NATIVELY_CONTEXT_DEBUG=verbose AND
+   * NATIVELY_CONTEXT_DEBUG_INCLUDE_CONTENT=1, evaluated per call so toggling
+   * the setting needs no restart, and failing CLOSED when unbound or packaged.
+   */
+  private contentTraceEnabled(): boolean {
+    try {
+      const { getContentInclusionEnabled } = require('./context-intelligence/debug/debug-config');
+      return getContentInclusionEnabled() === true;
+    } catch { return false; }
+  }
+
   private readonly simpleAutoAnswer = new SimpleAutoAnswerEngine({
     isEnabled: () => this._autoAnswerEnabled,
     isMeetingActive: () => this.isMeetingActive,
@@ -3196,6 +3213,10 @@ export class AppState {
     // the problem statement when ruling on a follow-up two minutes later,
     // while the answer could; the offline benches all ran on the wider view.
     recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(180) as any,
+    logContent: (label: string, text: string) => {
+      if (!this.contentTraceEnabled()) return;
+      console.log(`[AutoAnswer:text] ${label}\n    “${text}”`);
+    },
     dispatch: (question, { reuseSpeculative }) => {
       return this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
@@ -3487,6 +3508,12 @@ export class AppState {
       // Auto Answer (Settings > General, default OFF). Engine per the A/B
       // switch: legacy = the PR #497 debounce on interviewer finals only;
       // v3 = every segment, any speaker, the controller decides (V2 §24).
+      // Same gate: the raw STT stream, so a stoppage that judged the "wrong"
+      // words can be traced back to the segments that built it.
+      if (this.contentTraceEnabled()) {
+        console.log(`[STT:${speaker}${segment.isFinal ? '' : '~'}] ${segment.text}`);
+      }
+
       if (this._autoAnswerEnabled) {
         this.simpleAutoAnswer.ingest({
           speaker,

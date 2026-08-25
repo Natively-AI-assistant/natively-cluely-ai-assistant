@@ -30,7 +30,7 @@ function makeSimple(judgeImpl, overrides = {}) {
   const clock = new FakeClock();
   const state = {
     enabled: true, meetingActive: true, generation: 1, accepting: true, streaming: false,
-    turns: [], dispatched: [], offered: [], skips: [], events: [], cancelled: [], judgeCalls: [],
+    turns: [], dispatched: [], offered: [], skips: [], events: [], cancelled: [], judgeCalls: [], contentTrace: [],
     ...overrides,
   };
   const host = {
@@ -44,6 +44,7 @@ function makeSimple(judgeImpl, overrides = {}) {
     offer: (q) => state.offered.push(q),
     cancelAutomaticAnswer: (r) => { state.cancelled.push(r); return true; },
     telemetry: (e) => { state.events.push(e); if (e.name === 'auto_answer_ignored') state.skips.push(e.skipReason); },
+    logContent: (label, text) => state.contentTrace.push({ label, text }),
     log: () => {},
     ...(judgeImpl ? { judgeCandidate: (req) => { state.judgeCalls.push(req); return judgeImpl(req, state.judgeCalls.length); } } : {}),
   };
@@ -632,4 +633,34 @@ test('a deferred verdict expires, and a SILENT verdict is never deferred at all'
   g.interviewer('So how would you keep that pipeline from falling behind?');
   await g.advance(STABILITY_MS + 200);
   assert.equal(r2.length, 2, 'but it never vetoes GROWN text: the ask may be in the new words');
+});
+
+test('the dev content trace names the exact words judged, and the engine works without it', async () => {
+  const h = makeSimple(async () => YES({ question_text: 'how would you shard that table?' }));
+  h.interviewer('Right, so how would you shard that table once it stops fitting on one box?');
+  await h.advance(STABILITY_MS + 300);
+  const judging = h.state.contentTrace.find(t => t.label.startsWith('judging'));
+  assert.ok(judging, 'the candidate handed to the judge is traced');
+  assert.match(judging.text, /shard that table once it stops fitting/, 'and it is the WHOLE candidate');
+  const verdict = h.state.contentTrace.find(t => t.label.startsWith('verdict'));
+  assert.ok(verdict && /answer/.test(verdict.label), 'the ruling is traced too');
+  assert.equal(verdict.text, 'how would you shard that table?', 'showing the EXTRACTED question, not the raw candidate');
+
+  // The hook is OPTIONAL, and that is the safety property: a packaged build
+  // supplies no hook at all. Build a host that genuinely lacks the key.
+  const clock = new FakeClock();
+  const out = [];
+  const bare = new SimpleAutoAnswerEngine({
+    isEnabled: () => true,
+    isMeetingActive: () => true,
+    meetingGeneration: () => 1,
+    engineAccepting: () => true,
+    recentTurns: () => [],
+    dispatch: (q) => out.push(q),
+    judgeCandidate: async () => YES(),
+  }, clock);
+  bare.onMeetingStart();
+  bare.ingest({ speaker: 'interviewer', text: 'And how would you shard that table once it stops fitting?', final: true, timestamp: clock.now(), origin: 'stt' });
+  for (let i = 0; i < 14; i++) { clock.advance(100); await flush(); await flush(); }
+  assert.equal(out.length, 1, 'dispatches identically with no content hook wired');
 });

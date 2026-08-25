@@ -105,3 +105,30 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
     'must never log the classified text itself — only its length');
   assert.doesNotMatch(intent, /text\.substring\(/);
 });
+
+test('main.ts transcript content traces are gated, never unconditional', () => {
+  const source = read('electron/main.ts');
+
+  // The ONE deliberate exception to "lengths, never words": a dev-only trace
+  // of the raw STT stream and of the exact text the Auto Answer judge rules
+  // on. It must never be reachable without the Context-Intelligence content
+  // gate, which itself requires a dev build AND verbose AND an explicit env
+  // opt-in, and fails closed when unbound or packaged.
+  const helper = source.match(/private contentTraceEnabled\(\)[\s\S]{0,400}?\n  \}/);
+  assert.ok(helper, 'the contentTraceEnabled gate helper must exist');
+  assert.match(helper[0], /getContentInclusionEnabled\(\) === true/,
+    'the gate must delegate to the content-inclusion resolver, not re-implement it');
+  assert.match(helper[0], /catch \{ return false; \}/, 'and fail CLOSED if that lookup throws');
+
+  for (const tag of ['\\[AutoAnswer:text\\]', '\\[STT:']) {
+    const re = new RegExp(`[^\\n]*${tag}[^\\n]*`, 'g');
+    const uses = source.match(re) ?? [];
+    assert.ok(uses.length > 0, `expected a ${tag} trace to exist`);
+    for (const use of uses) {
+      const at = source.indexOf(use);
+      const preceding = source.slice(Math.max(0, at - 400), at);
+      assert.match(preceding, /contentTraceEnabled\(\)/,
+        `every ${tag} trace must sit behind contentTraceEnabled(): ${use.trim()}`);
+    }
+  }
+});

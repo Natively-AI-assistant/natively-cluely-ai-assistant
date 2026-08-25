@@ -171,6 +171,18 @@ export interface SimpleAutoAnswerHost {
     modeName?(): string | null;
     telemetry?(event: AutoAnswerTelemetryEvent): void;
     log?(line: string): void;
+    /**
+     * DEV-ONLY content trace: the exact words the judge is ruling on, and what
+     * it ruled. Telemetry and `log` carry lengths and reasons only, by
+     * construction, which left one question unanswerable from a real run —
+     * *which part of the speech was judged?*
+     *
+     * The engine never decides whether this is safe: the host supplies the
+     * hook only while the Context-Intelligence content gate is open (dev build
+     * AND verbose AND the explicit env opt-in), so a packaged build has no
+     * hook at all.
+     */
+    logContent?(label: string, text: string): void;
 }
 
 export class SimpleAutoAnswerEngine {
@@ -346,6 +358,7 @@ export class SimpleAutoAnswerEngine {
                 judgeMs: now - heldReady.at, dialogueAct: heldReady.act, answerability: heldReady.answerability,
             });
             this.host.log?.(`[AutoAnswer:simple] applying the deferred verdict for ${heldReady.id}`);
+            this.host.logContent?.(`deferred verdict applied ${heldReady.id} (a=${heldReady.answerability})`, heldReady.text);
             this.deliver(heldReady.id, heldReady.text, heldReady.answerability, heldReady.act, now);
             return;
         }
@@ -376,6 +389,7 @@ export class SimpleAutoAnswerEngine {
             candidateWordCount: words, endpointSource: 'quiet_window',
         });
         this.lastJudgedKey = key;
+        this.host.logContent?.(`judging ${id} (${words}w)`, candidate);
         // Key any speculation the engine starts on its own interims to THIS
         // candidate, so the dispatch below can claim it by id.
         this.host.noteCandidate?.(id, this.sequence);
@@ -465,6 +479,10 @@ export class SimpleAutoAnswerEngine {
                     dialogueAct: verdict.act, answerability: verdict.answerability,
                 } : {}),
             });
+            this.host.logContent?.(
+                `superseded ${id} by ${this.judgeSeqCause ?? 'unknown'} after ${judgeMs}ms`
+                + (verdict ? ` — it had said ${verdict.isAsk ? 'ASK' : 'not-ask'} a=${verdict.answerability}` : ''),
+                candidate);
             // Defer, don't discard. Only a POSITIVE verdict is held: a silent
             // one must not veto the grown candidate, because the ask may be in
             // the very words that superseded it.
@@ -502,6 +520,10 @@ export class SimpleAutoAnswerEngine {
             dialogueAct: verdict.act, answerability: verdict.answerability,
         });
         const route = routeForVerdict(verdict);
+        this.host.logContent?.(
+            `verdict ${id} → ${route.route === 'evaluate' ? route.action : route.route}`
+            + ` (${verdict.act}, a=${verdict.answerability}, ${judgeMs}ms)`,
+            route.route === 'evaluate' ? (route.questionText ?? candidate) : candidate);
         if (route.route !== 'evaluate') {
             const reason = route.route === 'wait_incomplete' ? 'incomplete' : route.reason;
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: reason, dialogueAct: verdict.act, answerability: verdict.answerability });
