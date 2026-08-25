@@ -1287,7 +1287,7 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                                 {/* Overview - Rendered as Markdown */}
                                 {meeting.detailedSummary?.overview && (
-                                <div className="mb-6 pb-6 border-b border-border-subtle prose prose-sm max-w-none">
+                                <div className="pb-5 border-b border-border-subtle prose prose-sm max-w-none">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
