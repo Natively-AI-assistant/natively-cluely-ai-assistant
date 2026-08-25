@@ -328,15 +328,32 @@ test('prefetch: a question-shaped candidate starts the answer WHILE the judge de
   assert.equal(h.state.dispatchOpts.reuseSpeculative, true, 'the dispatch adopts the stream that was already running');
 });
 
-test('prefetch: exposition never costs a generation', async () => {
+test('prefetch: a DECLARATIVE task gets the head start too — the old shape gate denied it exactly this', async () => {
+  const h = makeSimple(async () => YES({ act: 'coding_task' }));
+  const prefetched = [];
+  h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
+  h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
+  h.interviewer('And your task is to recreate this game in React, using the API endpoint I am about to give you.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(prefetched.length, 1, 'a task with no question mark must prefetch like any other ask');
+});
+
+test('prefetch: rationed by time, so a chatty meeting cannot stack generations', async () => {
+  const { PREFETCH_MIN_INTERVAL_MS } = Simple;
   const h = makeSimple(async () => NO);
   const prefetched = [];
   h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
   h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
-  h.interviewer('Basically, every day a five-letter word is picked at random from some word bank, and the player has to guess it.');
+  for (let i = 0; i < 4; i++) {
+    h.interviewer(`So the ${i} thing to know about this system is that it stores everything in one place.`);
+    await h.advance(STABILITY_MS + 200);
+    await h.advance(3000);
+  }
+  assert.equal(prefetched.length, 1, `four stoppages inside the window cost ONE prefetch (got ${prefetched.length})`);
+  await h.advance(PREFETCH_MIN_INTERVAL_MS);
+  h.interviewer('And now the last thing to know is how the cache gets invalidated on write.');
   await h.advance(STABILITY_MS + 200);
-  assert.equal(h.state.judgeCalls.length, 1, 'the judge still rules on it');
-  assert.deepEqual(prefetched, [], 'but no answer was generated speculatively');
+  assert.equal(prefetched.length, 2, 'once the window passes, prefetch is allowed again');
 });
 
 test('prefetch: a stale speculative snapshot for ANOTHER question is not reused', async () => {

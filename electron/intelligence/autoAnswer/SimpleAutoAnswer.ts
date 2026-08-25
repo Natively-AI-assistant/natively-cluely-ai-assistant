@@ -34,7 +34,7 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { normalizeForCompare, tokenContainment, scoreCandidate } from './AutoAnswerDetector';
+import { normalizeForCompare, tokenContainment } from './AutoAnswerDetector';
 import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
@@ -55,13 +55,19 @@ export const OFFER_TTL_MS = 10_000;
 /** Judge-unavailable fallback on punctuation-less providers: interrogative-led utterances. */
 export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)[,.!\s]+)*(?:how|what|why|when|where|which|who|whose|can|could|would|should|do|does|did|are|is|will|have you|tell me|tell us|walk me|walk us|explain|describe)\b/i;
 /**
- * Prefetch gate. The judge takes ~1-1.5 s and the answer's first token ~3 s
- * more; starting them together takes the judge off the critical path. But a
- * prefetch the verdict then rejects is a wasted generation, so only candidates
- * the CHEAP local scorer already likes get one — on the benched videos that is
- * the handful of question-shaped turns, never the exposition. Unfitted placeholder.
+ * Prefetch pacing. Starting the answer alongside the judge removes ~830 ms
+ * (measured) from the critical path, but a prefetch the verdict rejects is a
+ * wasted generation, so it has to be rationed.
+ *
+ * The first cut rationed it with the OLD heuristic scorer — which is exactly
+ * the thing the judge replaced because it cannot see declarative tasks. So
+ * "why did you choose Postgres?" got the speedup and "your task is to
+ * recreate this game in React" did not: the case the feature exists for was
+ * the one case that never benefited. Now the ration is TIME, not shape — at
+ * most one prefetch per window, so a long meeting cannot spend more than a
+ * bounded number of generations no matter how it is phrased.
  */
-export const PREFETCH_MIN_ANSWERABILITY = 0.8;
+export const PREFETCH_MIN_INTERVAL_MS = 25_000;
 /**
  * How long after an automatic answer a manual press still counts as "that
  * answer was not good enough". Long enough for the user to read it and
@@ -118,6 +124,8 @@ export class SimpleAutoAnswerEngine {
     /** The automatic answer currently inside its feedback window. */
     private feedbackPending: { id: string; at: number; act: AutoAnswerQuestion['dialogueAct']; answerability: number } | null = null;
     private feedbackTimer: ClockTimer | null = null;
+    /** When the last prefetch fired, for PREFETCH_MIN_INTERVAL_MS pacing. */
+    private lastPrefetchAt: number | null = null;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
     private activeOffer: { id: string; timer: ClockTimer } | null = null;
@@ -261,24 +269,18 @@ export class SimpleAutoAnswerEngine {
     }
 
     /**
-     * Start the answer while the judge is still deciding, but only for
-     * candidates the cheap local scorer already rates highly — a prefetch the
-     * verdict rejects costs a full generation.
+     * Start the answer while the judge is still deciding. Rationed by time, so
+     * a declarative task gets the same head start as a question mark — see
+     * PREFETCH_MIN_INTERVAL_MS. The engine applies its own guards on top (idle
+     * only, never over a live stream or an existing speculation), so this can
+     * be optimistic without stacking generations.
      */
     private maybePrefetch(id: string, candidate: string, now: number): void {
         if (!this.host.prefetchAnswer) return;
+        if (this.lastPrefetchAt !== null && now - this.lastPrefetchAt < PREFETCH_MIN_INTERVAL_MS) return;
+        this.lastPrefetchAt = now;
         try {
-            const scores = scoreCandidate({
-                candidate: { text: candidate, lastUpdatedAt: now } as never,
-                recentTurns: this.turnsBefore(now),
-                questionId: id,
-                candidateGeneration: this.sequence,
-                meetingGeneration: this.host.meetingGeneration(),
-                now,
-            });
-            if (scores.answerability < PREFETCH_MIN_ANSWERABILITY) return;
-            if (scores.dialogueAct === 'incomplete') return;
-            this.host.prefetchAnswer(id, scores.questionText || candidate);
+            this.host.prefetchAnswer(id, candidate);
         } catch { /* prefetch is an optimisation; never break the pipeline */ }
     }
 
@@ -477,6 +479,7 @@ export class SimpleAutoAnswerEngine {
         this.recentInterviewerFinals = [];
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
+        this.lastPrefetchAt = null;
         this.judgeSeq++;
         this.sequence = 0;
     }
