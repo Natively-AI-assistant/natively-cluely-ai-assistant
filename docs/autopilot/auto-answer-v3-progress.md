@@ -1237,6 +1237,25 @@ than a vague "should be fine":
 Getting real evidence needs one of: pushing the branch so the Windows leg runs (an outward-facing action, so it
 is the user's call), or a physical Windows machine.
 
+#### Where the Natively (default) provider sits on diarization
+Worth stating, because the app's own speaker separation is easy to undersell: **channel separation IS the
+primary diarization, and it is the stronger kind** — mic and system audio are two devices and two STT sessions,
+so user-vs-others is MEASURED, not inferred from a model. The dual-channel replay of the Google interview is the
+proof: 2 dispatches / 0 garbage with channels, 15 / 13 on the same content flattened to one.
+
+What separation cannot reach is several voices INSIDE the meeting-audio channel — a panel, a colleague answering
+a colleague, a two-speaker video. For that:
+- **Deepgram**: works end to end today (`setDiarize` → `speakerId` → judge).
+- **Natively (default)**: relays to Soniox `stt-rt-v5`, which supports per-token speaker labels — but the relay's
+  config frame never requests them (`enable_speaker_diarization` absent, server.js ~8497) and no speaker tag is
+  forwarded to the client, even though the relay already does exactly that pattern for per-token `language`.
+  Enabling it is a **server-side** change in `natively-api` (a submodule this campaign must not commit):
+  add `enable_speaker_diarization: true` to the Soniox config, and forward the token's speaker beside the text.
+- **Client side is now ready**: `NativelyProSTT` reads `speaker` / `speaker_id` off the relay message in the
+  shapes it might plausibly send and emits `speakerId`. Absent field → absent label → today's behaviour exactly,
+  so this is inert until (and unless) the server sends one.
+- **NVIDIA Nemotron** (the current default provider) does not diarize at all.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
