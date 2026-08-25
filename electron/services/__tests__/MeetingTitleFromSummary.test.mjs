@@ -180,3 +180,75 @@ test('genuinely empty note content still returns null', async () => {
   assert.equal(title, null, 'no note content means there is nothing to derive a title from');
   assert.equal(sink.length, 0);
 });
+
+// ── Regeneration must not downgrade a good title (2026-08-26) ────────────────
+// The deterministic fallback above is right for the FIRST save — a meeting must have a
+// name. On REGENERATION it is a downgrade: a refusal/timeout would silently replace a
+// perfectly good model-generated title with the mechanical note-derived one, which the
+// old `null` return could never do. generateTitleFromSummaryWithSource reports where the
+// title came from; shouldReplaceTitleOnRegenerate is the policy over that signal.
+const { generateTitleFromSummaryWithSource, shouldReplaceTitleOnRegenerate } =
+  await import(pathToFileURL(path.join(base, 'MeetingPersistence.js')).href);
+
+test('a model-generated title reports source "model"', async () => {
+  const out = await generateTitleFromSummaryWithSource(fakeLLM('Onboarding Pilot Rollout'), SUMMARY);
+  assert.deepEqual(out, { title: 'Onboarding Pilot Rollout', source: 'model' });
+});
+
+test('a refusal reports source "fallback" alongside the note-derived title', async () => {
+  const out = await generateTitleFromSummaryWithSource(fakeLLM(NO_ACTION), SUMMARY);
+  assert.equal(out.source, 'fallback');
+  assert.match(out.title, /onboarding/i);
+});
+
+test('a throwing call reports source "fallback"', async () => {
+  const out = await generateTitleFromSummaryWithSource(
+    { generateMeetingSummary: async () => { throw new Error('deadline exceeded'); } }, SUMMARY);
+  assert.equal(out.source, 'fallback');
+});
+
+test('nothing groundable to name reports source "none"', async () => {
+  const out = await generateTitleFromSummaryWithSource(fakeLLM('Something'), { title: '', tldr: [], keyPoints: [], overview: '', topics: [] });
+  assert.deepEqual(out, { title: null, source: 'none' });
+});
+
+test('the plain wrapper still returns just the title string (existing call site unchanged)', async () => {
+  assert.equal(await generateTitleFromSummary(fakeLLM('Onboarding Pilot Rollout'), SUMMARY), 'Onboarding Pilot Rollout');
+  assert.equal(await generateTitleFromSummary(fakeLLM(NO_ACTION), SUMMARY), 'Onboarding, Pilot, Security review');
+});
+
+test('regeneration with a refusing model preserves the existing good title', async () => {
+  const candidate = await generateTitleFromSummaryWithSource(fakeLLM(NO_ACTION), SUMMARY);
+  assert.equal(candidate.source, 'fallback');
+  assert.equal(shouldReplaceTitleOnRegenerate('Onboarding Pilot Rollout', candidate), false,
+    'a fallback-derived title must not overwrite an existing non-default title');
+});
+
+test('regeneration with a succeeding model still replaces the existing title', async () => {
+  const candidate = await generateTitleFromSummaryWithSource(fakeLLM('Onboarding Pilot Rollout'), SUMMARY);
+  assert.equal(candidate.source, 'model');
+  assert.equal(shouldReplaceTitleOnRegenerate('Stale Generated Name', candidate), true);
+});
+
+test('the fallback still fills an empty or placeholder title (first-generation path)', async () => {
+  const candidate = await generateTitleFromSummaryWithSource(fakeLLM(NO_ACTION), SUMMARY);
+  assert.equal(candidate.source, 'fallback');
+  for (const existing of ['', '   ', 'Untitled Session', undefined, null]) {
+    assert.equal(shouldReplaceTitleOnRegenerate(existing, candidate), true,
+      `a meeting with no real name must take the fallback (existing: ${JSON.stringify(existing)})`);
+  }
+});
+
+test('nothing to name never replaces anything', () => {
+  assert.equal(shouldReplaceTitleOnRegenerate('Onboarding Pilot Rollout', { title: null, source: 'none' }), false);
+  assert.equal(shouldReplaceTitleOnRegenerate('', { title: null, source: 'none' }), false);
+});
+
+// Drift pin: the regenerate call site is not unit-testable (DatabaseManager +
+// MeetingContextAssembler + BrowserWindow), so pin that it routes through the predicate
+// rather than assigning the regenerated title unconditionally.
+test('the regenerate call site applies the predicate (drift pin)', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/MeetingPersistence.ts'), 'utf8');
+  assert.match(src, /shouldReplaceTitleOnRegenerate\(existingTitle, regenerated\)/);
+});

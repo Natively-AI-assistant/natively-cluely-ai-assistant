@@ -363,9 +363,9 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   /^(?:return|print|output|write|implement|initialize)\b/i,
   // Conversational acknowledgements: "Yes, that's right", "Okay, so…"
   /^(?:yes|no|sure|okay|ok|yeah|yep)\b\s*[,.!]/i,
-  // Complexity notation is answer vocabulary, never a meeting name
-  // ("The two-pointer approach solves this in O(n) time." — review 2026-08-22).
-  /\bO\([^)]{1,12}\)/,
+  // Complexity notation ("O(1)", "O(n log n)") is handled by
+  // isComplexityAnswerTitle below — a blanket reject also threw away
+  // legitimate DSA-interview names ("O(1) Store Class Design", 2026-08-26).
   // ── Session E live misses (2026-08-23) ────────────────────────────────
   // First-person answer speech: "I'll switch the solution to C++". A meeting
   // name never opens with "I " / "I'…" ("I/O Performance Review" is safe —
@@ -381,11 +381,45 @@ const ANSWER_FRAGMENT_TITLE_RES: RegExp[] = [
   /ഞാൻ|ഞങ്ങൾ|നിങ്ങൾ|എനിക്ക്/u,
 ];
 
+// ── Complexity notation: answer vs. name (2026-08-26) ────────────────────────
+// "O(n)" in a generated title is TWO different failures wearing one shape.
+//
+//   answer   "O(1)" / "O(n log n)" / "O(1) time, O(n) space"
+//   answer   "The two-pointer approach solves this in O(n) time"
+//   NAME     "O(1) Store Class Design" / "Designing an O(1) Store"
+//
+// The user runs DSA interviews constantly, so the complexity IS often the
+// distinguishing feature of the meeting — rejecting every title that mentions
+// it left those sessions unnamed. Reject only when the notation is the whole
+// point of the string rather than one token inside a descriptive noun phrase:
+//
+//   1. ≤2 tokens survive once the notation is removed — the notation IS the title.
+//   2. an assertion verb is present — the phrase claims something about the
+//      complexity ("solves this in O(n) time"), i.e. it is the answer. Same
+//      verb vocabulary as the "<language> code uses/is/…" rule above.
+//   3. more than 6 words — the naming prompt asks for 3-6, so anything longer
+//      quoting complexity is a sentence, not a name.
+//
+// Detection is the unchanged pattern; only the decision narrowed.
+const COMPLEXITY_NOTATION_RE = /\bO\([^)]{1,12}\)/g;
+const ASSERTION_VERB_RE = /\b(?:uses|is|does|works|runs|solves|looks)\b/i;
+const TITLE_WORD_WINDOW_MAX = 6;
+
+function isComplexityAnswerTitle(t: string): boolean {
+  const stripped = t.replace(COMPLEXITY_NOTATION_RE, ' ');
+  if (stripped === t) return false; // no complexity notation at all
+  const residual = stripped.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (residual.length <= 2) return true;
+  if (ASSERTION_VERB_RE.test(stripped)) return true;
+  return t.split(/\s+/).filter(Boolean).length > TITLE_WORD_WINDOW_MAX;
+}
+
 /** True when a GENERATED title reads as an answer fragment, not a name. */
 export function isAnswerFragmentTitle(title: string): boolean {
   const t = String(title || '').trim();
   if (!t) return false;
   if (ANSWER_FRAGMENT_TITLE_RES.some((re) => re.test(t))) return true;
+  if (isComplexityAnswerTitle(t)) return true;
   // A single all-lowercase token ("cpp") is an answer artifact — the 3-6-word
   // title prompt never legitimately produces one, and user/calendar titles do
   // not pass through this predicate.

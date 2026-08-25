@@ -98,6 +98,31 @@ export async function generateTitleFromSummary(
     llmHelper: { generateMeetingSummary: (system: string, context: string, groq?: string, opts?: any) => Promise<string> },
     summary: { title?: string; tldr?: string[]; keyPoints?: string[]; overview?: string; topics?: string[] }
 ): Promise<string | null> {
+    return (await generateTitleFromSummaryWithSource(llmHelper, summary)).title;
+}
+
+/** Where a generated title actually came from. `none` = nothing groundable to name. */
+export type TitleSource = 'model' | 'fallback' | 'none';
+
+export interface GeneratedTitle {
+    title: string | null;
+    source: TitleSource;
+}
+
+/**
+ * generateTitleFromSummary with the provenance the caller sometimes needs.
+ *
+ * Since the deterministic fallback landed (2026-08-26) a refusal/throw/rejection no longer
+ * returns null — it returns a NOTE-DERIVED title. That is right for the first save (a
+ * meeting must have a name) but wrong for REGENERATION, where the mechanical title would
+ * overwrite a perfectly good LLM one. Callers that must tell the two apart use this
+ * function and `shouldReplaceTitleOnRegenerate`; everyone else keeps the plain wrapper.
+ */
+export async function generateTitleFromSummaryWithSource(
+    llmHelper: { generateMeetingSummary: (system: string, context: string, groq?: string, opts?: any) => Promise<string> },
+    summary: { title?: string; tldr?: string[]; keyPoints?: string[]; overview?: string; topics?: string[] }
+): Promise<GeneratedTitle> {
+    const asFallback = (t: string | null): GeneratedTitle => ({ title: t, source: t ? 'fallback' : 'none' });
     const clean = (arr?: string[]) => (arr || []).map(t => String(t || '').trim()).filter(Boolean);
     const overview = typeof summary.overview === 'string' ? summary.overview.trim() : '';
     const topics = clean(summary.topics).slice(0, 10);
@@ -107,7 +132,7 @@ export async function generateTitleFromSummary(
     let takeaways = clean(summary.tldr);
     if (takeaways.length === 0) takeaways = clean(summary.keyPoints);
 
-    if (takeaways.length === 0 && !overview && topics.length === 0) return null;
+    if (takeaways.length === 0 && !overview && topics.length === 0) return { title: null, source: 'none' };
 
     // Deterministic safety net, computed BEFORE the call so every rejection path below
     // has something to return. Costs nothing when the generated title is accepted.
@@ -139,7 +164,7 @@ export async function generateTitleFromSummary(
         generatedTitle = await llmHelper.generateMeetingSummary(titlePrompt, context, titlePrompt, { timeoutMs: NOTE_CALL_TIMEOUT_MS });
     } catch (e) {
         console.warn('[MeetingPersistence] Title generation failed (non-fatal):', (e as Error)?.message);
-        return fallbackTitle;
+        return asFallback(fallbackTitle);
     }
 
     // REFUSAL, not a bad title. The title prompt tells the model the sentinel is invalid
@@ -148,16 +173,16 @@ export async function generateTitleFromSummary(
     // is what sent the first investigation of this failure down the wrong path.
     if (isRefusal?.(generatedTitle)) {
         console.warn('[MeetingPersistence] Title generation refused with the no-action sentinel — using the note-derived fallback.');
-        return fallbackTitle;
+        return asFallback(fallbackTitle);
     }
     // Misfire shape: sentinel followed by a real title. Keep the title, drop the sentinel.
     if (stripRefusal) generatedTitle = stripRefusal(generatedTitle);
 
     const cleanedTitle = cleanMeetingTitle(generatedTitle);
-    if (!cleanedTitle) return fallbackTitle;
+    if (!cleanedTitle) return asFallback(fallbackTitle);
     if (isAnswerFragmentTitle(cleanedTitle) || isAnswerShapedGeneration(generatedTitle)) {
         console.warn(`[MeetingPersistence] Generated title rejected as answer fragment: "${cleanedTitle}"`);
-        return fallbackTitle;
+        return asFallback(fallbackTitle);
     }
 
     // The shape guards above (cleanMeetingTitle / isAnswerFragmentTitle /
@@ -188,14 +213,35 @@ export async function generateTitleFromSummary(
             // of the note-derived fallback rather than saving it silently.
             if (overlap === 0) {
                 console.warn(`[MeetingPersistence] Generated title rejected as ungrounded (no overlap with notes): "${cleanedTitle}"`);
-                return fallbackTitle;
+                return asFallback(fallbackTitle);
             }
         }
         // No usable corpus (sparse summary) — accept the title rather than drop it,
         // matching FollowUpDraftGenerator's validatedSubject behaviour for the same case.
     }
 
-    return cleanedTitle;
+    return { title: cleanedTitle, source: 'model' };
+}
+
+/** The one placeholder the save path starts a meeting at. */
+const DEFAULT_MEETING_TITLE_RE = /^untitled\b/i;
+
+/**
+ * Regeneration-only title policy (2026-08-26).
+ *
+ * On the FIRST save a note-derived fallback is always an improvement over the "Untitled
+ * Session" default. On REGENERATION it is not: the meeting may already carry a good
+ * model-generated name, and since the fallback landed a refusal/timeout during regenerate
+ * would silently DOWNGRADE it to the mechanical one (the old `null` return could not).
+ * So a fallback-derived title may only fill an empty/placeholder title; a model-generated
+ * one always wins. A manual rename is protected one layer lower by replaceDetailedSummary's
+ * user_titled CASE WHEN, so this predicate never has to reason about it.
+ */
+export function shouldReplaceTitleOnRegenerate(existing: string | null | undefined, candidate: GeneratedTitle): boolean {
+    if (!candidate?.title) return false;
+    if (candidate.source === 'model') return true;
+    const current = typeof existing === 'string' ? existing.trim() : '';
+    return !current || DEFAULT_MEETING_TITLE_RE.test(current);
 }
 
 export class MeetingPersistence {
@@ -1119,8 +1165,19 @@ Return ONLY valid JSON (no markdown code blocks):
             // notes; fall back to the existing v3.title when nothing groundable comes
             // back. replaceDetailedSummary's own user_titled CASE WHEN still protects a
             // manual rename regardless of what we pass here.
-            const regeneratedTitle = await generateTitleFromSummary(this.llmHelper, v3);
-            if (regeneratedTitle) v3.title = regeneratedTitle;
+            // A refusal/timeout now yields a NOTE-DERIVED fallback rather than null, so an
+            // unguarded assignment would overwrite a good existing title with the mechanical
+            // one. shouldReplaceTitleOnRegenerate lets a model-generated title through and
+            // holds a fallback back unless the current title is empty/placeholder.
+            const regenerated = await generateTitleFromSummaryWithSource(this.llmHelper, v3);
+            const existingTitle = (typeof v3.title === 'string' && v3.title.trim())
+                ? v3.title.trim()
+                : (typeof details.title === 'string' ? details.title.trim() : '');
+            if (shouldReplaceTitleOnRegenerate(existingTitle, regenerated)) {
+                v3.title = regenerated.title as string;
+            } else if (regenerated.title) {
+                console.log(`[MeetingPersistence] regenerate: keeping the existing title "${existingTitle}" over the note-derived fallback.`);
+            }
             const detailedSummary = buildV3DetailedSummary(v3, details.detailedSummary);
             const ok = db.replaceDetailedSummary(meetingId, detailedSummary, { title: v3.title, summaryStatus: 'completed' });
             try {
