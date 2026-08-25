@@ -1557,3 +1557,33 @@ pre-existing tests were rewritten rather than deleted: the monologue cost test n
 interims (which is what actually rations the early ask), and the interim test now asserts on the COMMIT
 instead of the ask, since asking early is the new intended behaviour. Typecheck clean.
 `Requires physical macOS verification`.
+
+### Relay mid-word cuts (2026-08-26)
+
+The relay finalizes a PREFIX of its own interim, cut at an arbitrary character offset, and that offset lands
+inside a word roughly half the time. Joining the finals with a space then mangles the text every downstream
+reader sees — the live session produced "Inserting a val ue", "no duplic ates allowed",
+"where it gets interest ing" and a 4-word candidate "And among the val" that cost a judge call.
+
+```
+interim  ", and where it gets interesting is I want you to"
+final    ", and where it gets interest"     <- 28 chars, cut inside a word
+interim  "ing is I want you to be able to get a"    (resumes at the cut)
+```
+
+The cut is **decidable, not guessable**: when a final arrives the interim it was cut from is still in hand, so
+the character at the cut offset settles it. `isMidWordCut` requires word characters on BOTH sides —
+`"…I want you to"` + `"be able…"` is a space in the interim and must stay two words, which is exactly what a
+"continues in lowercase" heuristic would get wrong, and `"…of equal probability."` + `"So just these"` must
+keep its space even though the interim has none there. A revised interim (one that is not a prefix of the
+final) makes no claim at all and falls back to today's plain space.
+
+`joinTranscriptParts` then closes only the seams marked `glueNext`. Scope: this repairs the Auto Answer
+candidate — what the judge rules on and what is handed to the answer as the question. The wider transcript
+(SessionTracker segments, the hot window) still carries the artefact; fixing it there means teaching the STT
+layer to emit the seam flag, which is a wider change and is not done here.
+
+Validation: 53/53 Auto Answer tests, including the verbatim strings from the live log. Three guards
+mutation-probed — ignoring the character before the cut (1 fail), claiming a seam when the interim was revised
+(1 fail), never detecting a cut (1 fail). The first probe initially passed and the test was strengthened until
+it failed: nothing covered the punctuation-seam case.

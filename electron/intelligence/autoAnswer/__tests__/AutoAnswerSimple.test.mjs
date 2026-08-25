@@ -10,6 +10,7 @@
  *   prefilter             → 'prefilter: …never cost a call'
  *   '?' fallback          → 'judge unavailable → only a trailing ? fires'
  *   early ask             → 'the early ask replaces the commit ask…'
+ *   mid-word seam         → 'a final cut mid-word is rejoined…'
  *   mic echo latch        → 'speaker bleed cannot shred a question…'
  *   latch release         → '…and it releases once the bleed stops'
  */
@@ -737,4 +738,58 @@ test('the echo latch holds through fragments that dodge the per-utterance test, 
   await h.advance(STABILITY_MS + 300);
   assert.ok(h.state.skips.includes('user_answering'),
     'once the bleed stops the mic is trusted again');
+});
+
+// ── relay mid-word cuts (live session 2026-08-26) ───────────────────────────
+
+test('a final cut mid-word is rejoined, and a final cut at a space is not', async () => {
+  const h = makeSimple(async () => YES());
+  // Verbatim from the live log. The relay finalizes a PREFIX of its own
+  // interim, and the cut offset lands inside a word about half the time.
+  h.interviewer(', and where it gets interesting is I want you to', false);
+  await h.advance(40);
+  h.interviewer(', and where it gets interest');                 // cut INSIDE "interesting"
+  await h.advance(40);
+  h.interviewer('ing is I want you to be able to get a random value', false);
+  await h.advance(40);
+  h.interviewer('ing is I want you to');                         // cut at the space before "be"
+  await h.advance(40);
+  h.interviewer('be able to get a random value, uh, that is already', false);
+  await h.advance(40);
+  h.interviewer('be able to get a');
+  await h.advance(STABILITY_MS + 400);
+
+  const judged = h.state.judgeCalls.at(-1).candidateText;
+  assert.match(judged, /gets interesting is/, 'the split word is closed up');
+  assert.doesNotMatch(judged, /interest ing/, 'no "interest ing"');
+  assert.match(judged, /I want you to be able to get a/, 'but a space cut stays two words');
+  assert.doesNotMatch(judged, /you tobe/, 'never glues across a real space');
+});
+
+test('a cut after punctuation is never glued, even with no space in the interim', async () => {
+  const h = makeSimple(async () => YES());
+  // The relay sometimes emits no space after a sentence: "…probability.So".
+  // The cut offset is a non-space, but the seam is a SENTENCE boundary, not a
+  // split word — gluing it would produce "probability.So just these".
+  h.interviewer('of equal probability.So just these 3 operations', false);
+  await h.advance(40);
+  h.interviewer('of equal probability.');
+  await h.advance(40);
+  h.interviewer('So just these 3 operations.');
+  await h.advance(STABILITY_MS + 400);
+  const judged = h.state.judgeCalls.at(-1).candidateText;
+  assert.match(judged, /probability\. So just these/, 'punctuation seams keep their space');
+  assert.doesNotMatch(judged, /probability\.So/, 'never glued onto a sentence end');
+});
+
+test('a revised interim makes no seam claim (fall back to a plain space)', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('something completely different from the final', false);
+  await h.advance(40);
+  h.interviewer('So tell me about the hardest');   // interim does NOT start with this
+  await h.advance(40);
+  h.interviewer('bug you have shipped to production?');
+  await h.advance(STABILITY_MS + 400);
+  const judged = h.state.judgeCalls.at(-1).candidateText;
+  assert.match(judged, /the hardest bug you have shipped/, 'joined with a space, unchanged behaviour');
 });

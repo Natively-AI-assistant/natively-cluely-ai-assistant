@@ -34,7 +34,7 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { echoContainment, normalizeForCompare } from './AutoAnswerText';
+import { echoContainment, isMidWordCut, joinTranscriptParts, normalizeForCompare } from './AutoAnswerText';
 import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
@@ -234,7 +234,9 @@ export interface SimpleAutoAnswerHost {
 }
 
 export class SimpleAutoAnswerEngine {
-    private pending: Array<{ text: string; at: number; speaker?: string }> = [];
+    private pending: Array<{ text: string; at: number; speaker?: string; glueNext?: boolean }> = [];
+    /** Latest interviewer interim — the evidence for whether a final cut a word in half. */
+    private lastInterviewerInterim = '';
     /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
     private speakerByTurn = new Map<string, string>();
     private recentInterviewerFinals: Array<{ text: string; at: number }> = [];
@@ -318,7 +320,11 @@ export class SimpleAutoAnswerEngine {
                 // verdict resolving after the interviewer RESUMED must not
                 // dispatch mid-sentence; the next stoppage re-judges).
                 if (this.pending.length > 0 || text) {
-                    if (text) { this.bumpJudgeSeq('interim'); this.lastInterviewerAt = now; }
+                    if (text) {
+                        this.bumpJudgeSeq('interim');
+                        this.lastInterviewerAt = now;
+                        this.lastInterviewerInterim = text;
+                    }
                     this.arm(STABILITY_MS);
                 }
                 return;
@@ -336,7 +342,11 @@ export class SimpleAutoAnswerEngine {
                     if (oldest !== undefined) this.speakerByTurn.delete(oldest);
                 }
             }
-            this.pending.push({ text, at: now, speaker });
+            // Decide the seam NOW: the interim this final was cut from is still
+            // in hand, and it is gone as soon as the next one arrives.
+            const glueNext = isMidWordCut(text, this.lastInterviewerInterim);
+            this.lastInterviewerInterim = '';
+            this.pending.push({ text, at: now, speaker, glueNext });
             this.bumpJudgeSeq('final');  // supersede any in-flight verdict: it judged less than this
             this.lastInterviewerAt = now;
             this.arm(STABILITY_MS);
@@ -425,7 +435,7 @@ export class SimpleAutoAnswerEngine {
         const now = this.clock.now();
         this.pending = this.pending.filter(p => now - p.at <= PENDING_MAX_AGE_MS);
         if (this.pending.length === 0) return;
-        const candidate = this.pending.map(p => p.text).join(' ').replace(/\s+/g, ' ').trim();
+        const candidate = joinTranscriptParts(this.pending);
         const key = normalizeForCompare(candidate);
         const words = candidate.split(/\s+/).filter(Boolean).length;
 
@@ -743,6 +753,7 @@ export class SimpleAutoAnswerEngine {
         this.clearFeedback();
         this.pending = [];
         this.recentInterviewerFinals = [];
+        this.lastInterviewerInterim = '';
         this.recentUserEcho = [];
         this.echoModeUntil = 0;
         this.lastInterviewerAt = 0;

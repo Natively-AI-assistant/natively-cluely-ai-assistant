@@ -52,3 +52,43 @@ export function echoContainment(needle: string, haystack: string): number {
     }
     return hit / nq.length;
 }
+
+/**
+ * The relay finalizes a PREFIX of its own interim, cut at an arbitrary
+ * character offset — which lands mid-word often enough to mangle every
+ * downstream reader:
+ *
+ *   interim  ", and where it gets interesting is I want you to"
+ *   final    ", and where it gets interest"     <- 28 chars, cut inside a word
+ *   interim  "ing is I want you to be able to get a"   (resumes at the cut)
+ *
+ * Joining those two finals with a space yields "gets interest ing", and the
+ * judge, the answer and every token comparison read the mangled form. A real
+ * session produced "Inserting a val ue", "no duplic ates allowed" and
+ * "And among the val".
+ *
+ * The cut is DECIDABLE, not guessable: at the moment a final arrives the
+ * interim it was cut from is still in hand, so the character sitting at the
+ * cut offset says whether a word was split. Both sides must be word
+ * characters — "…you to" + "be able…" is a space in the interim and must stay
+ * two words, which is exactly the case a lowercase-continuation heuristic
+ * would get wrong.
+ */
+export function isMidWordCut(finalText: string, latestInterim: string): boolean {
+    if (!finalText || !latestInterim) return false;
+    if (latestInterim.length <= finalText.length) return false;
+    if (!latestInterim.startsWith(finalText)) return false;   // the STT revised it: no claim
+    const before = finalText[finalText.length - 1];
+    const after = latestInterim[finalText.length];
+    return /\w/.test(before) && /\w/.test(after);
+}
+
+/** Join relay finals, closing the seam where `glueNext` marks a split word. */
+export function joinTranscriptParts(parts: ReadonlyArray<{ text: string; glueNext?: boolean }>): string {
+    let out = '';
+    for (let i = 0; i < parts.length; i++) {
+        if (i === 0) { out = parts[i].text; continue; }
+        out += (parts[i - 1].glueNext ? '' : ' ') + parts[i].text;
+    }
+    return out.replace(/\s+/g, ' ').trim();
+}
