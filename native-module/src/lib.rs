@@ -31,6 +31,12 @@ pub mod keyboard_tap;
 // is_accessibility_granted), so StealthKeyboardManager and the renderer's
 // stealth-key-captured contract are cross-platform. Lets the user type into
 // the overlay without the window taking OS focus (no meeting-app blur).
+// Pure (winapi-free) app-hotkey chord matching used by the Windows hook to
+// swallow + self-dispatch the app's own shortcuts. Declared unconditionally so
+// it compiles and unit-tests on every platform (cargo test on macOS), even
+// though only keyboard_hook_windows uses it.
+pub mod app_chord;
+
 #[cfg(target_os = "windows")]
 pub mod keyboard_hook_windows;
 

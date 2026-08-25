@@ -5794,6 +5794,23 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-stealth-shortcut-guard', async () => {
+    return appState.getStealthShortcutGuardEnabled();
+  });
+
+  safeHandle('set-stealth-shortcut-guard', async (_, enabled: boolean) => {
+    appState.setStealthShortcutGuardEnabled(!!enabled);
+    return { success: true };
+  });
+
+  // DEV/TEST ONLY — gated by NATIVELY_DEBUG_HOTKEYS=1 inside KeybindManager.
+  // Simulates the OS dropping a RegisterHotKey registration so a Windows tester
+  // can confirm the hook-level swallow / shortcut-guard still fire the action.
+  safeHandle('debug:drop-hotkey', async (_, id: string) => {
+    const { KeybindManager } = require('./services/KeybindManager');
+    return { dropped: KeybindManager.getInstance().debugDropRegistration(id) };
+  });
+
   safeHandle('get-ambient-chat-enabled', async () => {
     return appState.getAmbientChatEnabled();
   });
@@ -12429,6 +12446,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           appState.applyAutoAnswerThresholds?.(activeMode.templateType);
         } else if (appStateIntMgr && !id) {
           appStateIntMgr.clearDynamicActionContext();
+          // Mode cleared: back to the registry's no-mode Auto Answer bar
+          // instead of keeping the previous mode's thresholds (review#10).
+          appState.applyAutoAnswerThresholds?.(null);
         }
       } catch {
         /* non-fatal */

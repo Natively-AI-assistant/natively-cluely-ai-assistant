@@ -309,6 +309,21 @@ interface FlagSpec {
   /** SettingsManager key for a UI/persisted opt-in. */
   setting: string;
   /**
+   * When true, the flag is PERMANENTLY ON (no user-facing toggle) and the
+   * SettingsManager override for `setting` is never consulted — a stale
+   * persisted value from when this flag WAS toggleable (on either side) is
+   * inert and can never re-surface. Only the env var and `default` still
+   * apply. Use this when retiring a settings-UI row for a flag that graduates
+   * to "just how the product works": flip this on and delete the UI entry,
+   * do NOT touch anyone's settings.json — that's what makes the retirement
+   * safe for users who already persisted the old value.
+   *
+   * The env var remains the operator kill-switch — deliberately NOT
+   * suppressed by this field — so the flag can still be forced off in the
+   * field without a release even after its UI is gone.
+   */
+  settingIgnored?: boolean;
+  /**
    * Default when neither env nor settings decide. A plain `boolean` for a
    * fixed default; a thunk (`() => boolean`) for a CONTEXT-DEPENDENT default
    * (e.g. `isInternalDevTestContext`) that must be re-evaluated on every read
@@ -358,13 +373,23 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   promptAssemblerV2: { env: 'NATIVELY_PROMPT_ASSEMBLER_V2', setting: 'promptAssemblerV2Enabled', default: false },
   answerDiversityGuard: { env: 'NATIVELY_ANSWER_DIVERSITY_GUARD', setting: 'answerDiversityGuardEnabled', default: false },
   meetingMemoryV2: { env: 'NATIVELY_MEETING_MEMORY_V2', setting: 'meetingMemoryV2Enabled', default: false },
-  // Meeting Notes V3 ships ON by default (product decision 2026-06-20). Each remains
-  // env/settings-overridable; set NATIVELY_MEETING_SUMMARY_V3=0 to revert to the legacy
-  // single-pass summary path. All paths keep a deterministic fallback and honor the
+  // Meeting Notes V3 is now the UNCONDITIONAL default (product decision 2026-08-25) —
+  // the experimental settings toggle has been removed. `settingIgnored: true` means a
+  // stale persisted `meetingSummaryV3Enabled` (from when the toggle existed, in either
+  // direction) is never read — this flag now only listens to the env kill-switch and
+  // its default. Set NATIVELY_MEETING_SUMMARY_V3=0 to force the legacy single-pass
+  // summary path in an emergency without a release; that is the ONLY remaining way to
+  // turn this off. All paths keep a deterministic fallback and honor the
   // post_call_summary data scope.
-  meetingSummaryV3: { env: 'NATIVELY_MEETING_SUMMARY_V3', setting: 'meetingSummaryV3Enabled', default: true },
+  meetingSummaryV3: { env: 'NATIVELY_MEETING_SUMMARY_V3', setting: 'meetingSummaryV3Enabled', settingIgnored: true, default: true },
   meetingModeAutoDetect: { env: 'NATIVELY_MEETING_MODE_AUTODETECT', setting: 'meetingModeAutoDetectEnabled', default: true },
-  followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', default: true },
+  // The LLM-written follow-up draft is now the UNCONDITIONAL default (product decision
+  // 2026-08-25) — the experimental settings toggle has been removed. `settingIgnored: true`
+  // means a stale persisted `followUpDraftV2Enabled` (from when the toggle existed, in
+  // either direction) is never read — this flag now only listens to the env kill-switch and
+  // its default. Set NATIVELY_FOLLOWUP_DRAFT_V2=0 to force the deterministic fallback draft
+  // in an emergency without a release; that is the ONLY remaining way to turn this off.
+  followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', settingIgnored: true, default: true },
   speakerLabelsV1: { env: 'NATIVELY_SPEAKER_LABELS_V1', setting: 'speakerLabelsV1Enabled', default: true },
   // Constrained LLM polish of the Summary (note-content-only, "no new tokens" gated). ON by
   // default — it can only improve readability and always falls back to the deterministic
@@ -541,6 +566,7 @@ function readEnvOverride(key: IntelligenceFlagKey): 'on' | 'off' | null {
 }
 
 function readSettingOverride(key: IntelligenceFlagKey): boolean | null {
+  if (FLAGS[key].settingIgnored) return null;
   try {
     // From electron/intelligence/ → ../services/SettingsManager
     const { SettingsManager } = require('../services/SettingsManager');
@@ -832,6 +858,9 @@ export function setIntelligenceFlag(key: IntelligenceFlagKey, value: boolean | n
     if (typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(FLAGS, key)) return false;
     const spec = FLAGS[key];
     if (!spec || typeof spec.setting !== 'string') return false;
+    // The flag no longer reads its setting (permanently-on, no UI toggle) — persisting a
+    // value here would silently do nothing and mislead a future caller. Refuse instead.
+    if (spec.settingIgnored) return false;
     const { SettingsManager } = require('../services/SettingsManager');
     const sm = SettingsManager.getInstance();
     if (value === null) {

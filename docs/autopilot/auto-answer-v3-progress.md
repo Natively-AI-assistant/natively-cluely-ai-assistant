@@ -1,6 +1,6 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 7 complete — CAMPAIGN COMPLETE (branch local, no PR opened, no push)
+## Status: phase 7 complete + post-campaign code-review repairs (2026-08-24) — branch local, no PR, no push
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -695,6 +695,624 @@ construction; the toggle stays DEFAULT OFF.
 5. Settings-store-degraded path for the toggle (renderer rollback).
 6. Packaged build including `pipecat-ai/smart-turn-v3/` under `resources/models/` on both installers.
 
+### Post-campaign code-review repairs (2026-08-24)
+`/code-review` (high) returned 10 findings. Each was REPRODUCED before fixing (red test, or a live-provider probe
+with keys from `.env`); two of its sub-claims were refuted and left alone (Smart Turn padding side — the Python
+reference right-pads too; offer-card "leak" — refuted by the reviewer itself).
+
+| # | Finding | Verified by | Fix |
+|---|---|---|---|
+| 1 | `automaticAnswerInFlight` latch sticks when the planner answers with silence (no mode change → no idle event) → Auto Answer dead for the meeting | red controller test | `dispatch` may return a promise; on settle with `answerStreamActive()` false the controller clears in-flight, emits completed, dequeues. Harness models streaming (dispatch starts, idle ends) |
+| 2 | The engine's own SPECULATIVE prefetch read as a manual press → every committed question silenced as `manual_answer_active` while speculation ran (the common case!) | red engine test on the real `runWhatShouldISay` sync prefix | `speculativeGenerationId` stamped per run; `isManualAnswerActive` excludes it; new `isAnswerStreaming()` |
+| 3 | Barge-in during the planner await (mode still idle) cancelled nothing; the answer then streamed over the user | red engine test (planner parked on a controlled promise) | `automaticTriggerPending/Cancelled` window: `cancelAutomaticAnswer` flips it pre-stream; `handleSuggestionTrigger` aborts after the planner and emits `suggestion_skipped user_barge_in` |
+| 4 | `dispose()` released the ORT session under an in-flight `infer()` (the recorded SIGABRT class, now on the main process); a session resolving after dispose leaked past before-quit | 2 red predictor tests (stub session records use-after-release) | epoch counter + in-flight promise: dispose awaits the inference, voids a pending load and releases the late session; `inferInner` re-checks epoch/session identity after each await |
+| 5 | Soniox `<end>` arrives as the LAST token of the SAME message as the finals; the adapter emitted `endpoint` mid-loop → the subsequent `ingest(final)` re-arm wiped it → the primary STT never benefited from tier 1 | **live Soniox probe** (stt-rt-preview, real key): `…"dog"./F "<end>"/F` in one message | endpoint deferred below the transcript emits; TurnManager mechanism test pins endpoint-after-final vs before |
+| 6 | Deepgram delivers `speech_final=true` on trailing EMPTY-transcript results; `if (!transcript) return` dropped the strongest tier-1 signal | **live Deepgram probe** (nova-2, real key): two `is_final=true speech_final=true transcript=""` results + UtteranceEnd at +1 s | emit `endpoint {speech_final}` before the empty-transcript return (text-carrying finals keep transcript-then-endpoint order) |
+| 7 | A confident prediction cached from the PREVIOUS silence (≤ 2 s TTL) shortened the wait for a NEW mid-question pause; same-tier deadlines only move earlier so the fresh lower prediction could not undo it | red predictor test | `onInterviewerSpeechStart` clears the cached prediction; controller calls it on the interviewer start edge |
+| 8 | A stale native binary (no third `start()` callback) leaves the dual-channel gate silently INERT — auto-fires with no user-silence/barge-in and nothing distinguishes it | by construction (verdict with zero edges = dispatch) + test | one-time per-meeting warning when a candidate commits with zero `speech_edge` events ever seen; `channelEdgesSeen` on candidate telemetry |
+| 9 | The optional Smart Turn asset was REQUIRED in install verify and preflight: a blocked download failed `npm install`; a missing file flipped preflight to non-recoverable | confirmed in `LocalFallbackPreflight` + `download-models` code | new `OPTIONAL_MODEL_FILES` class: download non-fatal (warn), dev verify warns, preflight untouched by it; the packaged-RELEASE gate still requires it. Verified both ways by moving the file aside |
+| 10 | Two disagreeing threshold defaults (controller booted on the interview bar 0.88; registry says no-mode = meeting bar 0.94) and thresholds were never applied when no mode is active / on mode clear | code trace | controller constructed with `resolveAutoAnswerThresholds(null)`; `applyAutoAnswerThresholds(null)` on the no-mode meeting-start branch and the modes:set-active clear branch |
+
+New tests: +7 controller/fusion (`review#…` named), +5 engine (`AutoAnswerEngineReview2026_08_24.test.mjs`).
+Auto Answer suite 183/183 · engine review+gate 16/16 · preflight/install trio 25/25 · evaluator gate green ·
+both typechecks 0 · `npm test` 8498 / 8433 / **2** (only the allowed Ollama pair — the other pre-existing failures
+were repaired by a parallel session's uncommitted edits to two test files, which are NOT part of this branch).
+Labels: findings 1–8 fixes **Covered by automated tests**; 5/6 adapter ordering additionally **Tested physically
+on macOS against live Deepgram and Soniox**; 9 verified by running both verify scripts with the asset removed and
+restored; 10's registry resolution **Covered by automated tests**, its main.ts/ipc wiring **Reviewed but not
+executed**.
+
+### Live-run repairs (2026-08-24, after the first physical toggle-ON session)
+First real session (YouTube mock interview, Soniox relay): the pipeline ran and every candidate was evaluated, but
+every skip was wrong or debatable. The persisted transcripts (natively.db) were replayed VERBATIM through the
+controller to reproduce each decision offline, then fixed:
+
+1. **Directed question + elaboration killed as rhetorical.** The session's only real ask — "I'm just curious: are
+   you familiar with CoderPad? **Because** that's what we're going to be using throughout…" — hit the `? Because`
+   self-answered pattern. Fix: the turn is split at its LAST '?'; the after-text decides the act (DEFERRAL →
+   pause_request; an answer-lead after a NON-directed question → rhetorical; elaboration after a DIRECTED
+   question → judge the question region itself), and the dispatched `question.text` becomes the question region,
+   not the whole turn. The interviewer_self_answer fixture ("Why do we shard by user id? Because hot keys." — no
+   second person) still never fires.
+2. **Duplicate relay finals doubled the candidate text** ("I'm good. How are you? I'm good. How are you?").
+   Fix: TurnManager drops an identical final re-delivered within `DUPLICATE_FINAL_WINDOW_MS=500` (the same rule
+   SessionTracker already applies), still restarting the quiet window.
+3. **False positive found while replaying the logistics meeting** (never fired live, but fired offline): the shared
+   `IMPERATIVE_ASK` matches a bare verb anywhere, so "…and I recommend maybe SHARING your screen…" reached the
+   imperative floor. Fix: the floor now requires a clause-anchored candidate-directed imperative
+   (`CLAUSE_IMPERATIVE`/`TASK_DIRECTIVE`); first-person narration never anchors it. The extractor's honest 0.40
+   stands and the turn is silent.
+
+Verification: 4 new regression tests carry the VERBATIM live texts (live#1/1b/2/3, incl. the full 14-final
+logistics meeting pinned to zero answers and zero offers); both real meetings replayed offline — meeting 1 now
+fires the greeting and the CoderPad question, meeting 2 stays silent; Auto Answer suite 187/187; evaluator gate
+green (precision 1.0, recall unchanged); full suite 8510 / 8445 / 2 (Ollama pair only); both typechecks clean.
+
+Unrelated live observation, NOT this branch: the STT relay auto-detected `de-DE` mid-session on English video
+audio (gen 5), which degraded every transcript of that meeting — a NativelyProSTT/relay language-pinning issue.
+
+### Live-run repairs, round 2 (2026-08-24 — the system-design session)
+Second physical session (meeting 343d1321, a system-design mock interview): 35 candidates, ALL skipped. The full
+transcript was replayed verbatim; two more real-shape gaps fixed:
+
+4. **Design/coding TASK statements are the question.** The entire prompt was first-person task-giving — "…we need
+   help designing the actual app", "We need help designing the code that could implement an online cloud reading
+   application… this is very open-ended. You can implement this how you want…" — no '?', no clause-initial
+   imperative, so every fragment scored `not_question`. (The repo's `looksLikeCodingQuestion` needs ≥2 signal
+   classes and also misses these.) Fix: `DESIGN_TASK` frames (we need help designing / we want you to build /
+   your task is / you can implement this / …, min 40 chars) → act `coding_question`, imperative floor,
+   directed by nature. Full-meeting replay now fires EXACTLY ONCE, on the prompt itself.
+5. **A short affirmation echo after a question is the exchange closing itself.** "Is that correct? Correct."
+   (the video's other same-channel speaker) FIRED before this round. Fix: after-text of ≤4 words starting with an
+   affirmation (correct/right/exactly/yes/…) → `rhetorical`.
+
+Verbatim regression tests live#4/4b added (the design-prompt final sequence with real timings pinned to 1–2
+dispatches with act `coding_question`; requirements listing, "Is that correct? Correct." and window-resizing
+chatter pinned silent). Auto Answer suite 189/189 · evaluator gate green (precision 1.0, recall unchanged) ·
+full suite 8513 / 8448 / 2 (Ollama pair) · typecheck clean. Full-meeting replay: 1 auto answer (the prompt),
+3 offer-band cards (requirement fragments — Tab-gated, never auto), everything else silent.
+
+### A/B harness (2026-08-24, temporary)
+`NATIVELY_AUTO_ANSWER_ENGINE=legacy` routes the trigger through
+`electron/intelligence/LegacyAutoAnswerTrigger.ts` — a byte-faithful reproduction of the PR #497 path (bare 900 ms
+debounce restarted per final, single last turn as the question, hardcoded confidence 0.9, old gate, no rearm, no
+dual-channel/dedup/endpoints, its known starvation defect INCLUDED on purpose). Anything else (or unset) = the V3
+controller. Chosen once at startup; announced by `[AutoAnswer] engine=…` in the log; legacy dispatches/skips are
+prefixed `[AutoAnswer:legacy]`. Smoke-verified by hand (restart-then-fire-once, already_answered dedup). V3 suite
+unaffected (189/189). REMOVE the file and its main.ts wiring when the comparison is done.
+
+### Live-run repairs, round 3 (2026-08-24 — the A/B session; mic echo)
+The user ran the A/B harness. LEGACY behaved exactly as preserved: it fired constantly on garbage single turns
+("Cool.", ".", "My name is Kylie,") — the recorded PR #497 failure mode, now demonstrated live. V3 answered
+nothing: every candidate skipped `user_answering`. The log showed why — nearly every interviewer final had an
+IDENTICAL-length twin on the USER channel ms later (22/22, 156/156, 5/5), and the mic auto-detected "ml" from
+noise: the MacBook mic was hearing the video through the SPEAKERS. The macOS "VAD-backed = trustworthy" premise
+fails here: speaker bleed IS real speech acoustically, so the WebRTC VAD passes it.
+
+6. **Mic echo detection.** A user final whose text mirrors a recent interviewer final
+   (`speculativeQuestionSimilarity ≥ ECHO_SIMILARITY=0.8` within `ECHO_WINDOW_MS=5000`) is the echo, not the user:
+   it neither closes the accumulation nor counts as the user taking the floor. When ≥`ECHO_ACTIVATE_COUNT=2` of
+   the last `ECHO_FLAG_WINDOW=4` user finals were echoes, echo mode engages: user-channel EDGES are ignored for
+   gating and barge-in (`channels.clearUserSpeech()` on entry), with a one-time log naming the likely cause
+   (speakers without headphones). GENUINE user speech — different words — is not an echo, restores the flags and
+   re-enables the channel; live#5b pins that real speech still cancels as `user_answering`.
+
+Tests live#5/5b (echo suppression must not block the answer; genuine speech must). Auto Answer suite 191/191 ·
+evaluator gate green · full suite 8528 / 8463 / 2 (Ollama pair). With headphones the dual-channel gate operates
+exactly as designed; echo mode is the speakers-degradation path and reads as such in the log.
+
+### Live-run repairs, round 4 (2026-08-24 — the A/B session; Wordle coding round, meeting fd28a1af)
+Same video, headphones in (no echo this time): LEGACY again fired garbage constantly ("Cool.", ".", "five-letter.",
+"attempt."), V3 fired ZERO. Replaying the saved meeting verbatim from natively.db found the two real asking points
+and three defects around them:
+
+7. **The task never matched `DESIGN_TASK`.** The ask was "and your task **Connor** is / to **recreate** this game in
+   Reac / t, …" — the frame `your (task|job|goal) (is|today|here)` breaks on the interjected name, and `recreate`
+   defeated the `\b…creat(e…)` verb list. Fixed with a name-tolerant frame that then REQUIRES the infinitive
+   (`your (task|job|goal),? \w+,? (is|will be) to`) so "your task list is getting long" stays silent, plus
+   `recreate|rebuild|clone` in the verb groups. Deliberately NOT added: a bare `you have to recreate…` frame — the
+   interviewer restates the task 30 s later ("And you have to recreate \"wordle\"…") and a frame there would
+   double-fire past the Jaccard dedup.
+8. **Fragment questions from closed revision windows.** An ignored statement always called `markDispatched()`, so
+   when the provider split one sentence across finals, the committed first half ("The way that you guess it is you")
+   closed the window and the SECOND half ("have 6 tries, where you") became a fresh candidate — which the extractor
+   scored 0.9. Now only a statement that ended as a sentence (`/[.?!]$/`) closes; an unpunctuated one stays
+   revisable and `looksLikeContinuation` glues its own tail back on.
+9. **Dangling `not/only/also` tails.** "Which letters are not in that word, and which letters are not" scored 1.0 as
+   a follow-up; those words joined `DANGLING_TAIL` (active only under provider punctuation, as before).
+
+Also observed in replay, deliberately unchanged: queued candidates behind a streaming answer can die at
+`QUEUE_TTL_MS=6000` — real, but not implicated live and the TTL/supersession trade-off needs the corpus.
+
+Tests live#6/6b/6c — live#6 replays all 58 finals of the meeting verbatim with a 6 s streaming-engine model and pins
+EXACTLY two dispatches: the "have you heard of… wordle?" question and the task as a `coding_question`; 6b pins the
+name-interjected frame and its near-misses; 6c pins revisable-vs-closed statements. All three fixes mutation-probed
+red (name frame → live#6+6b, dangling words → live#6, close-condition → live#6+6c). Auto Answer suite 194/194 ·
+evaluator gate green (precision 1.0 · recall 0.90 · zero false/dup/premature) · typecheck clean · full suite re-run:
+only the known allowed Ollama baseline failure visible (tail-30 capture).
+
+### Dynamic judge (2026-08-24 — user decision after live rounds 1-4)
+Four live sessions each needed a new detector regex; the user called the fixed-shape approach itself the defect
+("any possible scenario, not just technical interview") and chose the **cloud LLM judge**, explicitly overriding
+spec V2 §36's "no cloud LLM in the detection path". Architecture kept layered: TurnManager/dedup/policy/gate are
+unchanged; only the JUDGMENT is dynamic.
+
+- `AutoAnswerJudge.ts` (pure): prompt builder (fenced candidate = data-not-instructions, ≤`JUDGE_CONTEXT_TURNS`=8
+  hot-window turns, mode name), strict verdict parser (types checked, answerability clamped, act mapped,
+  `question_text` grounded by `tokenContainment ≥ 0.65` — hallucinated questions dropped), consult policy
+  (`shouldConsultJudge`: incomplete/backchannel/pause/confirmation and <4-word non-'?' candidates never cost a
+  call), routing (`routeForVerdict`).
+- Controller: `consultJudge` between detect and routing. Judge raced against `JUDGE_DEADLINE_MS`=2500 on the
+  injected clock; verdict trusted in BOTH directions (promotes heuristic statements, vetoes pattern-matched
+  "questions"). Staleness: `judgeSeq` + generation + current-id checks after the await — a superseded/stopped
+  world drops the verdict (`judgeOutcome: 'stale'`). Absent hook / timeout / rejection / unparseable → the
+  heuristic verdict routes byte-identically to the pre-judge pipeline. `routeHeuristic`/`holdIncomplete`/
+  `ignoreCandidate` extracted so both paths share one implementation.
+- main.ts: hook wired to `llmHelper.generateContentStructured(prompt, { preferFast: true })` (flash-lite-led);
+  `modeName` from ModesManager. `NATIVELY_AUTO_ANSWER_JUDGE=off` removes the hook (pure heuristic pipeline for
+  A/B and offline). Telemetry `auto_answer_judged` carries outcome/act/scores/latency, never text.
+- **Live-probed on the real model** (flash-lite, temperature 0, key from .env): 12-case set built from the four
+  live meetings + non-interview scenarios — wordle task, wordle question, two rule-exposition turns, self-answered,
+  standup "task list", V2 design task, sales-call ask, lecture audience question, novel-phrased task, restated
+  task, and a prompt-injection candidate. **12/12 correct** after two prompt-rule tunings (", right?" recap =
+  comprehension check; plan statements ≠ asks), 750-1200 ms typical, one 1.9 s outlier → deadline 2500.
+- Tests: `AutoAnswerJudge.test.mjs` (16 incl. hostile parses, grounding, consult policy) +
+  `AutoAnswerJudged.test.mjs` integration (promote / veto / deadline+no-timer-leak / error+unparseable fallback /
+  stale-on-revision / stale-on-stop / no-text telemetry / prefilter / no-hook-identical). Mutation probes red:
+  staleness guard → stale test, deadline race → timeout test. Auto Answer suite 210/210 · evaluator gate
+  unchanged · typecheck clean.
+
+Full-meeting validation on the REAL model (all 58 finals of fd28a1af replayed through the controller with the
+live flash-lite judge, 41 calls, avg ~900 ms): dispatches exactly the two real asks — the wordle question and the
+task, with the judge's grounded `question_text` extraction tightening the dispatch to "your task Connor is to
+recreate this game in Reac t". First run triple-fired on the task RESTATEMENT 30 s later (token dedup cannot see
+"you have to recreate wordle" == the answered task), fixed by SEMANTIC dedup in the judge itself:
+`JudgeRequest.lastAnsweredText` (the controller's `lastDispatchedText`) enters the prompt with a restatement rule;
+re-run → exactly 2 dispatches. Suite 212/212.
+
+Judge residuals: prompt rules are v1 (tuned on 12 cases — expect iteration); judge latency adds ~0.8-1.2 s before
+auto-fire when consulted; per-candidate token cost accepted by the user; `generateContentStructured`'s rotation can
+exceed the deadline under provider outage (falls back to heuristics by design); the 12-case probe is a spot check,
+not a corpus.
+
+### Live-run repairs, round 5 (2026-08-24 — first physical judge run, meeting 680519c8)
+The user replayed the Wordle video with the judge live; ZERO answers. Telemetry (`auto_answer_judged`) + the saved
+meeting showed three separate causes:
+10. **Merged turns read as closed.** Live interims held the quiet window open, so the wordle question and the
+    video-candidate's "Yeah, yeah, I've played it" merged into ONE candidate (words=19) — and the judge's
+    "same-channel answer = closed" rule correctly-but-wrongly vetoed it as rhetorical. Prompt rule split: a
+    SUBSTANTIVE question directed at the USER stays an ask even when a DIFFERENT voice's reply merged into the
+    turn (question extracted as question_text); only same-voice self-answers and satisfied yes/no confirmations
+    close. Probe: merged wordle 3/3 fire with extraction, self-answer/confirmation/exposition 0/3.
+11. **Judge determinism.** The hook rode `generateContentStructured` (temperature 0.4, no JSON mode — extraction
+    tuning); the merged case fired only 2/3 there vs 3/3 at temp 0 + `responseMimeType: application/json`. New
+    dedicated `LLMHelper.generateJudgeVerdict`: flash-lite → 3.7-flash at temp 0/JSON/256 tokens, structured
+    ladder only as last resort.
+12. **Echo FRAGMENTS.** The speakers-into-mic echo returned as short fragments spanning finals ("Every day.",
+    "It was 6 tries where you basically—") — too dissimilar for the round-3 twin check; they killed candidates as
+    `user_answering`. Fragments are token-SUBSETS: echo now also = `tokenContainment(userFinal, recent
+    interviewer speech) ≥ ECHO_FRAGMENT_CONTAINMENT=0.85` at ≥2 words. Genuine answers (own words) still cancel.
+Also: the user stopped the meeting seconds after the task line — its verdict was still pending (1-q13 incomplete),
+so the task never got its ~2 s to fire; not a defect.
+Validation: meeting 680519c8 replayed verbatim BOTH channels through the REAL judge at the production config —
+dispatches exactly the wordle question + the task ("your task— Connor— is to recreate this game in Reac t"),
+23 judge calls; replay-harness note: a single fake-clock jump past JUDGE_DEADLINE while real network is in flight
+reads as timeout — step the tail. Tests live#7/7b (fragment echo, mutation-probed red; genuine speech). Suite
+214/214 · evaluator gate unchanged · typecheck clean.
+
+### Live-run repairs, round 6 (2026-08-24 — meeting 8168240a; the "Yeah." kill)
+Second physical judge run, again zero answers. Telemetry showed the judge running correctly on every consult
+(~0.9-1.4 s verdicts; it logs nothing to the console, which made it LOOK absent) and everything it saw was
+correctly silent exposition — but the wordle question never REACHED it: a one-word mic final ("Yeah.", speakers
+again, 372 ms after the question; then "Mm-hm.") closed the accumulation as user_turn → `user_answering`. One
+word defeats both echo checks (twin similarity and the ≥2-word containment gate). And the fix matters beyond the
+speaker setup: with headphones a user still backchannels while the interviewer talks.
+13. **User BACKCHANNELS are not the user taking the floor.** `USER_BACKCHANNEL` (short listening signals,
+    possibly repeated, ≤4 tokens: yeah/mm-hm/okay/right/…) on the user channel neither closes the accumulation
+    nor reads as answering, and leaves the echo flags alone. A short GENUINE answer in own words ("About three
+    years now.") still cancels. Trade-off accepted: a question the user answers with a bare "Yes." stays live.
+The task was again absent from the recording — the meeting stopped mid-exposition (34 segments, before
+"your task Connor"): the test needs the video to run ~5 s past the task line.
+Validation: meeting 8168240a replayed verbatim both channels through the REAL judge — the wordle question
+dispatches, zero user_answering skips, everything else silent. Test live#8/8b (backchannel branch
+mutation-probed red). Suite 216/216 · typecheck clean.
+
+### Lenient mic (2026-08-24 — user decision after rounds 3/5/6)
+Every live mic interaction was FALSE suppression; the user asked whether to de-prioritize mic speech like the
+legacy engine (mic-blind). Decision: **lenient mic** — the mic suppresses only on strong evidence. A user final
+counts as answering only when non-echo, non-backchannel AND ≥ `GENUINE_ANSWER_MIN_WORDS`=4 words; blips below the
+floor are ignored (skip `backchannel`). VAD-edge gating unchanged (echo-guarded; delays within the hold budget
+rather than killing; never the live killer). Trade-off accepted: a bare "Three years." self-answer no longer
+suppresses the auto answer. Test live#9; word floor mutation-probed red. Suite 217/217 · typecheck clean.
+
+### SIMPLE engine (2026-08-25 — user decision: "legacy trigger, judge brain")
+After six rounds the user called V3 "unnecessarily overcomplicated" and legacy "undercomplicated", and asked for
+the middle ground: fire like legacy on interviewer stoppages, but gate every firing through ONE LLM request that
+answers finished/ask/directed/type/follow-up in a single verdict. Built as `SimpleAutoAnswer.ts` (~300 lines) and
+made the DEFAULT engine; `NATIVELY_AUTO_ANSWER_ENGINE=v3|legacy` keeps the old engines for A/B.
+
+Flow: interviewer finals AND interims restart a STABILITY_MS=900 window (provider endpoint shortens to 350) →
+stoppage → zero-cost prefilter (unchanged-text / backchannel / <4-word non-'?' / dup-vs-answered) → one judge
+call → auto ≥ autoThreshold / offer ≥ offerThreshold / silent. In-flight verdicts superseded by new speech
+(judgeSeq). Lenient mic carried over verbatim. Judge unavailable/erroring → near-legacy fallback: only a trailing
+'?' fires. Busy engine → 500 ms retry, 8 s TTL. Cost optimizations: one call per stoppage (V3 re-judged one
+utterance 6×), judge prompt refactored to a byte-identical STATIC prefix (implicit provider caching) with all
+dynamic content trailing.
+
+Validation: all three recorded meetings replayed through the new engine with the REAL judge at production config —
+fd28a1af: wordle question + task, nothing else; 680519c8: both; 8168240a: wordle question only (the task was
+never recorded). 11 engine tests (fake clock/judge): one-call-per-stoppage, interim hold, supersede, prefilter,
+offer band, busy retry+TTL, lenient mic incl. barge-in, '?' fallback, endpoint confirm, stop/no-leaks, no-text
+telemetry. Suite 228/228 · evaluator gate unchanged · typecheck clean. Replay note: DB replays lack interims, so
+offline judge-call counts overestimate live (every recorded ~2 s pause reads as a stoppage).
+
+### Code-review repairs on the SIMPLE engine (2026-08-25 — /code-review high, 10 findings, 6 mine)
+All six confirmed findings in the simple engine/wiring fixed, each red-first or mutation-probed:
+14. Boot thresholds: engine constructed with `resolveAutoAnswerThresholds(null)` (meeting bar), review#10 parity.
+15. A genuine user answer now bumps `judgeSeq`, clears `retryTimer` and retracts the offer — a dispatch parked
+    behind a busy engine dies when the user takes the floor (probe red).
+16. A judge timeout/error clears `lastJudgedKey`: the next stoppage retries instead of silencing the question
+    forever (probe red).
+17. Interviewer INTERIMS supersede an in-flight verdict (module-doc contract; probe red) — no dispatch after the
+    interviewer audibly resumed.
+18. Punctuation provenance honored: the short-candidate prefilter skips only non-'?', non-interrogative-led
+    fragments, and the no-judge fallback fires on interrogative-led utterances when the provider never guarantees
+    marks (Soniox absence-is-NEUTRAL contract).
+19. Barge-in latency: a genuine-looking user INTERIM (echo/backchannel/word-floor validated) cancels a streaming
+    answer seconds before its final; offer cards get a full lifecycle (replaced/expired/topic_change/
+    meeting_stop/user_answering retraction, TTL on the injected clock).
+The four remaining findings (reducer `slice(0,20)` vs density contract, FollowUpDraftGenerator unfiltered
+sections, legacy MeetingDetails render, LLMHelper zero-headroom outer race) belong to the parallel
+meeting-notes workstream and were left untouched. Cleanup-tier residuals recorded: echo/lenient-mic block
+duplicated between engines (extract when V3 retires), dead `turnsBefore(cutoff)` param. Suite 234/234 ·
+typecheck clean.
+
+### Automated A/B/C on the standing test video (2026-08-25)
+The user's own test clip (youtube 5xf4_Kx7azg, 0:00-2:10 = recorded meeting fd28a1af, 58 interviewer finals)
+replayed through ALL THREE engines with the real judge, identical fake clock and a 6 s streaming-engine model.
+Harness `scratchpad/abc-test.mjs`; two segmentations per judged engine — the DB replay (no interims: every
+recorded pause is a stoppage) and a live model (interims every 350 ms while a final-to-final gap < 2.5 s).
+
+| engine | judge calls | dispatched | REAL asks | garbage | $/hr (judge+answer) |
+|---|---|---|---|---|---|
+| legacy | 0 | 17 | 0 | 17 | $2.84 |
+| v3 (db) | 41 | 3 | 2 | 1 | $0.67 |
+| **simple (db)** | 52 | **2** | **2** | **0** | $0.55 |
+| v3 (live) | 25 | 4 | 2 | 2 | $0.77 |
+| **simple (live)** | **7** | **2** | **2** | **0** | **$0.36** |
+
+Legacy is the MOST expensive engine despite a free trigger: every garbage firing burns a full answer generation
+(~$0.006), so the 2-20 cents/hour judge gate saves ~$2.50/hour of wasted answers. Simple is the only engine with
+perfect precision AND recall in both segmentations; V3 leaks fragment dispatches ("your task Connor is" alone).
+
+**Two defects the A/B/C surfaced, both fixed here:**
+20. The prefix-caching prompt reorder (static block first, schema before the candidate) was REVERTED: measured
+    `usageMetadata.cachedContentTokenCount === 0` on every call at this prompt size — implicit caching never
+    engaged, so it bought nothing — while merged-turn asks regressed 3/3 → 0/3 rhetorical, reproducing a live
+    miss visible in the 20:17 telemetry of the V3 run. Rules and schema are the LAST thing the model reads again
+    (also review finding #4's recency shield); the already-answered rule moved to the trailing block too, after
+    it was measured firing on five elaborations of a just-answered task.
+21. Completeness was being judged with the help of context: "…and your task— Connor—" (verbatim, meeting
+    680519c8) read as complete=0.9 WITH context and answered-state, though it is incomplete standalone — the
+    engine dispatched the truncated fragment as the question. New rule: judge completeness on the candidate's
+    own last words, never on what context lets you guess; never extract a fragment as question_text.
+
+**Prompt work is now measured, not argued.** `electron/intelligence/autoAnswer/__tests__/judgeEval.mjs` (manual,
+real-model, never in `npm test`) scores any prompt revision against
+`fixtures/judge-eval-wordle.json` — every candidate the engine actually judges on the test video in both
+segmentations, labeled by whether it carries a not-yet-answered ask:
+`node electron/intelligence/autoAnswer/__tests__/judgeEval.mjs` → precision/recall + each false fire and miss.
+Current: **54 candidates, precision 1.000, recall 1.000**. Independent guards also green: 7/7 merge/rhetorical
+probe, 12/12 scenario probe (sales, lecture, standup, prompt-injection), all three recorded meetings dispatching
+exactly their real asks. Suite 235/235 · typecheck clean.
+
+### Second test video: Google mock coding interview (2026-08-25)
+The user pointed at youtube 46dZH7LDbf8 ("Mock Google Coding Interview with a Meta Intern"), interview from 1:50.
+Transcript pulled with yt-dlp into an isolated scratchpad venv (YouTube's timedtext endpoint now needs a
+proof-of-origin token; plain curl returns 0 bytes, and this Python has no CA bundle — pass certifi via
+`SSL_CERT_FILE`). Window 1:50-12:00 = 188 caption cues. Ground truth: TWO asks — the 47-second spoken task
+("design a class supporting insert / remove / get-random with equal probability") and the optimization follow-up
+at ~9:37. Everything else is the candidate thinking aloud or the interviewer answering the candidate.
+
+This video is much harder than the Wordle clip and it broke things the Wordle set never touched:
+22. **Announced-but-undelivered structure fired early.** "…design a class that supports these three operations.
+    So, the first operation is inserting a value" was judged complete and answered while the interviewer was
+    still on operation one; operations two and three then fired again as "new requirements". Rule added: a
+    speaker who announces a structure ("these three operations", "a few things", "first… second…") and has not
+    delivered it is INCOMPLETE.
+23. **`PENDING_MAX_AGE_MS` truncated the ask.** A coding-interview problem statement runs 45-60 s; the 30 s
+    accumulation cap silently dropped its opening, so the dispatched question lost the insert operation
+    entirely. Raised to 90 s — measured before/after on this transcript.
+24. **question_text kept only the last part of a multi-part ask.** Extraction clause now demands the WHOLE ask.
+25. **The user's own voice on the shared channel.** Playing a video puts BOTH voices on system audio, so the
+    video candidate's clarifying questions ("Can I code in Python?", "Are these values integers?") read as asks.
+    A rule was added for the two reliable tells (asking the other party to permit/specify something about the
+    task the user was given; reasoning aloud while working) — it helps, but this is mostly an artefact of
+    testing with a video. Proven, not assumed: labelling every cue by speaker (one flash-3.7 pass) and replaying
+    with production channel attribution — interviewer on system audio, candidate on the mic — gives
+    **12 judge calls, 2 dispatches, both real asks, ZERO garbage over 9.8 minutes (~$0.013/hr)**. The
+    single-channel replay of the same window dispatches 15 with 13 garbage. The mic channel is what saves it, so
+    the honest guidance is: video testing over speakers will show false fires that a real meeting will not.
+
+Second permanent fixture: `__tests__/judge-eval/google-mock-interview.json` (44 candidates, dual-channel, both
+segmentations) alongside the Wordle set, now under `__tests__/judge-eval/` with a README — NOT `fixtures/`, which
+`replay.mjs` loads wholesale (a judge set there crashes every replay test with "events is not iterable"; it
+happened twice, the second time because a parallel session helpfully "restored" the file, so `loadFixtures` now
+skips anything without an `events` array). Current baselines: wordle **1.000/1.000**, interview **0.750/1.000**
+with one documented false fire (a candidate cut mid-phrase, reachable only in the pessimistic per-final
+segmentation). Regression after all of it: merge/rhetorical 7/7, fragment 4/4, scenarios 12/12, all three Wordle
+meetings correct, suite 235/235, evaluator gate green, typecheck clean.
+
+### Three more videos: the judge's blind spot was interviewer speech that ISN'T asking (2026-08-25)
+Benched three more clips end-to-end (transcript → speaker labels → dual-channel replay with the live judge):
+`yju4zwKSriI` senior-SWE strings/dictionary (440-1160 s), `svghH8P1uG4` Google number-of-islands (60-780 s),
+`QBHTbtWSECg` **system design** — Design Leetcode (55-775 s), the first non-coding scenario in the bench.
+
+First pass found one coherent failure family: the interviewer talking without asking for anything.
+26. **Speech that REMOVES work is not an ask.** Granting/scoping ("you can totally look up syntax",
+    "authentication and user profiles you can skip", "feel free to use any language"), session logistics
+    ("go ahead and share your screen"), and deferral ("we'll talk about that later" — and naming the subject it
+    defers to does not make it an ask). Five false fires across two videos, all gone.
+27. **Interviewer PARAPHRASE is a comprehension check** ("okay, it sounds more like you want a low-latency
+    platform"), not a new ask — unless a real question follows.
+28. **…but a directive to PRODUCE is an ask**, and the first cut of rule 26 wrongly swallowed it: "let's see how
+    you code this out" must fire. The distinction that works: produce-directives are asks *provided the
+    transcript already says what to produce* — "let's transition to the coding portion" before any problem has
+    been stated is still logistics.
+Results after: senior-SWE 3 dispatches (task, wildcard variant, "without dynamic programming" redirect),
+islands 5 (task, two produce-directives, two probes), system design 4 (leaderboard requirement, consistency
+probe, scale probe, fault-tolerance probe) — every dispatch reviewed and confirmed a genuine interviewer ask.
+12-21 judge calls per 12-minute window, **$0.012-0.021/hour**.
+
+**Discipline note.** A further clause (completeness for a dangling transitive verb, "you could go ahead and
+share") fixed one logistics false fire and broke two other cases — measured aggregate fell from P 0.905/R 1.000
+to P 0.85/R 0.895 — so it was REVERTED. Marginal prompt edits oscillate; the aggregate over all fixtures decides,
+not the case in front of you.
+
+Bench is now five labeled sets in `__tests__/judge-eval/` (146 candidates: wordle 54, google-mock 44,
+system-design 21, senior-swe 15, islands 12), spanning single- and dual-channel, coding and system design.
+**Aggregate: TP 19 · FP 2 · FN 0 — precision 0.905, recall 1.000.** Every real ask across five videos is caught;
+the two false fires are documented in the fixtures with `note` fields (a mid-phrase truncation, and the
+"transition to the coding portion" logistics line). Regression: merge 7/7, fragment 4/4, logistics 3/4 (the
+documented one), scenarios 12/12, all three recorded meetings correct, suite 235/235, evaluator gate green,
+typecheck clean.
+
+### Latency work (2026-08-25) — measured from a live run, not guessed
+A live run showed ~5.7 s from the end of a question to the first token: 900 ms stability window + ~1.5 s judge +
+**3.3 s answer TTFT**, i.e. the ANSWER model, not detection, was ~60% of it. Four changes, in the order they pay:
+
+29. **Speculative prefetch.** The judge (~1-1.5 s) and the answer (~3 s TTFT) ran in series. The engine already
+    speculates on interims but the simple engine dispatched with `reuseSpeculative: false`, so that work was
+    always thrown away. Now: at consult time the engine calls `noteCandidate` (keys any speculation to this
+    candidate) and, when the CHEAP local scorer already rates the candidate ≥ `PREFETCH_MIN_ANSWERABILITY`=0.8,
+    `prefetchAnswer` starts the answer while the judge decides; at dispatch, a speculative snapshot whose
+    questionId matches is adopted (`reuseSpeculative: true`). The heuristic gate is what keeps this from becoming
+    the legacy waste pattern — on the benched videos exposition never triggers a generation, only question-shaped
+    turns do. New `IntelligenceEngine.prefetchAutoAnswer()` mirrors `maybeSpeculate`'s guards (idle/assist only,
+    never over a live stream or an existing speculation, never inside the cooldown).
+30. **Automatic answers run in FAST routing.** An automatic answer appears unasked while someone is still
+    talking, so time-to-first-token matters more than the last points of depth. `groqFastTextMode` is now enabled
+    for the duration of an automatic run and restored in the `finally` (a manual press is untouched; a user who
+    already has fast mode on is left alone). `NATIVELY_AUTO_ANSWER_FAST=off` restores the default route.
+31. **NVIDIA Nemotron now emits provider endpoints.** `NvidiaNimStreamingSTT` had no `endpoint` event, so every
+    stoppage paid the full 900 ms window instead of the 350 ms endpoint confirm — main.ts had been wiring the
+    listener to a provider that never fired it. Riva's `is_final` IS the end-of-utterance signal; it now emits
+    `endpoint {type:'speech_final'}`. Additive: consumers that do not listen are unaffected.
+32. **The judge sees the same 3-minute transcript the answer does.** The answer path is written from
+    `getContext(180)`; the judge was capped at `getHotWindow(60)`, so it could not see the problem statement when
+    ruling on a follow-up two minutes later. Now 180 s (still capped at `JUDGE_CONTEXT_TURNS`=8 turns, so the
+    prompt does not grow) — which also matches the window every offline bench ran on.
+
+**Measured and rejected:** compressing the judge prompt 27% (1910 → 1404 tokens) did NOT improve latency (median
+1093 ms vs 999 ms — the ~1 s is network/model floor, not prompt size) and silently cost a real ask (the senior-SWE
+mid-interview problem change stopped firing). Reverted. Prompt size is a cost lever, not a latency lever.
+
+#### Real-API verification of all four (2026-08-25) — two of my own claims did not survive
+Paired design: within each rep the judge and the answer are each measured ONCE against the live endpoints, then
+both pipelines are derived from the SAME samples (`serial = judge + answer`, `prefetch = max(judge, answer)`).
+An earlier unpaired script disagreed with itself run to run because it timed the two pipelines minutes apart and
+network variance swamped the effect — worth remembering before trusting any latency A/B here.
+
+| claim | measured | verdict |
+|---|---|---|
+| prefetch overlaps the judge | serial 2195 ms → 1364 ms (8 reps, ~1.4k-token prompt); 2314 → 1436 ms (5 reps, ~6k) | **CONFIRMED, ~830-880 ms (38%)** |
+| fast routing is faster | `fast_mode` 1364 vs 1415 ms (4%, inside the spread); at ~6k tokens 1436 vs 1338 ms — SLOWER | **REFUTED** |
+| Nemotron endpoint emission | 3 deterministic tests on the real handler (injected stream factory) | **CONFIRMED** (the 550 ms is arithmetic 900→350, not measured live) |
+| 180 s judge window helps detection | two constructed follow-ups whose referent lives only in the older turns: 3/3 fire on BOTH windows | **NO MEASURED EFFECT** — an alignment, not a win |
+
+Consequences applied: **fast routing now defaults OFF** (`NATIVELY_AUTO_ANSWER_FAST=on` enables it) — it swaps to
+a different, smaller model, so leaving it on traded answer quality for nothing. `NvidiaNimStreamingSTT` took an
+injectable stream factory so its response handling is testable without a network, key or audio (esbuild inlines
+`rivaProto` into the bundle, so require-cache stubbing does not work — the earlier attempt made a real gRPC call
+and got UNAUTHENTICATED). The 180 s window stays: it costs nothing (still capped at 8 turns) and makes the judge
+read the window the answer is written from, but it is not claimed as an improvement.
+
+Realistic end-to-end on the live path that measured 5.7 s (900 ms window + 1518 ms judge + 3318 ms TTFT):
+endpoint confirm takes the window to 350 ms and the prefetch takes the judge off the critical path, so a
+prefetched question should land near **3.7 s**. Declarative tasks do not clear the prefetch gate, so they keep
+the serial cost. Requires physical verification.
+
+Validation: 3 new tests (prefetch fires during the consult and the dispatch adopts it; exposition never costs a
+generation; a snapshot keyed to another question is not reused). Suite 238/238 · judge fixtures unchanged
+(aggregate P 0.905 / R 1.000) · engine review tests 5/5 · evaluator gate green · typecheck clean. Requires
+physical verification: the end-to-end latency gain and the Nemotron endpoint path were not measured live.
+
+### V3 and legacy retired (2026-08-25)
+The simple engine won every comparison, so both other engines and the switch between them are gone: ~7,600 lines
+deleted across `LegacyAutoAnswerTrigger`, `AutoAnswerController`, `AutoAnswerTurnManager`, `AutoAnswerChannelGate`,
+`AutoAnswerQueue`, `AutoAnswerDedup`, `AutoAnswerTurnPredictor` (Smart Turn) and `AutoAnswerDetector`, plus their
+tests, the 34-fixture replay corpus and the offline evaluator.
+
+What survived, and why:
+- `AutoAnswerText.ts` — `normalizeForCompare` + `tokenContainment`, the only two functions of the ~400-line
+  heuristic detector still called. Everything else in it existed to GUESS what the judge now decides.
+- `AutoAnswerPolicy.ts` — trimmed to the thresholds type and the compiled-in fallback (0.88/0.65/0.82, inlined
+  now that the detector's constants are gone); the ternary policy function went with the controller because the
+  judge returns the decision itself.
+- The mic/echo policy (`ECHO_*`, `USER_BACKCHANNEL`, `GENUINE_ANSWER_MIN_WORDS`) moved into `SimpleAutoAnswer`,
+  its only consumer — this was the duplication the code review flagged as drift risk during the A/B.
+- **Smart Turn was dead weight**: the simple engine never consumed a prediction, so the ONNX session was loading,
+  taking PCM and running inference on every speech-stop for nothing. Its asset stays optional and unused.
+
+Costs, stated plainly: the 34 conversation fixtures × 6 provider dialects and the precision/recall evaluator gate
+are gone with the engine they tested. The replacement safety net is the five labelled video sets under
+`__tests__/judge-eval/` (146 candidates, real model) plus 34 engine tests on a fake clock. `npm run
+test:auto-answer:eval` is now `test:auto-answer:judge`. Suite 34/34, judge fixtures unchanged
+(P 0.905 / R 1.000), all three recorded meetings still dispatch exactly their real asks, typecheck clean.
+
+### The judge returns the decision, not a number to band (2026-08-25)
+Telemetry said the offer card was dead: **3 offers in 131 real decisions (2%)**. The cause was structural — the
+model does not emit a spectrum, it emits roughly three values (0, ~0.9, 1.0), so the 0.65-0.88 band almost never
+caught anything and the per-mode offer thresholds were decorative.
+
+The verdict now carries an explicit `action` — `answer` | `offer` | `silent` — and the engine obeys it. Thresholds
+survive only as a one-way valve: a stricter mode can DEMOTE an answer to an offer (so a meeting-grade bar loses
+the interruption, never the signal) but can never promote one. A reply that omits `action` still parses: the old
+banding is the fallback, so a degraded model degrades rather than breaks.
+
+Defining "offer" took two passes, and the first one is instructive. Written as "something the user plainly answers
+better themselves", the model reclassified *"have you heard of wordle?"* as an offer — reasonable English, exactly
+wrong product: questions about the user's own experience are the whole point of drafting. Narrowed to logistics,
+scheduling and pure pleasantries, with an explicit note that "the user could answer it themselves" is not grounds
+to withhold.
+
+Measured consequence: the screen-share false fire on the senior-SWE video is **gone** — session logistics now come
+back as `offer`/`silent` instead of being banded into a fire. Aggregate over the five video sets improves to
+**precision 0.950 / recall 1.000** (was 0.905/1.000); one documented false fire remains (the mid-phrase
+truncation). Live action probe 6/6 (coding task and probing question → answer; screen check and "are you ready?"
+→ offer; exposition and granting permission → silent). Suite 39/39, all three recorded meetings unchanged,
+typecheck clean.
+
+### Speaker diarization reaches the judge (2026-08-25)
+The deepest remaining source of wrong verdicts was that the meeting-audio channel carries several voices and the
+judge had to infer from WORDING who said what — the ambiguity behind the merged-turn rounds, and the reason
+testing over speakers looks worse than a real meeting. Deepgram already had diarization implemented end to end
+(`setDiarize` → `speakerId` per segment)… with **no callers**: it was built and never switched on, and the label
+never reached Auto Answer anyway.
+
+Now: the interviewer channel requests diarization where the provider supports it
+(`NATIVELY_AUTO_ANSWER_DIARIZE=off` opts out), the engine keeps the `speakerId` of each interviewer final, and the
+judge receives BOTH the labelled context turns and — the part that matters — **the candidate split by speaker**.
+
+The first cut labelled only the context and measured as a regression: identical text was judged
+`answer / answer / silent` across no-labels / same-speaker / cross-speaker, i.e. exactly inverted, because the
+ambiguity lives INSIDE the candidate (which voice asked, which replied) and a single dominant-speaker label throws
+that away. With the candidate split by voice — and the diarization block stated as an OVERRIDE of the
+merged-reply rule, which otherwise wins — the same words now judge correctly:
+
+| labels | verdict |
+|---|---|
+| none (undiarized) | answer — unchanged, as before |
+| one voice asks AND answers | **silent / rhetorical** |
+| voice A asks, voice B replies | **answer** — still open for the USER |
+
+Scope, stated plainly: this only activates on providers that emit `speakerId`, which today is Deepgram. The
+current default (NVIDIA Nemotron) does not diarize, so nothing changes for it — the prompt is byte-identical
+without labels, which the fixtures confirm (all five unchanged, aggregate P 0.950 / R 1.000). Suite 42/42.
+
+### Windows: what was verified and what still cannot be (2026-08-25)
+Physical Windows execution is not available from this machine, so here is exactly what the claim rests on rather
+than a vague "should be fine":
+
+**Verified here**
+- *Platform-independent by construction.* Every file touched in this campaign — the engine, the judge, the text
+  utilities, the STT endpoint emission and the main-process wiring — contains no `process.platform`, no
+  `darwin`/`win32` branch, no filesystem paths, no shell invocation and no native module call. Grepped, not
+  assumed.
+- *Runs under the runner CI actually uses.* All the suites here had only ever been run with plain `node --test`;
+  under `ELECTRON_RUN_AS_NODE=1 electron --test`, which is what `npm test` and the CI leg use, the auto-answer and
+  audio globs pass **439/439**. That closes a gap where a test could have depended on the Node binary.
+- *Windows risk went DOWN.* Retiring Smart Turn removed a native ONNX session that loaded, consumed PCM and ran
+  inference on every speech-stop for nothing — on the platform where this repo has a recorded native memory leak
+  and an ORT hard-exit SIGABRT, deleting a native runtime is a straight reduction in exposure.
+- The tests are inside `npm test`'s glob, so the `windows-latest` leg would exercise them.
+
+**Still cannot be claimed**
+- *No execution on Windows.* The 29 commits on this branch are unpushed, so CI has never seen any of it. And per
+  this repo's own history, the Windows leg of Build Smoke carries `continue-on-error` — a green check there is
+  not evidence; the log has to be read.
+- Audio capture, the STT socket lifecycle and overlay behaviour on Windows remain **Requires physical Windows
+  verification**, exactly as at the end of the original campaign.
+
+Getting real evidence needs one of: pushing the branch so the Windows leg runs (an outward-facing action, so it
+is the user's call), or a physical Windows machine.
+
+#### Where the Natively (default) provider sits on diarization
+Worth stating, because the app's own speaker separation is easy to undersell: **channel separation IS the
+primary diarization, and it is the stronger kind** — mic and system audio are two devices and two STT sessions,
+so user-vs-others is MEASURED, not inferred from a model. The dual-channel replay of the Google interview is the
+proof: 2 dispatches / 0 garbage with channels, 15 / 13 on the same content flattened to one.
+
+What separation cannot reach is several voices INSIDE the meeting-audio channel — a panel, a colleague answering
+a colleague, a two-speaker video. For that:
+- **Deepgram**: works end to end today (`setDiarize` → `speakerId` → judge).
+- **Natively (default)**: relays to Soniox `stt-rt-v5`, which supports per-token speaker labels — but the relay's
+  config frame never requests them (`enable_speaker_diarization` absent, server.js ~8497) and no speaker tag is
+  forwarded to the client, even though the relay already does exactly that pattern for per-token `language`.
+  Enabling it is a **server-side** change in `natively-api` (a submodule this campaign must not commit):
+  add `enable_speaker_diarization: true` to the Soniox config, and forward the token's speaker beside the text.
+- **Client side is now ready**: `NativelyProSTT` reads `speaker` / `speaker_id` off the relay message in the
+  shapes it might plausibly send and emits `speakerId`. Absent field → absent label → today's behaviour exactly,
+  so this is inert until (and unless) the server sends one.
+- **NVIDIA Nemotron** (the current default provider) does not diarize at all.
+
+### Real-interview latency: it is the BUSY path, not the pipeline (2026-08-25)
+The user ran an actual interview and reported "10 seconds plus". `natively_debug.log` + telemetry give the
+per-dispatch breakdown, and it is not what the offline benches predicted:
+
+| dispatch | speech end → verdict | verdict → decision | answer TTFT | total |
+|---|---|---|---|---|
+| 5-q8 | 1.9 s | **0.0 s** | 1.8 s | **3.8 s** |
+| 5-q13 | 2.1 s | **0.0 s** | 1.6 s | **3.7 s** |
+| 5-q5 | 2.0 s | **6.0 s** | 1.4 s | **9.4 s** |
+
+So the pipeline is healthy at ~3.7 s whenever the engine is free, and every slow case is one thing: the verdict
+was ready and the answer sat waiting for the engine. For q5 the previous (MANUAL) stream ended at 12:56:49 and
+the dispatch did not go until 12:56:52 — the remaining ~3.4 s was the trigger cooldown plus waiting out a 500 ms
+retry poll.
+
+Two fixes, both aimed at that gap:
+33. **Automatic answers wait 800 ms, not 3 s.** The 3 s cooldown protects the MANUAL path from a user hammering
+    the hotkey. On the automatic path the engine already refuses to repeat itself semantically (the judge is told
+    what was just answered and scores a restatement ≤ 0.2; the engine keeps its own lastAnswered), so the only
+    job left is stopping two answers landing on top of each other.
+34. **A parked dispatch wakes on `onEngineIdle` instead of waiting out its poll.** `onEngineIdle` was a no-op
+    with a comment saying the retry timer polls — which cost up to 500 ms on top of an already long wait.
+
+Expected on the q5 shape: ~9.4 s → ~6.7 s. The remainder is a manual answer legitimately holding the engine, and
+that is not latency to optimise away — it is the user's own request finishing.
+
+**Not fixable from the client**: the 0.9 s stability window is the floor on this provider. Deepgram and Nemotron
+emit endpoints (350 ms confirm), but the interview ran on NativelyPro→Soniox, whose relay strips the `<end>`
+sentinel and whose `is_final` messages are incremental commits, not utterance ends — so a final cannot be treated
+as an endpoint. Forwarding the endpoint is the same class of server-side change as diarization.
+
+Also measured: **40% of judge calls went stale** in this interview (6 of 15) versus 7% all-time — an interviewer
+speaking in bursts supersedes in-flight verdicts constantly. Wasted calls, but not added latency: the next
+stoppage re-judges the fuller text. Suite 44/44.
+
+### The offer card is gone: answer or stay silent (2026-08-25, user instruction)
+> "if it has a doubt always answer no need to ask, remove that card ui, if the percentage is above 20 then surely
+> show the answer"
+
+The periwinkle "Answer this?" card (Tab to accept) is removed everywhere: the engine no longer offers or
+retracts, `showAutoAnswerOffer`/`retractAutoAnswerOffer` and the `auto_answer_offer` action type are deleted from
+main.ts, and the judge now returns **two** outcomes instead of three. `ANSWER_FLOOR = 0.20` is the only number
+left in the decision — above it the answer is drafted, at or below it nothing happens. The per-mode bars no
+longer gate a dispatch, because the thing they demoted to is gone.
+
+Doubt now resolves toward answering, deliberately and in several places at once: the prompt ends with "WHEN IN
+DOUBT, ANSWER", a reply with no `action` is read as an answer rather than banded, and a reply that still says
+`offer` (older prompt, degraded model) is read as an answer too. Silence has to be earned by the rules, not
+arrived at by hesitation.
+
+The cost is visible and accepted. On the senior-SWE video, "let's transition into the coding portion… go ahead
+and share" fires again — the offer card was the thing that had been catching exactly that shape. Aggregate over
+the five sets returns to **precision 0.905 / recall 1.000** (from 0.950), and the fixture note now records that
+FP as an accepted trade rather than a regression to chase. Live probe 7/7: coding task, probing question, screen
+check, "are you ready?" and a borderline small ask all ANSWER; exposition and granting permission stay silent.
+Suite 42/42, three recorded meetings unchanged, typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
@@ -703,6 +1321,7 @@ construction; the toggle stays DEFAULT OFF.
 - Two dispatch-time identity checks in `AutoAnswerController.dispatch()`/hold timer are unreachable defense in
   depth (kept per V2 §46; probes show no test reds when they are deleted alone).
 - The policy's user-silence line is only unit-tested; the channel gate independently enforces the invariant.
+- Review finding #8's secondary point stands: Rust `reset_channel` has no lib.rs caller (start() reports a silent edge instead) — equivalent behaviour, dead-ish utility kept for its tests.
 - Dialect adapters are models of provider behaviour; Flux/AssemblyAI have no adapter in the repo.
 - Declarative questions stay `expectedFail` (text harness carries no audio); the real model was only probed with
   synthetic audio.
@@ -751,3 +1370,285 @@ placeholder until the dual-channel audio corpus (human work, out of scope) exist
 stays default OFF.
 
 ## Abort record (if any)
+
+---
+
+## Live run 2026-08-25 (meeting 75c6b06b, 4 min technical interview) — verdict-staleness defect
+
+First run of the offer-free build (`ANSWER_FLOOR` 0.20, judge reduced to answer|silent). Telemetry, not the
+main log, carries the record: only `auto_answer_ignored` writes a log line, so the console showed 3 skips and
+looked like near-total silence.
+
+**What the telemetry actually shows: 28 candidates, 28 judge calls, 25 verdicts DISCARDED as `stale`.**
+Two verdicts were ever applied — `1-q14` (coding_question, 0.9 → answered, feedback recorded `kept`, i.e. no
+manual press inside the 20 s window) and `1-q17` (statement, 0.1 → correctly silent).
+
+Mechanism (confirmed, not inferred):
+1. `SimpleAutoAnswerEngine.ingest` bumps `judgeSeq` on **every** interviewer text event, interim or final.
+2. `consult()` captures `judgeSeq` before the call and discards the verdict if it moved. The judge takes
+   ~950 ms (measured: `judgeMs` 757–1649, median ≈ 960).
+3. The stability window measures the gap between **transcript arrivals**, not speech. The Soniox relay
+   delivers finals in bursts 1–2 s apart mid-monologue, so a 900 ms arrival gap fires a stoppage in the
+   middle of the interviewer's sentence — then the next arriving segment kills the verdict that stoppage paid for.
+4. Evidence it was mid-monologue: candidate word counts grow monotonically across consecutive stoppages
+   (62 → 99 → 138 → 216 → 256 → 296 → 313) because `pending` only clears on dispatch.
+
+**Second finding — the endpoint fast path is dead code on the shipped configuration.** `onProviderEndpoint()` /
+`ENDPOINT_CONFIRM_MS = 350` only fire for STT classes that emit `endpoint`: Deepgram, NVIDIA NIM, OpenAI and
+**direct** Soniox. The default provider is `NativelyProSTT` (the Natively relay — the log says
+`[NativelyProSTT] Connected via soniox`), which never emits it: the relay collapses Soniox's token stream to
+`{text, is_final, confidence, speaker}` server-side, so the `<end>` marker `SonioxStreamingSTT` keys on is gone
+before it reaches the client. Net: the app's default path has **no turn-end signal at all**, only the arrival gap.
+Forwarding `<end>` from the relay is a `natively-api` change (submodule — not committed from here), and is the
+same shape as the outstanding `enable_speaker_diarization` item.
+
+Diagnostic-only changes landed (no behaviour change, typecheck clean):
+- `parseJudgeVerdict` moved ABOVE the staleness check (it is pure) so a discarded verdict still reaches
+  telemetry — previously every one of those 25 was unrecoverable, and the blast radius of any fix unknowable.
+- `supersededBy` on `auto_answer_judged`: `interim | final | user_answering | meeting_reset | meeting_ended`,
+  set through a single `bumpJudgeSeq(cause)` helper. Interim-dominant and final-dominant call for opposite
+  fixes, and the run could not distinguish them.
+
+### The failure chain (measured, not inferred)
+
+A latency-realistic replay of the same transcript — real judge calls, but the verdict released to the engine
+only after 950 ms of *virtual* time — isolates the cause. Replayed from the DB the engine sees **finals only**
+(interims are not persisted) and loses just **14 of 67** verdicts. Live, with the interim stream, it lost
+**25 of 28**. The difference is interims, and the chain is:
+
+1. a stoppage judges candidate `C` and optimistically sets `lastJudgedKey = C`;
+2. an interim arrives during the ~950 ms call → `bumpJudgeSeq('interim')` → the verdict is discarded;
+3. that same interim re-armed the stability window → stoppage → the candidate is **still `C`** (interims never
+   touch `pending`, which is finals-only) → `key === lastJudgedKey` → **early return**.
+
+So one interim landing inside the judge window kills that question *permanently*: not dispatched, and not
+re-judged either. That is why a 4-minute interview with 28 candidates produced one answer.
+
+### Fix: defer the verdict instead of discarding it
+
+`consult()` now keeps a superseded **positive** verdict (`held`), and `onStoppage()` applies it — before the
+`lastJudgedKey` return, which would otherwise swallow exactly this case — when the candidate is
+**byte-identical** to what was judged. No second judge call; recorded as `judgeOutcome: 'held_applied'`.
+
+Growth may never be held across, in either direction, and a test proved this before it could ship:
+* growth that **completes** the utterance ("tell me about the hardest bug you ever" + "debugged in production
+  and how you found it?") would answer a truncated question;
+* growth that is a **new sentence** would answer Q1 after Q2 arrived — spec V2 §34's pinned invariant.
+
+Growth therefore always re-judges, exactly as before. The three outcomes are now closed:
+| superseded verdict | behaviour |
+| --- | --- |
+| positive, identical candidate | held, applied at the next quiet point, **zero extra cost** |
+| negative, identical candidate | stays silent and is *not* re-judged — the answer would be the same |
+| timeout / error / unparseable | `lastJudgedKey` cleared, re-judged (pre-existing) |
+
+Held verdicts are dropped on `user_answering`, on meeting reset/generation change, on any divergence of the
+candidate text, and after `HELD_MAX_AGE_MS` (15 s).
+
+Validation: 46/46 Auto Answer tests on the fake clock, zero real sleeps. Three new guards mutation-probed —
+allowing growth to be held (2 fail), never applying a held verdict (1 fail), dropping the `user_answering`
+clear (1 fail). That last probe initially passed: clearing `pending` also prevents a stoppage, so the trap is
+only reachable when the interviewer repeats a sentence verbatim; the test was strengthened to cover it.
+Electron typecheck clean. `Requires physical macOS verification` — not yet exercised in a live meeting.
+Windows: `Reviewed but not executed` (no platform-specific code paths touched).
+
+---
+
+## Live session 2026-08-26 (meeting 7e4cbe43) — mic echo was shredding every question
+
+User report: "the auto answer is failure". Seven minutes produced **12 candidates and 1 answer**, with 82
+user-channel skips (50 backchannel, 30 user_answering). The judge was not the problem — the transcript was.
+
+Both channels transcribed the SAME speech: the interviewer's audio was playing through the speakers and being
+picked up by the microphone. The two STT sessions segment it at DIFFERENT boundaries, so the echo arrives
+offset by a fragment with cut-off edge words:
+
+```
+interviewer | And screen-to-b            interviewer | ody ratio was one of those
+user        | Screen-to-body             user        | ratio was one of those head
+```
+
+Measured over the real transcript (58 user finals): the per-utterance echo test caught 30, and **24 leaked
+through as `user_answering`** — each of which cleared the interviewer's accumulated `pending`. Their
+containment scores were min 0.60 / **median 0.80** / max 0.85 against a 0.85 bar: the whole leaked population
+sat just under it, because `tokenContainment` scores a cut word ("technolog", "equ", "ph", "disp") as a miss.
+
+**The damage was not the count, it was the shredding.** Replaying the session through the engine:
+
+| | candidates the judge saw | sizes |
+| --- | --- | --- |
+| the shipped build | 33 | 6–25 words, every one |
+| with the fix | 54 | 7 → 319 words, accumulating properly |
+
+The judge never saw a whole question — which is exactly why the session logged `incomplete`, `incomplete`,
+`incomplete` at answerability 0. It was ruling correctly on six-word scraps.
+
+### Fix
+
+1. `echoContainment` (new, in AutoAnswerText) counts an edge token when one side is a prefix of the other,
+   ≥3 chars. `tokenContainment` is left alone — the judge's grounding check uses it and wants exact words.
+2. **The echo-mode latch, which was declared and never implemented.** `ECHO_ACTIVATE_COUNT` and
+   `ECHO_FLAG_WINDOW` existed as documented constants with no code reading them. While the mic is
+   demonstrably carrying the interviewer, the user channel cannot close a candidate at all — the
+   per-utterance test asks "is THIS fragment an echo", which a boundary-straddling fragment can always dodge;
+   the latch asks the question that matters.
+3. The latch holds on **time** (`ECHO_MODE_HOLD_MS`, 10 s, refreshed by each echo), not on a count over the
+   last N. A pure count latch is self-defeating and the real data shows it: dodged fragments are recorded as
+   non-echoes and push the real echoes out of a four-slot window, releasing the very latch meant to catch them
+   (`flags=[0010]`, `[0100]`, `[1000]` at three consecutive leaks).
+4. New skip reason `mic_echo`, so this is legible in telemetry instead of hiding inside `backchannel`.
+
+Result on the real session: `user_answering` **30 → 2** (52 correctly reported as `mic_echo`); the two
+survivors are at session start, before any evidence exists.
+
+A test caught a latch bug before it shipped: engaging on the count alone re-armed the deadline from stale
+flags — a clean final would find two old `true`s still in the window and push the hold out again, so the latch
+could never release and a genuine answer stayed muted forever. Engage now requires the CURRENT final to be an
+echo *and* the window to corroborate it.
+
+Validation: 49/49 Auto Answer tests, 6/6 redaction. Three guards mutation-probed — disabling the latch (2
+fail), dropping split-word tolerance (1 fail), re-arming from stale flags (1 fail). Typecheck clean.
+`Requires physical macOS verification`; Windows `Reviewed but not executed` (no platform-specific paths).
+
+### Open, not fixed: the judge costs ~1.3 s that legacy did not
+
+The one answer that did fire took `judgeMs` 1377 on top of the 900 ms stability window. The legacy trigger
+dispatched at the 900 ms debounce flat, which is what "legacy should always be fast" refers to. `maybePrefetch`
+exists to hide exactly this, but `PREFETCH_MIN_INTERVAL_MS` (25 s) rationed it onto two junk candidates
+(q1, q4) and it was still cooling when the real question (q6) arrived. Options are a cost decision and are the
+user's to make — see the report; nothing changed here.
+
+### Early ask: overlap the judge with the stability window (2026-08-26)
+
+"At least legacy version should always be fast." The legacy trigger dispatched at its 900 ms debounce flat; the
+simple engine asked the judge *after* the window, so the ~1.3 s verdict landed at ~2.2 s.
+
+Fix: split the two clocks. `EARLY_JUDGE_MS` (120 ms of quiet) is when the judge is **asked**; `STABILITY_MS`
+(900 ms) remains when an answer may be **committed**. Both ride the same re-arm, so continuing speech pushes
+both out — that is the entire ration on the early ask, with no counter or cooldown: a talking interviewer never
+leaves a 120 ms gap. If the judge is fast enough that the window has *not* elapsed, the verdict is held (the
+commit timer is already armed and applies it) rather than answering into a breath.
+
+Measured on the recorded meetings with a realistic 1300 ms judge:
+
+| | dispatch latency from the last word | judge calls | dispatches |
+| --- | --- | --- | --- |
+| commit-time ask (before) | **2200 ms** | 67 | 4 |
+| early ask (after) | **1450 ms** | 79 (+18%) | 5 |
+
+Candidate counts across both recorded meetings: 54→59 (+9%) and 68→87 (+28%). The multiplier is small because
+the early ask usually *replaces* the commit ask rather than adding one — `lastJudgedKey` dedupes the second,
+and 91% of real gaps between interviewer transcript events already exceed 900 ms (median 5.2 s). Extra calls
+occur only in the 120–900 ms band.
+
+Why not prefetch the ANSWER early instead (the obvious alternative): `prefetchAutoAnswer` runs
+`runWhatShouldISay`, which sets `lastTriggerTime` and takes `activeMode` out of idle — and `canAutoAnswer()`
+fails on both. A junk prefetch therefore holds the answer engine for its whole 2–3 s generation and a real
+question arriving in that window parks behind it, which is the stall fixed on 2026-08-25. Multiplying the
+*judge* (~2.2k tokens, flash-lite, no engine occupancy) is strictly the cheaper axis than multiplying the
+*answer* (~5.8k tokens, larger model, exclusive engine).
+
+Residual: 1450 ms vs legacy's 900 ms. The remaining ~550 ms is the judge time that exceeds the window itself
+and cannot be hidden without generating before the verdict is known.
+
+Validation: 50/50 Auto Answer tests. Three guards mutation-probed — letting an early verdict commit inside the
+window (3 fail), removing the early ask (1 fail), never cancelling the early timer on re-arm (2 fail). Two
+pre-existing tests were rewritten rather than deleted: the monologue cost test now models continuous speech as
+interims (which is what actually rations the early ask), and the interim test now asserts on the COMMIT
+instead of the ask, since asking early is the new intended behaviour. Typecheck clean.
+`Requires physical macOS verification`.
+
+### Relay mid-word cuts (2026-08-26)
+
+The relay finalizes a PREFIX of its own interim, cut at an arbitrary character offset, and that offset lands
+inside a word roughly half the time. Joining the finals with a space then mangles the text every downstream
+reader sees — the live session produced "Inserting a val ue", "no duplic ates allowed",
+"where it gets interest ing" and a 4-word candidate "And among the val" that cost a judge call.
+
+```
+interim  ", and where it gets interesting is I want you to"
+final    ", and where it gets interest"     <- 28 chars, cut inside a word
+interim  "ing is I want you to be able to get a"    (resumes at the cut)
+```
+
+The cut is **decidable, not guessable**: when a final arrives the interim it was cut from is still in hand, so
+the character at the cut offset settles it. `isMidWordCut` requires word characters on BOTH sides —
+`"…I want you to"` + `"be able…"` is a space in the interim and must stay two words, which is exactly what a
+"continues in lowercase" heuristic would get wrong, and `"…of equal probability."` + `"So just these"` must
+keep its space even though the interim has none there. A revised interim (one that is not a prefix of the
+final) makes no claim at all and falls back to today's plain space.
+
+`joinTranscriptParts` then closes only the seams marked `glueNext`. Scope: this repairs the Auto Answer
+candidate — what the judge rules on and what is handed to the answer as the question. The wider transcript
+(SessionTracker segments, the hot window) still carries the artefact; fixing it there means teaching the STT
+layer to emit the seam flag, which is a wider change and is not done here.
+
+Validation: 53/53 Auto Answer tests, including the verbatim strings from the live log. Three guards
+mutation-probed — ignoring the character before the cut (1 fail), claiming a seam when the interim was revised
+(1 fail), never detecting a cut (1 fail). The first probe initially passed and the test was strengthened until
+it failed: nothing covered the punctuation-seam case.
+
+### NEGATIVE RESULT: the WTA system prompt is not a latency lever (2026-08-26)
+
+Proposed after the live run on the reasoning that the 16,291-char system prompt drove the 2690 ms TFFT, since
+a 3,145-char prompt on another surface measured 1622 ms. **That was a confound** — two different surfaces, two
+different user payloads, two different moments — and a controlled experiment refutes it.
+
+Interleaved A/B against the real Natively endpoint (7 samples per arm, arms alternated so drifting provider
+load hits both equally, identical user message):
+
+| system prompt | median TFFT | min | max |
+| --- | --- | --- | --- |
+| 1,000 chars | 1176 ms | 830 | 2420 |
+| 23,000 chars | **997 ms** | 794 | 1733 |
+
+The *large* prompt is marginally faster: there is no prefill effect in this range at all. TFFT on this endpoint
+is queue/network-bound, so cutting the prompt would buy nothing measurable while putting the Prompt System v2
+answer contract at risk. **Not done, deliberately.**
+
+This is the second measured dead end for answer latency. The first is already recorded in
+`IntelligenceEngine.handleSuggestionTrigger`: `NATIVELY_AUTO_ANSWER_FAST` routes to a smaller model and paired
+real-API runs put it at 1364 vs 1415 ms (inside the spread) and *slower* at the larger prompt size.
+
+Worth noting for anyone re-measuring: the live run's 2690 ms TFFT came at a total prompt of ~23.1k chars
+(16,291 system + 6,855 user) — the same total as the large arm above, which medians at 997 ms. So the live
+number is provider variance, not payload. The tail is what the user feels; the median is not the number to
+optimise against.
+
+Remaining structure of the ~3.1–4.2 s to first token:
+* ~1.5 s to decide — judge, now overlapped with the stability window and close to its floor;
+* ~1.0–2.7 s provider TFFT — not addressable from the client except by generating before the verdict, which
+  costs answer-engine occupancy (see the early-ask entry).
+
+### The speculative prefetch had never run (2026-08-26)
+
+Found while running `npm run typecheck:electron` before merging — the config I had been using all session
+(`tsconfig.json`) covers the renderer, not `electron/`:
+
+```
+electron/main.ts(3231,60): error TS2339:
+  Property 'prefetchAutoAnswer' does not exist on type 'IntelligenceManager'.
+```
+
+`prefetchAutoAnswer` was defined on **IntelligenceEngine**, but `main.ts` wired the `prefetchAnswer` host hook
+to the **Manager**, which never delegated it. So since the prefetch landed (0d5bf7fb) every call threw
+`is not a function` directly into `maybePrefetch`'s catch:
+
+```ts
+try { this.host.prefetchAnswer(id, candidate); } catch { /* prefetch is an optimisation; never break the pipeline */ }
+```
+
+A guard whose whole purpose is "an optimisation must never break the pipeline" turned a hard failure into a
+silent one, and nothing else could see it: host hooks are plain callbacks, so a missing method is not a
+compile error at the call site, and the electron typecheck was not being run. Corroborated by the logs — no
+`Auto Answer prefetch fired while the judge decides` line appears in any capture from any session.
+
+**This invalidates one claim made earlier in the campaign**: that `PREFETCH_MIN_INTERVAL_MS` had "spent its
+ration on q1 and q4 so the real question q6 missed the head start". Nothing ever fired. The architectural
+conclusion still stands on its own evidence (prefetching the answer takes `activeMode` out of idle and parks a
+real dispatch behind a junk generation), but the ration was never the reason.
+
+Fixed by adding the delegation, and pinned by a new test (`AutoAnswerHostWiring.test.mjs`) that brace-matches
+the `new SimpleAutoAnswerEngine({…})` literal in main.ts and asserts every `this.intelligenceManager.X(` it
+calls is actually declared on IntelligenceManager — the whole class of silent host-hook mismatch, not just
+this instance. Mutation-probed by deleting the delegation again (1 fail).

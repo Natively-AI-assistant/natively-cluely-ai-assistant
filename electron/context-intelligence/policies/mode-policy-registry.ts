@@ -102,7 +102,7 @@ export interface ModePolicy {
   /**
    * Auto Answer V3 ternary dispatch thresholds (V3 Amendment 4), per mode,
    * next to the retrieval scopes. On the extractor-scale answerability
-   * composite (see electron/intelligence/autoAnswer/AutoAnswerDetector.ts):
+   * verdict (the judge returns it directly — see AutoAnswerJudge.ts):
    *   >= autoThreshold (and user silent, engine idle) → fire automatically
    *   >= offerThreshold                               → offer card (hotkey/click commits)
    *   otherwise                                       → silent

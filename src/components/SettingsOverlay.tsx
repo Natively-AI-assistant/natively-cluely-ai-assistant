@@ -7,8 +7,9 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, MessageSquareReply
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
 } from 'lucide-react';
+import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
 import { analytics } from '../lib/analytics/analytics.service';
 import { AboutSection } from './AboutSection';
@@ -2094,10 +2095,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                 <div className="flex items-center justify-between px-4 py-3">
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
-                                                            <MessageSquareReply size={20} />
+                                                            <AutoAnswerIcon size={20} />
                                                         </div>
                                                         <div>
-                                                            <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
+                                                            <div className="flex items-center gap-2">
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
+                                                                {/* Solid yellow, Apple style — no border, no tint. The colours
+                                                                    are tokens because systemYellow differs per appearance. */}
+                                                                <span
+                                                                    className="text-[10px] font-semibold uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full shrink-0"
+                                                                    style={{
+                                                                        color: 'var(--badge-beta-fg)',
+                                                                        backgroundColor: 'var(--badge-beta-bg)',
+                                                                    }}
+                                                                >
+                                                                    {t('Beta')}
+                                                                </span>
+                                                            </div>
                                                             <p className="text-xs text-text-secondary mt-0.5">{t('Answers appear as soon as the interviewer finishes a question')}</p>
                                                         </div>
                                                     </div>

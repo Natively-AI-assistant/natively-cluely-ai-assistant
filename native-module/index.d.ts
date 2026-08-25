@@ -30,7 +30,7 @@ export declare class StealthKeyboardTap {
    *
    * Idempotent: repeated `start()` calls while active are no-ops.
    */
-  start(callback: ((err: Error | null, arg: CapturedKey) => any), overlayBounds?: OverlayBoundsInput | undefined | null): boolean
+  start(callback: ((err: Error | null, arg: CapturedKey) => any), appChords: Array<AppChordInput>, shortcutOnly: boolean, overlayBounds?: OverlayBoundsInput | undefined | null): boolean
   /**
    * Push fresh overlay bounds into the live tap. Required when the
    * OS window moves or resizes mid-session: without this, the start()
@@ -71,6 +71,20 @@ export declare class SystemAudioCapture {
   getNativeSampleRate(): number
   start(callback: ((err: Error | null, arg: Buffer) => any), onSpeechEnded?: (((err: Error | null, arg: boolean) => any)) | undefined | null, onSpeechEdge?: (((err: Error | null, arg: SpeechEdgeEvent) => any)) | undefined | null): void
   stop(): void
+}
+
+/**
+ * napi input mirror of `AppChord`, passed from JS into `start()`. Defined here
+ * (unconditionally compiled) so BOTH the macOS `keyboard_tap` and the Windows
+ * `keyboard_hook_windows` modules — which each expose the identical
+ * `StealthKeyboardTap.start` surface — can reference one napi object with a
+ * single generated TS type. `vk`/`mods` come from
+ * `electron/services/winChord.ts` (which owns the accelerator→VK translation).
+ */
+export interface AppChordInput {
+  vk: number
+  mods: number
+  id: string
 }
 
 /**
@@ -124,6 +138,13 @@ export interface CapturedKey {
   isKeyDown: boolean
   /** True for a pass-through mouse down outside the overlay bounds. */
   isOutsideMouseDown: boolean
+  /**
+   * Non-empty ⟹ an app hotkey chord fired (Windows hook only). Always empty
+   * on macOS, where the app's shortcuts are consumed by Carbon/IOKit before
+   * the tap; present here only to keep the CapturedKey napi shape identical
+   * across platforms.
+   */
+  appChordId: string
 }
 
 /**

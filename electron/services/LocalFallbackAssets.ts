@@ -28,9 +28,19 @@ export const REQUIRED_MODEL_FILES: RequiredLocalAsset[] = [
   { id: 'mobilebert-tokenizer', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/tokenizer.json', description: 'MobileBERT classifier tokenizer' },
   { id: 'mobilebert-tokenizer-config', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/tokenizer_config.json', description: 'MobileBERT classifier tokenizer config' },
   { id: 'mobilebert-onnx', kind: 'model_file', relativePath: 'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx', description: 'MobileBERT quantized ONNX model' },
-  // Auto Answer V3 TurnPredictor. Listed so packaging carries it; the runtime
-  // degrades to the deterministic path when it is missing (never a blocker).
-  { id: 'smart-turn-onnx', kind: 'model_file', relativePath: 'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx', description: 'Smart Turn v3.1 int8 ONNX (audio end-of-turn)' },
+];
+
+/**
+ * OPTIONAL model assets (review#9, 2026-08-24): the runtime degrades gracefully
+ * without them, so their absence must never fail install, preflight, or a dev
+ * checkout. Packaging still bundles them when present, and the RELEASE gate
+ * (scripts/verify-packaged-local-assets.mjs) still requires them so shipped
+ * builds are complete.
+ */
+export const OPTIONAL_MODEL_FILES: RequiredLocalAsset[] = [
+  // Auto Answer V3 TurnPredictor: predict() returns null when this is missing
+  // and the deterministic endpoint path is unaffected (spec V2 §38).
+  { id: 'smart-turn-onnx', kind: 'model_file', relativePath: 'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx', description: 'Smart Turn v3.1 int8 ONNX (audio end-of-turn) — optional' },
 ];
 
 export function getAppPathSafe(): string {

@@ -44,10 +44,23 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   // stream's late 'error'/'end' cannot null out its replacement.
   private generation = 0;
 
-  constructor(apiKey: string, model = DEFAULT_NVIDIA_NIM_STT_MODEL) {
+  /**
+   * The gRPC stream factory, injectable so the response handling — notably the
+   * endpoint emission below — can be exercised without a network, an API key
+   * or audio. Production always uses the real Riva factory; only tests pass
+   * their own (the same pattern as the injected Clock elsewhere).
+   */
+  private readonly streamFactory: typeof createNvcfStreamingRecognize;
+
+  constructor(
+    apiKey: string,
+    model = DEFAULT_NVIDIA_NIM_STT_MODEL,
+    streamFactory: typeof createNvcfStreamingRecognize = createNvcfStreamingRecognize,
+  ) {
     super();
     this.apiKey = apiKey;
     this.model = isNvidiaNimSttModel(model) ? model : DEFAULT_NVIDIA_NIM_STT_MODEL;
+    this.streamFactory = streamFactory;
   }
 
   setSampleRate(rate: number) { this.sampleRate = rate; }
@@ -140,7 +153,7 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     const gen = ++this.generation;
     try {
       const cfg = NVIDIA_NIM_STT_MODEL_CONFIG[this.model];
-      this.stream = createNvcfStreamingRecognize(this.apiKey, cfg.functionId);
+      this.stream = this.streamFactory(this.apiKey, cfg.functionId);
       this.stream.on('data', (response: any) => {
         // A response proves the session works; clear the backoff so a later
         // blip starts from 1s again instead of inheriting this session's count.
@@ -148,6 +161,13 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
         for (const result of response?.results || []) {
           const alt = result?.alternatives?.[0];
           if (alt?.transcript) this.emit('transcript', { text: alt.transcript, isFinal: !!result.isFinal, confidence: alt.confidence || 1 });
+          // Riva marks the end of an utterance with is_final. Auto Answer
+          // treats that as a provider ENDPOINT and confirms the speaker
+          // stopped in ENDPOINT_CONFIRM_MS instead of waiting the full
+          // stability window (2026-08-25: without this, every Nemotron
+          // stoppage paid the whole ~900 ms). Additive: consumers that do
+          // not listen for 'endpoint' are unaffected.
+          if (result?.isFinal) this.emit('endpoint', { type: 'speech_final' });
         }
       });
       this.stream.on('error', (error: Error) => {

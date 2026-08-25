@@ -774,7 +774,15 @@ export class CredentialsManager {
     }
 
     public getSttLanguage(): string {
-        return this.credentials.sttLanguage || 'english-us';
+        // Default 'auto', not 'english-us' (changed 2026-08-24). A pinned
+        // language is now genuinely strict on Soniox (language_hints_strict),
+        // so keeping an English default would have hard-locked every user who
+        // never opened the language setting to English — a non-English meeting
+        // would stop transcribing rather than degrade. 'auto' is what those
+        // users effectively had before, since the old hint was advisory.
+        // Every STT provider implements an 'auto' branch (see the note on
+        // AppState.setRecognitionLanguage in main.ts).
+        return this.credentials.sttLanguage || 'auto';
     }
 
     public getAiResponseLanguage(): string {

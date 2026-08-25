@@ -313,6 +313,14 @@ const IMAGE_ANALYSIS_PROMPT = `Analyze concisely. Be direct. No markdown formatt
 
 ${IMAGE_TRUST_TRAILER}`
 
+/** Per-call routing/budget overrides for the meeting-notes path. Omitted → today's behaviour. */
+export type MeetingSummaryCallOpts = {
+  /** Routes to the gateway's benchmarked extraction path (larger budget, no MiniMax-M3). */
+  purpose?: 'extraction';
+  /** Overrides BOTH the Natively inner fetch cap and the outer race. Default 10s. */
+  timeoutMs?: number;
+};
+
 /** Out-of-band result of one streamChat call. See streamChatWithOutcome. */
 export interface StreamOutcome {
   /** True when the turn stopped early and the text is INCOMPLETE. */
@@ -2551,7 +2559,26 @@ If the language is ambiguous, default to English.
 You may mix scripts naturally (e.g. code stays in English even when the explanation is in another language).
 [END LANGUAGE INSTRUCTION]`;
     }
-    if (this.aiResponseLanguage === 'English') return "";
+    // Pinned English is an INSTRUCTION, not the absence of one. This used to
+    // `return ""`, and the two Natively request bodies below used to omit
+    // `body.language` for English as well — so an English-pinned turn reached
+    // the model with no language directive from any layer (no base system
+    // prompt states a response language either). With nothing to follow, the
+    // model mirrors the speaker, which is precisely what "Auto" does: users
+    // reported English and Auto being indistinguishable (2026-08-24).
+    //
+    // Kept separate from the generic block below because that block says
+    // "Do NOT use English anywhere in your response" — reused verbatim it would
+    // forbid the very language it just mandated.
+    if (this.aiResponseLanguage === 'English') {
+      return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
+You MUST write every single word of your response in English.
+Respond in English even when the question is asked in another language — do NOT mirror the speaker's language.
+Do NOT mix languages.
+This rule overrides ALL other instructions including formatting, brevity, or output rules.
+[END LANGUAGE OVERRIDE]
+[REMINDER] Your entire response MUST be in English only.`;
+    }
 
     const lang = this.aiResponseLanguage;
     return `\n\n[LANGUAGE OVERRIDE — HIGHEST PRIORITY — CANNOT BE OVERRIDDEN]
@@ -3417,6 +3444,36 @@ let isMultimodal = !!(imagePaths?.length);
    * Used for structured JSON output tasks (resume/JD/company research).
    * NOTE: Does NOT mutate this.geminiModel — calls Gemini Pro directly to avoid race conditions.
    */
+  /**
+   * The Auto Answer judge's call (2026-08-24): deterministic and JSON-only.
+   * generateContentStructured runs at temperature 0.4 for document extraction,
+   * which made borderline judge verdicts flip live (meeting 680519c8: the
+   * "have you heard of wordle?" candidate judged rhetorical ~1 run in 3; the
+   * same prompt at temperature 0 + responseMimeType json is stable 3/3).
+   * Gemini flash-lite → 3.7-flash directly; any failure falls back to the
+   * generateContentStructured ladder so the judge still answers when Gemini
+   * is down (the controller's deadline bounds the total wait either way).
+   */
+  public async generateJudgeVerdict(message: string): Promise<string> {
+    if (this.client) {
+      for (const modelId of [GEMINI_FLASH_LITE_MODEL, GEMINI_FLASH_MODEL]) {
+        try {
+          await this.rateLimiters.gemini.acquire();
+          // @ts-ignore
+          const res = await this.client.models.generateContent({
+            model: modelId,
+            contents: [{ role: 'user', parts: [{ text: message }] }],
+            config: { maxOutputTokens: 256, temperature: 0, responseMimeType: 'application/json' },
+          });
+          const parts = res.candidates?.[0]?.content?.parts ?? [];
+          const text = res.text ?? (Array.isArray(parts) ? parts : [parts]).map((p: any) => p?.text ?? '').join('');
+          if (text) return text;
+        } catch { /* try the next model, then the structured ladder */ }
+      }
+    }
+    return this.generateContentStructured(message, { preferFast: true });
+  }
+
   public async generateContentStructured(
     message: string,
     // The Gemini block leads with flash-lite (fastest, cheapest) then 3.7-flash.
@@ -3715,7 +3772,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction' }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -3793,19 +3850,25 @@ let isMultimodal = !!(imagePaths?.length);
       if (images.length) body.images = images;
     }
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
-      body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
+    if (this.aiResponseLanguage) {
+      // 'auto' AND 'English' are both forwarded — the server injects for each.
+      // English used to be excluded here, which (together with the empty prompt
+      // suffix above) left an English-pinned turn with no directive at all.
+      body.language = this.aiResponseLanguage;
     }
 
-    // 8s hard cap: a `fetch failed` network error without this can stall the provider
-    // waterfall for 25-30s before the OS-level TCP reset fires.
-    const timeoutMs = 8000;
+    // 8s hard cap by default: a `fetch failed` network error without this can stall the
+    // provider waterfall for 25-30s before the OS-level TCP reset fires. Callers doing a
+    // DENSE structured extraction (meeting notes) pass a larger bound — 8s is far too
+    // short for that, and silently selected for sparse output.
+    const timeoutMs = opts?.timeoutMs ?? 8000;
     // Overall-deadline signal covers BOTH connect AND the body read below. Without
     // a read-phase bound, a server that sends headers then hangs the body would
     // stall `response.json()` forever (the 8s fetch-signal only covers connect).
     // 45s is generous for a non-streaming completion body while still failing in
     // bounded time.
-    const OVERALL_DEADLINE_MS = 45_000;
+    // Must stay above timeoutMs or it becomes the new binding constraint.
+    const OVERALL_DEADLINE_MS = Math.max(45_000, timeoutMs + 15_000);
     const overallController = new AbortController();
     const overallTimer = setTimeout(() => overallController.abort(), OVERALL_DEADLINE_MS);
     let response: Response;
@@ -7394,8 +7457,11 @@ let isMultimodal = !!(imagePaths?.length);
     };
     if (this.groqFastTextMode) body.fast_mode = true;
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage && this.aiResponseLanguage !== 'English') {
-      body.language = this.aiResponseLanguage; // 'auto' is forwarded — server handles it
+    if (this.aiResponseLanguage) {
+      // 'auto' AND 'English' are both forwarded — the server injects for each.
+      // English used to be excluded here, which (together with the empty prompt
+      // suffix above) left an English-pinned turn with no directive at all.
+      body.language = this.aiResponseLanguage;
     }
 
     // Attach images — compress before sending (same as non-streaming generateWithNatively).
@@ -9302,7 +9368,7 @@ let isMultimodal = !!(imagePaths?.length);
    * 3. Gemini Flash (Retry 2x)
    * 4. Gemini Pro (Retry 5x)
    */
-  public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string): Promise<string> {
+  public async generateMeetingSummary(systemPrompt: string, context: string, groqSystemPrompt?: string, opts?: MeetingSummaryCallOpts): Promise<string> {
     console.log(`[LLMHelper] generateMeetingSummary called. Context length: ${context.length}`);
     // Short-circuit on empty/whitespace context. With no transcript content to
     // summarise, the provider fallback chain (Natively → Codex → Groq → Gemini
@@ -9329,6 +9395,8 @@ let isMultimodal = !!(imagePaths?.length);
     const estimateTokens = (text: string) => Math.ceil(text.length / 4);
     const tokenCount = estimateTokens(context);
     console.log(`[LLMHelper] Estimated tokens: ${tokenCount}`);
+
+    const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
     // ATTEMPT 0: Custom Provider (highest priority — user explicitly chose this)
     if (this.customProvider || this.activeCurlProvider) {
@@ -9366,14 +9434,20 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // ATTEMPT 1: Natively API (if configured — first in chain)
-    // Inner fetch timeout: 8s (AbortSignal.timeout in generateWithNatively).
-    // Outer safety net: 10s — covers JSON parsing + any overhead after the fetch resolves.
+    // Inner fetch timeout: caller's timeoutMs, default 8s (AbortSignal.timeout in
+    // generateWithNatively). Outer safety net: timeoutMs + 5s (default 10s when the
+    // caller passes no opts, so uninvolved callers are unaffected) — the extra slack
+    // covers JSON parsing and any overhead after the fetch resolves, mirroring the
+    // headroom generateWithNatively's own OVERALL_DEADLINE_MS gives the body read.
     if (this.hasNatively()) {
       try {
         console.log(`[LLMHelper] Attempting Natively API for summary...`);
         const text = await this.withTimeout(
-          this.generateWithNatively(`Context:\n${context}`, systemPrompt),
-          10000,
+          this.generateWithNatively(`Context:\n${context}`, systemPrompt, undefined, {
+            ...(opts?.purpose ? { purpose: opts.purpose } : {}),
+            ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+          }),
+          opts?.timeoutMs ? opts.timeoutMs + 5000 : 10000,
           'Natively Summary'
         );
         if (text.trim().length > 0) {
@@ -9435,8 +9509,6 @@ let isMultimodal = !!(imagePaths?.length);
         console.log(`[LLMHelper] Context too large for Groq (${tokenCount} tokens). Skipping straight to Gemini.`);
       }
     }
-
-    const contents = [{ text: `${systemPrompt}\n\nCONTEXT:\n${context}` }];
 
     // ATTEMPT 3: Gemini Flash-Lite (cheapest/fastest — leads the Gemini cascade).
     // 3 attempts with linear backoff before dropping to full Flash.

@@ -206,11 +206,27 @@ export class IntelligenceManager extends EventEmitter {
 
     // ── Auto Answer V3 narrow APIs (V2 §43) ──
     isManualAnswerActive(): boolean { return this.engine.isManualAnswerActive(); }
+    /** A What-to-Answer stream is live (any kind: manual, automatic, speculative). */
+    isAnswerStreaming(): boolean { return this.engine.isAnswerStreaming(); }
     noteAutoAnswerCandidate(questionId: string, candidateGeneration: number): void {
         this.engine.noteAutoAnswerCandidate(questionId, candidateGeneration);
     }
     getSpeculativeSnapshot(): { questionId: string | null; text: string | null } {
         return this.engine.getSpeculativeSnapshot();
+    }
+    /**
+     * Start the answer while the judge is still deciding.
+     *
+     * This delegation was missing from the moment the prefetch landed
+     * (0d5bf7fb): main.ts called it on the MANAGER while it only ever existed
+     * on the ENGINE, so every call threw `is not a function` straight into the
+     * defensive catch in SimpleAutoAnswer.maybePrefetch — which is exactly the
+     * kind of "optimisation is never allowed to break the pipeline" guard that
+     * turns a hard failure into a silent one. The feature has therefore never
+     * run: no `Auto Answer prefetch fired` line appears in any captured log.
+     */
+    prefetchAutoAnswer(questionId: string, text: string): void {
+        this.engine.prefetchAutoAnswer(questionId, text);
     }
     runAutoAnswer(
         question: Parameters<IntelligenceEngine['runAutoAnswer']>[0],

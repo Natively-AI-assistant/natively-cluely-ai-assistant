@@ -113,6 +113,8 @@ export type AutoAnswerSkipReason =
     // V3 Amendment 1
     | 'user_answering'
     | 'user_barge_in'
+    /** The user channel is carrying the interviewer's audio (speakers, not headphones). */
+    | 'mic_echo'
     // Lifecycle reasons carried over from the PR #497 gate and the Phase 1 pending slot
     | 'no_question'
     | 'already_answered'
@@ -156,6 +158,8 @@ export type AutoAnswerTelemetryEventName =
     | 'auto_answer_committed'
     | 'auto_answer_queued'
     | 'auto_answer_deduplicated'
+    | 'auto_answer_judged'
+    | 'auto_answer_feedback'
     | 'auto_answer_cancelled'
     | 'auto_answer_completed'
     | 'auto_answer_offered';
@@ -178,4 +182,31 @@ export interface AutoAnswerTelemetryEvent {
     skipReason?: AutoAnswerSkipReason;
     state?: AutoAnswerState;
     action?: AutoAnswerPolicyAction;
+    /** False when NO speech_edge has ever arrived this meeting — dual-channel gating is inert (stale native module?). */
+    channelEdgesSeen?: boolean;
+    /** Dynamic-judge fields (auto_answer_judged) — verdict metadata only, never transcript text. */
+    judgeOutcome?: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'stale' | 'held_applied';
+    judgeIsAsk?: boolean;
+    judgeDirectedAtUser?: boolean;
+    judgeMs?: number;
+    /**
+     * Implicit usefulness signal (2026-08-25). Nothing in this feature ever
+     * recorded whether an automatic answer was any GOOD, so every threshold
+     * stayed an unfitted guess. The cheapest honest proxy: if the user reaches
+     * for the manual What-to-Answer right after an automatic one, the
+     * automatic one did not do the job.
+     *   'superseded' — a manual answer started inside FEEDBACK_WINDOW_MS
+     *   'kept'       — the window passed with no manual press
+     */
+    feedback?: 'superseded' | 'kept';
+    /** ms from the automatic dispatch to the manual press (only on 'superseded'). */
+    feedbackMs?: number;
+    /**
+     * What invalidated a verdict (auto_answer_judged / judgeOutcome 'stale').
+     * Live run 2026-08-25 discarded 25 of 28 verdicts and the record could not
+     * say WHY: an interviewer interim (which cannot change the candidate — the
+     * candidate is built from finals only) and a genuine new final call for
+     * opposite fixes. Diagnostic only; nothing branches on it.
+     */
+    supersededBy?: 'interim' | 'final' | 'user_answering' | 'meeting_reset' | 'meeting_ended';
 }

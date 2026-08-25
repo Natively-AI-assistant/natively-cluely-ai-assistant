@@ -57,10 +57,14 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::app_chord::{
+    app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_CTRL, MOD_SHIFT,
+};
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use once_cell::sync::Lazy;
@@ -125,6 +129,11 @@ pub struct CapturedKey {
     /// Alt+Tab (WinEvent hook). StealthKeyboardManager turns this into stop().
     /// Named for the macOS field it mirrors; on Windows it covers both triggers.
     pub is_outside_mouse_down: bool,
+    /// Non-empty ⟹ this event is the app's OWN global shortcut firing, swallowed
+    /// by the hook so it can never leak into the foreground app. The value is
+    /// the KeybindManager action id; StealthKeyboardManager dispatches it
+    /// instead of treating the event as typed text. Empty for ordinary keys.
+    pub app_chord_id: String,
 }
 
 // macOS CGEventFlags bits the renderer decodes. We reuse the SHIFT/CAPS bits.
@@ -152,6 +161,24 @@ struct HookState {
     num_on: AtomicBool,
     /// Threadsafe callback into V8. Set on start(), cleared on stop().
     callback: Mutex<Option<Arc<ThreadsafeFunction<CapturedKey>>>>,
+    /// The app's own global shortcuts (printable-leak subset) the hook swallows
+    /// and self-dispatches. Populated at start() from the JS-supplied table;
+    /// empty ⟹ the feature is inert and every chord passes through exactly as
+    /// before. See app_chord.rs for why and the scope.
+    app_chords: Mutex<Vec<AppChord>>,
+    /// Completing-key VKs whose key-DOWN we swallowed as an app chord, so we can
+    /// also swallow the matching key-UP (never leak half a sequence). Keyed by
+    /// VK alone: the modifiers may already be released by the time the up
+    /// arrives.
+    swallowed_ups: Mutex<HashSet<u32>>,
+    /// Shortcut-guard mode. When true the hook does NOT swallow ordinary typing
+    /// (everything passes straight through to the foreground app) and installs
+    /// neither the mouse nor the foreground-change hook — its ONLY job is to
+    /// swallow + self-dispatch the app's own chords so they cannot leak even
+    /// while stealth typing is OFF. When false (the default) the hook is the
+    /// full stealth-typing tap: it swallows typing into the overlay and arms the
+    /// outside-click / Alt+Tab auto-stop hooks. See StealthKeyboardManager.
+    shortcut_only: AtomicBool,
 }
 
 impl HookState {
@@ -163,6 +190,9 @@ impl HookState {
             caps_on: AtomicBool::new(false),
             num_on: AtomicBool::new(false),
             callback: Mutex::new(None),
+            app_chords: Mutex::new(Vec::new()),
+            swallowed_ups: Mutex::new(HashSet::new()),
+            shortcut_only: AtomicBool::new(false),
         }
     }
 }
@@ -249,6 +279,20 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
         }
     }
 
+    // ── APP-CHORD key-UP swallow ──
+    // If we swallowed this key's DOWN as one of the app's own shortcuts (see the
+    // swallow below), swallow its UP too so the foreground app never receives
+    // half a sequence. Keyed by VK alone because the modifiers may already be
+    // released by the time the up arrives. Runs before the pass-through filter:
+    // the completing key (Enter, a digit, a letter) would otherwise take the
+    // deliver-to-overlay path on its own up.
+    if is_key_up {
+        let mut ups = state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner());
+        if ups.remove(&vk) {
+            return LRESULT(1);
+        }
+    }
+
     // ── PASS-THROUGH FILTER (mirrors keyboard_tap.rs R3/R4) ──
     // Win combos and F-keys/nav/modifiers/lock/media keys go back to the OS so
     // system shortcuts keep working. Ctrl/Alt combos also pass through EXCEPT
@@ -269,6 +313,59 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     if win_held() {
         return pass();
     }
+
+    // ── APP-CHORD SWALLOW (defence against the RegisterHotKey-drop leak) ──
+    // If this key-down completes one of the app's OWN registered shortcuts,
+    // swallow it and dispatch the action ourselves rather than letting it fall
+    // through to the foreground app. The OS silently drops RegisterHotKey
+    // registrations on sleep/wake, display/workspace change, etc.; during the
+    // recovery window the chord would otherwise leak its completing character
+    // into the focused field (a newline from Ctrl+Enter, a digit from Ctrl+1…).
+    // Only the printable-leak subset is eligible: Ctrl (optionally +Shift) —
+    // Alt/AltGr and Win combos are excluded here (`ctrl && !alt`, and Win already
+    // returned above) AND re-excluded inside match_app_chord. An empty table or
+    // a miss falls straight through to the unchanged pass-through below, so this
+    // is fully inert unless JS supplied chords and one matches exactly.
+    if is_key_down && ctrl && !alt {
+        let mods = MOD_CTRL | if modifier_held(VK_SHIFT) { MOD_SHIFT } else { 0 };
+        let matched = {
+            let chords = state.app_chords.lock().unwrap_or_else(|p| p.into_inner());
+            match_app_chord(chords.as_slice(), vk, mods).map(|s| s.to_string())
+        };
+        if let Some(id) = matched {
+            // Deliver on the SAME threadsafe callback as ordinary keys, tagged
+            // with the action id so StealthKeyboardManager dispatches it instead
+            // of typing it into the overlay.
+            let delivered = send_payload(&state, CapturedKey {
+                key_code: 0,
+                chars: String::new(),
+                flags: 0,
+                is_key_down: true,
+                is_outside_mouse_down: false,
+                app_chord_id: id,
+            });
+            if delivered {
+                state
+                    .swallowed_ups
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .insert(vk);
+                return LRESULT(1);
+            }
+            // No live callback ⟹ nowhere to dispatch. Fall through so the OS /
+            // RegisterHotKey can still handle it — never swallow a key with
+            // nowhere to go (same rule as the plain-typing path below).
+        }
+    }
+
+    // Shortcut-guard mode: the app-chord swallow above is the ENTIRE job. Every
+    // other key — ordinary typing included — passes straight through to the
+    // foreground app; we are not capturing text here. (Full stealth-typing mode
+    // falls past this and swallows typing into the overlay below.)
+    if state.shortcut_only.load(Ordering::Acquire) {
+        return pass();
+    }
+
     if (ctrl || alt) && !altgr {
         return pass();
     }
@@ -317,6 +414,7 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
         flags,
         is_key_down,
         is_outside_mouse_down: false,
+        app_chord_id: String::new(),
     });
     if !delivered {
         return pass();
@@ -410,6 +508,7 @@ unsafe fn mouse_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT
                 flags: 0,
                 is_key_down: false,
                 is_outside_mouse_down: true,
+                app_chord_id: String::new(),
             },
         );
     }
@@ -524,6 +623,7 @@ unsafe fn foreground_event_inner(
             // captured-key payload byte-identical across platforms (no JS or
             // macOS change needed for a Windows-only trigger).
             is_outside_mouse_down: true,
+            app_chord_id: String::new(),
         },
     );
 }
@@ -828,33 +928,39 @@ fn hook_worker(state: Arc<HookState>, session_id: u64, ready_tx: mpsc::Sender<bo
         fg: HWINEVENTHOOK::default(),
     };
 
-    // Low-level MOUSE hook for outside-click stop. If it fails, keyboard stealth
-    // still works; the user just loses click-away auto-stop (Esc / idle / hotkey
-    // still disengage).
-    guard.mouse = match unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), hmod, 0) } {
-        Ok(h) => Some(h),
-        Err(e) => {
-            eprintln!("[keyboard_hook_windows] WH_MOUSE_LL install failed (outside-click stop disabled): {e:?}");
-            None
-        }
-    };
+    // The auto-stop hooks (outside-click, Alt+Tab) exist to end a stealth-TYPING
+    // session when the user leaves. Shortcut-guard mode has no session to end —
+    // it stays armed as long as the app runs — so it installs NEITHER, avoiding
+    // two extra system-wide hooks (less surface, less for EDR to notice).
+    if !state.shortcut_only.load(Ordering::Acquire) {
+        // Low-level MOUSE hook for outside-click stop. If it fails, keyboard
+        // stealth still works; the user just loses click-away auto-stop (Esc /
+        // idle / hotkey still disengage).
+        guard.mouse = match unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), hmod, 0) } {
+            Ok(h) => Some(h),
+            Err(e) => {
+                eprintln!("[keyboard_hook_windows] WH_MOUSE_LL install failed (outside-click stop disabled): {e:?}");
+                None
+            }
+        };
 
-    // Foreground-change hook: stops the session on Alt+Tab / Win+Tab / any app
-    // switch without a click. NON-FATAL. hmod must be NULL for an out-of-context
-    // WinEvent hook.
-    guard.fg = unsafe {
-        SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_FOREGROUND,
-            HMODULE::default(),
-            Some(foreground_event_proc),
-            0, // all processes
-            0, // all threads
-            WINEVENT_OUTOFCONTEXT,
-        )
-    };
-    if guard.fg.0 == 0 {
-        eprintln!("[keyboard_hook_windows] SetWinEventHook failed (Alt+Tab auto-stop disabled)");
+        // Foreground-change hook: stops the session on Alt+Tab / Win+Tab / any
+        // app switch without a click. NON-FATAL. hmod must be NULL for an
+        // out-of-context WinEvent hook.
+        guard.fg = unsafe {
+            SetWinEventHook(
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_FOREGROUND,
+                HMODULE::default(),
+                Some(foreground_event_proc),
+                0, // all processes
+                0, // all threads
+                WINEVENT_OUTOFCONTEXT,
+            )
+        };
+        if guard.fg.0 == 0 {
+            eprintln!("[keyboard_hook_windows] SetWinEventHook failed (Alt+Tab auto-stop disabled)");
+        }
     }
 
     // The queue was already forced at the top of this function; the hooks are
@@ -951,18 +1057,36 @@ impl StealthKeyboardTap {
     }
 
     /// Engage the hook. Every plain-text keystroke fires `callback` and is
-    /// swallowed from the foreground app. `overlay_bounds` is accepted for
-    /// cross-platform parity and ignored (no outside-click stop on Windows,
-    /// matching the shipped macOS build). Idempotent while active.
+    /// swallowed from the foreground app. `app_chords` is the app's OWN global
+    /// shortcuts (printable-leak subset) the hook should swallow + self-dispatch
+    /// so they can never leak into the foreground app while a `RegisterHotKey`
+    /// registration is temporarily dropped; pass `[]` to disable that (fully
+    /// inert — every chord passes through as before). `overlay_bounds` is
+    /// accepted for cross-platform parity and ignored (no outside-click stop on
+    /// Windows, matching the shipped macOS build). Idempotent while active.
     #[napi]
     pub fn start(
         &self,
         callback: ThreadsafeFunction<CapturedKey>,
+        app_chords: Vec<AppChordInput>,
+        // When true, engage SHORTCUT-GUARD mode: swallow only the app's own
+        // chords and pass all other keys (typing included) through; no
+        // outside-click / Alt+Tab auto-stop. When false, the full stealth-typing
+        // tap. Defaults matter: JS passes false for the existing behaviour.
+        shortcut_only: bool,
         _overlay_bounds: Option<OverlayBoundsInput>,
     ) -> Result<bool> {
         if self.state.active.load(Ordering::Acquire) {
             return Ok(true);
         }
+
+        // Publish the mode + chord table BEFORE the worker installs the hook, so
+        // the very first keystroke already sees them. Also clear any stale
+        // swallowed-up tracking from a prior session.
+        self.state.shortcut_only.store(shortcut_only, Ordering::Release);
+        *self.state.app_chords.lock().unwrap_or_else(|p| p.into_inner()) =
+            app_chords_from_inputs(app_chords);
+        self.state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner()).clear();
 
         // Join any prior worker still winding down before publishing active,
         // so its cleanup store(false) can't race our store(true).

@@ -104,6 +104,12 @@
   /* User Spec: Icons & Input Backgrounds */
   --bg-item-active: #2C2C2C;
   /* Selected state */
+  /* Beta pill — SOLID fill, Apple style. systemYellow is brighter in the dark
+     appearance and slightly deeper in light, so it is a token pair rather than
+     one hex. The foreground is near-black in both: white on yellow is roughly
+     1.6:1 and unreadable, #1C1C1E is ~12:1. */
+  --badge-beta-bg: #FFD60A;
+  --badge-beta-fg: #1C1C1E;
   --bg-row-hover: #2E2E32;
   /* Neutral hover fill for full-width list rows sitting on --bg-item-surface.
      Needed because --bg-item-active is blue-tinted in the light theme, and a
@@ -268,6 +274,8 @@
   --bg-component:      #F3F4F6;   /* Secondary button fill (gray-100)             */
   --bg-item-surface:   #EAECEF;   /* Row hover — clearly visible against canvas   */
   --bg-item-active:    rgba(37, 99, 235, 0.09); /* Blue-tinted selection (Linear/Notion style) */
+  --badge-beta-bg:     #FFCC00;   /* systemYellow (light appearance)              */
+  --badge-beta-fg:     #1C1C1E;   /* near-black — ~11:1 on the yellow             */
   --bg-row-hover:      #E1E4E8;   /* Neutral list-row hover (see dark-theme note) */
   --text-danger:       #B91C1C;   /* Destructive label — red-700 for contrast on light fills */
   --bg-toggle-switch:  #D1D5DB;   /* Toggle off-state track (gray-300)            */
