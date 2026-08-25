@@ -99,7 +99,30 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
     this.stream = null;
   }
 
-  finalize() { try { this.stream?.end(); } catch {} }
+  /**
+   * Flush, NOT close.
+   *
+   * The renderer calls this on every "Answer Now" press to mean "transcribe
+   * what I just said". Riva has no mid-session flush control: StreamingRecognize
+   * is one long-lived call that the SERVER endpoints itself, so `stream.end()`
+   * here did not flush anything — it half-closed the call and ended recognition
+   * for the rest of the meeting.
+   *
+   * What that produced, every single time the user pressed Answer Now:
+   *   1. the next mic chunk hit a half-closed stream → ERR_STREAM_WRITE_AFTER_END,
+   *      surfaced as "[Main] STT (user) Error";
+   *   2. the server completed the call → 'end' → the reconnect ladder treated an
+   *      INTENTIONAL close as a dropped stream and announced
+   *      "STT reconnecting" in the meeting overlay.
+   *
+   * Every other streaming provider here treats finalize() as flush-and-continue
+   * (Deepgram sends a Finalize control message, Soniox a {type:'finalize'},
+   * NativelyProSTT is a no-op). A no-op is the honest equivalent for Riva: its
+   * own endpointing emits the final for the utterance just spoken, so there is
+   * nothing to force and nothing to tear down. stop() still ends the stream —
+   * that one really is the end of the session.
+   */
+  finalize() { /* Riva endpoints server-side; closing here would end the session. */ }
 
   write(chunk: Buffer) {
     if (!this.active) return;
@@ -114,7 +137,17 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
       }
       return;
     }
-    try { this.stream.write({ audioContent: chunk }); } catch (e) { this.emit('error', e); }
+    try {
+      this.stream.write({ audioContent: chunk });
+    } catch (e) {
+      // The stream died between the null check above and this write — the peer
+      // half-closed, or a teardown raced us. That is a transport hiccup the
+      // reconnect ladder already handles, so drop the dead stream and let it
+      // rebuild rather than raising an STT error the user cannot act on.
+      console.warn('[NvidiaNimSTT] write failed, dropping stream for reconnect:', (e as Error)?.message);
+      this.stream = null;
+      if (this.active) this.scheduleReconnect();
+    }
   }
 
   private dropBuffer() { this.buffer = []; this.bufferedBytes = 0; }
