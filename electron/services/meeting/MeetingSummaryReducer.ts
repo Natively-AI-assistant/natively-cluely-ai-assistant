@@ -25,10 +25,12 @@ import { SECTION_BULLET_CAP } from './MeetingSummaryV3';
 // same list twice. It is switched OFF, not deleted.
 //
 // Flip INCLUDE_NEXT_STEPS back to true to restore it in this file. Matching
-// switches (flip all four together) live in:
+// switches (flip all together) live in:
 //   electron/services/meeting/FollowUpDraftGenerator.ts   (LLM mail prompt + inputs)
 //   electron/services/post-call/PostCallWorkflow.ts        (post-call follow-up draft)
 //   src/components/MeetingDetails.tsx                      (renderer, incl. already-saved notes)
+//   electron/services/meeting/SummaryPolisher.ts           (Summary polish prompt + corpus,
+//     2026-08-25 — the unlabelled action-item line in buildSummary()'s own slot, above)
 export const INCLUDE_NEXT_STEPS: boolean = false;
 
 // Note-section titles that ARE the next-steps block, across the built-in mode
@@ -236,9 +238,12 @@ const CONFIDENCE_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
 const rankConfidence = (c?: string): number => CONFIDENCE_RANK[c || ''] ?? 1;
 
 // Outcome-first Summary, built deterministically from the already-grounded reduced content.
-// 3–5 lines: mode-defining lead → purpose → key decisions → most important next step →
-// high-severity risk. Zero new information. Returns [] (empty Summary) rather than
-// boilerplate when there is genuinely no grounded outcome — honest beats filler.
+// 3–5 lines: mode-defining lead → purpose → key decisions → high-severity risk. (The most
+// important next step was dropped from this slot 2026-08-25 — product decision, same
+// suppression as the labelled "Next steps" block; see INCLUDE_NEXT_STEPS above. Restoring
+// it is a one-line flag flip: gate the action-item push below on INCLUDE_NEXT_STEPS.)
+// Zero new information. Returns [] (empty Summary) rather than boilerplate when there is
+// genuinely no grounded outcome — honest beats filler.
 //
 // Selection quality (review 2026-08-23 — the previous version was a positional
 // grab: chunk 1's brief, the first 2 decisions CHronologically, actionItems[0],
@@ -275,7 +280,7 @@ function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risk
       || rankConfidence(x.a.confidence) - rankConfidence(y.a.confidence)
       || x.i - y.i);
   const a = rankedActions[0]?.a;
-  if (a) out.push(`${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` by ${a.deadline}` : ''}`);
+  if (INCLUDE_NEXT_STEPS && a) out.push(`${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` by ${a.deadline}` : ''}`);
 
   const highRisk = risks.find(r => r.severity === 'high');
   if (highRisk) out.push(highRisk.text);

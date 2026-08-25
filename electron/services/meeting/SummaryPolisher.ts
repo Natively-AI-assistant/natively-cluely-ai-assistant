@@ -14,6 +14,7 @@
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, MeetingNoteSection, RiskItem } from './MeetingSummaryV3';
 import { generateStructured } from './generateStructured';
+import { INCLUDE_NEXT_STEPS } from './MeetingSummaryReducer';
 
 export interface PolishSummaryParams {
   deterministicSummary: string[];        // the grounded buildSummary() output
@@ -28,11 +29,21 @@ export class SummaryPolisher {
   constructor(private readonly llmHelper: LLMHelper) {}
 
   // Build the grounded fact corpus the LLM is allowed to draw from (note content only).
-  private buildGroundedNotes(p: PolishSummaryParams): string {
+  //
+  // `includeActionItems` defaults to true for polishOverview() (a whole-meeting prose
+  // paragraph, where a commitment mentioned in passing is not the thing being removed).
+  // polish() passes false: while INCLUDE_NEXT_STEPS is false, the Summary must not end in
+  // a next-step sentence, and withholding the Action items block from the corpus is what
+  // makes that safe — the model cannot emit tokens it was never shown, so the
+  // newSignificantTokens() "no new information" gate (which reads this same `grounded`
+  // string as its reference set) never has an action item to catch. Leaving the block in
+  // and only prohibiting it in the prompt risks the model mentioning one anyway and being
+  // silently rejected by the gate, discarding the whole rewrite — a real bug on this branch.
+  private buildGroundedNotes(p: PolishSummaryParams, includeActionItems: boolean = true): string {
     const parts: string[] = [];
     if (p.deterministicSummary.length) parts.push(`Summary points:\n${p.deterministicSummary.map(s => `- ${s}`).join('\n')}`);
     if (p.decisions.length) parts.push(`Decisions:\n${p.decisions.map(d => `- ${d.text}`).join('\n')}`);
-    if (p.actionItems.length) parts.push(`Action items:\n${p.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}`).join('\n')}`);
+    if (includeActionItems && p.actionItems.length) parts.push(`Action items:\n${p.actionItems.map(a => `- ${a.owner ? `${a.owner}: ` : ''}${a.text}${a.deadline ? ` (by ${a.deadline})` : ''}`).join('\n')}`);
     if (p.risks.length) parts.push(`Risks:\n${p.risks.map(r => `- ${r.text}`).join('\n')}`);
     if (p.sections.length) parts.push(`Section notes:\n${p.sections.flatMap(s => s.bullets.map(b => `- ${b.text}`)).join('\n')}`);
     return parts.join('\n\n');
@@ -40,16 +51,33 @@ export class SummaryPolisher {
 
   // Returns polished prose split into 3-5 lines, or null to keep the deterministic summary.
   async polish(p: PolishSummaryParams): Promise<string[] | null> {
-    const grounded = this.buildGroundedNotes(p);
+    // Action items withheld while INCLUDE_NEXT_STEPS is false — see buildGroundedNotes().
+    const grounded = this.buildGroundedNotes(p, INCLUDE_NEXT_STEPS);
     if (!grounded.trim() || p.deterministicSummary.length === 0) return null;
 
-    const systemPrompt = `Rewrite the meeting summary below into 3-5 short, clear sentences. Lead with the outcome, not chronology: sentence 1 = the meeting's purpose/topic, then the key decisions or conclusions, then the single most important next step.
+    // The opening sentence and the next-steps prohibition rule are the ONLY things that
+    // differ between the two branches below. Everything else — the shared STRICT RULES,
+    // the NOTES header, ${grounded} — is factored into `sharedRules` so the
+    // flag-off branch can never again drift into an incomplete prompt (see 2026-08-25 code
+    // review: the flag-on branch used to end right after "STRICT RULES:", silently
+    // stripping every anti-fabrication rule from the restore path).
+    const opening = INCLUDE_NEXT_STEPS
+      ? `Rewrite the meeting summary below into 3-5 short, clear sentences. Lead with the outcome, not chronology: sentence 1 = the meeting's purpose/topic, then the key decisions or conclusions, then the single most important next step.`
+      : `Rewrite the meeting summary below into 3-5 short, clear sentences. Lead with the outcome, not chronology: sentence 1 = the meeting's purpose/topic, then the key decisions or conclusions.`;
 
-STRICT RULES:
-- Use ONLY the facts in the NOTES below. Introduce NO new information, name, number, date, company, or owner that is not already present in the notes.
+    const nextStepsRule = INCLUDE_NEXT_STEPS
+      ? ''
+      : '\n- Do NOT add a next-steps / action-item sentence, and do NOT mention what happens next. That is deliberately omitted — the reader tracks it elsewhere.';
+
+    const sharedRules = `- Use ONLY the facts in the NOTES below. Introduce NO new information, name, number, date, company, or owner that is not already present in the notes.
 - Do not restate an agenda or add filler ("productive discussion", "the team aligned", "great meeting").
 - Plain, professional prose. No headings, no bullet markup inside sentences.
-- If the notes contain no concrete outcome, return an empty "summary" array.
+- If the notes contain no concrete outcome, return an empty "summary" array.`;
+
+    const systemPrompt = `${opening}
+
+STRICT RULES:${nextStepsRule}
+${sharedRules}
 
 NOTES:
 ${grounded}`;

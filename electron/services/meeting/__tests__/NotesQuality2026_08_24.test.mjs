@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const base = path.resolve(__dirname, '../../../../dist-electron/electron/services/meeting');
 const { similar, MeetingSummaryReducer } = await import(pathToFileURL(path.join(base, 'MeetingSummaryReducer.js')).href);
 const { TranscriptNormalizer } = await import(pathToFileURL(path.join(base, 'TranscriptNormalizer.js')).href);
-const { newSignificantTokens } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
+const { newSignificantTokens, SummaryPolisher } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
 const { buildChunkPrompt } = await import(pathToFileURL(path.join(base, 'ChunkSummaryGenerator.js')).href);
 const { MeetingSummarySchemaValidator } = await import(pathToFileURL(path.join(base, 'MeetingSummarySchemaValidator.js')).href);
 
@@ -347,4 +347,74 @@ test('chunk prompt states a density target and keeps evidence where it matters',
     /OPTIONAL[:\s].*omit the entire/i,
     'the optionality statement leaked back into jsonShapeHint, where a model could copy it into a real quote'
   );
+});
+
+// ── Summary "next step" removal (2026-08-25, product decision) ────────────────
+//
+// The labelled "Next steps" BLOCK was already suppressed (INCLUDE_NEXT_STEPS, 2026-08-24).
+// Separately, the Summary (tldr) builder had its own, unlabelled next-step slot — a ranked
+// action-item line appended after decisions in buildSummary() — that was deliberately left
+// in place at the time. The user has now seen it surface ("The next step is to assess the
+// candidate's ability to diagnose memory leaks…") and asked for it gone too. This block
+// covers that reversal at both of its sites: MeetingSummaryReducer.buildSummary() and
+// SummaryPolisher (prompt + grounded corpus).
+
+const ev2 = [{ speakerName: 'Ari', quote: 'said so' }];
+const summaryAtom = (over = {}) => ({
+  chunkIndex: 0, timeRange: { startMs: 0, endMs: 60000 },
+  brief: '', decisions: [], actionItems: [],
+  openQuestions: [], risks: [], topics: [], people: [], deadlines: [], modeSpecificFindings: {},
+  sourceQualityWarnings: [], ...over,
+});
+
+test('buildSummary (via reduce): a decision reaches tldr, an explicit action item does not', () => {
+  const normalized = new TranscriptNormalizer().normalize([
+    { speaker: 'user', text: 'We discussed the plan.', timestamp: 0 },
+  ]);
+  const summary = new MeetingSummaryReducer().reduce({
+    title: 't',
+    atoms: [summaryAtom({
+      decisions: [{ text: 'We will migrate the billing system to Stripe.', confidence: 'high', evidence: ev2 }],
+      actionItems: [{ text: 'assess the candidate ability to diagnose memory leaks', owner: 'Dana', explicitness: 'explicit', confidence: 'high', evidence: ev2 }],
+    })],
+    normalizedTranscript: normalized,
+    modeTemplateType: 'general',
+    modeNoteSections: [],
+  });
+  assert.ok(summary.tldr.some(l => /migrate the billing system/.test(l)),
+    `the decision must still reach the Summary: ${JSON.stringify(summary.tldr)}`);
+  assert.ok(!summary.tldr.some(l => /diagnose memory leaks/.test(l)),
+    `the unlabelled next-step slot must be gone from the Summary: ${JSON.stringify(summary.tldr)}`);
+});
+
+test('SummaryPolisher.polish(): prompt does not ask for a next step and withholds Action items from the corpus; polishOverview() keeps both', async () => {
+  const captured = {};
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, userContent) => {
+      captured.systemPrompt = systemPrompt;
+      captured.userContent = userContent;
+      return '{"summary":["The team selected PostHog for analytics."],"overview":"The team discussed analytics and selected PostHog."}';
+    },
+  };
+  const polisher = new SummaryPolisher(llm);
+  const params = {
+    deterministicSummary: ['Adopt PostHog for analytics'],
+    decisions: [{ text: 'Adopt PostHog for analytics', confidence: 'high' }],
+    actionItems: [{ text: 'assess the candidate ability to diagnose memory leaks', owner: 'Dana', explicitness: 'explicit', confidence: 'high' }],
+    risks: [], sections: [], mode: 'team-meet',
+  };
+
+  await polisher.polish(params);
+  assert.doesNotMatch(captured.systemPrompt, /most important next step/i,
+    'polish() must not ask for a next step while INCLUDE_NEXT_STEPS is false');
+  assert.doesNotMatch(captured.systemPrompt, /Action items:/,
+    'polish()\'s corpus must withhold the Action items block');
+  assert.doesNotMatch(captured.userContent, /Action items:/,
+    'polish()\'s user content must withhold the Action items block');
+
+  await polisher.polishOverview(params);
+  assert.match(captured.systemPrompt, /Action items:/,
+    'polishOverview() must keep the Action items block — it is a whole-meeting prose paragraph, not the Summary next-step slot');
+  assert.match(captured.userContent, /Action items:/,
+    'polishOverview()\'s user content must keep the Action items block');
 });
