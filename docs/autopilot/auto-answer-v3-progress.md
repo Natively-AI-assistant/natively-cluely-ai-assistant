@@ -1451,3 +1451,69 @@ clear (1 fail). That last probe initially passed: clearing `pending` also preven
 only reachable when the interviewer repeats a sentence verbatim; the test was strengthened to cover it.
 Electron typecheck clean. `Requires physical macOS verification` — not yet exercised in a live meeting.
 Windows: `Reviewed but not executed` (no platform-specific code paths touched).
+
+---
+
+## Live session 2026-08-26 (meeting 7e4cbe43) — mic echo was shredding every question
+
+User report: "the auto answer is failure". Seven minutes produced **12 candidates and 1 answer**, with 82
+user-channel skips (50 backchannel, 30 user_answering). The judge was not the problem — the transcript was.
+
+Both channels transcribed the SAME speech: the interviewer's audio was playing through the speakers and being
+picked up by the microphone. The two STT sessions segment it at DIFFERENT boundaries, so the echo arrives
+offset by a fragment with cut-off edge words:
+
+```
+interviewer | And screen-to-b            interviewer | ody ratio was one of those
+user        | Screen-to-body             user        | ratio was one of those head
+```
+
+Measured over the real transcript (58 user finals): the per-utterance echo test caught 30, and **24 leaked
+through as `user_answering`** — each of which cleared the interviewer's accumulated `pending`. Their
+containment scores were min 0.60 / **median 0.80** / max 0.85 against a 0.85 bar: the whole leaked population
+sat just under it, because `tokenContainment` scores a cut word ("technolog", "equ", "ph", "disp") as a miss.
+
+**The damage was not the count, it was the shredding.** Replaying the session through the engine:
+
+| | candidates the judge saw | sizes |
+| --- | --- | --- |
+| the shipped build | 33 | 6–25 words, every one |
+| with the fix | 54 | 7 → 319 words, accumulating properly |
+
+The judge never saw a whole question — which is exactly why the session logged `incomplete`, `incomplete`,
+`incomplete` at answerability 0. It was ruling correctly on six-word scraps.
+
+### Fix
+
+1. `echoContainment` (new, in AutoAnswerText) counts an edge token when one side is a prefix of the other,
+   ≥3 chars. `tokenContainment` is left alone — the judge's grounding check uses it and wants exact words.
+2. **The echo-mode latch, which was declared and never implemented.** `ECHO_ACTIVATE_COUNT` and
+   `ECHO_FLAG_WINDOW` existed as documented constants with no code reading them. While the mic is
+   demonstrably carrying the interviewer, the user channel cannot close a candidate at all — the
+   per-utterance test asks "is THIS fragment an echo", which a boundary-straddling fragment can always dodge;
+   the latch asks the question that matters.
+3. The latch holds on **time** (`ECHO_MODE_HOLD_MS`, 10 s, refreshed by each echo), not on a count over the
+   last N. A pure count latch is self-defeating and the real data shows it: dodged fragments are recorded as
+   non-echoes and push the real echoes out of a four-slot window, releasing the very latch meant to catch them
+   (`flags=[0010]`, `[0100]`, `[1000]` at three consecutive leaks).
+4. New skip reason `mic_echo`, so this is legible in telemetry instead of hiding inside `backchannel`.
+
+Result on the real session: `user_answering` **30 → 2** (52 correctly reported as `mic_echo`); the two
+survivors are at session start, before any evidence exists.
+
+A test caught a latch bug before it shipped: engaging on the count alone re-armed the deadline from stale
+flags — a clean final would find two old `true`s still in the window and push the hold out again, so the latch
+could never release and a genuine answer stayed muted forever. Engage now requires the CURRENT final to be an
+echo *and* the window to corroborate it.
+
+Validation: 49/49 Auto Answer tests, 6/6 redaction. Three guards mutation-probed — disabling the latch (2
+fail), dropping split-word tolerance (1 fail), re-arming from stale flags (1 fail). Typecheck clean.
+`Requires physical macOS verification`; Windows `Reviewed but not executed` (no platform-specific paths).
+
+### Open, not fixed: the judge costs ~1.3 s that legacy did not
+
+The one answer that did fire took `judgeMs` 1377 on top of the 900 ms stability window. The legacy trigger
+dispatched at the 900 ms debounce flat, which is what "legacy should always be fast" refers to. `maybePrefetch`
+exists to hide exactly this, but `PREFETCH_MIN_INTERVAL_MS` (25 s) rationed it onto two junk candidates
+(q1, q4) and it was still cooling when the real question (q6) arrived. Options are a cost decision and are the
+user's to make — see the report; nothing changed here.

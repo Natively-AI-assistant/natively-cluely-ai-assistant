@@ -34,7 +34,7 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { normalizeForCompare, tokenContainment } from './AutoAnswerText';
+import { echoContainment, normalizeForCompare } from './AutoAnswerText';
 import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
@@ -49,9 +49,39 @@ export const ECHO_SIMILARITY = 0.8;
 export const ECHO_FRAGMENT_CONTAINMENT = 0.85;
 /** Containment needs a few words to mean anything ("Yes." is contained in everything). */
 export const ECHO_FRAGMENT_MIN_WORDS = 2;
-/** Echo mode engages when at least this many of the last ECHO_FLAG_WINDOW user finals were echoes. */
+/**
+ * Echo mode engages when at least this many of the last ECHO_FLAG_WINDOW user
+ * finals were echoes.
+ *
+ * These two were declared with the rest of the echo policy and then never
+ * wired — the latch was specified and never implemented. A real bled session
+ * (2026-08-26) shows why it matters: the per-utterance test caught 30 of 58
+ * user finals, and the 24 it missed still each cleared the interviewer's
+ * pending text as "the user is answering", so seven minutes of interview
+ * produced twelve candidates and one answer.
+ *
+ * The per-utterance test asks "is THIS fragment an echo", which a
+ * boundary-straddling fragment can always dodge. The latch asks the question
+ * that actually matters — "is this microphone currently carrying the
+ * interviewer?" — and while the answer is yes the user channel cannot close a
+ * candidate at all. It re-evaluates on every user final, so it releases by
+ * itself once the bleed stops (headphones plugged in, speaker volume down).
+ */
 export const ECHO_ACTIVATE_COUNT = 2;
 export const ECHO_FLAG_WINDOW = 4;
+/**
+ * Once engaged, echo mode is HELD for this long, refreshed by every further
+ * echo — it is not a count over the last N finals.
+ *
+ * A pure count latch is self-defeating, and the bled session shows it exactly:
+ * the fragments that dodge the per-utterance test are recorded as non-echoes,
+ * so they push the real echoes out of a four-slot window and release the very
+ * latch that was meant to catch them (`flags=[0010]`, `[0100]`, `[1000]` at
+ * the three consecutive leaks). Holding on time instead means a run of dodged
+ * fragments cannot unlatch it; only an actual stretch with no echo at all can,
+ * which is what "the user unplugged the speakers" looks like. Two ECHO_WINDOW_MS.
+ */
+export const ECHO_MODE_HOLD_MS = 10_000;
 /**
  * User-channel BACKCHANNELS (live run 8168240a, 2026-08-24): short listening
  * signals — affirmations, acknowledgements, laughter — possibly repeated
@@ -208,6 +238,10 @@ export class SimpleAutoAnswerEngine {
         id: string; key: string; text: string;
         answerability: number; act: AutoAnswerQuestion['dialogueAct']; at: number;
     } | null = null;
+    /** Echo verdicts for the last ECHO_FLAG_WINDOW user finals (the latch). */
+    private recentUserEcho: boolean[] = [];
+    /** Echo mode is engaged until this timestamp; refreshed by every echo. */
+    private echoModeUntil = 0;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
     /** What last bumped judgeSeq, so a discarded verdict can say what killed it. */
@@ -292,8 +326,26 @@ export class SimpleAutoAnswerEngine {
         const words = text.split(/\s+/).filter(Boolean).length;
         const isEcho = recent.some(f => speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY)
             || (words >= ECHO_FRAGMENT_MIN_WORDS && recent.length > 0
-                && tokenContainment(text, recent.map(f => f.text).join(' ')) >= ECHO_FRAGMENT_CONTAINMENT);
-        const genuine = !isEcho && !USER_BACKCHANNEL.test(text) && words >= GENUINE_ANSWER_MIN_WORDS;
+                && echoContainment(text, recent.map(f => f.text).join(' ')) >= ECHO_FRAGMENT_CONTAINMENT);
+        if (segment.final) {
+            this.recentUserEcho.push(isEcho);
+            while (this.recentUserEcho.length > ECHO_FLAG_WINDOW) this.recentUserEcho.shift();
+            // Engage (and refresh) only on an ACTUAL echo that is corroborated
+            // by the recent window. Testing the count alone re-arms the latch
+            // from stale flags — a clean final would find two old `true`s
+            // still in the four slots and push the deadline out again, so the
+            // latch could never release and a genuine answer stayed muted.
+            if (isEcho && this.recentUserEcho.filter(Boolean).length >= ECHO_ACTIVATE_COUNT) {
+                this.echoModeUntil = now + ECHO_MODE_HOLD_MS;
+            }
+        }
+        // The latch: while the mic is demonstrably carrying the interviewer,
+        // nothing on this channel may close a candidate — a fragment that
+        // straddles two interviewer finals can always dodge the per-utterance
+        // test, and every dodge silently threw away a question.
+        const echoMode = now < this.echoModeUntil;
+        const genuine = !isEcho && !echoMode
+            && !USER_BACKCHANNEL.test(text) && words >= GENUINE_ANSWER_MIN_WORDS;
         if (!segment.final) {
             // Early barge-in (review 2026-08-25): V3 cancelled at the VAD
             // edge; here a genuine-looking user INTERIM cancels the streaming
@@ -303,7 +355,11 @@ export class SimpleAutoAnswerEngine {
             return;
         }
         if (!genuine) {
-            this.emit({ name: 'auto_answer_ignored', skipReason: 'backchannel' });
+            const echoed = isEcho || (echoMode && words >= GENUINE_ANSWER_MIN_WORDS);
+            this.emit({ name: 'auto_answer_ignored', skipReason: echoed ? 'mic_echo' : 'backchannel' });
+            if (echoMode && !isEcho && words >= GENUINE_ANSWER_MIN_WORDS) {
+                this.host.log?.('[AutoAnswer:simple] mic echo mode — the user channel is carrying the interviewer');
+            }
             return;
         }
         // A genuine sustained answer: the user took the floor. This must also
@@ -649,6 +705,8 @@ export class SimpleAutoAnswerEngine {
         this.clearFeedback();
         this.pending = [];
         this.recentInterviewerFinals = [];
+        this.recentUserEcho = [];
+        this.echoModeUntil = 0;
         this.speakerByTurn.clear();
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;

@@ -113,6 +113,8 @@ export type AutoAnswerSkipReason =
     // V3 Amendment 1
     | 'user_answering'
     | 'user_barge_in'
+    /** The user channel is carrying the interviewer's audio (speakers, not headphones). */
+    | 'mic_echo'
     // Lifecycle reasons carried over from the PR #497 gate and the Phase 1 pending slot
     | 'no_question'
     | 'already_answered'

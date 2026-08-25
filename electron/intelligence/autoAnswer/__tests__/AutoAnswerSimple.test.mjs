@@ -9,6 +9,8 @@
  *   deferred-verdict trap → 'growth is never held across…' / 'the user taking the floor drops…'
  *   prefilter             → 'prefilter: …never cost a call'
  *   '?' fallback          → 'judge unavailable → only a trailing ? fires'
+ *   mic echo latch        → 'speaker bleed cannot shred a question…'
+ *   latch release         → '…and it releases once the bleed stops'
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +22,7 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, ECHO_MODE_HOLD_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -663,4 +665,61 @@ test('the dev content trace names the exact words judged, and the engine works w
   bare.ingest({ speaker: 'interviewer', text: 'And how would you shard that table once it stops fitting?', final: true, timestamp: clock.now(), origin: 'stt' });
   for (let i = 0; i < 14; i++) { clock.advance(100); await flush(); await flush(); }
   assert.equal(out.length, 1, 'dispatches identically with no content hook wired');
+});
+
+// ── mic echo (live session 2026-08-26: speakers, not headphones) ────────────
+
+/** The bled shape from the real session: the mic transcribes the SAME speech,
+ *  segmented at different boundaries, so edge words arrive cut in half. */
+test('speaker bleed cannot shred a question: the interviewer pending survives', async () => {
+  const h = makeSimple(async () => YES({ question_text: 'how would you design the rate limiter?' }));
+  const bleed = [
+    ['So the next thing I want to ask you about is', 'So the next thing I want to ask you ab'],
+    ['how would you design the rate limit', 'out is how would you design the rate lim'],
+    ['er for that endpoint?', 'iter for that endpoint?'],
+  ];
+  for (const [heard, echoed] of bleed) {
+    h.interviewer(heard);
+    await h.advance(120);
+    h.user(echoed);                                   // the mic echo, offset by a fragment
+    await h.advance(200);
+  }
+  await h.advance(STABILITY_MS + 300);
+  assert.equal(h.state.skips.filter(s => s === 'user_answering').length, 0,
+    'an echo must never count as the user answering');
+  assert.ok(h.state.skips.includes('mic_echo'), 'and it is reported as what it is');
+  assert.equal(h.state.judgeCalls.length, 1, 'one stoppage, one call');
+  const judged = h.state.judgeCalls[0].candidateText.replace(/\s+/g, ' ');
+  // Both channels cut words mid-token, so "rate limiter" reaches the judge as
+  // "rate limit er" — an STT artefact, not a pending-wipe. What matters is
+  // that ALL THREE finals are in one candidate.
+  assert.match(judged, /^So the next thing I want to ask you about is how would you design the rate limit ?er for that endpoint\?$/,
+    'the WHOLE question reaches the judge, not a shredded fragment');
+  assert.equal(h.texts().length, 1);
+});
+
+test('the echo latch holds through fragments that dodge the per-utterance test, and releases once the bleed stops', async () => {
+  const h = makeSimple(async () => YES());
+  // Two clear echoes engage it.
+  h.interviewer('We are going to talk about database indexing strategies today');
+  await h.advance(150);
+  h.user('We are going to talk about database indexing strategies today');
+  await h.advance(150);
+  h.interviewer('and then move on to caching and invalidation');
+  await h.advance(150);
+  h.user('and then move on to caching and invalidation');
+  await h.advance(150);
+  // A fragment that dodges containment must NOT release the latch — that
+  // self-defeating release is what let 24 echoes through in the real session.
+  h.user('completely unrelated words that share nothing at all here');
+  assert.ok(!h.state.skips.includes('user_answering'), 'held by time, not by a 4-slot count');
+
+  // …but real silence on the echo front releases it, so a genuine answer works.
+  await h.advance(ECHO_MODE_HOLD_MS + 1000);
+  h.interviewer('So how many years of Postgres experience do you have?');
+  await h.advance(200);
+  h.user('I have about four years of production Postgres experience overall.');
+  await h.advance(STABILITY_MS + 300);
+  assert.ok(h.state.skips.includes('user_answering'),
+    'once the bleed stops the mic is trusted again');
 });
