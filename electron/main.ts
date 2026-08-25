@@ -3465,6 +3465,23 @@ export class AppState {
       : stt instanceof GoogleSTT ? 'google'
       : sttProvider;
 
+    // Speaker diarization on the MEETING-AUDIO channel (2026-08-25). That
+    // channel can carry several voices — an interviewer plus a colleague, or a
+    // video with two speakers — and without labels the judge has to infer from
+    // wording who asked what, which is the deepest remaining source of wrong
+    // verdicts. Providers that diarize surface `speakerId` per segment; the
+    // Auto Answer engine passes those labels to the judge, and providers that
+    // do not simply never send one (the prompt is then unchanged).
+    // NATIVELY_AUTO_ANSWER_DIARIZE=off disables it.
+    if (speaker === 'interviewer'
+        && (process.env.NATIVELY_AUTO_ANSWER_DIARIZE || '').toLowerCase() !== 'off'
+        && typeof (stt as any).setDiarize === 'function') {
+      try {
+        (stt as any).setDiarize(true);
+        if (this._verboseLogging) console.log(`[AutoAnswer] speaker diarization requested on ${effectiveSttId}`);
+      } catch { /* optional capability; never block the meeting */ }
+    }
+
     // Auto Answer V3 provider endpoints (Deepgram speech_final / UtteranceEnd,
     // Soniox <end>, OpenAI server VAD). Interviewer channel only; additive
     // event that only the controller consumes. Providers without the event

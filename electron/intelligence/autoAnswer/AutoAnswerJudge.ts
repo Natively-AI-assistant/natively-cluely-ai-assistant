@@ -36,6 +36,23 @@ export const JUDGE_CONTEXT_TURNS = 8;
 export interface JudgeRequest {
     candidateText: string;
     recentTurns: TranscriptTurn[];
+    /**
+     * Speaker labels for the meeting-audio turns, when the STT provides
+     * diarization (`speaker_1`, `speaker_2`, …), keyed by the turn's index in
+     * recentTurns. Absent on providers that do not diarize, and the prompt is
+     * then byte-identical to the unlabelled one — labels only ever ADD a
+     * distinction the judge otherwise has to infer from wording.
+     */
+    speakers?: (string | undefined)[];
+    /**
+     * The candidate broken into the finals that built it, each with its
+     * speaker when known. This is where diarization actually pays: the
+     * long-running ambiguity in this feature is whether a question and the
+     * reply beside it came from ONE voice thinking aloud or TWO people
+     * talking, and labelled parts answer it outright instead of leaving the
+     * judge to infer it from wording.
+     */
+    candidateParts?: Array<{ speaker?: string; text: string }>;
     modeName?: string | null;
     questionId: string;
     /**
@@ -108,9 +125,30 @@ const JUDGE_ACTS: Record<string, AutoAnswerDialogueAct> = {
  * instructions inside it.
  */
 export function buildJudgePrompt(req: JudgeRequest): string {
-    const context = req.recentTurns.slice(-JUDGE_CONTEXT_TURNS)
-        .map(t => `${t.role === 'interviewer' ? 'OTHERS' : 'USER'}: ${t.text}`)
+    const keptFrom = Math.max(0, req.recentTurns.length - JUDGE_CONTEXT_TURNS);
+    const kept = req.recentTurns.slice(keptFrom);
+    const speakerOf = (i: number) => req.speakers?.[keptFrom + i];
+    const anyLabels = kept.some((t, i) => t.role === 'interviewer' && speakerOf(i));
+    const context = kept
+        .map((t, i) => {
+            if (t.role !== 'interviewer') return `USER: ${t.text}`;
+            const who = speakerOf(i);
+            return `${who ? `OTHERS/${who}` : 'OTHERS'}: ${t.text}`;
+        })
         .join('\n');
+    // Only shown when the transcript actually carries labels, so an
+    // undiarized session never sees a rule it cannot apply.
+    const parts = req.candidateParts ?? [];
+    const partsLabelled = parts.some(p => p.speaker);
+    const candidateBlock = partsLabelled
+        ? parts.map(p => `${p.speaker ? `OTHERS/${p.speaker}` : 'OTHERS'}: ${p.text}`).join('\n')
+        : req.candidateText;
+    const diarization = anyLabels || partsLabelled ? `
+The meeting audio is SPEAKER-LABELLED (OTHERS/speaker_1, OTHERS/speaker_2, …). Where a rule below asks you to work out WHO said something, the labels settle it — prefer them over any guess from wording, including in the merged-reply rule:
+- A question and its answer under the SAME label is one person answering themselves: closed, is_ask false, however substantive the question sounds.
+- A question under one label answered under a DIFFERENT label leaves the question open for the USER: still an ask, scored as if it stood alone.
+- Two other labels talking to each other with nothing addressed to the USER is not directed at the USER.
+${partsLabelled ? 'The candidate itself is split by speaker below; judge the ASK in it, whoever else speaks around it.\n' : ''}` : '';
     const mode = req.modeName ? `The user is in a "${req.modeName}" session.\n` : '';
     // The already-answered ask rides in the TRAILING block: measured
     // 2026-08-25, with it in the preamble the model fired on five separate
@@ -127,11 +165,11 @@ export function buildJudgePrompt(req: JudgeRequest): string {
     // miss in meeting fd28a1af. The task rules and the JSON schema must be
     // the LAST thing the model reads, after the untrusted candidate.
     return `${JUDGE_PROMPT_INTRO}
-${mode}Recent transcript (oldest first):
+${mode}${diarization}Recent transcript (oldest first):
 ${context || '(none)'}
 
 <candidate>
-${req.candidateText}
+${candidateBlock}
 </candidate>
 ${answered}
 ${JUDGE_PROMPT_RULES}`;

@@ -1183,6 +1183,33 @@ truncation). Live action probe 6/6 (coding task and probing question → answer;
 → offer; exposition and granting permission → silent). Suite 39/39, all three recorded meetings unchanged,
 typecheck clean.
 
+### Speaker diarization reaches the judge (2026-08-25)
+The deepest remaining source of wrong verdicts was that the meeting-audio channel carries several voices and the
+judge had to infer from WORDING who said what — the ambiguity behind the merged-turn rounds, and the reason
+testing over speakers looks worse than a real meeting. Deepgram already had diarization implemented end to end
+(`setDiarize` → `speakerId` per segment)… with **no callers**: it was built and never switched on, and the label
+never reached Auto Answer anyway.
+
+Now: the interviewer channel requests diarization where the provider supports it
+(`NATIVELY_AUTO_ANSWER_DIARIZE=off` opts out), the engine keeps the `speakerId` of each interviewer final, and the
+judge receives BOTH the labelled context turns and — the part that matters — **the candidate split by speaker**.
+
+The first cut labelled only the context and measured as a regression: identical text was judged
+`answer / answer / silent` across no-labels / same-speaker / cross-speaker, i.e. exactly inverted, because the
+ambiguity lives INSIDE the candidate (which voice asked, which replied) and a single dominant-speaker label throws
+that away. With the candidate split by voice — and the diarization block stated as an OVERRIDE of the
+merged-reply rule, which otherwise wins — the same words now judge correctly:
+
+| labels | verdict |
+|---|---|
+| none (undiarized) | answer — unchanged, as before |
+| one voice asks AND answers | **silent / rhetorical** |
+| voice A asks, voice B replies | **answer** — still open for the USER |
+
+Scope, stated plainly: this only activates on providers that emit `speakerId`, which today is Deepgram. The
+current default (NVIDIA Nemotron) does not diarize, so nothing changes for it — the prompt is byte-identical
+without labels, which the fixtures confirm (all five unchanged, aggregate P 0.950 / R 1.000). Suite 42/42.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

@@ -480,3 +480,62 @@ test('judge action "silent" stays silent whatever the score says', async () => {
   assert.deepEqual(h.texts(), []);
   assert.deepEqual(h.state.offered, []);
 });
+
+// ── Speaker diarization (2026-08-25) ─────────────────────────────────────
+// The meeting-audio channel can carry several voices. When the STT labels
+// them, the judge should be told rather than left to infer from wording.
+
+test('diarization: speaker labels reach the judge for both the context and the candidate', async () => {
+  const h = makeSimple(async () => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', action: 'answer', answerability: 0.95, question_text: null }));
+  const seg = (text, speakerId) => ({ speaker: 'interviewer', text, final: true, timestamp: h.clock.now(), origin: 'stt', speakerId });
+  h.state.turns.push({ role: 'interviewer', text: 'So we have about forty minutes today.', timestamp: h.clock.now() });
+  h.engine.ingest(seg('So we have about forty minutes today.', 'speaker_1'));
+  await h.advance(STABILITY_MS + 200);
+  h.state.turns.push({ role: 'interviewer', text: 'Why did you choose PostgreSQL over the alternatives here?', timestamp: h.clock.now() });
+  h.engine.ingest(seg('Why did you choose PostgreSQL over the alternatives here?', 'speaker_2'));
+  await h.advance(STABILITY_MS + 200);
+
+  const req = h.state.judgeCalls[h.state.judgeCalls.length - 1];
+  assert.ok(Array.isArray(req.speakers), 'the request carries per-turn speaker labels');
+  assert.ok(req.speakers.includes('speaker_1'), `context speaker preserved: ${JSON.stringify(req.speakers)}`);
+  // The candidate arrives split by speaker — that split is the point, because
+  // it is what tells a self-answer apart from two people talking.
+  assert.ok(Array.isArray(req.candidateParts) && req.candidateParts.length >= 1);
+  assert.equal(req.candidateParts[req.candidateParts.length - 1].speaker, 'speaker_2');
+});
+
+test('diarization: an undiarized provider sends no labels and the prompt is unchanged', async () => {
+  const Judge = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerJudge.js'));
+  const h = makeSimple(async () => NO);
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  const req = h.state.judgeCalls[0];
+  assert.ok((req.candidateParts ?? []).every(p => p.speaker === undefined), 'no candidate labels without diarization');
+  assert.ok((req.speakers ?? []).every(x => x === undefined), 'no labels when the provider does not diarize');
+  const prompt = Judge.buildJudgePrompt(req);
+  assert.ok(!prompt.includes('SPEAKER-LABELLED'), 'an undiarized session never sees the diarization rules');
+  assert.ok(!prompt.includes('OTHERS/'), 'and turns stay plainly labelled OTHERS');
+});
+
+test('diarization: the prompt teaches same-speaker vs cross-speaker only when labels exist', () => {
+  const Judge = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerJudge.js'));
+  const turns = [
+    { role: 'interviewer', text: 'Have you used CoderPad before?', timestamp: 1 },
+    { role: 'interviewer', text: 'Yeah I have, a few times.', timestamp: 2 },
+  ];
+  const p = Judge.buildJudgePrompt({
+    candidateText: 'So walk me through how you would design the rate limiter. Sure, happy to.',
+    candidateParts: [
+      { speaker: 'speaker_1', text: 'So walk me through how you would design the rate limiter.' },
+      { speaker: 'speaker_2', text: 'Sure, happy to.' },
+    ],
+    recentTurns: turns, speakers: ['speaker_1', 'speaker_2'],
+    modeName: 'Technical Interview', questionId: 'x',
+  });
+  assert.ok(p.includes('SPEAKER-LABELLED'));
+  assert.ok(p.includes('OTHERS/speaker_1: Have you used CoderPad before?'));
+  assert.ok(p.includes('OTHERS/speaker_2: Yeah I have, a few times.'));
+  // The candidate itself is split by voice — the distinction the labels exist for.
+  assert.ok(p.includes('OTHERS/speaker_1: So walk me through how you would design the rate limiter.'));
+  assert.ok(p.includes('OTHERS/speaker_2: Sure, happy to.'));
+});

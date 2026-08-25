@@ -137,7 +137,9 @@ export interface SimpleAutoAnswerHost {
 }
 
 export class SimpleAutoAnswerEngine {
-    private pending: Array<{ text: string; at: number }> = [];
+    private pending: Array<{ text: string; at: number; speaker?: string }> = [];
+    /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
+    private speakerByTurn = new Map<string, string>();
     private recentInterviewerFinals: Array<{ text: string; at: number }> = [];
     private timer: ClockTimer | null = null;
     private retryTimer: ClockTimer | null = null;
@@ -197,7 +199,15 @@ export class SimpleAutoAnswerEngine {
             while (this.recentInterviewerFinals.length > 8) this.recentInterviewerFinals.shift();
             this.punctuationGuaranteed = (segment as { punctuationSource?: string }).punctuationSource === 'provider' ||
                 (segment as { punctuationSource?: string }).punctuationSource === 'provider_final';
-            this.pending.push({ text, at: now });
+            const speaker = (segment as { speakerId?: string }).speakerId;
+            if (speaker) {
+                this.speakerByTurn.set(normalizeForCompare(text), speaker);
+                if (this.speakerByTurn.size > 64) {
+                    const oldest = this.speakerByTurn.keys().next().value;
+                    if (oldest !== undefined) this.speakerByTurn.delete(oldest);
+                }
+            }
+            this.pending.push({ text, at: now, speaker });
             this.judgeSeq++;            // supersede any in-flight verdict: it judged less than this
             this.arm(STABILITY_MS);
             return;
@@ -313,6 +323,8 @@ export class SimpleAutoAnswerEngine {
         const generation = this.host.meetingGeneration();
         let timer: ClockTimer | null = null;
         let timedOut = false;
+        const turns = this.turnsBefore(committedAt);
+        const parts = this.pending.map(p => ({ speaker: p.speaker, text: p.text }));
         let raw: string | null = null;
         let outcome: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'absent' = 'verdict';
         if (!this.host.judgeCandidate) {
@@ -322,7 +334,9 @@ export class SimpleAutoAnswerEngine {
                 raw = await Promise.race([
                     this.host.judgeCandidate({
                         candidateText: candidate,
-                        recentTurns: this.turnsBefore(committedAt),
+                        recentTurns: turns,
+                        speakers: turns.map(t => (t.role === 'interviewer' ? this.speakerByTurn.get(normalizeForCompare(t.text)) : undefined)),
+                        candidateParts: parts,
                         modeName: this.host.modeName?.() ?? null,
                         questionId: id,
                         lastAnsweredText: this.lastAnsweredText,
@@ -506,6 +520,7 @@ export class SimpleAutoAnswerEngine {
         this.retractOffer('meeting_stop');
         this.pending = [];
         this.recentInterviewerFinals = [];
+        this.speakerByTurn.clear();
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
         this.lastPrefetchAt = null;
