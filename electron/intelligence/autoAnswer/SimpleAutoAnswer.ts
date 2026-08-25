@@ -123,13 +123,21 @@ export const ENDPOINT_CONFIRM_MS = 350;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
 export const MIN_NEW_WORDS = 4;
 /**
- * Fire at anything above this. Set by the user (2026-08-25): "if the
- * percentage is above 20 then surely show the answer". Everything between
- * this and the old per-mode bars used to become a card asking permission;
- * that card is gone, so this is the only line left — above it the answer is
- * drafted, below it nothing happens.
+ * Fire at anything above this. The offer card is gone, so this is the only
+ * line left in the dispatch decision — above it the answer is drafted, below
+ * it nothing happens.
+ *
+ * 0.20 (user, 2026-08-25) → 0.30 (user, 2026-08-26).
+ *
+ * Worth knowing before tuning it again: the judge's output is effectively
+ * QUANTIZED. Across every session captured so far it has returned only
+ * 0 (×132), 0.1 (×69), 0.4 (×5), 0.8 (×2), 0.9 (×19) and 1.0 (×13) — nothing
+ * has ever landed between 0.2 and 0.3, so this move changes no dispatch that
+ * has actually occurred. The weak band that produced the one questionable
+ * answer of the 2026-08-26 session ("I recommend maybe sharing your screen.")
+ * is 0.4, and only a floor above 0.4 removes it.
  */
-export const ANSWER_FLOOR = 0.20;
+export const ANSWER_FLOOR = 0.30;
 /** Judge-unavailable fallback on punctuation-less providers: interrogative-led utterances. */
 export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)[,.!\s]+)*(?:how|what|why|when|where|which|who|whose|can|could|would|should|do|does|did|are|is|will|have you|tell me|tell us|walk me|walk us|explain|describe)\b/i;
 /**
