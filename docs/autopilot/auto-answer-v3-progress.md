@@ -1137,6 +1137,29 @@ generation; a snapshot keyed to another question is not reused). Suite 238/238 �
 (aggregate P 0.905 / R 1.000) · engine review tests 5/5 · evaluator gate green · typecheck clean. Requires
 physical verification: the end-to-end latency gain and the Nemotron endpoint path were not measured live.
 
+### V3 and legacy retired (2026-08-25)
+The simple engine won every comparison, so both other engines and the switch between them are gone: ~7,600 lines
+deleted across `LegacyAutoAnswerTrigger`, `AutoAnswerController`, `AutoAnswerTurnManager`, `AutoAnswerChannelGate`,
+`AutoAnswerQueue`, `AutoAnswerDedup`, `AutoAnswerTurnPredictor` (Smart Turn) and `AutoAnswerDetector`, plus their
+tests, the 34-fixture replay corpus and the offline evaluator.
+
+What survived, and why:
+- `AutoAnswerText.ts` — `normalizeForCompare` + `tokenContainment`, the only two functions of the ~400-line
+  heuristic detector still called. Everything else in it existed to GUESS what the judge now decides.
+- `AutoAnswerPolicy.ts` — trimmed to the thresholds type and the compiled-in fallback (0.88/0.65/0.82, inlined
+  now that the detector's constants are gone); the ternary policy function went with the controller because the
+  judge returns the decision itself.
+- The mic/echo policy (`ECHO_*`, `USER_BACKCHANNEL`, `GENUINE_ANSWER_MIN_WORDS`) moved into `SimpleAutoAnswer`,
+  its only consumer — this was the duplication the code review flagged as drift risk during the A/B.
+- **Smart Turn was dead weight**: the simple engine never consumed a prediction, so the ONNX session was loading,
+  taking PCM and running inference on every speech-stop for nothing. Its asset stays optional and unused.
+
+Costs, stated plainly: the 34 conversation fixtures × 6 provider dialects and the precision/recall evaluator gate
+are gone with the engine they tested. The replacement safety net is the five labelled video sets under
+`__tests__/judge-eval/` (146 candidates, real model) plus 34 engine tests on a fake clock. `npm run
+test:auto-answer:eval` is now `test:auto-answer:judge`. Suite 34/34, judge fixtures unchanged
+(P 0.905 / R 1.000), all three recorded meetings still dispatch exactly their real asks, typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

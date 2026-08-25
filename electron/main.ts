@@ -1218,11 +1218,8 @@ import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
 import { DeepgramStreamingSTT } from "./audio/DeepgramStreamingSTT"
 import { isIntelligenceFlagEnabled } from "./intelligence/intelligenceFlags"
-import { AutoAnswerController } from "./intelligence/autoAnswer/AutoAnswerController"
 import { buildJudgePrompt } from "./intelligence/autoAnswer/AutoAnswerJudge"
 import { SimpleAutoAnswerEngine } from "./intelligence/autoAnswer/SimpleAutoAnswer"
-import { LegacyAutoAnswerTrigger } from "./intelligence/LegacyAutoAnswerTrigger"
-import { createSmartTurnPredictor } from "./intelligence/autoAnswer/AutoAnswerTurnPredictor"
 import { resolveAutoAnswerThresholds } from "./context-intelligence/policies/mode-policy-registry"
 import type { SpeechEdge } from "./audio/speechEdge"
 import { SonioxStreamingSTT } from "./audio/SonioxStreamingSTT"
@@ -1498,7 +1495,7 @@ export class AppState {
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
     this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
-    console.log(`[AutoAnswer] engine=${this.autoAnswerEngineChoice}${this.autoAnswerEngineChoice === 'legacy' ? ' (A/B harness: NATIVELY_AUTO_ANSWER_ENGINE=legacy — PR #497 behaviour, no V3 pipeline)' : ''}`);
+    console.log('[AutoAnswer] engine=simple (stoppage + judge)');
     console.log(`[AppState] Initialized with isUndetectable=${this.isUndetectable}, disguiseMode=${this.disguiseMode}, verboseLogging=${this._verboseLogging}, ambientChatEnabled=${this._ambientChatEnabled}, autoAnswerEnabled=${this._autoAnswerEnabled}`);
 
     // Context Intelligence debug logging (Developer settings). Bind the level
@@ -3183,17 +3180,6 @@ export class AppState {
   // currentGenerationId — cancelling the correctly-prefetched answer — and then
   // generates one for the PREVIOUS question.
   /**
-   * A/B HARNESS: `NATIVELY_AUTO_ANSWER_ENGINE=legacy` routes the trigger
-   * through the byte-faithful PR #497 path instead of the V3 controller, so
-   * the two engines can be compared live in one build. Read once at startup;
-   * the log line below states which engine is active. Remove with
-   * LegacyAutoAnswerTrigger when the A/B is done.
-   */
-  private readonly autoAnswerEngineChoice: 'simple' | 'v3' | 'legacy' =
-    (process.env.NATIVELY_AUTO_ANSWER_ENGINE || '').toLowerCase() === 'legacy' ? 'legacy'
-      : (process.env.NATIVELY_AUTO_ANSWER_ENGINE || '').toLowerCase() === 'v3' ? 'v3'
-        : 'simple';
-  /**
    * The DEFAULT engine (user decision 2026-08-25): "legacy trigger, judge
    * brain" — interviewer stoppage → one judge call → dispatch/offer/silent.
    * See SimpleAutoAnswer.ts. V3 stays reachable via
@@ -3248,133 +3234,22 @@ export class AppState {
     // review#10 parity (2026-08-25): boot on the registry's no-mode default
     // (the stricter MEETING bar), not the compiled-in interview constants.
   }, undefined, resolveAutoAnswerThresholds(null));
-  private readonly legacyAutoAnswer = new LegacyAutoAnswerTrigger({
-    isEnabled: () => this._autoAnswerEnabled,
-    isMeetingActive: () => this.isMeetingActive,
-    meetingGeneration: () => this._meetingGeneration,
-    lastInterviewerTurn: () => this.intelligenceManager.getLastInterviewerTurn(),
-    engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
-    log: (line) => console.log(line),
-    dispatch: (lastQuestion) => {
-      void this.intelligenceManager.handleSuggestionTrigger({
-        context: this.intelligenceManager.getFormattedContext(120),
-        lastQuestion,
-        confidence: 0.9,           // the old hardcoded value — deliberately
-      }).catch((error) => {
-        console.warn('[Main] Automatic interviewer answer failed (legacy):', error);
-      });
-    },
-  });
-
-  // Auto Answer V3 (Settings > General, default OFF). AppState owns wiring and
-  // lifecycle only; the controller owns turn accumulation, endpoint reasoning,
-  // question identity, answerability, dedup, queueing, the dual-channel gate
-  // and every skip reason (electron/intelligence/autoAnswer/). With the toggle
-  // OFF `ingest` returns before touching any state — hotkey-only, as before.
-  /** Built before the controller (field order) so the controller can subscribe to it. */
-  private readonly smartTurnPredictor = createSmartTurnPredictor((line) => { if (this._verboseLogging) console.log(line); });
-  private readonly autoAnswerController = new AutoAnswerController({
-    isEnabled: () => this._autoAnswerEnabled,
-    isMeetingActive: () => this.isMeetingActive,
-    meetingGeneration: () => this._meetingGeneration,
-    engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
-    manualAnswerActive: () => this.intelligenceManager.isManualAnswerActive(),
-    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(60) as any,
-    speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
-    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
-    cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
-    // The promise settles when the engine has fully decided the trigger; the
-    // controller uses it to clear its in-flight latch when the planner stayed
-    // silent and no stream (and therefore no idle event) ever happened.
-    dispatch: (question, { reuseSpeculative }) => {
-      return this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
-        console.warn('[Main] Automatic interviewer answer failed:', error);
-      });
-    },
-    answerStreamActive: () => this.intelligenceManager.isAnswerStreaming(),
-    // V3 Amendment 4: the ONE offer card, rendered through the existing Dynamic
-    // Action surface (DynamicActionBar/Card). Tab or click commits; the
-    // What-to-Answer hotkey commits through manual_answer_started → retract.
-    offer: (question) => this.showAutoAnswerOffer(question),
-    retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason),
-    log: (line) => { if (this._verboseLogging) console.log(line); },
-    // The DYNAMIC judge (user decision 2026-08-24, overriding spec V2 §36's
-    // no-cloud-LLM-in-detection rule): flash-lite-led structured call judges
-    // each consult-worthy candidate. The controller enforces the deadline and
-    // falls back to the heuristic verdict on null/rejection/timeout, so this
-    // hook never blocks the pipeline. NATIVELY_AUTO_ANSWER_JUDGE=off removes
-    // it entirely (pure heuristic pipeline, for A/B and offline use).
-    ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
-      judgeCandidate: async (req) => {
-        const llm = this.processingHelper?.getLLMHelper?.();
-        if (!llm) return null;
-        return await llm.generateJudgeVerdict(buildJudgePrompt(req));
-      },
-    }),
-    modeName: () => {
-      try {
-        const { ModesManager } = require('./services/ModesManager');
-        return ModesManager.getInstance().getActiveMode()?.name ?? null;
-      } catch { return null; }
-    },
-    telemetry: (event) => {
-      // Structured, NO transcript text (V2 §29): ids, acts, scores, reasons, timings only.
-      try {
-        const { telemetryService } = require('./services/telemetry/TelemetryService');
-        const { name, meetingGeneration, provider, ...properties } = event;
-        telemetryService.track({ name, provider, properties: { meetingGeneration, ...properties } });
-      } catch { /* telemetry must never break the pipeline */ }
-    },
-  }, {
-    // review#10: the controller's compiled-in default is the INTERVIEW bar
-    // (the detector constants); production must boot on the registry's
-    // no-mode default (the stricter MEETING bar) and re-resolve on every
-    // mode change INCLUDING a mode clear.
-    thresholds: resolveAutoAnswerThresholds(null),
-    // Tier-2 endpoint evidence: Smart Turn v3.1 on the interviewer audio
-    // (V3 Amendment 2). Asset missing → predict() null → deterministic path.
-    turnPredictor: this.smartTurnPredictor,
-    // Layer-3 dedup / speculative reuse over the bundled local embedder
-    // (Xenova/all-MiniLM-L6-v2). Lazily constructed; any failure → null →
-    // the cheap layers decide (V2 §38: never depend on a model asset).
-    embed: async (text: string) => {
-      try {
-        let embedder = this.autoAnswerEmbedder;
-        if (!embedder) {
-          const { LocalEmbeddingProvider } = require('./rag/providers/LocalEmbeddingProvider');
-          embedder = new LocalEmbeddingProvider();
-          this.autoAnswerEmbedder = embedder;
-        }
-        return await embedder!.embed(text);
-      } catch { return null; }
-    },
-  });
   private autoAnswerEmbedder: { embed(text: string): Promise<number[]> } | null = null;
 
   /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
   public onManualWhatToAnswer(): void {
-    this.autoAnswerController.onManualAnswerStarted();
     this.simpleAutoAnswer.onManualAnswerStarted();
   }
 
   /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
   public applyAutoAnswerThresholds(modeTemplateType: string | null | undefined): void {
     try {
-      const t = resolveAutoAnswerThresholds(modeTemplateType);
-      this.autoAnswerController.setThresholds(t);
-      this.simpleAutoAnswer.setThresholds(t);
+      this.simpleAutoAnswer.setThresholds(resolveAutoAnswerThresholds(modeTemplateType));
     } catch { /* keep the current thresholds */ }
   }
 
   private cancelAutoAnswer(): void {
-    this.legacyAutoAnswer.cancelAutoAnswer();
-    this.autoAnswerController.onMeetingStop();
     this.simpleAutoAnswer.onMeetingStop();
-    // Free the Smart Turn ORT session between meetings (and on toggle-off).
-    // It is lazily re-created on the next interviewer speech-stop. Also keeps
-    // a live ORT session out of any hard-exit path: process.exit() with one
-    // loaded SIGABRTs (reproduced under Electron 43's Node).
-    void this.smartTurnPredictor.dispose();
   }
 
   /** Stable id prefix so the renderer can replace the card in place and retract it by id. */
@@ -3424,7 +3299,6 @@ export class AppState {
 
   /** before-quit: release the Smart Turn session before the process winds down. */
   public disposeAutoAnswerForShutdown(): void {
-    void this.smartTurnPredictor.dispose();
   }
 
   private createSTTProvider(speaker: 'interviewer' | 'user'): STTProvider | null {
@@ -3598,8 +3472,7 @@ export class AppState {
     if (speaker === 'interviewer') {
       (stt as any).on?.('endpoint', (ev: { type: 'speech_final' | 'utterance_end'; confidence?: number }) => {
         if (!this._autoAnswerEnabled) return;
-        if (this.autoAnswerEngineChoice === 'simple') this.simpleAutoAnswer.onProviderEndpoint();
-        else this.autoAnswerController.onProviderEndpoint({ type: ev.type, timestamp: Date.now(), confidence: ev.confidence });
+        this.simpleAutoAnswer.onProviderEndpoint();
       });
     }
 
@@ -3634,11 +3507,7 @@ export class AppState {
       // Auto Answer (Settings > General, default OFF). Engine per the A/B
       // switch: legacy = the PR #497 debounce on interviewer finals only;
       // v3 = every segment, any speaker, the controller decides (V2 §24).
-      if (this.autoAnswerEngineChoice === 'legacy') {
-        if (segment.isFinal && speaker === 'interviewer') {
-          this.legacyAutoAnswer.scheduleAutoAnswer();
-        }
-      } else if (this.autoAnswerEngineChoice === 'simple') {
+      if (this._autoAnswerEnabled) {
         this.simpleAutoAnswer.ingest({
           speaker,
           text: segment.text,
@@ -3649,17 +3518,6 @@ export class AppState {
           sttProvider: effectiveSttId,
           punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
         } as any);
-      } else {
-        this.autoAnswerController.ingest({
-          speaker,
-          text: segment.text,
-          timestamp: Date.now(),
-          final: segment.isFinal,
-          confidence: segment.confidence,
-          origin: 'stt',
-          sttProvider: effectiveSttId,
-          punctuationSource: punctuationSourceFor(effectiveSttId, segment.isFinal),
-        });
       }
 
       // Feed final transcript to JIT RAG indexer
@@ -4047,7 +3905,6 @@ export class AppState {
         this.googleSTT?.write(chunk);
         // Smart Turn ring buffer (256 KB, interviewer channel only). Cheap
         // int16 copy; skipped entirely while Auto Answer is off.
-        if (this._autoAnswerEnabled) this.smartTurnPredictor.pushPcm(chunk, capture.getSampleRate?.() ?? 16000);
       }
     });
     capture.on('sample_rate_changed', (rate: number) => {
@@ -4062,7 +3919,6 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
-      if (this.systemAudioCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupAudioRecoveryHandler registers its own 'error' listener — do not
     // add a duplicate logger here or the same error reports twice.
@@ -4253,7 +4109,6 @@ export class AppState {
       }
     });
     capture.on('speech_edge', (edge: SpeechEdge) => {
-      if (this.microphoneCapture === capture) this.autoAnswerController.onSpeechEdge(edge);
     });
     // setupMicRecoveryHandler registers its own 'error' listener.
     this.setupMicRecoveryHandler();
@@ -6080,7 +5935,6 @@ export class AppState {
 
   private async startMeetingTransition(metadata?: any): Promise<void> {
     console.log('[Main] Starting Meeting...', metadata);
-    this.autoAnswerController.onMeetingStart();
     this.simpleAutoAnswer.onMeetingStart();
 
     // If a previous endMeeting() is still draining STT in the background, wait
@@ -6900,7 +6754,6 @@ export class AppState {
     this.intelligenceManager.on('manual_answer_started', () => {
       // The hotkey/click commits whatever Auto Answer was offering — and,
       // inside the feedback window, says the automatic answer missed.
-      this.autoAnswerController.onManualAnswerStarted();
       this.simpleAutoAnswer.onManualAnswerStarted();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-started')
@@ -6916,7 +6769,7 @@ export class AppState {
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-mode-changed', { mode })
       // A candidate parked because the engine was busy may now dispatch.
-      if (mode === 'idle') this.autoAnswerController.onEngineIdle()
+      if (mode === 'idle') this.simpleAutoAnswer.onEngineIdle()
     })
 
     this.intelligenceManager.on('error', (error: Error, mode: string) => {
