@@ -9,6 +9,7 @@
  *   deferred-verdict trap → 'growth is never held across…' / 'the user taking the floor drops…'
  *   prefilter             → 'prefilter: …never cost a call'
  *   '?' fallback          → 'judge unavailable → only a trailing ? fires'
+ *   early ask             → 'the early ask replaces the commit ask…'
  *   mic echo latch        → 'speaker bleed cannot shred a question…'
  *   latch release         → '…and it releases once the bleed stops'
  */
@@ -22,7 +23,7 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, ECHO_MODE_HOLD_MS } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, ECHO_MODE_HOLD_MS, EARLY_JUDGE_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -59,27 +60,42 @@ function makeSimple(judgeImpl, overrides = {}) {
   return { engine, clock, state, interviewer, user, advance, texts: () => state.dispatched.map(d => d.text) };
 }
 
-test('a monologue costs ONE judge call per stoppage, none per final', async () => {
+test('a monologue costs ONE judge call, not one per final', async () => {
   const h = makeSimple(async () => NO);
   for (let i = 0; i < 6; i++) {
     h.interviewer(`part ${i} of a long winding explanation about the system`, true);
-    await h.advance(400);                                   // < STABILITY: no stoppage yet
+    // Continuous speech = interims flowing. They push BOTH the early ask and
+    // the commit out, which is the whole ration on the early ask: a talking
+    // interviewer never leaves an EARLY_JUDGE_MS gap.
+    for (let k = 0; k < 4; k++) { h.interviewer(`part ${i} continues`, false); await h.advance(100); }
   }
   assert.equal(h.state.judgeCalls.length, 0, 'no call while speech continues');
   await h.advance(STABILITY_MS + 200);
-  assert.equal(h.state.judgeCalls.length, 1, 'one call at the stoppage');
+  assert.equal(h.state.judgeCalls.length, 1, 'one call for the whole utterance');
   assert.ok(/part 0 .* part 5/s.test(h.state.judgeCalls[0].candidateText.replace(/\n/g, ' ')), 'the call carries the WHOLE utterance');
+});
+
+test('the early ask replaces the commit ask — the commit never re-judges the same words', async () => {
+  const h = makeSimple(async () => NO);
+  h.interviewer('So tell me how you would approach designing that ingestion pipeline.');
+  await h.advance(EARLY_JUDGE_MS + 60);
+  assert.equal(h.state.judgeCalls.length, 1, 'the judge is asked after a short quiet, not after the full window');
+  await h.advance(STABILITY_MS + 400);
+  assert.equal(h.state.judgeCalls.length, 1, 'and the commit adds NO second call for identical text');
 });
 
 test('interims also hold the window open (the interviewer is still talking)', async () => {
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the alternatives here today?');
-  await h.advance(600);
+  await h.advance(60);                                     // < EARLY_JUDGE_MS
   h.interviewer('and also how', false);                    // interim only
-  await h.advance(600);                                    // 1.2s after final — but interim reset it
-  assert.equal(h.state.judgeCalls.length, 0);
+  await h.advance(60);
+  assert.equal(h.state.judgeCalls.length, 0, 'speech is still flowing: nothing asked yet');
+  h.interviewer('about the indexes', false);
+  await h.advance(600);                                    // they stop mid-thought
+  assert.deepEqual(h.texts(), [], 'an early verdict must never COMMIT inside the window');
   await h.advance(STABILITY_MS);
-  assert.equal(h.state.judgeCalls.length, 1);
+  assert.equal(h.texts().length, 1, 'it commits when the window finally completes');
 });
 
 test('judge yes → dispatch (extracted question when grounded); judge no → silent; verdicts stand without re-judging', async () => {
@@ -688,8 +704,7 @@ test('speaker bleed cannot shred a question: the interviewer pending survives', 
   assert.equal(h.state.skips.filter(s => s === 'user_answering').length, 0,
     'an echo must never count as the user answering');
   assert.ok(h.state.skips.includes('mic_echo'), 'and it is reported as what it is');
-  assert.equal(h.state.judgeCalls.length, 1, 'one stoppage, one call');
-  const judged = h.state.judgeCalls[0].candidateText.replace(/\s+/g, ' ');
+  const judged = h.state.judgeCalls.at(-1).candidateText.replace(/\s+/g, ' ');
   // Both channels cut words mid-token, so "rate limiter" reaches the judge as
   // "rate limit er" — an STT artefact, not a pending-wipe. What matters is
   // that ALL THREE finals are in one candidate.

@@ -100,6 +100,24 @@ export const GENUINE_ANSWER_MIN_WORDS = 4;
 
 /** The interviewer must be quiet this long before the judge is consulted. Unfitted placeholder. */
 export const STABILITY_MS = 900;
+/**
+ * Quiet needed before the judge is ASKED, as opposed to before the answer is
+ * COMMITTED (that stays STABILITY_MS).
+ *
+ * The judge costs ~1.3 s and, until now, that whole cost sat after the 900 ms
+ * window — so an answer landed ~2.2 s after the interviewer stopped, where the
+ * legacy trigger fired at 900 ms flat. Asking earlier overlaps the judge with
+ * the rest of the window instead of queueing behind it.
+ *
+ * It is deliberately a QUIET window rather than "on every final": interims
+ * keep pushing it out, so during continuous speech the early judge never
+ * fires. That is the whole ration — no counter, no cooldown, just the fact
+ * that a talking interviewer never leaves a 120 ms gap. It also multiplies
+ * only the CHEAP call: the judge is ~2.2k tokens on flash-lite and never
+ * touches the answer engine, whereas prefetching the ANSWER early would take
+ * activeMode out of idle and park the real dispatch behind a junk generation.
+ */
+export const EARLY_JUDGE_MS = 120;
 /** A provider endpoint (speech_final / <end>) confirms the stop: shorten the wait. */
 export const ENDPOINT_CONFIRM_MS = 350;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
@@ -221,6 +239,10 @@ export class SimpleAutoAnswerEngine {
     private speakerByTurn = new Map<string, string>();
     private recentInterviewerFinals: Array<{ text: string; at: number }> = [];
     private timer: ClockTimer | null = null;
+    /** Fires EARLY_JUDGE_MS after the interviewer's last word: asks, never commits. */
+    private earlyTimer: ClockTimer | null = null;
+    /** Last interviewer text event of any kind — the commit clock. */
+    private lastInterviewerAt = 0;
     private retryTimer: ClockTimer | null = null;
     private judgeSeq = 0;
     private sequence = 0;
@@ -296,7 +318,7 @@ export class SimpleAutoAnswerEngine {
                 // verdict resolving after the interviewer RESUMED must not
                 // dispatch mid-sentence; the next stoppage re-judges).
                 if (this.pending.length > 0 || text) {
-                    if (text) this.bumpJudgeSeq('interim');
+                    if (text) { this.bumpJudgeSeq('interim'); this.lastInterviewerAt = now; }
                     this.arm(STABILITY_MS);
                 }
                 return;
@@ -316,6 +338,7 @@ export class SimpleAutoAnswerEngine {
             }
             this.pending.push({ text, at: now, speaker });
             this.bumpJudgeSeq('final');  // supersede any in-flight verdict: it judged less than this
+            this.lastInterviewerAt = now;
             this.arm(STABILITY_MS);
             return;
         }
@@ -385,14 +408,19 @@ export class SimpleAutoAnswerEngine {
 
     private arm(ms: number): void {
         this.disarm();
-        this.timer = this.clock.setTimeout(() => { this.timer = null; this.onStoppage(); }, ms);
+        this.timer = this.clock.setTimeout(() => { this.timer = null; this.onStoppage(false); }, ms);
+        // The early ASK rides the same re-arm, so continuing speech pushes it
+        // out exactly as it pushes out the commit.
+        const early = Math.min(EARLY_JUDGE_MS, ms);
+        this.earlyTimer = this.clock.setTimeout(() => { this.earlyTimer = null; this.onStoppage(true); }, early);
     }
 
     private disarm(): void {
         if (this.timer !== null) { this.clock.clearTimeout(this.timer); this.timer = null; }
+        if (this.earlyTimer !== null) { this.clock.clearTimeout(this.earlyTimer); this.earlyTimer = null; }
     }
 
-    private onStoppage(): void {
+    private onStoppage(early: boolean): void {
         if (!this.host.isEnabled() || !this.host.isMeetingActive()) return;
         const now = this.clock.now();
         this.pending = this.pending.filter(p => now - p.at <= PENDING_MAX_AGE_MS);
@@ -450,7 +478,7 @@ export class SimpleAutoAnswerEngine {
         // candidate, so the dispatch below can claim it by id.
         this.host.noteCandidate?.(id, this.sequence);
         this.maybePrefetch(id, candidate, now);
-        void this.consult(id, candidate, now);
+        void this.consult(id, candidate, now, early);
     }
 
     /**
@@ -483,7 +511,7 @@ export class SimpleAutoAnswerEngine {
         } catch { /* prefetch is an optimisation; never break the pipeline */ }
     }
 
-    private async consult(id: string, candidate: string, committedAt: number): Promise<void> {
+    private async consult(id: string, candidate: string, committedAt: number, early = false): Promise<void> {
         const seq = this.judgeSeq;
         const generation = this.host.meetingGeneration();
         let timer: ClockTimer | null = null;
@@ -592,6 +620,16 @@ export class SimpleAutoAnswerEngine {
         // dispatch, because the thing they used to demote to (the offer card)
         // is gone.
         if (route.action === 'answer' && route.answerability > ANSWER_FLOOR) {
+            // An EARLY verdict was asked after EARLY_JUDGE_MS of quiet, which
+            // is not enough to call the turn over. If the judge happened to be
+            // fast enough that STABILITY_MS has still not elapsed, hold the
+            // verdict — the commit timer is already armed and will apply it —
+            // rather than answering into a breath. Usually the ~1.3 s judge has
+            // outlasted the window on its own and this commits immediately.
+            if (early && this.clock.now() - this.lastInterviewerAt < STABILITY_MS) {
+                this.held = { id, key: normalizeForCompare(candidate), text, answerability: route.answerability, act: route.act, at: this.clock.now() };
+                return;
+            }
             this.deliver(id, text, route.answerability, route.act, committedAt);
         } else {
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'low_answerability', answerability: route.answerability });
@@ -707,6 +745,7 @@ export class SimpleAutoAnswerEngine {
         this.recentInterviewerFinals = [];
         this.recentUserEcho = [];
         this.echoModeUntil = 0;
+        this.lastInterviewerAt = 0;
         this.speakerByTurn.clear();
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;

@@ -1517,3 +1517,43 @@ dispatched at the 900 ms debounce flat, which is what "legacy should always be f
 exists to hide exactly this, but `PREFETCH_MIN_INTERVAL_MS` (25 s) rationed it onto two junk candidates
 (q1, q4) and it was still cooling when the real question (q6) arrived. Options are a cost decision and are the
 user's to make — see the report; nothing changed here.
+
+### Early ask: overlap the judge with the stability window (2026-08-26)
+
+"At least legacy version should always be fast." The legacy trigger dispatched at its 900 ms debounce flat; the
+simple engine asked the judge *after* the window, so the ~1.3 s verdict landed at ~2.2 s.
+
+Fix: split the two clocks. `EARLY_JUDGE_MS` (120 ms of quiet) is when the judge is **asked**; `STABILITY_MS`
+(900 ms) remains when an answer may be **committed**. Both ride the same re-arm, so continuing speech pushes
+both out — that is the entire ration on the early ask, with no counter or cooldown: a talking interviewer never
+leaves a 120 ms gap. If the judge is fast enough that the window has *not* elapsed, the verdict is held (the
+commit timer is already armed and applies it) rather than answering into a breath.
+
+Measured on the recorded meetings with a realistic 1300 ms judge:
+
+| | dispatch latency from the last word | judge calls | dispatches |
+| --- | --- | --- | --- |
+| commit-time ask (before) | **2200 ms** | 67 | 4 |
+| early ask (after) | **1450 ms** | 79 (+18%) | 5 |
+
+Candidate counts across both recorded meetings: 54→59 (+9%) and 68→87 (+28%). The multiplier is small because
+the early ask usually *replaces* the commit ask rather than adding one — `lastJudgedKey` dedupes the second,
+and 91% of real gaps between interviewer transcript events already exceed 900 ms (median 5.2 s). Extra calls
+occur only in the 120–900 ms band.
+
+Why not prefetch the ANSWER early instead (the obvious alternative): `prefetchAutoAnswer` runs
+`runWhatShouldISay`, which sets `lastTriggerTime` and takes `activeMode` out of idle — and `canAutoAnswer()`
+fails on both. A junk prefetch therefore holds the answer engine for its whole 2–3 s generation and a real
+question arriving in that window parks behind it, which is the stall fixed on 2026-08-25. Multiplying the
+*judge* (~2.2k tokens, flash-lite, no engine occupancy) is strictly the cheaper axis than multiplying the
+*answer* (~5.8k tokens, larger model, exclusive engine).
+
+Residual: 1450 ms vs legacy's 900 ms. The remaining ~550 ms is the judge time that exceeds the window itself
+and cannot be hidden without generating before the verdict is known.
+
+Validation: 50/50 Auto Answer tests. Three guards mutation-probed — letting an early verdict commit inside the
+window (3 fail), removing the early ask (1 fail), never cancelling the early timer on re-arm (2 fail). Two
+pre-existing tests were rewritten rather than deleted: the monologue cost test now models continuous speech as
+interims (which is what actually rations the early ask), and the interim test now asserts on the COMMIT
+instead of the ask, since asking early is the new intended behaviour. Typecheck clean.
+`Requires physical macOS verification`.
