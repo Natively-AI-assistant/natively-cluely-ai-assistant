@@ -1210,6 +1210,33 @@ Scope, stated plainly: this only activates on providers that emit `speakerId`, w
 current default (NVIDIA Nemotron) does not diarize, so nothing changes for it — the prompt is byte-identical
 without labels, which the fixtures confirm (all five unchanged, aggregate P 0.950 / R 1.000). Suite 42/42.
 
+### Windows: what was verified and what still cannot be (2026-08-25)
+Physical Windows execution is not available from this machine, so here is exactly what the claim rests on rather
+than a vague "should be fine":
+
+**Verified here**
+- *Platform-independent by construction.* Every file touched in this campaign — the engine, the judge, the text
+  utilities, the STT endpoint emission and the main-process wiring — contains no `process.platform`, no
+  `darwin`/`win32` branch, no filesystem paths, no shell invocation and no native module call. Grepped, not
+  assumed.
+- *Runs under the runner CI actually uses.* All the suites here had only ever been run with plain `node --test`;
+  under `ELECTRON_RUN_AS_NODE=1 electron --test`, which is what `npm test` and the CI leg use, the auto-answer and
+  audio globs pass **439/439**. That closes a gap where a test could have depended on the Node binary.
+- *Windows risk went DOWN.* Retiring Smart Turn removed a native ONNX session that loaded, consumed PCM and ran
+  inference on every speech-stop for nothing — on the platform where this repo has a recorded native memory leak
+  and an ORT hard-exit SIGABRT, deleting a native runtime is a straight reduction in exposure.
+- The tests are inside `npm test`'s glob, so the `windows-latest` leg would exercise them.
+
+**Still cannot be claimed**
+- *No execution on Windows.* The 29 commits on this branch are unpushed, so CI has never seen any of it. And per
+  this repo's own history, the Windows leg of Build Smoke carries `continue-on-error` — a green check there is
+  not evidence; the log has to be read.
+- Audio capture, the STT socket lifecycle and overlay behaviour on Windows remain **Requires physical Windows
+  verification**, exactly as at the end of the original campaign.
+
+Getting real evidence needs one of: pushing the branch so the Windows leg runs (an outward-facing action, so it
+is the user's call), or a physical Windows machine.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
