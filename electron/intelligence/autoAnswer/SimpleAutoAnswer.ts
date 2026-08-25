@@ -152,6 +152,8 @@ export class SimpleAutoAnswerEngine {
     private feedbackTimer: ClockTimer | null = null;
     /** When the last prefetch fired, for PREFETCH_MIN_INTERVAL_MS pacing. */
     private lastPrefetchAt: number | null = null;
+    /** A dispatch waiting on a busy engine, so onEngineIdle can wake it immediately. */
+    private parkedAttempt: (() => void) | null = null;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
     private activeOffer: { id: string; timer: ClockTimer } | null = null;
@@ -169,7 +171,17 @@ export class SimpleAutoAnswerEngine {
 
     onMeetingStart(): void { this.reset(); }
     onMeetingStop(): void { this.reset(); }
-    onEngineIdle(): void { /* the retry timer already polls engineAccepting */ }
+    /**
+     * The engine went idle. A dispatch parked behind it should go NOW rather
+     * than wait out the rest of its 500 ms poll — measured on a real interview,
+     * the poll was adding most of a second on top of an already 6-second wait.
+     */
+    onEngineIdle(): void {
+        const parked = this.parkedAttempt;
+        if (!parked) return;
+        this.clearRetry();
+        parked();
+    }
 
     /** Provider says the interviewer's turn ended: confirm the stop sooner. */
     onProviderEndpoint(): void {
@@ -239,7 +251,7 @@ export class SimpleAutoAnswerEngine {
         // user is now answering themselves (review 2026-08-25).
         if (this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
         this.judgeSeq++;
-        this.clearRetry();
+        this.dropParked();
         this.retractOffer('user_answering');
         if (this.pending.length > 0 || this.timer !== null) {
             this.disarm();
@@ -407,20 +419,23 @@ export class SimpleAutoAnswerEngine {
         }
     }
 
-    /** Dispatch now, or retry briefly while the engine is busy. */
+    /** Dispatch now, or retry while the engine is busy — woken early by onEngineIdle. */
     private deliver(id: string, text: string, answerability: number, act: AutoAnswerQuestion['dialogueAct'], committedAt: number): void {
         const deadline = this.clock.now() + RETRY_TTL_MS;
         const seqAtDeliver = this.judgeSeq;
         const attempt = () => {
-            if (!this.host.isMeetingActive() || this.judgeSeq !== seqAtDeliver) return;
+            if (!this.host.isMeetingActive() || this.judgeSeq !== seqAtDeliver) { this.parkedAttempt = null; return; }
             if (!this.host.engineAccepting()) {
                 if (this.clock.now() >= deadline) {
+                    this.parkedAttempt = null;
                     this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'engine_busy_or_cooling' });
                     return;
                 }
+                this.parkedAttempt = attempt;
                 this.retryTimer = this.clock.setTimeout(attempt, RETRY_MS);
                 return;
             }
+            this.parkedAttempt = null;
             this.retractOffer('topic_change');
             const q = this.question(id, text, answerability, act, committedAt);
             // If the engine already has an answer in flight for THIS question
@@ -505,6 +520,8 @@ export class SimpleAutoAnswerEngine {
         if (this.retryTimer !== null) { this.clock.clearTimeout(this.retryTimer); this.retryTimer = null; }
     }
 
+    private dropParked(): void { this.parkedAttempt = null; this.clearRetry(); }
+
     private retractOffer(reason: 'replaced' | 'expired' | 'user_answering' | 'meeting_stop' | 'topic_change'): void {
         if (!this.activeOffer) return;
         const { id, timer } = this.activeOffer;
@@ -515,7 +532,7 @@ export class SimpleAutoAnswerEngine {
 
     private reset(): void {
         this.disarm();
-        this.clearRetry();
+        this.dropParked();
         this.clearFeedback();
         this.retractOffer('meeting_stop');
         this.pending = [];

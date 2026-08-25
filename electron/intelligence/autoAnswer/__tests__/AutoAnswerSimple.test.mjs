@@ -539,3 +539,36 @@ test('diarization: the prompt teaches same-speaker vs cross-speaker only when la
   assert.ok(p.includes('OTHERS/speaker_1: So walk me through how you would design the rate limiter.'));
   assert.ok(p.includes('OTHERS/speaker_2: Sure, happy to.'));
 });
+
+// ── Parked dispatches wake on idle (2026-08-25, real-interview latency) ──
+// Measured: a verdict ready at 12:56:46 did not dispatch until 12:56:52. The
+// engine had freed at 12:56:49; the rest was cooldown plus waiting out a
+// 500ms poll. The poll half is fixed here.
+
+test('a dispatch parked on a busy engine fires the instant the engine reports idle', async () => {
+  const h = makeSimple(async () => YES(), { accepting: false });
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.deepEqual(h.texts(), [], 'parked while the engine is busy');
+
+  h.state.accepting = true;
+  h.engine.onEngineIdle();          // no clock advance at all
+  await flush(); await flush();
+  assert.equal(h.texts().length, 1, 'dispatched without waiting out the retry poll');
+  assert.equal(h.clock.pendingCount() > 0, true, 'only the feedback window remains armed');
+});
+
+test('onEngineIdle with nothing parked is inert, and a superseded park never fires late', async () => {
+  const h = makeSimple(async () => YES());
+  h.engine.onEngineIdle();
+  assert.deepEqual(h.texts(), []);
+
+  const g = makeSimple(async () => YES(), { accepting: false });
+  g.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await g.advance(STABILITY_MS + 200);
+  g.user('I picked it mainly for the ecosystem and the tooling around it.');   // user takes the floor
+  g.state.accepting = true;
+  g.engine.onEngineIdle();
+  await flush(); await flush();
+  assert.deepEqual(g.texts(), [], 'the park died with the user answering');
+});

@@ -1256,6 +1256,41 @@ a colleague, a two-speaker video. For that:
   so this is inert until (and unless) the server sends one.
 - **NVIDIA Nemotron** (the current default provider) does not diarize at all.
 
+### Real-interview latency: it is the BUSY path, not the pipeline (2026-08-25)
+The user ran an actual interview and reported "10 seconds plus". `natively_debug.log` + telemetry give the
+per-dispatch breakdown, and it is not what the offline benches predicted:
+
+| dispatch | speech end → verdict | verdict → decision | answer TTFT | total |
+|---|---|---|---|---|
+| 5-q8 | 1.9 s | **0.0 s** | 1.8 s | **3.8 s** |
+| 5-q13 | 2.1 s | **0.0 s** | 1.6 s | **3.7 s** |
+| 5-q5 | 2.0 s | **6.0 s** | 1.4 s | **9.4 s** |
+
+So the pipeline is healthy at ~3.7 s whenever the engine is free, and every slow case is one thing: the verdict
+was ready and the answer sat waiting for the engine. For q5 the previous (MANUAL) stream ended at 12:56:49 and
+the dispatch did not go until 12:56:52 — the remaining ~3.4 s was the trigger cooldown plus waiting out a 500 ms
+retry poll.
+
+Two fixes, both aimed at that gap:
+33. **Automatic answers wait 800 ms, not 3 s.** The 3 s cooldown protects the MANUAL path from a user hammering
+    the hotkey. On the automatic path the engine already refuses to repeat itself semantically (the judge is told
+    what was just answered and scores a restatement ≤ 0.2; the engine keeps its own lastAnswered), so the only
+    job left is stopping two answers landing on top of each other.
+34. **A parked dispatch wakes on `onEngineIdle` instead of waiting out its poll.** `onEngineIdle` was a no-op
+    with a comment saying the retry timer polls — which cost up to 500 ms on top of an already long wait.
+
+Expected on the q5 shape: ~9.4 s → ~6.7 s. The remainder is a manual answer legitimately holding the engine, and
+that is not latency to optimise away — it is the user's own request finishing.
+
+**Not fixable from the client**: the 0.9 s stability window is the floor on this provider. Deepgram and Nemotron
+emit endpoints (350 ms confirm), but the interview ran on NativelyPro→Soniox, whose relay strips the `<end>`
+sentinel and whose `is_final` messages are incremental commits, not utterance ends — so a final cannot be treated
+as an endpoint. Forwarding the endpoint is the same class of server-side change as diarization.
+
+Also measured: **40% of judge calls went stale** in this interview (6 of 15) versus 7% all-time — an interviewer
+speaking in bursts supersedes in-flight verdicts constantly. Wasted calls, but not added latency: the next
+stoppage re-judges the fuller text. Suite 44/44.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

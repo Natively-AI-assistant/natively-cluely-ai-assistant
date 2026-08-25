@@ -234,6 +234,19 @@ export class IntelligenceEngine extends EventEmitter {
     private lastTriggerTime: number = 0;
     private readonly triggerCooldown: number = 3000; // 3 seconds
     /**
+     * The cooldown an AUTOMATIC answer waits out, measured from a real
+     * interview (2026-08-25): an auto answer whose verdict was ready at
+     * 12:56:46 did not dispatch until 12:56:52 — the previous stream ended at
+     * 12:56:49 and the remaining ~3.4 s was this cooldown plus the retry poll.
+     * On the manual path 3 s protects against a user hammering the hotkey; on
+     * the automatic path the engine already refuses to repeat itself
+     * semantically (the judge is told what was just answered and scores a
+     * restatement at most 0.2, and the engine keeps its own lastAnswered
+     * text), so the only job left here is stopping two answers landing on top
+     * of each other. 800 ms does that without the user feeling it.
+     */
+    private readonly automaticTriggerCooldown: number = 800;
+    /**
      * Generation id of the answer run started by an AUTOMATIC trigger
      * (SuggestionTrigger.automatic), or null. Lets the dual-channel gate
      * cancel exactly that stream on user barge-in while a manual
@@ -744,7 +757,7 @@ export class IntelligenceEngine extends EventEmitter {
      */
     canAutoAnswer(): boolean {
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return false;
-        if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return false;
+        if (Date.now() - this.lastTriggerTime < this.automaticTriggerCooldown) return false;
         return true;
     }
 
