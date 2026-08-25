@@ -1370,3 +1370,84 @@ placeholder until the dual-channel audio corpus (human work, out of scope) exist
 stays default OFF.
 
 ## Abort record (if any)
+
+---
+
+## Live run 2026-08-25 (meeting 75c6b06b, 4 min technical interview) — verdict-staleness defect
+
+First run of the offer-free build (`ANSWER_FLOOR` 0.20, judge reduced to answer|silent). Telemetry, not the
+main log, carries the record: only `auto_answer_ignored` writes a log line, so the console showed 3 skips and
+looked like near-total silence.
+
+**What the telemetry actually shows: 28 candidates, 28 judge calls, 25 verdicts DISCARDED as `stale`.**
+Two verdicts were ever applied — `1-q14` (coding_question, 0.9 → answered, feedback recorded `kept`, i.e. no
+manual press inside the 20 s window) and `1-q17` (statement, 0.1 → correctly silent).
+
+Mechanism (confirmed, not inferred):
+1. `SimpleAutoAnswerEngine.ingest` bumps `judgeSeq` on **every** interviewer text event, interim or final.
+2. `consult()` captures `judgeSeq` before the call and discards the verdict if it moved. The judge takes
+   ~950 ms (measured: `judgeMs` 757–1649, median ≈ 960).
+3. The stability window measures the gap between **transcript arrivals**, not speech. The Soniox relay
+   delivers finals in bursts 1–2 s apart mid-monologue, so a 900 ms arrival gap fires a stoppage in the
+   middle of the interviewer's sentence — then the next arriving segment kills the verdict that stoppage paid for.
+4. Evidence it was mid-monologue: candidate word counts grow monotonically across consecutive stoppages
+   (62 → 99 → 138 → 216 → 256 → 296 → 313) because `pending` only clears on dispatch.
+
+**Second finding — the endpoint fast path is dead code on the shipped configuration.** `onProviderEndpoint()` /
+`ENDPOINT_CONFIRM_MS = 350` only fire for STT classes that emit `endpoint`: Deepgram, NVIDIA NIM, OpenAI and
+**direct** Soniox. The default provider is `NativelyProSTT` (the Natively relay — the log says
+`[NativelyProSTT] Connected via soniox`), which never emits it: the relay collapses Soniox's token stream to
+`{text, is_final, confidence, speaker}` server-side, so the `<end>` marker `SonioxStreamingSTT` keys on is gone
+before it reaches the client. Net: the app's default path has **no turn-end signal at all**, only the arrival gap.
+Forwarding `<end>` from the relay is a `natively-api` change (submodule — not committed from here), and is the
+same shape as the outstanding `enable_speaker_diarization` item.
+
+Diagnostic-only changes landed (no behaviour change, typecheck clean):
+- `parseJudgeVerdict` moved ABOVE the staleness check (it is pure) so a discarded verdict still reaches
+  telemetry — previously every one of those 25 was unrecoverable, and the blast radius of any fix unknowable.
+- `supersededBy` on `auto_answer_judged`: `interim | final | user_answering | meeting_reset | meeting_ended`,
+  set through a single `bumpJudgeSeq(cause)` helper. Interim-dominant and final-dominant call for opposite
+  fixes, and the run could not distinguish them.
+
+### The failure chain (measured, not inferred)
+
+A latency-realistic replay of the same transcript — real judge calls, but the verdict released to the engine
+only after 950 ms of *virtual* time — isolates the cause. Replayed from the DB the engine sees **finals only**
+(interims are not persisted) and loses just **14 of 67** verdicts. Live, with the interim stream, it lost
+**25 of 28**. The difference is interims, and the chain is:
+
+1. a stoppage judges candidate `C` and optimistically sets `lastJudgedKey = C`;
+2. an interim arrives during the ~950 ms call → `bumpJudgeSeq('interim')` → the verdict is discarded;
+3. that same interim re-armed the stability window → stoppage → the candidate is **still `C`** (interims never
+   touch `pending`, which is finals-only) → `key === lastJudgedKey` → **early return**.
+
+So one interim landing inside the judge window kills that question *permanently*: not dispatched, and not
+re-judged either. That is why a 4-minute interview with 28 candidates produced one answer.
+
+### Fix: defer the verdict instead of discarding it
+
+`consult()` now keeps a superseded **positive** verdict (`held`), and `onStoppage()` applies it — before the
+`lastJudgedKey` return, which would otherwise swallow exactly this case — when the candidate is
+**byte-identical** to what was judged. No second judge call; recorded as `judgeOutcome: 'held_applied'`.
+
+Growth may never be held across, in either direction, and a test proved this before it could ship:
+* growth that **completes** the utterance ("tell me about the hardest bug you ever" + "debugged in production
+  and how you found it?") would answer a truncated question;
+* growth that is a **new sentence** would answer Q1 after Q2 arrived — spec V2 §34's pinned invariant.
+
+Growth therefore always re-judges, exactly as before. The three outcomes are now closed:
+| superseded verdict | behaviour |
+| --- | --- |
+| positive, identical candidate | held, applied at the next quiet point, **zero extra cost** |
+| negative, identical candidate | stays silent and is *not* re-judged — the answer would be the same |
+| timeout / error / unparseable | `lastJudgedKey` cleared, re-judged (pre-existing) |
+
+Held verdicts are dropped on `user_answering`, on meeting reset/generation change, on any divergence of the
+candidate text, and after `HELD_MAX_AGE_MS` (15 s).
+
+Validation: 46/46 Auto Answer tests on the fake clock, zero real sleeps. Three new guards mutation-probed —
+allowing growth to be held (2 fail), never applying a held verdict (1 fail), dropping the `user_answering`
+clear (1 fail). That last probe initially passed: clearing `pending` also prevents a stoppage, so the trap is
+only reachable when the interviewer repeats a sentence verbatim; the test was strengthened to cover it.
+Electron typecheck clean. `Requires physical macOS verification` — not yet exercised in a live meeting.
+Windows: `Reviewed but not executed` (no platform-specific code paths touched).

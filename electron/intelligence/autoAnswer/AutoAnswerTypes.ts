@@ -183,7 +183,7 @@ export interface AutoAnswerTelemetryEvent {
     /** False when NO speech_edge has ever arrived this meeting — dual-channel gating is inert (stale native module?). */
     channelEdgesSeen?: boolean;
     /** Dynamic-judge fields (auto_answer_judged) — verdict metadata only, never transcript text. */
-    judgeOutcome?: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'stale';
+    judgeOutcome?: 'verdict' | 'timeout' | 'error' | 'unparseable' | 'stale' | 'held_applied';
     judgeIsAsk?: boolean;
     judgeDirectedAtUser?: boolean;
     judgeMs?: number;
@@ -199,4 +199,12 @@ export interface AutoAnswerTelemetryEvent {
     feedback?: 'superseded' | 'kept';
     /** ms from the automatic dispatch to the manual press (only on 'superseded'). */
     feedbackMs?: number;
+    /**
+     * What invalidated a verdict (auto_answer_judged / judgeOutcome 'stale').
+     * Live run 2026-08-25 discarded 25 of 28 verdicts and the record could not
+     * say WHY: an interviewer interim (which cannot change the candidate — the
+     * candidate is built from finals only) and a genuine new final call for
+     * opposite fixes. Diagnostic only; nothing branches on it.
+     */
+    supersededBy?: 'interim' | 'final' | 'user_answering' | 'meeting_reset' | 'meeting_ended';
 }

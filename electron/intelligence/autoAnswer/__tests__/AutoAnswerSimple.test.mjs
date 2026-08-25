@@ -5,6 +5,8 @@
  * Mutation probes (progress file, simple-engine phase):
  *   one-call-per-stoppage → 'a monologue costs ONE judge call per stoppage…'
  *   supersede             → 'new speech supersedes an in-flight verdict…'
+ *   deferred verdict      → 'an INTERIM supersede defers the verdict…'
+ *   deferred-verdict trap → 'growth is never held across…' / 'the user taking the floor drops…'
  *   prefilter             → 'prefilter: …never cost a call'
  *   '?' fallback          → 'judge unavailable → only a trailing ? fires'
  */
@@ -18,7 +20,7 @@ import { FakeClock } from './fakeClock.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -542,4 +544,92 @@ test('onEngineIdle with nothing parked is inert, and a superseded park never fir
   g.engine.onEngineIdle();
   await flush(); await flush();
   assert.deepEqual(g.texts(), [], 'the park died with the user answering');
+});
+
+// ── deferred verdicts (live run 2026-08-25: 25 of 28 verdicts discarded) ─────
+
+test('an INTERIM supersede defers the verdict instead of discarding it — and costs no second call', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('Why did you choose PostgreSQL over the alternatives on that project?');
+  await h.advance(STABILITY_MS + 100);
+  assert.equal(resolvers.length, 1, 'the stoppage judged');
+  h.interviewer('uh', false);                     // an interim: cannot change the candidate
+  resolvers[0](YES({ answerability: 0.9 }));      // …so this verdict is still exactly about it
+  await flush(); await flush();
+  assert.deepEqual(h.texts(), [], 'not dispatched mid-sentence — the interviewer is audibly still there');
+  await h.advance(STABILITY_MS + 200);            // they stop for real
+  assert.equal(resolvers.length, 1, 'the deferred verdict is REUSED, not re-judged');
+  assert.equal(h.texts().length, 1, 'and it dispatches at the quiet point');
+  assert.ok(/PostgreSQL/.test(h.texts()[0]));
+  assert.ok(h.state.events.some(e => e.judgeOutcome === 'held_applied'), 'recorded as held_applied');
+});
+
+test('growth is never held across: a completed question re-judges rather than answering the fragment', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('Tell me about the hardest bug you ever');
+  await h.advance(STABILITY_MS + 100);
+  resolvers[0](YES({ answerability: 0.99 }));     // a POSITIVE verdict on the fragment
+  h.interviewer('debugged in production and how you found it?');
+  await flush(); await flush();
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(resolvers.length, 2, 'the grown candidate is judged afresh');
+  assert.deepEqual(h.texts(), [], 'the fragment verdict never dispatched');
+  resolvers[1](YES());
+  await flush(); await flush();
+  assert.ok(/how you found it\?/.test(h.texts()[0]), 'the WHOLE question is answered');
+});
+
+test('the user taking the floor drops a deferred verdict (it is keyed to text, not to judgeSeq)', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('So how would you scale that service to ten times the traffic?');
+  await h.advance(STABILITY_MS + 100);
+  h.interviewer('mm', false);
+  resolvers[0](YES({ answerability: 0.9 }));      // held
+  await flush(); await flush();
+  h.user('I would start by adding a read replica and caching the hot keys.');
+  await h.advance(STABILITY_MS * 3);
+  assert.deepEqual(h.texts(), [], 'never answers a question the user answered themselves');
+  // Clearing `pending` alone does not cover this: the held verdict is keyed to
+  // TEXT, so an interviewer who repeats the sentence verbatim re-creates the
+  // matching key and would fire it. Only the explicit drop prevents that.
+  h.interviewer('So how would you scale that service to ten times the traffic?');
+  await h.advance(STABILITY_MS + 200);
+  assert.deepEqual(h.texts(), [], 'not even when the interviewer repeats it word for word');
+  assert.equal(resolvers.length, 2, 'the repeat is judged afresh, with the answer now in context');
+});
+
+test('a deferred verdict expires, and a SILENT verdict is never deferred at all', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  h.interviewer('Why did you choose PostgreSQL over the alternatives on that project?');
+  await h.advance(STABILITY_MS + 100);
+  h.interviewer('uh', false);
+  resolvers[0](YES({ answerability: 0.9 }));
+  await flush(); await flush();
+  // The hold normally fires at the very next stoppage (~900 ms later), so the
+  // age bound is only reachable when no stoppage runs in between — e.g. the
+  // user switches Auto Answer off and back on.
+  h.state.enabled = false;
+  h.clock.advance(HELD_MAX_AGE_MS + 1000);
+  h.state.enabled = true;
+  h.interviewer('er', false);
+  await h.advance(STABILITY_MS + 200);
+  assert.deepEqual(h.texts(), [], 'a stale-by-age verdict is dropped, not fired');
+
+  const r2 = [];
+  const g = makeSimple(() => new Promise((r) => r2.push(r)));
+  g.interviewer('So that is roughly how the ingestion pipeline is put together.');
+  await g.advance(STABILITY_MS + 100);
+  g.interviewer('uh', false);
+  r2[0](NO);                                      // negative: must NOT be held
+  await flush(); await flush();
+  await g.advance(STABILITY_MS + 200);
+  assert.deepEqual(g.texts(), [], 'a silent verdict is never deferred into a dispatch');
+  assert.equal(r2.length, 1, 'nor re-judged on byte-identical text — the answer would be the same');
+  g.interviewer('So how would you keep that pipeline from falling behind?');
+  await g.advance(STABILITY_MS + 200);
+  assert.equal(r2.length, 2, 'but it never vetoes GROWN text: the ask may be in the new words');
 });

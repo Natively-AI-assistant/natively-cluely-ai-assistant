@@ -105,6 +105,37 @@ export const PREFETCH_MIN_INTERVAL_MS = 25_000;
  * Unfitted placeholder — this signal exists precisely so it can be fitted.
  */
 export const FEEDBACK_WINDOW_MS = 20_000;
+/**
+ * A verdict discarded as stale is KEPT this long, and re-applied at the next
+ * stoppage, when it was positive and the candidate has only grown since.
+ *
+ * Live run 2026-08-25: 25 of 28 verdicts were thrown away. The engine bumps
+ * `judgeSeq` on every interviewer text event, the judge takes ~950 ms, and the
+ * stability window measures the gap between transcript ARRIVALS rather than
+ * speech — on the relay path finals land in bursts 1-2 s apart, so a stoppage
+ * fires mid-sentence and the next arriving segment kills the verdict it paid
+ * for. Arrival is not resumption: the text that "superseded" the verdict was
+ * usually already spoken when the judge was asked.
+ *
+ * Deferring instead of discarding keeps the invariant the guard existed for —
+ * the held verdict is only ever applied from `onStoppage`, i.e. at a quiet
+ * point, never mid-sentence.
+ */
+export const HELD_MAX_AGE_MS = 15_000;
+/**
+ * A held verdict is applied ONLY to the byte-identical candidate. Growth may
+ * never be held across, in either direction, and this was proved by a test
+ * before it could ship:
+ *   - the growth COMPLETES the utterance ("tell me about the hardest bug you
+ *     ever" + "debugged in production and how you found it?") — applying the
+ *     held verdict answers a truncated question;
+ *   - the growth is a NEW sentence — applying the held verdict answers Q1
+ *     after Q2 arrived, which spec V2 §34 pins as an invariant.
+ * So growth always re-judges, exactly as before. What this recovers is the
+ * INTERIM supersede: an interim cannot change the candidate (`pending` is
+ * finals-only), so a verdict it invalidated is still precisely about the text
+ * on the table.
+ */
 /** Busy-engine retry cadence and give-up. */
 export const RETRY_MS = 500;
 export const RETRY_TTL_MS = 8000;
@@ -160,8 +191,15 @@ export class SimpleAutoAnswerEngine {
     private lastPrefetchAt: number | null = null;
     /** A dispatch waiting on a busy engine, so onEngineIdle can wake it immediately. */
     private parkedAttempt: (() => void) | null = null;
+    /** A positive verdict superseded by still-arriving transcript — see HELD_MAX_AGE_MS. */
+    private held: {
+        id: string; key: string; text: string;
+        answerability: number; act: AutoAnswerQuestion['dialogueAct']; at: number;
+    } | null = null;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
+    /** What last bumped judgeSeq, so a discarded verdict can say what killed it. */
+    private judgeSeqCause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']> | null = null;
     private thresholds: AutoAnswerThresholds;
 
     constructor(
@@ -173,6 +211,12 @@ export class SimpleAutoAnswerEngine {
     }
 
     setThresholds(t: AutoAnswerThresholds): void { this.thresholds = t; }
+
+    /** Every supersede goes through here so the telemetry can name the cause. */
+    private bumpJudgeSeq(cause: NonNullable<AutoAnswerTelemetryEvent['supersededBy']>): void {
+        this.judgeSeq++;
+        this.judgeSeqCause = cause;
+    }
 
     onMeetingStart(): void { this.reset(); }
     onMeetingStop(): void { this.reset(); }
@@ -206,7 +250,7 @@ export class SimpleAutoAnswerEngine {
                 // verdict resolving after the interviewer RESUMED must not
                 // dispatch mid-sentence; the next stoppage re-judges).
                 if (this.pending.length > 0 || text) {
-                    if (text) this.judgeSeq++;
+                    if (text) this.bumpJudgeSeq('interim');
                     this.arm(STABILITY_MS);
                 }
                 return;
@@ -225,7 +269,7 @@ export class SimpleAutoAnswerEngine {
                 }
             }
             this.pending.push({ text, at: now, speaker });
-            this.judgeSeq++;            // supersede any in-flight verdict: it judged less than this
+            this.bumpJudgeSeq('final');  // supersede any in-flight verdict: it judged less than this
             this.arm(STABILITY_MS);
             return;
         }
@@ -255,8 +299,12 @@ export class SimpleAutoAnswerEngine {
         // dispatch parked behind a busy engine both belong to a question the
         // user is now answering themselves (review 2026-08-25).
         if (this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
-        this.judgeSeq++;
+        this.bumpJudgeSeq('user_answering');
         this.dropParked();
+        // A held verdict is keyed to a candidate PREFIX, not to judgeSeq, so
+        // the seq guard no longer protects it: drop it explicitly or it fires
+        // into a question the user has just answered themselves.
+        this.held = null;
         if (this.pending.length > 0 || this.timer !== null) {
             this.disarm();
             this.pending = [];
@@ -283,10 +331,27 @@ export class SimpleAutoAnswerEngine {
         if (this.pending.length === 0) return;
         const candidate = this.pending.map(p => p.text).join(' ').replace(/\s+/g, ' ').trim();
         const key = normalizeForCompare(candidate);
+        const words = candidate.split(/\s+/).filter(Boolean).length;
+
+        // A verdict this candidate already earned, deferred because transcript
+        // kept arriving. Checked BEFORE the lastJudgedKey return: an INTERIM
+        // supersede leaves the candidate byte-identical, so that return would
+        // otherwise swallow the very case this exists for.
+        const heldReady = this.applicableHeld(key, now);
+        if (heldReady) {
+            this.held = null;
+            this.lastJudgedKey = key;
+            this.emit({
+                name: 'auto_answer_judged', questionId: heldReady.id, judgeOutcome: 'held_applied',
+                judgeMs: now - heldReady.at, dialogueAct: heldReady.act, answerability: heldReady.answerability,
+            });
+            this.host.log?.(`[AutoAnswer:simple] applying the deferred verdict for ${heldReady.id}`);
+            this.deliver(heldReady.id, heldReady.text, heldReady.answerability, heldReady.act, now);
+            return;
+        }
 
         // Zero-cost prefilter — the ONLY heuristics left in the hot path.
         if (key === this.lastJudgedKey) return;                     // verdict already stands
-        const words = candidate.split(/\s+/).filter(Boolean).length;
         // A short candidate waits for more speech unless it already looks
         // like a question: a literal '?' (always positive evidence) or an
         // interrogative lead (which needs no punctuation, per the
@@ -316,6 +381,20 @@ export class SimpleAutoAnswerEngine {
         this.host.noteCandidate?.(id, this.sequence);
         this.maybePrefetch(id, candidate, now);
         void this.consult(id, candidate, now);
+    }
+
+    /**
+     * The held verdict, if it still applies to this candidate: same text, or
+     * the same text plus a little more speech. Anything else (a revision that
+     * broke the prefix, a long continuation, an old verdict) is dropped here
+     * so the stoppage judges afresh.
+     */
+    private applicableHeld(key: string, now: number): NonNullable<SimpleAutoAnswerEngine['held']> | null {
+        const h = this.held;
+        if (!h) return null;
+        if (now - h.at > HELD_MAX_AGE_MS) { this.held = null; return null; }
+        if (key !== h.key) { this.held = null; return null; }   // see the note on HELD_MAX_AGE_MS
+        return h;
     }
 
     /**
@@ -369,12 +448,39 @@ export class SimpleAutoAnswerEngine {
             }
         }
         const judgeMs = this.clock.now() - committedAt;
+        // Parse FIRST (it is pure and cheap), so that a verdict about to be
+        // discarded still reaches telemetry. Live run 2026-08-25: 25 of 28
+        // verdicts were dropped here and the record could not say whether a
+        // single one of them had said 'answer'.
+        const verdict = outcome === 'verdict' ? parseJudgeVerdict(raw, candidate) : null;
         // Superseded: more interviewer speech arrived, the meeting moved on.
         if (seq !== this.judgeSeq || !this.host.isMeetingActive() || this.host.meetingGeneration() !== generation) {
-            this.emit({ name: 'auto_answer_judged', questionId: id, judgeOutcome: 'stale', judgeMs });
+            this.emit({
+                name: 'auto_answer_judged', questionId: id, judgeOutcome: 'stale', judgeMs,
+                supersededBy: !this.host.isMeetingActive() ? 'meeting_ended'
+                    : this.host.meetingGeneration() !== generation ? 'meeting_reset'
+                    : (this.judgeSeqCause ?? undefined),
+                ...(verdict ? {
+                    judgeIsAsk: verdict.isAsk, judgeDirectedAtUser: verdict.directedAtUser,
+                    dialogueAct: verdict.act, answerability: verdict.answerability,
+                } : {}),
+            });
+            // Defer, don't discard. Only a POSITIVE verdict is held: a silent
+            // one must not veto the grown candidate, because the ask may be in
+            // the very words that superseded it.
+            if (verdict && this.host.isMeetingActive() && this.host.meetingGeneration() === generation) {
+                const superseded = routeForVerdict(verdict);
+                if (superseded.route === 'evaluate' && superseded.action === 'answer'
+                    && superseded.answerability > ANSWER_FLOOR) {
+                    this.held = {
+                        id, key: normalizeForCompare(candidate),
+                        text: superseded.questionText ?? candidate,
+                        answerability: superseded.answerability, act: superseded.act, at: this.clock.now(),
+                    };
+                }
+            }
             return;
         }
-        const verdict = outcome === 'verdict' ? parseJudgeVerdict(raw, candidate) : null;
         if (!verdict) {
             if (outcome === 'verdict') outcome = 'unparseable';
             if (outcome !== 'absent') this.emit({ name: 'auto_answer_judged', questionId: id, judgeOutcome: outcome as 'timeout' | 'error' | 'unparseable', judgeMs });
@@ -525,7 +631,8 @@ export class SimpleAutoAnswerEngine {
         this.lastJudgedKey = '';
         this.lastAnsweredText = null;
         this.lastPrefetchAt = null;
-        this.judgeSeq++;
+        this.held = null;
+        this.bumpJudgeSeq('meeting_reset');
         this.sequence = 0;
     }
 
