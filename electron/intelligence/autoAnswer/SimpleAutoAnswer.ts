@@ -62,6 +62,13 @@ export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)
  * the handful of question-shaped turns, never the exposition. Unfitted placeholder.
  */
 export const PREFETCH_MIN_ANSWERABILITY = 0.8;
+/**
+ * How long after an automatic answer a manual press still counts as "that
+ * answer was not good enough". Long enough for the user to read it and
+ * decide, short enough that an unrelated later press is not blamed on it.
+ * Unfitted placeholder — this signal exists precisely so it can be fitted.
+ */
+export const FEEDBACK_WINDOW_MS = 20_000;
 /** Busy-engine retry cadence and give-up. */
 export const RETRY_MS = 500;
 export const RETRY_TTL_MS = 8000;
@@ -108,6 +115,9 @@ export class SimpleAutoAnswerEngine {
     private sequence = 0;
     private lastJudgedKey = '';
     private lastAnsweredText: string | null = null;
+    /** The automatic answer currently inside its feedback window. */
+    private feedbackPending: { id: string; at: number; act: AutoAnswerQuestion['dialogueAct']; answerability: number } | null = null;
+    private feedbackTimer: ClockTimer | null = null;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
     private activeOffer: { id: string; timer: ClockTimer } | null = null;
@@ -379,6 +389,7 @@ export class SimpleAutoAnswerEngine {
             this.lastJudgedKey = '';
             this.emit({ name: 'auto_answer_decision', questionId: id, action: 'auto', answerability });
             if (reuseSpeculative) this.host.log?.(`[AutoAnswer:simple] reusing the prefetched answer for ${id}`);
+            this.armFeedback(id, act, answerability);
             void this.host.dispatch(q, { reuseSpeculative });
         };
         attempt();
@@ -407,6 +418,44 @@ export class SimpleAutoAnswerEngine {
             .slice(-JUDGE_CONTEXT_TURNS);
     }
 
+    /**
+     * A manual What-to-Answer started. Inside the feedback window that is the
+     * user telling us the automatic answer missed; the offer card (if any) is
+     * committed either way.
+     */
+    onManualAnswerStarted(): void {
+        this.retractOffer('user_answering');
+        const pending = this.feedbackPending;
+        if (!pending) return;
+        this.clearFeedback();
+        const feedbackMs = this.clock.now() - pending.at;
+        this.emit({
+            name: 'auto_answer_feedback', questionId: pending.id, feedback: 'superseded', feedbackMs,
+            dialogueAct: pending.act, answerability: pending.answerability,
+        });
+        this.host.log?.(`[AutoAnswer:simple] superseded by a manual answer after ${feedbackMs}ms`);
+    }
+
+    private armFeedback(id: string, act: AutoAnswerQuestion['dialogueAct'], answerability: number): void {
+        this.clearFeedback();
+        this.feedbackPending = { id, at: this.clock.now(), act, answerability };
+        this.feedbackTimer = this.clock.setTimeout(() => {
+            const pending = this.feedbackPending;
+            this.feedbackTimer = null;
+            this.feedbackPending = null;
+            if (!pending) return;
+            this.emit({
+                name: 'auto_answer_feedback', questionId: pending.id, feedback: 'kept',
+                dialogueAct: pending.act, answerability: pending.answerability,
+            });
+        }, FEEDBACK_WINDOW_MS);
+    }
+
+    private clearFeedback(): void {
+        if (this.feedbackTimer !== null) { this.clock.clearTimeout(this.feedbackTimer); this.feedbackTimer = null; }
+        this.feedbackPending = null;
+    }
+
     private clearRetry(): void {
         if (this.retryTimer !== null) { this.clock.clearTimeout(this.retryTimer); this.retryTimer = null; }
     }
@@ -422,6 +471,7 @@ export class SimpleAutoAnswerEngine {
     private reset(): void {
         this.disarm();
         this.clearRetry();
+        this.clearFeedback();
         this.retractOffer('meeting_stop');
         this.pending = [];
         this.recentInterviewerFinals = [];

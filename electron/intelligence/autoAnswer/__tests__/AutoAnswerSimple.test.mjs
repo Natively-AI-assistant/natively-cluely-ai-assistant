@@ -348,3 +348,60 @@ test('prefetch: a stale speculative snapshot for ANOTHER question is not reused'
   assert.equal(h.texts().length, 1);
   assert.equal(h.state.dispatchOpts.reuseSpeculative, false, 'a snapshot keyed to a different question must be ignored');
 });
+
+// ── Usefulness feedback (2026-08-25) ─────────────────────────────────────
+// Nothing recorded whether an automatic answer was any good, so every
+// threshold stayed a guess. A manual press right after an automatic answer
+// is the user saying it missed.
+
+test('feedback: a manual answer inside the window marks the automatic one superseded', async () => {
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(h.texts().length, 1);
+
+  await h.advance(4000);
+  h.engine.onManualAnswerStarted();
+  const fb = h.state.events.filter(e => e.name === 'auto_answer_feedback');
+  assert.equal(fb.length, 1);
+  assert.equal(fb[0].feedback, 'superseded');
+  assert.ok(fb[0].feedbackMs >= 4000 && fb[0].feedbackMs < 6000, `feedbackMs=${fb[0].feedbackMs}`);
+  assert.equal(fb[0].questionId, h.state.dispatched[0].id);
+  // The window is spent: a later press must not report twice.
+  await h.advance(1000);
+  h.engine.onManualAnswerStarted();
+  assert.equal(h.state.events.filter(e => e.name === 'auto_answer_feedback').length, 1);
+});
+
+test('feedback: an untouched automatic answer is reported KEPT when the window passes', async () => {
+  const { FEEDBACK_WINDOW_MS } = Simple;
+  const h = makeSimple(async () => YES());
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.deepEqual(h.state.events.filter(e => e.name === 'auto_answer_feedback'), []);
+  await h.advance(FEEDBACK_WINDOW_MS + 500);
+  const fb = h.state.events.filter(e => e.name === 'auto_answer_feedback');
+  assert.equal(fb.length, 1);
+  assert.equal(fb[0].feedback, 'kept');
+  assert.equal(h.clock.pendingCount(), 0, 'the feedback timer does not leak');
+});
+
+test('feedback: a manual press with no automatic answer in flight reports nothing', async () => {
+  const h = makeSimple(async () => NO);
+  h.engine.onManualAnswerStarted();
+  h.interviewer('So this is on the New York Times website as you can see.');
+  await h.advance(STABILITY_MS + 200);
+  h.engine.onManualAnswerStarted();
+  assert.deepEqual(h.state.events.filter(e => e.name === 'auto_answer_feedback'), []);
+});
+
+test('feedback: telemetry carries the act and score but no transcript text', async () => {
+  const h = makeSimple(async () => YES({ act: 'coding_task' }));
+  h.interviewer('Your task is to design a rate limiter that survives a burst of a million requests.');
+  await h.advance(STABILITY_MS + 200);
+  h.engine.onManualAnswerStarted();
+  const fb = h.state.events.find(e => e.name === 'auto_answer_feedback');
+  assert.equal(fb.dialogueAct, 'coding_question');
+  assert.equal(typeof fb.answerability, 'number');
+  assert.ok(!JSON.stringify(fb).toLowerCase().includes('rate limiter'), 'no transcript text in telemetry');
+});

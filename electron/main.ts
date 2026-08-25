@@ -3354,6 +3354,7 @@ export class AppState {
   /** A manual What-to-Answer started (hotkey / button / accepted offer): the offer card is committed. */
   public onManualWhatToAnswer(): void {
     this.autoAnswerController.onManualAnswerStarted();
+    this.simpleAutoAnswer.onManualAnswerStarted();
   }
 
   /** Per-mode ternary thresholds (V3 Amendment 4), resolved from the mode policy registry. */
@@ -6897,8 +6898,10 @@ export class AppState {
     })
 
     this.intelligenceManager.on('manual_answer_started', () => {
-      // The hotkey/click commits whatever Auto Answer was offering.
+      // The hotkey/click commits whatever Auto Answer was offering — and,
+      // inside the feedback window, says the automatic answer missed.
       this.autoAnswerController.onManualAnswerStarted();
+      this.simpleAutoAnswer.onManualAnswerStarted();
       const win = mainWindow()
       this.sendToWindow(win, 'intelligence-manual-started')
     })
