@@ -1,11 +1,17 @@
 /**
- * Reproduces the "STT reconnecting" the overlay showed mid-meeting.
+ * "Answer Now" (finalizeMicSTT) has to do two things at once, and the first two
+ * attempts each got one of them:
  *
- * The renderer calls finalizeMicSTT() on every "Answer Now". finalize() used to
- * call stream.end(), which for Riva ENDS the recognition session — so the next
- * mic chunk threw ERR_STREAM_WRITE_AFTER_END and the server's end-of-call woke
- * the reconnect ladder. Both symptoms are asserted gone here, and stop() is
- * asserted to still really close.
+ *   stream.end()  -> the final arrived, but the session was dead afterwards:
+ *                    ERR_STREAM_WRITE_AFTER_END on the next mic chunk and
+ *                    "STT reconnecting" in the overlay.
+ *   no-op         -> no errors, and NO TRANSCRIPTS AT ALL. Riva has no flush
+ *                    control and the mic sends keepalive frames rather than
+ *                    real silence, so its endpointing never fires by itself.
+ *
+ * The stream is now ROTATED: end the call so the server flushes its final, and
+ * open a replacement in the same breath. This pins both halves — the final still
+ * arrives AND the session survives — plus the absence of the reconnect noise.
  */
 const path=require('path'); const fs=require('fs'); const os=require('os');
 const Module=require('module'); const esbuild=require('esbuild');
@@ -56,44 +62,58 @@ const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
   const stt=new NvidiaNimStreamingSTT('k','nemotron-asr-streaming');
   const errors=[]; stt.on('error',e=>errors.push(e.message||String(e)));
+  const heard=[]; stt.on('transcript',t=>heard.push(t));
   stt.setSampleRate(16000); stt.start();
   stt.write(Buffer.alloc(640));
-  const before=streams[0].writes.filter(w=>w.audioContent).length;
-  check('audio flowing before Answer Now', before===1, `${before} frames`);
+  check('one stream before Answer Now', streams.length===1, `${streams.length}`);
+  check('audio reaches it', streams[0].writes.filter(w=>w.audioContent).length===1);
 
-  // ── The user presses "Answer Now" ──
+  // ── "Answer Now" ──
+  const first=streams[0];
   stt.finalize();
-  check('finalize does NOT close the session', streams[0].ended===false);
+  check('the call is closed so the server flushes', first.ended===true);
+  check('a REPLACEMENT stream is opened immediately', streams.length===2, `${streams.length} streams`);
+  check('the replacement got the recognition config',
+    streams[1].writes.some(w=>w.streamingConfig), JSON.stringify(streams[1].writes[0]||{}).slice(0,60));
 
-  // Mic keeps running, as it does in a real meeting.
+  // THE POINT OF THE WHOLE FIX: the flushed final still reaches the app.
+  first.h.data({results:[{alternatives:[{transcript:'hi hi what is up',confidence:0.9}],isFinal:true}]});
+  check('the flushed FINAL still reaches the listener', heard.length===1 && heard[0].isFinal===true, JSON.stringify(heard));
+
+  // The closed call completing must not look like a dropped stream.
+  first.h.end();
+  await sleep(1300);
+  check('closing the old call schedules NO reconnect', streams.length===2, `${streams.length} streams`);
+  check('no error surfaced to the user', errors.length===0, errors.join('|')||'none');
+
+  // Session survives: audio after the press goes to the replacement.
   stt.write(Buffer.alloc(640)); stt.write(Buffer.alloc(640));
-  const after=streams[0].writes.filter(w=>w.audioContent).length;
-  check('audio still flows after Answer Now', after===3, `${after} frames`);
-  check('no ERR_STREAM_WRITE_AFTER_END surfaced', !errors.some(e=>/write after end/i.test(e)), errors.join('|')||'no errors');
-  check('no error raised to the user at all', errors.length===0, errors.join('|')||'none');
+  const onNew=streams[1].writes.filter(w=>w.audioContent).length;
+  check('audio keeps flowing after Answer Now', onNew===2, `${onNew} frames on the replacement`);
+  check('still no ERR_STREAM_WRITE_AFTER_END', !errors.some(e=>/write after end/i.test(e)), errors.join('|')||'none');
 
-  await sleep(1300);
-  check('no spurious reconnect — still one stream', streams.length===1, `${streams.length} streams`);
-
-  // Repeated presses must stay harmless.
+  // Pressing it repeatedly rotates once each, and stays quiet.
   stt.finalize(); stt.finalize();
-  stt.write(Buffer.alloc(640));
   await sleep(1300);
-  check('repeated Answer Now presses stay harmless', streams.length===1 && errors.length===0,
-    `${streams.length} streams, ${errors.length} errors`);
-
-  // ── A write that genuinely fails must still recover, not raise ──
-  streams[0].ended=true;                    // simulate the peer half-closing
+  check('repeated presses rotate once each', streams.length===4, `${streams.length} streams`);
+  check('repeated presses stay error-free', errors.length===0, errors.join('|')||'none');
   stt.write(Buffer.alloc(640));
-  check('a genuinely dead stream raises no user-facing error', errors.length===0, errors.join('|')||'none');
-  await sleep(1300);
-  check('a genuinely dead stream DOES reconnect', streams.length===2, `${streams.length} streams`);
+  check('newest stream is the live one', streams[3].writes.filter(w=>w.audioContent).length===1);
 
-  // ── stop() must still really end it ──
+  // ── A genuinely dead stream must still recover ──
+  const live=streams[3];
+  live.ended=true;                    // peer half-closed under us
+  stt.write(Buffer.alloc(640));
+  check('a real drop raises no user-facing error', errors.length===0, errors.join('|')||'none');
+  await sleep(1300);
+  check('a real drop DOES reconnect', streams.length===5, `${streams.length} streams`);
+
+  // ── stop() is still a real close ──
   stt.stop();
-  check('stop() ends the live stream', streams[1].ended===true);
+  check('stop() ends the live stream', streams[4].ended===true);
   const n=streams.length; await sleep(1300);
   check('stop() queues no reconnect', streams.length===n, `${streams.length} vs ${n}`);
+  check('finalize() after stop() is inert', (stt.finalize(), streams.length===n), `${streams.length}`);
 
   Module._load=realLoad;
   fs.rmSync(tmp,{recursive:true,force:true});

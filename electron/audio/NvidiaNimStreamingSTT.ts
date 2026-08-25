@@ -100,29 +100,37 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
   }
 
   /**
-   * Flush, NOT close.
+   * Flush the pending utterance without ending the session.
    *
-   * The renderer calls this on every "Answer Now" press to mean "transcribe
-   * what I just said". Riva has no mid-session flush control: StreamingRecognize
-   * is one long-lived call that the SERVER endpoints itself, so `stream.end()`
-   * here did not flush anything — it half-closed the call and ended recognition
-   * for the rest of the meeting.
+   * The renderer calls this on every "Answer Now" to mean "transcribe what I
+   * just said". Riva has NO flush control — StreamingRecognize is one long
+   * call, and half-closing it is the only way to make the server emit the
+   * final it is holding. That is why the original `stream.end()` produced a
+   * transcript, and why replacing it with a no-op produced NONE at all: the
+   * mic's silence suppressor sends keepalive frames rather than real silence,
+   * so Riva's own endpointing never fires and nothing else forces the final.
    *
-   * What that produced, every single time the user pressed Answer Now:
-   *   1. the next mic chunk hit a half-closed stream → ERR_STREAM_WRITE_AFTER_END,
-   *      surfaced as "[Main] STT (user) Error";
-   *   2. the server completed the call → 'end' → the reconnect ladder treated an
-   *      INTENTIONAL close as a dropped stream and announced
-   *      "STT reconnecting" in the meeting overlay.
+   * So: ROTATE rather than close. End the current call (the server flushes its
+   * final, which still reaches the listener — the 'data' handler emits
+   * transcripts regardless of generation) and open a replacement immediately so
+   * audio after the press keeps flowing.
    *
-   * Every other streaming provider here treats finalize() as flush-and-continue
-   * (Deepgram sends a Finalize control message, Soniox a {type:'finalize'},
-   * NativelyProSTT is a no-op). A no-op is the honest equivalent for Riva: its
-   * own endpointing emits the final for the utterance just spoken, so there is
-   * nothing to force and nothing to tear down. stop() still ends the stream —
-   * that one really is the end of the session.
+   * connect() runs BEFORE dying.end() on purpose: it bumps `generation`, so the
+   * dying stream's 'end'/'error' handlers see a stale generation and return
+   * early. That is what keeps this rotation from looking like a dropped stream —
+   * no backoff, no error, and no "STT reconnecting" in the overlay, which is
+   * exactly what the previous end()-without-replacement caused.
+   *
+   * stop() still ends the stream outright; that one really is end of session.
    */
-  finalize() { /* Riva endpoints server-side; closing here would end the session. */ }
+  finalize() {
+    if (!this.active) return;
+    const dying = this.stream;
+    if (!dying) return;
+    this.stream = null;      // no further writes reach the call being closed
+    this.connect();          // new stream first, so `dying`'s handlers go stale
+    try { dying.end(); } catch { /* already gone; the replacement is live */ }
+  }
 
   write(chunk: Buffer) {
     if (!this.active) return;
