@@ -80,7 +80,15 @@ export function isMidWordCut(finalText: string, latestInterim: string): boolean 
     if (!latestInterim.startsWith(finalText)) return false;   // the STT revised it: no claim
     const before = finalText[finalText.length - 1];
     const after = latestInterim[finalText.length];
-    return /\w/.test(before) && /\w/.test(after);
+    // A contraction may be cut on EITHER side of its apostrophe — the live
+    // session split "we|'re going" and "I'|m just curious" — so an apostrophe
+    // counts as word-continuation. Requiring at least one true word character
+    // keeps the sentence seam ("…probability.|So just these") unglued, which
+    // is the case the word-character test exists for.
+    const word = (c: string) => /\w/.test(c);
+    const apos = (c: string) => c === "'" || c === '\u2019';
+    if (apos(before) && apos(after)) return false;
+    return (word(before) || apos(before)) && (word(after) || apos(after));
 }
 
 /** Join relay finals, closing the seam where `glueNext` marks a split word. */
