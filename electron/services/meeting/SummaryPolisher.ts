@@ -14,7 +14,7 @@
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, MeetingNoteSection, RiskItem } from './MeetingSummaryV3';
 import { generateStructured } from './generateStructured';
-import { INCLUDE_NEXT_STEPS } from './MeetingSummaryReducer';
+import { INCLUDE_NEXT_STEPS, getOverviewBand } from './MeetingSummaryReducer';
 
 export interface PolishSummaryParams {
   deterministicSummary: string[];        // the grounded buildSummary() output
@@ -114,7 +114,12 @@ ${grounded}`;
   // things landed. Drawn from the WHOLE meeting's grounded content (chunk briefs across the
   // timeline + topics + decisions/actions/risks + section bullets), never raw transcript.
   // Same "no new tokens" gate; returns null to keep the deterministic overview.
-  async polishOverview(p: PolishSummaryParams & { briefs?: string[]; topics?: string[] }): Promise<string | null> {
+  // `totalTokensEstimate` is NormalizedTranscript.totalTokensEstimate (chars/4), threaded
+  // in by MeetingContextAssembler — the same length signal buildOverview's deterministic
+  // fallback uses (see getOverviewBand in MeetingSummaryReducer.ts). It sets a CONCRETE
+  // target for THIS meeting rather than a generic ceiling: a model told "up to 400 words"
+  // reliably writes ~160; a model told "write 2-3 paragraphs, about 380 words" writes that.
+  async polishOverview(p: PolishSummaryParams & { briefs?: string[]; topics?: string[]; totalTokensEstimate?: number }): Promise<string | null> {
     const noteCorpus = this.buildGroundedNotes(p);
     const timeline = (p.briefs || []).filter(Boolean);
     const topics = (p.topics || []).filter(Boolean);
@@ -125,11 +130,20 @@ ${grounded}`;
     const grounded = groundedParts.join('\n\n');
     if (!grounded.trim()) return null;
 
-    const systemPrompt = `Write a single-paragraph overview of the ENTIRE meeting from the grounded notes below — a quick read that tells someone who missed it what happened. Up to 400 words; usually much shorter. Cover the meeting's purpose, the arc of what was discussed, the key decisions/outcomes, and where things landed. Flowing prose, ONE paragraph (no headings, no bullets).
+    const band = getOverviewBand(p.totalTokensEstimate ?? 0);
+    // Additive to the length target only — every rule below is unconditional and identical
+    // across bands, and the STRICT RULES / NOTES block is never assembled inside a
+    // conditional branch, so there is no way for a band to silently ship a truncated prompt
+    // (see the 2026-08-25 review note on SummaryPolisher.polish(), which DID have that bug).
+    const paragraphInstruction = band.paragraphs === 'one paragraph'
+      ? 'Flowing prose, ONE paragraph (no headings, no bullets).'
+      : `Flowing prose in ${band.paragraphs}, with a genuine paragraph break (a blank line) between each paragraph — no headings, no bullets, no bullet markup inside paragraphs.`;
+
+    const systemPrompt = `Write an overview of the ENTIRE meeting from the grounded notes below — a quick read that tells someone who missed it what happened, compressed without losing anything important. Target for THIS meeting: about ${band.targetWords} words (roughly ${band.minWords}-${band.maxWords} words). ${paragraphInstruction} Cover the meeting's purpose, the arc of what was discussed, the key decisions/outcomes, and where things landed.
 
 STRICT RULES:
 - Use ONLY the facts in the NOTES below. Introduce NO new information, name, number, date, company, or owner not already present.
-- No filler ("productive discussion", "the team aligned", "great meeting"). Every sentence must carry a real fact.
+- No filler ("productive discussion", "the team aligned", "great meeting"). Every sentence must carry a real fact — writing more paragraphs is not licence to pad; only expand if the notes actually contain that much grounded content.
 - If the notes contain no substance, return an empty "overview" string.
 
 NOTES:
@@ -144,10 +158,16 @@ ${grounded}`;
       userContent: grounded,
       llmHelper: this.llmHelper,
       validate: (raw) => {
-        const text = (raw && typeof raw === 'object') ? String((raw as any).overview || '').replace(/\s+/g, ' ').trim() : '';
+        // Collapse only HORIZONTAL whitespace and normalize runs of blank lines to a single
+        // paragraph break (\n\n) — a plain `\s+ -> ' '` collapse (used elsewhere in this file
+        // for single-line fields) would flatten every paragraph break the medium/long bands
+        // just asked the model for, making that instruction a no-op.
+        const text = (raw && typeof raw === 'object')
+          ? String((raw as any).overview || '').replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+          : '';
         if (!text || text.length < 20) return { ok: false, errors: ['missing/short overview'], repaired: false };
         const words = text.split(/\s+/);
-        const clipped = words.length > 400 ? words.slice(0, 400).join(' ') : text;
+        const clipped = words.length > band.maxWords ? words.slice(0, band.maxWords).join(' ') : text;
         const offending = newSignificantTokens(clipped, grounded);
         if (offending.length > 0) return { ok: false, errors: [`introduced new tokens: ${offending.slice(0, 5).join(', ')}`], repaired: false };
         return { ok: true, data: { overview: clipped }, errors: [], repaired: false };

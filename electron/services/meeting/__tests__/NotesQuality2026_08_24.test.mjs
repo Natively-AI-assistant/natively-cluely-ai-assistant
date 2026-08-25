@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const base = path.resolve(__dirname, '../../../../dist-electron/electron/services/meeting');
-const { similar, MeetingSummaryReducer } = await import(pathToFileURL(path.join(base, 'MeetingSummaryReducer.js')).href);
+const { similar, MeetingSummaryReducer, getOverviewBand } = await import(pathToFileURL(path.join(base, 'MeetingSummaryReducer.js')).href);
 const { TranscriptNormalizer } = await import(pathToFileURL(path.join(base, 'TranscriptNormalizer.js')).href);
 const { newSignificantTokens, SummaryPolisher } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
 const { buildChunkPrompt } = await import(pathToFileURL(path.join(base, 'ChunkSummaryGenerator.js')).href);
@@ -417,4 +417,144 @@ test('SummaryPolisher.polish(): prompt does not ask for a next step and withhold
     'polishOverview() must keep the Action items block — it is a whole-meeting prose paragraph, not the Summary next-step slot');
   assert.match(captured.userContent, /Action items:/,
     'polishOverview()\'s user content must keep the Action items block');
+});
+
+// ── Overview scales with meeting length (2026-08-25, product decision) ────────
+//
+// Measured baseline: a 48-minute, ~11.8k-token, 5-chunk meeting produced a 161-word
+// (~1 paragraph) V3 overview via polishOverview()'s old fixed "Up to 400 words; usually
+// much shorter" prompt — short of the 2-3 paragraphs wanted for a meeting that length.
+// Fix: getOverviewBand(totalTokensEstimate) derives a concrete word/paragraph target from
+// the already-computed NormalizedTranscript.totalTokensEstimate, threaded into both
+// polishOverview()'s prompt and buildOverview()'s deterministic fallback cap.
+
+test('polishOverview(): prompt states a concrete word/paragraph target that differs between a short and a long meeting', async () => {
+  const captured = {};
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, userContent) => {
+      captured.systemPrompt = systemPrompt;
+      captured.userContent = userContent;
+      return '{"overview":"A short grounded overview sentence."}';
+    },
+  };
+  const polisher = new SummaryPolisher(llm);
+  const params = {
+    deterministicSummary: ['Adopt PostHog for analytics'],
+    decisions: [{ text: 'Adopt PostHog for analytics', confidence: 'high' }],
+    actionItems: [],
+    risks: [],
+    sections: [],
+    mode: 'team-meet',
+    briefs: ['The team discussed analytics tooling.'],
+    topics: ['analytics'],
+  };
+
+  await polisher.polishOverview({ ...params, totalTokensEstimate: 1000 });
+  const shortPrompt = captured.systemPrompt;
+
+  await polisher.polishOverview({ ...params, totalTokensEstimate: 20000 });
+  const longPrompt = captured.systemPrompt;
+
+  assert.notEqual(shortPrompt, longPrompt,
+    'the prompt must differ between a short-meeting call and a long-meeting call');
+
+  const shortBand = getOverviewBand(1000);
+  const longBand = getOverviewBand(20000);
+  assert.notEqual(shortBand.targetWords, longBand.targetWords,
+    'sanity check: the two totalTokensEstimate values used above must actually land in different bands');
+
+  // Each prompt must name ITS OWN concrete target, not a shared generic ceiling like the
+  // old "Up to 400 words; usually much shorter".
+  assert.match(shortPrompt, new RegExp(`${shortBand.targetWords} words`),
+    `short-meeting prompt must state its own target (${shortBand.targetWords} words): ${shortPrompt}`);
+  assert.match(longPrompt, new RegExp(`${longBand.targetWords} words`),
+    `long-meeting prompt must state its own target (${longBand.targetWords} words): ${longPrompt}`);
+  assert.doesNotMatch(shortPrompt, /up to 400 words/i,
+    'the old generic "up to 400 words" ceiling must be gone');
+  // The long band should ask for genuine multi-paragraph prose, not a single paragraph.
+  assert.match(longPrompt, /paragraph break/i,
+    'the long-meeting prompt must ask for genuine paragraph breaks');
+});
+
+test('polishOverview(): both the short-band and long-band prompts still carry the full STRICT RULES and NOTES block (regression guard for the truncated-branch trap)', async () => {
+  const captured = {};
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, userContent) => {
+      captured.systemPrompt = systemPrompt;
+      captured.userContent = userContent;
+      return '{"overview":"A short grounded overview sentence."}';
+    },
+  };
+  const polisher = new SummaryPolisher(llm);
+  const params = {
+    deterministicSummary: ['Adopt PostHog for analytics'],
+    decisions: [{ text: 'Adopt PostHog for analytics', confidence: 'high' }],
+    actionItems: [],
+    risks: [],
+    sections: [],
+    mode: 'team-meet',
+    briefs: ['The team discussed analytics tooling.'],
+    topics: ['analytics'],
+  };
+
+  for (const totalTokensEstimate of [1000, 20000]) {
+    await polisher.polishOverview({ ...params, totalTokensEstimate });
+    const prompt = captured.systemPrompt;
+    const band = getOverviewBand(totalTokensEstimate);
+    // Tie this guard to the actual per-band target so it fails against the pre-fix prompt
+    // (which states a single generic "up to 400 words" regardless of band) and not just
+    // against a hypothetical future truncated branch.
+    assert.match(prompt, new RegExp(`${band.targetWords} words`),
+      `totalTokensEstimate=${totalTokensEstimate}: prompt must state its own band target (${band.targetWords} words)`);
+    assert.match(prompt, /STRICT RULES:/,
+      `totalTokensEstimate=${totalTokensEstimate}: prompt is missing the STRICT RULES header`);
+    assert.match(prompt, /Use ONLY the facts in the NOTES below/,
+      `totalTokensEstimate=${totalTokensEstimate}: prompt is missing the no-new-information rule`);
+    assert.match(prompt, /No filler/,
+      `totalTokensEstimate=${totalTokensEstimate}: prompt is missing the no-filler rule`);
+    assert.match(prompt, /return an empty "overview" string/,
+      `totalTokensEstimate=${totalTokensEstimate}: prompt is missing the empty-overview escape hatch`);
+    assert.match(prompt, /NOTES:\n/,
+      `totalTokensEstimate=${totalTokensEstimate}: prompt is missing the NOTES: block`);
+    assert.match(prompt, /Adopt PostHog for analytics/,
+      `totalTokensEstimate=${totalTokensEstimate}: the NOTES: block must actually carry the grounded content`);
+  }
+});
+
+test('buildOverview (via reduce): the deterministic overview cap moves with the length band instead of staying fixed', () => {
+  // Every token must be a single alnum run unique to its chunk — similar()'s normalize()
+  // splits on any non-alnum separator (e.g. "_"), so "chunk0_word0" and "chunk1_word0"
+  // would both contribute the shared token "word0" and the two 120-word briefs would score
+  // Dice ~0.99 and collapse via dedupeStrings, silently shrinking the fixture back down to
+  // ~120 words regardless of band. "c0w0", "c1w0", ... are single tokens with no shared
+  // substring after normalization, so the five briefs stay genuinely distinct.
+  const bigBrief = (chunkIdx) => Array.from({ length: 120 }, (_, i) => `c${chunkIdx}w${i}`).join(' ');
+  const atoms = [0, 1, 2, 3, 4].map(i => summaryAtom({ chunkIndex: i, brief: bigBrief(i) }));
+
+  const shortNorm = new TranscriptNormalizer().normalize([
+    { speaker: 'user', text: 'We discussed the plan briefly.', timestamp: 0 },
+  ]);
+  shortNorm.totalTokensEstimate = 1000; // short band: maxWords 180
+
+  const longNorm = { ...shortNorm, totalTokensEstimate: 20000 }; // long band: maxWords 450
+
+  const shortSummary = new MeetingSummaryReducer().reduce({
+    title: 't', atoms, normalizedTranscript: shortNorm, modeTemplateType: 'general', modeNoteSections: [],
+  });
+  const longSummary = new MeetingSummaryReducer().reduce({
+    title: 't', atoms, normalizedTranscript: longNorm, modeTemplateType: 'general', modeNoteSections: [],
+  });
+
+  const shortWords = shortSummary.overview.split(/\s+/).filter(Boolean).length;
+  const longWords = longSummary.overview.split(/\s+/).filter(Boolean).length;
+
+  const shortBand = getOverviewBand(1000);
+  const longBand = getOverviewBand(20000);
+
+  assert.ok(shortWords <= shortBand.maxWords,
+    `short-band deterministic overview must not exceed its own cap (${shortBand.maxWords}); got ${shortWords}`);
+  assert.ok(longWords > shortBand.maxWords,
+    `long-band deterministic overview must be allowed to exceed the SHORT cap (${shortBand.maxWords}); got ${longWords} — this fails if the cap is still fixed at a single value`);
+  assert.ok(longWords <= longBand.maxWords,
+    `long-band deterministic overview must not exceed its own cap (${longBand.maxWords}); got ${longWords}`);
 });

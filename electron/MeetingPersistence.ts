@@ -544,7 +544,7 @@ ${sectionList}
 Return ONLY valid JSON — no markdown fences, no comments, no extra keys. Each section value is an array of concise factual bullet strings taken directly from the conversation. Use [] if a section has no relevant content.
 
 {
-  "overview": "1-2 sentence summary of what was discussed",
+  "overview": "one solid paragraph compressing the ENTIRE meeting without losing anything important - purpose, what was discussed, key outcomes, and where things landed",
   "sections": {
 ${sectionKeys}
   }
@@ -559,7 +559,7 @@ ${baseRules}
 
 Return ONLY valid JSON (no markdown code blocks):
 {
-  "overview": "1-2 sentence description of what was discussed",
+  "overview": "one solid paragraph compressing the ENTIRE meeting without losing anything important - purpose, what was discussed, key outcomes, and where things landed",
   "keyPoints": ["3-6 specific bullets - each = one concrete topic or point discussed"],
   "actionItems": ["specific next steps, assigned tasks, or implied follow-ups. If absolutely none found, return empty array"]
 }`;

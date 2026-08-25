@@ -68,7 +68,7 @@ export class MeetingSummaryReducer {
     // "Summary" (rendered at the top of the notes) = outcome-first, grounded, no filler.
     const tldr = buildSummary(decisions, actionItems, risks, atoms, sections, params.modeTemplateType);
     const whatChanged = buildWhatChanged(atoms, decisions).slice(0, 6);
-    const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType);
+    const overview = buildOverview(tldr, atoms, decisions, sections, params.modeTemplateType, params.normalizedTranscript.totalTokensEstimate);
     const actionConfidence = deriveActionConfidence(actionItems);
     const transcriptCoverage = Math.max(0, Math.min(1, typeof params.transcriptCoverage === 'number' ? params.transcriptCoverage : (params.normalizedTranscript.totalChars > 0 ? 1 : 0)));
     // Order matters: sourceQuality.warnings is capped downstream (sanitizeStringArray keeps
@@ -289,11 +289,52 @@ function buildSummary(decisions: DecisionItem[], actionItems: ActionItem[], risk
   return dedupeStrings(out).slice(0, 5);
 }
 
+// ── Overview length band (2026-08-25, product decision) ───────────────────────
+// The Overview should scale with meeting length: roughly one paragraph for a short
+// meeting, up to 2-3 paragraphs for a long one, so the compressed summary can actually
+// carry "the entire meeting without losing anything important" instead of hard-capping at
+// a fixed word count regardless of how much happened. Measured baseline: a 48-minute,
+// ~11.8k-estimated-token, 5-chunk meeting produced a 161-word (~1 paragraph) V3 overview —
+// short of the 2-3 paragraphs wanted for a meeting that length.
+//
+// Signal: NormalizedTranscript.totalTokensEstimate (chars/4, see TranscriptNormalizer) is
+// already computed once per meeting and threaded through both call sites (buildOverview's
+// deterministic cap here, and SummaryPolisher.polishOverview's LLM prompt) — a cleaner,
+// more continuous signal than chunk count, which only reflects TranscriptChunker's own
+// size thresholds. Bands (word counts are the LLM prompt's target; the deterministic cap
+// below uses maxWords so it can absorb slightly more without ever exceeding it):
+//   short  (<= 3000 tokens,  ~12 min): ~120-180 words,  one paragraph
+//   medium (<= 8000 tokens,  ~32 min): ~200-300 words,  two paragraphs
+//   long   (>  8000 tokens):           ~300-450 words,  2-3 paragraphs
+export interface OverviewBand {
+  label: 'short' | 'medium' | 'long';
+  minWords: number;
+  maxWords: number;
+  targetWords: number;
+  paragraphs: string;
+}
+
+const OVERVIEW_SHORT_TOKEN_THRESHOLD = 3000;
+const OVERVIEW_MEDIUM_TOKEN_THRESHOLD = 8000;
+
+export function getOverviewBand(totalTokensEstimate: number): OverviewBand {
+  const tokens = typeof totalTokensEstimate === 'number' && totalTokensEstimate > 0 ? totalTokensEstimate : 0;
+  if (tokens <= OVERVIEW_SHORT_TOKEN_THRESHOLD) {
+    return { label: 'short', minWords: 120, maxWords: 180, targetWords: 150, paragraphs: 'one paragraph' };
+  }
+  if (tokens <= OVERVIEW_MEDIUM_TOKEN_THRESHOLD) {
+    return { label: 'medium', minWords: 200, maxWords: 300, targetWords: 250, paragraphs: '2 paragraphs' };
+  }
+  return { label: 'long', minWords: 300, maxWords: 450, targetWords: 380, paragraphs: '2-3 paragraphs' };
+}
+
 // Deterministic whole-meeting overview paragraph (fallback when LLM polish is off/unavailable).
 // Stitches the chunk briefs (the chronological arc of the meeting) into a paragraph, then
 // folds in the headline decisions so it reads as a quick recap of the ENTIRE meeting rather
-// than just the first two summary bullets. Capped to ~400 words.
-function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[], sections: MeetingNoteSection[] = [], modeTemplateType?: string | null): string {
+// than just the first two summary bullets. Capped to the length band's maxWords (see
+// getOverviewBand above) rather than a fixed 400, so a long meeting's deterministic
+// fallback isn't truncated to the same size as a short one's.
+function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions: DecisionItem[], sections: MeetingNoteSection[] = [], modeTemplateType?: string | null, totalTokensEstimate?: number): string {
   const briefs = dedupeStrings(atoms.map(a => a.brief).filter(Boolean));
   const parts: string[] = [];
   if (briefs.length) parts.push(briefs.join(' '));
@@ -315,7 +356,8 @@ function buildOverview(summary: string[], atoms: ChunkMeetingAtoms[], decisions:
   }
   const text = parts.join(' ').replace(/\s+/g, ' ').trim();
   const words = text.split(/\s+/);
-  return words.length > 400 ? words.slice(0, 400).join(' ') : text;
+  const maxWords = getOverviewBand(totalTokensEstimate ?? 0).maxWords;
+  return words.length > maxWords ? words.slice(0, maxWords).join(' ') : text;
 }
 
 // Deterministic follow-up body (fallback used when the LLM follow-up generator is
