@@ -1809,30 +1809,12 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     </section>
                                 )}
 
-                                {/* Phase 7 — Coaching insights (mode-specific opportunities). */}
-                                {meeting.detailedSummary?.coachingInsights && meeting.detailedSummary.coachingInsights.length > 0 && (
-                                    <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Coaching')}</h2>
-                                        <ul className="space-y-3">
-                                            {meeting.detailedSummary.coachingInsights.map(insight => {
-                                                const tone = insight.severity === 'warning'
-                                                    ? 'border-amber-400/40 bg-amber-500/5'
-                                                    : insight.severity === 'opportunity'
-                                                        ? 'border-blue-400/40 bg-blue-500/5'
-                                                        : 'border-text-tertiary/30 bg-transparent';
-                                                return (
-                                                    <li key={insight.id} className={`p-3 rounded-[10px] border ${tone}`}>
-                                                        <p className="text-sm font-semibold text-text-primary">{insight.title}</p>
-                                                        <p className="text-[12.5px] text-text-secondary mt-1 leading-relaxed">{insight.detail}</p>
-                                                        {insight.evidence && (
-                                                            <p className="text-[11px] text-text-tertiary mt-1.5 italic">"{insight.evidence}"</p>
-                                                        )}
-                                                    </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    </section>
-                                )}
+                                {/* The "Coaching" section was removed on 2026-08-26 (product decision);
+                                    generation is switched off at INCLUDE_COACHING_INSIGHTS in
+                                    electron/services/post-call/PostCallWorkflow.ts. The
+                                    `coachingInsights` type above is kept so already-saved notes
+                                    still parse; restore this <section> from git history if the
+                                    flag is ever flipped back on. */}
 
                                 {/* Phase 7 — Follow-up email draft (legacy V2: string). V3 renders its own above. */}
                                 {!isV3Summary && typeof meeting.detailedSummary?.followUpDraft === 'string' && meeting.detailedSummary.followUpDraft.trim() && (

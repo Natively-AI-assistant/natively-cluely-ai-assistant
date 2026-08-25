@@ -30,11 +30,15 @@ test('a grounded summary yields a cleaned title', async () => {
 });
 
 // RC-7: the model answering the notes instead of naming them must still be rejected
-// outright, not salvaged — the meeting keeps its default title.
+// outright, never salvaged into the title. Since 2026-08-26 a rejection no longer leaves
+// the meeting unnamed — it falls back to the note-derived title (see the fallback block
+// at the bottom of this file) — so the assertion is "the generation was not used".
 test('an answer-shaped generation is rejected', async () => {
   for (const reply of ["Here's the C++ implementation", 'cpp', 'the team agreed to pilot the onboarding flow']) {
-    assert.equal(await generateTitleFromSummary(fakeLLM(reply), SUMMARY), null,
-      `answer fragment was accepted as a title: "${reply}"`);
+    const title = await generateTitleFromSummary(fakeLLM(reply), SUMMARY);
+    assert.notEqual(title, reply, `answer fragment was accepted as a title: "${reply}"`);
+    assert.match(title, /^Onboarding, Pilot, Security review$/,
+      `a rejected generation must fall back to the note-derived title, got: "${title}"`);
   }
 });
 
@@ -82,7 +86,12 @@ test('an ungrounded title sharing no meaningful word with the notes is rejected'
     fakeLLM('Penetration testing of the user-facing input surface'),
     CLOUD_READING_APP_SUMMARY
   );
-  assert.equal(title, null, 'ungrounded title (zero word overlap with notes) must be rejected, not saved');
+  // Rejected, not saved — and since 2026-08-26 replaced by the note-derived fallback
+  // rather than left as null (which meant the meeting kept no title at all).
+  assert.notEqual(title, 'Penetration testing of the user-facing input surface',
+    'ungrounded title (zero word overlap with notes) must be rejected, not saved');
+  assert.notEqual(title, null, 'a rejected title must not leave the meeting unnamed');
+  assert.match(title, /object-oriented design/i, 'the fallback must be derived from the notes');
 });
 
 // Guard against over-rejection: a title that DOES share a meaningful word with the notes
@@ -109,4 +118,65 @@ test('the prompt carries note content only, never transcript-shaped lines', asyn
   const labelLines = sink[0].context.match(/^\w+:\s/gm) || [];
   assert.ok(labelLines.length <= 1, `context looks like multi-turn transcript lines: ${JSON.stringify(labelLines)}`);
   assert.equal(/^speaker:\s/im.test(sink[0].context), false, 'context must not contain the raw-transcript speaker fallback label');
+});
+
+// ── Deterministic fallback (2026-08-26, real production failure) ──────────────
+// A live meeting was saved with NO title: the model answered the naming call with the
+// no-action sentinel ("[[NO_ACTION]]"), the grounding guard rejected it, the function
+// returned null, and the caller left the title at its default. `null` must mean "there
+// is nothing to name", never "generation misbehaved" — every rejection path now falls
+// back to a title DERIVED FROM THE NOTES with no second LLM call.
+const NO_ACTION = '[[NO_ACTION]]';
+
+test('a no-action sentinel reply yields a deterministic title derived from the notes', async () => {
+  const title = await generateTitleFromSummary(fakeLLM(NO_ACTION), SUMMARY);
+  assert.notEqual(title, null, 'the sentinel must not leave the meeting unnamed');
+  assert.equal(/NO_ACTION/.test(title), false, `the sentinel leaked into the title: ${title}`);
+  // Derived from `topics` (first tier of the fallback chain).
+  assert.match(title, /onboarding/i);
+  assert.ok(title.length <= 64, `fallback title is not title-length: ${title}`);
+});
+
+test('a sentinel wrapped in quotes/punctuation is still treated as a refusal', async () => {
+  for (const reply of ['"[[NO_ACTION]]"', '[[NO_ACTION]].', '  [[NO_ACTION]]  ']) {
+    const title = await generateTitleFromSummary(fakeLLM(reply), SUMMARY);
+    assert.notEqual(title, null, `sentinel variant left the meeting unnamed: ${reply}`);
+    assert.equal(/NO_ACTION/.test(title), false, `the sentinel leaked into the title: ${title}`);
+  }
+});
+
+test('generation throwing yields the deterministic fallback rather than null', async () => {
+  const throwingLLM = { generateMeetingSummary: async () => { throw new Error('deadline exceeded'); } };
+  const title = await generateTitleFromSummary(throwingLLM, SUMMARY);
+  assert.notEqual(title, null, 'a failed title call must not leave the meeting unnamed');
+  assert.match(title, /onboarding/i);
+});
+
+test('the deterministic fallback uses tldr when there are no topics', async () => {
+  const NO_TOPICS = { title: 'Untitled Session', tldr: SUMMARY.tldr, topics: [] };
+  const title = await generateTitleFromSummary(fakeLLM(NO_ACTION), NO_TOPICS);
+  assert.notEqual(title, null);
+  assert.ok(title.length <= 64, `fallback title is not title-length: ${title}`);
+  assert.match(title, /team agreed/i);
+});
+
+test('the deterministic fallback uses overview when tldr and topics are empty', async () => {
+  const OVERVIEW_ONLY = { title: '', tldr: [], keyPoints: [], topics: [], overview: 'Reviewed the migration plan for the billing service.' };
+  const title = await generateTitleFromSummary(fakeLLM(NO_ACTION), OVERVIEW_ONLY);
+  assert.notEqual(title, null);
+  assert.match(title, /migration plan/i);
+});
+
+// Guard against the fallback shadowing a real title: a good generation still wins.
+test('a good generated title still beats the deterministic fallback', async () => {
+  const title = await generateTitleFromSummary(fakeLLM('Onboarding Pilot Rollout'), SUMMARY);
+  assert.equal(title, 'Onboarding Pilot Rollout');
+});
+
+// The only remaining null: genuinely nothing to name. No LLM call, no fallback.
+test('genuinely empty note content still returns null', async () => {
+  const sink = [];
+  const title = await generateTitleFromSummary(fakeLLM(NO_ACTION, sink), { title: '', tldr: [], keyPoints: [], overview: '', topics: [] });
+  assert.equal(title, null, 'no note content means there is nothing to derive a title from');
+  assert.equal(sink.length, 0);
 });

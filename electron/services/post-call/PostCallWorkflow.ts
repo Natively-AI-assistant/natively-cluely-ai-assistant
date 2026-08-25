@@ -40,6 +40,21 @@ export interface PostCallEnhancements {
   coachingInsights: CoachingInsight[];
 }
 
+// ── Coaching-insight suppression (2026-08-26, product decision) ───────────────
+// The "Coaching" section on the notes page was judged unwanted: it quoted a transcript
+// line back at the user under generic advice ("Uncertainty appeared in answers — Review
+// these moments and prepare a tighter explanation") on every call that tripped a regex.
+// It is switched OFF, not deleted, exactly like INCLUDE_NEXT_STEPS in
+// electron/services/meeting/MeetingSummaryReducer.ts — see that constant for the shape.
+//
+// Flip INCLUDE_COACHING_INSIGHTS back to true to restore generation here.
+// generateCoachingInsights() below is untouched and still unit-tested, so the flip is the
+// only change needed in this file. The matching switch is the renderer:
+//   src/components/MeetingDetails.tsx  (the "Coaching" <section>, removed 2026-08-26 —
+//     restore it from git history; the `coachingInsights` type and the stored-schema
+//     field are deliberately KEPT so already-saved notes still parse.)
+export const INCLUDE_COACHING_INSIGHTS: boolean = false;
+
 const ACTION_PATTERNS = [
   /\b(?:i|we|you|he|she|they|[A-Z][a-z]+)\s+(?:will|should|need to|needs to|must|can|could)\s+(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
   /\b(?:action|todo|follow up):\s*(.+?)(?:\s+(?:by|before|on|after)\s+([^.!?]+))?[.!?]?$/i,
@@ -55,7 +70,11 @@ export function buildPostCallEnhancements(params: {
   summaryData?: { overview?: string; actionItems?: string[]; keyPoints?: string[]; sections?: Array<{ title: string; bullets: string[] }> };
 }): PostCallEnhancements {
   const actionItemsStructured = extractStructuredActionItems(params.transcript, params.summaryData?.actionItems ?? []);
-  const coachingInsights = generateCoachingInsights(params.transcript, params.modeTemplateType, params.summaryData);
+  // Not invoked at all while INCLUDE_COACHING_INSIGHTS is false — the key stays on the
+  // payload (stored-schema consumers read it) but is always empty.
+  const coachingInsights = INCLUDE_COACHING_INSIGHTS
+    ? generateCoachingInsights(params.transcript, params.modeTemplateType, params.summaryData)
+    : [];
 
   return {
     schemaVersion: 2,

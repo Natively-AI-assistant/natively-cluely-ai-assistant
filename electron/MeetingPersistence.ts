@@ -20,6 +20,56 @@ import { telemetryService } from './services/telemetry/TelemetryService';
 import type { ProviderDataScopePolicy } from './llm/ProviderRouter';
 const crypto = require('crypto');
 
+/** Longest a derived fallback title may be, before word-boundary truncation. */
+const DERIVED_TITLE_MAX_CHARS = 60;
+
+/** Collapse one note string into a title-length name: first sentence, trailing
+ *  punctuation dropped, truncated on a word boundary, first letter capitalised.
+ *  Deliberately NOT routed through cleanMeetingTitle / isAnswerFragmentTitle /
+ *  isAnswerShapedGeneration: those guards judge MODEL output ("did it name the
+ *  meeting or answer it"), and a note sentence is answer-shaped by construction.
+ *  This text is grounded by definition — it IS the notes. */
+function shortenToTitleLength(value: string): string {
+    const collapsed = String(value || '').replace(/\s+/g, ' ').replace(/^["'`\s]+|["'`\s]+$/g, '').trim();
+    if (!collapsed) return '';
+    const firstSentence = (collapsed.match(/^[^.!?]+[.!?]?/) || [collapsed])[0];
+    let out = firstSentence.replace(/[\s.,;:!?]+$/, '');
+    if (out.length > DERIVED_TITLE_MAX_CHARS) {
+        const cut = out.slice(0, DERIVED_TITLE_MAX_CHARS);
+        const lastSpace = cut.lastIndexOf(' ');
+        out = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).replace(/[\s.,;:!?]+$/, '');
+    }
+    if (!out) return '';
+    return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
+/**
+ * Deterministic, llm-free title derived from the notes already in hand.
+ *
+ * Priority topics -> takeaways (tldr, else keyPoints) -> overview: topics are the
+ * shortest naming material and read most like a title; the takeaway/overview tiers are
+ * sentences, so only their first clause survives. Returns null only when every tier is
+ * empty — the one case where "no title" is the honest answer.
+ */
+function deriveDeterministicTitle(parts: { topics: string[]; takeaways: string[]; overview: string }): string | null {
+    const topics = parts.topics.map(t => String(t || '').trim()).filter(Boolean);
+    if (topics.length > 0) {
+        const joined = topics.slice(0, 3).map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ');
+        const fromTopics = shortenToTitleLength(joined);
+        if (fromTopics) return fromTopics;
+    }
+    const firstTakeaway = parts.takeaways.map(t => String(t || '').trim()).find(Boolean);
+    if (firstTakeaway) {
+        const fromTakeaway = shortenToTitleLength(firstTakeaway);
+        if (fromTakeaway) return fromTakeaway;
+    }
+    if (parts.overview) {
+        const fromOverview = shortenToTitleLength(parts.overview);
+        if (fromOverview) return fromOverview;
+    }
+    return null;
+}
+
 /**
  * Name the meeting from its FINISHED notes.
  *
@@ -34,9 +84,15 @@ const crypto = require('crypto');
  * legacy V2 path (still the fallback when V3 returns null) populates keyPoints/overview but
  * leaves tldr empty.
  *
- * Returns null — and makes NO llm call — when there is nothing groundable to name, or when
- * the model answered the notes instead of naming them. A null return means "keep the
- * existing title" — this must never block the notes from being saved.
+ * Returns null — and makes NO llm call — ONLY when there is nothing groundable to name.
+ * Every other failure (the model refusing with the no-action sentinel, answering the notes
+ * instead of naming them, hallucinating an ungrounded title, or the call throwing) falls
+ * back to a title DERIVED FROM THE NOTES with no second llm call — see
+ * deriveDeterministicTitle. A real production meeting was saved unnamed because the model
+ * returned "[[NO_ACTION]]", the grounding guard correctly rejected it, and null then meant
+ * "no title" (2026-08-26). A meeting always needs a name, so null must mean "nothing to
+ * name", never "generation misbehaved". A null return still means "keep the existing
+ * title" — this must never block the notes from being saved.
  */
 export async function generateTitleFromSummary(
     llmHelper: { generateMeetingSummary: (system: string, context: string, groq?: string, opts?: any) => Promise<string> },
@@ -53,10 +109,20 @@ export async function generateTitleFromSummary(
 
     if (takeaways.length === 0 && !overview && topics.length === 0) return null;
 
+    // Deterministic safety net, computed BEFORE the call so every rejection path below
+    // has something to return. Costs nothing when the generated title is accepted.
+    const fallbackTitle = deriveDeterministicTitle({ topics, takeaways, overview });
+
     let v2TitlePrompt: string | null = null;
+    // Reuse the prompt system's OWN sentinel helpers rather than a local regex, so a
+    // change to NO_ACTION_SENTINEL can never leave this call site matching the old token.
+    let isRefusal: ((text: string) => boolean) | null = null;
+    let stripRefusal: ((text: string) => string) | null = null;
     try {
-        const { resolveV2SystemPrompt } = require('./llm/promptSystemV2');
-        v2TitlePrompt = resolveV2SystemPrompt({ action: 'title', tier: 'cloud', activeMode: null });
+        const promptSystemV2 = require('./llm/promptSystemV2');
+        v2TitlePrompt = promptSystemV2.resolveV2SystemPrompt({ action: 'title', tier: 'cloud', activeMode: null });
+        if (typeof promptSystemV2.shouldSuppressModelOutput === 'function') isRefusal = promptSystemV2.shouldSuppressModelOutput;
+        if (typeof promptSystemV2.stripLeadingNoActionSentinel === 'function') stripRefusal = promptSystemV2.stripLeadingNoActionSentinel;
     } catch { /* legacy fallback below */ }
     const titlePrompt = v2TitlePrompt
         ?? `Generate a concise 3-6 word title for this meeting context. Output ONLY the title text. Do not use quotes or conversational filler.`;
@@ -73,14 +139,25 @@ export async function generateTitleFromSummary(
         generatedTitle = await llmHelper.generateMeetingSummary(titlePrompt, context, titlePrompt, { timeoutMs: NOTE_CALL_TIMEOUT_MS });
     } catch (e) {
         console.warn('[MeetingPersistence] Title generation failed (non-fatal):', (e as Error)?.message);
-        return null;
+        return fallbackTitle;
     }
 
+    // REFUSAL, not a bad title. The title prompt tells the model the sentinel is invalid
+    // here (silenceGateBlock's non-'assist' branch), but production saw it returned anyway.
+    // Detect it explicitly: routed through the guards below it reads as "ungrounded", which
+    // is what sent the first investigation of this failure down the wrong path.
+    if (isRefusal?.(generatedTitle)) {
+        console.warn('[MeetingPersistence] Title generation refused with the no-action sentinel — using the note-derived fallback.');
+        return fallbackTitle;
+    }
+    // Misfire shape: sentinel followed by a real title. Keep the title, drop the sentinel.
+    if (stripRefusal) generatedTitle = stripRefusal(generatedTitle);
+
     const cleanedTitle = cleanMeetingTitle(generatedTitle);
-    if (!cleanedTitle) return null;
+    if (!cleanedTitle) return fallbackTitle;
     if (isAnswerFragmentTitle(cleanedTitle) || isAnswerShapedGeneration(generatedTitle)) {
         console.warn(`[MeetingPersistence] Generated title rejected as answer fragment: "${cleanedTitle}"`);
-        return null;
+        return fallbackTitle;
     }
 
     // The shape guards above (cleanMeetingTitle / isAnswerFragmentTitle /
@@ -107,11 +184,11 @@ export async function generateTitleFromSummary(
             let overlap = 0;
             for (const t of titleTokens) if (corpusSet.has(t)) overlap++;
             // Require ≥1 overlapping meaningful word. A title with ZERO overlap with the
-            // notes it was generated from is ungrounded/hallucinated — keep the existing
-            // default title rather than saving it silently.
+            // notes it was generated from is ungrounded/hallucinated — drop it in favour
+            // of the note-derived fallback rather than saving it silently.
             if (overlap === 0) {
                 console.warn(`[MeetingPersistence] Generated title rejected as ungrounded (no overlap with notes): "${cleanedTitle}"`);
-                return null;
+                return fallbackTitle;
             }
         }
         // No usable corpus (sparse summary) — accept the title rather than drop it,
