@@ -2029,16 +2029,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         <div>
                                                             <div className="flex items-center gap-2">
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Auto Answer')}</h3>
-                                                                {/* Tailwind 3 cannot apply an opacity modifier to a token that
-                                                                    holds a whole colour (bg-accent-primary/15 emits an invalid
-                                                                    value and drops silently), so the tint uses color-mix — the
-                                                                    same way index.css does throughout. */}
+                                                                {/* Solid yellow, Apple style — no border, no tint. The colours
+                                                                    are tokens because systemYellow differs per appearance. */}
                                                                 <span
-                                                                    className="text-[10px] font-semibold uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full border shrink-0"
+                                                                    className="text-[10px] font-semibold uppercase tracking-wide leading-none px-1.5 py-0.5 rounded-full shrink-0"
                                                                     style={{
-                                                                        color: 'var(--accent-primary)',
-                                                                        backgroundColor: 'color-mix(in srgb, var(--accent-primary) 15%, transparent)',
-                                                                        borderColor: 'color-mix(in srgb, var(--accent-primary) 30%, transparent)',
+                                                                        color: 'var(--badge-beta-fg)',
+                                                                        backgroundColor: 'var(--badge-beta-bg)',
                                                                     }}
                                                                 >
                                                                     {t('Beta')}

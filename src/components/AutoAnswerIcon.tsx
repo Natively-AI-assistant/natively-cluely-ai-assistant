@@ -30,13 +30,15 @@ export const AutoAnswerIcon: React.FC<{
         className={className}
         aria-hidden="true"
     >
-        {/* The bubble */}
-        <rect x="2" y="4" width="20" height="15" rx="4" />
+        {/* The bubble. 20x18 rather than a letterbox 20x15: the neighbours
+            (Shield, Cpu, Headphones) fill nearly the whole 24 grid vertically,
+            so a short wide bubble read as a visibly smaller icon in the row. */}
+        <rect x="2" y="3" width="20" height="18" rx="5" />
         {/* Reply hook resolving into a forward chevron. Sized from a 20px
             A/B: a tighter hook merges into a blob at the size it is actually
             rendered, and dropping the hook for a plain chevron reads as a
             media "skip" button rather than a reply. */}
-        <path d="M7 8.6v1.9a2 2 0 0 0 2 2h4.6" />
-        <path d="M12.4 10.6 14.9 12.5l-2.5 1.9" />
+        <path d="M7.5 8.5v3a2 2 0 0 0 2 2h4.5" />
+        <path d="M12.8 11.3 15.2 13.5l-2.4 2.2" />
     </svg>
 );
