@@ -42,7 +42,7 @@ import { BrandMark, BrandMonogram } from './ui/BrandMark';
 import icon from './icon.png';
 // Shared with the main process so the picker cannot offer a model the ipc
 // validator rejects. Pure data module — no node/electron imports.
-import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL } from '../../electron/audio/nvidiaNimSttModels';
+import { NVIDIA_NIM_STT_MODELS, DEFAULT_NVIDIA_NIM_STT_MODEL, allowedLanguageKeysForNvidiaModel } from '../../electron/audio/nvidiaNimSttModels';
 
 // ---------------------------------------------------------------------------
 // StarRating — renders filled/empty stars for culture ratings
@@ -427,6 +427,28 @@ interface SettingsOverlayProps {
     initialHasNativelyKey?: boolean;
 }
 
+/**
+ * Where each speech provider issues API keys. The "Get API Key" button reads
+ * this; a provider missing from it used to render a link that did NOTHING when
+ * clicked — soniox and nvidia_nim were both in that state — so the button is now
+ * hidden unless there is somewhere to send the user.
+ *
+ * nvidia_nim points at the SPEECH catalogue rather than a settings page:
+ * build.nvidia.com/settings/api-keys 404s (it returns the SPA's not-found
+ * shell), and NVIDIA issues keys from a model card's "Generate API Key" button,
+ * so /explore/speech is both a working URL and the right context for an ASR key.
+ */
+const STT_KEY_URLS: Record<string, string> = {
+    groq: 'https://console.groq.com/keys',
+    openai: 'https://platform.openai.com/api-keys',
+    deepgram: 'https://console.deepgram.com',
+    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
+    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
+    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text',
+    soniox: 'https://console.soniox.com/api-keys',
+    nvidia_nim: 'https://build.nvidia.com/explore/speech',
+};
+
 const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     isOpen,
     onClose,
@@ -674,6 +696,11 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     // settings below) because the local-model language-capability effect and
     // memo that follow depend on it.
     const [sttProvider, setSttProvider] = useState<'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper'>('none');
+
+    // Declared here for the same reason sttProvider is: the NVIDIA
+    // language-capability memo below reads it, and which languages that model
+    // can recognise gates the recognition-language selector.
+    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
 
     // Local model language capability (local-whisper provider only).
     // Per-model: which RECOGNITION_LANGUAGES keys the model accepts, whether
@@ -1020,9 +1047,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         }
     };
 
+    // NVIDIA speech models are per-language deployments: the Vietnamese build
+    // serves vi-VN and nothing else, and the streaming English ones serve en-US
+    // only. Offering the full language list under them would let a user pick a
+    // language the selected model cannot recognise. Derived from each model's
+    // documented locales — see allowedLanguageKeysForNvidiaModel.
+    const nvidiaLanguageCapability = useMemo(() => {
+        if (sttProvider !== 'nvidia_nim') return null;
+        if (!availableLanguages || Object.keys(availableLanguages).length === 0) return null;
+        return allowedLanguageKeysForNvidiaModel(nvidiaNimSttModel, availableLanguages);
+    }, [sttProvider, nvidiaNimSttModel, availableLanguages]);
+
     // Language keys the active STT backend accepts. Unrestricted for cloud
     // providers; for local-whisper this is the active model's documented set.
-    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? null;
+    const allowedLanguageKeySet = localLanguageCapability?.allowedKeys ?? nvidiaLanguageCapability ?? null;
     const isLanguageEntryAllowed = (key: string) => !allowedLanguageKeySet || allowedLanguageKeySet.has(key);
 
     // Helper to get unique groups (restricted to what the active model accepts)
@@ -1154,8 +1192,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         reason?: string;
     } | null>(null);
 
-    // Nvidia Nim speech settings live beside the existing provider state.
-    const [nvidiaNimSttModel, setNvidiaNimSttModel] = useState(DEFAULT_NVIDIA_NIM_STT_MODEL);
     const [sttNvidiaNimKey, setSttNvidiaNimKey] = useState('');
     const [groqSttModel, setGroqSttModel] = useState('whisper-large-v3-turbo');
     const [sttGroqKey, setSttGroqKey] = useState('');
@@ -1274,6 +1310,41 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
         } catch (e) {
             console.error('Failed to set STT provider:', e);
         }
+    };
+
+    /**
+     * Commit a speech-model choice.
+     *
+     * Optimistic, then REVERTED if the write did not land. set-nvidia-nim-stt-model
+     * answers {success:false} for an unsupported id and for a degraded credential
+     * store (refuseWriteWhileDegraded), and the previous version neither awaited a
+     * result nor caught a rejection — so a refused write left the UI showing a model
+     * the next session would not load, with an unhandled rejection in the console.
+     */
+    const selectNvidiaNimSttModel = async (id: string) => {
+        const previous = nvidiaNimSttModel;
+        if (previous === id) return;
+        setNvidiaNimSttModel(id);
+        try {
+            const result = await window.electronAPI?.setNvidiaNimSttModel?.(id);
+            if (result && result.success === false) throw new Error(result.error || 'Could not save speech model');
+        } catch (err) {
+            console.error('[Settings] Failed to save NVIDIA NIM speech model:', err);
+            setNvidiaNimSttModel(previous);
+        }
+    };
+
+    /** Arrow-key navigation, which `role="radio"` obliges us to provide. */
+    const nvidiaNimSttModelKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+        const forward = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+        const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+        if (!forward && !back) return;
+        e.preventDefault();
+        const count = NVIDIA_NIM_STT_MODELS.length;
+        const next = (index + (forward ? 1 : -1) + count) % count;
+        void selectNvidiaNimSttModel(NVIDIA_NIM_STT_MODELS[next].id);
+        const group = e.currentTarget.parentElement;
+        (group?.querySelectorAll<HTMLElement>('[role="radio"]')[next])?.focus();
     };
 
     const handleSttKeySubmit = async (provider: 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim', key: string) => {
@@ -2903,13 +2974,56 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                                             {sttProvider === 'nvidia_nim' && hasStoredNvidiaNimKey && (
                                                 <div className="bg-bg-card rounded-xl border border-border-subtle p-4">
-                                                    <label className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                        {NVIDIA_NIM_STT_MODELS.map((m) => (
-                                                            <button key={m.id} onClick={async () => { setNvidiaNimSttModel(m.id); await window.electronAPI?.setNvidiaNimSttModel?.(m.id); }} className={`rounded-lg px-3 py-2.5 text-left ${nvidiaNimSttModel === m.id ? 'bg-accent-primary text-on-accent shadow-md' : 'bg-bg-input hover:bg-bg-elevated text-text-primary'}`}>
-                                                                <span className="text-sm font-medium block">{m.label}</span><span className="text-[11px] opacity-70">{m.description}</span>
-                                                            </button>
-                                                        ))}
+                                                    <label id="nvidia-nim-stt-model-label" className="text-xs font-medium text-text-secondary mb-2.5 block">{t('Nvidia Nim Speech Model')}</label>
+                                                    {/* One column, not a 2-col grid: there are THREE models, so a
+                                                        two-up grid leaves a lone orphan on the second row, and the
+                                                        descriptions ("Multilingual streaming ASR (40 locales,
+                                                        auto-detect)") wrap at half width. Mutually exclusive choice,
+                                                        so radiogroup semantics with a roving tabindex — previously
+                                                        three unrelated <button>s whose selected state was carried by
+                                                        colour alone and was invisible to a screen reader. */}
+                                                    <div role="radiogroup" aria-labelledby="nvidia-nim-stt-model-label"
+                                                        /* Nine models run ~420px; cap it so the picker cannot
+                                                           dominate the Audio tab. Arrow-key navigation scrolls the
+                                                           focused row into view for free. */
+                                                        className="flex flex-col gap-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-0.5">
+                                                        {NVIDIA_NIM_STT_MODELS.map((m, i) => {
+                                                            const selected = nvidiaNimSttModel === m.id;
+                                                            return (
+                                                                <button
+                                                                    key={m.id}
+                                                                    type="button"
+                                                                    role="radio"
+                                                                    aria-checked={selected}
+                                                                    tabIndex={selected ? 0 : -1}
+                                                                    onClick={() => void selectNvidiaNimSttModel(m.id)}
+                                                                    onKeyDown={(e) => nvidiaNimSttModelKeyDown(e, i)}
+                                                                    className={`block w-full rounded-lg px-3 py-2.5 text-left text-text-primary
+                                                                        transition-[background-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]
+                                                                        motion-safe:active:scale-[0.99] ${selected
+                                                                            ? 'bg-[color-mix(in_srgb,var(--accent-primary)_12%,var(--bg-input))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--accent-primary)_45%,transparent)]'
+                                                                            : 'bg-bg-input hover:bg-bg-elevated'}`}
+                                                                >
+                                                                    {/* Selected is a TINT plus a hairline accent ring, not
+                                                                        a solid accent slab: three full-width rows filled
+                                                                        with periwinkle overpowered a settings card, and
+                                                                        the label had to flip to --on-accent to stay
+                                                                        readable, which made the selected row the loudest
+                                                                        thing on the panel.
+                                                                        No check mark is needed even so: the ring is a
+                                                                        STRUCTURAL difference (present vs absent), not a
+                                                                        colour one, so the state survives greyscale and
+                                                                        colour-blind viewing — WCAG 1.4.1 without a second
+                                                                        glyph. `aria-checked` carries it to screen readers.
+                                                                        Opacity modifiers are unavailable here: the theme
+                                                                        colours are bare `var(--x)` with no <alpha-value>,
+                                                                        so `bg-accent-primary/12` would emit invalid CSS —
+                                                                        hence the explicit color-mix. */}
+                                                                    <span className="text-sm font-medium block leading-tight">{m.label}</span>
+                                                                    <span className={`text-[11px] leading-snug block mt-0.5 ${selected ? 'text-text-secondary' : 'text-text-tertiary'}`}>{m.description}</span>
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -3124,26 +3238,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 <>{t('Test Connection')}</>
                                                             )}
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                const urls: Record<string, string> = {
-                                                                    groq: 'https://console.groq.com/keys',
-                                                                    openai: 'https://platform.openai.com/api-keys',
-                                                                    deepgram: 'https://console.deepgram.com',
-                                                                    elevenlabs: 'https://elevenlabs.io/app/settings/api-keys',
-                                                                    azure: 'https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeech',
-                                                                    ibmwatson: 'https://cloud.ibm.com/catalog/services/speech-to-text'
-                                                                };
-                                                                if (urls[sttProvider]) {
-                                                                    // @ts-ignore
-                                                                    window.electronAPI?.openExternal(urls[sttProvider]);
-                                                                }
-                                                            }}
-                                                            className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
-                                                            title={t("Get API Key")}
-                                                        >
-                                                            <ExternalLink size={12} />
-                                                        </button>
+                                                        {STT_KEY_URLS[sttProvider] && (
+                                                            <button
+                                                                // @ts-ignore
+                                                                onClick={() => window.electronAPI?.openExternal(STT_KEY_URLS[sttProvider])}
+                                                                className="text-xs text-text-tertiary hover:text-text-primary flex items-center gap-1 transition-colors ml-1"
+                                                                title={t("Get API Key")}
+                                                            >
+                                                                <ExternalLink size={12} />
+                                                            </button>
+                                                        )}
                                                         {sttTestStatus === 'error' && (
                                                             <span className="text-xs text-red-400">{sttTestError}</span>
                                                         )}
