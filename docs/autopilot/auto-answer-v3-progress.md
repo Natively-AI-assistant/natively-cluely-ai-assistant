@@ -1107,6 +1107,31 @@ A live run showed ~5.7 s from the end of a question to the first token: 900 ms s
 1093 ms vs 999 ms — the ~1 s is network/model floor, not prompt size) and silently cost a real ask (the senior-SWE
 mid-interview problem change stopped firing). Reverted. Prompt size is a cost lever, not a latency lever.
 
+#### Real-API verification of all four (2026-08-25) — two of my own claims did not survive
+Paired design: within each rep the judge and the answer are each measured ONCE against the live endpoints, then
+both pipelines are derived from the SAME samples (`serial = judge + answer`, `prefetch = max(judge, answer)`).
+An earlier unpaired script disagreed with itself run to run because it timed the two pipelines minutes apart and
+network variance swamped the effect — worth remembering before trusting any latency A/B here.
+
+| claim | measured | verdict |
+|---|---|---|
+| prefetch overlaps the judge | serial 2195 ms → 1364 ms (8 reps, ~1.4k-token prompt); 2314 → 1436 ms (5 reps, ~6k) | **CONFIRMED, ~830-880 ms (38%)** |
+| fast routing is faster | `fast_mode` 1364 vs 1415 ms (4%, inside the spread); at ~6k tokens 1436 vs 1338 ms — SLOWER | **REFUTED** |
+| Nemotron endpoint emission | 3 deterministic tests on the real handler (injected stream factory) | **CONFIRMED** (the 550 ms is arithmetic 900→350, not measured live) |
+| 180 s judge window helps detection | two constructed follow-ups whose referent lives only in the older turns: 3/3 fire on BOTH windows | **NO MEASURED EFFECT** — an alignment, not a win |
+
+Consequences applied: **fast routing now defaults OFF** (`NATIVELY_AUTO_ANSWER_FAST=on` enables it) — it swaps to
+a different, smaller model, so leaving it on traded answer quality for nothing. `NvidiaNimStreamingSTT` took an
+injectable stream factory so its response handling is testable without a network, key or audio (esbuild inlines
+`rivaProto` into the bundle, so require-cache stubbing does not work — the earlier attempt made a real gRPC call
+and got UNAUTHENTICATED). The 180 s window stays: it costs nothing (still capped at 8 turns) and makes the judge
+read the window the answer is written from, but it is not claimed as an improvement.
+
+Realistic end-to-end on the live path that measured 5.7 s (900 ms window + 1518 ms judge + 3318 ms TTFT):
+endpoint confirm takes the window to 350 ms and the prefetch takes the judge off the critical path, so a
+prefetched question should land near **3.7 s**. Declarative tasks do not clear the prefetch gate, so they keep
+the serial cost. Requires physical verification.
+
 Validation: 3 new tests (prefetch fires during the consult and the dispatch adopts it; exposition never costs a
 generation; a snapshot keyed to another question is not reused). Suite 238/238 · judge fixtures unchanged
 (aggregate P 0.905 / R 1.000) · engine review tests 5/5 · evaluator gate green · typecheck clean. Requires

@@ -832,15 +832,17 @@ export class IntelligenceEngine extends EventEmitter {
 
         // runWhatShouldISay's own default (0.8) applies when the trigger carried none.
         this.nextRunIsAutomatic = trigger.automatic === true;
-        // An AUTOMATIC answer is a latency product: it appears unasked while
-        // the user is being spoken to, so time-to-first-token matters more
-        // than the last few points of depth. Measured 2026-08-25 on a live
-        // run: 3.3 s TTFT via the default route, which dominated the whole
-        // ~5.7 s question-to-answer path. Fast routing is scoped to this run
-        // and restored in the finally, so a manual press is untouched.
-        // NATIVELY_AUTO_ANSWER_FAST=off restores the default route.
+        // Fast routing for automatic answers: OFF by default, and the default
+        // is a MEASUREMENT, not a preference. Paired real-API runs against the
+        // Natively endpoint (8 reps at ~1.4k prompt tokens, 5 at ~6k, 2026-08-25)
+        // put `fast_mode` at 1364 ms vs 1415 ms median TTFT (4% — inside the
+        // run-to-run spread) and at the larger size 1436 vs 1338 ms, i.e.
+        // slightly SLOWER. It routes to a different, smaller model, so turning
+        // it on trades answer quality for no measured speed. The mechanism
+        // stays for endpoints where it does pay:
+        // NATIVELY_AUTO_ANSWER_FAST=on enables it.
         const fastAuto = trigger.automatic === true
-            && (process.env.NATIVELY_AUTO_ANSWER_FAST || '').toLowerCase() !== 'off';
+            && (process.env.NATIVELY_AUTO_ANSWER_FAST || '').toLowerCase() === 'on';
         const previousFastMode = this.llmHelper.getGroqFastTextMode?.() ?? false;
         if (fastAuto && !previousFastMode) {
             try { this.llmHelper.setGroqFastTextMode(true); } catch { /* routing hint only */ }
