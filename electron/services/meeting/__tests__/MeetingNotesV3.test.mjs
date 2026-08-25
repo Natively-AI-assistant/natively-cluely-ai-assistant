@@ -623,3 +623,105 @@ test('normalizer: without speakerId, channel mapping is unchanged (back-compat)'
   assert.equal(normalized.segments[0].speakerId, 'speaker_1');
   assert.equal(normalized.segments[0].speaker, 'Speaker 1');
 });
+
+// ── Follow-up draft: plain-text email shape for every mode (2026-08-26) ─────────
+// A real Technical Interview run produced a labelled "**Problem:** / **Approach:** /
+// **Signal:**" report with markdown bold and a sentence narrating that "No hiring
+// signal was discussed" — unusable as an email. These tests lock in: every mode's
+// prompt asks for a salutation + sign-off (not labelled report sections), a uniform
+// no-markdown rule, a no-absence-statements rule, and that both INCLUDE_NEXT_STEPS
+// branches carry the full STRICT RULES block.
+
+function capturingLLM(response) {
+  const captured = [];
+  return {
+    llm: { generateMeetingSummary: async (systemPrompt) => { captured.push(systemPrompt); return response; } },
+    captured,
+  };
+}
+
+const ALL_MEETING_MODES = ['general', 'sales', 'recruiting', 'team-meet', 'looking-for-work', 'technical-interview', 'lecture'];
+
+test('follow-up: technical-interview and lecture prompts ask for a salutation + sign-off, not labelled report sections', async () => {
+  for (const mode of ['technical-interview', 'lecture']) {
+    const { llm, captured } = capturingLLM('{"body":"Hi team, thanks for the session. Overall it went well."}');
+    const gen = new FollowUpDraftGenerator(llm);
+    await gen.generate({
+      summary: {
+        title: 'Session recap',
+        overview: 'Covered the main topic in depth.',
+        tldr: ['Discussed the core topic'],
+        decisions: [], actionItems: [], openQuestions: [], whatChanged: [], risks: [], sections: [],
+      },
+      mode,
+    });
+    const prompt = captured[0];
+    assert.ok(prompt, `no prompt captured for mode ${mode}`);
+    assert.match(prompt, /[Ss]alutation/, `${mode} prompt must still discuss a salutation`);
+    assert.match(prompt, /[Ss]ign-?off/, `${mode} prompt must still discuss a sign-off`);
+    // Must NOT be told "No salutation" / "No sign-off" anymore.
+    assert.equal(/No salutation/i.test(prompt), false, `${mode} prompt still says "No salutation": ${prompt}`);
+    assert.equal(/No sign-off/i.test(prompt), false, `${mode} prompt still says "No sign-off": ${prompt}`);
+    // Must NOT mandate the old labelled-block structures.
+    assert.equal(/"Problem:"/.test(prompt), false, `${mode} prompt still mandates a "Problem:" block`);
+    assert.equal(/"Approach:"/.test(prompt), false, `${mode} prompt still mandates an "Approach:" block`);
+    assert.equal(/"Signal:"/.test(prompt), false, `${mode} prompt still mandates a "Signal:" block`);
+    assert.equal(/"Key concepts:"/.test(prompt), false, `${mode} prompt still mandates a "Key concepts:" block`);
+    assert.equal(/"To remember:"/.test(prompt), false, `${mode} prompt still mandates a "To remember:" block`);
+    assert.equal(/"To review:"/.test(prompt), false, `${mode} prompt still mandates a "To review:" block`);
+  }
+});
+
+test('follow-up: every mode\'s prompt carries the no-markdown rule and the no-absence-statements rule', async () => {
+  for (const mode of ALL_MEETING_MODES) {
+    const { llm, captured } = capturingLLM('{"subject":"s","body":"Hi, thanks for the time today. We covered the main topic."}');
+    const gen = new FollowUpDraftGenerator(llm);
+    await gen.generate({
+      summary: {
+        title: 'Recap',
+        overview: 'Covered the main topic.',
+        tldr: ['Covered the main topic'],
+        decisions: [{ id: 'd1', text: 'Proceed', confidence: 'high' }],
+        actionItems: [], openQuestions: [], whatChanged: [], risks: [], sections: [],
+      },
+      mode,
+    });
+    const prompt = captured[0];
+    assert.ok(prompt, `no prompt captured for mode ${mode}`);
+    assert.match(prompt, /markdown/i, `${mode} prompt missing the no-markdown rule`);
+    assert.match(prompt, /\*\*bold\*\*/, `${mode} prompt missing the **bold** example in the no-markdown rule`);
+    assert.match(prompt, /NOT discussed, decided, or covered/, `${mode} prompt missing the no-absence-statements rule`);
+  }
+});
+
+test('follow-up: both INCLUDE_NEXT_STEPS branches carry the full STRICT RULES block (ternary-drop regression guard)', async () => {
+  // Exercise the prompt as actually built (INCLUDE_NEXT_STEPS is a module-level
+  // constant in MeetingSummaryReducer.ts, currently false) and assert every shared
+  // STRICT RULE survives — this is the branch a prior bug silently emptied.
+  const { llm, captured } = capturingLLM('{"subject":"s","body":"Hi, thanks for the time today. We covered the main topic."}');
+  const gen = new FollowUpDraftGenerator(llm);
+  await gen.generate({
+    summary: {
+      title: 'Recap', overview: 'Covered the main topic.', tldr: ['Covered the main topic'],
+      decisions: [{ id: 'd1', text: 'Proceed', confidence: 'high' }],
+      actionItems: [], openQuestions: [], whatChanged: [], risks: [], sections: [],
+    },
+    mode: 'general',
+  });
+  const prompt = captured[0];
+  const sharedRuleMarkers = [
+    /Ground everything in the notes/,
+    /Be specific to THIS meeting/,
+    /Match the salutation and sign-off/,
+    /NEVER emit placeholder syntax/,
+    /markdown/i,
+    /NOT discussed, decided, or covered/,
+    /Keep it tight and copy-paste ready/,
+    /Do not mention transcripts, AI, summaries/,
+  ];
+  for (const marker of sharedRuleMarkers) {
+    assert.match(prompt, marker, `STRICT RULES block missing ${marker} in the active INCLUDE_NEXT_STEPS branch: ${prompt}`);
+  }
+  // The branch-specific next-steps rule must also be present (whichever branch is active).
+  assert.match(prompt, /next-steps|next steps/i, 'branch-specific next-steps rule missing entirely');
+});

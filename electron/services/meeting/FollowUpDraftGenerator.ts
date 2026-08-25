@@ -113,23 +113,23 @@ const MODE_MAIL_PROFILES: Record<string, ModeMailProfile> = {
   },
   'technical-interview': {
     recipient: 'the internal hiring panel / interview loop (evaluator feedback, not the candidate)',
-    salutation: 'No salutation — this is a written debrief, not a letter. It is NOT addressed to a person.',
-    closing: 'No sign-off. End on the recommendation line.',
-    register: 'Objective, specific, and evidence-based — an interviewer writing up a debrief for the loop.',
-    structure: 'A formatted debrief with clear labelled sections in this order — "Problem:", "Approach:", "Signal:" (correctness, complexity, communication), and "Recommendation:" (advance / more signal needed). Keep each section to 1-2 lines. Do NOT invent a final hire/no-hire if it was not decided.',
+    salutation: 'Open with a brief greeting to the loop, e.g. "Hi team," or "Hi panel," — this is a short written debrief sent to people, not a filed form.',
+    closing: 'Sign off with "Thanks," or "Best," on its own line.',
+    register: 'Objective, specific, and evidence-based — an interviewer writing up a debrief for the loop, in plain prose rather than a formatted report.',
+    structure: 'A one-line frame of what was covered → the candidate\'s approach and key tradeoffs, in prose → the concrete correctness/complexity/communication signal observed, woven into sentences → a clear recommendation sentence (advance / more signal needed). Do NOT invent a final hire/no-hire if it was not decided.',
     followUp: 'Give the loop a decision-useful debrief: state the problem, the candidate\'s approach and key tradeoffs, the concrete correctness/complexity/communication signal observed, and a clear recommendation (advance / more signal needed / area to probe next round). Base every claim on what actually happened; do not invent a final hire/no-hire.',
-    structureNoNextSteps: 'A formatted debrief with clear labelled sections in this order — "Problem:", "Approach:" and "Signal:" (correctness, complexity, communication). Keep each section to 1-2 lines. Do NOT invent a final hire/no-hire if it was not decided.',
+    structureNoNextSteps: 'A one-line frame of what was covered → the candidate\'s approach and key tradeoffs, in prose → the concrete correctness/complexity/communication signal observed, woven into sentences. Do NOT invent a final hire/no-hire if it was not decided.',
     followUpNoNextSteps: 'Give the loop a decision-useful debrief: state the problem, the candidate\'s approach and key tradeoffs, and the concrete correctness/complexity/communication signal observed. Base every claim on what actually happened; do not invent a final hire/no-hire.',
     defaultTone: 'professional',
   },
   lecture: {
-    recipient: 'yourself / classmates (a study recap, not a message to anyone)',
-    salutation: 'No salutation — this is a personal study note, not addressed to anyone.',
-    closing: 'No sign-off.',
-    register: 'Plain and self-directed — notes-to-self that make revision fast.',
-    structure: 'A formatted study recap with clear labelled sections in this order — "Key concepts:", "To remember:" (definitions/formulas), and "To review:" (specific questions before the exam). Keep each section tight. No greeting, no sign-off, no "thanks".',
+    recipient: 'yourself / classmates (a study recap you might send yourself or a study group)',
+    salutation: 'Open with a brief, plain line like "Hi," or "Quick recap:" — self-directed, not a formal address.',
+    closing: 'Close with a short line such as "That\'s the recap." No formal sign-off name needed.',
+    register: 'Plain and self-directed — notes-to-self, in prose, that make revision fast.',
+    structure: 'A one-line frame of what the session covered → the core concepts worth remembering, in plain sentences → the specific definitions/formulas and the questions to review before the exam, woven into prose rather than headers.',
     followUp: 'Make revision fast: distil the core concepts worth remembering, the exact definitions/formulas to memorize, and the specific questions or confusing points to review before the exam. This is a study aid, not a message to anyone.',
-    structureNoNextSteps: 'A formatted study recap with clear labelled sections in this order — "Key concepts:" and "To remember:" (definitions/formulas). Keep each section tight. No greeting, no sign-off, no "thanks".',
+    structureNoNextSteps: 'A one-line frame of what the session covered → the core concepts worth remembering, in plain sentences → the specific definitions/formulas worth memorizing, woven into prose rather than headers.',
     followUpNoNextSteps: 'Make revision fast: distil the core concepts worth remembering and the exact definitions/formulas to memorize. This is a study aid, not a message to anyone.',
     defaultTone: 'concise',
   },
@@ -142,23 +142,27 @@ function mailProfileForMode(mode?: string | null): ModeMailProfile {
   return (mode && MODE_MAIL_PROFILES[mode]) || MODE_MAIL_PROFILES.general;
 }
 
+// Every type produces a plain-text EMAIL-shaped message — a salutation, prose body,
+// and a sign-off. `interview_feedback` and `study_notes` used to describe formatted,
+// labelled-section reports; they now describe the same kind of letter as every other
+// type, just with mode-appropriate voice (an objective debrief, a self-directed recap).
 const TYPE_GUIDANCE: Record<FollowUpDraftType, string> = {
   email: 'Write a short professional follow-up email (3-6 sentences). Open with a one-line thanks, state what was aligned/decided, then the concrete next steps with owners and dates if known, and end with the single most important open question if any.',
-  slack: 'Write a concise Slack-style update (no greeting needed, can use brief bullet emphasis). Lead with the outcome, then next steps.',
+  slack: 'Write a concise Slack-style update as plain sentences (no greeting needed). Lead with the outcome, then next steps.',
   project_update: 'Write a short project update: what changed since last sync, decisions, owners + next steps, and any blocker. Keep it skimmable.',
   crm_note: 'Write a concise CRM note: account context, pain/need, buying signal, objection, and next step. Factual, no fluff.',
-  study_notes: 'Write a short study recap: the core concepts to remember and the questions to review before the exam.',
-  interview_feedback: 'Write concise interviewer feedback: the problem, the approach, correctness/complexity signal, communication, and a clear next-step recommendation. Do NOT invent a final hire/no-hire if it was not decided.',
+  study_notes: 'Write a short study-recap email or note (3-5 sentences): a brief opening line, then plain prose covering the core concepts to remember and the questions to review before the exam. Woven into paragraphs, not labelled sections.',
+  interview_feedback: 'Write a short interview debrief as a plain email to the hiring loop (3-6 sentences): a brief greeting, then prose covering the problem, the candidate\'s approach, the concrete correctness/complexity/communication signal observed, and a clear recommendation. Woven into paragraphs, not labelled sections. Do NOT invent a final hire/no-hire if it was not decided.',
 };
 
 // Next-steps-free counterparts to TYPE_GUIDANCE, used while INCLUDE_NEXT_STEPS is false.
 const TYPE_GUIDANCE_NO_NEXT_STEPS: Record<FollowUpDraftType, string> = {
   email: 'Write a short professional follow-up email (3-5 sentences). Open with a one-line thanks, state what was aligned/decided, and end with the single most important open question if any.',
-  slack: 'Write a concise Slack-style update (no greeting needed, can use brief bullet emphasis). Lead with the outcome and what was decided.',
+  slack: 'Write a concise Slack-style update as plain sentences (no greeting needed). Lead with the outcome and what was decided.',
   project_update: 'Write a short project update: what changed since last sync, decisions, and any blocker. Keep it skimmable.',
   crm_note: 'Write a concise CRM note: account context, pain/need, buying signal, and objection. Factual, no fluff.',
-  study_notes: 'Write a short study recap: the core concepts to remember and the definitions/formulas worth memorizing.',
-  interview_feedback: 'Write concise interviewer feedback: the problem, the approach, correctness/complexity signal, and communication. Do NOT invent a final hire/no-hire if it was not decided.',
+  study_notes: 'Write a short study-recap email or note (3-4 sentences): a brief opening line, then plain prose covering the core concepts to remember and the definitions/formulas worth memorizing. Woven into paragraphs, not labelled sections.',
+  interview_feedback: 'Write a short interview debrief as a plain email to the hiring loop (3-5 sentences): a brief greeting, then prose covering the problem, the candidate\'s approach, and the concrete correctness/complexity/communication signal observed. Woven into paragraphs, not labelled sections. Do NOT invent a final hire/no-hire if it was not decided.',
 };
 
 const TONE_GUIDANCE: Record<FollowUpTone, string> = {
@@ -239,6 +243,14 @@ export class FollowUpDraftGenerator {
     // Tone: explicit caller wins; otherwise the mode's natural default.
     const tone: FollowUpTone = params.tone || profile.defaultTone;
     const inputs = this.buildInputs(params.summary);
+    // The next-steps rule is the ONLY part of STRICT RULES that legitimately differs
+    // between the two INCLUDE_NEXT_STEPS branches. Every other rule — including the
+    // plain-text and no-absence-statements rules below — is assembled OUTSIDE this
+    // ternary so it can never be silently dropped from one branch (a prior version of
+    // this file lost its entire STRICT RULES block that way).
+    const nextStepsRule = INCLUDE_NEXT_STEPS
+      ? '- If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.'
+      : '- Do NOT add a next-steps / action-items / to-do list, and do NOT add a "Next steps", "Owners & next steps" or "Action items" heading, bullet list, or closing "next steps are…" line. That block is deliberately omitted — the reader tracks those elsewhere. If one outstanding commitment is genuinely essential to the message, fold it into a sentence; never enumerate it as a labelled list.\n- If the notes genuinely contain no real outcomes, keep it short and honest rather than padding.';
 
     const decisions = params.summary.decisions || [];
     const actionItems = params.summary.actionItems || [];
@@ -273,13 +285,14 @@ AUDIENCE & VOICE:
 STRICT RULES:
 - Ground everything in the notes below. Do NOT invent decisions, owners, deadlines, numbers, pricing, or promises that aren't there.
 - Be specific to THIS meeting — reference the actual topics, names, and outcomes from the notes, not generic filler. A reader should be able to tell exactly which meeting this was about.
-- Write natural prose (or the labelled sections specified above), not a hollow scaffold. It must read like a person who was in the room wrote it.
+- Write natural prose, not a hollow scaffold or a formatted report. It must read like a person who was in the room wrote it, in a plain-text email.
 - Match the salutation and sign-off to the audience above — do NOT default to "Hi team," unless this is an internal-team message.
 - NEVER emit placeholder syntax — neither bracketed placeholders ([Name]) nor curly braces ({first name} / {interviewer name}). If a name is unknown, phrase around it naturally or use "Hi there," / "Dear Hiring Team,".
+- Plain text only — do NOT use any markdown formatting: no **bold**, no _italics_, no # headings, no backticks, and no "-" or "*" bullet markers. Email clients render these characters literally as visible asterisks/hashes/dashes, not as formatting, so markdown syntax would show up as clutter in the sent message. This applies to every draft, including Slack-style updates.
+- Never state what was NOT discussed, decided, or covered (e.g. "no hiring signal was discussed," "no decisions were made," "nothing was mentioned about X"). If a topic is absent from the notes, simply omit it — do not narrate the gap.
 - Keep it tight and copy-paste ready.
 - Do not mention transcripts, AI, summaries, or that this was auto-generated.
-${INCLUDE_NEXT_STEPS ? '- If the notes genuinely contain no real outcomes or next steps, keep it short and honest rather than padding.' : `- Do NOT add a next-steps / action-items / to-do list, and do NOT add a "Next steps", "Owners & next steps" or "Action items" heading, bullet list, or closing "next steps are…" line. That block is deliberately omitted — the reader tracks those elsewhere. If one outstanding commitment is genuinely essential to the message, fold it into a sentence; never enumerate it as a labelled list.
-- If the notes genuinely contain no real outcomes, keep it short and honest rather than padding.`}
+${nextStepsRule}
 
 ${type === 'email' ? 'The "subject" must be grounded in the meeting title or the first takeaway below — a short noun phrase grounded in something in the notes, NOT a list of topics. Example good subject: "Follow-up: Acme Q3 renewal kickoff".' : 'No "subject" key — this draft is not an email.'}
 
