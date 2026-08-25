@@ -5529,8 +5529,17 @@ let isMultimodal = !!(imagePaths?.length);
     // The ceiling is per-SURFACE: the live cap is calibrated from what_to_answer
     // answers and is far too tight for a whole-meeting summary, which the batch
     // callers reach through streamChatLongForm.
-    const { MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
-    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    // Loaded TOGETHER: the two imports are independent, so awaiting them in
+    // sequence costs an extra microtask hop on every streamed turn for nothing
+    // (react-doctor server-sequential-independent-await). This is the hot path —
+    // every answer passes through it.
+    const [
+      { MAX_STREAM_OUTPUT_CHARS, MAX_SUMMARY_OUTPUT_CHARS },
+      { testOutputCharCeiling },
+    ] = await Promise.all([
+      import('./llm/liveDeadlines'),
+      import('./llm/streamFaultInjection'),
+    ]);
     // Test switch (dev-only, opt-in) lets the cap be provoked without waiting
     // for a model to actually loop. Null in any packaged build.
     const outputCeiling = testOutputCharCeiling()
@@ -5629,8 +5638,12 @@ let isMultimodal = !!(imagePaths?.length);
     state: { chars: number; truncated?: boolean },
     label: string,
   ): AsyncGenerator<string, void, unknown> {
-    const { MAX_STREAM_OUTPUT_CHARS } = await import('./llm/liveDeadlines');
-    const { testOutputCharCeiling } = await import('./llm/streamFaultInjection');
+    // Same independent-await pair as streamChat above — one Promise.all rather
+    // than two sequential awaits on the per-chunk cap path.
+    const [{ MAX_STREAM_OUTPUT_CHARS }, { testOutputCharCeiling }] = await Promise.all([
+      import('./llm/liveDeadlines'),
+      import('./llm/streamFaultInjection'),
+    ]);
     const ceiling = testOutputCharCeiling() ?? MAX_STREAM_OUTPUT_CHARS;
     for await (const chunk of inner) {
       yield chunk;
