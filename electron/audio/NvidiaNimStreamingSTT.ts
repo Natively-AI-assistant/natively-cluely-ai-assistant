@@ -104,11 +104,17 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
    *
    * The renderer calls this on every "Answer Now" to mean "transcribe what I
    * just said". Riva has NO flush control — StreamingRecognize is one long
-   * call, and half-closing it is the only way to make the server emit the
-   * final it is holding. That is why the original `stream.end()` produced a
-   * transcript, and why replacing it with a no-op produced NONE at all: the
-   * mic's silence suppressor sends keepalive frames rather than real silence,
-   * so Riva's own endpointing never fires and nothing else forces the final.
+   * call, and half-closing it is the only way to make the server release a
+   * final it is still holding.
+   *
+   * Riva DOES endpoint on its own for completed utterances; live logs show
+   * finals arriving mid-meeting with no press. What it will not do is release
+   * the utterance still in flight at the moment the user asks for an answer,
+   * and that trailing fragment is usually the question itself. Measured on one
+   * press: a 14-char final had already landed from normal endpointing, and the
+   * 39-char remainder — the actual question — only arrived once this closed the
+   * call. Replacing end() with a no-op therefore did not merely delay finals,
+   * it lost the one that mattered.
    *
    * So: ROTATE rather than close. End the current call (the server flushes its
    * final, which still reaches the listener — the 'data' handler emits
