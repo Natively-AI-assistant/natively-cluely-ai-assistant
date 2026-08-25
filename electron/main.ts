@@ -3205,7 +3205,11 @@ export class AppState {
     meetingGeneration: () => this._meetingGeneration,
     engineAccepting: () => this.intelligenceManager.canAutoAnswer(),
     answerStreamActive: () => this.intelligenceManager.isAnswerStreaming(),
-    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(60) as any,
+    // 180 s — the SAME window the answer itself is written from
+    // (IntelligenceEngine's getContext(180)). At 60 s the judge could not see
+    // the problem statement when ruling on a follow-up two minutes later,
+    // while the answer could; the offline benches all ran on the wider view.
+    recentTurns: () => this.intelligenceManager.getLiveTranscriptBrain().getHotWindow(180) as any,
     dispatch: (question, { reuseSpeculative }) => {
       return this.intelligenceManager.runAutoAnswer(question, { reuseSpeculative }).catch((error) => {
         console.warn('[Main] Automatic interviewer answer failed:', error);
@@ -3213,6 +3217,12 @@ export class AppState {
     },
     offer: (question) => this.showAutoAnswerOffer(question),
     cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
+    // Speculative prefetch (2026-08-25): key the engine's own interim
+    // speculation to this candidate, and let the engine start the answer while
+    // the judge is still deciding.
+    noteCandidate: (id, gen) => this.intelligenceManager.noteAutoAnswerCandidate(id, gen),
+    speculativeSnapshot: () => this.intelligenceManager.getSpeculativeSnapshot(),
+    prefetchAnswer: (id, text) => this.intelligenceManager.prefetchAutoAnswer(id, text),
     ...((process.env.NATIVELY_AUTO_ANSWER_JUDGE || '').toLowerCase() === 'off' ? {} : {
       judgeCandidate: async (req) => {
         const llm = this.processingHelper?.getLLMHelper?.();

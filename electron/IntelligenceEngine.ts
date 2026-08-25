@@ -832,10 +832,26 @@ export class IntelligenceEngine extends EventEmitter {
 
         // runWhatShouldISay's own default (0.8) applies when the trigger carried none.
         this.nextRunIsAutomatic = trigger.automatic === true;
+        // An AUTOMATIC answer is a latency product: it appears unasked while
+        // the user is being spoken to, so time-to-first-token matters more
+        // than the last few points of depth. Measured 2026-08-25 on a live
+        // run: 3.3 s TTFT via the default route, which dominated the whole
+        // ~5.7 s question-to-answer path. Fast routing is scoped to this run
+        // and restored in the finally, so a manual press is untouched.
+        // NATIVELY_AUTO_ANSWER_FAST=off restores the default route.
+        const fastAuto = trigger.automatic === true
+            && (process.env.NATIVELY_AUTO_ANSWER_FAST || '').toLowerCase() !== 'off';
+        const previousFastMode = this.llmHelper.getGroqFastTextMode?.() ?? false;
+        if (fastAuto && !previousFastMode) {
+            try { this.llmHelper.setGroqFastTextMode(true); } catch { /* routing hint only */ }
+        }
         try {
             await this.runWhatShouldISay(trigger.lastQuestion, trigger.confidence ?? undefined);
         } finally {
             this.nextRunIsAutomatic = false;
+            if (fastAuto && !previousFastMode) {
+                try { this.llmHelper.setGroqFastTextMode(false); } catch { /* routing hint only */ }
+            }
         }
     }
 
@@ -863,6 +879,34 @@ export class IntelligenceEngine extends EventEmitter {
     /** Auto Answer V3: the controller's current candidate, for keying the speculative prefetch. */
     noteAutoAnswerCandidate(questionId: string, _candidateGeneration: number): void {
         this.currentAutoCandidateId = questionId;
+    }
+
+    /**
+     * Auto Answer (2026-08-25): start the answer WHILE the judge is deciding.
+     *
+     * The judge takes ~1-1.5 s and the answer's first token another ~3 s, so
+     * running them in series is most of the perceived latency. This starts a
+     * SPECULATIVE run keyed to the candidate; if the verdict says fire, the
+     * dispatch reuses the stream already in flight (`reuseSpeculative`), and
+     * if it says no, the speculative text simply expires unused.
+     *
+     * Guards mirror maybeSpeculate: only from an idle/assist engine, never on
+     * top of a live stream or an existing speculation, never inside the
+     * trigger cooldown. Callers gate on how likely the candidate is to be an
+     * ask, so a whole meeting of exposition does not each start a generation.
+     */
+    prefetchAutoAnswer(questionId: string, text: string): void {
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return;
+        if (this.speculativeText !== null) return;
+        if (this.speculativeTimer !== null) return;
+        if (Date.now() - this.lastTriggerTime < this.triggerCooldown) return;
+        const trimmed = (text ?? '').trim();
+        if (trimmed.length < 12) return;
+        this.currentAutoCandidateId = questionId;
+        this.speculativeQuestionId = questionId;
+        console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
+        this.runWhatShouldISay(trimmed, 0.9, undefined, { speculative: true })
+            .catch(err => console.error('[IntelligenceEngine] Auto Answer prefetch error:', err));
     }
 
     /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */

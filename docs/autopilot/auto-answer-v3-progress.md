@@ -1077,6 +1077,41 @@ the two false fires are documented in the fixtures with `note` fields (a mid-phr
 documented one), scenarios 12/12, all three recorded meetings correct, suite 235/235, evaluator gate green,
 typecheck clean.
 
+### Latency work (2026-08-25) — measured from a live run, not guessed
+A live run showed ~5.7 s from the end of a question to the first token: 900 ms stability window + ~1.5 s judge +
+**3.3 s answer TTFT**, i.e. the ANSWER model, not detection, was ~60% of it. Four changes, in the order they pay:
+
+29. **Speculative prefetch.** The judge (~1-1.5 s) and the answer (~3 s TTFT) ran in series. The engine already
+    speculates on interims but the simple engine dispatched with `reuseSpeculative: false`, so that work was
+    always thrown away. Now: at consult time the engine calls `noteCandidate` (keys any speculation to this
+    candidate) and, when the CHEAP local scorer already rates the candidate ≥ `PREFETCH_MIN_ANSWERABILITY`=0.8,
+    `prefetchAnswer` starts the answer while the judge decides; at dispatch, a speculative snapshot whose
+    questionId matches is adopted (`reuseSpeculative: true`). The heuristic gate is what keeps this from becoming
+    the legacy waste pattern — on the benched videos exposition never triggers a generation, only question-shaped
+    turns do. New `IntelligenceEngine.prefetchAutoAnswer()` mirrors `maybeSpeculate`'s guards (idle/assist only,
+    never over a live stream or an existing speculation, never inside the cooldown).
+30. **Automatic answers run in FAST routing.** An automatic answer appears unasked while someone is still
+    talking, so time-to-first-token matters more than the last points of depth. `groqFastTextMode` is now enabled
+    for the duration of an automatic run and restored in the `finally` (a manual press is untouched; a user who
+    already has fast mode on is left alone). `NATIVELY_AUTO_ANSWER_FAST=off` restores the default route.
+31. **NVIDIA Nemotron now emits provider endpoints.** `NvidiaNimStreamingSTT` had no `endpoint` event, so every
+    stoppage paid the full 900 ms window instead of the 350 ms endpoint confirm — main.ts had been wiring the
+    listener to a provider that never fired it. Riva's `is_final` IS the end-of-utterance signal; it now emits
+    `endpoint {type:'speech_final'}`. Additive: consumers that do not listen are unaffected.
+32. **The judge sees the same 3-minute transcript the answer does.** The answer path is written from
+    `getContext(180)`; the judge was capped at `getHotWindow(60)`, so it could not see the problem statement when
+    ruling on a follow-up two minutes later. Now 180 s (still capped at `JUDGE_CONTEXT_TURNS`=8 turns, so the
+    prompt does not grow) — which also matches the window every offline bench ran on.
+
+**Measured and rejected:** compressing the judge prompt 27% (1910 → 1404 tokens) did NOT improve latency (median
+1093 ms vs 999 ms — the ~1 s is network/model floor, not prompt size) and silently cost a real ask (the senior-SWE
+mid-interview problem change stopped firing). Reverted. Prompt size is a cost lever, not a latency lever.
+
+Validation: 3 new tests (prefetch fires during the consult and the dispatch adopts it; exposition never costs a
+generation; a snapshot keyed to another question is not reused). Suite 238/238 · judge fixtures unchanged
+(aggregate P 0.905 / R 1.000) · engine review tests 5/5 · evaluator gate green · typecheck clean. Requires
+physical verification: the end-to-end latency gain and the Nemotron endpoint path were not measured live.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.

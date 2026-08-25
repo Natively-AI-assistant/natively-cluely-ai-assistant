@@ -135,6 +135,13 @@ export class NvidiaNimStreamingSTT extends EventEmitter {
         for (const result of response?.results || []) {
           const alt = result?.alternatives?.[0];
           if (alt?.transcript) this.emit('transcript', { text: alt.transcript, isFinal: !!result.isFinal, confidence: alt.confidence || 1 });
+          // Riva marks the end of an utterance with is_final. Auto Answer
+          // treats that as a provider ENDPOINT and confirms the speaker
+          // stopped in ENDPOINT_CONFIRM_MS instead of waiting the full
+          // stability window (2026-08-25: without this, every Nemotron
+          // stoppage paid the whole ~900 ms). Additive: consumers that do
+          // not listen for 'endpoint' are unaffected.
+          if (result?.isFinal) this.emit('endpoint', { type: 'speech_final' });
         }
       });
       this.stream.on('error', (error: Error) => {

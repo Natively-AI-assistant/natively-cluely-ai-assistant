@@ -38,7 +38,7 @@ function makeSimple(judgeImpl, overrides = {}) {
     engineAccepting: () => state.accepting,
     answerStreamActive: () => state.streaming,
     recentTurns: () => state.turns,
-    dispatch: (q) => { state.dispatched.push(q); state.streaming = true; },
+    dispatch: (q, opts) => { state.dispatched.push(q); state.dispatchOpts = opts; state.streaming = true; },
     offer: (q) => state.offered.push(q),
     cancelAutomaticAnswer: (r) => { state.cancelled.push(r); return true; },
     telemetry: (e) => { state.events.push(e); if (e.name === 'auto_answer_ignored') state.skips.push(e.skipReason); },
@@ -303,4 +303,48 @@ test('review offers: replaced / expired / topic-change / meeting-stop all retrac
   assert.equal(g.texts().length, 1);
   g.engine.onMeetingStop();
   assert.equal(g.clock.pendingCount(), 0);
+});
+
+// ── Latency work (2026-08-25): prefetch, speculative reuse, endpoint confirm ──
+
+test('prefetch: a question-shaped candidate starts the answer WHILE the judge decides, and the dispatch reuses it', async () => {
+  const resolvers = [];
+  const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
+  const prefetched = [];
+  h.state.spec = { questionId: null, text: null };
+  h.engine.host.prefetchAnswer = (id, text) => { prefetched.push({ id, text }); h.state.spec = { questionId: id, text }; };
+  h.engine.host.speculativeSnapshot = () => h.state.spec;
+  h.engine.host.noteCandidate = () => {};
+
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 100);
+  assert.equal(prefetched.length, 1, 'prefetch starts at the consult, not after the verdict');
+  assert.equal(h.state.judgeCalls.length, 1, 'and the judge is still deciding');
+  assert.deepEqual(h.texts(), []);
+
+  resolvers[0](YES());
+  await flush(); await flush();
+  assert.equal(h.texts().length, 1);
+  assert.equal(h.state.dispatchOpts.reuseSpeculative, true, 'the dispatch adopts the stream that was already running');
+});
+
+test('prefetch: exposition never costs a generation', async () => {
+  const h = makeSimple(async () => NO);
+  const prefetched = [];
+  h.engine.host.prefetchAnswer = (id, text) => prefetched.push(text);
+  h.engine.host.speculativeSnapshot = () => ({ questionId: null, text: null });
+  h.interviewer('Basically, every day a five-letter word is picked at random from some word bank, and the player has to guess it.');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(h.state.judgeCalls.length, 1, 'the judge still rules on it');
+  assert.deepEqual(prefetched, [], 'but no answer was generated speculatively');
+});
+
+test('prefetch: a stale speculative snapshot for ANOTHER question is not reused', async () => {
+  const h = makeSimple(async () => YES());
+  h.engine.host.prefetchAnswer = () => {};
+  h.engine.host.speculativeSnapshot = () => ({ questionId: 'someone-elses-question', text: 'stale answer' });
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.equal(h.texts().length, 1);
+  assert.equal(h.state.dispatchOpts.reuseSpeculative, false, 'a snapshot keyed to a different question must be ignored');
 });

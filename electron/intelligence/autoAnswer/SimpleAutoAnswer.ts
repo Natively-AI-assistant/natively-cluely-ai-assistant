@@ -34,7 +34,7 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { normalizeForCompare, tokenContainment } from './AutoAnswerDetector';
+import { normalizeForCompare, tokenContainment, scoreCandidate } from './AutoAnswerDetector';
 import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
@@ -54,6 +54,14 @@ export const MIN_NEW_WORDS = 4;
 export const OFFER_TTL_MS = 10_000;
 /** Judge-unavailable fallback on punctuation-less providers: interrogative-led utterances. */
 export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)[,.!\s]+)*(?:how|what|why|when|where|which|who|whose|can|could|would|should|do|does|did|are|is|will|have you|tell me|tell us|walk me|walk us|explain|describe)\b/i;
+/**
+ * Prefetch gate. The judge takes ~1-1.5 s and the answer's first token ~3 s
+ * more; starting them together takes the judge off the critical path. But a
+ * prefetch the verdict then rejects is a wasted generation, so only candidates
+ * the CHEAP local scorer already likes get one — on the benched videos that is
+ * the handful of question-shaped turns, never the exposition. Unfitted placeholder.
+ */
+export const PREFETCH_MIN_ANSWERABILITY = 0.8;
 /** Busy-engine retry cadence and give-up. */
 export const RETRY_MS = 500;
 export const RETRY_TTL_MS = 8000;
@@ -80,6 +88,12 @@ export interface SimpleAutoAnswerHost {
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
     judgeCandidate?(req: JudgeRequest): Promise<string | null>;
+    /** Key the engine's speculative cache to this candidate. */
+    noteCandidate?(questionId: string, candidateGeneration: number): void;
+    /** What the engine currently holds speculatively, for keyed reuse. */
+    speculativeSnapshot?(): { questionId: string | null; text: string | null };
+    /** Start the answer WHILE the judge decides (see PREFETCH_MIN_ANSWERABILITY). */
+    prefetchAnswer?(questionId: string, text: string): void;
     modeName?(): string | null;
     telemetry?(event: AutoAnswerTelemetryEvent): void;
     log?(line: string): void;
@@ -229,7 +243,33 @@ export class SimpleAutoAnswerEngine {
             candidateWordCount: words, endpointSource: 'quiet_window',
         });
         this.lastJudgedKey = key;
+        // Key any speculation the engine starts on its own interims to THIS
+        // candidate, so the dispatch below can claim it by id.
+        this.host.noteCandidate?.(id, this.sequence);
+        this.maybePrefetch(id, candidate, now);
         void this.consult(id, candidate, now);
+    }
+
+    /**
+     * Start the answer while the judge is still deciding, but only for
+     * candidates the cheap local scorer already rates highly — a prefetch the
+     * verdict rejects costs a full generation.
+     */
+    private maybePrefetch(id: string, candidate: string, now: number): void {
+        if (!this.host.prefetchAnswer) return;
+        try {
+            const scores = scoreCandidate({
+                candidate: { text: candidate, lastUpdatedAt: now } as never,
+                recentTurns: this.turnsBefore(now),
+                questionId: id,
+                candidateGeneration: this.sequence,
+                meetingGeneration: this.host.meetingGeneration(),
+                now,
+            });
+            if (scores.answerability < PREFETCH_MIN_ANSWERABILITY) return;
+            if (scores.dialogueAct === 'incomplete') return;
+            this.host.prefetchAnswer(id, scores.questionText || candidate);
+        } catch { /* prefetch is an optimisation; never break the pipeline */ }
     }
 
     private async consult(id: string, candidate: string, committedAt: number): Promise<void> {
@@ -328,11 +368,18 @@ export class SimpleAutoAnswerEngine {
             }
             this.retractOffer('topic_change');
             const q = this.question(id, text, answerability, act, committedAt);
+            // If the engine already has an answer in flight for THIS question
+            // (our prefetch, or its own interim speculation keyed by
+            // noteCandidate), adopt it instead of starting over — that is the
+            // whole point of prefetching.
+            const snapshot = this.host.speculativeSnapshot?.();
+            const reuseSpeculative = Boolean(snapshot && snapshot.questionId === id && snapshot.text);
             this.lastAnsweredText = text;
             this.pending = [];
             this.lastJudgedKey = '';
             this.emit({ name: 'auto_answer_decision', questionId: id, action: 'auto', answerability });
-            void this.host.dispatch(q, { reuseSpeculative: false });
+            if (reuseSpeculative) this.host.log?.(`[AutoAnswer:simple] reusing the prefetched answer for ${id}`);
+            void this.host.dispatch(q, { reuseSpeculative });
         };
         attempt();
     }
