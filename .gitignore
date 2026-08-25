@@ -533,7 +533,13 @@ benchmark-results/
 #   undefined/           written by a bug that resolved a path to the literal
 #                        string "undefined" — if this reappears, fix the caller
 #   natively_debug.size* one-off debug dumps
+#   pitch/               investor pitch deck + DPIIT notes (business material,
+#                        and this repo is public — a deck does not belong in it)
+#   researc              a personal chat transcript, saved by a shell redirect
+#                        that lost its filename. Kept locally, never committed.
 /natively-control/
 /chargeback_evidence/
 /undefined/
 /natively_debug.size*
+/pitch/
+/researc
