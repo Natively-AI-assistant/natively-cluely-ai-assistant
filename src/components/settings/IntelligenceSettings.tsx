@@ -42,7 +42,11 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
   // removing `settingIgnored` from the registry (otherwise the toggle would render but
   // silently do nothing).
   meetingModeAutoDetect: { label: 'Auto-detect meeting type', desc: 'Detects whether a meeting was a sales call, interview, standup, or lecture, and uses the best notes template.', group: 'Meeting notes', tier: 'core' },
-  followUpDraftV2: { label: 'Smart follow-up drafts', desc: 'Writes a short, copy-ready follow-up message from the meeting’s decisions and action items.', group: 'Meeting notes', tier: 'core' },
+  // followUpDraftV2 removed (2026-08-25): the LLM-written follow-up draft is now the
+  // unconditional default with no user-facing toggle — see
+  // electron/intelligence/intelligenceFlags.ts's `settingIgnored` on that flag's spec. Do
+  // not re-add an entry here without also removing `settingIgnored` from the registry
+  // (otherwise the toggle would render but silently do nothing).
   speakerLabelsV1: { label: 'Speaker labels', desc: 'Lets you rename speakers (e.g. “John from Client”) and uses those names in notes and action items.', group: 'Meeting notes', tier: 'core' },
   // ── Advanced: real opt-in tradeoffs (cost / scope / niche) → inside "Customize" ──────
   // Descriptions corrected 2026-08-05 (settings-surface audit): each now states what the

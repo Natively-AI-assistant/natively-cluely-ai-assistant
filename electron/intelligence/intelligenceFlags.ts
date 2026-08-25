@@ -383,7 +383,13 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // post_call_summary data scope.
   meetingSummaryV3: { env: 'NATIVELY_MEETING_SUMMARY_V3', setting: 'meetingSummaryV3Enabled', settingIgnored: true, default: true },
   meetingModeAutoDetect: { env: 'NATIVELY_MEETING_MODE_AUTODETECT', setting: 'meetingModeAutoDetectEnabled', default: true },
-  followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', default: true },
+  // The LLM-written follow-up draft is now the UNCONDITIONAL default (product decision
+  // 2026-08-25) — the experimental settings toggle has been removed. `settingIgnored: true`
+  // means a stale persisted `followUpDraftV2Enabled` (from when the toggle existed, in
+  // either direction) is never read — this flag now only listens to the env kill-switch and
+  // its default. Set NATIVELY_FOLLOWUP_DRAFT_V2=0 to force the deterministic fallback draft
+  // in an emergency without a release; that is the ONLY remaining way to turn this off.
+  followUpDraftV2: { env: 'NATIVELY_FOLLOWUP_DRAFT_V2', setting: 'followUpDraftV2Enabled', settingIgnored: true, default: true },
   speakerLabelsV1: { env: 'NATIVELY_SPEAKER_LABELS_V1', setting: 'speakerLabelsV1Enabled', default: true },
   // Constrained LLM polish of the Summary (note-content-only, "no new tokens" gated). ON by
   // default — it can only improve readability and always falls back to the deterministic
