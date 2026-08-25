@@ -1587,3 +1587,35 @@ Validation: 53/53 Auto Answer tests, including the verbatim strings from the liv
 mutation-probed — ignoring the character before the cut (1 fail), claiming a seam when the interim was revised
 (1 fail), never detecting a cut (1 fail). The first probe initially passed and the test was strengthened until
 it failed: nothing covered the punctuation-seam case.
+
+### NEGATIVE RESULT: the WTA system prompt is not a latency lever (2026-08-26)
+
+Proposed after the live run on the reasoning that the 16,291-char system prompt drove the 2690 ms TFFT, since
+a 3,145-char prompt on another surface measured 1622 ms. **That was a confound** — two different surfaces, two
+different user payloads, two different moments — and a controlled experiment refutes it.
+
+Interleaved A/B against the real Natively endpoint (7 samples per arm, arms alternated so drifting provider
+load hits both equally, identical user message):
+
+| system prompt | median TFFT | min | max |
+| --- | --- | --- | --- |
+| 1,000 chars | 1176 ms | 830 | 2420 |
+| 23,000 chars | **997 ms** | 794 | 1733 |
+
+The *large* prompt is marginally faster: there is no prefill effect in this range at all. TFFT on this endpoint
+is queue/network-bound, so cutting the prompt would buy nothing measurable while putting the Prompt System v2
+answer contract at risk. **Not done, deliberately.**
+
+This is the second measured dead end for answer latency. The first is already recorded in
+`IntelligenceEngine.handleSuggestionTrigger`: `NATIVELY_AUTO_ANSWER_FAST` routes to a smaller model and paired
+real-API runs put it at 1364 vs 1415 ms (inside the spread) and *slower* at the larger prompt size.
+
+Worth noting for anyone re-measuring: the live run's 2690 ms TFFT came at a total prompt of ~23.1k chars
+(16,291 system + 6,855 user) — the same total as the large arm above, which medians at 997 ms. So the live
+number is provider variance, not payload. The tail is what the user feels; the median is not the number to
+optimise against.
+
+Remaining structure of the ~3.1–4.2 s to first token:
+* ~1.5 s to decide — judge, now overlapped with the stability window and close to its floor;
+* ~1.0–2.7 s provider TFFT — not addressable from the client except by generating before the verdict, which
+  costs answer-engine occupancy (see the early-ask entry).
