@@ -166,7 +166,7 @@ jobs:
       # about it.
       #
       # ⚠️ EXPECTED RED until the two deferred findings are resolved
-      # (docs/ts7-upgrade-report.md §7): IntelligenceEngine's queryOkfCards vs
+      # IntelligenceEngine's queryOkfCards vs
       # EvidenceResolver's DI port, and ModeHybridRetriever's genuinely-nullable
       # reranker. Deliberately left BLOCKING rather than downgraded to
       # continue-on-error — muting a real gate to hide two known type errors is

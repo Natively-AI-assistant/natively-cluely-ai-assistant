@@ -1,7 +1,6 @@
 // electron/llm/modeHybridEligibility.ts
 //
-// Phase 2 of the semantic-retrieval repair (2026-08-13, audit
-// reports/cosine-similarity-relevance-audit-2026-08-13.md §6).
+// Phase 2 of the semantic-retrieval repair (2026-08-13).
 //
 // LLMHelper had TWO hybrid-eligibility predicates for mode reference-file
 // retrieval, and they disagreed:

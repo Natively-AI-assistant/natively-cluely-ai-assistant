@@ -1,7 +1,6 @@
 // electron/llm/semanticAdmissionGate.ts
 //
-// Phase 1 of the semantic-retrieval repair (2026-08-13, audit
-// reports/cosine-similarity-relevance-audit-2026-08-13.md §5).
+// Phase 1 of the semantic-retrieval repair (2026-08-13).
 //
 // HybridSearchEngine's legacy admission predicate is `blendedScore > 0.55`,
 // where blendedScore = 0.6·cosine + up to 1.35 of metadata boosts. Verified

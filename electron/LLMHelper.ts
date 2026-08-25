@@ -7559,7 +7559,7 @@ let isMultimodal = !!(imagePaths?.length);
     //     leaves `lastErr` set, so `if (lastErr) throw lastErr` fires first.
     // NOTE: this invariant is fragile — introducing an `await` before the loop
     // would make the abort break reachable and `response.ok` would throw a
-    // TypeError. See docs/ts7-upgrade-report.md (fragile invariants).
+    // TypeError.
     let response!: Response;
     try {
       // Retry on transient DNS failures (ENOTFOUND / EAI_AGAIN).

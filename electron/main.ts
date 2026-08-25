@@ -8960,7 +8960,7 @@ if (process.env.THINKING_MATRIX === '1') {
   // TODO(electron43): dead event on Electron 43; remove after verifying child-process-gone covers GPU crashes on macOS+Windows
   // The `as any` is type-only: Electron 43 dropped 'gpu-process-crashed' from its
   // typings, so no overload matches. The listener is deliberately KEPT registered
-  // (removing it would be a behaviour change) — see docs/ts7-upgrade-audit.md §4.4.
+  // (removing it would be a behaviour change).
   app.on('gpu-process-crashed' as any, (_event: Electron.Event, killed: boolean) => {
     logCrashConsole('gpu-process-crashed', { killed });
     // Deprecated alias of child-process-gone {type:'GPU'} — same policy:

@@ -68,7 +68,7 @@ module.exports = {
     // keychain-access-groups entitlement shipped. That entitlement was removed on
     // 2026-08-19 — it is restricted/profile-requiring and, with no embedded
     // provisioning profile, AMFI refused to exec the signed app at all. See
-    // MACOS_LAUNCH_FAILURE_2026-08-19.md and build/entitlements.mac.plist.
+    // build/entitlements.mac.plist.
   },
   // afterSign: notarize the .app via scripts/notarize.js, which adds STAPLE-RETRY
   // recovery for the Apple CDN ticket-propagation race (Error 65). We do NOT use
