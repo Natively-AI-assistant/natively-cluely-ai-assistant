@@ -15,7 +15,7 @@ const { MeetingModeDetector } = await load('MeetingModeDetector.js');
 const { SpeakerLabelService } = await load('SpeakerLabelService.js');
 const { CrossMeetingRecall, priorFromDetailedSummary } = await load('CrossMeetingRecall.js');
 const { FollowUpDraftGenerator, followUpTypeForMode } = await load('FollowUpDraftGenerator.js');
-const { generateStructured, extractJsonObject } = await load('generateStructured.js');
+const { generateStructured, extractJsonObject, NOTE_CALL_TIMEOUT_MS } = await load('generateStructured.js');
 const { MeetingSummarySchemaValidator } = await load('MeetingSummarySchemaValidator.js');
 const { MeetingSummaryReducer } = await load('MeetingSummaryReducer.js');
 const { SectionPromptCompiler, deterministicSectionInstruction } = await load('SectionPromptCompiler.js');
@@ -292,6 +292,28 @@ test('follow-up generator uses LLM body when valid', async () => {
 // ── Follow-up generator quality gates (regression suite for the senior review) ─
 // These tests are intentionally narrow: each one locks in a single user-visible
 // behaviour that the senior review found missing or breakable.
+
+// Fix 2: only ChunkSummaryGenerator's extraction call had its timeout raised past the
+// 8s default. FollowUpDraftGenerator.generate() must pass the shared NOTE_CALL_TIMEOUT_MS
+// (30s) via callOpts — timeout ONLY, never purpose:'extraction' (that route is
+// benchmarked for structured extraction, not drafting prose).
+test('follow-up generator passes the raised NOTE_CALL_TIMEOUT_MS to the LLM call, without purpose:extraction', async () => {
+  const captured = [];
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, context, groq, opts) => {
+      captured.push(opts);
+      return '{"subject":"Sync recap","body":"Thanks all. We chose PostHog."}';
+    },
+  };
+  const gen = new FollowUpDraftGenerator(llm);
+  await gen.generate({
+    summary: { overview: 'x', decisions: [{ id: 'd1', text: 'Use PostHog', confidence: 'high' }], actionItems: [], openQuestions: [], tldr: [], whatChanged: [] },
+    mode: 'sales',
+  });
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0]?.timeoutMs, NOTE_CALL_TIMEOUT_MS, `expected timeoutMs ${NOTE_CALL_TIMEOUT_MS}, got ${JSON.stringify(captured[0])}`);
+  assert.equal(captured[0]?.purpose, undefined, 'follow-up drafting must NOT be routed to purpose:extraction');
+});
 
 test('follow-up: rejects LLM subject with placeholder syntax and falls back to a grounded one', async () => {
   // A model that emits {first name} / [Name] must not see it persisted; the gate

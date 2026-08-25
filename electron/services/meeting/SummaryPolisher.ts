@@ -13,7 +13,7 @@
 
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, MeetingNoteSection, RiskItem } from './MeetingSummaryV3';
-import { generateStructured } from './generateStructured';
+import { generateStructured, NOTE_CALL_TIMEOUT_MS } from './generateStructured';
 import { INCLUDE_NEXT_STEPS, getOverviewBand } from './MeetingSummaryReducer';
 
 export interface PolishSummaryParams {
@@ -90,6 +90,9 @@ ${grounded}`;
       jsonShapeHint,
       userContent: grounded,
       llmHelper: this.llmHelper,
+      // Timeout only — deliberately NOT routed to purpose:'extraction'. This is a prose
+      // polish (a writing task), not the benchmarked structured-extraction route.
+      callOpts: { timeoutMs: NOTE_CALL_TIMEOUT_MS },
       validate: (raw) => {
         const arr = (raw && typeof raw === 'object' && Array.isArray((raw as any).summary)) ? (raw as any).summary : null;
         if (!arr) return { ok: false, errors: ['missing summary array'], repaired: false };
@@ -157,6 +160,9 @@ ${grounded}`;
       jsonShapeHint,
       userContent: grounded,
       llmHelper: this.llmHelper,
+      // Timeout only — deliberately NOT routed to purpose:'extraction'. This is a prose
+      // polish (a writing task), not the benchmarked structured-extraction route.
+      callOpts: { timeoutMs: NOTE_CALL_TIMEOUT_MS },
       validate: (raw) => {
         // Collapse only HORIZONTAL whitespace and normalize runs of blank lines to a single
         // paragraph break (\n\n) — a plain `\s+ -> ' '` collapse (used elsewhere in this file

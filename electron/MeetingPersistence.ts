@@ -9,6 +9,7 @@ import { GROQ_SUMMARY_JSON_PROMPT } from './llm';
 import { buildPostCallEnhancements } from './services/post-call/PostCallWorkflow';
 import { MeetingContextAssembler } from './services/meeting/MeetingContextAssembler';
 import { cleanMeetingTitle, isAnswerFragmentTitle, isAnswerShapedGeneration } from './services/meeting/MeetingSummaryV3';
+import { NOTE_CALL_TIMEOUT_MS } from './services/meeting/generateStructured';
 import type { MeetingSummaryTelemetryMeta } from './services/meeting/types';
 import { MeetingMemoryService, buildPersistedMeetingMemory } from './intelligence/MeetingMemoryService';
 import type { MeetingMemoryProvenanceTelemetry } from './intelligence/MeetingMemoryService';
@@ -67,7 +68,9 @@ export async function generateTitleFromSummary(
 
     let generatedTitle = '';
     try {
-        generatedTitle = await llmHelper.generateMeetingSummary(titlePrompt, context, titlePrompt);
+        // Timeout only — deliberately NOT routed to purpose:'extraction'. Naming a
+        // meeting is a writing task, not the benchmarked structured-extraction route.
+        generatedTitle = await llmHelper.generateMeetingSummary(titlePrompt, context, titlePrompt, { timeoutMs: NOTE_CALL_TIMEOUT_MS });
     } catch (e) {
         console.warn('[MeetingPersistence] Title generation failed (non-fatal):', (e as Error)?.message);
         return null;
@@ -79,6 +82,42 @@ export async function generateTitleFromSummary(
         console.warn(`[MeetingPersistence] Generated title rejected as answer fragment: "${cleanedTitle}"`);
         return null;
     }
+
+    // The shape guards above (cleanMeetingTitle / isAnswerFragmentTitle /
+    // isAnswerShapedGeneration) only check that the model NAMED the meeting rather than
+    // answering it — none of them checks whether the title is about THIS meeting. A real
+    // production failure produced a well-formed, Title Case, non-answer-shaped title
+    // ("Penetration testing of the user-facing input surface") for a meeting whose notes
+    // never mentioned that topic at all. Mirror the grounding check FollowUpDraftGenerator
+    // already applies to email subjects (see validatedSubject there): require the title to
+    // share at least one meaningful word with the note content it was generated from.
+    const titleTokens = new Set(
+        cleanedTitle.toLowerCase().split(/\W+/).filter(w => w.length >= 4)
+    );
+    if (titleTokens.size > 0) {
+        const corpus = [
+            ...clean(summary.tldr),
+            ...clean(summary.keyPoints),
+            ...topics,
+            overview,
+            typeof summary.title === 'string' ? summary.title : '',
+        ].join(' ').toLowerCase().split(/\W+/).filter(w => w.length >= 4);
+        if (corpus.length > 0) {
+            const corpusSet = new Set(corpus);
+            let overlap = 0;
+            for (const t of titleTokens) if (corpusSet.has(t)) overlap++;
+            // Require ≥1 overlapping meaningful word. A title with ZERO overlap with the
+            // notes it was generated from is ungrounded/hallucinated — keep the existing
+            // default title rather than saving it silently.
+            if (overlap === 0) {
+                console.warn(`[MeetingPersistence] Generated title rejected as ungrounded (no overlap with notes): "${cleanedTitle}"`);
+                return null;
+            }
+        }
+        // No usable corpus (sparse summary) — accept the title rather than drop it,
+        // matching FollowUpDraftGenerator's validatedSubject behaviour for the same case.
+    }
+
     return cleanedTitle;
 }
 

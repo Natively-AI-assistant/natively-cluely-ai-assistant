@@ -60,6 +60,47 @@ test('an empty summary makes no LLM call at all', async () => {
 // `speaker: text` shape — which shows up either as a run of many "word: text" lines (one
 // per turn) or the literal "speaker:" fallback the old transcript formatter used for an
 // unnamed segment.
+// RC-9 (real production failure): a well-formed, Title Case, non-answer-shaped title
+// with ZERO overlap with the notes it was generated from must be rejected. The notes are
+// about an OOD interview for a cloud reading app; the model returned a title about
+// penetration testing — a topic the transcript never mentions. Every existing guard
+// (cleanMeetingTitle, isAnswerFragmentTitle, isAnswerShapedGeneration) passes this title;
+// only a grounding check catches it. Proves RED against pre-fix code (no grounding gate).
+test('an ungrounded title sharing no meaningful word with the notes is rejected', async () => {
+  const CLOUD_READING_APP_SUMMARY = {
+    title: 'Untitled Session',
+    tldr: [
+      'Discussed object-oriented design for a cloud-based reading app, focusing on class structure for books, shelves, and readers.',
+    ],
+    keyPoints: [
+      'Modeled Book, Shelf, and Reader classes with clear responsibilities.',
+      'Discussed how syncing reading progress across devices should work.',
+    ],
+    topics: ['object-oriented design', 'cloud reading app', 'class structure', 'interview'],
+  };
+  const title = await generateTitleFromSummary(
+    fakeLLM('Penetration testing of the user-facing input surface'),
+    CLOUD_READING_APP_SUMMARY
+  );
+  assert.equal(title, null, 'ungrounded title (zero word overlap with notes) must be rejected, not saved');
+});
+
+// Guard against over-rejection: a title that DOES share a meaningful word with the notes
+// must still be accepted.
+test('a grounded title sharing a meaningful word with the notes is accepted', async () => {
+  const title = await generateTitleFromSummary(fakeLLM('Onboarding Pilot Rollout'), SUMMARY);
+  assert.equal(title, 'Onboarding Pilot Rollout');
+});
+
+// Matches FollowUpDraftGenerator's validatedSubject behaviour: when there is no usable
+// corpus (sparse summary), accept the title rather than drop it — there is nothing better
+// to fall back to either.
+test('a title is accepted when there is no usable corpus to check grounding against', async () => {
+  const SPARSE = { title: '', tldr: [], keyPoints: [], overview: '', topics: ['ok'] };
+  const title = await generateTitleFromSummary(fakeLLM('Quarterly Kickoff Review'), SPARSE);
+  assert.equal(title, 'Quarterly Kickoff Review');
+});
+
 test('the prompt carries note content only, never transcript-shaped lines', async () => {
   const sink = [];
   await generateTitleFromSummary(fakeLLM('Onboarding Pilot Rollout', sink), SUMMARY);

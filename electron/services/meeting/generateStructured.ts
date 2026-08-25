@@ -18,6 +18,19 @@
 
 import type { LLMHelper } from '../../LLMHelper';
 
+// Shared timeout budget for the meeting-notes writing calls (prose polish, follow-up
+// drafts, title naming) — everything on this pipeline that is NOT the chunk-extraction
+// call. Those calls inherited the 8s default forever; on a real production run the
+// sibling extraction call (ChunkSummaryGenerator, raised to 60s/'extraction') finished a
+// 3.5k-char meeting in 7,996ms against the OLD 8,000ms cap — 4ms to spare. The
+// non-extraction calls observed 1.8-4.2s that same run, so 30s is >7x the slowest
+// observed call while still failing a stuck request well before it would stall the
+// meeting save for a full minute. Deliberately lower than the 60s extraction budget:
+// these are writing tasks (prose polish, drafting, naming), not the benchmarked
+// structured-extraction route, and should fail back to a cheaper provider sooner than
+// extraction does if something is actually wrong.
+export const NOTE_CALL_TIMEOUT_MS = 30000;
+
 export interface StructuredValidation<T> {
   ok: boolean;
   data?: T;

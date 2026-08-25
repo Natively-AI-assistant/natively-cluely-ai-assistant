@@ -18,7 +18,7 @@
 import type { LLMHelper } from '../../LLMHelper';
 import type { ActionItem, DecisionItem, FollowUpDraft, FollowUpDraftType, FollowUpTone, MeetingSummaryV3, QuestionItem } from './MeetingSummaryV3';
 import { buildFollowUpBody, INCLUDE_NEXT_STEPS } from './MeetingSummaryReducer';
-import { generateStructured } from './generateStructured';
+import { generateStructured, NOTE_CALL_TIMEOUT_MS } from './generateStructured';
 
 export function followUpTypeForMode(mode?: string | null): FollowUpDraftType {
   switch (mode) {
@@ -296,6 +296,9 @@ ${inputs}`;
       jsonShapeHint,
       userContent: inputs,
       llmHelper: this.llmHelper,
+      // Timeout only — deliberately NOT routed to purpose:'extraction'. Drafting a
+      // follow-up is a writing task, not the benchmarked structured-extraction route.
+      callOpts: { timeoutMs: NOTE_CALL_TIMEOUT_MS },
       validate: (raw) => {
         if (!raw || typeof raw !== 'object') return { ok: false, errors: ['not an object'], repaired: false };
         const body = typeof (raw as any).body === 'string' ? (raw as any).body.trim() : '';

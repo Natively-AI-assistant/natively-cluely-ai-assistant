@@ -8,7 +8,8 @@ const base = path.resolve(__dirname, '../../../../dist-electron/electron/service
 const { similar, MeetingSummaryReducer, getOverviewBand } = await import(pathToFileURL(path.join(base, 'MeetingSummaryReducer.js')).href);
 const { TranscriptNormalizer } = await import(pathToFileURL(path.join(base, 'TranscriptNormalizer.js')).href);
 const { newSignificantTokens, SummaryPolisher } = await import(pathToFileURL(path.join(base, 'SummaryPolisher.js')).href);
-const { buildChunkPrompt } = await import(pathToFileURL(path.join(base, 'ChunkSummaryGenerator.js')).href);
+const { buildChunkPrompt, ChunkSummaryGenerator } = await import(pathToFileURL(path.join(base, 'ChunkSummaryGenerator.js')).href);
+const { NOTE_CALL_TIMEOUT_MS } = await import(pathToFileURL(path.join(base, 'generateStructured.js')).href);
 const { MeetingSummarySchemaValidator } = await import(pathToFileURL(path.join(base, 'MeetingSummarySchemaValidator.js')).href);
 
 // The old rule was `shared / min(wordCount) >= 0.8` — pure subset containment — so a short
@@ -557,4 +558,80 @@ test('buildOverview (via reduce): the deterministic overview cap moves with the 
     `long-band deterministic overview must be allowed to exceed the SHORT cap (${shortBand.maxWords}); got ${longWords} — this fails if the cap is still fixed at a single value`);
   assert.ok(longWords <= longBand.maxWords,
     `long-band deterministic overview must not exceed its own cap (${longBand.maxWords}); got ${longWords}`);
+});
+
+// ── Fix 2 (2026-08-25): only the chunk-extraction call had its timeout raised past the
+// 8s default. On a real production run, chunk extraction on a 3.5k-char meeting took
+// 7,996ms against the OLD 8,000ms cap — 4ms to spare — which is why that call site was
+// raised to 60s/'extraction'. SummaryPolisher.polish()/polishOverview() must now pass the
+// shared NOTE_CALL_TIMEOUT_MS too, so a longer meeting doesn't blow the 8s default on a
+// writing call and silently fall through to a cheaper provider. Timeout only — never
+// purpose:'extraction' (that route is benchmarked for structured extraction, not prose).
+
+test('SummaryPolisher.polish() passes the raised NOTE_CALL_TIMEOUT_MS, without purpose:extraction', async () => {
+  const captured = [];
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, userContent, groq, opts) => {
+      captured.push(opts);
+      return '{"summary":["The team selected PostHog for analytics."]}';
+    },
+  };
+  const polisher = new SummaryPolisher(llm);
+  await polisher.polish({
+    deterministicSummary: ['Adopt PostHog for analytics'],
+    decisions: [{ text: 'Adopt PostHog for analytics', confidence: 'high' }],
+    actionItems: [], risks: [], sections: [], mode: 'team-meet',
+  });
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0]?.timeoutMs, NOTE_CALL_TIMEOUT_MS, `expected timeoutMs ${NOTE_CALL_TIMEOUT_MS}, got ${JSON.stringify(captured[0])}`);
+  assert.equal(captured[0]?.purpose, undefined, 'polish() must NOT be routed to purpose:extraction');
+});
+
+test('SummaryPolisher.polishOverview() passes the raised NOTE_CALL_TIMEOUT_MS, without purpose:extraction', async () => {
+  const captured = [];
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, userContent, groq, opts) => {
+      captured.push(opts);
+      return '{"overview":"The team discussed analytics and selected PostHog."}';
+    },
+  };
+  const polisher = new SummaryPolisher(llm);
+  await polisher.polishOverview({
+    deterministicSummary: ['Adopt PostHog for analytics'],
+    decisions: [{ text: 'Adopt PostHog for analytics', confidence: 'high' }],
+    actionItems: [], risks: [], sections: [], mode: 'team-meet',
+    briefs: ['The team discussed analytics tooling.'], topics: ['analytics'],
+  });
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0]?.timeoutMs, NOTE_CALL_TIMEOUT_MS, `expected timeoutMs ${NOTE_CALL_TIMEOUT_MS}, got ${JSON.stringify(captured[0])}`);
+  assert.equal(captured[0]?.purpose, undefined, 'polishOverview() must NOT be routed to purpose:extraction');
+});
+
+test('ChunkSummaryGenerator.generateAtoms() still passes purpose:extraction and the 60s extraction timeout (regression guard: Fix 2 must not touch this call site)', async () => {
+  const captured = [];
+  const llm = {
+    generateMeetingSummary: async (systemPrompt, userContent, groq, opts) => {
+      captured.push(opts);
+      return '{"brief":"discussed the plan","decisions":[],"actionItems":[],"openQuestions":[],"risks":[],"topics":[],"modeSpecificFindings":{}}';
+    },
+  };
+  const gen = new ChunkSummaryGenerator(llm);
+  await gen.generateAtoms({
+    chunk: {
+      chunkIndex: 0,
+      segments: [],
+      text: 'We discussed the plan.',
+      charCount: 23,
+      tokenEstimate: 6,
+      overlapFromPrevious: false,
+      timeRange: {},
+      segmentIds: [],
+    },
+    totalChunks: 1,
+    modeTemplateType: 'general',
+    modeNoteSections: [],
+  });
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0]?.purpose, 'extraction');
+  assert.equal(captured[0]?.timeoutMs, 60000);
 });
