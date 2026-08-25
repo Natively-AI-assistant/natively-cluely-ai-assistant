@@ -124,12 +124,19 @@ test('prefilter: backchannels and tiny fragments never cost a call', async () =>
   assert.deepEqual(h.texts(), []);
 });
 
-test('offer band: a mid-answerability verdict offers instead of firing', async () => {
-  const h = makeSimple(async () => YES({ answerability: 0.8 }));   // default thresholds: auto 0.88, offer 0.65
+test('above ANSWER_FLOOR it answers; at or below it stays silent — no card, no asking', async () => {
+  const { ANSWER_FLOOR } = Simple;
+  const h = makeSimple(async () => YES({ answerability: ANSWER_FLOOR + 0.01 }));
   h.interviewer('Can you see my screen okay before we start the interview?');
   await h.advance(STABILITY_MS + 300);
-  assert.deepEqual(h.texts(), []);
-  assert.equal(h.state.offered.length, 1);
+  assert.equal(h.texts().length, 1, 'a barely-confident ask is still answered');
+  assert.deepEqual(h.state.offered, [], 'nothing is ever offered');
+
+  const g = makeSimple(async () => YES({ answerability: ANSWER_FLOOR }));
+  g.interviewer('Can you see my screen okay before we start the interview?');
+  await g.advance(STABILITY_MS + 300);
+  assert.deepEqual(g.texts(), [], 'at the floor exactly, silent');
+  assert.ok(g.state.skips.includes('low_answerability'));
 });
 
 test('busy engine: retries and dispatches when it frees up; gives up after the TTL', async () => {
@@ -273,36 +280,26 @@ test('review#4: punctuation provenance — no-\'?\' is negative evidence only wh
   assert.equal(g.state.judgeCalls.length, 0, 'short unpunctuated fragment on a punctuating provider never costs a call');
 });
 
-test('review offers: replaced / expired / topic-change / meeting-stop all retract the card', async () => {
-  const { OFFER_TTL_MS } = Simple;
-  const retracted = [];
-  const h = makeSimple(async () => YES({ answerability: 0.8 }));  // offer band
-  h.state.retracted = retracted;
-  h.engine.host?.constructor;   // no-op
-  // wire retract capture
-  const origHost = h.state;
-  h.engineHostRetract = true;
-  // rebuild with retract hook
-  const g = makeSimple(async (req, n) => n <= 2 ? YES({ answerability: 0.8 }) : YES({ answerability: 0.95 }));
-  g.hostRetracts = [];
-  // attach after construction (TS-private is runtime-open)
-  g.engine.host.retractOffer = (id, reason) => g.hostRetracts.push(reason);
-  g.interviewer('Can you see my screen okay before we start the interview?');
-  await g.advance(STABILITY_MS + 200);
-  assert.equal(g.state.offered.length, 1);
-  await g.advance(3000);
-  g.interviewer('And is the audio also coming through fine on your end?');
-  await g.advance(STABILITY_MS + 200);
-  assert.equal(g.state.offered.length, 2);
-  assert.deepEqual(g.hostRetracts, ['replaced']);
-  await g.advance(OFFER_TTL_MS + 100);
-  assert.deepEqual(g.hostRetracts, ['replaced', 'expired']);
-  await g.advance(2000);
-  g.interviewer('Why did you choose PostgreSQL over the alternatives here?');   // auto band now
-  await g.advance(STABILITY_MS + 200);
-  assert.equal(g.texts().length, 1);
-  g.engine.onMeetingStop();
-  assert.equal(g.clock.pendingCount(), 0);
+test('the offer card is gone: nothing is ever offered or retracted, whatever the score', async () => {
+  // Was: "replaced / expired / topic-change / meeting-stop all retract the
+  // card". There is no card to retract now — every real ask above the floor is
+  // simply answered.
+  const offered = [], retracted = [];
+  const h = makeSimple(async (req, n) => YES({ answerability: n === 1 ? 0.5 : 0.95 }));
+  h.engine.host.offer = (q) => offered.push(q);
+  h.engine.host.retractOffer = (id, reason) => retracted.push(reason);
+
+  h.interviewer('Can you see my screen okay before we start the interview?');
+  await h.advance(STABILITY_MS + 300);
+  h.controller?.onEngineIdle?.();
+  h.state.streaming = false; h.state.accepting = true;
+  await h.advance(3000);
+  h.interviewer('So why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 300);
+
+  assert.deepEqual(offered, [], 'no card is ever rendered');
+  assert.deepEqual(retracted, [], 'and so none is ever retracted');
+  assert.equal(h.texts().length, 2, 'both asks were answered outright');
 });
 
 // ── Latency work (2026-08-25): prefetch, speculative reuse, endpoint confirm ──
@@ -429,49 +426,23 @@ test('feedback: telemetry carries the act and score but no transcript text', asy
 
 const ACT = (action, over = {}) => JSON.stringify({
   is_ask: action !== 'silent', directed_at_user: action !== 'silent', complete: true,
-  act: 'question', action, answerability: action === 'answer' ? 0.95 : action === 'offer' ? 0.5 : 0,
+  act: 'question', action, answerability: action === 'answer' ? 0.95 : 0,
   question_text: null, ...over,
 });
 
-test('judge action "offer" shows the card even though its answerability is far below the offer bar', async () => {
-  const h = makeSimple(async () => ACT('offer'));
+test('a reply that still says "offer" is answered — doubt never resolves into silence', async () => {
+  const h = makeSimple(async () => JSON.stringify({
+    is_ask: true, directed_at_user: true, complete: true, act: 'question',
+    action: 'offer', answerability: 0.5, question_text: null,
+  }));
   h.interviewer('Can you see my screen okay before we start the interview?');
-  await h.advance(STABILITY_MS + 200);
-  assert.deepEqual(h.texts(), [], 'an offer never fires unasked');
-  assert.equal(h.state.offered.length, 1, 'the card is shown on the judge\'s say-so, not on a score band');
+  await h.advance(STABILITY_MS + 300);
+  assert.equal(h.texts().length, 1, 'a retired "offer" verdict answers rather than asking');
+  assert.deepEqual(h.state.offered, []);
 });
 
-test('the action decides WHAT a candidate can become; the mode bar only decides whether an answer fires', async () => {
-  // 'answer' at the interview bar fires…
-  const h = makeSimple(async () => ACT('answer', { answerability: 0.9 }));
-  h.interviewer('So how would you shard this table once it stops fitting on one box?');
-  await h.advance(STABILITY_MS + 200);
-  assert.equal(h.texts().length, 1);
 
-  // …and the same verdict below the bar becomes an offer rather than silence,
-  // so a conservative mode loses the interruption, never the signal.
-  const g = makeSimple(async () => ACT('answer', { answerability: 0.5 }));
-  g.interviewer('So how would you shard this table once it stops fitting on one box?');
-  await g.advance(STABILITY_MS + 200);
-  assert.deepEqual(g.texts(), []);
-  assert.equal(g.state.offered.length, 1);
-});
 
-test('a stricter mode DEMOTES an answer to an offer, and never promotes', async () => {
-  const strict = { autoThreshold: 0.94, offerThreshold: 0.75, speculationThreshold: 0.88 };
-  const h = makeSimple(async () => ACT('answer', { answerability: 0.9 }));   // below the strict bar
-  h.engine.setThresholds(strict);
-  h.interviewer('So how would you shard this table once it stops fitting on one box?');
-  await h.advance(STABILITY_MS + 200);
-  assert.deepEqual(h.texts(), [], 'a meeting-grade bar does not fire unasked at 0.9');
-  assert.equal(h.state.offered.length, 1, 'it becomes an offer instead');
-
-  const g = makeSimple(async () => ACT('offer'));
-  g.engine.setThresholds({ autoThreshold: 0.1, offerThreshold: 0.05, speculationThreshold: 0.05 });
-  g.interviewer('Can you see my screen okay before we start the interview?');
-  await g.advance(STABILITY_MS + 200);
-  assert.deepEqual(g.texts(), [], 'even a wide-open bar cannot promote an offer into an answer');
-});
 
 test('judge action "silent" stays silent whatever the score says', async () => {
   const h = makeSimple(async () => ACT('silent', { answerability: 0.99, is_ask: true, directed_at_user: true }));

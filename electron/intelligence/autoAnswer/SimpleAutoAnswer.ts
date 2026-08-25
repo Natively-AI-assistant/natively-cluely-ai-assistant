@@ -74,8 +74,14 @@ export const STABILITY_MS = 900;
 export const ENDPOINT_CONFIRM_MS = 350;
 /** Below this many NEW words (and no '?') we wait for more speech instead of calling. */
 export const MIN_NEW_WORDS = 4;
-/** Offer card lifetime (mirrors V3's OFFER_TTL_MS). Unfitted placeholder. */
-export const OFFER_TTL_MS = 10_000;
+/**
+ * Fire at anything above this. Set by the user (2026-08-25): "if the
+ * percentage is above 20 then surely show the answer". Everything between
+ * this and the old per-mode bars used to become a card asking permission;
+ * that card is gone, so this is the only line left — above it the answer is
+ * drafted, below it nothing happens.
+ */
+export const ANSWER_FLOOR = 0.20;
 /** Judge-unavailable fallback on punctuation-less providers: interrogative-led utterances. */
 export const FALLBACK_INTERROGATIVE = /^(?:(?:ok(?:ay)?|so|and|now|alright|well)[,.!\s]+)*(?:how|what|why|when|where|which|who|whose|can|could|would|should|do|does|did|are|is|will|have you|tell me|tell us|walk me|walk us|explain|describe)\b/i;
 /**
@@ -156,7 +162,6 @@ export class SimpleAutoAnswerEngine {
     private parkedAttempt: (() => void) | null = null;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
-    private activeOffer: { id: string; timer: ClockTimer } | null = null;
     private thresholds: AutoAnswerThresholds;
 
     constructor(
@@ -252,7 +257,6 @@ export class SimpleAutoAnswerEngine {
         if (this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
         this.judgeSeq++;
         this.dropParked();
-        this.retractOffer('user_answering');
         if (this.pending.length > 0 || this.timer !== null) {
             this.disarm();
             this.pending = [];
@@ -399,21 +403,12 @@ export class SimpleAutoAnswerEngine {
             return;
         }
         const text = route.questionText ?? candidate;
-        // The JUDGE decides; thresholds no longer arbitrate. A mode can still
-        // veto downward — a stricter bar (the meeting/lecture modes) turns an
-        // 'answer' into an offer rather than firing unasked in a room full of
-        // colleagues — but it can never promote one.
-        const demoted = route.action === 'answer' && route.answerability < this.thresholds.autoThreshold;
-        if (route.action === 'answer' && !demoted) {
+        // Answer or nothing. The judge decides, and the only number left in
+        // the decision is ANSWER_FLOOR — the per-mode bars no longer gate a
+        // dispatch, because the thing they used to demote to (the offer card)
+        // is gone.
+        if (route.action === 'answer' && route.answerability > ANSWER_FLOOR) {
             this.deliver(id, text, route.answerability, route.act, committedAt);
-        } else if (this.host.offer) {
-            this.retractOffer('replaced');
-            this.host.offer(this.question(id, text, route.answerability, route.act, committedAt));
-            this.activeOffer = {
-                id,
-                timer: this.clock.setTimeout(() => { this.activeOffer = null; this.host.retractOffer?.(id, 'expired'); }, OFFER_TTL_MS),
-            };
-            this.emit({ name: 'auto_answer_offered', questionId: id, answerability: route.answerability });
         } else {
             this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: 'low_answerability', answerability: route.answerability });
         }
@@ -436,7 +431,6 @@ export class SimpleAutoAnswerEngine {
                 return;
             }
             this.parkedAttempt = null;
-            this.retractOffer('topic_change');
             const q = this.question(id, text, answerability, act, committedAt);
             // If the engine already has an answer in flight for THIS question
             // (our prefetch, or its own interim speculation keyed by
@@ -484,7 +478,6 @@ export class SimpleAutoAnswerEngine {
      * committed either way.
      */
     onManualAnswerStarted(): void {
-        this.retractOffer('user_answering');
         const pending = this.feedbackPending;
         if (!pending) return;
         this.clearFeedback();
@@ -522,19 +515,10 @@ export class SimpleAutoAnswerEngine {
 
     private dropParked(): void { this.parkedAttempt = null; this.clearRetry(); }
 
-    private retractOffer(reason: 'replaced' | 'expired' | 'user_answering' | 'meeting_stop' | 'topic_change'): void {
-        if (!this.activeOffer) return;
-        const { id, timer } = this.activeOffer;
-        this.activeOffer = null;
-        this.clock.clearTimeout(timer);
-        this.host.retractOffer?.(id, reason);
-    }
-
     private reset(): void {
         this.disarm();
         this.dropParked();
         this.clearFeedback();
-        this.retractOffer('meeting_stop');
         this.pending = [];
         this.recentInterviewerFinals = [];
         this.speakerByTurn.clear();

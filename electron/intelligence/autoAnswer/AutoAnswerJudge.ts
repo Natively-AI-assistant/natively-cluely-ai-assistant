@@ -65,14 +65,17 @@ export interface JudgeRequest {
 }
 
 /**
- * What the judge decides to DO. Replaces banding `answerability` against
- * thresholds (2026-08-25): across 131 real decisions only 3 ever landed in the
- * offer band, because the model does not emit a spectrum — it emits roughly
- * three values (0, ~0.9, 1.0). The band was therefore decorative and the offer
- * card nearly dead code. Asking for the decision directly makes "offer" a
- * deliberate verdict instead of an accident of where two constants sit.
+ * What the judge decides to DO. Two outcomes, not three: the middle one — a
+ * card asking the user to press Tab — was removed on the user's instruction
+ * (2026-08-25). "If it has a doubt always answer, no need to ask." An
+ * assistant that hedges by asking permission costs the user a keystroke and a
+ * decision at the exact moment they are being spoken to, which is worse than
+ * an answer they can ignore.
+ *
+ * A reply that still says "offer" (an older prompt, a degraded model) is read
+ * as 'answer' — doubt resolves toward answering, never toward silence.
  */
-export type JudgeAction = 'answer' | 'offer' | 'silent';
+export type JudgeAction = 'answer' | 'silent';
 
 export interface JudgeVerdict {
     /** The candidate contains a question or task someone is expected to act on. */
@@ -209,9 +212,10 @@ answerability = how much the USER wants a drafted answer RIGHT NOW:
 - 0.0-0.2 — anything not an ask, and any restatement of an ask already answered.
 
 action — what the assistant should DO, and the field that actually decides:
-- "answer" — draft the answer now. This is the DEFAULT for every real ask the USER must handle next, and it explicitly INCLUDES questions about the user's own experience, background, projects and opinions ("have you heard of wordle?", "tell me about a time you disagreed", "why did you pick Postgres?"). Drafting those is the entire point: that the user could answer in their own words is not a reason to withhold it.
-- "offer"  — narrow. Only asks where an unrequested answer would be noise rather than help: audio/screen/tooling logistics ("can you see my screen?", "can I get you to share your tab?"), scheduling, and pure social pleasantries ("how's your morning going?"). The UI shows a one-tap card instead of drafting.
-- "silent" — not an ask, not for the USER, unfinished, or already answered.
+- "answer" — draft the answer now. This is the default for every real ask the USER must handle next, and it explicitly INCLUDES questions about the user's own experience, background, projects and opinions ("have you heard of wordle?", "tell me about a time you disagreed", "why did you pick Postgres?"), and small logistics they still have to respond to ("can you see my screen?", "are you ready?"). That the user could answer in their own words is not a reason to withhold.
+- "silent" — not an ask at all, not directed at the USER, unfinished, or already answered.
+
+WHEN IN DOUBT, ANSWER. There are only these two outcomes: a drafted answer the user can ignore in a glance costs them nothing, while a missed one costs them the moment. Reserve "silent" for the cases the rules above make clear.
 
 Reply with ONLY this JSON object, no prose, no code fences:
 {"is_ask": boolean, "directed_at_user": boolean, "complete": boolean, "act": "question"|"follow_up"|"coding_task"|"behavioral"|"technical"|"rhetorical"|"statement"|"social"|"incomplete", "action": "answer"|"offer"|"silent", "answerability": number 0..1, "question_text": string|null}
@@ -250,9 +254,11 @@ export function parseJudgeVerdict(raw: string | null | undefined, candidateText:
     // prompt, degraded model) still works: fall back to the old banding so the
     // parser never gets stricter than the model it is reading.
     const rawAction = String(obj.action ?? '').toLowerCase();
-    const action: JudgeAction = rawAction === 'answer' || rawAction === 'offer' || rawAction === 'silent'
-        ? rawAction
-        : (!isAsk || !directed ? 'silent' : answerability >= 0.88 ? 'answer' : answerability >= 0.65 ? 'offer' : 'silent');
+    const action: JudgeAction = rawAction === 'answer' || rawAction === 'offer'
+        ? 'answer'                                   // 'offer' is retired: doubt answers
+        : rawAction === 'silent'
+            ? 'silent'
+            : (!isAsk || !directed ? 'silent' : 'answer');
     return { isAsk, directedAtUser: directed, complete, act, answerability, questionText, action };
 }
 

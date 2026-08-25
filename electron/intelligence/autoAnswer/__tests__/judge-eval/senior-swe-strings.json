@@ -22,7 +22,7 @@
   "lastAnswered": null,
   "modeName": "Technical Interview",
   "expect": "silent",
-  "note": "WAS a known false fire (\"let's transition into the coding portion ... go ahead and share\") until the judge started returning an explicit action (2026-08-25): session logistics now come back as \"offer\" or \"silent\" rather than being banded into a fire by their score. Kept as a regression guard."
+  "note": "KNOWN FALSE FIRE, and now an ACCEPTED one. \"let's transition into the coding portion ... go ahead and share\" is session logistics before any problem exists. The offer card used to catch exactly this shape; the card was removed on the user's instruction (2026-08-25) \u2014 \"if it has a doubt always answer\" \u2014 so borderline logistics now produces an answer the user can ignore instead of a card asking permission. That is the deliberate trade, not a regression to chase."
  },
  {
   "text": "up on the screen yep cool awesome um so",

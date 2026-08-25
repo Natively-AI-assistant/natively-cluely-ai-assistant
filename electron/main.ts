@@ -3201,7 +3201,6 @@ export class AppState {
         console.warn('[Main] Automatic interviewer answer failed:', error);
       });
     },
-    offer: (question) => this.showAutoAnswerOffer(question),
     cancelAutomaticAnswer: (reason) => this.intelligenceManager.cancelAutomaticAnswer(reason),
     // Speculative prefetch (2026-08-25): key the engine's own interim
     // speculation to this candidate, and let the engine start the answer while
@@ -3230,7 +3229,6 @@ export class AppState {
       } catch { /* telemetry must never break the pipeline */ }
     },
     log: (line) => { if (this._verboseLogging) console.log(line); },
-    retractOffer: (questionId, reason) => this.retractAutoAnswerOffer(questionId, reason as any),
     // review#10 parity (2026-08-25): boot on the registry's no-mode default
     // (the stricter MEETING bar), not the compiled-in interview constants.
   }, undefined, resolveAutoAnswerThresholds(null));
@@ -3253,49 +3251,14 @@ export class AppState {
   }
 
   /** Stable id prefix so the renderer can replace the card in place and retract it by id. */
-  private static readonly AUTO_ANSWER_OFFER_ID_PREFIX = 'auto-answer-offer:';
-
-  /** Render the offer as a Dynamic Action (reuse, not a new surface — V2 §47 / V3 Amendment 4). */
-  private showAutoAnswerOffer(question: { id: string; text: string; answerability: number; dialogueAct: string }): void {
-    const now = Date.now();
-    let modeId = 'general';
-    let modeTemplateType = 'general';
-    try {
-      const { ModesManager } = require('./services/ModesManager');
-      const active = ModesManager.getInstance().getActiveMode();
-      if (active) { modeId = active.id; modeTemplateType = active.templateType; }
-    } catch { /* defaults */ }
-    const action = {
-      id: `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${question.id}`,
-      sessionId: `auto-answer-${this._meetingGeneration}`,
-      modeId,
-      modeTemplateType,
-      type: 'auto_answer_offer',
-      label: 'Answer this?',
-      // The detected question IS the card body; it is also the prompt the
-      // renderer hands to handleWhatToSay on accept (manual semantics).
-      description: question.text,
-      confidence: question.answerability,
-      priority: 100,
-      evidenceRefs: [],
-      status: 'shown' as const,
-      createdAt: now,
-      expiresAt: now + 10_000,
-      promptInstruction: question.text,
-    };
-    try { this.intelligenceManager.registerDynamicAction(action); } catch { /* accept still works renderer-side */ }
-    const helper = this.getWindowHelper();
-    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action', { action });
-    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action', { action });
-  }
-
-  private retractAutoAnswerOffer(questionId: string, reason: string): void {
-    const id = `${AppState.AUTO_ANSWER_OFFER_ID_PREFIX}${questionId}`;
-    try { this.intelligenceManager.dismissDynamicAction(id); } catch { /* best effort */ }
-    const helper = this.getWindowHelper();
-    this.sendToWindow(helper.getLauncherWindow(), 'intelligence-dynamic-action-retract', { id, reason });
-    this.sendToWindow(helper.getOverlayWindow(), 'intelligence-dynamic-action-retract', { id, reason });
-  }
+  /**
+   * The Auto Answer offer card ("Answer this?" + Tab) was removed on the
+   * user's instruction (2026-08-25): "if it has a doubt always answer, no need
+   * to ask… if the percentage is above 20 then surely show the answer."
+   * Asking permission mid-interview costs a keystroke and a decision at the
+   * worst possible moment; an answer you can ignore in a glance costs nothing.
+   * The engine now only answers or stays silent — see ANSWER_FLOOR.
+   */
 
   /** before-quit: release the Smart Turn session before the process winds down. */
   public disposeAutoAnswerForShutdown(): void {

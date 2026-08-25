@@ -121,18 +121,24 @@ test('route: incomplete → wait; non-ask/undirected/silent → ignore; rhetoric
   assert.deepEqual(routeForVerdict({ ...base, action: 'silent', answerability: 0.99 }), { route: 'ignore', reason: 'low_answerability' });
   assert.deepEqual(routeForVerdict({ ...base, act: 'coding_question', questionText: 'q' }),
     { route: 'evaluate', action: 'answer', answerability: 0.9, act: 'coding_question', questionText: 'q' });
-  assert.deepEqual(routeForVerdict({ ...base, action: 'offer', answerability: 0.4 }),
-    { route: 'evaluate', action: 'offer', answerability: 0.4, act: 'general_question', questionText: null });
+  // 'offer' is retired at parse time, so routing only ever sees answer/silent.
+  assert.deepEqual(routeForVerdict({ ...base, answerability: 0.4 }),
+    { route: 'evaluate', action: 'answer', answerability: 0.4, act: 'general_question', questionText: null });
 });
 
-test('parse: a reply with no action falls back to the old banding, so a degraded model still works', () => {
+test('parse: doubt resolves toward ANSWERING — a missing or retired action never means silence', () => {
+  // No action at all (older prompt, degraded model): a real ask still answers.
   const noAction = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.95, "question_text": null}';
   assert.equal(parseJudgeVerdict(noAction, CAND).action, 'answer');
-  const mid = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.7, "question_text": null}';
-  assert.equal(parseJudgeVerdict(mid, CAND).action, 'offer');
+  // Even at a middling score — the offer band that used to catch this is gone.
+  const mid = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "answerability": 0.4, "question_text": null}';
+  assert.equal(parseJudgeVerdict(mid, CAND).action, 'answer');
+  // The retired "offer" verdict is read as an answer, never as silence.
+  const retired = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "action": "offer", "answerability": 0.5, "question_text": null}';
+  assert.equal(parseJudgeVerdict(retired, CAND).action, 'answer');
+  // Silence stays available for what is genuinely not an ask.
   const low = '{"is_ask": false, "directed_at_user": false, "complete": true, "act": "statement", "answerability": 0.1, "question_text": null}';
   assert.equal(parseJudgeVerdict(low, CAND).action, 'silent');
-  // An explicit action always wins over the number.
-  const explicit = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "action": "offer", "answerability": 1, "question_text": null}';
-  assert.equal(parseJudgeVerdict(explicit, CAND).action, 'offer');
+  const explicit = '{"is_ask": true, "directed_at_user": true, "complete": true, "act": "question", "action": "silent", "answerability": 1, "question_text": null}';
+  assert.equal(parseJudgeVerdict(explicit, CAND).action, 'silent');
 });

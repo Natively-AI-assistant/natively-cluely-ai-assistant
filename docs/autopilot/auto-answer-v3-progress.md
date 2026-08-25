@@ -1291,6 +1291,28 @@ Also measured: **40% of judge calls went stale** in this interview (6 of 15) ver
 speaking in bursts supersedes in-flight verdicts constantly. Wasted calls, but not added latency: the next
 stoppage re-judges the fuller text. Suite 44/44.
 
+### The offer card is gone: answer or stay silent (2026-08-25, user instruction)
+> "if it has a doubt always answer no need to ask, remove that card ui, if the percentage is above 20 then surely
+> show the answer"
+
+The periwinkle "Answer this?" card (Tab to accept) is removed everywhere: the engine no longer offers or
+retracts, `showAutoAnswerOffer`/`retractAutoAnswerOffer` and the `auto_answer_offer` action type are deleted from
+main.ts, and the judge now returns **two** outcomes instead of three. `ANSWER_FLOOR = 0.20` is the only number
+left in the decision — above it the answer is drafted, at or below it nothing happens. The per-mode bars no
+longer gate a dispatch, because the thing they demoted to is gone.
+
+Doubt now resolves toward answering, deliberately and in several places at once: the prompt ends with "WHEN IN
+DOUBT, ANSWER", a reply with no `action` is read as an answer rather than banded, and a reply that still says
+`offer` (older prompt, degraded model) is read as an answer too. Silence has to be earned by the rules, not
+arrived at by hesitation.
+
+The cost is visible and accepted. On the senior-SWE video, "let's transition into the coding portion… go ahead
+and share" fires again — the offer card was the thing that had been catching exactly that shape. Aggregate over
+the five sets returns to **precision 0.905 / recall 1.000** (from 0.950), and the fixture note now records that
+FP as an accepted trade rather than a regression to chase. Live probe 7/7: coding task, probing question, screen
+check, "are you ready?" and a borderline small ask all ANSWER; exposition and granting permission stay silent.
+Suite 42/42, three recorded meetings unchanged, typecheck clean.
+
 ## Known residuals
 - Smart Turn runs on the main thread (~50–75 ms per interviewer speech-stop on this CPU); every other ORT consumer
   is in a worker. Follow-up: move to a worker.
