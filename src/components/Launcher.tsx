@@ -9,7 +9,7 @@ import { useToggleInit } from './settings/useToggleInit';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -408,6 +408,59 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         return `${mm}:00`;
     };
 
+    // ── List ⇄ meeting-notes navigation transition ─────────────────────────────
+    // Cover/uncover model: the details panel is ALWAYS the upper layer (z-20) and
+    // the list is ALWAYS the lower layer (z-10). Details slides in from the right
+    // and leaves to the right; the list never moves laterally, it only recedes by
+    // scaling *up* past the clip box. Scaling up (rather than the usual iOS scale
+    // down) is deliberate: the container clips the overflow, so no edge of the
+    // window is ever uncovered mid-transition — important because this is a
+    // transparent Electron overlay where an uncovered edge is a hole to the
+    // desktop, not a background colour.
+    //
+    // Because direction is decided by *which layer mounts*, not by which meeting
+    // is selected, handleOpenMeeting / handleForward / handleBack all produce the
+    // correct motion with no direction state to keep in sync.
+    const prefersReducedMotion = useReducedMotion();
+    // iOS/Ionic panel curve — strong ease-out, no overshoot.
+    const NAV_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+
+    // Opacity resolves well before the transform so the slide reads as a settle
+    // rather than a fade; the panel is opaque for most of the movement.
+    const detailsEnter: TargetAndTransition = prefersReducedMotion
+        ? { opacity: 1, transition: { duration: 0.12, ease: 'linear' } }
+        : {
+            opacity: 1,
+            transform: 'translateX(0px)',
+            transition: {
+                transform: { duration: 0.34, ease: NAV_EASE },
+                opacity: { duration: 0.2, ease: 'easeOut' },
+            },
+        };
+    const detailsExit: TargetAndTransition = prefersReducedMotion
+        ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: 'linear' } }
+        : {
+            opacity: 0,
+            transform: 'translateX(20px)',
+            pointerEvents: 'none',
+            transition: {
+                transform: { duration: 0.26, ease: NAV_EASE },
+                opacity: { duration: 0.22, ease: 'easeOut' },
+            },
+        };
+    const detailsInitial: TargetAndTransition = prefersReducedMotion
+        ? { opacity: 0 }
+        : { opacity: 0, transform: 'translateX(24px)' };
+
+    // The list layer keeps opacity 1 throughout — it is covered by an opaque
+    // details panel, so cross-dissolving it too would only muddy the blend.
+    const listRecede: TargetAndTransition = prefersReducedMotion
+        ? {}
+        : { transform: 'scale(1.03)', transition: { duration: 0.3, ease: NAV_EASE } };
+    const listSettle: TargetAndTransition = prefersReducedMotion
+        ? {}
+        : { transform: 'scale(1)', transition: { duration: 0.34, ease: NAV_EASE } };
+
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
             {/* 1. Header (Static) */}
@@ -721,15 +774,17 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                 {!isDetectable && (
                     <div className={`absolute inset-1 border-2 border-dashed rounded-2xl pointer-events-none z-[100] ${isLight ? 'border-black/15' : 'border-white/20'}`} />
                 )}
-                <AnimatePresence mode="wait">
+                {/* initial={false} — the panel that is present on first paint must not
+                    animate in: the launcher is opened by a global shortcut many times a
+                    day, and an entrance animation there only makes it feel slower. */}
+                <AnimatePresence initial={false}>
                     {selectedMeeting ? (
                         <motion.div
                             key="details"
-                            className="flex-1 overflow-hidden"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
+                            className="absolute inset-0 z-20 overflow-hidden"
+                            initial={detailsInitial}
+                            animate={detailsEnter}
+                            exit={detailsExit}
                         >
                             <MeetingDetails
                                 meeting={selectedMeeting}
@@ -740,11 +795,10 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     ) : (
                         <motion.div
                             key="launcher"
-                            className="flex-1 flex flex-col overflow-hidden"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
+                            className="absolute inset-0 z-10 flex flex-col overflow-hidden"
+                            initial={listRecede}
+                            animate={listSettle}
+                            exit={listRecede}
                         >
 
                             {/* Main Area - Fixed Top, Scrollable Bottom */}
