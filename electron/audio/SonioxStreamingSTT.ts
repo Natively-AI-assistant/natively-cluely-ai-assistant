@@ -20,6 +20,7 @@ import { EventEmitter } from 'events';
 import WebSocket from 'ws';
 import { RECOGNITION_LANGUAGES } from '../config/languages';
 import { streamingStttWsOptions } from './dnsHelpers';
+import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './sttReconnectPolicy.mjs';
 
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
@@ -44,6 +45,11 @@ export class SonioxStreamingSTT extends EventEmitter {
     private reconnectAttempts = 0;
     private reconnectTimer: NodeJS.Timeout | null = null;
     private keepAliveTimer: NodeJS.Timeout | null = null;
+    // Timestamp (ms) when automatic reconnect was exhausted and latched off, or
+    // null when reconnect is healthy. Drives the self-heal-on-resumed-audio path
+    // in write() so a session that gave up during a silent/hidden stretch can
+    // recover when the user returns. See sttReconnectPolicy.mjs.
+    private reconnectExhaustedAt: number | null = null;
     // 250ms debounced restart driven by setSampleRate / setRecognitionLanguage.
     // Previously these methods called `stop(); start();` synchronously, which
     // produced two WebSocket handshakes in flight whenever the methods fired
@@ -224,11 +230,13 @@ export class SonioxStreamingSTT extends EventEmitter {
         this.isActive = true;        // Set immediately so write() buffers audio during WS handshake
         this.shouldReconnect = true;
         this.reconnectAttempts = 0;
+        this.reconnectExhaustedAt = null;
         this.connect();
     }
 
     public stop(): void {
         this.shouldReconnect = false;
+        this.reconnectExhaustedAt = null; // state hygiene: no stale exhaustion marker across stop
         this.clearTimers();
 
         if (this.ws) {
@@ -264,6 +272,23 @@ export class SonioxStreamingSTT extends EventEmitter {
 
             if (!this.isConnecting && this.shouldReconnect && !this.reconnectTimer) {
                 console.log('[SonioxStreaming] WS not ready. Lazy connecting on new audio...');
+                this.connect();
+            } else if (shouldReviveExhaustedReconnect({
+                isActive: this.isActive,
+                shouldReconnect: this.shouldReconnect,
+                isConnecting: this.isConnecting,
+                hasSocket: this.ws !== null,
+                exhaustedAt: this.reconnectExhaustedAt,
+                now: Date.now(),
+                cooldownMs: DEFAULT_REVIVE_COOLDOWN_MS,
+            })) {
+                // Reconnect was exhausted during a silent/hidden stretch, but
+                // audio is flowing again — grant one fresh reconnect budget
+                // instead of staying dead for the rest of the meeting.
+                console.warn('[SonioxStreaming] Reviving exhausted reconnect on resumed audio.');
+                this.reconnectAttempts = 0;
+                this.shouldReconnect = true;
+                this.reconnectExhaustedAt = null;
                 this.connect();
             }
             return;
@@ -325,6 +350,7 @@ export class SonioxStreamingSTT extends EventEmitter {
             }
 
             this.reconnectAttempts = 0;
+            this.reconnectExhaustedAt = null; // healthy again — clear the exhaustion marker
             console.log('[SonioxStreaming] Connected, sending config...');
 
             // Send initial configuration as first message
@@ -469,10 +495,14 @@ export class SonioxStreamingSTT extends EventEmitter {
 
         if (this.reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
             console.error(`[SonioxStreaming] Max reconnect attempts (${RECONNECT_MAX_ATTEMPTS}) reached — giving up`);
-            // Latch off the reconnect path so write()'s lazy-connect (line 159)
-            // cannot resurrect the storm on the next audio chunk. start() resets
-            // shouldReconnect=true so a user-triggered restart still works.
+            // Latch off the reconnect path so write()'s lazy-connect cannot
+            // resurrect the storm on the next audio chunk. Record WHEN we gave
+            // up: if genuine audio is still flowing after a cooldown (the user
+            // hid the app during a network blip and has now come back), write()
+            // grants one fresh reconnect budget instead of staying dead for the
+            // rest of the meeting. start() also resets this for a manual restart.
             this.shouldReconnect = false;
+            this.reconnectExhaustedAt = Date.now();
             this.emit('error', new Error('SonioxStreamingSTT: max reconnect attempts exceeded'));
             return;
         }
