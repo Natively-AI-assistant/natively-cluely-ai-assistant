@@ -434,8 +434,21 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     //      only ever fades the *text* — the background never flickers, and the
     //      20px the content travels only ever uncovers more of the same colour.
     const prefersReducedMotion = useReducedMotion();
-    // iOS/Ionic panel curve — strong ease-out, no overshoot.
+    // iOS/Ionic panel curve — strong ease-out, no overshoot. Used for the parts
+    // that are mechanical rather than expressive: the veil landing and lifting.
     const NAV_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+
+    // Apple states its springs as duration + bounce rather than stiffness and
+    // damping, and this is the reason the motion reads as an object settling
+    // rather than a value being tweened: a spring decelerates asymmetrically and
+    // keeps a trace of momentum right at the end, where a bezier simply stops.
+    // Bounce stays near zero — a full-window surface that overshoots reads as
+    // sloppy, not playful. What is wanted is the settle, not the wobble.
+    const SETTLE = { type: 'spring' as const, duration: 0.62, bounce: 0.05 };
+    // Leaving is the system getting out of the way, so it is quicker and has no
+    // bounce at all.
+    const RELEASE = { type: 'spring' as const, duration: 0.46, bounce: 0 };
+
     // Exactly the token MeetingDetails paints its own root with. If these two
     // ever disagree the seam becomes visible as a tint shift mid-transition.
     const NOTES_SURFACE = isLight ? 'bg-bg-secondary' : 'bg-bg-elevated';
@@ -448,57 +461,66 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
         gone: { pointerEvents: 'none' },
     };
 
-    // The grey. In on its own, quickly, ahead of the content.
+    // The grey. Deliberately NOT slowed along with everything else: it is the
+    // mechanical half of the transition, and it is also the thing standing
+    // between the notes and the list. It reaches full opacity around 160ms, and
+    // every frame after that the list is completely hidden — so time spent
+    // beyond this point would be spent on something nobody can see, while time
+    // added *before* it would put the list back underneath the notes text.
     const veilVariants: Variants = prefersReducedMotion
         ? {
             hidden: { opacity: 0 },
-            shown: { opacity: 1, transition: { duration: 0.14, ease: 'linear' } },
-            gone: { opacity: 0, transition: { duration: 0.14, ease: 'linear' } },
+            shown: { opacity: 1, transition: { duration: 0.16, ease: 'linear' } },
+            gone: { opacity: 0, transition: { duration: 0.16, ease: 'linear' } },
         }
         : {
             hidden: { opacity: 0 },
-            shown: { opacity: 1, transition: { duration: 0.12, ease: 'easeOut' } },
-            // Lingers a beat after the text has gone, then lifts to reveal the
-            // list. Leaving in the other order would flash the list behind still-
-            // legible notes.
-            gone: { opacity: 0, transition: { duration: 0.18, ease: 'easeOut', delay: 0.1 } },
+            shown: { opacity: 1, transition: { duration: 0.16, ease: 'easeOut' } },
+            // Lingers well past the text, then lifts. Leaving in the other order
+            // would flash the list behind still-legible notes.
+            gone: { opacity: 0, transition: { duration: 0.3, ease: NAV_EASE, delay: 0.18 } },
         };
 
-    // The notes themselves. The delay is the whole point and is tuned to one
-    // invariant, verified frame by frame: the content must never be legible
-    // while the list still is. Concretely — whenever content opacity is above
-    // ~0.05, veil opacity is already above ~0.97, so there is nothing left of
-    // the list to read through the text.
+    // The notes. This is where the length lives — the part worth watching.
+    //
+    // The delay is tuned to one invariant, verified frame by frame: content must
+    // never be legible while the list still is. Whenever content opacity is above
+    // ~0.05, veil opacity is already above ~0.97.
+    //
+    // The scale is what separates this from a slide. Coming forward from 0.985
+    // while travelling the last 28px reads as the page arriving in depth rather
+    // than sliding along a rail; at full size the difference is a couple of
+    // pixels of text, which is exactly the amount you feel without seeing.
     const contentVariants: Variants = prefersReducedMotion
         ? {
             hidden: { opacity: 0 },
-            shown: { opacity: 1, transition: { duration: 0.14, ease: 'linear', delay: 0.04 } },
-            gone: { opacity: 0, transition: { duration: 0.12, ease: 'linear' } },
+            shown: { opacity: 1, transition: { duration: 0.16, ease: 'linear', delay: 0.06 } },
+            gone: { opacity: 0, transition: { duration: 0.14, ease: 'linear' } },
         }
         : {
-            hidden: { opacity: 0, transform: 'translateX(20px)' },
+            hidden: { opacity: 0, transform: 'translateX(28px) scale(0.985)' },
             shown: {
                 opacity: 1,
-                transform: 'translateX(0px)',
+                transform: 'translateX(0px) scale(1)',
                 transition: {
-                    opacity: { duration: 0.18, ease: 'easeOut', delay: 0.1 },
-                    transform: { duration: 0.28, ease: NAV_EASE },
+                    opacity: { duration: 0.34, ease: 'easeOut', delay: 0.15 },
+                    transform: SETTLE,
                 },
             },
-            // Text clears fast — the system getting out of the way should outpace
-            // the user deciding to leave.
             gone: {
                 opacity: 0,
-                transform: 'translateX(16px)',
+                transform: 'translateX(22px) scale(0.99)',
                 transition: {
-                    opacity: { duration: 0.11, ease: 'easeOut' },
-                    transform: { duration: 0.2, ease: NAV_EASE },
+                    opacity: { duration: 0.18, ease: 'easeOut' },
+                    transform: RELEASE,
                 },
             },
         };
 
     // The list keeps opacity 1 throughout — it is covered by an opaque surface,
-    // so cross-dissolving it too would only muddy the blend.
+    // so cross-dissolving it too would only muddy the blend. It recedes a little
+    // further than before (4.5%) and on the same spring as the notes, so coming
+    // back the two halves settle as one movement rather than two.
     //
     // Under reduced motion it still needs *something* to animate even though it
     // must not move: AnimatePresence drops an exiting child as soon as its exit
@@ -506,11 +528,11 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
     // measured, the list unmounted at 3ms and the veil then faded in over bare
     // background. The 0.999 is imperceptible and holds the layer for the fade.
     const listRecede: TargetAndTransition = prefersReducedMotion
-        ? { opacity: 0.999, transition: { duration: 0.14, ease: 'linear' } }
-        : { transform: 'scale(1.03)', transition: { duration: 0.28, ease: NAV_EASE } };
+        ? { opacity: 0.999, transition: { duration: 0.16, ease: 'linear' } }
+        : { transform: 'scale(1.045)', transition: RELEASE };
     const listSettle: TargetAndTransition = prefersReducedMotion
-        ? { opacity: 1, transition: { duration: 0.14, ease: 'linear' } }
-        : { transform: 'scale(1)', transition: { duration: 0.3, ease: NAV_EASE } };
+        ? { opacity: 1, transition: { duration: 0.16, ease: 'linear' } }
+        : { transform: 'scale(1)', transition: SETTLE };
 
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
