@@ -85,6 +85,35 @@ export class MicrophoneCapture extends EventEmitter {
     }
 
     /**
+     * Re-point this wrapper at a different input device.
+     *
+     * Exists for the "saved device is gone" retry: because init is LAZY, a bad
+     * device id cannot be detected until start() constructs the native monitor
+     * and throws. At that moment the wrapper holds no native handle (the
+     * construction-failure branch in start() never assigns this.monitor), so
+     * the cheapest correct retry is to re-target THIS instance and start again
+     * — no destroy/recreate, so the caller keeps its wireMicCapture() wiring
+     * and there is no teardown racing a fresh device open on the HAL.
+     *
+     * Deliberately refuses to run on a live wrapper: swapping deviceId while a
+     * cpal stream is open would silently desync this.deviceId from the device
+     * actually being captured.
+     */
+    public retargetDevice(deviceId?: string | null): void {
+        if (this.monitor || this.isRecording) {
+            throw new Error(
+                '[MicrophoneCapture] retargetDevice() requires an inactive wrapper with no native monitor',
+            );
+        }
+        this.deviceId = deviceId || null;
+        // A wrapper that has never captured successfully must not re-open the
+        // mic during stop()'s post-teardown pre-warm (same rule start()'s
+        // failure path enforces).
+        this.preWarmEnabled = false;
+        console.log(`[MicrophoneCapture] Re-targeted to device: ${this.deviceId || 'default'}`);
+    }
+
+    /**
      * Start capturing microphone audio
      */
     public start(): void {
