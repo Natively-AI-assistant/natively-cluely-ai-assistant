@@ -78,6 +78,87 @@ function getCombinedDisplayBounds(): Electron.Rectangle {
 }
 
 /**
+ * Builds the cropper BrowserWindow constructor options for a given platform.
+ *
+ * Extracted (and platform-injected) so BOTH platform branches are unit-testable
+ * without mutating `process.platform`.
+ *
+ * PLATFORM GATE — `enableLargerThanScreen` is macOS-ONLY, and the gate used to
+ * have it backwards: set on win32 (where Electron never reads it) and omitted on
+ * darwin, the one platform whose -[NSWindow constrainFrameRect:toScreen:] clamps
+ * a window to a single screen. The macOS cropper was therefore silently confined
+ * to one display, leaving the rest of the desktop unselectable.
+ *
+ * The correction is additive — darwin gains the flag, win32 keeps it — so this
+ * function changes NOTHING on Windows. See the inline note at the gate.
+ *
+ * `type: 'toolbar'` stays on every non-win32 platform exactly as before — it is
+ * load-bearing for the macOS NSPanel stealth path (see createWindow), and Linux
+ * has always received it.
+ */
+export function buildCropperWindowSettings(
+    combinedBounds: Electron.Rectangle,
+    platform: NodeJS.Platform,
+): Electron.BrowserWindowConstructorOptions {
+    const settings: Electron.BrowserWindowConstructorOptions = {
+        width: combinedBounds.width,
+        height: combinedBounds.height,
+        x: combinedBounds.x,
+        y: combinedBounds.y,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        // NOTE: do NOT use fullscreenable: true — on Windows it limits the
+        // window to a single monitor.
+        fullscreenable: false,
+        hasShadow: false,
+        alwaysOnTop: true,
+        backgroundColor: "#00000000",
+        show: false,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, "preload.js")
+        }
+    };
+
+    if (platform !== 'win32') {
+        settings.type = CROPPER_CONFIG.WINDOW_TYPE;
+    }
+
+    // darwin is the ADDITION here; win32 is left exactly as it was found.
+    //
+    // macOS needs this: -[ElectronNSWindow constrainFrameRect:toScreen:] clamps
+    // the window to a single screen unless the flag is set, and for a FRAMELESS
+    // window (this one) the flag unconstrains position as well as size — which is
+    // precisely what a negative-origin multi-monitor span requires. Without it the
+    // macOS cropper silently covered one display.
+    //
+    // win32 keeps the flag even though Electron documents it as macOS-only and
+    // implements it solely in shell/browser/ui/cocoa/electron_ns_window.mm — so it
+    // is never read on Windows. It is retained rather than removed because that
+    // makes this whole change provably behaviour-neutral on Windows, the platform
+    // this cannot be executed on. Dropping a line that is "documented dead" is not
+    // worth spending the one risk in the diff on an untestable platform.
+    if (platform === 'darwin' || platform === 'win32') {
+        settings.enableLargerThanScreen = true;
+    }
+
+    return settings;
+}
+
+/**
+ * True when `actual` matches `target` on all four edges.
+ */
+function boundsMatch(target: Electron.Rectangle, actual: Electron.Rectangle): boolean {
+    return actual.x === target.x
+        && actual.y === target.y
+        && actual.width === target.width
+        && actual.height === target.height;
+}
+
+/**
  * CropperWindowHelper manages the life cycle of the area-selection window.
  *
  * DESIGN STRATEGY:
@@ -355,7 +436,7 @@ export class CropperWindowHelper {
                     current.height !== combinedNow.height
                 ) {
                     console.log('[CropperWindowHelper] Display arrangement changed — refitting cropper to', combinedNow);
-                    this.cropperWindow.setBounds(combinedNow);
+                    this.applyCombinedBounds(combinedNow, 'show:refit');
                 }
 
                 // Get cursor position and display info at the moment cropper is shown
@@ -434,6 +515,73 @@ export class CropperWindowHelper {
         }
     }
 
+    /**
+     * Sets the cropper window to `target` and verifies the OS honored it.
+     * Returns true when the window ended up exactly at `target`.
+     */
+    private applyCombinedBounds(target: Electron.Rectangle, reason: string): boolean {
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return false;
+        this.cropperWindow.setBounds({
+            x: target.x,
+            y: target.y,
+            width: target.width,
+            height: target.height
+        });
+        return this.verifyCombinedBounds(target, reason);
+    }
+
+    /**
+     * Reads the cropper window's ACTUAL bounds back and reports any divergence
+     * from the combined virtual-desktop rectangle we asked for.
+     *
+     * WHY THIS EXISTS: positioning the cropper used to be fire-and-forget. When
+     * the OS declines the request the app carried on as if it had worked, and
+     * the failure surfaced as two unrelated-looking symptoms:
+     *
+     *   1. Desktop regions outside the misplaced window are simply not
+     *      selectable — the user drags over them and nothing happens.
+     *   2. The confirm listener maps window-local → global using the window's
+     *      REAL origin, while validateBounds() checks the result against the
+     *      IDEAL combined display bounds. A misplaced window pushes legitimate
+     *      selections outside the real display area, so they are silently
+     *      rejected.
+     *
+     * validateBounds() is deliberately NOT relaxed to paper over this: a
+     * selection that maps outside real screen territory cannot be captured, so
+     * rejecting it is correct. The window placement is what is wrong, and this
+     * is the line that says so.
+     *
+     * Reported on 2.8.7/win32 with a mixed-DPI layout: a setBounds of
+     * {x:0, y:-442, w:3627, h:1509} came back as {x:569, y:-83, w:3628, h:1510}.
+     * The scale factors are logged alongside the rectangles because that is the
+     * evidence needed to confirm (or kill) the per-monitor-DPI hypothesis from
+     * a user's log.
+     */
+    private verifyCombinedBounds(target: Electron.Rectangle, reason: string): boolean {
+        if (!this.cropperWindow || this.cropperWindow.isDestroyed()) return false;
+
+        const actual = this.cropperWindow.getBounds();
+        if (boundsMatch(target, actual)) {
+            console.log(`[CropperWindowHelper] bounds honored (${reason}):`, actual);
+            return true;
+        }
+
+        console.error(
+            `[CropperWindowHelper] bounds NOT honored (${reason}) — the cropper does not cover the virtual desktop. ` +
+            'Regions outside it are unselectable, and selections that map outside the real display area will be ' +
+            'rejected by validateBounds.',
+            {
+                requested: target,
+                actual,
+                displays: screen.getAllDisplays().map(d => ({
+                    bounds: d.bounds,
+                    scaleFactor: d.scaleFactor
+                }))
+            }
+        );
+        return false;
+    }
+
     private createWindow(showImmediately: boolean): void {
         if (this.isDisposed) {
             console.warn('[CropperWindowHelper] Cannot create window: instance has been disposed');
@@ -442,40 +590,10 @@ export class CropperWindowHelper {
 
         // Get combined bounds of ALL displays for multi-monitor support
         const combinedBounds = getCombinedDisplayBounds();
-        const { width, height } = combinedBounds;
 
         console.log(`[CropperWindowHelper] Creating cropper window with multi-monitor bounds:`, combinedBounds);
 
-        const windowSettings: Electron.BrowserWindowConstructorOptions = {
-            width,
-            height,
-            x: combinedBounds.x,
-            y: combinedBounds.y,
-            frame: false,
-            transparent: true,
-            resizable: false,
-            // NOTE: On Windows, do NOT use fullscreenable: true as it limits the window
-            // to a single monitor. We use enableLargerThanScreen + maximize instead.
-            fullscreenable: false,
-            hasShadow: false,
-            alwaysOnTop: true,
-            backgroundColor: "#00000000",
-            show: false,
-            skipTaskbar: true,
-            webPreferences: {
-                nodeIntegration: false,
-                contextIsolation: true,
-                preload: path.join(__dirname, "preload.js")
-            }
-        }
-
-        // Windows requires enableLargerThanScreen to span multiple monitors
-        // macOS uses fullscreenable + visibleOnAllWorkspaces instead
-        if (process.platform === 'win32') {
-            (windowSettings as any).enableLargerThanScreen = true;
-        } else {
-            windowSettings.type = CROPPER_CONFIG.WINDOW_TYPE;
-        }
+        const windowSettings = buildCropperWindowSettings(combinedBounds, process.platform);
 
         this.cropperWindow = new BrowserWindow(windowSettings)
 
@@ -496,20 +614,14 @@ export class CropperWindowHelper {
         // from being usable; partial stealth is better than no cropper.)
 
         // On Windows, ensure window spans all monitors by explicitly setting bounds
-        // This is needed because BrowserWindow might auto-adjust to primary monitor
+        // This is needed because BrowserWindow might auto-adjust to primary monitor.
+        // Every path that positions the cropper VERIFIES the result — see
+        // verifyCombinedBounds for why a silent mismatch is so damaging.
         if (process.platform === 'win32') {
-            this.cropperWindow.setBounds({
-                x: combinedBounds.x,
-                y: combinedBounds.y,
-                width: combinedBounds.width,
-                height: combinedBounds.height
-            });
+            this.applyCombinedBounds(combinedBounds, 'create:win32-span');
+        } else {
+            this.verifyCombinedBounds(combinedBounds, 'create');
         }
-
-        // Debug: log actual window bounds after creation
-        const actualBounds = this.cropperWindow.getBounds();
-        console.log(`[CropperWindowHelper] Window created. Actual bounds:`, actualBounds);
-        console.log(`[CropperWindowHelper] Expected bounds: {x:${combinedBounds.x}, y:${combinedBounds.y}, width:${combinedBounds.width}, height:${combinedBounds.height}}`);
 
         if (process.platform === "darwin") {
             this.cropperWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
