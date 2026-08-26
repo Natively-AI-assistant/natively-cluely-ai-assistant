@@ -187,8 +187,6 @@ This demo shows **a complete live meeting scenario**:
 | **Codex CLI Integration** | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Offline SLM Mode**      | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Stateful Intelligence OS** | ✅ Yes                    | ❌                   | ❌         | ❌               | ❌                     |
-| **Spoken Answer Humanizer** | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
-| **Sandboxed Code Verification** | ✅ Yes                  | ❌                   | ❌         | ❌               | ❌                     |
 | **Hindsight LTM Vector DB** | ✅ Yes                    | ❌                   | ❌         | ❌               | ❌                     |
 | **Regional STT Relay**    | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Data breach history**   | ✅ None                    | ❌ 83k users exposed | ✅ None    | ✅ None          | ✅ None                |
@@ -392,8 +390,6 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 | **Undetectable & Stealth Modes**                    |      ✅       |      ✅      |
 | **Meeting Dashboard & Offline RAG History**         |      ✅       |      ✅      |
 | **Stateful "Intelligence OS"**                     |      ✅       |      ✅      |
-| **Spoken Answer Humanizer**                         |      ✅       |      ✅      |
-| **Sandboxed Code Verification**                     |      ✅       |      ✅      |
 | **Hindsight Long-Term Memory (LTM)**                |      ❌       |      ✅      |
 | **Job Description (JD) & Resume Context Awareness** |      ❌       |      ✅      |
 | **Automated Company Research & Dossiers**           |      ❌       |      ✅      |
