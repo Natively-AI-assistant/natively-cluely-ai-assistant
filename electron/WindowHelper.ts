@@ -279,12 +279,33 @@ export class WindowHelper {
     // default), re-exposing it via `NSWindowSharingReadOnly` and overriding the
     // unconditional `NSWindowSharingNone` the native stealth module applies to
     // exactly these three windows. Force it on for them regardless of `enable`.
-    const overlayChrome = [this.overlayWindow, this.pillWindow, this.toggleWindow];
-    overlayChrome.forEach((win) => {
-      if (win && !win.isDestroyed()) {
-        win.setContentProtection(true);
-      }
-    });
+    //
+    // Skipped on Windows, deliberately. The chrome is already `true` from
+    // creation (createWindow / createOverlayAuxWindows) and on every show
+    // (switchToOverlay, both branches), and NOTHING in this codebase ever
+    // passes `false` for these three — so on win32 this write is always
+    // value-identical, and identical writes are exactly what the dedupe guard
+    // in setContentProtection() exists to avoid: repeated DWM affinity churn
+    // leaves the HWND in a transient black/blank frame state for a few hundred
+    // ms (see SetContentProtectionDedupe.test.mjs). Before the always-protect
+    // fix this write was value-CHANGING on every undetectable toggle, so it
+    // paid for itself; now it would only blank the overlay mid-meeting when
+    // the user flips undetectable mode.
+    //
+    // It is still required off win32: reassertContentProtection() routes here
+    // after app.dock.hide()/show(), and that macOS activation-policy flip makes
+    // WindowServer re-evaluate each NSWindow and silently reset its
+    // sharingType. There the re-push is the whole point — the in-memory value
+    // is already correct, so only an unconditional write restores the OS flag.
+    // Windows has no equivalent policy flip.
+    if (process.platform !== 'win32') {
+      const overlayChrome = [this.overlayWindow, this.pillWindow, this.toggleWindow];
+      overlayChrome.forEach((win) => {
+        if (win && !win.isDestroyed()) {
+          win.setContentProtection(true);
+        }
+      });
+    }
     // The launcher and popover catcher are not meeting chrome; they follow the
     // undetectable-mode toggle (the launcher is the main window shown outside a
     // meeting, and the native module deliberately does NOT force-hide it).
@@ -2509,10 +2530,48 @@ export class WindowHelper {
     menu.popup({ window: win, x: point.x, y: point.y });
   }
 
+  /**
+   * Cancel a pending opacity-shield timer WITHOUT stranding its windows at
+   * opacity 0.
+   *
+   * The Windows opacity shield (switchToOverlay / switchToLauncher) shows a
+   * window at opacity 0 and restores it 60ms later, once DWM has applied the
+   * capture-exclusion flag, so the first frame can't leak. A bare
+   * `clearTimeout` drops that restore on the floor: a minimize or close landing
+   * inside those 60ms left the shielded windows shown-but-fully-transparent
+   * until the next switch re-set their opacity. Flush the restore instead of
+   * discarding it — setting opacity 1 on a window that is about to be minimized
+   * or closed is harmless; leaving one stuck invisible is not.
+   *
+   * `isVisible()` is the guard that keeps this from fighting hideMainWindow,
+   * which deliberately zeroes opacity on win32 before hide() so a capture frame
+   * during the hide can't leak the chrome. Those windows are hidden by then, so
+   * they are skipped here and their opacity is re-set by the next show.
+   *
+   * NOT for the shield's own arm sites: those call setOpacity(0) and then clear
+   * the previous timer, so flushing there would undo the shield they just set.
+   */
+  private cancelOpacityShield(): void {
+    if (!this.opacityTimeout) return;
+    clearTimeout(this.opacityTimeout);
+    this.opacityTimeout = null;
+    const shielded = [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+    ];
+    for (const win of shielded) {
+      if (win && !win.isDestroyed() && win.isVisible()) {
+        win.setOpacity(1);
+      }
+    }
+  }
+
   public minimizeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.cancelOpacityShield();
     win.minimize();
   }
 
@@ -2768,7 +2827,10 @@ export class WindowHelper {
   public closeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    // Flush, don't drop: on Windows/Linux this hides to tray rather than
+    // quitting, so a discarded shield restore would strand the overlay chrome
+    // at opacity 0 for the rest of the session.
+    this.cancelOpacityShield();
     // On Windows/Linux the 'close' event listener intercepts this
     // and hides to tray unless the app is actually quitting.
     win.close();
