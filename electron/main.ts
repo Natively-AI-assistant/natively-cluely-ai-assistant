@@ -8425,15 +8425,30 @@ async function initializeApp() {
   //
   // Started AFTER credentials are loaded, but the key is passed as a GETTER
   // rather than a value: a user who pastes their Natively key ten minutes from
-  // now must not need a restart before their queued events can drain. Inert
-  // unless NATIVELY_USAGE_OUTBOX_ENABLED is set, so shipping this changes
-  // nothing until the flag is switched on.
+  // now must not need a restart before their queued events can drain.
+  //
+  // ON BY DEFAULT since 2026-08-27. It was gated behind an unset env var from
+  // 2026-08-14 until then, which meant the whole ledger shipped inert and
+  // collected nothing in production for the entire period. Setting
+  // NATIVELY_USAGE_OUTBOX_ENABLED=0 turns it back off, but only where an
+  // environment can actually be set (dev, CI, a terminal launch) — a packaged
+  // app inherits none. The production kill switch is server-side; see
+  // UsageOutbox.isEnabled().
   try {
     const { usageOutbox } = require('./services/UsageOutbox');
     usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
     // Drain anything queued while the app was closed, without waiting a full
     // dispatch interval. Deliberately not awaited — startup must not block on it.
     setTimeout(() => { void usageOutbox.dispatchOnce(); }, 5000);
+
+    // §5 application lifecycle. recordAppStarted/recordAppShutdown were written
+    // on 2026-08-14 and had ZERO callers until 2026-08-27 — the functions
+    // existed, the taxonomy reserved app_started/app_shutdown, and nothing ever
+    // emitted either. Started is recorded here rather than at whenReady so it
+    // means "the app came up far enough to be usable", which is the only
+    // reading a launch-failure investigation can act on.
+    const { recordAppStarted } = require('./services/usageInstrumentation');
+    recordAppStarted();
   } catch (err: any) {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
   }
@@ -8992,6 +9007,19 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    // FIRST, and deliberately so: record() is a synchronous INSERT into the
+    // same SQLite file that checkpointDatabase('will-quit') below is about to
+    // checkpoint, and record() swallows its own errors — so writing after the
+    // checkpoint would lose the row with no signal at all. Ordering is the
+    // whole correctness argument here.
+    //
+    // Only the graceful path emits this. SIGTERM/SIGINT call app.exit(), which
+    // bypasses will-quit — so a killed app records no shutdown, which is the
+    // honest outcome rather than a fabricated one.
+    try {
+      const { recordAppShutdown } = require('./services/usageInstrumentation');
+      recordAppShutdown();
+    } catch { /* instrumentation must never block a quit */ }
     appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');

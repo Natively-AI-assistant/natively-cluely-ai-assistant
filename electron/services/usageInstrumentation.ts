@@ -259,3 +259,133 @@ export function recordAppShutdown(): void {
         usageOutbox.record({ event_type: 'app_shutdown', event_status: 'completed' });
     } catch { /* ignore */ }
 }
+
+// ── Operational telemetry (layer B) ──────────────────────────────────────────
+//
+// WHY THIS EXISTS, AND WHY IT IS SEPARATE FROM THE LEDGER ABOVE
+//
+// `operational_telemetry_events` shipped on 2026-08-14 with a migration, a
+// server route, an allowlist and a 45-day sweep — and NOT ONE EMITTER. Nothing
+// in this application ever called `usageOutbox.recordTelemetry`, so the table
+// could only ever hold rows written by the live E2E harness. Turning
+// OPS_TELEMETRY_ENABLED on changed nothing, because "enabled" and "emitting"
+// are different facts and only one of them had been built.
+//
+// The source is the AnswerTrace the answer pipeline already produces per turn —
+// no new instrumentation on the answer path, which is the same argument
+// rollout-metrics makes for deriving its counters from the same object.
+//
+// PRIVACY. Everything below is a count, a duration, an enum or an identifier.
+// The trace itself is redacted at construction and carries evidence IDENTITY
+// rather than content; this maps only its numeric and enum fields, and the
+// server's allowlist independently refuses anything with a space in it.
+
+/** The server's IDENT charset. Anything outside it is refused, not stripped. */
+const IDENT_RE = /^[A-Za-z0-9_.:@/-]{1,64}$/;
+
+/**
+ * Coerce to something the server allowlist will accept, or drop it.
+ *
+ * Dropping beats sending a mangled value: a truncated model name that no longer
+ * matches any real model is worse than an absent one, because it reads as data.
+ */
+function identOrUndefined(v: unknown): string | undefined {
+    if (typeof v !== 'string') return undefined;
+    const t = v.trim();
+    if (!t) return undefined;
+    const cleaned = t.replace(/[^A-Za-z0-9_.:@/-]/g, '_').slice(0, 64);
+    return IDENT_RE.test(cleaned) ? cleaned : undefined;
+}
+
+function finiteInt(v: unknown): number | undefined {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
+}
+
+/**
+ * TraceStatus → ledger status.
+ *
+ * SUPERSEDED must NOT become `completed`. A superseded turn is one the pipeline
+ * abandoned because a newer question arrived — counting it as a completion
+ * inflates every rate computed from this table, and with auto-answer running on
+ * interims those turns are not rare. `interrupted` exists for exactly this.
+ */
+const TRACE_STATUS_TO_EVENT_STATUS: Record<string, UsageEventInput['event_status']> = {
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+    CANCELLED: 'cancelled',
+    SUPERSEDED: 'interrupted',
+};
+
+/**
+ * Emit one operational-telemetry event for a completed turn.
+ *
+ * Never throws — this runs on the live answer path, and the rule the whole
+ * observability layer is built on is that a monitoring defect degrades the
+ * metric, never the answer.
+ */
+export function recordTurnTelemetry(trace: unknown): void {
+    try {
+        if (!trace || typeof trace !== 'object') return;
+        const t = trace as Record<string, any>;
+
+        const status = TRACE_STATUS_TO_EVENT_STATUS[String(t.status)] ?? 'completed';
+        const latency = (t.latency ?? {}) as Record<string, unknown>;
+
+        const attempts: any[] = Array.isArray(t.retrievalAttempts) ? t.retrievalAttempts : [];
+        const candidates = attempts.reduce((n, a) => n + (finiteInt(a?.candidateCount) ?? 0), 0);
+        const accepted = Array.isArray(t.acceptedEvidence) ? t.acceptedEvidence.length : 0;
+
+        // The dominant accepted source type, not a list: metadata values may not
+        // be arrays, and "which kind of knowledge answered this" is the question
+        // a 45-day diagnostics table is actually asked.
+        const tally = new Map<string, number>();
+        for (const e of (Array.isArray(t.acceptedEvidence) ? t.acceptedEvidence : [])) {
+            const k = identOrUndefined(e?.sourceType);
+            if (k) tally.set(k, (tally.get(k) ?? 0) + 1);
+        }
+        let dominant = 'none';
+        let best = 0;
+        for (const [k, n] of tally) if (n > best) { dominant = k; best = n; }
+
+        const lastProvider = Array.isArray(t.providerAttempts) && t.providerAttempts.length
+            ? t.providerAttempts[t.providerAttempts.length - 1]
+            : undefined;
+
+        // At most 8 keys are accepted and an overflow REJECTS THE WHOLE EVENT —
+        // which the outbox then drops permanently as a poison row. Five keys,
+        // three spare, on purpose: durations and counts that have a real column
+        // go in the column, not in here.
+        const metadata: Record<string, string | number | boolean> = {
+            selected_source_count: accepted,
+            reranking_used: (finiteInt(latency.rerankingMs) ?? 0) > 0,
+            knowledge_source_type: dominant,
+        };
+        const ctxMs = finiteInt(latency.promptCompositionMs);
+        if (ctxMs !== undefined) metadata.context_build_duration_ms = ctxMs;
+        // Named ttfb, not `llm_duration_ms`: the trace measures time to FIRST
+        // byte, and a field named for total duration would be read as one.
+        const ttfbMs = finiteInt(latency.providerTtfbMs);
+        if (ttfbMs !== undefined) metadata.llm_ttfb_ms = ttfbMs;
+
+        const input: UsageEventInput = {
+            event_type: status === 'failed' ? 'retrieval_failed' : 'retrieval_completed',
+            event_status: status,
+            reported_count: candidates,
+            metadata,
+        };
+        const totalMs = finiteInt(latency.totalMs);
+        if (totalMs !== undefined) input.reported_duration_ms = totalMs;
+        const provider = identOrUndefined(lastProvider?.provider);
+        if (provider) input.provider = provider;
+        const model = identOrUndefined(lastProvider?.model);
+        if (model) input.model = model;
+        // Correlates this row with the rest of the turn inside the telemetry
+        // table. Not the raw question, and not a licence identifier — the server
+        // resolves the licence from auth and refuses a client-chosen one.
+        const reqId = identOrUndefined(t.requestId);
+        if (reqId) input.feature_session_id = reqId;
+
+        usageOutbox.recordTelemetry(input);
+    } catch { /* observability only */ }
+}
