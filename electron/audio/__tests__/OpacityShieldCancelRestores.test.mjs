@@ -134,6 +134,27 @@ for (const [label, body] of [['minimizeWindow', minimizeBody], ['closeWindow', c
     });
 }
 
+test('the shield timer marks itself spent when it fires', () => {
+    // Without this the field holds an already-fired Timeout forever, so
+    // cancelOpacityShield()'s "nothing pending" early return never fires — the
+    // guard reads as meaningful while every later minimize/close runs a
+    // pointless restore pass. Nulling here is what makes that guard real.
+    for (const name of ['switchToOverlay', 'switchToLauncher']) {
+        const body = extractMethodBody(source, sigFor(name, '[^)]*'), name);
+        const callback = extractMethodBody(
+            body,
+            /this\.opacityTimeout\s*=\s*setTimeout\s*\(\s*\(\s*\)\s*=>\s*\{/,
+            `${name}'s opacity-shield callback`,
+        );
+        assert.ok(
+            /this\.opacityTimeout\s*=\s*null/.test(callback),
+            `BUG: ${name}'s opacity-shield callback does not null this.opacityTimeout when it ` +
+            `fires, leaving a stale non-null Timeout behind. cancelOpacityShield()'s early ` +
+            `return then never triggers.`,
+        );
+    }
+});
+
 test('the shield ARM sites still use a bare clearTimeout', () => {
     // The arm sites call setOpacity(0) and *then* clear the previous timer.
     // Routing them through cancelOpacityShield would immediately un-zero the

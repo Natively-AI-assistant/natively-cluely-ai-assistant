@@ -2309,6 +2309,11 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          // Mark the shield spent. Without this the field holds an
+          // already-fired Timeout forever, so cancelOpacityShield()'s
+          // "nothing pending" early return never fires and every later
+          // minimize/close runs a pointless restore pass.
+          this.opacityTimeout = null;
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
             this.pillWindow?.setOpacity(1);
@@ -2407,6 +2412,8 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          // Mark the shield spent — see the overlay branch above.
+          this.opacityTimeout = null;
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
             if (!inactive) this.launcherWindow.focus();
