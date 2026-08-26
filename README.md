@@ -5,7 +5,7 @@ If you’re looking for a hosted desktop recording API, consider checking out [R
 <div align="center">
   <img src="assets/icon.png" width="150" alt="Natively AI Assistant Logo">
 
-# Natively — Personal-Use Source AI Interview Copilot & Meeting Assistant
+# Natively — AI Interview Copilot & Meeting Assistant
 
 **The best free alternative to Cluely, Final Round AI, LockedIn AI, and Interview Coder.**
 <br/>
