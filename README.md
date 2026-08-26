@@ -101,10 +101,12 @@ Natively started as a pixel-perfect recreation of Cluely's interface — then ke
 While other tools act as simple API wrappers, Natively is a complete, native intelligence system designed specifically for high-stakes meetings and interviews.
 
 - **Native Audio Capture (<500ms):** Built with Rust and Zero-Copy ABI transfers, bypassing generic web-audio limitations for ultra-low latency.
-- **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
+- **Local Whisper STT (On-Device):** 100% on-device speech-to-text using optimized ONNX models (Moonshine-tiny, Moonshine-base, Whisper-large-v3-turbo, distil-large-v3, Parakeet CTC 0.6B). Uses hardware acceleration (CoreML/Metal GPU on Apple Silicon, DirectML on Windows, quantized int8 on CPU) with zero cloud fees or data exposure.
 - **Dual-Channel Intelligence:** Distinct pipelines for system audio (what they say) and your microphone (what you dictate) ensuring perfect transcription without room noise.
 - **Battle-Tested Stealth Mode:** Completely undetectable. Hides from the dock, disables popups, and disguises the process during screen sharing.
-- **Modes Manager (7 Personas):** Toggle between 7 tailored personas (General, Technical Interview, Looking for Work, Sales, Recruiting, Team Meet, and Lecture) with custom system prompts and dynamic meeting-note templates.
+- **Auto Answer (Beta):** Answers appear on their own the moment the other person finishes a question — Natively decides whether an answer is actually wanted and stays silent when it isn't. Off by default.
+- **Modes Manager (9 Built-in Personas):** Toggle between General, Technical Interview, Looking for Work, Sales, Recruiting, Team Meet, Lecture, **Seminar** (strict file-grounded Q&A), and **Call Center** — each with its own system prompt and meeting-note template. Build your own on top.
+- **Browser Companion (Chrome):** Press ⌘/Ctrl+Y to pull the page you're looking at — a job description, a coding problem, documentation — straight into your next answer.
 - **Custom Context & Notes:** A dedicated free-form notes area to paste instructions, crib sheets, or credentials (up to 8,000 characters), automatically injected into real-time LLM prompts.
 - **Rolling Context:** We don't just transcribe; we maintain a "memory window" of the conversation for smarter answers.
 - **Local RAG Memory:** We embed your meetings locally using SQLite vector search so you can ask, "What did John say about the API last week?"
@@ -178,6 +180,10 @@ This demo shows **a complete live meeting scenario**:
 | **Auto-Calendar Sync**    | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Smart Task Sync**       | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Speaker Diarization**   | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
+| **Hands-Free Auto Answer**| ✅ Beta                    | ❌                   | ❌         | ❌               | ❌                     |
+| **Browser Page Capture**  | ✅ Chrome extension        | ❌                   | ❌         | ❌               | ❌                     |
+| **JD Role Insight**       | ✅ Pro                     | ❌                   | ❌         | ⚠️ Limited       | ⚠️ Limited             |
+| **9 Built-in Modes**      | ✅ Yes                     | ⚠️ Limited           | ❌         | ❌               | ⚠️ Limited             |
 | **Codex CLI Integration** | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Offline SLM Mode**      | ✅ Yes                     | ❌                   | ❌         | ❌               | ❌                     |
 | **Stateful Intelligence OS** | ✅ Yes                    | ❌                   | ❌         | ❌               | ❌                     |
@@ -371,7 +377,12 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 | **Local Whisper STT (On-Device)**                   |      ✅       |      ✅      |
 | **Real-Time Speech-to-Text (<500ms)**               |      ✅       |      ✅      |
 | **Multi-Key API Pools & Key Rotation**              |      ✅       |      ✅      |
-| **Profile Intelligence Router (v2)**                |      ✅       |      ✅      |
+| **Profile Intelligence Router (v3)**                |      ✅       |      ✅      |
+| **Auto Answer (Beta)**                              |      ✅       |      ✅      |
+| **Browser Companion & Page Capture (Chrome)**       |      ✅       |      ✅      |
+| **9 Built-in Modes (incl. Seminar, Call Center)**   |      ✅       |      ✅      |
+| **Skills — Upload & Manage Custom Personas**        |      ✅       |      ✅      |
+| **Meeting Notes with Follow-Up Email Draft**        |      ✅       |      ✅      |
 | **Eager Code UI Expansion**                         |      ✅       |      ✅      |
 | **Live Follow-Up Resolver**                         |      ✅       |      ✅      |
 | **Real-Time Latency Tracing**                       |      ✅       |      ✅      |
@@ -386,6 +397,7 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 | **Hindsight Long-Term Memory (LTM)**                |      ❌       |      ✅      |
 | **Job Description (JD) & Resume Context Awareness** |      ❌       |      ✅      |
 | **Automated Company Research & Dossiers**           |      ❌       |      ✅      |
+| **Role Insight — JD Requirement Coverage Scoring**  |      ❌       |      ✅      |
 | **Live Salary & Offer Negotiation Copilot**         |      ❌       |      ✅      |
 | **Custom Persona Modes (Sales, Tech, etc.)**        |      ❌       |      ✅      |
 | **Custom Context & Notes**                          |      ❌       |      ✅      |
@@ -404,16 +416,22 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
   </a>
 </p>
 
-### What's New in v2.8.0 (Latest Release)
+### What's New in v2.8.7 (Latest Release)
 
-Version 2.8.0 introduces the stateful "Intelligence OS" control plane, Hindsight long-term memory, deterministic answer humanization, sandboxed local code execution, and low-latency regional STT relay migration:
+Three months of work since v2.7.0 — a smarter answer engine, hands-free Auto Answer, rebuilt meeting notes, a Chrome companion extension, and NVIDIA speech.
 
-- **Stateful "Intelligence OS"**: Transitioned to a stateful control plane with mode-aware priors (Sales, Technical, Lecture) that automatically route queries and filter context based on your active task.
-- **Hindsight Long-Term Memory (LTM)**: Integrates a secure local sidecar vector database that indexes past meetings, custom profiles, and documents, retrieving relevant semantic matches dynamically.
-- **Spoken Answer Humanizer**: Deterministically rewrites raw LLM outputs to strip corporate jargon, filter out structure bugs (em-dashes, empty bullets), and optimize prose for natural spoken flow.
-- **Sandboxed Code Verification**: Automatically extracts and executes Python, JS, and SQLite code in isolated local subprocesses, verifying correctness and auto-correcting errors before displaying a verified badge.
-- **Regional STT-Relay Migration**: Migrated realtime audio transcription to low-latency regional VPS hosts with transaction-scoped quota advisory locks to prevent double-billing.
-- **macOS 12 (Monterey) Compatibility Guard**: Added safety checks to prevent runtime crashes during Whisper local speech-to-text initialization on older macOS versions.
+- **Auto Answer (Beta)**: Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't — no card to dismiss, no button to press. Off by default; enable it in **Settings → General**.
+- **A New Answer Engine**: Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them together. Follow-up questions keep the thread even after the topic changes.
+- **Meeting Notes, Rebuilt**: Summaries adapt to the kind of meeting you're in, get a real title instead of the first line of the transcript, and scale in length with the meeting. Plus editable speaker labels and a ready-to-send follow-up email draft.
+- **Browser Companion for Chrome**: Press **⌘/Ctrl+Y** to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere.
+- **Two New Built-in Modes**: **Seminar** for strict file-grounded Q&A (thesis defenses, paper walkthroughs), and **Call Center** for support calls framed as issue → resolution → escalation.
+- **NVIDIA NIM & NVIDIA Speech**: A new provider for both text and real-time transcription, with nine streaming models to choose from.
+- **Role Insight (Pro)**: Paste a job description and see every requirement pulled out, checked against your profile, and scored for coverage.
+- **Windows Stealth Typing**: Type into the meeting overlay without your call ever losing focus. Handles Alt+Tab, clicking away, and steps aside for CJK/IME input.
+- **Skills Upload & Delete**: Add your own skill as a file or folder with a preview before it installs, and remove ones you no longer want — no more editing folders by hand.
+- **Redesigned Meeting Overlay**: Panel, pill and resize control now move as one, answers stream in word by word, and scrolling back no longer fights you.
+
+> Read the [full v2.8.7 release notes](docs/releases/v2.8.7.md) for every change, including fixes.
 
 ## Table of Contents
 
@@ -426,7 +444,7 @@ Version 2.8.0 introduces the stateful "Intelligence OS" control plane, Hindsight
 - [Why Natively wins](#why-natively-wins)
 - [AI Coding Assistant](#free-ai-coding-interview-assistant-undetectable-on-leetcode-hackerrank--coderpad)
 - [Natively Pro](#natively-pro)
-- [What's New in v2.8.0](#whats-new-in-v280-latest-release)
+- [What's New in v2.8.7](#whats-new-in-v287-latest-release)
 - [Privacy & Security](#privacy--security-core-design-principle)
 - [Installation](#installation-developers--contributors)
 - [AI Providers](#ai-providers)
@@ -509,7 +527,7 @@ You explicitly control:
 
 ### Prerequisites
 
-- Node.js (v20+ recommended)
+- Node.js (v22.6+ required)
 - Git
 - Rust (required for native audio capture)
 
@@ -520,7 +538,8 @@ Connect **any** speech provider and **any** LLM. No subscriptions, no markups, n
 
 ### Unlimited Free Transcription (Whisper, Google, Deepgram)
 
-- **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT_
+- **Soniox** (API Key) - _Ultra-fast, highly accurate streaming STT (recommended)_
+- **NVIDIA Riva / NIM** (API Key) - _Nine streaming models, including multilingual Nemotron and Parakeet_
 - **Google Cloud Speech-to-Text** (Service Account)
 - **Groq** (API Key)
 - **OpenAI Whisper** (API Key)
@@ -535,10 +554,12 @@ Connect Natively to **any** leading model or local inference engine.
 
 | Provider                     | Best For                                                    |
 | :--------------------------- | :---------------------------------------------------------- |
-| **Gemini 3.1 Series**        | Recommended: Massive context window (2M tokens) & low cost. |
+| **Gemini 3.1 / 3.7 Series**  | Recommended (and the default): 2M-token context & low cost. |
 | **OpenAI (GPT-5.4 & o3)**    | High reasoning capabilities.                                |
 | **Anthropic (Claude 4.6)**   | Coding & complex nuanced tasks.                             |
 | **Groq (Llama 3.3/Scout 4)** | Insane speed (near-instant answers) & screenshot analysis.  |
+| **NVIDIA NIM**               | NVIDIA-hosted open models, plus Riva streaming speech.      |
+| **LiteLLM Gateway**          | Route through your own proxy with a built-in model picker.  |
 | **Ollama / LocalAI**         | 100% Offline & Private (No API keys needed).                |
 | **OpenAI-Compatible**        | Connect to _any_ custom endpoint (vLLM, LM Studio, etc.)    |
 
@@ -643,7 +664,9 @@ This runs: Vite build → TypeScript compile → native module build → electro
 - **Custom (BYO Endpoint):** Paste any cURL command to use OpenRouter, DeepSeek, or private endpoints.
 - **Ollama (Local):** Zero-setup detection of local models (Llama 3, Mistral, Gemma).
 - **Dynamic Model Selection:** Preferred models (OpenAI, Anthropic, Google) now automatically appear across the app.
-- **Google Gemini:** First-class support for the Gemini 3.1 series.
+- **NVIDIA NIM:** NVIDIA-hosted models for both text and streaming speech-to-text.
+- **LiteLLM:** Point Natively at your own gateway, with a model picker and configurable default.
+- **Google Gemini:** First-class support for the Gemini 3.1 and 3.7 series — the default models.
 - **OpenAI:** GPT-5.4 and o3 series support with optimized system prompts.
 - **Anthropic:** Claude 4.6 series support with corrected max_tokens.
 - **Groq:** Ultra-fast text inference with Llama 3.3, and screenshot analysis using Llama 4 Scout.
@@ -671,6 +694,25 @@ This runs: Vite build → TypeScript compile → native module build → electro
 - **TinyPrompts™ Engine**: Specialized prompt architecture for local SLMs (4B-8B params), ensuring instruction following and reasoning parity with cloud models on local hardware.
 - **Dynamic Note Templates**: AI automatically generates structured meeting notes based on your active persona mode (e.g., Tech Interview follow-ups vs Sales action items).
 
+### Auto Answer (Beta) — Hands-Free Responses
+
+Natively can answer without being asked. When the other person finishes a question, an LLM judge decides whether it is genuinely a question aimed at you — and either answers it or stays silent.
+
+- **No prompt, no button.** Nothing to dismiss and nothing to click; the answer is simply there.
+- **Knows when to stay quiet.** Rhetorical asides, questions aimed at someone else, and restatements of something already answered are ignored.
+- **Speaker-aware.** It reads speaker labels and splits the conversation by voice, so your own thinking-out-loud doesn't trigger an answer.
+- **Off by default.** Turn it on in **Settings → General**.
+
+### Browser Companion — Capture What You're Reading
+
+A Chrome extension that hands the page you're on to Natively.
+
+- **⌘/Ctrl+Y** pulls the current page into your next answer — job descriptions, coding problems, documentation, dashboards
+- **One-click permissions** for every site, instead of approving them one at a time
+- **Automatic context** recognises coding pages, job descriptions and developer docs and captures them without being asked
+- **Secrets are stripped** from captured page content before it ever reaches a model
+- Falls back to a screenshot, with a visible notice, when a page can't be read
+
 ### Instant Screen & Slide Analysis (OCR) — AI Coding Interview Assistant
 
 - Works on **LeetCode, HackerRank, CoderPad, Codility, HackerEarth** and any browser-based coding environment
@@ -683,7 +725,8 @@ This runs: Vite build → TypeScript compile → native module build → electro
 
 ### Premium Profile Intelligence
 
-- **Profile Intelligence Router (v2)**: Seamlessly categorizes user questions into distinct domains (Coding, System Design, Behavioral, Negotiation) to apply the most optimal reasoning path.
+- **Profile Intelligence Router (v3)**: Categorizes each question into a domain (Coding, System Design, Behavioral, Negotiation) and picks its source deliberately — your résumé, an uploaded document, the live conversation, or general knowledge — rather than blending them.
+- **Role Insight**: Paste a job description and see every requirement extracted, assessed against your profile, and scored for coverage before the interview starts.
 - **Answer-Type Constraints & Follow-Up Resolver**: Contextually tracks conversations to answer subsequent queries, and enforces precise layout constraints (such as short, conversational, bulleted, or code-only responses).
 - **Custom Persona Modes**: Seamlessly switch between built-in personas (Technical Interview, Sales, Recruiting) or create your own custom modes tailored to any conversation.
 - **Reference Files & Custom Context**: Upload PDFs, DOCX files, or type custom instructions to give the AI real-time context on your specific situation.
@@ -700,7 +743,9 @@ Create local `SKILL.md` files to give the AI specialized instructions for any ta
 - Type `/` or `$` to open a live skill picker — filtered autocomplete with arrow-key navigation, just like Claude Code's slash commands
 - Or type `/skill-name` directly to activate a skill inline
 - Built-in: **Humanize AI Text** — strips AI writing patterns and makes output sound human
-- Add your own: drop a `SKILL.md` with a YAML frontmatter `name:` and `description:` into `~/Library/Application Support/natively/skills/<folder>/`
+- **Upload from the app:** drop in a `SKILL.md` file or a whole skill folder and preview what it does before it installs — no manual file copying
+- **Delete from the app:** remove any skill you installed, straight from the same panel
+- Or add one by hand: a `SKILL.md` with YAML frontmatter `name:` and `description:` in `~/Library/Application Support/natively/skills/<folder>/`
 
 ### Contextual Actions
 
@@ -761,6 +806,9 @@ Natively includes a powerful, local-first meeting management system to review, s
 ![Dashboard Preview](assets/dashboard-preview.png)
 
 - **Meeting Archives:** Access full transcripts of every past meeting, searchable by keywords or dates.
+- **Adaptive Meeting Notes:** Summaries shaped by the mode you were in, titled from the finished summary rather than the first line of the transcript, and scaled in length to the meeting.
+- **Follow-Up Email Draft:** Every meeting produces a ready-to-send plain-text follow-up you can copy straight into your mail client.
+- **Editable Speaker Labels:** Rename speakers once and have it apply across the transcript and notes.
 - **Smart Export:** One-click export of transcripts and AI summaries to **Markdown, JSON, or Text**—perfect for pasting into Notion, Obsidian, or Slack.
 - **Usage Statistics:** Track your token usage and API costs in real-time. Know exactly how much you are spending on Gemini, OpenAI, or Claude.
 - **Audio Separation:** Distinct controls for **System Audio** (what they say) vs. **Microphone** (what you dictate).
@@ -774,7 +822,10 @@ Natively includes a powerful, local-first meeting management system to review, s
 timeline
     title Natively Product Roadmap
     section Recently Completed
-        Personas : ✅ Custom Modes & Templates
+        Personas : ✅ 9 Built-in Modes & Templates
+        Auto Answer : ✅ Hands-Free Answering (Beta)
+        Browser : ✅ Chrome Companion Extension
+        Notes : ✅ Rebuilt Meeting Notes
         Trial : ✅ 10-Minute Free Trial
     section Short-term (1-3 mos)
         System Design : Visualization MVP
@@ -830,18 +881,20 @@ No raw audio, screenshots, or transcripts are stored or transmitted unless expli
 
 ### Tech Stack
 
-- **React, Vite, TypeScript, TailwindCSS**
-- **Electron**
+- **React, Vite, TypeScript 7, TailwindCSS**
+- **Electron 43**
 - **Rust** (native audio with **Zero-Copy ABI Transfers** via `napi::Buffer` — enabling continuous audio capture without V8 garbage collection pressure, achieving significantly lower latency and CPU usage than typical Electron-based competitors)
 - **SQLite** (local storage with `sqlite-vec`)
 
 ### Supported Models
 
-- **Gemini 3.1 Series**
+- **Gemini 3.1 / 3.7 Series** (default: Gemini 3.1 Flash Lite and Gemini 3.7 Flash)
 - **OpenAI** (GPT-5.4, o3 series)
-- **Claude** (4.6 series)
+- **Claude** (4.6 series — full catalogue)
+- **NVIDIA NIM** (text and streaming speech)
 - **Ollama** (Llama, Mistral, CodeLlama)
 - **Groq** (Llama 3.3 for text, Llama 4 Scout for OCR)
+- **LiteLLM** (any model behind your own gateway)
 
 ### System Requirements
 
@@ -944,6 +997,14 @@ Natively is a powerful assistant for any professional situation. However, users 
 #### How do I use local models?
 
 Simply install **Ollama**, run a model (e.g., `ollama run llama3`), and Natively will automatically detect it. Enable "Ollama" in the AI Providers settings to switch to offline mode.
+
+#### What is Auto Answer, and is it on by default?
+
+Auto Answer (Beta) responds without you asking. When the other person finishes a question, Natively judges whether it's genuinely aimed at you and either answers or stays silent — rhetorical asides and questions meant for someone else are ignored. It is **off by default**; enable it in **Settings → General**.
+
+#### Do I need the browser extension?
+
+No — it's optional. It adds one thing: pressing **⌘/Ctrl+Y** hands the page you're currently reading to Natively, so a job description, a coding problem, or a page of documentation becomes context for your next answer. Without it, screenshot OCR still covers anything on screen.
 
 #### How does Natively compare to Cluely?
 

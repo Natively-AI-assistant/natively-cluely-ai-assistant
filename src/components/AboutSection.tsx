@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import evinProfile from '../assets/evin.png';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
-import { getPlatformShortcut } from '../utils/platformUtils';
+import { getModifierSymbol } from '../utils/platformUtils';
 
 interface AboutSectionProps { }
 
@@ -66,78 +66,78 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* What's New Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t("What's New in v2.8")}</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t("What's New in v2.8.7")}</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
-                    {/* 1. Stateful "Intelligence OS" */}
+                    {/* 1. Auto Answer */}
+                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
+                        <div className="flex items-start gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
+                                <Zap size={20} />
+                            </div>
+                            <div>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Auto Answer (Beta)</h5>
+                                <p className="text-xs text-text-secondary leading-relaxed">
+                                    Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't. Off by default — turn it on in General.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 2. A New Answer Engine */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
                                 <Cpu size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Stateful "Intelligence OS"</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">A New Answer Engine</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Transitioned to a stateful control plane with mode-aware priors (Sales, Technical, Lecture) that automatically route queries and filter context based on your active task.
+                                    Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them. Follow-ups keep the thread even after the topic changes.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 2. Hindsight Long-Term Memory */}
+                    {/* 3. Meeting Notes, Rebuilt */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 shrink-0">
-                                <Database size={20} />
+                                <ListTodo size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Hindsight Long-Term Memory</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Meeting Notes, Rebuilt</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Integrates a secure local sidecar vector database that indexes past meetings, custom profiles, and documents, retrieving relevant semantic matches dynamically.
+                                    Summaries adapt to the kind of meeting you're in, get a real title instead of the first line of the transcript, and scale with meeting length. Plus editable speaker labels and a ready-to-send follow-up email draft.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 3. Spoken Answer Humanizer */}
-                    <div className="p-3 border-b border-border-subtle bg-bg-card/50">
-                        <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 shrink-0">
-                                <MessageSquare size={20} />
-                            </div>
-                            <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Spoken Answer Humanizer</h5>
-                                <p className="text-xs text-text-secondary leading-relaxed">
-                                    Deterministically rewrites raw LLM outputs to strip corporate jargon, filter out structure bugs (em-dashes, empty bullets), and optimize prose for natural spoken flow.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 4. Sandboxed Code Verification */}
+                    {/* 4. Browser Companion */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 shrink-0">
-                                <Zap size={20} />
+                                <Globe size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Sandboxed Code Verification</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Browser Companion for Chrome</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Automatically executes Python, JS, and SQLite code in isolated local subprocesses, verifying correctness and auto-correcting errors before displaying a verified badge.
+                                    Press {getModifierSymbol('commandorcontrol')}+Y to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere.
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* 5. Regional STT-Relay Migration */}
+                    {/* 5. NVIDIA Speech & New Modes */}
                     <div className="p-3 bg-bg-card/50">
                         <div className="flex items-start gap-4">
-                            <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400 shrink-0">
-                                <Globe size={20} />
+                            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
+                                <Volume2 size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">Regional STT-Relay Migration</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">NVIDIA Speech & Two New Modes</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Migrated realtime audio transcription to low-latency regional VPS hosts with transaction-scoped quota advisory locks to prevent double-billing.
+                                    NVIDIA NIM joins the provider list for both text and real-time transcription, with nine streaming models. Plus Seminar mode for strict file-grounded Q&A and Call Center mode for support calls.
                                 </p>
                             </div>
                         </div>
