@@ -31,6 +31,15 @@ console.log(
 // Force production mode if running as packaged app or inside app bundle
 const isDev = isEnvDev && !isPackaged;
 
+// Fully transparent native background for the launcher's non-macOS (frameless)
+// window. Kept as a named constant because two call sites must agree on it —
+// createWindow()'s construction options and setLauncherOpacityPreview()'s
+// "stop previewing" branch, which restores the construction values. If those
+// two ever disagree, the launcher's rounded corners (src/index.css, the
+// `html[data-platform="win32"] body` radius) get filled in with opaque square
+// wedges the moment the preview ends.
+const LAUNCHER_TRANSPARENT_BG = '#00000000';
+
 const overlayResizeTracePath = '/tmp/natively-overlay-resize-trace.log';
 
 function traceOverlayResize(event: string, data: Record<string, unknown>): void {
@@ -517,11 +526,34 @@ export class WindowHelper {
       // translucent material by default.
       transparent: true,
       hasShadow: true,
-      // The launcher starts with the black logo splash. Use a black native
-      // background too so the OS doesn't show a grey/white transparent-window
-      // flash before the renderer paints (applies on macOS and Windows, both
-      // of which now create the window with `transparent: true`).
-      backgroundColor: '#000000',
+      // ROUNDED LAUNCHER CORNERS ARE LOAD-BEARING ON THIS VALUE — see the
+      // `html[data-platform="win32"] body` rule in src/index.css.
+      //
+      // Windows/Linux: the launcher is `frame: false`, so the OS draws no
+      // chrome and the rounding has to come from the DOM (that CSS rule's
+      // 8px body radius). The pixels OUTSIDE that radius are still inside
+      // the window rect, and on a `transparent: true` window they show this
+      // native `backgroundColor`. An opaque value therefore paints four
+      // square black corner wedges around the rounded UI — the exact
+      // rectangular-window-vs-curved-UI mismatch this is fixed to avoid. It
+      // must stay fully transparent so those corners composite to the
+      // desktop. Every other transparent window here already does this
+      // (settings, model selector, cropper, overlay + aux panels).
+      //
+      // Do NOT "fix" an unpainted-window symptom by making this opaque again
+      // on win32 — that silently squares off the launcher. The normal cold
+      // start is covered by `show: false` + ready-to-show. The one case that
+      // is genuinely visible is the dev load failure described at the
+      // did-fail-load handler below: that path used to show a black window
+      // for ~1s and now shows an invisible one instead. It is dev-only and
+      // the bounded retry there self-heals it.
+      //
+      // macOS: keeps the opaque black. Its launcher is a native
+      // `titleBarStyle: 'hiddenInset'` window, so the OS rounds and masks
+      // the rect for us and no background can leak past the corners; the
+      // black then does its original job of suppressing a grey/white
+      // transparent-window flash before the black logo splash paints.
+      backgroundColor: isMac ? '#000000' : LAUNCHER_TRANSPARENT_BG,
       focusable: true,
       resizable: true,
       movable: true,
@@ -2132,9 +2164,13 @@ export class WindowHelper {
       // this preview, since normal launcher UI still wants its window shadow.
       this.launcherWindow.setHasShadow(false);
     } else {
-      // Must match the values createWindow() applies at construction.
+      // Must match the values createWindow() applies at construction. The
+      // background is platform-split there and must stay split here: this
+      // branch runs on every did-finish-load, so an unconditional '#000000'
+      // would re-paint opaque square corners over the frameless window's
+      // rounded DOM on Windows/Linux a moment after every renderer load.
       if (isMac) this.launcherWindow.setVibrancy('under-window');
-      this.launcherWindow.setBackgroundColor('#000000');
+      this.launcherWindow.setBackgroundColor(isMac ? '#000000' : LAUNCHER_TRANSPARENT_BG);
       this.launcherWindow.setHasShadow(true);
     }
     this.launcherOpacityPreviewActive = active;

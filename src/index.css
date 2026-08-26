@@ -2877,11 +2877,160 @@ a,
 /* ── Windows / Linux window chrome – rounded corners ──────────────────────────
    Using positive selectors (not :not()) avoids a brief border-radius flash on
    macOS during cold-start, before the data-platform attribute is set.
+
+   macOS is excluded because it needs nothing: the launcher there is a native
+   `titleBarStyle: 'hiddenInset'` window, so the OS rounds and masks the rect
+   itself. Windows/Linux are `frame: false`, so the curve has to come from the
+   DOM — this rule is the only thing producing it.
+
+   This rule is HALF of the effect. The pixels outside the radius are still
+   inside the window rect, and they render the BrowserWindow's native
+   `backgroundColor`. That value is `LAUNCHER_TRANSPARENT_BG` on win32/linux in
+   electron/WindowHelper.ts (createWindow's launcherSettings, and again in
+   setLauncherOpacityPreview) precisely so the corners composite to the
+   desktop. If someone makes it opaque there, this radius stops reading as a
+   rounded window and starts reading as rounded UI floating inside four square
+   corner wedges. Change the two together or not at all.
+
+   SHAPE. macOS window corners are continuous (a superellipse), and
+   `corner-shape: squircle` reproduces that. It was tried here and REJECTED on
+   measurement - do not reach for it again without re-measuring:
+
+     1. A squircle's `border-radius` is not its apparent size. It hugs the
+        corner far more tightly, so `squircle 16px` reads as a ~6px corner.
+        Matching a 16px circular corner needed `squircle 26px`.
+     2. Worse, it concentrates its curvature. Measured horizontal inset per
+        scanline down the arc:
+
+           round 16px     17 14 12 11 10  9  8  7  6  5  5   (steps: 3,2,1,1...)
+           squircle 26px  17 13 11  9  8  7  7  6  5  5  4   (steps: 4,2,2,1...)
+
+        Same apparent depth, but the squircle is near-flat at the tangents and
+        then turns hard, so it jumps up to 4px per row where it meets the
+        straight edge. Antialiasing cannot hide a 4px jump: the sides stay
+        crisp and the corner reads as stepped. A circular arc spreads its
+        curvature evenly and advances ~1px per row nearly the whole way.
+
+   So: a plain circular arc, which is also literally what was asked for. This
+   removes the radius/shape calibration coupling and the Chrome-139
+   `corner-shape` dependency along with it.
+
+   16px is both the literal and the apparent size. It is deliberately NOT
+   scaled by devicePixelRatio: CSS px are already density-independent, so this
+   is 20 physical px at 125% and the apparent size holds across displays.
+
+   NOT AN ALIASING PROBLEM. The arc is antialiased in every configuration
+   tested - `overflow: hidden`, `clip-path`, mask, `contain: paint`, and with
+   the subtree layer-promoted - at 36-40 partial-alpha px, and 13/13 arc
+   scanlines carry 3-5 intermediate values in a true-resolution desktop
+   capture. If a corner ever looks rough, measure the per-row step size before
+   suspecting antialiasing.
+
+   The radius only bites because body also CLIPS: the launcher's root div
+   carries its own opaque background and would otherwise paint straight over
+   the corners. The `overflow: hidden` below is a redundant restatement — the
+   global `html, body, #root` rule near the top of this file already supplies
+   it, and tests/css/launcher-corner-radius.check.mjs still passes with this
+   copy deleted. It is kept as a local guard so the two rules would have to be
+   broken together, not as the thing doing the work.
+
+   The radius is theme-independent by construction: it clips whatever the
+   surface underneath happens to be, so light and dark get the same silhouette.
    ─────────────────────────────────────────────────────────────────────────── */
 html[data-platform="win32"] body,
 html[data-platform="linux"] body {
-  border-radius: 8px !important;
+  border-radius: 16px !important;
   overflow: hidden;
+}
+
+/* Make the clip reach POSITION: FIXED children too.
+
+   `overflow: hidden` above only clips descendants for which body is a
+   containing block — and a `position: fixed` element's containing block is the
+   viewport, not body. So every full-screen fixed overlay painted straight over
+   the rounded corners and squared the window off. The startup splash
+   (StartupSequence.tsx: `fixed inset-0 ... bg-[#000000]`) is the visible case —
+   the window had hard corners for the whole boot animation — but the same was
+   true of any fixed backdrop.
+
+   `contain: paint` fixes it by making body a containing block for fixed
+   descendants AND clipping to its border box, radius included. Measured
+   alternatives in this Electron:
+
+     · overflow: hidden alone   → fixed child NOT clipped (the bug)
+     · contain: paint           → clipped, corner profile preserved
+     · transform: translateZ(0) → clipped, but forces layer promotion for the
+                                  whole window to buy nothing extra
+     · clip-path: inset(round)  → clipped, but it also ignores `corner-shape`,
+                                  so it would silently undo any non-circular
+                                  corner. Measured: always a circular profile.
+
+   Launcher-scoped: it is the only window with an opaque body, and this makes
+   body a containing block + stacking context, which is a behavior change worth
+   confining. Body is `width/height: 100%` with no margin, so its box is
+   identical to the viewport and fixed elements do not move. */
+html[data-window="launcher"][data-platform="win32"] body,
+html[data-window="launcher"][data-platform="linux"] body {
+  contain: paint;
+}
+
+/* Maximized → square. A maximized window is flush with the work area on all
+   four sides, so the radius would not read as a rounded window at all: it
+   would cut four transparent notches through to the desktop at the screen
+   corners. `data-window-maximized` is set in src/main.tsx from the same
+   main-process maximize signal WindowControls consumes. */
+html[data-platform="win32"][data-window-maximized="true"] body,
+html[data-platform="linux"][data-window-maximized="true"] body {
+  border-radius: 0 !important;
+}
+
+/* Hairline edge on the curve itself.
+
+   Scoped to `[data-window="launcher"]` (set in src/main.tsx), NOT just to the
+   platform. The body radius above can be platform-wide because it is inert on
+   every other win32 renderer — those windows are `transparent: true` with a
+   see-through body, so there is nothing for a radius to clip. A box-shadow has
+   no such escape hatch: it PAINTS whether or not anything is behind it, so an
+   unscoped ring would draw a 1px rounded outline around the full window rect
+   of the settings, model-selector, cropper, overlay and aux-panel windows —
+   a ghost rectangle on the desktop with no relation to the panel inside it.
+   At 16px the arc is wide enough that a bare opaque fill reads soft against a
+   busy or light desktop — the eye loses the silhouette. This paints a 1px ring
+   on exactly the same geometry (`border-radius: inherit` means the ring can
+   never drift out of register with the clip).
+
+   It has to be an overlay rather than an inset `box-shadow` on body: an inset
+   shadow paints above body's own background but BELOW its content, and the
+   launcher's root div is a full-bleed opaque child that would cover it.
+
+   `position: fixed` + `inset: 0` tracks the viewport, so it follows every
+   resize with no JS. `pointer-events: none` keeps it out of hit-testing —
+   including the drag regions and the resize edges. */
+html[data-window="launcher"][data-platform="win32"] body::after,
+html[data-window="launcher"][data-platform="linux"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2147483647;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+/* Light theme: the dark half of the pair would read as a grimy outline against
+   a light surface, so light gets a single soft dark hairline instead. */
+html[data-window="launcher"][data-platform="win32"][data-theme="light"] body::after,
+html[data-window="launcher"][data-platform="linux"][data-theme="light"] body::after {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.10);
+}
+
+/* Maximized → no ring. The window edge is the screen edge; a 1px outline
+   around the whole display is framing nothing. */
+html[data-window="launcher"][data-platform="win32"][data-window-maximized="true"] body::after,
+html[data-window="launcher"][data-platform="linux"][data-window-maximized="true"] body::after {
+  box-shadow: none;
 }
 
 /* ───────────────────────────────────────────────────────────────────────

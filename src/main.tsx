@@ -60,6 +60,51 @@ if (window.electronAPI?.getThemeMode) {
   });
 }
 
+// Step 3: Track maximized state on the root element so the frameless-window
+// corner radius (src/index.css, `html[data-platform="win32"] body`) can drop to
+// 0 while maximized. A maximized window is flush with the work area on all four
+// sides, so a radius there does not read as a rounded window — it punches four
+// transparent notches through to the desktop at the screen corners. macOS is
+// unaffected: its launcher is a native window and the OS handles this itself.
+//
+// This reuses the maximize signal WindowControls already consumes; no new IPC.
+// The launcher has no fullscreen path (nothing in WindowHelper calls
+// setFullScreen), so maximize is the only flush-to-edge state to handle.
+//
+// Scoped to the launcher on purpose. main.tsx runs in EVERY renderer, but both
+// halves of that signal are launcher-only: `window-is-maximized` resolves to
+// isMainWindowMaximized() and `window-maximized-changed` is emitted from the
+// launcher's own maximize/unmaximize handlers. Without this guard, maximizing
+// the launcher would stamp the attribute onto the settings/overlay/cropper
+// renderers too — invisible today since their bodies are transparent, but a
+// wrong-window coupling waiting to matter.
+const isLauncherRenderer = (() => {
+  const w = new URLSearchParams(window.location.search).get('window');
+  return w === 'launcher' || w === null;
+})();
+
+// Published to CSS as well. The launcher is the ONLY window whose body is an
+// opaque, full-bleed surface — every other renderer (settings, model selector,
+// cropper, overlay, aux panels) is a transparent window painting its own
+// rounded panel inside a see-through body. Chrome styling keyed to the window
+// edge must therefore say "launcher", not "win32": a `border-radius` on a
+// transparent body is inert, but anything that PAINTS (the hairline ring below)
+// would draw a ghost outline around those windows' full rects.
+if (isLauncherRenderer) {
+  document.documentElement.setAttribute('data-window', 'launcher');
+}
+
+if (isLauncherRenderer && window.electronAPI?.platform !== 'darwin') {
+  const setMaximized = (maximized: boolean) => {
+    document.documentElement.setAttribute('data-window-maximized', maximized ? 'true' : 'false');
+  };
+  // Seed from the authoritative main-process value — covers the app being
+  // reopened while already maximized, same as WindowControls' initial query.
+  setMaximized(false);
+  window.electronAPI?.windowIsMaximized?.().then(setMaximized).catch(() => {});
+  window.electronAPI?.onWindowMaximizedChanged?.(setMaximized);
+}
+
 try {
   const rootEl = document.getElementById("root");
   if (!rootEl) {
