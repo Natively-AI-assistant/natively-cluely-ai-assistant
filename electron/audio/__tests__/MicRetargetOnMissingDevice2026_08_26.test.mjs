@@ -28,6 +28,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distRoot = path.resolve(__dirname, '../../../dist-electron/electron/audio');
 
 const constructedWith = [];
+const halOrder = [];
 
 const fakeNativeModule = {
     getHardwareId: () => 'fake',
@@ -47,9 +48,14 @@ const fakeNativeModule = {
                 'Available devices: iPhone Microphone, MacBook Air Microphone',
             );
         }
+        // 'flaky-mic' models the OTHER start() failure path: construction
+        // SUCCEEDS (a native handle is open) and monitor.start() throws.
         return {
-            start() {},
-            stop() {},
+            start() {
+                if (deviceId === 'flaky-mic') throw new Error('forced native start failure');
+                halOrder.push(`start:${deviceId ?? 'default'}`);
+            },
+            stop() { halOrder.push(`stop:${deviceId ?? 'default'}`); },
             getSampleRate: () => 16000,
             getNativeSampleRate: () => 48000,
         };
@@ -88,7 +94,7 @@ test('constructing with a missing device does NOT throw — only start() does', 
     assert.deepEqual(constructedWith, ['NativelySystemAudioTap']);
 });
 
-test('retargetDevice(null) + start() recovers onto the system default', () => {
+test('retargetDevice(null) + start() recovers onto the system default', async () => {
     constructedWith.length = 0;
     const cap = new MicrophoneCapture('NativelySystemAudioTap');
     cap.on('error', () => {});
@@ -96,7 +102,7 @@ test('retargetDevice(null) + start() recovers onto the system default', () => {
     assert.throws(() => cap.start(), /not found/);
 
     // The recovery path: no destroy, no re-wire.
-    cap.retargetDevice(null);
+    await cap.retargetDevice(null);
     cap.start();
 
     assert.deepEqual(
@@ -107,7 +113,7 @@ test('retargetDevice(null) + start() recovers onto the system default', () => {
     );
 });
 
-test('listeners survive the retarget (no destroy/recreate)', () => {
+test('listeners survive the retarget (no destroy/recreate)', async () => {
     const cap = new MicrophoneCapture('NativelySystemAudioTap');
     let errors = 0;
     let started = 0;
@@ -117,20 +123,43 @@ test('listeners survive the retarget (no destroy/recreate)', () => {
     assert.throws(() => cap.start(), /not found/);
     assert.equal(errors, 1, 'the failed start must still emit error for the recovery handler');
 
-    cap.retargetDevice(null);
+    await cap.retargetDevice(null);
     cap.start();
     assert.equal(started, 1, "BUG: 'start' listener was lost — retarget must not tear the wrapper down");
 });
 
-test('retargetDevice refuses to run on a live wrapper', () => {
+test('retargetDevice refuses to run on a live wrapper', async () => {
     const cap = new MicrophoneCapture(null);
     cap.on('error', () => {});
     cap.start();
 
-    assert.throws(
+    await assert.rejects(
         () => cap.retargetDevice('MacBook Air Microphone'),
         /inactive wrapper/,
         'BUG: swapping deviceId under a live cpal stream desyncs the wrapper from the ' +
         'device actually being captured.',
+    );
+});
+
+test('retargetDevice waits for the deferred orphan teardown of a failed start', async () => {
+    // Second start() failure path: construction SUCCEEDS (a native handle is
+    // open) and monitor.start() throws. start()'s catch nulls this.monitor but
+    // defers dying.stop() by a tick, so "monitor === null" does not mean the HAL
+    // is free. Retargeting and starting without draining that opens a second
+    // native handle while the first is still closing.
+    halOrder.length = 0;
+    const cap = new MicrophoneCapture('flaky-mic');
+    cap.on('error', () => {});
+
+    assert.throws(() => cap.start(), /forced native start failure/);
+
+    await cap.retargetDevice(null);
+    cap.start();
+
+    assert.deepEqual(
+        halOrder,
+        ['stop:flaky-mic', 'start:default'],
+        'BUG: the fresh device open raced the orphan teardown — the failed handle must be ' +
+        'released BEFORE the retry opens another one (Windows WASAPI exclusive mode contends).',
     );
 });

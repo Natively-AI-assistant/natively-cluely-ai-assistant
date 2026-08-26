@@ -11,7 +11,7 @@
 // no default fallback.
 //
 // These are behavioural tests against the real module (no source assertions):
-// electron/audio/inputDeviceSelection.mjs is the single choke point that the
+// electron/audio/audioDeviceSelection.mjs is the single choke point that the
 // picker (AudioDevices), the pipeline (main.ts) and the launcher (App.tsx) all
 // share.
 
@@ -23,11 +23,11 @@ import { fileURLToPath } from 'node:url';
 
 import {
   INTERNAL_CAPTURE_DEVICE_NAMES,
-  filterSelectableInputDevices,
+  filterSelectableDevices,
   isInternalCaptureDevice,
   normalizeDeviceName,
   resolveRequestedInputDevice,
-} from '../inputDeviceSelection.mjs';
+} from '../audioDeviceSelection.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,7 +48,7 @@ const DEVICES_WITHOUT_TAP = [
 ];
 
 test('the system-audio tap is never offered as a selectable microphone', () => {
-  const selectable = filterSelectableInputDevices(DEVICES_WITH_TAP);
+  const selectable = filterSelectableDevices(DEVICES_WITH_TAP);
   assert.deepEqual(
     selectable.map(d => d.id),
     ['default', 'iPhone Microphone', 'MacBook Air Microphone'],
@@ -58,10 +58,10 @@ test('the system-audio tap is never offered as a selectable microphone', () => {
 });
 
 test('filtering keeps real devices untouched and tolerates junk input', () => {
-  assert.deepEqual(filterSelectableInputDevices(DEVICES_WITHOUT_TAP), DEVICES_WITHOUT_TAP);
-  assert.deepEqual(filterSelectableInputDevices(null), []);
-  assert.deepEqual(filterSelectableInputDevices(undefined), []);
-  assert.deepEqual(filterSelectableInputDevices([null, undefined]), []);
+  assert.deepEqual(filterSelectableDevices(DEVICES_WITHOUT_TAP), DEVICES_WITHOUT_TAP);
+  assert.deepEqual(filterSelectableDevices(null), []);
+  assert.deepEqual(filterSelectableDevices(undefined), []);
+  assert.deepEqual(filterSelectableDevices([null, undefined]), []);
 });
 
 test('isInternalCaptureDevice matches case and dash variants, not real mics', () => {
@@ -111,6 +111,39 @@ test('the synthetic default ID resolves as default, never as missing', () => {
   // raise an amber banner naming "default" as missing.
   assert.equal(resolveRequestedInputDevice('default', DEVICES_WITHOUT_TAP).status, 'default');
   assert.equal(resolveRequestedInputDevice('default', []).status, 'default');
+});
+
+test('an EMPTY enumeration is unverifiable, never "missing"', () => {
+  // Rust's list_input_devices() swallows an enumeration error
+  // (`if let Ok(devices) = host.input_devices()`) and returns only the
+  // synthetic default row; AudioDevices returns [] when the native module is
+  // absent or throws. Reporting 'missing' on either would make the gate
+  // discard a present, working microphone and pin the session to the default.
+  assert.equal(resolveRequestedInputDevice('MacBook Air Microphone', []).status, 'unverifiable');
+  assert.equal(resolveRequestedInputDevice('MacBook Air Microphone', null).status, 'unverifiable');
+  // Only the synthetic default row survives the candidate filter -> still nothing to compare against.
+  assert.equal(
+    resolveRequestedInputDevice('MacBook Air Microphone', [{ id: 'default', name: 'Default Microphone' }]).status,
+    'unverifiable',
+  );
+  // But a NON-empty enumeration that genuinely lacks the device is 'missing'.
+  assert.equal(
+    resolveRequestedInputDevice('Dock Microphone', DEVICES_WITHOUT_TAP).status,
+    'missing',
+  );
+});
+
+test('the tap is filtered out of the OUTPUT list too', () => {
+  // Probed: while a tap runs, getOutputDevices() returns the aggregate AHEAD of
+  // the real speaker, so it is the first thing the speaker picker offers.
+  const outputs = [
+    { id: 'NativelySystemAudioTap', name: 'NativelySystemAudioTap' },
+    { id: 'BuiltInSpeakerDevice', name: 'MacBook Air Speakers' },
+  ];
+  assert.deepEqual(
+    filterSelectableDevices(outputs).map(d => d.name),
+    ['MacBook Air Speakers'],
+  );
 });
 
 test('resolution tiers mirror Rust resolve_input_device (exact < case < fuzzy)', () => {

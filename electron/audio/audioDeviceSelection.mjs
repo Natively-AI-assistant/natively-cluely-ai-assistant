@@ -1,5 +1,5 @@
 /**
- * Pure input-device selection logic, shared by the microphone picker
+ * Pure audio-device selection logic, shared by the device pickers
  * (AudioDevices / SettingsOverlay), the meeting audio pipeline (main.ts) and
  * the launcher's saved-preference read (App.tsx).
  *
@@ -75,12 +75,19 @@ export function isInternalCaptureDevice(idOrName) {
 }
 
 /**
- * Drop Natively's own capture devices from an enumerated input list. Applied
- * at the single choke point (AudioDevices.getInputDevices) so the picker, the
- * I/O-conflict fallback, the built-in-mic lookup and the last-resort candidate
- * ladder all inherit it.
+ * Drop Natively's own capture devices from an enumerated device list.
+ *
+ * Applied to BOTH pickers at their single choke point (AudioDevices):
+ *   - input:  the tap is enumerated by cpal's host.input_devices()
+ *   - output: the aggregate is built with sub_device_list/main_sub_device set
+ *             to the real output UID, so it reports output buffers and passes
+ *             sck::list_output_devices()' `number_buffers() > 0` admission —
+ *             verified by probe, where it sorted AHEAD of the real speaker.
+ *
+ * Filtering here also keeps the I/O-conflict fallback, the built-in-mic lookup
+ * and the last-resort candidate ladder in main.ts from ever selecting it.
  */
-export function filterSelectableInputDevices(devices) {
+export function filterSelectableDevices(devices) {
   if (!Array.isArray(devices)) return [];
   return devices.filter(
     (device) =>
@@ -100,6 +107,15 @@ export function filterSelectableInputDevices(devices) {
  *   { status: 'default' }  — no preference (null/empty/"default")
  *   { status: 'matched', id, name, tier }  — Rust will resolve this
  *   { status: 'missing', available }       — Rust will throw "not found"
+ *   { status: 'unverifiable' }             — the enumeration told us nothing
+ *
+ * 'unverifiable' exists because an empty candidate list is NOT evidence that
+ * the device is gone. Rust's list_input_devices() swallows an enumeration
+ * error (`if let Ok(devices) = host.input_devices()`) and returns only the
+ * synthetic default row, and AudioDevices returns [] when the native module is
+ * missing or throws. Reporting 'missing' there would discard a present,
+ * working microphone and pin the session to the default. Callers must act on
+ * 'missing' only.
  *
  * Tiers mirror Rust: 0 exact, 1 case-insensitive, 2 fuzzy-normalized.
  * (JS toLowerCase() folds Unicode where Rust's eq_ignore_ascii_case does not,
@@ -134,5 +150,8 @@ export function resolveRequestedInputDevice(requestedId, devices) {
     }
   }
 
-  return best ?? { status: 'missing', available: candidates.map((d) => d.name) };
+  if (best) return best;
+  // Absence of evidence is not evidence of absence — see 'unverifiable' above.
+  if (candidates.length === 0) return { status: 'unverifiable' };
+  return { status: 'missing', available: candidates.map((d) => d.name) };
 }

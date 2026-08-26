@@ -6,7 +6,8 @@ export interface EnumeratedInputDevice {
 export type InputDeviceResolution =
   | { status: 'default' }
   | { status: 'matched'; id: string; name: string; tier: 0 | 1 | 2 }
-  | { status: 'missing'; available: string[] };
+  | { status: 'missing'; available: string[] }
+  | { status: 'unverifiable' };
 
 export const INTERNAL_CAPTURE_DEVICE_NAMES: readonly string[];
 
@@ -14,7 +15,7 @@ export function normalizeDeviceName(value: string | null | undefined): string;
 
 export function isInternalCaptureDevice(idOrName: string | null | undefined): boolean;
 
-export function filterSelectableInputDevices<T extends EnumeratedInputDevice>(
+export function filterSelectableDevices<T extends EnumeratedInputDevice>(
   devices: T[] | null | undefined,
 ): T[];
 

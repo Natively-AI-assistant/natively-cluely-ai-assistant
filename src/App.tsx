@@ -29,7 +29,7 @@ import ReviewPromptHost from "./components/ReviewPromptHost"
 // unmounting the whole tree — the black-screen root cause. Do not remove
 // the extension.
 import { getOrchestrator } from "./lib/onboarding/orchestrator.ts"
-import { isInternalCaptureDevice } from "../electron/audio/inputDeviceSelection.mjs"
+import { isInternalCaptureDevice } from "../electron/audio/audioDeviceSelection.mjs"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { clampOverlayOpacity, OVERLAY_OPACITY_DEFAULT, getDefaultOverlayOpacity } from "./lib/overlayAppearance"
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme'
