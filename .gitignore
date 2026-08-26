@@ -539,3 +539,17 @@ benchmark-results/
 /natively_debug.size*
 /pitch/
 /researc
+
+# Local AI-assistant / editor configs. Each of these is written by a tool a
+# single developer happens to run (Gemini, Kiro, Qoder, CodeBuddy, opencode);
+# none of them is part of the build, and they otherwise show up as untracked
+# noise in every `git status`. CLAUDE.md is deliberately NOT here — it is the
+# shared, reviewed contract for this repo, not one person's local tool state.
+/.gemini/
+/.kiro/
+/.qoder/
+/.codebuddy/
+/GEMINI.md
+/QODER.md
+/CODEBUDDY.md
+/opencode.jsonc
