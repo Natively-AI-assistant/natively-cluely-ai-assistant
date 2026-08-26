@@ -123,7 +123,7 @@ test('applyContentProtection maps at least two window groups (chrome + followers
 });
 
 for (const win of OVERLAY_CHROME) {
-    test(`applyContentProtection protects ${win} with a literal true, never \`enable\``, () => {
+    test(`applyContentProtection protects ${win} unconditionally (setContentProtection(true))`, () => {
         const owning = groups.filter((g) => g.members.includes(win));
         assert.ok(
             owning.length > 0,
@@ -135,37 +135,13 @@ for (const win of OVERLAY_CHROME) {
                 g.arg,
                 'true',
                 `BUG: ${win} receives \`setContentProtection(${g.arg})\` in applyContentProtection, ` +
-                `not \`true\`. The overlay chrome's protection must not depend on the mode — coupling it to ` +
+                `not \`true\`. The overlay chrome must be protected unconditionally — coupling it to ` +
                 `\`enable\` (undetectable mode) re-exposes the overlay in screen shares whenever ` +
                 `undetectable mode is off (its default).`,
             );
         }
     });
 }
-
-test('the chrome re-push in applyContentProtection still runs on macOS', () => {
-    // The chrome loop is skipped on win32 (there the write is always
-    // value-identical, and identical writes cause the DWM affinity churn
-    // SetContentProtectionDedupe.test.mjs exists to prevent). It must NOT be
-    // skipped off win32: reassertContentProtection() routes through here after
-    // app.dock.hide()/show(), and that macOS activation-policy flip makes
-    // WindowServer re-evaluate each NSWindow and silently reset its sharingType.
-    // The in-memory value is still correct, so only an unconditional re-push
-    // restores NSWindowSharingNone. Narrowing this gate to exclude darwin —
-    // or dropping the chrome from applyContentProtection altogether — silently
-    // un-protects the overlay after every dock toggle.
-    const beforeChrome = body.slice(0, body.indexOf('const overlayChrome'));
-    const gates = beforeChrome.match(/process\.platform\s*[!=]==\s*'[a-z0-9]+'/g) ?? [];
-    for (const gate of gates) {
-        assert.equal(
-            gate,
-            "process.platform !== 'win32'",
-            `BUG: the overlay-chrome re-push in applyContentProtection is gated on \`${gate}\`. ` +
-            `It must run on darwin — reassertContentProtection() relies on it to restore ` +
-            `NSWindowSharingNone after app.dock.hide()/show() resets sharingType.`,
-        );
-    }
-});
 
 test('applyContentProtection keeps the launcher on the undetectable-mode toggle (enable)', () => {
     // Sanity that the split is real: the launcher is NOT meeting chrome and must
