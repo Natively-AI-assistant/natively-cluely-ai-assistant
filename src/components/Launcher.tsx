@@ -9,7 +9,7 @@ import { useToggleInit } from './settings/useToggleInit';
 import MeetingDetails from './MeetingDetails';
 import TopSearchPill from './TopSearchPill';
 import GlobalChatOverlay from './GlobalChatOverlay';
-import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, type TargetAndTransition, type Variants } from 'framer-motion';
 import { FeatureSpotlight } from './FeatureSpotlight';
 import { analytics } from '../lib/analytics/analytics.service'; // Added analytics import
 import { useShortcuts } from '../hooks/useShortcuts';
@@ -410,56 +410,107 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
     // ── List ⇄ meeting-notes navigation transition ─────────────────────────────
     // Cover/uncover model: the details panel is ALWAYS the upper layer (z-20) and
-    // the list is ALWAYS the lower layer (z-10). Details slides in from the right
-    // and leaves to the right; the list never moves laterally, it only recedes by
-    // scaling *up* past the clip box. Scaling up (rather than the usual iOS scale
-    // down) is deliberate: the container clips the overflow, so no edge of the
-    // window is ever uncovered mid-transition — important because this is a
-    // transparent Electron overlay where an uncovered edge is a hole to the
-    // desktop, not a background colour.
+    // the list is ALWAYS the lower layer (z-10). The list never moves laterally,
+    // it only recedes by scaling *up* past the clip box. Scaling up (rather than
+    // the usual iOS scale down) is deliberate: the container clips the overflow,
+    // so no edge of the window is ever uncovered mid-transition — important
+    // because this is a transparent Electron surface where an uncovered edge is a
+    // hole to the desktop, not a background colour.
     //
     // Because direction is decided by *which layer mounts*, not by which meeting
     // is selected, handleOpenMeeting / handleForward / handleBack all produce the
     // correct motion with no direction state to keep in sync.
+    //
+    // The details layer is split in two, and that split is the whole reason this
+    // reads as smooth. Fading one combined panel from opacity 0 meant the list
+    // stayed legible *through* the notes for the length of the fade — you read
+    // two documents stacked on each other, gradient promo card and all. Instead:
+    //
+    //   1. a veil painted in the meeting-notes grey covers the list first, fast.
+    //      A flat colour fading over content reads as a surface arriving; it has
+    //      no text of its own to ghost against.
+    //   2. the notes content settles onto that already-opaque surface. Because
+    //      MeetingDetails' own root is painted the SAME grey, fading the content
+    //      only ever fades the *text* — the background never flickers, and the
+    //      20px the content travels only ever uncovers more of the same colour.
     const prefersReducedMotion = useReducedMotion();
     // iOS/Ionic panel curve — strong ease-out, no overshoot.
     const NAV_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+    // Exactly the token MeetingDetails paints its own root with. If these two
+    // ever disagree the seam becomes visible as a tint shift mid-transition.
+    const NOTES_SURFACE = isLight ? 'bg-bg-secondary' : 'bg-bg-elevated';
 
-    // Opacity resolves well before the transform so the slide reads as a settle
-    // rather than a fade; the panel is opaque for most of the movement.
-    const detailsEnter: TargetAndTransition = prefersReducedMotion
-        ? { opacity: 1, transition: { duration: 0.12, ease: 'linear' } }
+    // Nothing visual — this only carries the variant labels down to the two
+    // layers below and takes the panel out of the hit-testing path on the way out.
+    const panelVariants: Variants = {
+        hidden: {},
+        shown: {},
+        gone: { pointerEvents: 'none' },
+    };
+
+    // The grey. In on its own, quickly, ahead of the content.
+    const veilVariants: Variants = prefersReducedMotion
+        ? {
+            hidden: { opacity: 0 },
+            shown: { opacity: 1, transition: { duration: 0.14, ease: 'linear' } },
+            gone: { opacity: 0, transition: { duration: 0.14, ease: 'linear' } },
+        }
         : {
-            opacity: 1,
-            transform: 'translateX(0px)',
-            transition: {
-                transform: { duration: 0.34, ease: NAV_EASE },
-                opacity: { duration: 0.2, ease: 'easeOut' },
+            hidden: { opacity: 0 },
+            shown: { opacity: 1, transition: { duration: 0.12, ease: 'easeOut' } },
+            // Lingers a beat after the text has gone, then lifts to reveal the
+            // list. Leaving in the other order would flash the list behind still-
+            // legible notes.
+            gone: { opacity: 0, transition: { duration: 0.18, ease: 'easeOut', delay: 0.1 } },
+        };
+
+    // The notes themselves. The delay is the whole point and is tuned to one
+    // invariant, verified frame by frame: the content must never be legible
+    // while the list still is. Concretely — whenever content opacity is above
+    // ~0.05, veil opacity is already above ~0.97, so there is nothing left of
+    // the list to read through the text.
+    const contentVariants: Variants = prefersReducedMotion
+        ? {
+            hidden: { opacity: 0 },
+            shown: { opacity: 1, transition: { duration: 0.14, ease: 'linear', delay: 0.04 } },
+            gone: { opacity: 0, transition: { duration: 0.12, ease: 'linear' } },
+        }
+        : {
+            hidden: { opacity: 0, transform: 'translateX(20px)' },
+            shown: {
+                opacity: 1,
+                transform: 'translateX(0px)',
+                transition: {
+                    opacity: { duration: 0.18, ease: 'easeOut', delay: 0.1 },
+                    transform: { duration: 0.28, ease: NAV_EASE },
+                },
+            },
+            // Text clears fast — the system getting out of the way should outpace
+            // the user deciding to leave.
+            gone: {
+                opacity: 0,
+                transform: 'translateX(16px)',
+                transition: {
+                    opacity: { duration: 0.11, ease: 'easeOut' },
+                    transform: { duration: 0.2, ease: NAV_EASE },
+                },
             },
         };
-    const detailsExit: TargetAndTransition = prefersReducedMotion
-        ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0.12, ease: 'linear' } }
-        : {
-            opacity: 0,
-            transform: 'translateX(20px)',
-            pointerEvents: 'none',
-            transition: {
-                transform: { duration: 0.26, ease: NAV_EASE },
-                opacity: { duration: 0.22, ease: 'easeOut' },
-            },
-        };
-    const detailsInitial: TargetAndTransition = prefersReducedMotion
-        ? { opacity: 0 }
-        : { opacity: 0, transform: 'translateX(24px)' };
 
-    // The list layer keeps opacity 1 throughout — it is covered by an opaque
-    // details panel, so cross-dissolving it too would only muddy the blend.
+    // The list keeps opacity 1 throughout — it is covered by an opaque surface,
+    // so cross-dissolving it too would only muddy the blend.
+    //
+    // Under reduced motion it still needs *something* to animate even though it
+    // must not move: AnimatePresence drops an exiting child as soon as its exit
+    // animation finishes, and an empty target finishes on the first frame —
+    // measured, the list unmounted at 3ms and the veil then faded in over bare
+    // background. The 0.999 is imperceptible and holds the layer for the fade.
     const listRecede: TargetAndTransition = prefersReducedMotion
-        ? {}
-        : { transform: 'scale(1.03)', transition: { duration: 0.3, ease: NAV_EASE } };
+        ? { opacity: 0.999, transition: { duration: 0.14, ease: 'linear' } }
+        : { transform: 'scale(1.03)', transition: { duration: 0.28, ease: NAV_EASE } };
     const listSettle: TargetAndTransition = prefersReducedMotion
-        ? {}
-        : { transform: 'scale(1)', transition: { duration: 0.34, ease: NAV_EASE } };
+        ? { opacity: 1, transition: { duration: 0.14, ease: 'linear' } }
+        : { transform: 'scale(1)', transition: { duration: 0.3, ease: NAV_EASE } };
 
     return (
         <div className="h-full w-full flex flex-col bg-bg-primary text-text-primary font-sans overflow-hidden selection:bg-accent-secondary/30">
@@ -781,20 +832,41 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                     {selectedMeeting ? (
                         <motion.div
                             key="details"
+                            data-page="details"
                             className="absolute inset-0 z-20 overflow-hidden"
-                            initial={detailsInitial}
-                            animate={detailsEnter}
-                            exit={detailsExit}
+                            variants={panelVariants}
+                            initial="hidden"
+                            animate="shown"
+                            exit="gone"
                         >
-                            <MeetingDetails
-                                meeting={selectedMeeting}
-                                onBack={handleBack}
-                                onOpenSettings={onOpenSettings}
+                            {/* The grey, covering the list before any notes text
+                                is legible. Purely a surface — it holds no content,
+                                so there is nothing for the list to ghost against
+                                while it fades. */}
+                            <motion.div
+                                data-layer="veil"
+                                className={`absolute inset-0 ${NOTES_SURFACE}`}
+                                variants={veilVariants}
                             />
+                            {/* Settles onto the surface above. MeetingDetails paints
+                                its own root the same grey, so the 20px of travel
+                                only ever uncovers more of that same colour. */}
+                            <motion.div
+                                data-layer="content"
+                                className="relative h-full w-full"
+                                variants={contentVariants}
+                            >
+                                <MeetingDetails
+                                    meeting={selectedMeeting}
+                                    onBack={handleBack}
+                                    onOpenSettings={onOpenSettings}
+                                />
+                            </motion.div>
                         </motion.div>
                     ) : (
                         <motion.div
                             key="launcher"
+                            data-page="launcher"
                             className="absolute inset-0 z-10 flex flex-col overflow-hidden"
                             initial={listRecede}
                             animate={listSettle}
