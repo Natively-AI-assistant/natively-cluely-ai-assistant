@@ -25,6 +25,16 @@
 // `enable` — so a refactor that drops one window into the mode-dependent group
 // (or flips its argument to `enable`/`false`) fails here instead of silently
 // re-introducing the screen-capture leak.
+//
+// IMPORTANT — why the positive assertions are scoped to a specific method body
+// rather than run against the whole file: `applyContentProtection` itself now
+// contains the literal text `win.setContentProtection(true)`, and the overlay
+// show path contains `this.overlayWindow.setContentProtection(true)`. A
+// whole-source regex for either string therefore passes even when the *creation*
+// site it claims to guard has been reverted to `this.contentProtection` (verified
+// with a mutation probe: reverting both creation sites still gave 8/8 green).
+// Each positive check below is anchored to the body of the method that owns the
+// site, so a revert there actually fails the test.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,14 +49,12 @@ const source = readFileSync(windowHelperPath, 'utf8');
 const OVERLAY_CHROME = ['this.overlayWindow', 'this.pillWindow', 'this.toggleWindow'];
 
 /**
- * Extract the body of `applyContentProtection(enable: boolean): void { ... }`
- * via brace-balancing. Mirrors the extractor in
- * SetContentProtectionDedupe.test.mjs.
+ * Extract a method body via brace-balancing from the first match of `sigRe`.
+ * Mirrors the extractor in SetContentProtectionDedupe.test.mjs.
  */
-function extractApplyContentProtectionBody(src) {
-    const sigRe = /(?:public\s+|private\s+|protected\s+)?applyContentProtection\s*\(\s*enable\s*:\s*boolean\s*\)\s*:\s*void\s*\{/;
+function extractMethodBody(src, sigRe, label) {
     const m = sigRe.exec(src);
-    assert.ok(m, 'could not locate applyContentProtection signature in WindowHelper');
+    assert.ok(m, `could not locate ${label} in WindowHelper`);
     let i = m.index + m[0].length;
     let depth = 1;
     const start = i;
@@ -56,7 +64,7 @@ function extractApplyContentProtectionBody(src) {
         else if (ch === '}') depth--;
         i++;
     }
-    assert.equal(depth, 0, 'unbalanced braces while extracting applyContentProtection');
+    assert.equal(depth, 0, `unbalanced braces while extracting ${label}`);
     return src.slice(start, i - 1);
 }
 
@@ -83,8 +91,27 @@ function parseProtectionGroups(body) {
     return groups;
 }
 
-const body = extractApplyContentProtectionBody(source);
+const body = extractMethodBody(
+    source,
+    /(?:public\s+|private\s+|protected\s+)?applyContentProtection\s*\(\s*enable\s*:\s*boolean\s*\)\s*:\s*void\s*\{/,
+    'applyContentProtection',
+);
 const groups = parseProtectionGroups(body);
+
+// The overlay body is created here (createWindow builds the launcher AND the
+// overlay); the pill/toggle are created in createOverlayAuxWindows. Scoping the
+// creation assertions to these bodies is what makes them bite — see the note at
+// the top of this file.
+const createWindowBody = extractMethodBody(
+    source,
+    /(?:public\s+|private\s+|protected\s+)?createWindow\s*\(\s*\)\s*:\s*void\s*\{/,
+    'createWindow',
+);
+const createAuxBody = extractMethodBody(
+    source,
+    /(?:public\s+|private\s+|protected\s+)?createOverlayAuxWindows\s*\(\s*startUrl\s*:\s*string\s*\)\s*:\s*void\s*\{/,
+    'createOverlayAuxWindows',
+);
 
 test('applyContentProtection maps at least two window groups (chrome + followers)', () => {
     assert.ok(
@@ -138,7 +165,8 @@ test('applyContentProtection keeps the launcher on the undetectable-mode toggle 
 
 test('the overlay body is never protected via this.contentProtection', () => {
     // The exact leak: creating/showing the overlay with the undetectable-mode
-    // value flips sharingType back to ReadOnly in normal mode.
+    // value flips sharingType back to ReadOnly in normal mode. Whole-source on
+    // purpose — no site anywhere may reintroduce it.
     assert.ok(
         !/this\.overlayWindow\.setContentProtection\s*\(\s*this\.contentProtection\s*\)/.test(source),
         `BUG: WindowHelper still calls ` +
@@ -148,20 +176,44 @@ test('the overlay body is never protected via this.contentProtection', () => {
     );
 });
 
-test('the overlay is created/shown with content protection forced on', () => {
+test('the overlay body is CREATED with content protection forced on', () => {
+    // Scoped to createWindow so the show-path call sites cannot satisfy it.
     assert.ok(
-        /this\.overlayWindow\.setContentProtection\s*\(\s*true\s*\)/.test(source),
-        `BUG: the overlay window is not created/shown with \`setContentProtection(true)\`. It ` +
-        `must be protected from the first frame, independent of undetectable mode.`,
+        /this\.overlayWindow\.setContentProtection\s*\(\s*true\s*\)/.test(createWindowBody),
+        `BUG: the overlay window is not created with \`setContentProtection(true)\` in ` +
+        `createWindow. It must be protected from the first frame, independent of undetectable ` +
+        `mode — a show-site call is too late and does not cover a window created while hidden.`,
     );
 });
 
-test('the pill/toggle aux windows are protected with a literal true, not this.contentProtection', () => {
+test('the overlay body is SHOWN with content protection forced on', () => {
+    // switchToOverlay re-asserts protection on both the Windows (opacity-shield)
+    // and macOS/Linux branches. Scoped so the creation site cannot satisfy it.
+    const switchToOverlayBody = extractMethodBody(
+        source,
+        /(?:public\s+|private\s+|protected\s+)?switchToOverlay\s*\(\s*inactive\s*\??\s*:\s*boolean[^)]*\)\s*:\s*void\s*\{/,
+        'switchToOverlay',
+    );
+    const forced = switchToOverlayBody.match(
+        /this\.overlayWindow\.setContentProtection\s*\(\s*true\s*\)/g,
+    );
+    assert.equal(
+        forced?.length,
+        2,
+        `BUG: switchToOverlay has ${forced?.length ?? 0} \`setContentProtection(true)\` call(s) ` +
+        `on the overlay, expected 2 (the win32 opacity-shield branch and the macOS/Linux branch). ` +
+        `Both show paths must force protection on before the first painted frame.`,
+    );
+});
+
+test('the pill/toggle aux windows are CREATED with a literal true, not this.contentProtection', () => {
+    // Scoped to createOverlayAuxWindows so applyContentProtection's own
+    // `win.setContentProtection(true)` cannot satisfy it.
     assert.ok(
-        /win\.setContentProtection\s*\(\s*true\s*\)/.test(source),
+        /win\.setContentProtection\s*\(\s*true\s*\)/.test(createAuxBody),
         `BUG: the overlay aux windows (pill/toggle) are not protected with ` +
-        `\`win.setContentProtection(true)\` at creation. They are on-screen meeting chrome and ` +
-        `must never leak into a shared screen.`,
+        `\`win.setContentProtection(true)\` at creation in createOverlayAuxWindows. They are ` +
+        `on-screen meeting chrome and must never leak into a shared screen.`,
     );
     assert.ok(
         !/win\.setContentProtection\s*\(\s*this\.contentProtection\s*\)/.test(source),
