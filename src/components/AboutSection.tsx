@@ -128,16 +128,16 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         </div>
                     </div>
 
-                    {/* 5. NVIDIA Speech & New Modes */}
+                    {/* 5. Hindsight Long-Term Memory */}
                     <div className="p-3 bg-bg-card/50">
                         <div className="flex items-start gap-4">
                             <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 shrink-0">
-                                <Volume2 size={20} />
+                                <Database size={20} />
                             </div>
                             <div>
-                                <h5 className="text-sm font-bold text-text-primary mb-1">NVIDIA Speech & Two New Modes</h5>
+                                <h5 className="text-sm font-bold text-text-primary mb-1">Hindsight Long-Term Memory</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    NVIDIA NIM joins the provider list for both text and real-time transcription, with nine streaming models. Plus Seminar mode for strict file-grounded Q&A and Call Center mode for support calls.
+                                    A local vector database that indexes your past meetings, profiles and documents, so Natively can recall what was said weeks ago — not just in this session. Pro, and opt-in from Settings.
                                 </p>
                             </div>
                         </div>

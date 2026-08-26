@@ -418,7 +418,7 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 
 ### What's New in v2.8.7 (Latest Release)
 
-Three months of work since v2.7.0 — a smarter answer engine, hands-free Auto Answer, rebuilt meeting notes, a Chrome companion extension, and NVIDIA speech.
+Everything since v2.7.0 — a smarter answer engine, hands-free Auto Answer, long-term memory, rebuilt meeting notes, a Chrome companion extension, and NVIDIA speech. The 2.8.0–2.8.6 builds were never published here, so their work ships in this release too.
 
 - **Auto Answer (Beta)**: Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't — no card to dismiss, no button to press. Off by default; enable it in **Settings → General**.
 - **A New Answer Engine**: Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them together. Follow-up questions keep the thread even after the topic changes.
@@ -426,10 +426,12 @@ Three months of work since v2.7.0 — a smarter answer engine, hands-free Auto A
 - **Browser Companion for Chrome**: Press **⌘/Ctrl+Y** to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere.
 - **Two New Built-in Modes**: **Seminar** for strict file-grounded Q&A (thesis defenses, paper walkthroughs), and **Call Center** for support calls framed as issue → resolution → escalation.
 - **NVIDIA NIM & NVIDIA Speech**: A new provider for both text and real-time transcription, with nine streaming models to choose from.
+- **Hindsight Long-Term Memory (Pro)**: A local vector database that indexes your past meetings, profiles and documents, so Natively can recall what was said weeks ago instead of only what's in the current session. Opt-in from Settings.
 - **Role Insight (Pro)**: Paste a job description and see every requirement pulled out, checked against your profile, and scored for coverage.
 - **Windows Stealth Typing**: Type into the meeting overlay without your call ever losing focus. Handles Alt+Tab, clicking away, and steps aside for CJK/IME input.
 - **Skills Upload & Delete**: Add your own skill as a file or folder with a preview before it installs, and remove ones you no longer want — no more editing folders by hand.
 - **Redesigned Meeting Overlay**: Panel, pill and resize control now move as one, answers stream in word by word, and scrolling back no longer fights you.
+- **Signed macOS Builds & Faster Transcription**: Signed builds for Apple Silicon and Intel, a macOS 12 (Monterey) compatibility guard for local speech, and live transcription moved to low-latency regional hosts.
 
 > Read the [full v2.8.7 release notes](docs/releases/v2.8.7.md) for every change, including fixes.
 
