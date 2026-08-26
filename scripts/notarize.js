@@ -161,8 +161,11 @@ module.exports = async function notarizeHook(context) {
   // signature-gated: only network-class failures retry; a genuine
   // notarization REJECTION or auth failure still fails the build on the
   // first attempt, loudly, exactly as before.
-  const TRANSIENT_NETWORK_RE =
-    /Connection reset by peer|NWError|abortedUpload|ECONNRESET|ETIMEDOUT|ENETDOWN|EPIPE|socket hang up|network connection was lost|Operation timed out|temporarily unavailable/i;
+  // The signature list lives in scripts/lib/notary-transient.cjs so this path and the
+  // DMG path in scripts/afterAllArtifactBuild.cjs cannot drift apart. The `!/staple/`
+  // guard below stays HERE on purpose: @electron/notarize funnels submit AND staple
+  // failures through one throw, so only this call site needs to tell them apart.
+  const { isTransientNetworkMessage } = require('./lib/notary-transient.cjs');
   const MAX_SUBMIT_ATTEMPTS = 3;
 
   let lastErr;
@@ -178,7 +181,7 @@ module.exports = async function notarizeHook(context) {
       const attemptMsg = (err && err.message ? err.message : String(err)) || '';
       // Staple-race is handled below (it is a SUCCESS of submission) — break
       // out of the retry loop for it and for any non-transient failure.
-      const isTransient = TRANSIENT_NETWORK_RE.test(attemptMsg) && !/staple/i.test(attemptMsg);
+      const isTransient = isTransientNetworkMessage(attemptMsg) && !/staple/i.test(attemptMsg);
       if (isTransient && attempt < MAX_SUBMIT_ATTEMPTS) {
         const delayS = 30 * attempt;
         console.warn(

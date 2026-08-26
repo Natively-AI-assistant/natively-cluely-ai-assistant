@@ -18,14 +18,14 @@
     "typecheck:ts7": "node node_modules/typescript7/lib/tsc.js -p tsconfig.json --noEmit",
     "typecheck:ts7:electron": "node node_modules/typescript7/lib/tsc.js -p electron/tsconfig.json --noEmit",
     "preview": "vite preview",
-    "postinstall": "patch-package && cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && node scripts/rebuild-native-electron.js && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/patch-electron-plist.js && node scripts/verify-native-arch.js",
+    "postinstall": "patch-package && cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp && node scripts/rebuild-native-electron.js && node scripts/download-models.js && node scripts/ensure-sqlite-vec.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/patch-electron-plist.js && node scripts/verify-native-arch.js",
     "rebuild:native": "node scripts/rebuild-native-electron.js && node scripts/verify-native-arch.js",
     "prepare": "husky",
     "electron:dev": "npm run build && npm run build:electron && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build:electron && cross-env NODE_ENV=production electron .",
     "app:dev": "concurrently --kill-others --kill-signal SIGKILL \"npm run dev -- --port 5180 --strictPort\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
-    "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",
-    "app:build:signed": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
+    "app:build": "npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js",
+    "app:build:signed": "node scripts/preflight-notary.cjs && npm run build && npm run typecheck:electron && npm run build:electron && cross-env NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native && node scripts/ensure-sharp-mac-deps.js && node scripts/ensure-napi-canvas-mac-deps.js && node scripts/ensure-sqlite-vec.js && npm run verify:packaged-local-assets && node scripts/package-app.js --config electron-builder.signed.cjs",
     "watch": "node scripts/build-electron.js --watch",
     "start": "npm run app:dev",
     "dist": "npm run app:build",
@@ -123,7 +123,8 @@
       "!**/.env.*",
       "!**/*.log",
       "!**/*.pdf",
-      "!**/.git"
+      "!**/.git",
+      "!**/node_modules/@typescript/**"
     ],
     "asarUnpack": [
       "**/*.node",
