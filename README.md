@@ -418,22 +418,45 @@ We've launched the official **$NAT token** on Printr! Holders who maintain a spe
 
 ### What's New in v2.8.7 (Latest Release)
 
-Everything since v2.7.0 — a smarter answer engine, hands-free Auto Answer, long-term memory, rebuilt meeting notes, a Chrome companion extension, and NVIDIA speech. The 2.8.0–2.8.6 builds were never published here, so their work ships in this release too.
+**Everything since v2.7.0 in one release.** The 2.8.0–2.8.6 builds were never published here, so their work ships in this update too.
 
-- **Auto Answer (Beta)**: Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't — no card to dismiss, no button to press. Off by default; enable it in **Settings → General**.
-- **A New Answer Engine**: Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them together. Follow-up questions keep the thread even after the topic changes.
-- **Meeting Notes, Rebuilt**: Summaries adapt to the kind of meeting you're in, get a real title instead of the first line of the transcript, and scale in length with the meeting. Plus editable speaker labels and a ready-to-send follow-up email draft.
-- **Browser Companion for Chrome**: Press **⌘/Ctrl+Y** to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere.
-- **Two New Built-in Modes**: **Seminar** for strict file-grounded Q&A (thesis defenses, paper walkthroughs), and **Call Center** for support calls framed as issue → resolution → escalation.
-- **NVIDIA NIM & NVIDIA Speech**: A new provider for both text and real-time transcription, with nine streaming models to choose from.
-- **Hindsight Long-Term Memory (Pro)**: A local vector database that indexes your past meetings, profiles and documents, so Natively can recall what was said weeks ago instead of only what's in the current session. Opt-in from Settings.
-- **Role Insight (Pro)**: Paste a job description and see every requirement pulled out, checked against your profile, and scored for coverage.
-- **Windows Stealth Typing**: Type into the meeting overlay without your call ever losing focus. Handles Alt+Tab, clicking away, and steps aside for CJK/IME input.
-- **Skills Upload & Delete**: Add your own skill as a file or folder with a preview before it installs, and remove ones you no longer want — no more editing folders by hand.
-- **Redesigned Meeting Overlay**: Panel, pill and resize control now move as one, answers stream in word by word, and scrolling back no longer fights you.
-- **Signed macOS Builds & Faster Transcription**: Signed builds for Apple Silicon and Intel, a macOS 12 (Monterey) compatibility guard for local speech, and live transcription moved to low-latency regional hosts.
+#### ✨ New
 
-> Read the [full v2.8.7 release notes](docs/releases/v2.8.7.md) for every change, including fixes.
+| Feature | What it does |
+| :------ | :----------- |
+| **Auto Answer** `Beta` | Answers appear on their own the moment the other person finishes a question. Natively judges whether an answer is actually wanted and stays silent when it isn't — no card to dismiss, no button to press. Off by default; enable in **Settings → General**. |
+| **Browser Companion** `Chrome` | Press **⌘/Ctrl+Y** to pull the page you're looking at into your next answer — a job description, a coding problem, documentation. One click enables it everywhere. |
+| **Hindsight Long-Term Memory** `Pro` | A local vector database that indexes your past meetings, profiles and documents, so Natively recalls what was said weeks ago — not just this session. Opt-in from Settings. |
+| **Role Insight** `Pro` | Paste a job description and see every requirement pulled out, checked against your profile, and scored for coverage. |
+| **Seminar & Call Center Modes** | Seminar for strict file-grounded Q&A (thesis defenses, paper walkthroughs); Call Center for support calls framed as issue → resolution → escalation. Brings the built-in count to 9. |
+| **NVIDIA NIM & NVIDIA Speech** | A new provider for both text and real-time transcription, with nine streaming models to choose from. |
+| **Skills Upload & Delete** | Add a skill as a file or folder with a preview before it installs, and remove ones you no longer want — no more editing folders by hand. |
+
+#### ⚡ Improved
+
+- **A smarter answer engine.** Answers now pick their source properly — your résumé, an uploaded document, the live conversation, or general knowledge — instead of blending them. Follow-ups keep the thread even after the topic changes.
+- **Meeting notes, rebuilt.** Summaries adapt to the kind of meeting you're in, get a real title instead of the first line of the transcript, and scale in length with the meeting. Plus editable speaker labels and a ready-to-send follow-up email draft.
+- **Redesigned meeting overlay.** Panel, pill and resize control move as one, answers stream in word by word, and scrolling back no longer fights you.
+- **Faster everywhere.** Answers are prepared ahead of time, local speech no longer stalls when a meeting starts, and live transcription moved to low-latency regional hosts.
+- **Refreshed interface.** Apple-style toggles, smoother section transitions, a new Soft Orchid accent, clearer code blocks, and calmer onboarding.
+- **New default models** — Gemini 3.1 Flash Lite and Gemini 3.7 Flash — plus the full Claude catalogue and real provider logos in the model picker.
+- **Windows stealth typing.** Type into the meeting overlay without your call ever losing focus. Handles Alt+Tab, clicking away, and steps aside for CJK/IME input.
+
+#### 🛠 Fixed
+
+- **Startup.** Fixed the app getting stuck on the logo, several memory leaks that could crash the launcher, and a crash that could stop the app opening ever again.
+- **Meetings were being lost.** A database bug meant some meetings never saved. Fixed — and a meeting is never left unnamed.
+- **Microphone and audio.** Fixed the mic being held after a failed start, capture breaking when you switch devices mid-meeting, and system audio missed on some Windows setups.
+- **Answers.** Your profile no longer leaks into unrelated technical questions, internal markers no longer show up on screen, and a slow provider can't overwrite an answer you already have.
+- **Windows.** Screenshots capture the right monitor, the cropper works across multiple displays, shortcuts no longer stop working in stealth mode, and the overlay stays above fullscreen calls and screen shares.
+- **Language.** Choosing English now actually keeps answers in English.
+
+#### 🖥 Platform
+
+- Electron 43 and TypeScript 7; requires Node 22.6+ to build from source.
+- Signed macOS builds for **both** Apple Silicon and Intel, plus a macOS 12 (Monterey) compatibility guard for local speech.
+
+> 📄 **[Read the full v2.8.7 release notes →](docs/releases/v2.8.7.md)**
 
 ## Table of Contents
 
