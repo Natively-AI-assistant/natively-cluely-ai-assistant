@@ -133,10 +133,17 @@ test('switchToOverlay shields the first Windows frame regardless of content prot
   assert.ok(zeroAt < showAt, 'opacity must be zeroed BEFORE show() or the stale frame is presented.');
   assert.ok(showAt < restoreAt, 'opacity must be restored only after the show, on the deferred timer.');
 
+  // The overlay chrome is ALWAYS content-protected, independent of undetectable
+  // mode — see applyContentProtection and OverlayAlwaysContentProtected.test.mjs.
+  // Coupling this call to `this.contentProtection` was the "Natively is visible on
+  // Google Meet calls" leak: undetectable mode is off by default, so every overlay
+  // show called setContentProtection(false) and re-exposed the window. The shield
+  // being unconditional (asserted above) is a SEPARATE property from the CP
+  // argument, and only the shield is this test's subject.
   assert.match(
     win32Branch,
-    /setContentProtection\(this\.contentProtection\)/,
-    'the shared win32 path must honour the real contentProtection setting, not hardcode true — the shield now runs with CP off too.',
+    /setContentProtection\(true\)/,
+    'the win32 show path must force content protection on, never follow undetectable mode.',
   );
 });
 
