@@ -45,7 +45,12 @@ permissions:
 jobs:
   build-macos:
     runs-on: macos-14 # Apple Silicon runner; builds both arches via NATIVELY_BUILD_ALL_MAC_ARCHES
-    timeout-minutes: 90
+    # 90 was already tight for two ~28-min app notarizations plus two DMG
+    # notarizations. scripts/lib/notary-transient.cjs now retries a DMG submit up
+    # to 3x (~25 min each) and stapleWithRetry adds ~8 min of backoff per DMG, so a
+    # run that survives a dropped upload needs materially more headroom — otherwise
+    # the job is killed mid-retry and the retry buys nothing.
+    timeout-minutes: 180
     steps:
       - name: Checkout (with submodules)
         uses: actions/checkout@v4
@@ -121,6 +126,12 @@ jobs:
           npm run build:electron
           NATIVELY_BUILD_ALL_MAC_ARCHES=1 npm run build:native
           node scripts/ensure-sharp-mac-deps.js
+          # Both darwin arches of @napi-rs/canvas. The runner is arm64, so `npm ci`
+          # installs only the arm64 binding and the x64 pack ships without one —
+          # that is how v2.8.7 shipped an Intel DMG whose PDF text extraction died
+          # with "DOMMatrix is not defined". postinstall also covers this; the
+          # explicit call keeps it true if scripts are ever skipped.
+          node scripts/ensure-napi-canvas-mac-deps.js
           ./node_modules/.bin/electron-builder --mac --config electron-builder.signed.cjs --publish never
 
       - name: Verify signature + notarization (both arches + DMGs)

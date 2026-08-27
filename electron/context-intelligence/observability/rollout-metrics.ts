@@ -127,6 +127,20 @@ const bump = (m: Record<string, number>, k: string | undefined) => {
  * the answer. Callers are not expected to wrap it.
  */
 export function recordTurnMetrics(trace: AnswerTrace | null | undefined): void {
+  // Operational telemetry (layer B), emitted from the same funnel for the same
+  // reason the counters are: this is the ONE place both engines hand over a
+  // finished trace, so an emitter here needs no new instrumentation on the
+  // answer path and cannot miss a surface.
+  //
+  // Lazily required and independently wrapped. UsageOutbox reaches
+  // InstallPingManager, which touches app.getPath('userData') — an eager import
+  // would throw in every context without a ready Electron app, which is exactly
+  // the offline evaluators and replay harnesses that load this module.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../../services/usageInstrumentation').recordTurnTelemetry(trace);
+  } catch { /* observability only */ }
+
   try {
     if (!trace) return;
     const t = trace as unknown as Record<string, any>;

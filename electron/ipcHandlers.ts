@@ -7030,6 +7030,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   const PRICING_CACHE_TTL_MS = 5 * 60_000;
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
+    // Set when the server REFUSES the key, so the handler can report the real
+    // reason instead of the unconditional { success: true } it used to return
+    // even for a key that authenticates nowhere.
+    let keyRejection: { error?: string } | null = null;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -7112,6 +7116,39 @@ export function initializeIpcHandlers(appState: AppState): void {
               '[IPC] set-natively-api-key: Pro inactive —',
               result.error,
             );
+          } else if (result.keyRejected) {
+            // The server REFUSED the key (4xx): it authenticates nowhere,
+            // /v1/chat included (both go through validateKey). By this point
+            // CredentialsManager.setNativelyApiKey has ALREADY auto-promoted the
+            // default model — and possibly the STT provider — to 'natively' and
+            // saved, so leaving it here parks the user on an endpoint that
+            // rejects every request, with nothing but a console line to say why.
+            // Undo the promotion and hand the server's own reason to the settings
+            // UI, which already renders `error` when a save reports failure.
+            //
+            // Only the 4xx branch does this. A standard-plan key ('no Pro') still
+            // authenticates against /v1/chat — the server gates only
+            // /v1/pro/verify on PRO_PLANS — and a 5xx/network verdict says
+            // nothing about the key, so neither may tear down working state.
+            console.warn(
+              '[IPC] set-natively-api-key: key REFUSED by server —',
+              result.code,
+              result.error,
+            );
+            const reverted = cm.revertNativelyAutoDefaults('Natively key refused by server');
+            if (reverted.defaultModel) {
+              const revertedProviders = [
+                ...(cm.getCurlProviders() || []),
+                ...(cm.getCustomProviders() || []),
+              ];
+              llmHelper.setModel(reverted.defaultModel, revertedProviders);
+              appState.sendModelChanged(reverted.defaultModel);
+            }
+            if (reverted.sttProvider) {
+              await appState.reconfigureSttProvider();
+            }
+            broadcastCredentialsChanged();
+            keyRejection = { error: result.error };
           } else {
             console.log('[IPC] set-natively-api-key: Pro not activated —', result.error);
           }
@@ -7149,7 +7186,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
 
-      return { success: true };
+      return keyRejection
+        ? { success: false, error: keyRejection.error }
+        : { success: true };
     } catch (error: any) {
       console.error('Error saving Natively API key:', error);
       return { success: false, error: error.message };

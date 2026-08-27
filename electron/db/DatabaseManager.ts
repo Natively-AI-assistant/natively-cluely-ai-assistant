@@ -226,18 +226,54 @@ export class DatabaseManager {
      * produced by an `npm install` that ran under a Rosetta shell).
      */
     private reportInitFailure(error: unknown): void {
-        const err = error as NodeJS.ErrnoException;
-        const msg = err?.message || String(error);
-        const isArchMismatch =
-            err?.code === 'ERR_DLOPEN_FAILED' ||
-            /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i.test(msg);
+        // better-sqlite3 loads through the `bindings` package, which SWALLOWS the
+        // real dlopen error at each candidate path and then reports
+        // "Could not locate the bindings file. Tried: …" — a message that names a
+        // MISSING file even when the file is present and merely unloadable. The
+        // previous /incompatible architecture|ERR_DLOPEN_FAILED|mach-o/i test
+        // therefore never matched the most common genuine cause, so users hit the
+        // generic branch and never saw the rebuild guidance. See
+        // electron/lib/bindingFailure.cjs for the evidence.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { diagnoseBindingFailure } = require('../lib/bindingFailure.cjs');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { binaryArch } = require('../lib/nativeArch.cjs');
 
-        if (isArchMismatch) {
+        let diagnosis: { kind: string; path?: string; actual?: string; expected?: string; tried?: string[] };
+        try {
+            diagnosis = diagnoseBindingFailure(error, {
+                exists: (p: string) => fs.existsSync(p),
+                archOf: (p: string) => binaryArch(p),
+                processArch: process.arch,
+            });
+        } catch {
+            // Diagnosis must never be the thing that breaks startup reporting.
+            diagnosis = { kind: 'other' };
+        }
+
+        if (diagnosis.kind === 'arch-mismatch') {
+            const where = diagnosis.path ? `\n  Offending binary: ${diagnosis.path}` : '';
+            const what = diagnosis.actual
+                ? ` (binary is ${diagnosis.actual}, this app is ${diagnosis.expected})`
+                : '';
             console.error(
                 '[DatabaseManager] FATAL: native module (better-sqlite3) failed to load — the compiled ' +
-                'binary architecture does not match the Electron runtime. Local database is DISABLED ' +
+                `binary architecture does not match the Electron runtime${what}. Local database is DISABLED ` +
+                '(meeting history, modes, and notes will not persist this session).' + where + '\n' +
+                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.\n' +
+                '  If this is an INSTALLED app (not a dev checkout), you have the wrong build for your Mac — ' +
+                'download the arm64 DMG on Apple Silicon, or the standard DMG on Intel.'
+            );
+        } else if (diagnosis.kind === 'binding-missing') {
+            // Every candidate path was genuinely absent: a packaging/installation
+            // fault, NOT something a rebuild fixes. Saying "rebuild" here would send
+            // users down the wrong path.
+            console.error(
+                '[DatabaseManager] FATAL: native module (better-sqlite3) is MISSING from this build — no ' +
+                'binary exists at any of the paths it was looked for. Local database is DISABLED ' +
                 '(meeting history, modes, and notes will not persist this session).\n' +
-                '  Fix: run `npm run rebuild:native` from a native (non-Rosetta) terminal, then restart the app.'
+                `  Searched ${diagnosis.tried?.length ?? 0} path(s); first: ${diagnosis.tried?.[0] ?? 'n/a'}\n` +
+                '  This is an installation/packaging fault — reinstall the app.'
             );
         } else {
             console.error(

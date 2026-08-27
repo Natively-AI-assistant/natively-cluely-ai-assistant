@@ -493,6 +493,9 @@ tools/
 !docs/
 docs/*
 !docs/VISION_MODEL_BENCHMARK.md
+# Per-release notes are published artifacts (linked from the README), not scratch notes.
+!docs/releases/
+!docs/releases/**
 # Usage ledger — the progress file is the mandated handoff contract across three
 # campaigns (16 architectural decisions, 5 open findings, the full forensics
 # record), the architecture doc is the system's specification, and the privacy

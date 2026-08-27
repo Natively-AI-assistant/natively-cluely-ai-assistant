@@ -24,6 +24,12 @@ export class MicrophoneCapture extends EventEmitter {
     //     complete before constructing a new native instance / starting again,
     //   - destroy() awaits this before removing listeners and nulling fields.
     private _teardownPromise: Promise<void> | null = null;
+    // Resolves when the setImmediate orphan-stop scheduled by a FAILED start()
+    // has actually released the native handle. start()'s failure path nulls
+    // this.monitor synchronously but defers `dying.stop()` by a tick, so
+    // "monitor === null" alone does NOT mean the HAL is free — retargetDevice()
+    // awaits this before letting a caller open a different device.
+    private _orphanTeardown: Promise<void> | null = null;
     // When false, the post-teardown pre-warm step (which constructs a fresh
     // RustMicCapture so the next meeting's start() doesn't pay the cpal init
     // cost on the Electron main thread) is skipped. Disabled by:
@@ -82,6 +88,48 @@ export class MicrophoneCapture extends EventEmitter {
             }
         }
         return 0;
+    }
+
+    /**
+     * Re-point this wrapper at a different input device.
+     *
+     * Exists for the "saved device is gone" retry: because init is LAZY, a bad
+     * device id cannot be detected until start() constructs the native monitor
+     * and throws. Re-targeting THIS instance and starting again is cheaper and
+     * safer than destroy/recreate — the caller keeps its wireMicCapture()
+     * wiring — and awaiting any pending orphan teardown (below) keeps a closing
+     * handle from racing the fresh device open.
+     *
+     * Deliberately refuses to run on a live wrapper: swapping deviceId while a
+     * cpal stream is open would silently desync this.deviceId from the device
+     * actually being captured.
+     */
+    public async retargetDevice(deviceId?: string | null): Promise<void> {
+        if (this.monitor || this.isRecording) {
+            throw new Error(
+                '[MicrophoneCapture] retargetDevice() requires an inactive wrapper with no native monitor',
+            );
+        }
+        // Two distinct start() failure paths, only one of which leaves the HAL
+        // free immediately:
+        //   - `new RustMicCapture()` threw  -> no handle was ever opened.
+        //   - `monitor.start()` threw       -> a handle WAS opened; the catch
+        //     nulls this.monitor but defers its stop() by a tick.
+        // Awaiting here is what actually delivers the "no teardown racing a
+        // fresh device open" property this method claims — without it, the
+        // caller's next start() opens a second native handle while the first is
+        // still closing, and if the failed id resolved to the current default
+        // they contend for the same device (Windows WASAPI exclusive mode).
+        if (this._orphanTeardown) {
+            await this._orphanTeardown;
+            this._orphanTeardown = null;
+        }
+        this.deviceId = deviceId || null;
+        // A wrapper that has never captured successfully must not re-open the
+        // mic during stop()'s post-teardown pre-warm (same rule start()'s
+        // failure path enforces).
+        this.preWarmEnabled = false;
+        console.log(`[MicrophoneCapture] Re-targeted to device: ${this.deviceId || 'default'}`);
     }
 
     /**
@@ -188,12 +236,16 @@ export class MicrophoneCapture extends EventEmitter {
             const dying = this.monitor;
             this.monitor = null;
             if (dying) {
-                setImmediate(() => {
-                    try {
-                        dying.stop();
-                    } catch (e) {
-                        console.error('[MicrophoneCapture] Error stopping orphaned monitor after failed start:', e);
-                    }
+                this._orphanTeardown = new Promise<void>((resolve) => {
+                    setImmediate(() => {
+                        try {
+                            dying.stop();
+                        } catch (e) {
+                            console.error('[MicrophoneCapture] Error stopping orphaned monitor after failed start:', e);
+                        } finally {
+                            resolve();
+                        }
+                    });
                 });
             }
             this.emit('error', error);

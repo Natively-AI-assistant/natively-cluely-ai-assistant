@@ -1185,6 +1185,50 @@ export class CredentialsManager {
         console.log(`[CredentialsManager] Default Model set to: ${model}`);
     }
 
+    /**
+     * Undo the auto-promotions setNativelyApiKey() performs when a key is stored.
+     * Mutates only; the caller saves.
+     *
+     * Returns what actually changed so a caller can re-sync the runtime (LLMHelper
+     * model, STT pipeline) instead of guessing.
+     */
+    private applyNativelyAutoDefaultRevert(reason: string): { defaultModel?: string; sttProvider?: string } {
+        const changed: { defaultModel?: string; sttProvider?: string } = {};
+        if (this.credentials.defaultModel === 'natively') {
+            this.credentials.defaultModel = 'gemini-3.1-flash-lite';
+            changed.defaultModel = this.credentials.defaultModel;
+            console.log(`[CredentialsManager] ${reason} — reset default model to Gemini Flash-Lite`);
+        }
+        if (this.credentials.sttProvider === 'natively') {
+            this.credentials.sttProvider = 'none';
+            changed.sttProvider = 'none';
+            console.log(`[CredentialsManager] ${reason} — reset STT provider to none`);
+        }
+        return changed;
+    }
+
+    /**
+     * Public revert, for when a stored key turns out NOT to authenticate.
+     *
+     * setNativelyApiKey() promotes the default model (and STT) to 'natively' and
+     * saves BEFORE anything has checked that the key works. When the server then
+     * refuses the key, the user is left routed at an endpoint that rejects them —
+     * silently, because the failure branch only logged. This is how that caller
+     * undoes the promotion.
+     *
+     * Deliberately keyed on the CURRENT value being 'natively' rather than on a
+     * pre-call snapshot: re-saving a key that was already stored leaves the
+     * snapshot reading 'natively' too, so restoring it would restore the broken
+     * state. Falling back to the same safe defaults the key-cleared path uses
+     * always lands somewhere that can actually serve a request.
+     */
+    public revertNativelyAutoDefaults(reason: string): { defaultModel?: string; sttProvider?: string } {
+        if (this.refuseWriteWhileDegraded('revert natively auto defaults')) return {};
+        const changed = this.applyNativelyAutoDefaultRevert(reason);
+        if (changed.defaultModel || changed.sttProvider) this.saveCredentials();
+        return changed;
+    }
+
     public setNativelyApiKey(key: string): void {
         if (this.refuseWriteWhileDegraded('set natively api key')) return;
         const trimmed = key.trim();
@@ -1225,14 +1269,7 @@ export class CredentialsManager {
             }
         } else {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
-            if (this.credentials.defaultModel === 'natively') {
-                this.credentials.defaultModel = 'gemini-3.1-flash-lite';
-                console.log('[CredentialsManager] Natively key cleared — reset default model to Gemini Flash-Lite');
-            }
-            if (this.credentials.sttProvider === 'natively') {
-                this.credentials.sttProvider = 'none';
-                console.log('[CredentialsManager] Natively key cleared — reset STT provider to none');
-            }
+            this.applyNativelyAutoDefaultRevert('Natively key cleared');
         }
 
         this.saveCredentials();

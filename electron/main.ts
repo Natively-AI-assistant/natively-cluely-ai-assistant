@@ -1220,6 +1220,7 @@ import { IntelligenceManager } from "./IntelligenceManager"
 import { SystemAudioCapture } from "./audio/SystemAudioCapture"
 import { MicrophoneCapture } from "./audio/MicrophoneCapture"
 import { AudioDevices } from "./audio/AudioDevices"
+import { resolveRequestedInputDevice } from "./audio/audioDeviceSelection.mjs"
 import { loadNativeModule } from "./audio/nativeModuleLoader"
 import { GoogleSTT } from "./audio/GoogleSTT"
 import { RestSTT } from "./audio/RestSTT"
@@ -4798,6 +4799,57 @@ export class AppState {
       }
     }
 
+    // Availability gate. Rust's resolve_input_device() HARD-ERRORS on an
+    // unknown input id — there is no default fallback on that path, and the
+    // error does not surface until MicrophoneCapture.start(), long after the
+    // constructor-shaped fallback ladder below has already "succeeded". So a
+    // saved device that is simply gone (unplugged dock mic, a renamed
+    // interface, or the NativelySystemAudioTap aggregate that used to be
+    // offerable in the picker) took the mic channel down for the entire
+    // meeting.
+    //
+    // Answer availability from the enumeration instead: it opens no capture
+    // stream, so it cannot start the mic, and it lets us hand the renderer a
+    // fellBack:true broadcast — which is what raises the amber "couldn't be
+    // opened — using <device> instead" banner whose Reset button already clears
+    // preferredInputDeviceId. The self-heal UI existed; this is the wiring that
+    // finally reaches it.
+    //
+    // NOT free of HAL contact: nativeModuleLoader.ts documents that on macOS
+    // getInputDevices() instantiates cpal::default_host() and registers this
+    // process with the CoreAudio HAL, which lights the orange menu-bar mic
+    // indicator. That is why this gate lives HERE — inside reconfigureAudio, at
+    // meeting start, after three earlier getInputDevices() calls in this same
+    // function — and must not be hoisted to app launch.
+    let unavailableInput: { requested: string; reason: string } | null = null;
+    if (wantedInput) {
+      const resolution = resolveRequestedInputDevice(wantedInput, AudioDevices.getInputDevices());
+      // Only 'missing' — a device the enumeration positively did not contain.
+      // 'unverifiable' means the enumeration itself told us nothing (native
+      // module absent, or Rust swallowed a host.input_devices() error and
+      // returned just the synthetic default row); discarding a working mic on
+      // that would be treating absence of evidence as evidence of absence.
+      if (resolution.status === 'missing') {
+        const reason = `Input device "${wantedInput}" is not available (found: ${
+          resolution.available.length ? resolution.available.join(', ') : 'none'
+        }).`;
+        console.warn(`[Main] ${reason} Falling back to the system default microphone.`);
+        unavailableInput = { requested: wantedInput, reason };
+        wantedInput = undefined;
+        // Broadcast here rather than only at the construction site below: the
+        // skip-if-unchanged early return sits between the two, so on a second
+        // meeting with the same stale preference the construction site is
+        // never reached and the banner would never appear.
+        this.broadcastDeviceSelection({
+          kind: 'input',
+          requested: unavailableInput.requested,
+          actual: 'default',
+          fellBack: true,
+          reason: unavailableInput.reason,
+        });
+      }
+    }
+
     if (
       this.systemAudioCapture &&
       this.microphoneCapture &&
@@ -4891,13 +4943,26 @@ export class AppState {
       this._micSttRateApplied = false;
       this.wireMicCapture(this.microphoneCapture, '(Reconfigured)');
       console.log('[Main] MicrophoneCapture initialized.');
+      // When the availability gate above rewrote wantedInput to the default,
+      // this is still a FALLBACK from the user's point of view. Reporting
+      // fellBack:false here would clear the amber notice the gate just raised
+      // (SettingsOverlay drops any notice for a kind that reports success).
       this.broadcastDeviceSelection({
         kind: 'input',
-        requested: wantedInput || null,
+        requested: unavailableInput ? unavailableInput.requested : (wantedInput || null),
         actual: wantedInput || 'default',
-        fellBack: false,
+        fellBack: !!unavailableInput,
+        ...(unavailableInput ? { reason: unavailableInput.reason } : {}),
       });
     } catch (err) {
+      // UNREACHABLE for a bad device id, and deliberately left in place: the
+      // wrapper is lazy, so `new MicrophoneCapture(id)` only throws when the
+      // native module itself is missing — never for a device that is absent or
+      // unopenable. "Absent" is handled by the availability gate above.
+      // "Present but unopenable" (an AirPods/XM5 returning an unsupported cpal
+      // sample format) surfaces later from start(), where setupMicRecoveryHandler
+      // retargets to the default. This ladder still covers the native-module
+      // failure case, so removing it is a separate change, not a cleanup.
       console.warn('[Main] Failed to initialize MicrophoneCapture with preferred ID. Falling back to default.', err);
       try {
         this.microphoneCapture = new MicrophoneCapture(); // Default
@@ -5492,110 +5557,171 @@ export class AppState {
       }
 
       this._micRecoveryInProgress = true;
-      this._micRecoveryAttempts++;
-      console.warn(
-        `[MicRecovery] MicrophoneCapture error — attempting recovery #${this._micRecoveryAttempts}: ${err.message}`,
-      );
+
+      // Pause system audio ONCE, outside the attempt loop but INSIDE the try —
+      // a throw from stop() must still reach the finally that clears
+      // _micRecoveryInProgress, or every later recovery is blocked for the rest
+      // of the process. The CoreAudio process-tap + aggregate teardown is a
+      // synchronous HAL operation that, on a Bluetooth output route, can stall
+      // coreaudiod's global HAL lock for seconds — freezing the machine — when a
+      // tap is created and destroyed within ~1-2s (the hazard
+      // _audioTestSystemProbeTimer is debounced for). Pausing per-attempt would
+      // do three such cycles ~1.5s apart.
+      const systemCapturePausedForMicRecovery = !!this.systemAudioCapture;
+      const systemCapturePausedByMicRecovery = this.systemAudioCapture;
 
       try {
-        await new Promise<void>(resolve => {
-          this._micRecoveryTimer = setTimeout(resolve, 1500);
-        });
-        this._micRecoveryTimer = null;
-        if (!isMicRecoveryCurrentMeeting()) {
-          return;
-        }
-
-        // Tear down + recreate the mic. Because MicrophoneCapture is lazy-init,
-        // mic.start() constructs the cpal input stream. Pause system audio first
-        // so cpal does not negotiate the mic stream while the CoreAudio aggregate
-        // device IO proc is active — same HAL ordering invariant as startMeeting.
-        const systemCapturePausedForMicRecovery = !!this.systemAudioCapture;
-        const systemCapturePausedByMicRecovery = this.systemAudioCapture;
         if (systemCapturePausedByMicRecovery) {
           (systemCapturePausedByMicRecovery as any)?.__disarmStuckWatchdog?.();
           await systemCapturePausedByMicRecovery.stop();
         }
 
-        let micRecoveryErr: any = null;
-        try {
-          if (this.microphoneCapture) {
-            await this.microphoneCapture.destroy();
-            this.microphoneCapture = null;
-          }
-          this._micSttRateApplied = false;
+        // ATTEMPT LOOP — one inbound 'error' drives all three attempts.
+        //
+        // Pre-fix this handler did exactly one attempt per inbound event and
+        // relied on a later 'error' to trigger the next. That event never came:
+        // the recovery's own MicrophoneCapture.start() emits 'error'
+        // SYNCHRONOUSLY before throwing, re-entering this handler while
+        // _micRecoveryInProgress is still true, so the guard above dropped it.
+        // The counter froze at 1 — the mic stayed dead for the rest of the
+        // meeting and the 3-attempt terminal banner below could never fire.
+        //
+        // The bound is a LOCAL, not `this._micRecoveryAttempts`: the field is
+        // reset to 0 by the power-resume handler, reconfigureAudio and
+        // startMeetingTransition, and power-resume also clears
+        // _micRecoveryInProgress and the timer this loop awaits. A shared bound
+        // would let a parked loop run past three attempts while a second
+        // concurrent loop rebuilds the same this.microphoneCapture field.
+        let attempts = 0;
+        while (attempts < 3) {
+          attempts++;
+          this._micRecoveryAttempts = attempts;
+          console.warn(
+            `[MicRecovery] MicrophoneCapture error — attempting recovery #${this._micRecoveryAttempts}: ${err.message}`,
+          );
 
           try {
-            this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
-          } catch (createErr) {
-            console.warn('[MicRecovery] Saved device unavailable on recovery, falling back to default.', createErr);
-            this.microphoneCapture = new MicrophoneCapture();
-          }
+            await new Promise<void>(resolve => {
+              this._micRecoveryTimer = setTimeout(resolve, 1500);
+            });
+            this._micRecoveryTimer = null;
+            if (!isMicRecoveryCurrentMeeting()) {
+              return;
+            }
 
-          // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
-          // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
-          // recovery path used to omit the stuck-watchdog and zero-fill detector
-          // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
-          // would silently get zero-filled audio with no UI signal — exactly the
-          // failure mode the watchdog was built to surface. setupMicRecoveryHandler
-          // is invoked at the tail of wireMicCapture so we don't need a separate
-          // call here either. Mirrors the system-audio recovery pattern at L2413.
-          this.wireMicCapture(this.microphoneCapture, '(Recovery)');
-          this.microphoneCapture.start();
-        } catch (err) {
-          micRecoveryErr = err;
-        } finally {
-          // Only restart the exact system wrapper WE paused. If a route-change
-          // watcher or system-audio recovery rebuilt/restarted system audio while
-          // mic recovery was in flight, that owner should keep control; starting
-          // whatever happens to be in this.systemAudioCapture could resurrect a
-          // stale wrapper or double-start a freshly-owned one.
-          if (
-            systemCapturePausedForMicRecovery &&
-            systemCapturePausedByMicRecovery &&
-            this.systemAudioCapture === systemCapturePausedByMicRecovery &&
-            !this._defaultOutputSwitchInProgress &&
-            !this._systemAudioRecoveryInProgress &&
-            isMicRecoveryCurrentMeeting()
-          ) {
-            try {
-              systemCapturePausedByMicRecovery.start();
-            } catch (restartErr) {
-              console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+            // Tear down + recreate the mic. Because MicrophoneCapture is lazy-init,
+            // mic.start() constructs the cpal input stream. System audio is
+            // already paused (above the loop) so cpal does not negotiate the mic
+            // stream while the CoreAudio aggregate device IO proc is active —
+            // same HAL ordering invariant as startMeeting.
+            {
+              if (this.microphoneCapture) {
+                await this.microphoneCapture.destroy();
+                this.microphoneCapture = null;
+              }
+              this._micSttRateApplied = false;
+
+              this.microphoneCapture = new MicrophoneCapture(this._lastRequestedInputDeviceId);
+
+              // Use the canonical wiring path (wireMicCapture) instead of hand-rolling
+              // data/sample_rate_changed/speech_ended. Hand-rolled wiring drifts: this
+              // recovery path used to omit the stuck-watchdog and zero-fill detector
+              // (lines 1612-1693 of wireMicCapture), so after a mic recovery the user
+              // would silently get zero-filled audio with no UI signal — exactly the
+              // failure mode the watchdog was built to surface. setupMicRecoveryHandler
+              // is invoked at the tail of wireMicCapture so we don't need a separate
+              // call here either. Mirrors the system-audio recovery pattern at L2413.
+              this.wireMicCapture(this.microphoneCapture, '(Recovery)');
+
+              try {
+                this.microphoneCapture.start();
+              } catch (startErr) {
+                // FALL BACK ON THE SURFACE THAT ACTUALLY THROWS.
+                //
+                // This used to be `try { new MicrophoneCapture(id) } catch {
+                // new MicrophoneCapture() }` — unreachable. The wrapper is
+                // LAZY: its constructor never touches the HAL (doing so would
+                // light the macOS orange mic indicator outside a meeting), so a
+                // missing or unopenable device cannot be detected until start()
+                // builds the native monitor. Every recovery attempt therefore
+                // retried the identical dead device id forever.
+                const failedDeviceId = this._lastRequestedInputDeviceId;
+                if (!failedDeviceId) throw startErr;
+
+                console.warn(
+                  `[MicRecovery] Saved input device "${failedDeviceId}" could not be opened — falling back to the system default.`,
+                  startErr,
+                );
+                // Re-target rather than destroy+recreate: keeps the
+                // wireMicCapture wiring we just installed, and the await drains
+                // any deferred orphan teardown so it cannot race the fresh
+                // device open on the HAL.
+                await this.microphoneCapture.retargetDevice(null);
+                this._lastRequestedInputDeviceId = undefined;
+                this.microphoneCapture.start();
+                this.broadcastDeviceSelection({
+                  kind: 'input',
+                  requested: failedDeviceId,
+                  actual: 'default',
+                  fellBack: true,
+                  reason: (startErr as Error)?.message || 'device could not be opened',
+                });
+              }
+            }
+          } catch (recoveryErr: any) {
+            console.error(`[MicRecovery] Recovery attempt #${this._micRecoveryAttempts} failed:`, recoveryErr);
+            // B4: surface a terminal failure to the CURRENT meeting after the same
+            // 3-attempt cap that setupAudioRecoveryHandler uses for system audio
+            // (see L2456-2464). Pre-fix, mic recovery exhausted attempts only via
+            // console.error and the next 'error' was silently dropped by the
+            // early-return guard at the top of this handler — user heard nothing
+            // was being transcribed but no banner ever showed. Meeting-generation
+            // check mirrors isRecoveryCurrentMeeting() in the system-side handler.
+            if (this._micRecoveryAttempts >= 3 && isMicRecoveryCurrentMeeting()) {
               this.sendAudioCaptureFailed({
-                channel: 'system',
-                message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
-                attempt: 0,
-                maxAttempts: 0,
-                terminal: false,
+                channel: 'mic',
+                message: `Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
+                attempt: this._micRecoveryAttempts,
+                maxAttempts: 3,
+                terminal: true,
               });
             }
+            continue;
           }
-        }
 
-        if (micRecoveryErr) throw micRecoveryErr;
-
-        this._micRecoveryAttempts = 0;
-        console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
-      } catch (recoveryErr: any) {
-        console.error(`[MicRecovery] Recovery attempt #${this._micRecoveryAttempts} failed:`, recoveryErr);
-        // B4: surface a terminal failure to the CURRENT meeting after the same
-        // 3-attempt cap that setupAudioRecoveryHandler uses for system audio
-        // (see L2456-2464). Pre-fix, mic recovery exhausted attempts only via
-        // console.error and the next 'error' was silently dropped by the
-        // early-return guard at the top of this handler — user heard nothing
-        // was being transcribed but no banner ever showed. Meeting-generation
-        // check mirrors isRecoveryCurrentMeeting() in the system-side handler.
-        if (this._micRecoveryAttempts >= 3 && isMicRecoveryCurrentMeeting()) {
-          this.sendAudioCaptureFailed({
-            channel: 'mic',
-            message: `Microphone capture gave up after 3 attempts. Last error: ${recoveryErr?.message || err.message}`,
-            attempt: this._micRecoveryAttempts,
-            maxAttempts: 3,
-            terminal: true,
-          });
+          if (!isMicRecoveryCurrentMeeting()) return;
+          this._micRecoveryAttempts = 0;
+          console.log('[MicRecovery] MicrophoneCapture restarted successfully.');
+          return;
         }
       } finally {
+        // Restart the exact system wrapper WE paused, once, whatever the mic
+        // outcome. If a route-change watcher or system-audio recovery
+        // rebuilt/restarted system audio while mic recovery was in flight, that
+        // owner should keep control; starting whatever happens to be in
+        // this.systemAudioCapture could resurrect a stale wrapper or
+        // double-start a freshly-owned one.
+        if (
+          systemCapturePausedForMicRecovery &&
+          systemCapturePausedByMicRecovery &&
+          this.systemAudioCapture === systemCapturePausedByMicRecovery &&
+          !this._defaultOutputSwitchInProgress &&
+          !this._systemAudioRecoveryInProgress &&
+          isMicRecoveryCurrentMeeting()
+        ) {
+          try {
+            systemCapturePausedByMicRecovery.start();
+          } catch (restartErr) {
+            console.error('[MicRecovery] Failed to restart system audio after mic recovery pause:', restartErr);
+            this.sendAudioCaptureFailed({
+              channel: 'system',
+              message: `System audio failed to restart after microphone recovery: ${(restartErr as Error)?.message || 'unknown error'}`,
+              attempt: 0,
+              maxAttempts: 0,
+              terminal: false,
+            });
+          }
+        }
         this._micRecoveryInProgress = false;
       }
     });
@@ -8353,15 +8479,30 @@ async function initializeApp() {
   //
   // Started AFTER credentials are loaded, but the key is passed as a GETTER
   // rather than a value: a user who pastes their Natively key ten minutes from
-  // now must not need a restart before their queued events can drain. Inert
-  // unless NATIVELY_USAGE_OUTBOX_ENABLED is set, so shipping this changes
-  // nothing until the flag is switched on.
+  // now must not need a restart before their queued events can drain.
+  //
+  // ON BY DEFAULT since 2026-08-27. It was gated behind an unset env var from
+  // 2026-08-14 until then, which meant the whole ledger shipped inert and
+  // collected nothing in production for the entire period. Setting
+  // NATIVELY_USAGE_OUTBOX_ENABLED=0 turns it back off, but only where an
+  // environment can actually be set (dev, CI, a terminal launch) — a packaged
+  // app inherits none. The production kill switch is server-side; see
+  // UsageOutbox.isEnabled().
   try {
     const { usageOutbox } = require('./services/UsageOutbox');
     usageOutbox.start(() => CredentialsManager.getInstance().getNativelyApiKey());
     // Drain anything queued while the app was closed, without waiting a full
     // dispatch interval. Deliberately not awaited — startup must not block on it.
     setTimeout(() => { void usageOutbox.dispatchOnce(); }, 5000);
+
+    // §5 application lifecycle. recordAppStarted/recordAppShutdown were written
+    // on 2026-08-14 and had ZERO callers until 2026-08-27 — the functions
+    // existed, the taxonomy reserved app_started/app_shutdown, and nothing ever
+    // emitted either. Started is recorded here rather than at whenReady so it
+    // means "the app came up far enough to be usable", which is the only
+    // reading a launch-failure investigation can act on.
+    const { recordAppStarted } = require('./services/usageInstrumentation');
+    recordAppStarted();
   } catch (err: any) {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
   }
@@ -8931,6 +9072,19 @@ if (process.env.THINKING_MATRIX === '1') {
   }
 
   app.on('will-quit', () => {
+    // FIRST, and deliberately so: record() is a synchronous INSERT into the
+    // same SQLite file that checkpointDatabase('will-quit') below is about to
+    // checkpoint, and record() swallows its own errors — so writing after the
+    // checkpoint would lose the row with no signal at all. Ordering is the
+    // whole correctness argument here.
+    //
+    // Only the graceful path emits this. SIGTERM/SIGINT call app.exit(), which
+    // bypasses will-quit — so a killed app records no shutdown, which is the
+    // honest outcome rather than a fabricated one.
+    try {
+      const { recordAppShutdown } = require('./services/usageInstrumentation');
+      recordAppShutdown();
+    } catch { /* instrumentation must never block a quit */ }
     appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');

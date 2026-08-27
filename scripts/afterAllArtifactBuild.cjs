@@ -20,10 +20,20 @@
  *      notarized+stapled trips Gatekeeper and needs the `xattr` workaround we're
  *      eliminating.
  *
+ *  (3) NEITHER STEP RETRIED (added 2026-08-26). These are the last two calls of a
+ *      ~55-minute signed build, long after both .apps are notarized + stapled and
+ *      both updater ZIPs are written. A build died here when the 1.01 GB arm64
+ *      upload was reset at part 148 ("Network.NWError error 54 - Connection reset
+ *      by peer"): notarytool does not retry, so one dropped connection cost a full
+ *      rebuild. FIX: the submit retries while NO verdict was reached (never after a
+ *      decided Invalid/Rejected) via scripts/lib/notary-transient.cjs, and the
+ *      staple goes through scripts/staple-with-retry.js for the CDN ticket race.
+ *
  * Per macOS arch slice (release/mac = x64, release/mac-arm64 = arm64):
  *   1. create-dmg → styled DMG from the signed .app (signs the DMG with Developer ID)
- *   2. xcrun notarytool submit --wait
- *   3. xcrun stapler staple
+ *   2. xcrun notarytool submit --wait  (bounded retry — see (3))
+ *   3. xcrun stapler staple            (retried through CDN ticket-propagation lag)
+ *
  * Then re-patch each dmg's sha512/size in latest*.yml (the dmg is brand-new bytes),
  * and assert the updater ZIP manifest still matches (the updater consumes the ZIP).
  *
@@ -37,6 +47,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { notarytoolSubmitWithRetry } = require('./lib/notary-transient.cjs');
+const { stapleWithRetry } = require('./staple-with-retry');
 
 const VOLNAME = 'Natively';
 const BACKGROUND = path.resolve(__dirname, '..', 'assets', 'dmg-background.png');
@@ -295,10 +307,20 @@ module.exports = async function afterAllArtifactBuild(buildResult) {
     console.log(`[dmg] Rebuilding clean styled DMG for ${archDir}: ${dmgName}`);
     buildStyledDmg({ appPath, outDmg, identity });
 
+    // Submit with a bounded retry. A single dropped TCP connection during this
+    // ~1 GB upload used to fail the ENTIRE signed build after the apps had already
+    // been notarized + stapled (~55 min of work). Only the submit is retried — the
+    // DMG bytes are unchanged and already signed, so re-submitting the same file is
+    // correct and avoids re-running ditto + hdiutil per attempt. A DECIDED verdict
+    // (Invalid/Rejected) never retries. See scripts/lib/notary-transient.cjs.
     console.log(`[dmg] notarytool submit ${dmgName} (several minutes)…`);
-    execFileSync('xcrun', ['notarytool', 'submit', outDmg, ...creds, '--wait'], { stdio: 'inherit' });
+    await notarytoolSubmitWithRetry({ target: outDmg, credArgs: creds });
+    // Staple through Apple's CDN ticket-propagation lag (Error 65 / "Record not
+    // found"). Notarization has already SUCCEEDED at this point, so failing the
+    // build on that race would throw away the same hour the retry above protects.
+    // stapleWithRetry also runs `stapler validate`, matching isDmgAlreadyValid().
     console.log(`[dmg] stapler staple ${dmgName}`);
-    execFileSync('xcrun', ['stapler', 'staple', outDmg], { stdio: 'inherit' });
+    await stapleWithRetry(outDmg, { maxAttempts: 6, baseDelayMs: 15000 });
     // Verify the app INSIDE the freshly built+stapled dmg before trusting it.
     verifyDmgAppSignature(outDmg);
     rebuiltDmgs.push(outDmg);
