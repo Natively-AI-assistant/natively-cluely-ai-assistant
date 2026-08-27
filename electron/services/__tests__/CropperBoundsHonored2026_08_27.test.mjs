@@ -24,7 +24,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import Module from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const COMPILED = path.resolve(__dirname, '../../../dist-electron/electron/CropperWindowHelper.js');
@@ -59,7 +59,10 @@ Module._load = function patched(request) {
   return origLoad.apply(this, arguments);
 };
 
-const { CropperWindowHelper, buildCropperWindowSettings } = await import(COMPILED);
+// pathToFileURL, not the bare path: on Windows a dynamic import() of an
+// absolute path throws ERR_UNSUPPORTED_ESM_URL_SCHEME because the ESM loader
+// reads the drive letter as a URL scheme ('c:'). No-op on POSIX.
+const { CropperWindowHelper, buildCropperWindowSettings } = await import(pathToFileURL(COMPILED).href);
 
 // --- platform gate on enableLargerThanScreen -------------------------------
 
