@@ -47,9 +47,26 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
     nvidia_nim: {
         hasKeyCheck: (creds) => !!creds?.hasNvidiaNimKey,
-        ids: ['nvidia_nim/meta/llama-3.1-8b-instruct', 'nvidia_nim/z-ai/glm4.7'],
-        names: ['Llama 3.1 8B (Nvidia Nim)', 'GLM 4.7 (Nvidia Nim)'],
-        descs: ['Nvidia hosted', 'Reasoning • Nvidia hosted'],
+        // NVIDIA retired BOTH ids this list used to offer — z-ai/glm4.7 on
+        // 2026-05-14 and meta/llama-3.1-8b-instruct in the 2026-08-26 batch EOL
+        // that also took every meta/* chat id — so the picker was offering two
+        // models that answer 410 Gone to any request. The retired set itself
+        // lives in electron/llm/nvidiaNimModels.ts.
+        //
+        // These presets are BEST-EFFORT, and cannot be more than that: NVIDIA's
+        // catalogue lists ids that /chat/completions refuses, `GET /v1/models`
+        // answers 200 to an invalid key, and there is no public signal for which
+        // ids a given account may actually call. "Refresh" on the provider card
+        // reads the account's own catalogue and is the authoritative list; a
+        // preset that turns out to be unservable is handled at runtime, where a
+        // 404/410 classifies as model_gone.
+        ids: [
+            'nvidia_nim/nvidia/llama-3.1-nemotron-70b-instruct',
+            'nvidia_nim/nvidia/nemotron-3-super-120b-a12b',
+            'nvidia_nim/openai/gpt-oss-20b',
+        ],
+        names: ['Llama 3.1 Nemotron 70B (Nvidia Nim)', 'Nemotron 3 Super (Nvidia Nim)', 'GPT-OSS 20B (Nvidia Nim)'],
+        descs: ['Llama • Nvidia hosted', 'Reasoning • Nvidia hosted', 'Open weights • Nvidia hosted'],
         pmKey: 'nvidia_nimPreferredModel'
     },
 };

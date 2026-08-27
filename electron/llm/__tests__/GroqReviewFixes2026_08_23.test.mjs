@@ -46,8 +46,12 @@ describe('FINDING 1: the picker\'s Groq-hosted OpenAI models route to Groq, neve
 
 describe('FINDING 2: a persisted RETIRED default is repaired even when a Groq key exists', () => {
   test('ipcHandlers gates the availability early-return on isRetiredModelId', () => {
-    assert.match(src('electron/ipcHandlers.ts'),
-      /if \(!_isRetiredGroqId\(defaultModel\) && modelAvailable\(defaultModel\)\) return null;/);
+    // 2026-08-28: the gate now calls isRetiredId, a union of the Groq predicate
+    // and the NVIDIA one (NVIDIA retired the two nvidia_nim ids the picker
+    // shipped). The Groq half must still be in it — that is what this pins.
+    const s = src('electron/ipcHandlers.ts');
+    assert.match(s, /if \(!isRetiredId\(defaultModel\) && modelAvailable\(defaultModel\)\) return null;/);
+    assert.match(s, /const isRetiredId = \(modelId: string\): boolean =>\s*\n?\s*_isRetiredGroqId\(modelId\) \|\|/);
   });
 
   test('the historical auto-installed defaults are in the retired set', () => {

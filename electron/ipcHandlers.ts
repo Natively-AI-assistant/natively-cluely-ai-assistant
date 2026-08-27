@@ -157,6 +157,16 @@ export function initializeIpcHandlers(appState: AppState): void {
       // had drifted (code-review 2026-08-23).
       const { isGroqModelId: isKnownGroqModel, isRetiredModelId: _isRetiredGroqId } =
         require('./llm/groqModels') as typeof import('./llm/groqModels');
+      // Same hazard, different vendor: an NVIDIA key makes ANY nvidia_nim/ id
+      // "available" (see modelAvailable below), so a default persisted from an
+      // earlier build — the picker offered meta/llama-3.1-8b-instruct and
+      // z-ai/glm4.7, both since retired — passed the availability check and
+      // 410'd on every call. Repair it the same way.
+      const { isNvidiaNimRetiredModelId } =
+        require('./llm/nvidiaNimModels') as typeof import('./llm/nvidiaNimModels');
+      const isRetiredId = (modelId: string): boolean =>
+        _isRetiredGroqId(modelId) ||
+        (!!modelId && modelId.startsWith('nvidia_nim/') && isNvidiaNimRetiredModelId(modelId));
       // Which provider a model id belongs to. Mirrors the family checks below, kept
       // as one helper so the disabled-provider test and the credential test can
       // never disagree about what a given id is. The renderer's
@@ -240,7 +250,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // forever; groqFallbackFor deliberately refuses off-ladder ids, so the
       // runtime ladder couldn't heal it either. A retired id is never
       // available, whatever keys exist — fall through to the repair logic.
-      if (!_isRetiredGroqId(defaultModel) && modelAvailable(defaultModel)) return null;
+      if (!isRetiredId(defaultModel) && modelAvailable(defaultModel)) return null;
 
       let litellmFallbackModel: string | null = null;
       if (has(cm.getLitellmBaseURL())) {
@@ -7965,7 +7975,19 @@ export function initializeIpcHandlers(appState: AppState): void {
         openaiPreferredModel: creds.openaiPreferredModel || undefined,
         claudePreferredModel: creds.claudePreferredModel || undefined,
         deepseekPreferredModel: creds.deepseekPreferredModel || undefined,
-        nvidia_nimPreferredModel: creds.nvidia_nimPreferredModel || undefined,
+        // A retired id is withheld, not reported. `nvidia_nimPreferredModel` is a
+        // SECOND persisted store — AIProvidersSettings pushes it into the
+        // default-model dropdown as an extra option even when it is absent from
+        // the offered list — so leaving it in would keep offering
+        // meta/llama-3.1-8b-instruct (EOL 2026-08-26) after the picker table
+        // dropped it, and the retired-default repair above would silently undo
+        // the user's pick on the next refresh. Withholding it here is the only
+        // place that covers both.
+        nvidia_nimPreferredModel:
+          (require('./llm/nvidiaNimModels') as typeof import('./llm/nvidiaNimModels'))
+            .isNvidiaNimRetiredModelId(creds.nvidia_nimPreferredModel)
+            ? undefined
+            : creds.nvidia_nimPreferredModel || undefined,
         // Stored prefixed (`litellm/<model>`) — see StoredCredentials.litellmPreferredModel.
         litellmPreferredModel: creds.litellmPreferredModel || undefined,
         disabledProviders: creds.disabledProviders || [],
@@ -9029,9 +9051,58 @@ export function initializeIpcHandlers(appState: AppState): void {
           );
         }
         else if (provider === 'nvidia_nim') {
-          response = await axios.post('https://integrate.api.nvidia.com/v1/chat/completions', {
-            model: 'meta/llama-3.1-8b-instruct', messages: [{ role: 'user', content: 'Hello' }], max_tokens: 10,
-          }, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000 });
+          // THE QUESTION THIS PROBE ANSWERS IS "was the key accepted?", not "did
+          // this model answer?". Getting that backwards is what broke it twice:
+          // first the pinned meta/llama-3.1-8b-instruct was retired (410) and
+          // reported as a bad key, then a live-looking replacement returned 404
+          // "Model not found" and was reported as a bad key too — even though
+          // NVIDIA only reaches a 404 AFTER authenticating, so that 404 was
+          // proof the key worked. See llm/nvidiaNimModels.ts for the full
+          // response matrix; the classifier owns the mapping.
+          const { NVIDIA_NIM_TEST_MODEL_LADDER, classifyNvidiaNimProbeError } =
+            require('./llm/nvidiaNimModels') as typeof import('./llm/nvidiaNimModels');
+          let lastNvidiaError: any = null;
+          let nvidiaKeyAccepted = false;
+          for (const candidate of NVIDIA_NIM_TEST_MODEL_LADDER) {
+            try {
+              response = await axios.post('https://integrate.api.nvidia.com/v1/chat/completions', {
+                model: candidate, messages: [{ role: 'user', content: 'Hello' }], max_tokens: 10,
+              }, { headers: { Authorization: `Bearer ${apiKey}` }, timeout: 15000 });
+              lastNvidiaError = null;
+              break;
+            } catch (nvidiaErr: any) {
+              // The candidate is named in every branch. Without it the log said
+              // only "status: 404" and gave no way to tell WHICH rung failed,
+              // which cost a full round trip with the user to work out.
+              const verdict = classifyNvidiaNimProbeError(nvidiaErr);
+              console.warn(`[IPC] NVIDIA NIM test: ${candidate} -> ${nvidiaErr?.response?.status || nvidiaErr?.code} (${verdict})`);
+              if (verdict === 'try-next') { lastNvidiaError = nvidiaErr; continue; }
+              if (verdict === 'key-ok') {
+                // Authenticated, then rejected the model. The account simply is
+                // not entitled to this id — which is not what Test Connection
+                // asks about, and not something the user can act on.
+                nvidiaKeyAccepted = true;
+                lastNvidiaError = null;
+              } else {
+                lastNvidiaError = nvidiaErr;
+              }
+              break;
+            }
+          }
+          if (lastNvidiaError && classifyNvidiaNimProbeError(lastNvidiaError) === 'try-next') {
+            // Every rung was retired. 410 is pre-auth, so we learned NOTHING
+            // about the key — and rethrowing would show the user "the model
+            // 'mistralai/…' has reached its end of life", naming a model they
+            // never chose in a dialog asking about their key. Say what is
+            // actually true instead.
+            console.error(`[IPC] NVIDIA NIM test: every candidate is retired (${NVIDIA_NIM_TEST_MODEL_LADDER.join(', ')})`);
+            return {
+              success: false,
+              error: 'Could not verify the key: every model this test uses has been retired by NVIDIA. Update Natively, or pick a model from Refresh and try it directly.',
+            };
+          }
+          if (lastNvidiaError) throw lastNvidiaError;
+          if (nvidiaKeyAccepted && !response) return { success: true };
         }
 
         if (response && (response.status === 200 || response.status === 201)) {
@@ -9043,18 +9114,32 @@ export function initializeIpcHandlers(appState: AppState): void {
         // CRITICAL: do NOT log the raw axios error — it includes the request config
         // with the Authorization header (full API key) and is dumped verbatim by
         // Node's util.inspect. Strip to a safe shape before logging.
+        //
+        // `detail`/`title` are read alongside the OpenAI-shaped fields because
+        // NVIDIA answers in RFC-7807 (`{type,title,status,detail}`) with neither
+        // `error.message` nor `message`. Without them a retired model logged
+        // `responseError: undefined` and told the user only "Request failed with
+        // status code 410", hiding NVIDIA's own "…has reached its end of life on
+        // 2026-08-26" — the one sentence that explains it isn't their key.
+        const { nvidiaNimErrorDetail } =
+          require('./llm/nvidiaNimModels') as typeof import('./llm/nvidiaNimModels');
+        const responseError =
+          error?.response?.data?.error?.message ||
+          error?.response?.data?.message ||
+          nvidiaNimErrorDetail(error);
         const safeInfo = {
           provider,
           status: error?.response?.status,
           statusText: error?.response?.statusText,
           code: error?.code,
           message: error?.message,
-          responseError: error?.response?.data?.error?.message || error?.response?.data?.message,
+          responseError,
         };
         console.error('LLM connection test failed:', safeInfo);
         const rawMsg =
           error?.response?.data?.error?.message ||
           error?.response?.data?.message ||
+          nvidiaNimErrorDetail(error) ||
           (error.response?.data?.error?.type
             ? `${error.response.data.error.type}: ${error.response.data.error.message}`
             : error.message) ||

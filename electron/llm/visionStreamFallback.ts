@@ -190,9 +190,15 @@ export function classifyVisionError(err: any, timedOut: boolean): VisionErrorCla
   // containing 404 would then be treated as permanently gone and demote a
   // healthy provider for a day — worse than the bug this fixes. Only a real
   // status code, or an unambiguous phrase, qualifies.
+  // 410 Gone is HTTP's unambiguous "this resource is permanently retired" and
+  // is exactly what NVIDIA NIM returns for an EOL'd model id (2026-08-28). It
+  // was falling through to 'transient', so a retired NVIDIA model was retried
+  // three times per call and re-probed every 30s forever instead of triggering
+  // rediscovery. No provider uses 410 for a recoverable condition.
   if (
-    status === 404 ||
+    status === 404 || status === 410 ||
     msg.includes('does not exist') || msg.includes('no such model') ||
+    msg.includes('end of life') || msg.includes('no longer available') ||
     msg.includes('model_not_found') || msg.includes('model not found') ||
     msg.includes('decommissioned') || msg.includes('has been removed') ||
     msg.includes('deprecated')
