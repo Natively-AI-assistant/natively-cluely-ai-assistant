@@ -210,6 +210,29 @@ function checkUnpackedNativeDir(rel: string): { ok: boolean; message: string } {
   return { ok: false, message: `Missing app.asar.unpacked/${rel}` };
 }
 
+/**
+ * Whether this platform+arch has an onnxruntime-node binary at all.
+ *
+ * onnxruntime-node ships PREBUILT binaries only (there is no source build in
+ * the package), and its win32 set is {x64, arm64} at every published version.
+ * A 32-bit Windows install therefore has no ONNX runtime, so every packaged
+ * local model — Whisper, embeddings, reranker, intent classifier — is
+ * unreachable there. A 32-bit process also caps out around 2 GB of address
+ * space, well under what those models want, so this is not a gap that a
+ * different build could close.
+ *
+ * This is an upstream platform limit, NOT a corrupt install. The app still
+ * transcribes through any of the cloud STT providers and embeds through
+ * Gemini / OpenAI / Ollama — which EmbeddingProviderResolver already prefers
+ * over the packaged local model. Reporting these as 'missing_required_asset'
+ * would tell a correctly-installed user to reinstall and fix nothing.
+ */
+function onnxRuntimeSupportsThisArch(): boolean {
+  if (process.platform === 'win32') return process.arch === 'x64' || process.arch === 'arm64';
+  if (process.platform === 'darwin') return process.arch === 'x64' || process.arch === 'arm64';
+  return true;
+}
+
 export async function runLocalFallbackPreflight(options: { ollamaSelected?: boolean } = {}): Promise<LocalFallbackPreflightResult> {
   if (inFlight) return inFlight;
 
@@ -219,9 +242,29 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     const checks: LocalFallbackPreflightCheck[] = [];
 
     // 1. ONNX / Transformers.js runtime imports.
-    checks.push(await timedCheck('@huggingface/transformers import', () => canImportPackage('@huggingface/transformers')));
-    checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common')));
-    checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node')));
+    //
+    // Gated on arch. Where onnxruntime-node publishes no binary the import is
+    // a known-failing probe: it throws, slowly, for a condition already
+    // decided by the platform. Report it directly instead, so the failure
+    // reads as "this architecture has no ONNX runtime" rather than as a
+    // corrupted install.
+    const onnxArchSupported = onnxRuntimeSupportsThisArch();
+    if (onnxArchSupported) {
+      checks.push(await timedCheck('@huggingface/transformers import', () => canImportPackage('@huggingface/transformers')));
+      checks.push(await timedCheck('onnxruntime-common import', () => canImportPackage('onnxruntime-common')));
+      checks.push(await timedCheck('onnxruntime-node import', () => canImportPackage('onnxruntime-node')));
+    } else {
+      checks.push({
+        id: 'onnxruntime-node import',
+        ok: false,
+        health: 'unavailable',
+        durationMs: 0,
+        message:
+          'onnxruntime-node publishes no ' + process.platform + '-' + process.arch + ' binary; ' +
+          'packaged local models are unavailable on this architecture. Cloud providers are unaffected.',
+        recoverable: true,
+      });
+    }
 
     // 2. Required bundled model assets. In dev the models live under the repo's
     // resources/models/ and resolveModelPath() finds them; in packaged builds
@@ -292,14 +335,38 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       checks.push(await timedCheck('sqlite-vec darwin-arm64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-arm64/vec0.dylib')));
       checks.push(await timedCheck('sqlite-vec darwin-x64 dylib', async () => checkUnpackedNativeDir('node_modules/sqlite-vec-darwin-x64/vec0.dylib')));
     } else if (process.platform === 'win32') {
-      // Prefix-matched: Windows ships x64 AND ia32 installers (and arm64 is
-      // possible), so the arch suffix cannot be hardcoded. Both directories are
-      // covered by asarUnpack (`**/node_modules/@img/**`,
-      // `**/node_modules/sqlite-vec-*/**`).
-      // The 'sharp ' / 'sqlite-vec ' id prefixes are load-bearing — `nativeOk`
-      // below selects these checks by exactly those prefixes.
-      checks.push(await timedCheck('sharp win32 native', async () => checkUnpackedNativePrefix('node_modules/@img', 'sharp-win32-', 'sharp Windows binary')));
-      checks.push(await timedCheck('sqlite-vec windows extension', async () => checkUnpackedNativePrefix('node_modules', 'sqlite-vec-windows-', 'sqlite-vec Windows extension')));
+      // Arch-PINNED, not prefix-matched. The NSIS target ships x64 AND ia32,
+      // and electron-builder packs the same node_modules tree for both — so a
+      // prefix match on 'sharp-win32-' was satisfied by the packaged x64
+      // directory even on an ia32 install. The check passed while the binary
+      // was the wrong bitness, i.e. it gave a clean bill of health on exactly
+      // the install it exists to catch. scripts/ensure-sharp-win-deps.js now
+      // installs every shipped arch, so pinning is both safe and meaningful.
+      // The 'sharp ' / 'sqlite-vec ' id prefixes remain load-bearing —
+      // `nativeOk` below selects these checks by exactly those prefixes.
+      checks.push(await timedCheck('sharp win32 native', async () =>
+        checkUnpackedNativeDir(`node_modules/@img/sharp-win32-${process.arch}/lib`)));
+
+      // sqlite-vec publishes a Windows extension for x64 ONLY — there is no
+      // windows-ia32 or windows-arm64 build at ANY version (checked through
+      // 0.1.10-alpha.4). On any other arch its absence is EXPECTED, not
+      // corruption: DatabaseManager catches the load failure and VectorStore
+      // falls back to JS cosine similarity. Reporting it as a failed check
+      // would flip `nativeOk` and tell a correctly-installed 32-bit user to
+      // reinstall — the same false alarm the darwin/win32 split above fixed.
+      if (process.arch === 'x64') {
+        checks.push(await timedCheck('sqlite-vec windows extension', async () =>
+          checkUnpackedNativeDir('node_modules/sqlite-vec-windows-x64/vec0.dll')));
+      } else {
+        checks.push({
+          id: 'sqlite-vec windows extension',
+          ok: true,
+          health: 'ready',
+          durationMs: 0,
+          message: `sqlite-vec publishes no Windows ${process.arch} build; vector search uses the JS cosine fallback`,
+          recoverable: true,
+        });
+      }
     }
 
     // 4. Ollama optional path.
@@ -337,10 +404,12 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-embedding',
       'packaged_local',
-      localEmbeddingOk ? 'ready' : 'missing_required_asset',
+      localEmbeddingOk ? 'ready' : onnxArchSupported ? 'missing_required_asset' : 'unavailable',
       localEmbeddingOk
         ? 'Packaged local embedding fallback assets are ready'
-        : 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.',
+        : onnxArchSupported
+          ? 'Natively local embedding fallback assets are missing or corrupted. Please reinstall Natively.'
+          : 'Packaged local embeddings need onnxruntime-node, which publishes no build for this architecture. Configure a cloud embedding provider (Gemini or OpenAI) or Ollama instead.',
       {
         checks: checks.filter(c => c.id.includes('minilm') || c.id.includes('import') || c.id.startsWith('rust') || c.id.includes('sharp') || c.id.includes('sqlite-vec') || c.id.includes('better-sqlite3')),
       },
@@ -349,20 +418,24 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'intent-classifier',
       'packaged_local',
-      intentOk ? 'ready' : 'missing_required_asset',
+      intentOk ? 'ready' : onnxArchSupported ? 'missing_required_asset' : 'unavailable',
       intentOk
         ? 'Packaged zero-shot intent classifier assets are ready'
-        : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
+        : onnxArchSupported
+          ? 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.'
+          : 'The zero-shot intent classifier needs onnxruntime-node, which publishes no build for this architecture.',
       { checks: checks.filter(c => c.id.includes('mobilebert') || c.id.includes('import')) },
     ));
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-reranker',
       'packaged_local',
-      rerankerOk ? 'ready' : 'missing_required_asset',
-      rerankerOk
+      rerankerOk && onnxArchSupported ? 'ready' : onnxArchSupported ? 'missing_required_asset' : 'unavailable',
+      rerankerOk && onnxArchSupported
         ? 'Packaged BGE reranker (q8) is ready for offline smart-retrieval'
-        : 'Natively packaged BGE reranker model is missing. Please reinstall Natively.',
+        : onnxArchSupported
+          ? 'Natively packaged BGE reranker model is missing. Please reinstall Natively.'
+          : 'The BGE reranker needs onnxruntime-node, which publishes no build for this architecture. Retrieval runs without the rerank escalation.',
       { checks: checks.filter(c => c.id === 'reranker model assets') },
     ));
 
