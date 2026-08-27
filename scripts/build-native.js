@@ -8,6 +8,13 @@ const nativeModulePath = path.join(__dirname, '..', 'native-module');
 // sweep skips these; everything else matching '.node.stale-' is swept freely.
 const RESCUE_MARKER = '.rescue-last-good';
 const buildAllMacTargets = process.env.NATIVELY_BUILD_ALL_MAC_ARCHES === '1';
+// Windows companion to the flag above. The NSIS target ships x64 AND ia32, but
+// a host build only ever emits the host arch, so an ia32 pack used to embed the
+// x64 .node and every 32-bit install failed nativeModuleLoader (WASAPI capture
+// + the stealth keyboard hook both dead). Set this for any build that packages
+// the ia32 artifact. Cross-compiling is a plain rustup target: the MSVC linker
+// targets i686 from an x64 host, no second toolchain.
+const buildAllWinTargets = process.env.NATIVELY_BUILD_ALL_WIN_ARCHES === '1';
 
 // Ensure Cargo binary directory (~/.cargo/bin) is in PATH if cargo is installed there
 const cargoBinDir = path.join(os.homedir(), '.cargo', 'bin');
@@ -156,7 +163,22 @@ if (os.platform() === 'darwin') {
     },
   };
 
-  const expectedArtifacts = artifactMap[os.platform()]?.[os.arch()];
+  // Rust target triple per Windows arch, for the cross-arch build below.
+  const winTripleMap = {
+    x64: 'x86_64-pc-windows-msvc',
+    ia32: 'i686-pc-windows-msvc',
+    arm64: 'aarch64-pc-windows-msvc',
+  };
+
+  // Which arches this run must produce. Default is host-only (unchanged); with
+  // NATIVELY_BUILD_ALL_WIN_ARCHES=1 on Windows it is every arch the NSIS target
+  // ships, so one build feeds both per-arch packs.
+  const winArches =
+    os.platform() === 'win32' && buildAllWinTargets ? ['x64', 'ia32'] : null;
+
+  const expectedArtifacts = winArches
+    ? winArches.flatMap((arch) => artifactMap.win32[arch])
+    : artifactMap[os.platform()]?.[os.arch()];
 
   // Windows only: unblock the artifact copy when the app is running.
   //
@@ -220,7 +242,21 @@ if (os.platform() === 'darwin') {
   }
 
   try {
-    runCommand('npx napi build --platform --release');
+    if (winArches) {
+      for (const arch of winArches) {
+        const triple = winTripleMap[arch];
+        try {
+          runCommand(`rustup target add ${triple}`);
+        } catch (err) {
+          console.warn(`Warning: Could not configure rust target ${triple}. Continuing anyway.`);
+        }
+        console.log(`
+--- Building for ${triple} (${arch}) ---`);
+        runCommand(`npx napi build --platform --target ${triple} --release`);
+      }
+    } else {
+      runCommand('npx napi build --platform --release');
+    }
     // Verified INSIDE the try, before the stale copies are swept. napi can exit
     // 0 and still not leave the artifact this platform/arch expects — a
     // toolchain that silently falls back to ia32, or a target-triple rename,
