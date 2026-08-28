@@ -196,10 +196,37 @@ describe('T1 — what did NOT change', () => {
   // assertion is now the opposite — and the reason is recorded rather than the
   // test quietly flipped.
   test('USER_PROJECT IS widened — it is the project-shaped claim', () => {
-    assert.ok(claimAuthority('USER_PROJECT').authoritative.includes('REFERENCE_FILE'));
-    // and the widening is additive: nothing it already admitted was removed.
-    for (const s of CLAIM_AUTHORITY.USER_PROJECT.authoritative) {
-      assert.ok(claimAuthority('USER_PROJECT').authoritative.includes(s), s);
+    // deepEqual against the EXPECTED merged list, not a containment loop over
+    // the base: `claimAuthority` spreads `base.authoritative` first, so a loop
+    // asserting each base entry survives is true by construction and cannot
+    // fail. This repo has a documented history of vacuous gates; an assertion
+    // that cannot go red is not a guard.
+    assert.deepEqual(claimAuthority('USER_PROJECT').authoritative,
+      [...CLAIM_AUTHORITY.USER_PROJECT.authoritative, 'REFERENCE_FILE']);
+  });
+
+  test('DISCLOSURE: in Recruiting, a decoy reference file can now evidence USER_PROJECT', () => {
+    // Recruiting is the ONLY mode authorizing both CANDIDATE_FILE and
+    // REFERENCE_FILE, and its contamination probe relies on the decoy file
+    // being typed REFERENCE_FILE precisely BECAUSE that type could not evidence
+    // a USER_* claim. D1 ended that for USER_EMPLOYMENT / USER_SKILL /
+    // USER_EDUCATION; widening USER_PROJECT completes it rather than starting
+    // it.
+    //
+    // Pinned rather than argued away: this is a real consequence of the locked
+    // decision, and the next person to read `authorityOf('REFERENCE_FILE')`
+    // should find it stated instead of inferring it from four separate lists.
+    // Scoping authority per mode would need mode context inside
+    // `claimAuthority`, which it deliberately does not have.
+    const recruiting = MODE_POLICIES['recruiting'].allowedSourceTypes;
+    assert.ok(recruiting.includes('CANDIDATE_FILE') && recruiting.includes('REFERENCE_FILE'));
+    assert.deepEqual(
+      authorityOf('REFERENCE_FILE').filter((c) => String(c).startsWith('USER_')).sort(),
+      ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
+    // The protection that does NOT depend on this: a JD still cannot evidence
+    // any of them.
+    for (const claim of ['USER_EMPLOYMENT', 'USER_SKILL', 'USER_EDUCATION', 'USER_PROJECT']) {
+      assert.equal(isProhibitedFor('JOB_DESCRIPTION', claim), true, claim);
     }
   });
 
