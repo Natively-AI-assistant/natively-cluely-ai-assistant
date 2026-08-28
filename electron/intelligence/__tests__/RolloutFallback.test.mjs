@@ -39,6 +39,11 @@ const DEFAULT_ON_KEYS = new Set([
   // Prompt System v2 — promoted default-ON 2026-08-02 (benchmark campaign;
   // see the intelligenceFlags.ts promotion comment).
   'promptSystemV2',
+  // WTA governance yields to a V3-composed turn (2026-08-28) — default ON,
+  // literal (never isInternalDevTestContext): it restores the !v3OwnedTurn
+  // invariant LLMHelper already enforces, and a fix for a production-only
+  // failure must not resolve differently in dev/test.
+  'wtaGovernanceYieldsToV3',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;

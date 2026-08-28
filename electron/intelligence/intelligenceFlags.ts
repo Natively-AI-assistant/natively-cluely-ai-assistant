@@ -301,7 +301,29 @@ export type IntelligenceFlagKey =
   // byte-for-byte the legacy constants. Rollout: enable per the mode-by-mode
   // order in the migration notes; the legacy constants are removable only
   // after this flag has been default-ON through a full release cycle.
-  | 'promptSystemV2';
+  | 'promptSystemV2'
+  // ── WTA governance yields to a V3-composed turn (2026-08-28) ──────────────
+  // `LLMHelper.ts` guards Context OS pack governance on `!v3OwnedTurn` — when
+  // V3 has already composed the turn, the legacy governance must not also run.
+  // `WhatToAnswerLLM`'s in-file copy of that gate never got the term, so on the
+  // live-audio path a V3 turn with real evidence could still hit
+  // `refuse_insufficient_evidence` in the legacy pack and hard-return a canned
+  // refusal BEFORE any model call — while manual chat, which sets
+  // `v3Owned: true`, answered the same question normally. That asymmetry is the
+  // reported "works typed, refuses on audio" bug.
+  //
+  // Default ON: this restores the invariant LLMHelper already enforces, and a
+  // literal default (never isInternalDevTestContext) so dev, test and
+  // production resolve it identically — the F5 split that let composePrompt be
+  // built, tested and never executed for a user.
+  //
+  // Flag OFF is byte-for-byte the pre-2026-08-28 behaviour, including for
+  // LEGACY (non-V3) WTA turns, which keep governance in BOTH positions: the new
+  // term only fires when `requestSnapshot.v3Prompt` is present, and a legacy
+  // turn has none.
+  //
+  // See docs/retrieval-handoff/02-WTA-VS-MANUAL.md §3b.
+  | 'wtaGovernanceYieldsToV3';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -542,6 +564,8 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // promptSystemV2Enabled setting reverts to the legacy constants everywhere
   // (every call site is `resolveV2SystemPrompt(...) ?? legacy`).
   promptSystemV2: { env: 'NATIVELY_PROMPT_SYSTEM_V2', setting: 'promptSystemV2Enabled', default: true },
+  // Literal `true`, NOT isInternalDevTestContext — see the union member's note.
+  wtaGovernanceYieldsToV3: { env: 'NATIVELY_WTA_GOVERNANCE_YIELDS_TO_V3', setting: 'wtaGovernanceYieldsToV3Enabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
