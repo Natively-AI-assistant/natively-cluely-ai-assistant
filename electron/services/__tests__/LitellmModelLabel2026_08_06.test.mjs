@@ -17,14 +17,18 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
 
-const { litellmModelLabel, prettifyModelId } = await import(
-  path.join(root, 'src/utils/modelUtils.ts')
-);
+// WINDOWS (2026-08-29): `await import()` needs a file:// URL, not a bare
+// absolute path. On POSIX `import('/Users/…')` happens to resolve; on Windows
+// `import('C:\\…')` throws ERR_UNSUPPORTED_ESM_URL_SCHEME, and because these
+// imports run at MODULE LOAD the whole file fails before a single test runs —
+// which is why this file showed up as one opaque file-level ✖ in the Windows
+// leg rather than as a failing assertion. `pathToFileURL` is the fix.
+const { litellmModelLabel, prettifyModelId } = await import(pathToFileURL(path.join(root, 'src/utils/modelUtils.ts')).href);
 
 describe('litellmModelLabel', () => {
   test('strips our routing prefix AND the proxy upstream, leaving the model name', () => {
