@@ -111,10 +111,8 @@ export const CLAIM_AUTHORITY: Record<ClaimType, ClaimAuthority> = {
 //     whole of the reported failure.
 //   • USER_EDUCATION — same shape, included for consistency; conditional on the
 //     contamination suite staying green.
-//   • USER_PROJECT is deliberately NOT widened. It already admits PROJECT_FILE
-//     and CODING_SAMPLE, and no measured interview phrasing routes to it, so
-//     adding REFERENCE_FILE there would widen retrieval with no defect to show
-//     for it.
+//   • USER_PROJECT — added 2026-08-29, reversing the exclusion this list carried
+//     for one day. See its entry below for the evidence that overturned it.
 //   • USER_MOTIVATION is untouched. A document describing what someone BUILT
 //     cannot evidence why they want a job; that inference is exactly what the
 //     motivation claim's narrow list exists to prevent.
@@ -129,6 +127,27 @@ const USER_CLAIM_DOCUMENT_WIDENING: Partial<Record<ClaimType, SourceType[]>> = {
   USER_EMPLOYMENT: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
   USER_SKILL:      ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
   USER_EDUCATION:  ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
+  // USER_PROJECT added 2026-08-29, REVERSING the exclusion recorded here on
+  // 2026-08-28. That exclusion said "no measured interview phrasing routes to
+  // USER_PROJECT" — which was true of the SYNTHETIC question set and false of
+  // the real one. Run against the reporter's own sanitized pack in General
+  // mode, three of his twelve questions route straight to USER_PROJECT:
+  //
+  //   "What exactly did you personally build or code in that project?"
+  //   "Tell me specifically about Project A. What was the problem, what did
+  //    you build, how did you test it, and what was the result?"
+  //   "What did you monitor after Project A went live?"
+  //
+  // and each resolved `requires RESUME, CANDIDATE_FILE, PROJECT_FILE,
+  // CODING_SAMPLE, PROFILE_FACT, which mode "general" does not authorize` ->
+  // shouldRetrieve=false. General is the mode his own README recommends, and it
+  // authorizes none of those five. So the claim most likely to be about a
+  // user's project could not read the file describing that project.
+  //
+  // USER_PROJECT is THE project-shaped claim, so this is the centre of D1's
+  // "option (a) scoped to project-shaped claims", not an extension of it. It
+  // was excluded only because a synthetic corpus never produced it.
+  USER_PROJECT:    ['REFERENCE_FILE'],
 };
 
 /**

@@ -187,17 +187,54 @@ describe('T1 — what did NOT change', () => {
     assert.equal(isProhibitedFor('RESUME', 'USER_MOTIVATION'), true);
   });
 
-  test('USER_PROJECT is deliberately NOT widened', () => {
-    // It already admits PROJECT_FILE and CODING_SAMPLE, and no measured
-    // interview phrasing routes to it — widening it would add reach with no
-    // defect to show for it. Pinned so a future change is visible, not silent.
-    assert.deepEqual(claimAuthority('USER_PROJECT'), CLAIM_AUTHORITY.USER_PROJECT);
+  // REVERSED 2026-08-29. This asserted "USER_PROJECT is deliberately NOT
+  // widened", on the stated grounds that no measured interview phrasing routed
+  // to it. That was true of the SYNTHETIC question set and false of the real
+  // one: run against the reporter's own sanitized pack in General mode, three of
+  // his twelve questions produce USER_PROJECT and each resolved
+  // shouldRetrieve=false. The exclusion was an artifact of the corpus, so the
+  // assertion is now the opposite — and the reason is recorded rather than the
+  // test quietly flipped.
+  test('USER_PROJECT IS widened — it is the project-shaped claim', () => {
+    // deepEqual against the EXPECTED merged list, not a containment loop over
+    // the base: `claimAuthority` spreads `base.authoritative` first, so a loop
+    // asserting each base entry survives is true by construction and cannot
+    // fail. This repo has a documented history of vacuous gates; an assertion
+    // that cannot go red is not a guard.
+    assert.deepEqual(claimAuthority('USER_PROJECT').authoritative,
+      [...CLAIM_AUTHORITY.USER_PROJECT.authoritative, 'REFERENCE_FILE']);
   });
 
-  test('only the three named claims are widened at all', () => {
+  test('DISCLOSURE: in Recruiting, a decoy reference file can now evidence USER_PROJECT', () => {
+    // Recruiting is the ONLY mode authorizing both CANDIDATE_FILE and
+    // REFERENCE_FILE, and its contamination probe relies on the decoy file
+    // being typed REFERENCE_FILE precisely BECAUSE that type could not evidence
+    // a USER_* claim. D1 ended that for USER_EMPLOYMENT / USER_SKILL /
+    // USER_EDUCATION; widening USER_PROJECT completes it rather than starting
+    // it.
+    //
+    // Pinned rather than argued away: this is a real consequence of the locked
+    // decision, and the next person to read `authorityOf('REFERENCE_FILE')`
+    // should find it stated instead of inferring it from four separate lists.
+    // Scoping authority per mode would need mode context inside
+    // `claimAuthority`, which it deliberately does not have.
+    const recruiting = MODE_POLICIES['recruiting'].allowedSourceTypes;
+    assert.ok(recruiting.includes('CANDIDATE_FILE') && recruiting.includes('REFERENCE_FILE'));
+    assert.deepEqual(
+      authorityOf('REFERENCE_FILE').filter((c) => String(c).startsWith('USER_')).sort(),
+      ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
+    // The protection that does NOT depend on this: a JD still cannot evidence
+    // any of them.
+    for (const claim of ['USER_EMPLOYMENT', 'USER_SKILL', 'USER_EDUCATION', 'USER_PROJECT']) {
+      assert.equal(isProhibitedFor('JOB_DESCRIPTION', claim), true, claim);
+    }
+  });
+
+  test('only the four project-shaped claims are widened at all', () => {
     const widened = Object.keys(CLAIM_AUTHORITY).filter((c) =>
       claimAuthority(c).authoritative.length > CLAIM_AUTHORITY[c].authoritative.length);
-    assert.deepEqual(widened.sort(), ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_SKILL']);
+    assert.deepEqual(widened.sort(),
+      ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
   });
 
   test('no mode gains a source its own policy does not authorize', () => {

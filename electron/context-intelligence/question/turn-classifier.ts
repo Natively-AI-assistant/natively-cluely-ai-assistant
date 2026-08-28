@@ -149,6 +149,32 @@ const CANDIDATE_PERSON_RE = new RegExp(
   `\\b(?:candidates?['’]s?\\b|(?:the|this|that|each|our|both|either)\\s+(?:\\S+\\s+){0,2}candidates?\\b(?!\\s+(?:${CANDIDATE_TECHNICAL_HEAD})\\b))`,
 );
 const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the applicant|applicant'?s?)\b/;
+// SECOND PERSON WITH A LEXICAL VERB (2026-08-29).
+//
+// PERSONAL_RE above covers second person carried by an AUXILIARY — "did you",
+// "do you", "have you", "your". It does not cover second person carried by the
+// MAIN VERB, and interviewers use that constantly:
+//
+//   "Tell me about the AI agent you BUILT."
+//   "Walk me through one integration you OWNED from requirements to production."
+//   "Tell me about a real production failure, not a hypothetical."
+//
+// All three came from the reporter's own question list. Each produced
+// GENERAL_TECHNICAL — no claim, no required source, shouldRetrieve=FALSE — so
+// the reference file describing that exact work was never queried.
+//
+// Note this is the OPPOSITE failure from RC1 and lands in the same place. RC1 is
+// PERSONAL_RE matching too much, so the turn becomes a USER_* claim no document
+// could evidence. This is PERSONAL_RE matching too little, so the turn becomes
+// general knowledge and retrieval never runs. Both end at "no evidence", which
+// is why one report described a single symptom.
+//
+// PAST TENSE ONLY, and that is the whole guard. Past tense is autobiographical
+// ("the agent you built"); present and conditional are hypothetical ("how would
+// you build a rate limiter?", "how do you test this?") and must keep their
+// general-knowledge route. The distinction is grammatical rather than a keyword
+// list, so it does not need maintaining as vocabulary drifts.
+const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -627,8 +653,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     const candidateAsPerson = tokenFramingOn()
       ? CANDIDATE_PERSON_RE.test(clause)
       : LEGACY_CANDIDATE_PERSON_RE.test(clause);
+    // Second person carried by the main verb rather than an auxiliary.
+    const secondPersonPast = tokenFramingOn() && SECOND_PERSON_PAST_RE.test(clause);
     const personal = !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
       || candidateAsPerson
+      || secondPersonPast
       || (FIRST_PERSON_RE.test(clause)
         && !TECH_SELF_TALK_RE.test(clause)
         && !CODING_TASK_RE.test(clause)
