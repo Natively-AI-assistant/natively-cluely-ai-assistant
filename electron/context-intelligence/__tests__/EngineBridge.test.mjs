@@ -92,9 +92,21 @@ describe('the prompt reflects the decision', () => {
     // whole turn is the contract of "Only answer from references", not of the
     // default. See AnswerPolicyLiveDenials2026_08_07 for the strict half and
     // for the live denials this scoping fixes.
+    //
+    // UPDATED 2026-08-28 (T8). The question was "How many backend roles are we
+    // opening this quarter?", which is no longer WHOLLY unsupported in
+    // technical-interview: the mode now authorizes REFERENCE_FILE, so bare
+    // meeting-context wording claims the reference side as an alternative (the
+    // classifier's deliberate "Are we SOC 2 certified?" branch, which this mode
+    // was excluded from only for lack of a reference pool). It retrieves now,
+    // and `unsupportedInMode` correctly reports false.
+    //
+    // A real meeting EVENT is still wholly unsupported here — the transcript is
+    // the only thing that can evidence it and the mode authorizes none — so the
+    // flag keeps a genuine witness rather than being relaxed to fit.
     setStoredAnswerPolicy('technical-interview', null, USERDATA);
     const r = await buildV3Prompt({
-      surface: 'assist', question: 'How many backend roles are we opening this quarter?',
+      surface: 'assist', question: 'What did we decide in the standup?',
       modeTemplateType: 'technical-interview', modeUniqueId: 'technical-interview',
     });
     assert.equal(r.unsupportedInMode, true);

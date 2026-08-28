@@ -280,8 +280,21 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
   'technical-interview': {
     id: 'technical-interview', version: '1.1.0', name: 'Technical Interview',
     purpose: 'Whiteboard-style coding and system design support.',
-    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROJECT_FILE', 'CODING_SAMPLE', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
-    sourcePriorities: { RESUME: 1, PROJECT_FILE: 2, CODING_SAMPLE: 3, JOB_DESCRIPTION: 4 },
+    // REFERENCE_FILE added 2026-08-28 (T8). Without it this was the ONLY mode
+    // with no reference pool at all, with three consequences beyond retrieval:
+    // `shouldOfferAnswerPolicyControl` tests REFERENCE_FILE membership, so the
+    // "Only answer from references" control was HIDDEN here; `primarySrc`
+    // sorted to RESUME, making `documentCentricMode` false on both clauses and
+    // disabling document-lookup routing; and `sourceTypeForFile` fell through to
+    // PROJECT_FILE, so an attached .md was stamped as something it is not.
+    //
+    // Ranked BELOW PROJECT_FILE deliberately: in a technical interview a project
+    // file or coding sample is the more specific evidence for a question about
+    // the user's own work, and a general reference file should not displace it.
+    // Priority is a tiebreak, not an allowlist -- adding the type cannot widen
+    // what the mode may READ beyond what claim authority already permits.
+    allowedSourceTypes: ['RESUME', 'JOB_DESCRIPTION', 'PROJECT_FILE', 'CODING_SAMPLE', 'REFERENCE_FILE', 'SCREEN_CONTEXT', 'CONVERSATION_STATE'],
+    sourcePriorities: { RESUME: 1, PROJECT_FILE: 2, CODING_SAMPLE: 3, REFERENCE_FILE: 4, JOB_DESCRIPTION: 5 },
     // Same latent defect as looking-for-work: RESUME was planned but had no
     // pool without duplicate attachments. JD/résumé hydrate; PROFILE_FACT is
     // not in this mode's allowlist so it is not opted in.

@@ -12,6 +12,7 @@ import {
     type ModeSourceContract,
     type ModeSourceOwner,
     CURRENT_MIGRATION_REVISION,
+    CURRENT_SEED_REVISION,
     defaultSourceContractForNewMode,
     migrateSourceContractFromPrompt,
     parseModeSourceContract,
@@ -892,6 +893,20 @@ export class ModesManager {
                 || !mode.sourceContract.seededForTemplateType);
         const staleMigration = mode.sourceContract?.origin === 'migrated_from_prompt'
             && (mode.sourceContract.migrationRevision ?? 1) < CURRENT_MIGRATION_REVISION;
+        // Seed revision (T8, 2026-08-28). A SEEDED contract could not previously
+        // pick up a later change to the seed rules at all -- `staleMigration`
+        // above tests `migrated_from_prompt` only -- so an existing Technical
+        // Interview mode would have kept its pre-T8 permission set forever and
+        // the fix would have reached newly-created modes alone.
+        //
+        // Its own counter, NOT a bump of CURRENT_MIGRATION_REVISION: that would
+        // re-run the prompt-heuristic migration over every migrated contract in
+        // every user's database, and break the standing invariant that a
+        // prompt-migrated contract is never overwritten by a template switch.
+        // A seed carries no user intent by definition (see `isTemplateAwareSeed`
+        // above), so re-seeding it loses nothing; `user_selected` is untouched.
+        const staleSeedRevision = mode.sourceContract?.origin === 'default_new_mode'
+            && (mode.sourceContract.seedRevision ?? 1) < CURRENT_SEED_REVISION;
         // Stale-seed detection (Knowledge Source canonical-gate repair, 2026-07-16):
         // a default_new_mode contract whose seededForTemplateType differs from the
         // mode's current templateType was created for the wrong template (someone
@@ -905,6 +920,7 @@ export class ModesManager {
         const needsMigration = !mode.sourceContract
             || (mode.sourceContract.origin === 'default_new_mode' && !isTemplateAwareSeed && (hasCustomPrompt || hasReferenceFiles))
             || staleMigration
+            || staleSeedRevision
             || staleSeedForCurrentTemplate;
         if (!needsMigration) return mode.sourceContract!;
         // Stale-seed path (Knowledge Source canonical-gate repair, 2026-07-16):

@@ -118,19 +118,29 @@ describe('T1 — second-person questions reach the reference file', () => {
   });
 });
 
-describe('T1 — technical-interview is covered by the PROJECT_FILE half', () => {
-  // TI authorizes no REFERENCE_FILE, so `sourceTypeForFile` falls through to
-  // PROJECT_FILE. Widening only REFERENCE_FILE would have left the mode the
-  // report was actually about unfixed — which is why PROJECT_FILE and
-  // CODING_SAMPLE are widened alongside it.
-  // EXPECTED TO CHANGE AT T8. Adding REFERENCE_FILE to technical-interview's
-  // allowlist flips this stamp from PROJECT_FILE to REFERENCE_FILE. That is not
-  // a regression — both are widened by T1, so the reachability assertion below
-  // holds either way. Update the stamp, keep the reachability.
-  test('a .md in technical-interview is stamped PROJECT_FILE and is admissible', () => {
+describe('T1 — technical-interview is covered whichever way its file is stamped', () => {
+  // Before T8, technical-interview authorized no REFERENCE_FILE, so
+  // `sourceTypeForFile` fell through to PROJECT_FILE. Widening only
+  // REFERENCE_FILE in T1 would have left the mode the report was actually about
+  // unfixed — which is why PROJECT_FILE and CODING_SAMPLE were widened with it.
+  //
+  // T8 flipped this stamp from PROJECT_FILE to REFERENCE_FILE by giving the mode
+  // a reference pool. Reachability is unaffected BECAUSE T1 widened both types
+  // together — had it widened REFERENCE_FILE alone, this mode would have been
+  // fixed and then silently un-fixed one commit later.
+  test('a .md in technical-interview is stamped REFERENCE_FILE and is admissible', () => {
     const p = MODE_POLICIES['technical-interview'];
-    assert.equal(sourceTypeForFile(NAME, BODY, p.allowedSourceTypes), 'PROJECT_FILE');
+    assert.equal(sourceTypeForFile(NAME, BODY, p.allowedSourceTypes), 'REFERENCE_FILE');
     assert.equal(reaches('technical-interview', SECOND_PERSON[0]), true);
+  });
+
+  test('BOTH stamps are admissible, so the T1/T8 interaction cannot regress', () => {
+    for (const stamped of ['REFERENCE_FILE', 'PROJECT_FILE']) {
+      const acceptedFor = authorityOf(stamped);
+      for (const claim of ['USER_EMPLOYMENT', 'USER_SKILL']) {
+        assert.ok(acceptedFor.includes(claim), `${stamped} must evidence ${claim}`);
+      }
+    }
   });
 
   test('the fix is not inert in production: mode reference files set hasAttachedDocuments', () => {
