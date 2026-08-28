@@ -1432,7 +1432,19 @@ export class ModeHybridRetriever {
                 });
             }
             const withIdentity = broadQuery;
-            const finalContext = withIdentity ? this.prependIdentityBlock(formattedContext, files) : formattedContext;
+            let finalContext = withIdentity ? this.prependIdentityBlock(formattedContext, files) : formattedContext;
+            // T12: UNCONDITIONAL, unlike the identity block above. The question
+            // that most needs it ("what projects have you worked on?") is not
+            // reliably `broadQuery`, and a specific question about project A is
+            // exactly when the model most needs to know that B..E also exist
+            // before it answers "that's the only one".
+            const projectIndex = this.buildProjectIndex(selected);
+            if (projectIndex) {
+                finalContext = finalContext.replace(
+                    '<active_mode_retrieved_context>',
+                    `<active_mode_retrieved_context>\n${projectIndex}`,
+                );
+            }
             if (retrievalDiagnosticsEnabled()) {
                 const coverage = computeEvidenceCoverage({ question: queryText, retrievedBlock: finalContext, queryShape });
                 diagLog('DOC-RANK coverage', coverage);
@@ -2041,6 +2053,68 @@ export class ModeHybridRetriever {
      * buildDocumentIdentityBlock but is self-contained so the hybrid
      * retriever does not have to import private helpers.
      */
+    /**
+     * A compact list of the PROJECTS a reference set describes (T12, 2026-08-28).
+     *
+     * WHAT IT IS FOR. The reporter's file is one 63k markdown describing five
+     * integration projects. Asked "what projects have you worked on?" the model
+     * saw twelve chunks from whichever two or three projects ranked best and
+     * answered as though those were all of them — an answer that is wrong in a
+     * way the user cannot detect, because nothing in the evidence says a project
+     * is missing. He asked for this directly.
+     *
+     * WHY IT IS DERIVED, NOT EXTRACTED. The names come from the heading-ancestor
+     * prefixes T9 already writes into every chunk (`[context: Project: X > ...]`).
+     * The existing `prependIdentityBlock` next to this one indexes FILES and
+     * mines capitalised terms out of the first 4000 characters — a heuristic that
+     * finds nothing useful for a single combined file, which is exactly this
+     * case. Reading structure the chunker already recorded needs no heuristic and
+     * cannot disagree with the chunks.
+     *
+     * NAVIGATION, NOT EVIDENCE. It carries names and nothing else — no facts, no
+     * numbers, no claims — so it can route a broad question without becoming
+     * something the model can answer FROM. On the V3 path it is structurally
+     * excluded anyway: V3 consumes `chunks`, not `formattedContext`.
+     *
+     * Capped at ~200 tokens, and returns '' below two projects: a single-project
+     * file needs no index, and an empty one would be pure prompt overhead.
+     */
+    private buildProjectIndex(chunks: ChunkCandidate[]): string {
+        const names: string[] = [];
+        const seen = new Set<string>();
+        for (const c of chunks) {
+            const m = /\[context:\s*([^\]>]+?)\s*(?:>|\])/.exec(c.text);
+            const name = m?.[1]?.trim();
+            if (!name) continue;
+            const key = name.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            names.push(name);
+        }
+        if (names.length < 2) return '';
+
+        const MAX_CHARS = 800;   // ~200 tokens
+        const kept: string[] = [];
+        let used = 0;
+        for (const n of names) {
+            if (used + n.length + 2 > MAX_CHARS) break;
+            kept.push(n);
+            used += n.length + 2;
+        }
+        if (kept.length < 2) return '';
+        const truncated = kept.length < names.length ? ` (+${names.length - kept.length} more)` : '';
+        return [
+            '  <project_index purpose="navigation_only">',
+            `    <note>The uploaded material covers these subjects. This list is for ROUTING ONLY — it states no facts and supports no claim. Answer only from the retrieved excerpts below.</note>`,
+            `    <subjects>${this.escapeForXml(kept.join(', ') + truncated)}</subjects>`,
+            '  </project_index>',
+        ].join('\n');
+    }
+
+    private escapeForXml(s: string): string {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     private prependIdentityBlock(formattedContext: string, files: ModeReferenceFile[]): string {
         const lines: string[] = [];
         lines.push('<document_identity purpose="broad_query_grounding">');

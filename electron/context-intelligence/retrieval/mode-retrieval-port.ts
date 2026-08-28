@@ -213,16 +213,26 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
       if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
       const res = await input.modesManager.retrieveHybridRaw(input.modeInfo, input.files, {
         query, topK: opts.topK, tokenBudget: input.tokenBudget, allowRerank: false,
-        // REQUIRED for usable recall. deduplicateChunks keeps the highest-scoring
-        // chunk PER FILE by default and switches to per-SECTION only under this
-        // flag. With a single 66-page reference file that default returns exactly
-        // ONE chunk no matter what topK asks for: measured 1 chunk, and the fact
-        // being asked about ("44%") was not in it. With the flag, 12 chunks and
-        // the fact ranks 2nd.
+        // CORRECTED 2026-08-28. This block used to say `deduplicateChunks` keeps
+        // the highest-scoring chunk PER FILE by default, so that without this
+        // flag a single 66-page reference file returned exactly ONE chunk. That
+        // has been FALSE since 2026-07-31: `dedupeGroupKey` keys by
+        // `sourceId#chunkIndex` for every caller — exact-duplicate suppression
+        // only — and the `forceDocumentGrounding` parameter on
+        // `deduplicateChunks` is vestigial.
         //
-        // Safe here because V3 does not consume `formattedContext` (which is what
-        // the flag's other effects shape) — it takes `chunks` and applies its own
-        // source authority, scope and version filtering downstream.
+        // The stale text is worth recording rather than deleting, because it did
+        // real damage: it was read as current during the 2026-08-28 retrieval
+        // investigation and produced a wrong conclusion about why splitting a
+        // combined file helped, which had to be retracted. Verify behaviour
+        // against executed code, not docblocks — including this one.
+        //
+        // The flag is still passed, and still wanted, for its OTHER effects:
+        // topK 12 and a 3600-token budget instead of 6/1800, the per-file floor,
+        // answerability scoring, section-target and positional restore, and query
+        // normalization. Safe here because V3 does not consume
+        // `formattedContext` — it takes `chunks` and applies its own source
+        // authority, scope and version filtering downstream.
         forceDocumentGrounding: true,
       });
       return (res?.chunks ?? []).map((c: Record<string, unknown>) => {
