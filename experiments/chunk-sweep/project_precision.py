@@ -65,6 +65,19 @@ def measure(label, chunks, followups, projects):
         variants = {
             "plain": f["question"],
             "anchored": f"{project} {f['question']}",
+            # What the CURRENT referent resolver produces: the entity appended
+            # in a parenthetical rather than prepended. If this scores like
+            # `anchored`, T10 has nothing to add for a resolved follow-up and
+            # its value is confined to the turns resolution never fires on.
+            "resolved": f"{f['question']} (referring to: {project})",
+            # The ASR-LOWERCASE fallback. When the entity arrives lowercased,
+            # `activeTopic` stays empty (capitalisation gate) and the resolver
+            # falls back to ANCHORED_TO_PREVIOUS_QUESTION, which pastes the
+            # WHOLE previous question into the retrieval query. The entity is in
+            # there — but so is the previous question's own topic, which pulls
+            # retrieval toward the section already answered.
+            "prevq": (f"{f['question']} (follow-up to: \"how did you handle "
+                      f"idempotency on {project.lower()}\")"),
         }
         qvecs = embed_texts(list(variants.values()), "RETRIEVAL_QUERY", qcache)
         for (mode, _q), qv in zip(variants.items(), qvecs):
@@ -84,7 +97,7 @@ def measure(label, chunks, followups, projects):
 
 
 def summarise(label, rows):
-    for mode in ("plain", "anchored"):
+    for mode in ("plain", "anchored", "resolved", "prevq"):
         sub = [r for r in rows if r["mode"] == mode]
         if not sub:
             continue

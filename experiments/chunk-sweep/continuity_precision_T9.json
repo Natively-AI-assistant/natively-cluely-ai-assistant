@@ -15,6 +15,20 @@
       "answer_rank": 1
     },
     {
+      "project": "FieldServe-CRM Sync",
+      "mode": "resolved",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "prevq",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "LedgerLink",
       "mode": "plain",
       "precision": 0.17,
@@ -29,6 +43,20 @@
       "answer_rank": 1
     },
     {
+      "project": "LedgerLink",
+      "mode": "resolved",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "prevq",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "FleetBridge",
       "mode": "plain",
       "precision": 0.25,
@@ -38,6 +66,20 @@
     {
       "project": "FleetBridge",
       "mode": "anchored",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "resolved",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "prevq",
       "precision": 0.58,
       "top1_right_project": true,
       "answer_rank": 1
@@ -57,6 +99,20 @@
       "answer_rank": 1
     },
     {
+      "project": "StockMesh",
+      "mode": "resolved",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "prevq",
+      "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "CarePoint Connect",
       "mode": "plain",
       "precision": 0.25,
@@ -66,6 +122,20 @@
     {
       "project": "CarePoint Connect",
       "mode": "anchored",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "resolved",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "prevq",
       "precision": 0.67,
       "top1_right_project": true,
       "answer_rank": 1
@@ -87,6 +157,20 @@
       "answer_rank": 2
     },
     {
+      "project": "FieldServe-CRM Sync",
+      "mode": "resolved",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 2
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "prevq",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
       "project": "LedgerLink",
       "mode": "plain",
       "precision": 0.08,
@@ -96,6 +180,20 @@
     {
       "project": "LedgerLink",
       "mode": "anchored",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "resolved",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "prevq",
       "precision": 0.17,
       "top1_right_project": true,
       "answer_rank": 1
@@ -115,6 +213,20 @@
       "answer_rank": 1
     },
     {
+      "project": "FleetBridge",
+      "mode": "resolved",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "prevq",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "StockMesh",
       "mode": "plain",
       "precision": 0.08,
@@ -129,6 +241,20 @@
       "answer_rank": 1
     },
     {
+      "project": "StockMesh",
+      "mode": "resolved",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "prevq",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "CarePoint Connect",
       "mode": "plain",
       "precision": 0.0,
@@ -138,6 +264,20 @@
     {
       "project": "CarePoint Connect",
       "mode": "anchored",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "resolved",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "prevq",
       "precision": 0.08,
       "top1_right_project": false,
       "answer_rank": 1
@@ -159,6 +299,20 @@
       "answer_rank": 1
     },
     {
+      "project": "FieldServe-CRM Sync",
+      "mode": "resolved",
+      "precision": 0.67,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "prevq",
+      "precision": 0.75,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "LedgerLink",
       "mode": "plain",
       "precision": 0.17,
@@ -169,6 +323,20 @@
       "project": "LedgerLink",
       "mode": "anchored",
       "precision": 0.58,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "resolved",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "prevq",
+      "precision": 0.67,
       "top1_right_project": true,
       "answer_rank": 1
     },
@@ -187,6 +355,20 @@
       "answer_rank": 1
     },
     {
+      "project": "FleetBridge",
+      "mode": "resolved",
+      "precision": 0.42,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "prevq",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "StockMesh",
       "mode": "plain",
       "precision": 0.17,
@@ -196,6 +378,20 @@
     {
       "project": "StockMesh",
       "mode": "anchored",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "resolved",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "prevq",
       "precision": 0.5,
       "top1_right_project": true,
       "answer_rank": 1
@@ -213,6 +409,20 @@
       "precision": 0.5,
       "top1_right_project": true,
       "answer_rank": 2
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "resolved",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 2
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "prevq",
+      "precision": 0.5,
+      "top1_right_project": true,
+      "answer_rank": 1
     }
   ],
   "prod-npfx": [
@@ -231,6 +441,20 @@
       "answer_rank": 2
     },
     {
+      "project": "FieldServe-CRM Sync",
+      "mode": "resolved",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 2
+    },
+    {
+      "project": "FieldServe-CRM Sync",
+      "mode": "prevq",
+      "precision": 0.08,
+      "top1_right_project": false,
+      "answer_rank": 1
+    },
+    {
       "project": "LedgerLink",
       "mode": "plain",
       "precision": 0.08,
@@ -241,6 +465,20 @@
       "project": "LedgerLink",
       "mode": "anchored",
       "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "resolved",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "LedgerLink",
+      "mode": "prevq",
+      "precision": 0.08,
       "top1_right_project": true,
       "answer_rank": 1
     },
@@ -255,6 +493,20 @@
       "project": "FleetBridge",
       "mode": "anchored",
       "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "resolved",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "FleetBridge",
+      "mode": "prevq",
+      "precision": 0.08,
       "top1_right_project": true,
       "answer_rank": 1
     },
@@ -273,6 +525,20 @@
       "answer_rank": 1
     },
     {
+      "project": "StockMesh",
+      "mode": "resolved",
+      "precision": 0.17,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
+      "project": "StockMesh",
+      "mode": "prevq",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 1
+    },
+    {
       "project": "CarePoint Connect",
       "mode": "plain",
       "precision": 0.0,
@@ -285,6 +551,20 @@
       "precision": 0.08,
       "top1_right_project": true,
       "answer_rank": 2
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "resolved",
+      "precision": 0.08,
+      "top1_right_project": true,
+      "answer_rank": 2
+    },
+    {
+      "project": "CarePoint Connect",
+      "mode": "prevq",
+      "precision": 0.0,
+      "top1_right_project": false,
+      "answer_rank": 1
     }
   ]
 }
