@@ -529,8 +529,16 @@ interface ElectronAPI {
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
-  forceRestartOllama: () => Promise<void>;
+  /** Returns the handler's real shape. This was declared `Promise<void>` while
+   *  the handler has always returned `{ success }`, which is why the settings
+   *  screen read `result.success` behind a @ts-ignore. */
+  forceRestartOllama: () => Promise<{ success: boolean; reason?: string }>;
   isOllamaReachable: () => Promise<boolean>;
+  /** Start the local Ollama daemon if the user has Ollama selected. The handler
+   *  has existed since the OllamaManager work and had no bridge, so the settings
+   *  screen reached it through a generic `invoke` that this preload does not
+   *  expose — see AIProvidersSettings.ensureOllamaStartup. */
+  ensureOllamaRunning: () => Promise<{ success: boolean; reason?: string; [k: string]: unknown }>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;
@@ -1059,6 +1067,21 @@ interface ElectronAPI {
    *  renderer only renders what this returns. */
   answerPolicyGet: (input: { modeId?: string; templateType?: string }) => Promise<any>;
   answerPolicySet: (input: { modeId?: string; templateType?: string; policy?: string | null }) => Promise<{ success: boolean; error?: string }>;
+  // Context Intelligence V3 rollout controls. Their handlers were registered in
+  // ipcHandlers.ts and had NO bridge here and no caller anywhere in the repo,
+  // so neither was reachable from a shipped app (`e2eInvoke`, the only generic
+  // passthrough, is undefined unless NATIVELY_E2E=1).
+  contextIntelligenceFlagGet: () => Promise<{
+    ok: boolean; enabled?: boolean; persisted?: boolean | null;
+    default?: boolean; envOverride?: string | null; error?: string;
+  }>;
+  contextIntelligenceFlagSet: (input: { enabled?: boolean | null }) =>
+    Promise<{ success: boolean; enabled?: boolean; error?: string }>;
+  contextIntelligenceRolloutMetrics: (input?: {
+    baselineContamination?: number | null;
+    baselineOrchestrationP95Ms?: number | null;
+    minTurns?: number;
+  }) => Promise<{ ok: boolean; metrics?: any; abort?: any; error?: string }>;
   modesDelete: (id: string) => Promise<{ success: boolean; error?: string }>;
   modesSetActive: (id: string | null) => Promise<{ success: boolean; error?: string }>;
   modesGetReferenceFiles: (
@@ -2113,6 +2136,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   modelSelectorCloseIfOpen: () => ipcRenderer.invoke('model-selector:close-if-open'),
   forceRestartOllama: () => ipcRenderer.invoke('force-restart-ollama'),
   isOllamaReachable: () => ipcRenderer.invoke('is-ollama-reachable'),
+  ensureOllamaRunning: () => ipcRenderer.invoke('ensure-ollama-running'),
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) =>
@@ -2750,6 +2774,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('context-intelligence:answer-policy-get', input),
   answerPolicySet: (input: { modeId?: string; templateType?: string; policy?: string | null }) =>
     ipcRenderer.invoke('context-intelligence:answer-policy-set', input),
+
+  // ── V3 rollout: flag + metrics ───────────────────────────────────────────
+  //
+  // flag.ts documents its own fix for "the F1 pattern — a documented path with
+  // no caller", so that "enabling a rollout stage must not require relaunching
+  // the app from a shell with an env var set". The handler that WRITES that
+  // persisted setting then had no bridge, which reproduced the same pattern one
+  // layer up: the env var stayed the only working switch.
+  //
+  // rollout-metrics is the sole consumer of the contamination rate, the abort
+  // conditions and the orchestration percentiles that recordTurnMetrics
+  // collects on every single turn. Without this line all of it was computed and
+  // unreadable.
+  contextIntelligenceFlagGet: () =>
+    ipcRenderer.invoke('context-intelligence:flag-get'),
+  contextIntelligenceFlagSet: (input: { enabled?: boolean | null }) =>
+    ipcRenderer.invoke('context-intelligence:flag-set', input),
+  contextIntelligenceRolloutMetrics: (input?: {
+    baselineContamination?: number | null;
+    baselineOrchestrationP95Ms?: number | null;
+    minTurns?: number;
+  }) => ipcRenderer.invoke('context-intelligence:rollout-metrics', input ?? {}),
   modesDelete: (id: string) => ipcRenderer.invoke('modes:delete', id),
   modesSetActive: (id: string | null) => ipcRenderer.invoke('modes:set-active', id),
   modesGetReferenceFiles: (modeId: string) =>

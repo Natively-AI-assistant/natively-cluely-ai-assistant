@@ -66,9 +66,14 @@ export interface RolloutCounters {
    *  nobody knows" — the exact silent-fallback failure §22.1 forbids. */
   v3FallbackBySurface: Record<string, number>;
 
-  /** Milliseconds, for the p95 TTFT abort condition. Bounded ring buffer: an
-   *  unbounded latency array in a long meeting is its own leak. */
-  latencyMs: number[];
+  /** ORCHESTRATION milliseconds — resolve + classify + retrieve — NOT TTFT.
+   *  The trace is finalized before the prompt is composed and before any
+   *  provider call, so `providerTtfbMs` is a structural 0 here and time to
+   *  first token is not knowable from this object. Named for what it holds:
+   *  feeding orchestration time to something labelled TTFT compares quantities
+   *  about an order of magnitude apart. Bounded ring buffer — an unbounded
+   *  latency array in a long meeting is its own leak. */
+  orchestrationMs: number[];
 }
 
 const MAX_LATENCY_SAMPLES = 512;
@@ -86,7 +91,7 @@ function emptyCounters(): RolloutCounters {
     contaminationCheckableTurns: 0,
     supersededTurns: 0,
     v3FallbackBySurface: {},
-    latencyMs: [],
+    orchestrationMs: [],
   };
 }
 
@@ -186,10 +191,30 @@ export function recordTurnMetrics(trace: AnswerTrace | null | undefined): void {
       if (bad) counters.contaminationTurns += 1;
     }
 
-    const ttft = Number(t.timings?.providerTtfbMs ?? t.timings?.totalMs ?? NaN);
-    if (Number.isFinite(ttft) && ttft >= 0) {
-      counters.latencyMs.push(ttft);
-      if (counters.latencyMs.length > MAX_LATENCY_SAMPLES) counters.latencyMs.shift();
+    // `t.latency`, not `t.timings` — AnswerTrace has never had a `timings`
+    // field, so this read was `undefined` on every turn since it was written
+    // and the latency percentiles below have always been empty.
+    //
+    // And `||`, not `??`. providerTtfbMs is a hardcoded 0 here (the provider
+    // has not run when the trace is built), and `??` does not fall through on
+    // zero — so the field-name fix alone would have traded an obvious NaN for a
+    // plausible permanent 0ms p95, which is the worse of the two bugs.
+    // `t.latency`, not `t.timings` — AnswerTrace has never declared a `timings`
+    // field, so this read was `undefined` on every turn since it was written
+    // and these percentiles were empty for the life of the metric.
+    //
+    // totalMs ONLY. Falling back through `providerTtfbMs` would be worse than
+    // the original bug: it is a hardcoded 0 at this point, and `??` does not
+    // short-circuit on zero, so the obvious NaN would have become a plausible
+    // permanent 0 ms p95.
+    //
+    // `>= 0`, not `> 0`. orchestrate() rounds its spans, so a turn that answers
+    // from state without retrieving genuinely measures 0 ms — discarding those
+    // drops the fastest turns from the sample and biases p50/p95 upward.
+    const orchestrationMs = Number((t.latency ?? {}).totalMs);
+    if (Number.isFinite(orchestrationMs) && orchestrationMs >= 0) {
+      counters.orchestrationMs.push(orchestrationMs);
+      if (counters.orchestrationMs.length > MAX_LATENCY_SAMPLES) counters.orchestrationMs.shift();
     }
   } catch { /* a metrics defect must never affect an answer */ }
 }
@@ -212,12 +237,13 @@ function quantile(values: number[], q: number): number | null {
 export function getRolloutMetrics(): {
   counters: RolloutCounters;
   rates: Record<string, number | null>;
-  latency: { p50: number | null; p95: number | null; samples: number };
+  /** ORCHESTRATION latency, not TTFT. See RolloutCounters.orchestrationMs. */
+  orchestrationLatency: { p50: number | null; p95: number | null; samples: number };
 } {
   const c = c0();
   const withRetrieval = c.retrieval.turnsWithRetrieval;
   return {
-    counters: { ...c, latencyMs: [...c.latencyMs] },
+    counters: { ...c, orchestrationMs: [...c.orchestrationMs] },
     rates: {
       staleVersionRejected: pct(c.retrieval.staleVersionRejectedTurns, withRetrieval),
       outOfScopeRejected: pct(c.retrieval.outOfScopeRejectedTurns, withRetrieval),
@@ -236,10 +262,10 @@ export function getRolloutMetrics(): {
       fastPath: pct(c.path.FAST ?? 0, c.turns),
       v3Share: pct(c.engine.v3, c.turns),
     },
-    latency: {
-      p50: quantile(c.latencyMs, 0.5),
-      p95: quantile(c.latencyMs, 0.95),
-      samples: c.latencyMs.length,
+    orchestrationLatency: {
+      p50: quantile(c.orchestrationMs, 0.5),
+      p95: quantile(c.orchestrationMs, 0.95),
+      samples: c.orchestrationMs.length,
     },
   };
 }
@@ -256,8 +282,13 @@ export function evaluateAbortConditions(input: {
   minTurns?: number;
   /** Legacy contamination rate to compare against, when one has been measured. */
   baselineContamination?: number | null;
-  /** Legacy p95 TTFT in ms, when one has been measured. */
-  baselineP95Ms?: number | null;
+  /** Legacy p95 ORCHESTRATION time in ms, when one has been measured.
+   *  Renamed from baselineP95Ms: it used to be documented as TTFT, and this
+   *  gate now compares against orchestration time. A TTFT baseline is roughly
+   *  an order of magnitude larger, so passing one here would hold the gate
+   *  permanently open — vacuously green, which is the failure this whole
+   *  metric exists to avoid. */
+  baselineOrchestrationP95Ms?: number | null;
 } = {}): { insufficientData: boolean; triggered: string[]; detail: Record<string, unknown> } {
   const minTurns = input.minTurns ?? 50;
   const m = getRolloutMetrics();
@@ -277,9 +308,9 @@ export function evaluateAbortConditions(input: {
     triggered.push('contamination_above_baseline');
   }
 
-  if (input.baselineP95Ms != null && m.latency.p95 != null
-      && m.latency.p95 > input.baselineP95Ms * 1.2) {
-    triggered.push('p95_regression_over_20pct');
+  if (input.baselineOrchestrationP95Ms != null && m.orchestrationLatency.p95 != null
+      && m.orchestrationLatency.p95 > input.baselineOrchestrationP95Ms * 1.2) {
+    triggered.push('orchestration_p95_regression_over_20pct');
   }
 
   // Over-refusal: strict refusals rising while general fallback is flat/low.
@@ -289,7 +320,7 @@ export function evaluateAbortConditions(input: {
     triggered.push('over_refusal_suspected');
   }
 
-  return { insufficientData: false, triggered, detail: { rates: m.rates, latency: m.latency } };
+  return { insufficientData: false, triggered, detail: { rates: m.rates, orchestrationLatency: m.orchestrationLatency } };
 }
 
 /** Test seam / session boundary. */
