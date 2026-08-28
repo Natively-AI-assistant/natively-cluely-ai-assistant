@@ -104,3 +104,54 @@ describe("the findings doc's Team Meet claim does not reproduce", () => {
     }
   });
 });
+
+describe('EXPLANATORY modes keep the direct-answer contract', () => {
+  // Review finding: the first version switched unconditionally across all nine
+  // modes, and the suite only exercised team-meet and recruiting — the two where
+  // `voiceOverlay()` supplies role framing — so a green run said nothing about
+  // the other seven.
+  //
+  // `answer` branches on mode ("in a live role mode, output the exact words that
+  // role should say. IN DIRECT CHAT OR AN EXPLANATORY MODE, ANSWER THE USER
+  // DIRECTLY"). `what_to_say` does not. The per-mode voice table settles which
+  // is which: lecture is "a quiet study partner explaining to the student …
+  // never speak as the student", and general is "the assistant in direct chat,
+  // or the user's own voice … as the moment requires".
+  for (const mode of ['lecture', 'general']) {
+    test(`${mode} must NOT get a script-for-the-user contract`, () => {
+      assert.doesNotMatch(compose('answer', false, mode), SPOKEN_WORDS,
+        `${mode} is explanatory; "output only the exact words to say" turns an `
+        + 'explanation into a recitation');
+    });
+  }
+
+  // The modes where the user genuinely IS the speaker keep the spoken contract.
+  for (const mode of ['team-meet', 'sales', 'call-center', 'looking-for-work']) {
+    test(`${mode} is a speaking role and does get it`, () => {
+      assert.match(compose('what_to_say', false, mode), SPOKEN_WORDS);
+    });
+  }
+});
+
+describe('a screen-code deictic turn does not get contradictory instructions', () => {
+  // Review finding, HIGH. `_promoted` is `!codingSignals.codingTask && …`, so it
+  // is FALSE exactly when the signals say coding; and the bridge's `codingTask`
+  // is `isCodingAnswerType(answerPlan.answerType)`, false for `unknown_answer`.
+  // A deictic ask over a code template on screen satisfied NEITHER term, so it
+  // would have taken 'what_to_say' — "no coaching, alternatives, LABELS" — while
+  // the CodingStreamGate and the post-stream repair independently enforced the
+  // six-section shape. The prompt would forbid the headings the repair requires.
+  //
+  // The engine branch is not directly reachable from here, so this pins the
+  // PROPERTY that makes the bug possible: the two contracts are mutually
+  // exclusive, therefore whatever picks between them must never see a coding
+  // turn as non-coding.
+  test('the spoken-words rule and the section contract never belong together', () => {
+    const spoken = compose('what_to_say', false);
+    const sections = compose('answer', true);
+    assert.match(spoken, SPOKEN_WORDS);
+    assert.doesNotMatch(spoken, CODING_SECTIONS);
+    assert.match(sections, CODING_SECTIONS);
+    assert.doesNotMatch(sections, SPOKEN_WORDS);
+  });
+});

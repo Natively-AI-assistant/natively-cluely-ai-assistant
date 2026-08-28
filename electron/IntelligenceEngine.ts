@@ -3184,7 +3184,44 @@ export class IntelligenceEngine extends EventEmitter {
                                 // (verified by dumping the composed prompt for
                                 // all four combinations), so that half of the
                                 // finding did not reproduce.
-                                const _liveCoding = codingTask || _promoted;
+                                // `codingSignals.codingTask` is in this OR for a
+                                // reason found by review. `_promoted` is defined
+                                // as `!codingSignals.codingTask && …`, so it goes
+                                // FALSE exactly when the signals say coding — and
+                                // the bridge's `codingTask` is
+                                // `isCodingAnswerType(answerPlan.answerType)`,
+                                // which is false for `unknown_answer`. A deictic
+                                // ask ("how do I do this?") over a code template
+                                // on screen therefore satisfied NEITHER term.
+                                //
+                                // That turn would have taken 'what_to_say' — "no
+                                // coaching, alternatives, LABELS" — while
+                                // `wtaPromotedScreenCoding` independently armed
+                                // the CodingStreamGate and the post-stream repair
+                                // to enforce the six-section shape. The prompt
+                                // would forbid the very headings the repair
+                                // requires, so every such answer would be
+                                // deterministically rewritten. Three call sites
+                                // asking the same question three ways is the
+                                // divergence the 2026-08-22 note above exists to
+                                // end; this makes them agree.
+                                const _liveCoding = codingTask || codingSignals.codingTask || _promoted;
+                                // EXPLANATORY modes keep 'answer'. Its text
+                                // branches — "in a live role mode, output the
+                                // exact words that role should say; IN DIRECT CHAT
+                                // OR AN EXPLANATORY MODE, ANSWER THE USER
+                                // DIRECTLY" — and `what_to_say` has no such
+                                // branch. The per-mode voice table is the source
+                                // of truth: `lecture` reads "a quiet study partner
+                                // explaining to the student … never speak as the
+                                // student", and `general` reads "the assistant in
+                                // direct chat, or the user's own voice … as the
+                                // moment requires". Handing either a
+                                // script-for-the-user contract turns "what is the
+                                // professor's definition of entropy?" into words
+                                // to recite instead of an explanation.
+                                const _explanatoryMode = snapshotModeInfo?.templateType === 'lecture'
+                                    || snapshotModeInfo?.templateType === 'general';
                                 // ── T3: the repeat-press directive, on the SYSTEM channel ──
                                 //
                                 // Its only carrier was `intentContext` ->
@@ -3206,7 +3243,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 // and belongs on the same channel that already
                                 // carries the coding contract it refers to.
                                 const _base = resolveV2SystemPrompt({
-                                    action: _liveCoding ? 'answer' : 'what_to_say',
+                                    action: (_liveCoding || _explanatoryMode) ? 'answer' : 'what_to_say',
                                     tier: v2TierForPromptTier(this.llmHelper.getPromptTier?.()),
                                     activeMode: snapshotModeInfo ?? undefined,
                                     codingTask: codingTask || _promoted,
