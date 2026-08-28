@@ -21,6 +21,7 @@ import { freezeTurnDecision } from '../contracts/types';
 import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 
@@ -694,7 +695,10 @@ export async function orchestrate(
     if (rawQ) {
       const priorState = getConversationState(req.sessionId);
       priorDecision = priorState?.previousDecision;
-      const ref = resolveAgainstSession(req.sessionId, rawQ);
+      // T7: pass this turn's scope so a topic from the PREVIOUS meeting/mode
+      // cannot rewrite this question. `advance()` resets on scope change, but it
+      // runs AFTER this line -- resetting on write cannot protect a read.
+      const ref = resolveAgainstSession(req.sessionId, rawQ, req.scope);
       referentResolution = {
         applied: Boolean(ref.usedState && ref.resolved !== rawQ),
         ...(ref.referent ? { referent: ref.referent } : {}),
@@ -713,6 +717,64 @@ export async function orchestrate(
   } catch { /* continuity must never break a turn */ }
 
   let decision = decide(effectiveReq);
+
+  // ── T5: a resolved bare follow-up regains its subject's pool ───────────────
+  //
+  // The unclaimed-retrieval fallback in `decide()` consults DOCUMENT pools only
+  // and deliberately excludes identity pools — "Reverse a linked list in Python"
+  // must not retrieve resumes (deep-run 2, issue 5). That exclusion is right for
+  // its own case and wrong for the one it also catches: a bare follow-up
+  // ("Why?", "What did you monitor after that?") has no claims of its own
+  // BECAUSE its subject lives in the previous turn, and the fallback then denies
+  // it the very pool that turn answered from. Measured:
+  //
+  //   looking-for-work  "Why? (referring to: Kubernetes)"  planned [REFERENCE_FILE]
+  //                     -- resume/profile excluded, though the prior turn used them
+  //   recruiting        same                               CANDIDATE_FILE excluded,
+  //                     the mode's PRIORITY-1 source
+  //
+  // That is a second, independent cause of "follow-ups jump to the wrong
+  // project", distinct from the chunking one: even when the referent resolves
+  // correctly, the plan can exclude the pool that owns the subject.
+  //
+  // Four conditions, and each is load-bearing:
+  //   • `usePreviousSourceContinuity` — the plan already declares this a
+  //     continuity turn. The field existed and had no consumer for this.
+  //   • `referentWasResolved` — the subject genuinely came from state. Without
+  //     it a self-contained question with no claims would inherit pools it never
+  //     asked for, which is exactly the deep-run 2 defect.
+  //   • the plan used the FALLBACK (no claim named a source). A follow-up that
+  //     names its own sources keeps them.
+  //   • intersect with the mode allowlist. Continuity can restore a pool the
+  //     mode authorizes; it can never introduce one it does not.
+  if (isRetrievalFixEnabled('followUpSourceContinuity')
+      && referentWasResolved
+      && decision.retrievalPlan.shouldRetrieve
+      && decision.retrievalPlan.usePreviousSourceContinuity
+      && decision.claimRequirements.every((c) => c.authority !== 'PRIVATE_SOURCE_REQUIRED')) {
+    try {
+      const { getConversationState } = require('../question/conversation-state-store');
+      const prior = getConversationState(req.sessionId)?.previousPlannedSourceTypes ?? [];
+      // `optional` is the mode allowlist minus what the claims required (see
+      // where it is computed in decide()), so the two together ARE the
+      // allowlist — including any extraAllowedSourceTypes decide() folded in.
+      const allowed = new Set<SourceType>([
+        ...decision.requiredSourceTypes,
+        ...decision.optionalSourceTypes,
+      ]);
+      const planned = new Set(decision.retrievalPlan.sourceTypes);
+      const restored = prior.filter((s: SourceType) => allowed.has(s) && !planned.has(s));
+      if (restored.length) {
+        decision = freezeTurnDecision({
+          ...decision,
+          retrievalPlan: {
+            ...decision.retrievalPlan,
+            sourceTypes: [...decision.retrievalPlan.sourceTypes, ...restored],
+          },
+        } as never);
+      }
+    } catch { /* continuity must never break a turn */ }
+  }
 
   // Precedence follow-up (live turns 18/92, 2026-08-01): "Why did you ignore
   // the other values?" / "Why are the lower values not current?" ask about the
@@ -918,6 +980,8 @@ export async function orchestrate(
       evidenceIds: evidence.map((e) => e.evidenceId),
       sourceIds: [...new Set(evidence.map((e) => e.sourceId))],
       decision: turnDecision,
+      // T5: what this turn planned, so a bare follow-up can inherit it.
+      plannedSourceTypes: decision.retrievalPlan.sourceTypes,
     });
   } catch { /* continuity must never break a turn */ }
 

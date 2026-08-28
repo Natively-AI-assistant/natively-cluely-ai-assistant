@@ -5980,7 +5980,14 @@ export class IntelligenceEngine extends EventEmitter {
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         requestSequence: this.currentGenerationId,
-                        scope: { meetingId: _ctx.meetingId ?? undefined },
+                        // T7 (2026-08-28): `sessionId` was MISSING here while both
+                        // sibling call sites (:5517 and the WTA snapshot) set it
+                        // explicitly, each with a comment saying why. Without it the
+                        // V3 conversation-state store falls back to the literal key
+                        // 'engine', so every session on this surface shared one
+                        // continuity slot -- one user's activeTopic resolving another
+                        // turn's "that project". A one-line omission, not a design.
+                        scope: { meetingId: _ctx.meetingId ?? undefined, sessionId: _ctx.meetingId ?? undefined },
                         retrieval: _ctx.port as any,
                     });
                 } catch { return null; }
