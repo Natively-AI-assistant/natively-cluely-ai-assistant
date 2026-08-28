@@ -45,14 +45,26 @@ describe('EmbeddingPipeline single-text fallback promotion', () => {
     assert.match(block, /space: fallback\.space, provider: fallback\.name, dimensions: fallback\.dimensions/, 'fallback metadata should come from the fallback that produced the vector');
   });
 
-  test('getEmbeddingForQuery() falls back to fallbackProvider and promotes it after primary failure', () => {
+  // UPDATED 2026-08-28 (T13). This asserted that a primary failure falls back
+  // and PROMOTES — which was the defect, not the contract. A single 429 changed
+  // the session's embedding space, stranding every persisted vector in the
+  // primary space and degrading ~90 chunks to FTS-only. The contract now is:
+  // retry the primary, and only a SUSTAINED outage may promote.
+  //
+  // Behaviour is asserted in QueryEmbedHysteresis2026_08_28.test.mjs; these
+  // structural assertions only pin that the parts are still wired together.
+  test('getEmbeddingForQuery() retries the primary before any fallback is considered', () => {
     const source = read('electron/rag/EmbeddingPipeline.ts');
     const block = methodBlock(source, 'async getEmbeddingForQuery(text: string)');
     assert.match(block, /const provider = this\.provider/, 'query path should capture the starting provider');
     assert.match(block, /const runQuery = \(p: IEmbeddingProvider, label: string\)/, 'query path should support running against either provider');
-    assert.match(block, /return await runQuery\(provider, 'live-query'\)/, 'primary query embed should be attempted first');
+    assert.match(block, /for \(let attempt = 0; attempt <= QUERY_RETRY_ATTEMPTS/, 'the primary must be retried in place');
+    assert.match(block, /noteQueryHardFailure\(\)/, 'a hard failure must be counted toward the promotion streak');
+    assert.match(block, /hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES/, 'promotion must require a sustained streak');
+    assert.match(block, /throw primaryError/, 'below the streak the turn degrades; the active space is untouched');
     assert.match(block, /runQuery\(fallback, 'fallback-live-query'\)/, 'fallback provider should perform the query embed');
-    assert.match(block, /this\.promoteFallbackProvider\(fallback\)/, 'successful query fallback should become active');
+    assert.match(block, /this\.promoteFallbackProvider\(fallback\)/, 'a sustained outage still promotes');
+    assert.match(block, /schedulePrimaryReprobe\(provider\)/, 'a promotion must schedule its own demotion');
   });
 
   test('fallback promotion persists last_embedding_space and emits a warning if persistence fails', () => {

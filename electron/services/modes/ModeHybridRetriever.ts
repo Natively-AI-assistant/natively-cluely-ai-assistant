@@ -410,6 +410,20 @@ export class ModeHybridRetriever {
      */
     private inflightIndex = new Map<string, Promise<void>>();
 
+    // T13 / D4.6 — "at session start, re-embed any file whose vectors sit in a
+    // non-primary space" is ALREADY IMPLEMENTED, and a second implementation was
+    // written here before that was checked. `getFileIndexStatus` reports a
+    // space-mismatched file as `pending` (see above), and
+    // `ModesManager.prewarmModeReferenceIndex` re-indexes every file that is not
+    // `ready` on mode activation. So the repair already runs; adding a parallel
+    // path would have been a documented method with no caller.
+    //
+    // The gap that WAS real is upstream, and is fixed in EmbeddingPipeline:
+    // ingestion used to write vectors into the fallback space on the first
+    // rate-limit burst, which is how a file became permanently MiniLM-indexed.
+    // It now refuses to write to a non-primary space below the promotion
+    // threshold, so there is nothing for a repair pass to find.
+
     public async indexFile(file: ModeReferenceFile): Promise<void> {
         const existing = this.inflightIndex.get(file.id);
         if (existing) return existing;
