@@ -2762,8 +2762,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const ensureOllamaStartup = async () => {
         setOllamaStatus('checking');
         try {
-            // @ts-ignore
-            const result = await window.electronAPI?.invoke?.('ensure-ollama-running');
+            // electronAPI.ensureOllamaRunning, NOT a generic `invoke`.
+            //
+            // This called `window.electronAPI?.invoke?.('ensure-ollama-running')`
+            // behind a @ts-ignore, and this preload exposes NO generic `invoke`
+            // (the only passthrough, e2eInvoke, is undefined unless
+            // NATIVELY_E2E=1). So the optional call short-circuited, `result`
+            // was always undefined, and the branch below reported 'not-found'
+            // WITHOUT EVER TRYING TO START THE DAEMON. The @ts-ignore is what
+            // let it typecheck.
+            const result = await window.electronAPI?.ensureOllamaRunning?.();
             if (result && result.success) {
                 // It's running (or just started), now fetch models
                 checkOllama(true);
@@ -2830,8 +2838,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const handleFixOllama = async () => {
         setOllamaStatus('fixing');
         try {
-            // @ts-ignore
-            const result = await window.electronAPI?.invoke?.('force-restart-ollama');
+            // Same defect: forceRestartOllama IS bridged, but reaching it
+            // through the nonexistent generic `invoke` silently did nothing.
+            const result = await window.electronAPI?.forceRestartOllama?.();
             if (result && result.success) {
                 setOllamaRestarted(true);
                 // Wait for server to be ready

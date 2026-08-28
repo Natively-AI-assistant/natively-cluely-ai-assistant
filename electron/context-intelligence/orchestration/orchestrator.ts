@@ -667,7 +667,27 @@ export async function orchestrate(
   req: AnswerRequest,
   retrieval?: RetrievalPort,
 ): Promise<OrchestratorResult> {
-  const t0 = 0;
+  // performance.now(), NOT Date.now(). This is a desktop app that sleeps in the
+  // middle of a turn all the time — a lid closed between here and the trace
+  // literal would otherwise report a four-hour retrieval. A monotonic clock
+  // cannot be dragged by a sleep, an NTP step or a timezone change.
+  const clock = () => (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
+  const span = (from: number) => Math.max(0, Math.round(clock() - from));
+  const t0 = clock();
+
+  // Phase spans. Every one of these was a hardcoded 0 from the day the trace
+  // was written (`const t0 = 0` was literally the total), so `latency` looked
+  // like a measurement and was a placeholder — 173 production telemetry rows
+  // reported 0ms for everything before this was noticed. A zero here now means
+  // "measured zero", which is why the two spans that genuinely cannot be timed
+  // from inside this function are documented at the trace literal instead of
+  // being left to look measured.
+  let questionResolutionMs = 0;
+  let classificationMs = 0;
+  let retrievalMs = 0;
+  let evidenceEvaluationMs = 0;
 
   // ── Conversation continuity (§12.3) ───────────────────────────────────────
   // Resolve a bare follow-up against this session's state BEFORE deciding.
@@ -689,6 +709,7 @@ export async function orchestrate(
   // that as "original" hid every resolver decision from the telemetry.
   const originalQuestion = (req.manualQuestion ?? req.transcriptQuestion ?? '').trim();
   let priorDecision: import('../contracts/types').PriorTurnDecision | undefined;
+  const tResolve = clock();
   try {
     const { resolveAgainstSession, getConversationState } = require('../question/conversation-state-store');
     const rawQ = originalQuestion;
@@ -715,8 +736,14 @@ export async function orchestrate(
       }
     }
   } catch { /* continuity must never break a turn */ }
+  questionResolutionMs = span(tResolve);
 
+  // decide() resolves the mode policy AND classifies the turn, so this span
+  // covers both. policyResolutionMs is left at 0 rather than being given half
+  // of a number nobody measured — splitting it means instrumenting decide().
+  const tClassify = clock();
   let decision = decide(effectiveReq);
+  classificationMs = span(tClassify);
 
   // ── T5: a resolved bare follow-up regains its subject's pool ───────────────
   //
@@ -793,11 +820,17 @@ export async function orchestrate(
   let attempts: RetrievalAttemptTrace[] = [];
 
   if (decision.retrievalPlan.shouldRetrieve && retrieval) {
+    // Timed at the call site, not read from `attempts[].durationMs`: only
+    // legacy-retrieval-port populates that field, so trusting it would report
+    // 0ms for every turn served by any other port.
+    const tRetrieve = clock();
     try {
       const r = await retrieval.retrieve({ decision });
       evidence = r.evidence;
       attempts = r.attempts;
+      retrievalMs = span(tRetrieve);
     } catch (e) {
+      retrievalMs = span(tRetrieve);
       // §22.1: a retrieval dependency failure is RECORDED and the turn
       // continues with no evidence — it must NOT abort the turn back to a
       // legacy path that would inject a raw context blob instead. Answerability
@@ -815,7 +848,9 @@ export async function orchestrate(
     }
   }
 
+  const tEvaluate = clock();
   const answerability = evaluateAnswerability(decision, evidence);
+  evidenceEvaluationMs = span(tEvaluate);
 
   // A question whose required source the MODE forbids is not answerable from
   // model knowledge — that would answer a meeting question out of thin air. It
@@ -891,10 +926,29 @@ export async function orchestrate(
     fallbackUsed,
     promptTokenEstimate: 0,
     latency: {
-      normalizationMs: 0, questionResolutionMs: 0, policyResolutionMs: 0, classificationMs: 0,
-      retrievalMs: 0, rerankingMs: 0, evidenceEvaluationMs: 0, promptCompositionMs: 0,
-      providerTtfbMs: 0, totalMs: t0,
+      // Measured.
+      questionResolutionMs, classificationMs, retrievalMs, evidenceEvaluationMs,
+      totalMs: span(t0),
+
+      // NOT measured, and deliberately not guessed. Each of these happens
+      // outside this function, so any number here would be invented:
+      //   normalizationMs / policyResolutionMs — inside decide(), which reports
+      //     one span; see classificationMs above.
+      //   rerankingMs      — inside the retrieval port, which does not report it.
+      //   promptCompositionMs — composePrompt runs in engine-bridge AFTER this
+      //     function returns.
+      //   providerTtfbMs   — the provider has not been called yet.
+      normalizationMs: 0, policyResolutionMs: 0, rerankingMs: 0,
+      promptCompositionMs: 0, providerTtfbMs: 0,
     },
+    // Empty, and it must STAY empty here. This trace is finalized before the
+    // prompt is composed and long before a provider is called, so there is no
+    // provider to attribute. Reading LLMHelper.lastProviderModel at this point
+    // would return the PREVIOUS turn's model — and with auto-answer running
+    // overlapping turns it would be wrong in a way that looks entirely
+    // plausible. An empty array is honest; a stale model is telemetry that
+    // lies. Provider attribution belongs to whoever observes the completed
+    // provider call, not here.
     providerAttempts: [],
     status: 'COMPLETED',
     errorCodes: [],

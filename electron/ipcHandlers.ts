@@ -12416,7 +12416,7 @@ export function initializeIpcHandlers(appState: AppState): void {
   // Exposed so a rollout stage can be gated on measured rates instead of a
   // description of rates, and so §5's abort conditions are evaluated rather
   // than remembered.
-  safeHandle('context-intelligence:rollout-metrics', async (_, input?: { baselineContamination?: number | null; baselineP95Ms?: number | null; minTurns?: number }) => {
+  safeHandle('context-intelligence:rollout-metrics', async (_, input?: { baselineContamination?: number | null; baselineOrchestrationP95Ms?: number | null; minTurns?: number }) => {
     try {
       const { getRolloutMetrics, evaluateAbortConditions } = require('./context-intelligence/observability/rollout-metrics');
       return { ok: true, metrics: getRolloutMetrics(), abort: evaluateAbortConditions(input ?? {}) };

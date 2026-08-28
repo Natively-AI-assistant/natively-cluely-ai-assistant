@@ -443,8 +443,15 @@ export interface ElectronAPI {
   setDefaultModel: (modelId: string) => Promise<{ success: boolean; error?: string }>;
   toggleModelSelector: (coords: { x: number; y: number; activate?: boolean }) => Promise<void>;
   modelSelectorCloseIfOpen: () => Promise<void>;
-  forceRestartOllama: () => Promise<void>;
+  // NOTE: this interface and the one in electron/preload.ts are maintained
+  // separately and drift. That drift is what hid the Ollama bug: the settings
+  // screen reached these through a generic `invoke` that neither file declares
+  // and preload does not expose, behind a @ts-ignore that silenced the error.
+  /** Real handler shape — `{ success }`, not void. */
+  forceRestartOllama: () => Promise<{ success: boolean; reason?: string }>;
   isOllamaReachable: () => Promise<boolean>;
+  /** Start the local Ollama daemon when Ollama is the selected provider. */
+  ensureOllamaRunning: () => Promise<{ success: boolean; reason?: string; [k: string]: unknown }>;
 
   // Settings Window
   toggleSettingsWindow: (coords?: { x: number; y: number }) => Promise<void>;

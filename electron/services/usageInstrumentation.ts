@@ -348,25 +348,27 @@ export function recordTurnTelemetry(trace: unknown): void {
         let best = 0;
         for (const [k, n] of tally) if (n > best) { dominant = k; best = n; }
 
-        const lastProvider = Array.isArray(t.providerAttempts) && t.providerAttempts.length
-            ? t.providerAttempts[t.providerAttempts.length - 1]
-            : undefined;
-
-        // At most 8 keys are accepted and an overflow REJECTS THE WHOLE EVENT —
-        // which the outbox then drops permanently as a poison row. Five keys,
-        // three spare, on purpose: durations and counts that have a real column
-        // go in the column, not in here.
+        // ONLY MEASURED VALUES. The first version of this shipped
+        // llm_ttfb_ms, context_build_duration_ms and reranking_used, and all
+        // three were structurally impossible to measure at the emit point:
+        // 173 production rows carried 0/0/false without a single one of them
+        // being an observation. A measurement-shaped non-measurement is worse
+        // than an absent field, because a reader averages it.
+        //
+        // What is left is measured in orchestrate(): the retrieval span, the
+        // candidate and accepted counts, and the dominant source type.
+        //
+        // At most 8 keys are accepted and an overflow REJECTS THE WHOLE EVENT,
+        // which the outbox then drops permanently as a poison row. Four keys,
+        // four spare.
         const metadata: Record<string, string | number | boolean> = {
             selected_source_count: accepted,
-            reranking_used: (finiteInt(latency.rerankingMs) ?? 0) > 0,
             knowledge_source_type: dominant,
         };
-        const ctxMs = finiteInt(latency.promptCompositionMs);
-        if (ctxMs !== undefined) metadata.context_build_duration_ms = ctxMs;
-        // Named ttfb, not `llm_duration_ms`: the trace measures time to FIRST
-        // byte, and a field named for total duration would be read as one.
-        const ttfbMs = finiteInt(latency.providerTtfbMs);
-        if (ttfbMs !== undefined) metadata.llm_ttfb_ms = ttfbMs;
+        const retrievalMs = finiteInt(latency.retrievalMs);
+        if (retrievalMs !== undefined) metadata.retrieval_ms = retrievalMs;
+        const classifyMs = finiteInt(latency.classificationMs);
+        if (classifyMs !== undefined) metadata.classification_ms = classifyMs;
 
         const input: UsageEventInput = {
             event_type: status === 'failed' ? 'retrieval_failed' : 'retrieval_completed',
@@ -374,12 +376,22 @@ export function recordTurnTelemetry(trace: unknown): void {
             reported_count: candidates,
             metadata,
         };
+        // NAMING COLLISION, READ THIS BEFORE JOINING THE TWO TABLES.
+        // This is ORCHESTRATION time — resolve + classify + retrieve — and it
+        // ends before the prompt is composed or the provider is called. The
+        // ledger's reported_duration_ms, written by runTracked(), is the WHOLE
+        // handler including the LLM: in production the ledger median is ~4.6s
+        // and p95 ~30s, roughly an order of magnitude larger. Same column name,
+        // two tables, two different things.
         const totalMs = finiteInt(latency.totalMs);
         if (totalMs !== undefined) input.reported_duration_ms = totalMs;
-        const provider = identOrUndefined(lastProvider?.provider);
-        if (provider) input.provider = provider;
-        const model = identOrUndefined(lastProvider?.model);
-        if (model) input.model = model;
+
+        // provider/model are NOT set, and that is not an omission. This event
+        // is emitted from a trace finalized before any provider call, so
+        // providerAttempts is always empty (see orchestrator.ts). The first
+        // version read it anyway and wrote NULL on 100% of 173 rows. Attribute
+        // the provider where the provider call actually completes, or not at
+        // all.
         // Correlates this row with the rest of the turn inside the telemetry
         // table. Not the raw question, and not a licence identifier — the server
         // resolves the licence from auth and refuses a client-chosen one.

@@ -75,8 +75,9 @@ describe('turn telemetry emission', { skip: HAVE_BUILD ? false : 'run `npm run b
             ],
             providerAttempts: [{ provider: 'gemini', model: 'gemini-3.1-flash-lite', ok: true }],
             latency: {
-                retrievalMs: 210, rerankingMs: 48, promptCompositionMs: 33,
-                providerTtfbMs: 640, totalMs: 1180,
+                questionResolutionMs: 6, classificationMs: 90, retrievalMs: 210,
+                evidenceEvaluationMs: 12, rerankingMs: 0, promptCompositionMs: 0,
+                providerTtfbMs: 0, totalMs: 1180,
             },
             ...over,
         };
@@ -93,20 +94,37 @@ describe('turn telemetry emission', { skip: HAVE_BUILD ? false : 'run `npm run b
         assert.equal(rows[0].event_status, 'completed');
     });
 
-    test('counts, durations and provider are mapped from the trace', () => {
+    test('counts and measured durations are mapped from the trace', () => {
         emitted();
         const { recordTurnTelemetry } = require(INSTR);
         recordTurnTelemetry(trace());
         const [row] = emitted();
         assert.equal(row.reported_count, 15, 'candidateCount summed across attempts');
-        assert.equal(row.reported_duration_ms, 1180);
-        assert.equal(row.provider, 'gemini');
-        assert.equal(row.model, 'gemini-3.1-flash-lite');
+        assert.equal(row.reported_duration_ms, 1180, 'ORCHESTRATION time, not the whole handler');
         assert.equal(row.metadata.selected_source_count, 3);
-        assert.equal(row.metadata.reranking_used, true);
         assert.equal(row.metadata.knowledge_source_type, 'RESUME', 'the dominant type, not the first');
-        assert.equal(row.metadata.context_build_duration_ms, 33);
-        assert.equal(row.metadata.llm_ttfb_ms, 640);
+        assert.equal(row.metadata.retrieval_ms, 210);
+        assert.equal(row.metadata.classification_ms, 90);
+    });
+
+    // The first version of this emitter shipped llm_ttfb_ms,
+    // context_build_duration_ms and reranking_used, plus provider/model. All
+    // five are impossible to know at the emit point — the trace is finalized
+    // before the prompt is composed and before any provider call — so 173
+    // production rows carried 0/0/false/null/null without one of them being an
+    // observation. A measurement-shaped non-measurement is worse than an
+    // absent field, because a reader averages it.
+    test('fields that cannot be measured here are ABSENT, not zero', () => {
+        emitted();
+        const { recordTurnTelemetry } = require(INSTR);
+        recordTurnTelemetry(trace());
+        const [row] = emitted();
+        for (const dead of ['llm_ttfb_ms', 'context_build_duration_ms', 'reranking_used']) {
+            assert.ok(!(dead in row.metadata),
+                `${dead} cannot be measured at this point and must not be emitted`);
+        }
+        assert.equal(row.provider, undefined, 'providerAttempts is always empty here');
+        assert.equal(row.model, undefined);
     });
 
     test('a SUPERSEDED turn is interrupted, never completed', () => {
@@ -129,12 +147,13 @@ describe('turn telemetry emission', { skip: HAVE_BUILD ? false : 'run `npm run b
         assert.equal(row.event_status, 'failed');
     });
 
-    test('reranking_used is false when the reranker did not run', () => {
+    test('a turn that never retrieved reports a measured 0ms, not a missing field', () => {
         emitted();
         const { recordTurnTelemetry } = require(INSTR);
-        recordTurnTelemetry(trace({ latency: { rerankingMs: 0, totalMs: 90 } }));
+        recordTurnTelemetry(trace({ latency: { retrievalMs: 0, classificationMs: 4, totalMs: 90 } }));
         const [row] = emitted();
-        assert.equal(row.metadata.reranking_used, false);
+        assert.equal(row.metadata.retrieval_ms, 0, 'orchestrate() measured it; zero is the answer');
+        assert.equal(row.metadata.classification_ms, 4);
         assert.equal(row.metadata.knowledge_source_type, 'RESUME');
     });
 
