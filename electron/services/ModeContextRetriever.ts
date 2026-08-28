@@ -242,21 +242,42 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
     //     boundaries: we never split mid-page, but we DO start a new chunk
     //     at each [Page N] marker.
     const lines = content.split('\n');
-    const sections: Array<{ heading: string | null; body: string[] }> = [];
-    let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
+    // `path` (T9, 2026-08-28) is the heading ANCESTOR chain, tracked so this
+    // chunker prefixes chunks identically to the vector arm's
+    // `semanticChunker.semanticChunks`. The two must not drift: if the lexical
+    // arm keeps leaf-only headings while the vector arm carries paths, a query
+    // scores against two different texts for the same chunk. Only the PREFIX is
+    // shared — this chunker's own splitting, and in particular its round-7
+    // pathological-document safety nets, are deliberately left alone.
+    const sections: Array<{ heading: string | null; path: string[]; body: string[] }> = [];
+    let current: { heading: string | null; path: string[]; body: string[] } = { heading: null, path: [], body: [] };
+    const stack: Array<{ level: number; text: string }> = [];
 
     const headingRe = /^\s*(?:#{1,3}\s+|(?:\d+(?:\.\d+){0,2}\s+))/;
     const pageMarkerRe = /^\s*\[Page\s+\d+\]\s*$/;
 
+    /** Depth + display text, matching semanticChunker's `headingOf`. */
+    const headingParts = (line: string): { level: number; text: string } => {
+        const atx = /^\s*(#{1,6})\s+(.*)$/.exec(line);
+        if (atx) return { level: atx[1].length, text: atx[2].trim() };
+        const num = /^\s*(\d+(?:\.\d+){0,3})\s+(\S.*)$/.exec(line);
+        if (num) return { level: num[1].split('.').length, text: `${num[1]} ${num[2].trim()}` };
+        return { level: 1, text: line.trim() };
+    };
+
     const flush = () => {
         if (current.heading !== null || current.body.length > 0) sections.push(current);
-        current = { heading: null, body: [] };
+        current = { heading: null, path: [], body: [] };
     };
 
     for (const line of lines) {
         if (headingRe.test(line)) {
             // New heading → close the previous section, start a new one.
             flush();
+            const h = headingParts(line);
+            while (stack.length && stack[stack.length - 1].level >= h.level) stack.pop();
+            stack.push(h);
+            current.path = stack.map((x) => x.text);
             current.heading = line.trim();
         } else if (pageMarkerRe.test(line)) {
             // [Page N] is a SOFT boundary. We do NOT close the section here —
@@ -272,7 +293,14 @@ function chunkText(content: string, fineChunk: boolean = false): string[] {
 
     const chunks: string[] = [];
     for (const section of sections) {
-        const headingLine = section.heading ?? '';
+        // The heading-path prefix rides in FRONT of the heading line, so every
+        // chunk of "Idempotency" says which project's Idempotency it is. The
+        // document-level heading is dropped for the same reason it is in
+        // semanticChunker: identical on every chunk, so it discriminates none.
+        const ctx = section.path.length > 1
+            ? `[context: ${section.path.slice(1).join(' > ')}]`
+            : '';
+        const headingLine = [ctx, section.heading ?? ''].filter(Boolean).join(' ');
         const bodyText = section.body.join('\n').replace(/\s+/g, ' ').trim();
         const fullText = headingLine ? `${headingLine}\n${bodyText}` : bodyText;
         if (!fullText) continue;

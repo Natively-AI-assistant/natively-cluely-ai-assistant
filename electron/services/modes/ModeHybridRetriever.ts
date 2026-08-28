@@ -9,6 +9,7 @@ import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 import { wordsOf } from './lexicalTokens';
+import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -231,6 +232,15 @@ function hashContent(content: string): string {
     return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+/**
+ * The hash the index is keyed on: file content AND the chunker that produced
+ * the stored chunks. See CHUNKER_VERSION — a chunker change must invalidate the
+ * index, and content alone cannot express that.
+ */
+function indexHash(content: string): string {
+    return `${hashContent(content)}.c${CHUNKER_VERSION}`;
+}
+
 interface ChunkCandidate {
     sourceId: string;
     fileName: string;
@@ -411,7 +421,10 @@ export class ModeHybridRetriever {
     private async indexFileInner(file: ModeReferenceFile): Promise<void> {
         const content = (file.content || '').trim();
         if (!content) return;
-        const contentHash = hashContent(content);
+        // Versioned (T9): this is the value compared against the stored state, so
+        // it must agree with `needsReindexing`/`markIndexed` or a chunker change
+        // would be detected in one place and ignored in the other.
+        const contentHash = indexHash(content);
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
 
         const state = this.getIndexState(file.id);
@@ -623,7 +636,7 @@ export class ModeHybridRetriever {
             if (!file.content.trim()) continue;
 
             const content = file.content.trim();
-            const contentHash = hashContent(content);
+            const contentHash = indexHash(content);
 
             // Reuse cached chunks when the content is unchanged; otherwise re-chunk
             // and refresh the cache (audit finding #8 — was re-chunking every query).
@@ -677,51 +690,19 @@ export class ModeHybridRetriever {
         const sectionChunks = sectionAwareChunksFromMap(docMap, CHUNK_WORDS, CHUNK_OVERLAP);
         if (sectionChunks) return sectionChunks;
 
-        const lines = content.split('\n');
-        const sections: Array<{ heading: string | null; body: string[] }> = [];
-        let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
-
-        const headingRe = /^\s*(?:#{1,3}\s+|(?:\d+(?:\.\d+){0,2}\s+))/;
-        const pageMarkerRe = /^\s*\[Page\s+\d+\]\s*$/;
-
-        const flush = () => {
-            if (current.heading !== null || current.body.length > 0) sections.push(current);
-            current = { heading: null, body: [] };
-        };
-
-        for (const line of lines) {
-            if (headingRe.test(line)) {
-                flush();
-                current.heading = line.trim();
-            } else if (pageMarkerRe.test(line)) {
-                current.body.push(line);
-            } else {
-                current.body.push(line);
-            }
-        }
-        flush();
-
-        const chunks: string[] = [];
-        for (const section of sections) {
-            const headingLine = section.heading ?? '';
-            const bodyText = section.body.join('\n').replace(/\s+/g, ' ').trim();
-            const fullText = headingLine ? `${headingLine}\n${bodyText}` : bodyText;
-            if (!fullText) continue;
-            const words = fullText.split(/\s+/).filter(Boolean);
-            if (words.length === 0) continue;
-            if (words.length <= CHUNK_WORDS) {
-                chunks.push(fullText);
-                continue;
-            }
-            // Sentence-aware windowing: never split a normative clause across a
-            // chunk boundary (the RFC "MUST NOT add a byte order mark" bug).
-            const bodyForWindows = headingLine ? bodyText : fullText;
-            for (const window of sentenceAwareWindows(bodyForWindows, CHUNK_WORDS, CHUNK_OVERLAP)) {
-                const chunkText = headingLine ? `${headingLine}\n${window}` : window;
-                if (chunkText.trim()) chunks.push(chunkText);
-            }
-        }
-        return chunks;
+        // FLAT PROSE (no ToC): boundary-driven chunking with heading-path
+        // prefixes (T9, 2026-08-28). This replaces a 140-word window with 30-word
+        // overlap that prefixed only the LEAF heading — so a file with five
+        // projects x six identically-named sections produced five "Idempotency"
+        // chunks that were near-neighbours in embedding space with nothing to
+        // tell them apart. Measured: heading paths take top-1-correct-project
+        // from 1/5 to 5/5 when paired with entity anchoring, and anchoring alone
+        // recovers almost nothing without them.
+        //
+        // The reporter's 63k combined markdown has no ToC, so THIS is the path
+        // his file takes. See semanticChunker.ts for the size guardrails and for
+        // why CHUNKER_VERSION must be bumped with any change here.
+        return semanticChunks(content);
     }
 
     /**
@@ -2119,17 +2100,21 @@ export class ModeHybridRetriever {
         const state = this.getIndexState(file.id);
         if (!state) return true;  // Never indexed
 
-        const currentHash = hashContent(file.content);
-        return state.fileHash !== currentHash;
+        // CHUNKER_VERSION is folded in (T9, 2026-08-28) so a chunker change
+        // forces exactly one re-index per file. Without it this compares the RAW
+        // SOURCE only: a chunker change leaves old chunk text and old vectors in
+        // the index while the query path produces new chunk text, with no error
+        // and no warning. The same trap `embedding_space` already guards for a
+        // provider flip.
+        return state.fileHash !== indexHash(file.content);
     }
 
     /**
      * Mark a file as indexed (called after embedding)
      */
     markIndexed(file: ModeReferenceFile): void {
-        const contentHash = hashContent(file.content);
         const chunks = this.chunkText(file.content);
-        this.updateIndexState(file.id, contentHash, chunks.length);
+        this.updateIndexState(file.id, indexHash(file.content), chunks.length);
     }
 
     /**
