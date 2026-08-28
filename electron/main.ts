@@ -7820,7 +7820,15 @@ export class AppState {
     // changes.  The OS can silently drop Carbon/IOKit hotkey registrations when
     // window focusability or visibility changes; revalidating surgically
     // re-registers any that were lost without clobbering the others.
-    KeybindManager.getInstance().revalidateShortcuts();
+    //
+    // Wrapped for the same reason as the resume/unlock/display callers: shortcut
+    // recovery is a best-effort side task of toggling passthrough, and must never
+    // be able to take the main process — or the toggle itself — down with it.
+    try {
+      KeybindManager.getInstance().revalidateShortcuts();
+    } catch (err) {
+      console.error('[Main] revalidateShortcuts on passthrough toggle threw:', err);
+    }
 
     this._broadcastToAllWindows('overlay-mouse-passthrough-changed', state);
   }

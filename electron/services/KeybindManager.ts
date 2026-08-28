@@ -8,6 +8,7 @@ import {
     beginFullRegistrationPass,
     listRegistrationFailures,
 } from './keybindRegistrationState';
+import { isRegisterableAccelerator, probeAccelerator } from './acceleratorValidation';
 import { buildChordTable, type Win32Chord } from './winChord';
 
 export interface KeybindConfig {
@@ -84,6 +85,12 @@ export class KeybindManager {
     // `keybinds:get-registration-failures` to seed its conflict UI. Rules live
     // in keybindRegistrationState.ts so they can be tested without Electron.
     private registrationFailures: KeybindRegistrationFailures = NO_REGISTRATION_FAILURES;
+    // Accelerators already reported as unrepresentable. Purely a log damper: the
+    // health check re-tests every keybind every 10 s, and without this an
+    // accelerator the user cannot see is broken would print an error six times a
+    // minute for the life of the process. Cleared by a full re-registration pass
+    // so a rebind is reported afresh.
+    private unusableAccelerators: Set<string> = new Set();
     // How often to poll that OS-registered shortcuts are still alive (ms).
     // 10 s is aggressive enough to recover within one poll cycle after a
     // passthrough toggle, sleep/wake, or workspace switch.
@@ -204,6 +211,20 @@ export class KeybindManager {
                     if (this.keybinds.has(fileKb.id)) {
                         const current = this.keybinds.get(fileKb.id)!;
 
+                        // Drop an accelerator Electron cannot even convert (e.g. a
+                        // bare "₹" recorded from an Option+key press on a non-US
+                        // layout). Every globalShortcut call with it throws, so
+                        // leaving it in the map re-arms the crash on every launch.
+                        // Clearing it here — and persisting below — is what recovers
+                        // a user who is already crash-looping, without making them
+                        // hand-edit keybinds.json.
+                        if (fileKb.accelerator && fileKb.accelerator.trim() !== ''
+                            && !isRegisterableAccelerator(fileKb.accelerator)) {
+                            console.warn(`[KeybindManager] Discarding unusable accelerator for ${fileKb.id}: ${JSON.stringify(fileKb.accelerator)}`);
+                            fileKb.accelerator = '';
+                            hadConflicts = true; // reuse the same persist trigger
+                        }
+
                         // Deduplicate: If another keybind is already using this accelerator, skip or clear it
                         if (fileKb.accelerator && fileKb.accelerator.trim() !== '') {
                             let conflictId: string | null = null;
@@ -262,6 +283,19 @@ export class KeybindManager {
 
     public setKeybind(id: string, accelerator: string) {
         if (!this.keybinds.has(id)) return;
+
+        // Refuse an accelerator Electron cannot convert rather than persisting it
+        // and discovering the problem from a thrown TypeError later. Keeping the
+        // existing binding is the least surprising outcome: the recorder shows the
+        // old chord still in place, which reads as "that key didn't take".
+        if (accelerator && accelerator.trim() !== '' && !isRegisterableAccelerator(accelerator)) {
+            console.warn(`[KeybindManager] Rejected unusable accelerator for ${id}: ${JSON.stringify(accelerator)}`);
+            // Settings applies the new combo optimistically while this round-trips,
+            // so returning silently would leave it displaying a shortcut main
+            // never accepted. Push the authoritative table back instead.
+            this.broadcastUpdate();
+            return;
+        }
 
         const currentKb = this.keybinds.get(id)!;
         const oldAccelerator = currentKb.accelerator || '';
@@ -334,6 +368,7 @@ export class KeybindManager {
 
     public registerGlobalShortcuts() {
         globalShortcut.unregisterAll();
+        this.unusableAccelerators.clear();
         // Drop verdicts this pass is about to re-derive; KEEP verdicts for ids
         // it will not attempt. The predicate mirrors the filter in the loop
         // below, so the two cannot drift: an id is re-tested only if it is
@@ -356,6 +391,15 @@ export class KeybindManager {
                 if (!this.shouldRegister(kb.id)) return;
 
                 const acc = kb.accelerator.trim();
+                // Never hand Electron a string it cannot convert: register(),
+                // unregister() and isRegistered() all THROW on one rather than
+                // returning false. Badged like an OS conflict because the
+                // user-visible symptom is the same — a hotkey that never fires.
+                if (!isRegisterableAccelerator(acc)) {
+                    console.error(`[KeybindManager] Unusable accelerator for ${kb.id}, not registering: ${JSON.stringify(acc)}`);
+                    this.markRegistration(kb.id, acc, false);
+                    return;
+                }
                 try {
                     globalShortcut.register(acc, () => {
                         this.onShortcutTriggeredCallbacks.forEach(cb => cb(kb.id));
@@ -406,7 +450,24 @@ export class KeybindManager {
             if (!this.shouldRegister(kb.id)) return;
 
             const acc = kb.accelerator.trim();
-            if (globalShortcut.isRegistered(acc)) return; // still alive — nothing to do
+            // THIS probe is what killed the app. A bare globalShortcut.isRegistered()
+            // here sat outside the try below, so Electron's conversion TypeError for
+            // an unrepresentable accelerator escaped the forEach, escaped the
+            // health-check setInterval, and became an uncaughtException — a fatal
+            // main-process error ~10 s after every launch. probeAccelerator()
+            // validates first and swallows anything the validator has not learned.
+            const state = probeAccelerator(acc, a => globalShortcut.isRegistered(a));
+            if (state === 'alive') return; // still alive — nothing to do
+            if (state === 'invalid') {
+                // Unrecoverable by definition, so do not count it as "lost" and do
+                // not retry it every 10 s. Log once per process, not per tick.
+                if (!this.unusableAccelerators.has(acc)) {
+                    this.unusableAccelerators.add(acc);
+                    console.error(`[KeybindManager] Accelerator ${JSON.stringify(acc)} (${kb.id}) is not representable — skipping until it is rebound.`);
+                }
+                this.markRegistration(kb.id, acc, false);
+                return;
+            }
 
             lost++;
             try {
