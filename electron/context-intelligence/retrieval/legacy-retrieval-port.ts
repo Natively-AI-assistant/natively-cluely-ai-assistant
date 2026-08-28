@@ -18,6 +18,7 @@ import type { TurnDecision, EvidenceItem, SourceType } from '../contracts/types'
 import type { RetrievalPort } from '../orchestration/orchestrator';
 import type { RetrievalAttemptTrace } from '../observability/answer-trace';
 import { adaptLegacyChunks, type LegacyChunk } from './legacy-adapter';
+import { extractIdentifiers, positionalDirection, POSITIONAL_RE } from './query-rewrite';
 
 /** The shape the legacy retriever returns (ModeHybridRetriever.retrieve). */
 export interface LegacyRetrieveFn {
@@ -67,28 +68,9 @@ export interface LegacyPortDeps {
 // ONE bounded retry with a distilled query, fired only when the admitted
 // evidence visibly lacks what was asked for.
 
-/** Hyphenated codes: ≥2 hyphen segments AND (a digit or all-caps), so
- *  "QF-2026-0514" and "TECH-PDF-START-481" match while hyphenated prose
- *  ("state-of-the-art", "end-to-end") does not. */
-const IDENTIFIER_RE = /\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+){2,}\b/g;
-
-const extractIdentifiers = (question: string): string[] =>
-  (question.match(IDENTIFIER_RE) ?? ([] as string[])).filter((t) => /\d/.test(t) || t === t.toUpperCase());
-
-/** Positional-page qualifiers: the compound form only ("last-page", "first
- *  section"), never a bare positional word — "last quarter revenue" must not
- *  trigger document-position targeting. */
-const POSITIONAL_RE = /\b(first|last|final|middle|start|starting|opening|end|ending|closing)[-\s](page|pages|section|paragraph|line|chunk)s?\b/i;
-
-type PositionalDirection = 'first' | 'last' | 'middle';
-
-const positionalDirection = (question: string): PositionalDirection | undefined => {
-  const m = question.match(POSITIONAL_RE);
-  if (!m) return undefined;
-  const w = m[1].toLowerCase();
-  if (w === 'middle') return 'middle';
-  return w === 'first' || w === 'start' || w === 'starting' || w === 'opening' ? 'first' : 'last';
-};
+// Extracted to retrieval/query-rewrite.ts (2026-08-28) so the post-stream
+// doc-grounded validator can reuse the same distillation instead of retrying
+// with the query text that just failed. Behaviour here is unchanged.
 
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
   const now = deps.now ?? (() => 0);

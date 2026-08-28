@@ -323,7 +323,24 @@ export type IntelligenceFlagKey =
   // turn has none.
   //
   // See docs/retrieval-handoff/02-WTA-VS-MANUAL.md §3b.
-  | 'wtaGovernanceYieldsToV3';
+  | 'wtaGovernanceYieldsToV3'
+  // ── The doc-grounded validator checks the block that was SENT (2026-08-28) ──
+  // The post-stream validator re-ran a separate LEGACY retrieval and judged the
+  // streamed answer against it. Under V3 the answer was grounded in V3's
+  // evidence — a different set — so a correct answer could be overwritten with
+  // "I could not find that in the retrieved sections of the document." by a
+  // witness who was not in the room. With this ON, a V3-composed turn is
+  // validated against `v3Prompt.evidenceBlock`, and a V3 turn that carried no
+  // evidence is not doc-validated at all (there is nothing it could have been
+  // grounded in, and the composer already shaped the answer around that).
+  //
+  // This is deliberately NOT a blanket V3 exemption: V3 is the default path, so
+  // exempting it would retire the zero-fabrication guard for nearly every WTA
+  // turn. `computeEvidenceCoverage` still has the final word.
+  //
+  // Default ON via a literal, never isInternalDevTestContext.
+  // See docs/retrieval-handoff/01-ROOT-CAUSES.md RC7(b).
+  | 'docGroundedValidatorUsesSentEvidence';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -566,6 +583,7 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   promptSystemV2: { env: 'NATIVELY_PROMPT_SYSTEM_V2', setting: 'promptSystemV2Enabled', default: true },
   // Literal `true`, NOT isInternalDevTestContext — see the union member's note.
   wtaGovernanceYieldsToV3: { env: 'NATIVELY_WTA_GOVERNANCE_YIELDS_TO_V3', setting: 'wtaGovernanceYieldsToV3Enabled', default: true },
+  docGroundedValidatorUsesSentEvidence: { env: 'NATIVELY_DOC_GROUNDED_VALIDATOR_SENT_EVIDENCE', setting: 'docGroundedValidatorUsesSentEvidenceEnabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

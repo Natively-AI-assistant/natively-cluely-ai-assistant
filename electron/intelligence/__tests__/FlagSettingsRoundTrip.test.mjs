@@ -129,6 +129,9 @@ const EXPECTED_KEYS = [
   // invariant LLMHelper already enforces, and a fix for a production-only
   // failure must not resolve differently in dev/test.
   'wtaGovernanceYieldsToV3',
+  // The doc-grounded validator checks the block that was SENT (2026-08-28) —
+  // default ON, literal (never isInternalDevTestContext).
+  'docGroundedValidatorUsesSentEvidence',
 ];
 
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
@@ -169,6 +172,9 @@ const DEFAULT_ON_KEYS = new Set([
   // invariant LLMHelper already enforces, and a fix for a production-only
   // failure must not resolve differently in dev/test.
   'wtaGovernanceYieldsToV3',
+  // The doc-grounded validator checks the block that was SENT (2026-08-28) —
+  // default ON, literal (never isInternalDevTestContext).
+  'docGroundedValidatorUsesSentEvidence',
 ]);
 
 const ALL_ENV_VARS = [

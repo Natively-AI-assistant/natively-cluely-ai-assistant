@@ -123,10 +123,28 @@ describe('T1 — technical-interview is covered by the PROJECT_FILE half', () =>
   // PROJECT_FILE. Widening only REFERENCE_FILE would have left the mode the
   // report was actually about unfixed — which is why PROJECT_FILE and
   // CODING_SAMPLE are widened alongside it.
+  // EXPECTED TO CHANGE AT T8. Adding REFERENCE_FILE to technical-interview's
+  // allowlist flips this stamp from PROJECT_FILE to REFERENCE_FILE. That is not
+  // a regression — both are widened by T1, so the reachability assertion below
+  // holds either way. Update the stamp, keep the reachability.
   test('a .md in technical-interview is stamped PROJECT_FILE and is admissible', () => {
     const p = MODE_POLICIES['technical-interview'];
     assert.equal(sourceTypeForFile(NAME, BODY, p.allowedSourceTypes), 'PROJECT_FILE');
     assert.equal(reaches('technical-interview', SECOND_PERSON[0]), true);
+  });
+
+  test('the fix is not inert in production: mode reference files set hasAttachedDocuments', () => {
+    // The whole widening is gated on `hasAttachedDocuments`, so it is worth
+    // pinning what feeds that flag. `attachedSourceCount` comes from
+    // `getReferenceFiles(modeId)` on BOTH surfaces — IntelligenceEngine.ts:5232
+    // (live audio) and ipcHandlers.ts:1137 (manual chat) — so a file uploaded
+    // to a MODE counts, not only a file attached to one turn. Had it been the
+    // latter, this fix would have passed every test here and done nothing for
+    // the reported case, which is a mode-attached reference file.
+    const withDocs = classify(SECOND_PERSON[0], 'general', true);
+    const withoutDocs = classify(SECOND_PERSON[0], 'general', false);
+    assert.ok(withDocs.requiredSourceTypes.includes('REFERENCE_FILE'));
+    assert.ok(!withoutDocs.requiredSourceTypes.includes('REFERENCE_FILE'));
   });
 });
 
