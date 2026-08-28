@@ -16,12 +16,17 @@
 // minutes. The end-to-end proof is recorded in 10_BENCHMARK_RESULTS.md.
 
 import { test, describe } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-const { ModeHybridRetriever } = await import(
-  path.resolve(process.cwd(), 'dist-electron/electron/services/modes/ModeHybridRetriever.js')
-);
+// WINDOWS (2026-08-29): `await import()` needs a file:// URL, not a bare
+// absolute path. On POSIX `import('/Users/…')` happens to resolve; on Windows
+// `import('C:\\…')` throws ERR_UNSUPPORTED_ESM_URL_SCHEME, and because these
+// imports run at MODULE LOAD the whole file fails before a single test runs —
+// which is why this file showed up as one opaque file-level ✖ in the Windows
+// leg rather than as a failing assertion. `pathToFileURL` is the fix.
+const { ModeHybridRetriever } = await import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron/services/modes/ModeHybridRetriever.js')).href);
 
 /** Records the size of every batch handed to the embedder. */
 function makeHarness(providerName) {
@@ -91,8 +96,7 @@ describe('F22 — indexing batch is provider-aware', () => {
     // The property is "batching embedded EVERY chunk", so it is now asserted
     // against the chunker's actual output instead of a magic number — which
     // also makes it immune to the next legitimate chunking change.
-    const { semanticChunks } = await import(
-      path.resolve(process.cwd(), 'dist-electron/electron/services/modes/semanticChunker.js'));
+    const { semanticChunks } = await import(pathToFileURL(path.resolve(process.cwd(), 'dist-electron/electron/services/modes/semanticChunker.js')).href);
     const expected = semanticChunks(BIG_DOC).length;
     assert.ok(expected > 1, 'the fixture must produce multiple chunks for this test to mean anything');
 
