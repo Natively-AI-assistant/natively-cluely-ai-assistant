@@ -18,6 +18,61 @@ const RETRY_DELAY_BASE_MS = 2000;
 // 30s is generous for large chunks on slow connections (typical: 200-800ms).
 const EMBED_TIMEOUT_MS = 30_000;
 
+// ── T13 / RC12: query-path hysteresis (2026-08-28) ──────────────────────────
+//
+// THE DAMAGE. A single Gemini 429 or timeout on the QUERY path used to fall
+// straight through to MiniLM and PROMOTE it. Promotion changes the active
+// embedding space to `local:…:384`, which makes every persisted Gemini vector
+// in the corpus unusable at a stroke: ~90 chunks must be re-embedded
+// ephemerally inside one timeout, and on partial failure the remainder degrade
+// to FTS-only. One transient blip therefore costs the whole session its
+// semantic arm — and `text-embedding-004` returning 404 mid-investigation is a
+// live demonstration of how ordinary that blip is.
+//
+// The startup probe already solved this shape (EmbeddingProviderResolver:
+// CLOUD_PROBE_ATTEMPTS/BACKOFF, whose docblock describes this exact thrash).
+// This applies the same discipline to the query path, which never had it.
+//
+// The ordering is the point: retry the PRIMARY in place first, and only after
+// sustained failure consider a fallback that costs the session its space.
+const QUERY_RETRY_ATTEMPTS = 2;
+const QUERY_RETRY_BACKOFF_MS = [1_000, 3_000];
+/** Jitter so N concurrent turns do not retry in lockstep against a rate limit. */
+const QUERY_RETRY_JITTER_MS = 250;
+/**
+ * Consecutive HARD failures (primary exhausted its retries) before a mid-session
+ * promotion is allowed.
+ *
+ * Deliberately higher than the startup probe's 3: a promotion here is strictly
+ * more expensive than one at startup, because a running session already holds
+ * vectors in the primary space that the promotion strands.
+ */
+const PROMOTE_AFTER_CONSECUTIVE_FAILURES = 5;
+/** How long a hard failure counts toward the streak. */
+const FAILURE_WINDOW_MS = 5 * 60_000;
+/** How often to re-probe the primary after a promotion, so it can be demoted. */
+const PRIMARY_REPROBE_INTERVAL_MS = 60_000;
+
+/** `Retry-After` in seconds or as an HTTP date, when the provider sent one. */
+function retryAfterMs(err: unknown): number | null {
+    const raw = (err as { retryAfter?: unknown; headers?: Record<string, unknown> })?.retryAfter
+        ?? (err as { headers?: Record<string, unknown> })?.headers?.['retry-after'];
+    if (raw == null) return null;
+    const asNumber = Number(raw);
+    if (Number.isFinite(asNumber) && asNumber >= 0) return Math.min(asNumber * 1000, 30_000);
+    const asDate = Date.parse(String(raw));
+    if (Number.isFinite(asDate)) return Math.max(0, Math.min(asDate - Date.now(), 30_000));
+    return null;
+}
+
+const isRateLimited = (err: unknown): boolean => {
+    const status = (err as { status?: number; statusCode?: number })?.status
+        ?? (err as { statusCode?: number })?.statusCode;
+    if (status === 429) return true;
+    return /\b429\b|rate.?limit|too many requests|quota/i.test(
+        err instanceof Error ? err.message : String(err ?? ''));
+};
+
 /**
  * EmbeddingPipeline - Handles post-meeting embedding generation
  * 
@@ -604,17 +659,73 @@ export class EmbeddingPipeline {
             const space = active.space;
             if (!space) throw new Error('Embedding provider has no active space');
             return { embeddings, space, provider: active.name, dimensions: active.dimensions };
-        } catch (primaryError) {
+        } catch (firstError) {
+            // ── T13 / D4.6: INGESTION retries the primary too ────────────────
+            //
+            // This path is how a reference file gets PERMANENTLY indexed in the
+            // MiniLM space. A rate-limit burst during ingestion fell straight to
+            // the fallback and promoted it, so the file's vectors were written
+            // with `space = local:…:384` and persisted that way — the query path
+            // then has to match a space the rest of the corpus is not in. The
+            // query path's own hysteresis cannot help: by the time a query runs,
+            // the wrong vectors are already on disk.
+            //
+            // Same ladder as the query path, and it shares the SAME streak
+            // counter deliberately: a burst that is hammering ingestion is the
+            // same outage the query path is seeing, and two independent counters
+            // would each need five failures to agree on one fact.
+            let primaryError: unknown = firstError;
+            for (let attempt = 0; attempt < QUERY_RETRY_ATTEMPTS; attempt++) {
+                const base = retryAfterMs(primaryError) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
+                const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
+                console.warn(
+                    `[EmbeddingPipeline] Batch embedding failed via ${active?.name ?? 'unknown'} `
+                    + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,
+                    primaryError instanceof Error ? primaryError.message : primaryError,
+                    isRateLimited(primaryError) ? '(rate-limited)' : ''
+                );
+                await new Promise((r) => setTimeout(r, wait));
+                try {
+                    if (!active) throw primaryError;
+                    const embeddings = await this.getEmbeddings(texts);
+                    const space = active.space;
+                    if (!space) throw new Error('Embedding provider has no active space');
+                    this.noteQuerySuccess();
+                    return { embeddings, space, provider: active.name, dimensions: active.dimensions };
+                } catch (retryErr) {
+                    primaryError = retryErr;
+                }
+            }
+
             const fallback = this.fallbackProvider;
             // If no fallback is configured, or the primary IS already the fallback
             // (local-only mode where `this.provider === this.fallbackProvider`),
             // re-running the same call would silently double-embed and re-trigger
             // the same timeout. Surface the original failure instead.
             if (!fallback || fallback === this.provider) throw primaryError;
+
+            const hardFailures = this.noteQueryHardFailure('ingest_embed_hard_failure');
+            if (hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES) {
+                // FAIL THE BATCH rather than write vectors into a space the rest
+                // of the corpus is not in. The caller
+                // (ModeHybridRetriever.indexFileInner) already treats a batch
+                // failure as "persist the chunk TEXT, mark the file for a later
+                // retry" — lexical-only until the primary is back is strictly
+                // better than permanently-wrong-space, because the second is
+                // invisible and never retried.
+                console.warn(
+                    `[EmbeddingPipeline] Ingestion batch left unembedded rather than written to the `
+                    + `fallback space (${hardFailures}/${PROMOTE_AFTER_CONSECUTIVE_FAILURES} consecutive `
+                    + `failures; active space unchanged):`,
+                    primaryError instanceof Error ? primaryError.message : primaryError
+                );
+                throw primaryError;
+            }
+
             console.warn(
-                `[EmbeddingPipeline] Primary batch embedding failed via ${this.provider?.name ?? 'unknown'}; ` +
-                `falling back to ${fallback.name}:`,
-                primaryError instanceof Error ? primaryError.message : primaryError
+                `[EmbeddingPipeline] PROMOTING ${fallback.name} from the INGESTION path: ${hardFailures} `
+                + `consecutive hard failures on ${active?.name ?? 'unknown'}. Failure history: `
+                + this.queryFailureHistory.map((h) => `${new Date(h.at).toISOString()} ${h.reason}`).join('; ')
             );
             const embeddings = await new Promise<number[][]>((resolve, reject) => {
                 const timer = setTimeout(() => {
@@ -628,6 +739,7 @@ export class EmbeddingPipeline {
                 );
             });
             this.promoteFallbackProvider(fallback);
+            if (active) this.schedulePrimaryReprobe(active);
             return { embeddings, space: fallback.space, provider: fallback.name, dimensions: fallback.dimensions };
         }
     }
@@ -690,20 +802,143 @@ export class EmbeddingPipeline {
             );
         });
 
-        try {
-            return await runQuery(provider, 'live-query');
-        } catch (primaryError) {
-            const fallback = this.fallbackProvider;
-            if (!fallback || fallback === provider) throw primaryError;
+        // ── T13: retry the PRIMARY in place before considering a fallback ────
+        //
+        // This used to be a single attempt, and any failure fell through to
+        // MiniLM AND promoted it — so one 429 cost the session its embedding
+        // space. Two bounded retries with jittered backoff absorb exactly the
+        // failures that were never worth a promotion. `Retry-After` is honoured
+        // when the provider sends one; jitter keeps concurrent turns from
+        // retrying in lockstep against the same rate limit.
+        let primaryError: unknown;
+        for (let attempt = 0; attempt <= QUERY_RETRY_ATTEMPTS; attempt++) {
+            try {
+                const embedding = await runQuery(provider, attempt === 0 ? 'live-query' : `live-query-retry-${attempt}`);
+                this.noteQuerySuccess();
+                return embedding;
+            } catch (err) {
+                primaryError = err;
+                if (attempt === QUERY_RETRY_ATTEMPTS) break;
+                const base = retryAfterMs(err) ?? this.queryRetryBackoffMs[attempt] ?? 3_000;
+                const wait = base + Math.floor(Math.random() * QUERY_RETRY_JITTER_MS);
+                console.warn(
+                    `[EmbeddingPipeline] Primary query embedding failed via ${provider.name} `
+                    + `(attempt ${attempt + 1}/${QUERY_RETRY_ATTEMPTS + 1}); retrying in ${wait}ms:`,
+                    err instanceof Error ? err.message : err,
+                    isRateLimited(err) ? '(rate-limited)' : ''
+                );
+                await new Promise((r) => setTimeout(r, wait));
+            }
+        }
+
+        // The primary is HARD-failed for this turn. Whether that justifies
+        // changing the session's embedding space is a separate question, and
+        // the answer is almost always no.
+        const hardFailures = this.noteQueryHardFailure();
+        const fallback = this.fallbackProvider;
+
+        if (!fallback || fallback === provider || hardFailures < PROMOTE_AFTER_CONSECUTIVE_FAILURES) {
+            // DEGRADE THIS TURN, DON'T FLIP THE SESSION. Throwing here leaves
+            // `getActiveSpaceKey()` untouched, so every persisted vector stays
+            // usable and the caller falls back to its lexical arm for this one
+            // question. That is a latency and quality cost measured in ONE turn;
+            // a promotion is a cost measured in the whole session.
+            //
+            // Querying MiniLM without promoting would be worse than either: the
+            // query vector would live in a space none of the persisted document
+            // vectors share, and cross-space cosine is guarded to 0 — so it
+            // would return confident nonsense instead of an honest miss.
             console.warn(
-                `[EmbeddingPipeline] Primary query embedding failed via ${provider.name}; ` +
-                `falling back to ${fallback.name}:`,
+                `[EmbeddingPipeline] Query embedding degraded to lexical-only for this turn `
+                + `(${hardFailures}/${PROMOTE_AFTER_CONSECUTIVE_FAILURES} consecutive failures; `
+                + `active space unchanged):`,
                 primaryError instanceof Error ? primaryError.message : primaryError
             );
-            const embedding = await runQuery(fallback, 'fallback-live-query');
-            this.promoteFallbackProvider(fallback);
-            return embedding;
+            throw primaryError;
         }
+
+        console.warn(
+            `[EmbeddingPipeline] PROMOTING ${fallback.name}: ${hardFailures} consecutive hard `
+            + `failures on ${provider.name} within ${Math.round(FAILURE_WINDOW_MS / 60000)}min. `
+            + `Every persisted vector in the ${provider.space} space becomes unusable until the `
+            + `primary recovers. Failure history: `
+            + this.queryFailureHistory.map((f) => `${new Date(f.at).toISOString()} ${f.reason}`).join('; ')
+        );
+        const embedding = await runQuery(fallback, 'fallback-live-query');
+        this.promoteFallbackProvider(fallback);
+        this.schedulePrimaryReprobe(provider);
+        return embedding;
+    }
+
+    // ── T13 failure accounting ───────────────────────────────────────────────
+
+    /** Hard failures inside the sliding window, newest last. */
+    private queryFailureHistory: Array<{ at: number; reason: string }> = [];
+    /**
+     * Retry backoff, overridable ONLY so tests can run in milliseconds.
+     *
+     * A suite that genuinely waited 1s + 3s per failed call takes two minutes
+     * for eight cases, and a two-minute suite is a suite that gets skipped —
+     * which is how a guard against silent degradation silently degrades. The
+     * production default is the constant; nothing in the app writes this.
+     */
+    private queryRetryBackoffMs: number[] = QUERY_RETRY_BACKOFF_MS;
+    private primaryReprobeTimer: ReturnType<typeof setInterval> | null = null;
+
+    /** One success clears the streak — the bar is CONSECUTIVE failures. */
+    private noteQuerySuccess(): void {
+        if (this.queryFailureHistory.length) this.queryFailureHistory = [];
+    }
+
+    private noteQueryHardFailure(reason = 'query_embed_hard_failure'): number {
+        const now = Date.now();
+        this.queryFailureHistory = this.queryFailureHistory
+            .filter((f) => now - f.at <= FAILURE_WINDOW_MS)
+            .concat({ at: now, reason });
+        return this.queryFailureHistory.length;
+    }
+
+    /**
+     * After a promotion, keep asking the primary whether it is back, and demote
+     * as soon as it answers.
+     *
+     * Without this a promotion is permanent for the session: nothing else ever
+     * re-tries the primary, so a two-minute outage costs the user their cloud
+     * embedding space until they restart the app. Demotion restores the space
+     * the persisted vectors are ALREADY in, so it causes no re-index — it ends
+     * one.
+     */
+    private schedulePrimaryReprobe(primary: IEmbeddingProvider): void {
+        if (this.primaryReprobeTimer) return;
+        this.primaryReprobeTimer = setInterval(() => {
+            void (async () => {
+                if (this.provider === primary) {          // already demoted
+                    this.stopPrimaryReprobe();
+                    return;
+                }
+                try {
+                    await primary.embedQuery('probe');
+                } catch {
+                    return;                                // still down; try again later
+                }
+                console.log(
+                    `[EmbeddingPipeline] ${primary.name} recovered — demoting the fallback and `
+                    + `restoring the ${primary.space} space (no re-index: the persisted vectors `
+                    + `are already in it).`
+                );
+                this.promoteFallbackProvider(primary);     // idempotent; persists the space
+                this.queryFailureHistory = [];
+                this.stopPrimaryReprobe();
+            })();
+        }, PRIMARY_REPROBE_INTERVAL_MS);
+        // Never hold the event loop open for a background probe.
+        (this.primaryReprobeTimer as unknown as { unref?: () => void }).unref?.();
+    }
+
+    private stopPrimaryReprobe(): void {
+        if (!this.primaryReprobeTimer) return;
+        clearInterval(this.primaryReprobeTimer);
+        this.primaryReprobeTimer = null;
     }
 
     /**

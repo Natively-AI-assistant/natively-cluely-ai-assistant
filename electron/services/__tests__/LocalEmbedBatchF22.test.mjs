@@ -83,9 +83,23 @@ describe('F22 — indexing batch is provider-aware', () => {
   });
 
   test('every chunk is still embedded — batching is not truncation', async () => {
+    // REWRITTEN 2026-08-28 (T9). This asserted `total > 100`, a number that
+    // described the OLD 140-word window chunker rather than the property under
+    // test. Boundary-driven chunks are larger, so the same document now yields
+    // ~38 chunks and the old threshold failed on a correct result.
+    //
+    // The property is "batching embedded EVERY chunk", so it is now asserted
+    // against the chunker's actual output instead of a magic number — which
+    // also makes it immune to the next legitimate chunking change.
+    const { semanticChunks } = await import(
+      path.resolve(process.cwd(), 'dist-electron/electron/services/modes/semanticChunker.js'));
+    const expected = semanticChunks(BIG_DOC).length;
+    assert.ok(expected > 1, 'the fixture must produce multiple chunks for this test to mean anything');
+
     const { hr, batchSizes } = makeHarness('local');
     await hr.indexFile({ id: 'f3', fileName: 'big.txt', content: BIG_DOC });
     const total = batchSizes.reduce((a, b) => a + b, 0);
-    assert.ok(total > 100, `expected the whole document to be embedded, saw ${total} chunks`);
+    assert.equal(total, expected,
+      `batching must embed every chunk: chunker produced ${expected}, batches carried ${total}`);
   });
 });

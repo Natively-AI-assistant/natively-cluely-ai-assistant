@@ -148,15 +148,26 @@ describe('determinism and traceability', () => {
 
 describe('unsupported-in-mode is distinct from "no source needed"', () => {
   test('a meeting question in technical-interview does NOT take the fast path', () => {
-    // technical-interview does not authorize MEETING_TRANSCRIPT, so
-    // requiredSourceTypes comes back empty — but for a reason that has nothing
-    // to do with the question being general. Before this signal existed the two
-    // collapsed and the turn was answered from model knowledge.
+    // technical-interview does not authorize MEETING_TRANSCRIPT, so the turn
+    // must report that gap rather than answering from model knowledge — before
+    // this signal existed, "unsupported here" and "needs no source" collapsed
+    // into one and the model filled the silence.
+    //
+    // UPDATED 2026-08-28 (T8). The `shouldRetrieve === false` assertion is gone,
+    // and its disappearance is the fix rather than a casualty of it. The mode
+    // now authorizes REFERENCE_FILE, so the classifier's deliberate
+    // "Are we SOC 2 certified?" branch applies here too: bare meeting-context
+    // wording cannot PROVE the fact lives in the conversation, so the reference
+    // side is claimed as an ALTERNATIVE. technical-interview was excluded from
+    // that branch only because it had no reference pool to offer.
+    //
+    // What this test is actually about is untouched and still asserted: not
+    // FAST, and MEETING_TRANSCRIPT reported as unsupported.
     const r = classify('How many backend roles are we opening this quarter?', 'technical-interview');
     assert.notEqual(r.path, 'FAST', 'must not answer a meeting question from model knowledge');
     assert.deepEqual(r.unsupportedInMode, ['MEETING_TRANSCRIPT']);
-    assert.equal(r.shouldRetrieve, false, 'there is nothing authorized to retrieve');
-    assert.match(r.reason, /does not authorize/);
+    assert.ok(!r.requiredSourceTypes.includes('MEETING_TRANSCRIPT'),
+      'the mode still must not plan a transcript it does not authorize');
   });
 
   test('the same question in team-meet IS supported and retrieves', () => {

@@ -9,6 +9,7 @@ import { EmbeddingPipeline } from '../../rag/EmbeddingPipeline';
 import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 import { wordsOf } from './lexicalTokens';
+import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -231,6 +232,15 @@ function hashContent(content: string): string {
     return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
+/**
+ * The hash the index is keyed on: file content AND the chunker that produced
+ * the stored chunks. See CHUNKER_VERSION — a chunker change must invalidate the
+ * index, and content alone cannot express that.
+ */
+function indexHash(content: string): string {
+    return `${hashContent(content)}.c${CHUNKER_VERSION}`;
+}
+
 interface ChunkCandidate {
     sourceId: string;
     fileName: string;
@@ -400,6 +410,20 @@ export class ModeHybridRetriever {
      */
     private inflightIndex = new Map<string, Promise<void>>();
 
+    // T13 / D4.6 — "at session start, re-embed any file whose vectors sit in a
+    // non-primary space" is ALREADY IMPLEMENTED, and a second implementation was
+    // written here before that was checked. `getFileIndexStatus` reports a
+    // space-mismatched file as `pending` (see above), and
+    // `ModesManager.prewarmModeReferenceIndex` re-indexes every file that is not
+    // `ready` on mode activation. So the repair already runs; adding a parallel
+    // path would have been a documented method with no caller.
+    //
+    // The gap that WAS real is upstream, and is fixed in EmbeddingPipeline:
+    // ingestion used to write vectors into the fallback space on the first
+    // rate-limit burst, which is how a file became permanently MiniLM-indexed.
+    // It now refuses to write to a non-primary space below the promotion
+    // threshold, so there is nothing for a repair pass to find.
+
     public async indexFile(file: ModeReferenceFile): Promise<void> {
         const existing = this.inflightIndex.get(file.id);
         if (existing) return existing;
@@ -411,7 +435,10 @@ export class ModeHybridRetriever {
     private async indexFileInner(file: ModeReferenceFile): Promise<void> {
         const content = (file.content || '').trim();
         if (!content) return;
-        const contentHash = hashContent(content);
+        // Versioned (T9): this is the value compared against the stored state, so
+        // it must agree with `needsReindexing`/`markIndexed` or a chunker change
+        // would be detected in one place and ignored in the other.
+        const contentHash = indexHash(content);
         const activeSpace = this.embeddingPipeline.getActiveSpaceKey?.() ?? null;
 
         const state = this.getIndexState(file.id);
@@ -623,7 +650,7 @@ export class ModeHybridRetriever {
             if (!file.content.trim()) continue;
 
             const content = file.content.trim();
-            const contentHash = hashContent(content);
+            const contentHash = indexHash(content);
 
             // Reuse cached chunks when the content is unchanged; otherwise re-chunk
             // and refresh the cache (audit finding #8 — was re-chunking every query).
@@ -677,51 +704,19 @@ export class ModeHybridRetriever {
         const sectionChunks = sectionAwareChunksFromMap(docMap, CHUNK_WORDS, CHUNK_OVERLAP);
         if (sectionChunks) return sectionChunks;
 
-        const lines = content.split('\n');
-        const sections: Array<{ heading: string | null; body: string[] }> = [];
-        let current: { heading: string | null; body: string[] } = { heading: null, body: [] };
-
-        const headingRe = /^\s*(?:#{1,3}\s+|(?:\d+(?:\.\d+){0,2}\s+))/;
-        const pageMarkerRe = /^\s*\[Page\s+\d+\]\s*$/;
-
-        const flush = () => {
-            if (current.heading !== null || current.body.length > 0) sections.push(current);
-            current = { heading: null, body: [] };
-        };
-
-        for (const line of lines) {
-            if (headingRe.test(line)) {
-                flush();
-                current.heading = line.trim();
-            } else if (pageMarkerRe.test(line)) {
-                current.body.push(line);
-            } else {
-                current.body.push(line);
-            }
-        }
-        flush();
-
-        const chunks: string[] = [];
-        for (const section of sections) {
-            const headingLine = section.heading ?? '';
-            const bodyText = section.body.join('\n').replace(/\s+/g, ' ').trim();
-            const fullText = headingLine ? `${headingLine}\n${bodyText}` : bodyText;
-            if (!fullText) continue;
-            const words = fullText.split(/\s+/).filter(Boolean);
-            if (words.length === 0) continue;
-            if (words.length <= CHUNK_WORDS) {
-                chunks.push(fullText);
-                continue;
-            }
-            // Sentence-aware windowing: never split a normative clause across a
-            // chunk boundary (the RFC "MUST NOT add a byte order mark" bug).
-            const bodyForWindows = headingLine ? bodyText : fullText;
-            for (const window of sentenceAwareWindows(bodyForWindows, CHUNK_WORDS, CHUNK_OVERLAP)) {
-                const chunkText = headingLine ? `${headingLine}\n${window}` : window;
-                if (chunkText.trim()) chunks.push(chunkText);
-            }
-        }
-        return chunks;
+        // FLAT PROSE (no ToC): boundary-driven chunking with heading-path
+        // prefixes (T9, 2026-08-28). This replaces a 140-word window with 30-word
+        // overlap that prefixed only the LEAF heading — so a file with five
+        // projects x six identically-named sections produced five "Idempotency"
+        // chunks that were near-neighbours in embedding space with nothing to
+        // tell them apart. Measured: heading paths take top-1-correct-project
+        // from 1/5 to 5/5 when paired with entity anchoring, and anchoring alone
+        // recovers almost nothing without them.
+        //
+        // The reporter's 63k combined markdown has no ToC, so THIS is the path
+        // his file takes. See semanticChunker.ts for the size guardrails and for
+        // why CHUNKER_VERSION must be bumped with any change here.
+        return semanticChunks(content);
     }
 
     /**
@@ -1437,7 +1432,19 @@ export class ModeHybridRetriever {
                 });
             }
             const withIdentity = broadQuery;
-            const finalContext = withIdentity ? this.prependIdentityBlock(formattedContext, files) : formattedContext;
+            let finalContext = withIdentity ? this.prependIdentityBlock(formattedContext, files) : formattedContext;
+            // T12: UNCONDITIONAL, unlike the identity block above. The question
+            // that most needs it ("what projects have you worked on?") is not
+            // reliably `broadQuery`, and a specific question about project A is
+            // exactly when the model most needs to know that B..E also exist
+            // before it answers "that's the only one".
+            const projectIndex = this.buildProjectIndex(selected);
+            if (projectIndex) {
+                finalContext = finalContext.replace(
+                    '<active_mode_retrieved_context>',
+                    `<active_mode_retrieved_context>\n${projectIndex}`,
+                );
+            }
             if (retrievalDiagnosticsEnabled()) {
                 const coverage = computeEvidenceCoverage({ question: queryText, retrievedBlock: finalContext, queryShape });
                 diagLog('DOC-RANK coverage', coverage);
@@ -2046,6 +2053,68 @@ export class ModeHybridRetriever {
      * buildDocumentIdentityBlock but is self-contained so the hybrid
      * retriever does not have to import private helpers.
      */
+    /**
+     * A compact list of the PROJECTS a reference set describes (T12, 2026-08-28).
+     *
+     * WHAT IT IS FOR. The reporter's file is one 63k markdown describing five
+     * integration projects. Asked "what projects have you worked on?" the model
+     * saw twelve chunks from whichever two or three projects ranked best and
+     * answered as though those were all of them — an answer that is wrong in a
+     * way the user cannot detect, because nothing in the evidence says a project
+     * is missing. He asked for this directly.
+     *
+     * WHY IT IS DERIVED, NOT EXTRACTED. The names come from the heading-ancestor
+     * prefixes T9 already writes into every chunk (`[context: Project: X > ...]`).
+     * The existing `prependIdentityBlock` next to this one indexes FILES and
+     * mines capitalised terms out of the first 4000 characters — a heuristic that
+     * finds nothing useful for a single combined file, which is exactly this
+     * case. Reading structure the chunker already recorded needs no heuristic and
+     * cannot disagree with the chunks.
+     *
+     * NAVIGATION, NOT EVIDENCE. It carries names and nothing else — no facts, no
+     * numbers, no claims — so it can route a broad question without becoming
+     * something the model can answer FROM. On the V3 path it is structurally
+     * excluded anyway: V3 consumes `chunks`, not `formattedContext`.
+     *
+     * Capped at ~200 tokens, and returns '' below two projects: a single-project
+     * file needs no index, and an empty one would be pure prompt overhead.
+     */
+    private buildProjectIndex(chunks: ChunkCandidate[]): string {
+        const names: string[] = [];
+        const seen = new Set<string>();
+        for (const c of chunks) {
+            const m = /\[context:\s*([^\]>]+?)\s*(?:>|\])/.exec(c.text);
+            const name = m?.[1]?.trim();
+            if (!name) continue;
+            const key = name.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            names.push(name);
+        }
+        if (names.length < 2) return '';
+
+        const MAX_CHARS = 800;   // ~200 tokens
+        const kept: string[] = [];
+        let used = 0;
+        for (const n of names) {
+            if (used + n.length + 2 > MAX_CHARS) break;
+            kept.push(n);
+            used += n.length + 2;
+        }
+        if (kept.length < 2) return '';
+        const truncated = kept.length < names.length ? ` (+${names.length - kept.length} more)` : '';
+        return [
+            '  <project_index purpose="navigation_only">',
+            `    <note>The uploaded material covers these subjects. This list is for ROUTING ONLY — it states no facts and supports no claim. Answer only from the retrieved excerpts below.</note>`,
+            `    <subjects>${this.escapeForXml(kept.join(', ') + truncated)}</subjects>`,
+            '  </project_index>',
+        ].join('\n');
+    }
+
+    private escapeForXml(s: string): string {
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     private prependIdentityBlock(formattedContext: string, files: ModeReferenceFile[]): string {
         const lines: string[] = [];
         lines.push('<document_identity purpose="broad_query_grounding">');
@@ -2119,17 +2188,21 @@ export class ModeHybridRetriever {
         const state = this.getIndexState(file.id);
         if (!state) return true;  // Never indexed
 
-        const currentHash = hashContent(file.content);
-        return state.fileHash !== currentHash;
+        // CHUNKER_VERSION is folded in (T9, 2026-08-28) so a chunker change
+        // forces exactly one re-index per file. Without it this compares the RAW
+        // SOURCE only: a chunker change leaves old chunk text and old vectors in
+        // the index while the query path produces new chunk text, with no error
+        // and no warning. The same trap `embedding_space` already guards for a
+        // provider flip.
+        return state.fileHash !== indexHash(file.content);
     }
 
     /**
      * Mark a file as indexed (called after embedding)
      */
     markIndexed(file: ModeReferenceFile): void {
-        const contentHash = hashContent(file.content);
         const chunks = this.chunkText(file.content);
-        this.updateIndexState(file.id, contentHash, chunks.length);
+        this.updateIndexState(file.id, indexHash(file.content), chunks.length);
     }
 
     /**

@@ -18,7 +18,19 @@
 
 import type { QuestionType, ClaimType, RetrievalPath, SourceType } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
-import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
+import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
+
+// T2's kill switch, read PER CALL. A module-level `const on = isRetrievalFix…()`
+// would freeze whatever the environment happened to be at import time, which is
+// the exact drift `FlagSpec.default`'s docblock in intelligenceFlags.ts warns
+// about — and it would make the flag untestable from a test that sets the env
+// var after importing this module. This module stays synchronous and
+// deterministic given its inputs; the env var is one of them.
+const tokenFramingOn = (): boolean => isRetrievalFixEnabled('classifierTokenFraming');
+/** Pre-T2 behaviour, kept verbatim so the flag-off path is byte-for-byte legacy. */
+const LEGACY_MEETING_EVENT_NOUN_RE = /\b(standup|sync)\b/;
+const LEGACY_CANDIDATE_PERSON_RE = /\b(the candidate|candidate'?s?)\b/;
 
 export interface ClassificationInput {
   resolvedQuestion: string;
@@ -93,7 +105,50 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 // 2026-08-02: a GraphQL chat produced "I'm a backend engineer…" from nothing).
 // Emphatic uses ("did you build it yourself?") are questions about the user's
 // own work, so the personal claim is correct for them too.
-const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the candidate|candidate'?s?|the applicant|applicant'?s?)\b/;
+// `candidate` narrowed 2026-08-28 (T2). It used to appear here as
+// `the candidate|candidate'?s?` — matching the bare noun — which made every
+// ordinary ML / search / database use of the word an IDENTITY question with
+// retrieve=false: "candidate generation", "candidate set size", "candidate
+// key". Candidate generation is a stock system-design interview topic, so the
+// token was breaking technical-interview on its own bread-and-butter material.
+//
+// The discriminator is GRAMMATICAL, not lexical. In the technical sense
+// `candidate` is a MODIFIER — it is followed by the noun it modifies
+// ("candidate pool", "candidate key"). In the person sense it is the HEAD of
+// the noun phrase, so what follows it is a verb, a preposition, punctuation or
+// nothing at all.
+//
+// Two conditions, and the FIRST is what does most of the work:
+//
+//   1. a DETERMINER is required. The technical compound almost never carries
+//      one ("candidate generation", "candidate sampling"), and the sweep's
+//      product-name shape ("How does Candidate handle failures?") carries none
+//      either. `a` is deliberately excluded — "what is a candidate key?" is a
+//      database question.
+//   2. the next word must not be a technical HEAD noun, which catches the
+//      determined compounds "the candidate pool", "the Candidate project".
+//
+// Rule 2 is a blocklist and blocklists are open-ended — "candidate span",
+// "candidate edge", "candidate passage" are all real and a miss here makes a
+// technical turn personal again. A whitelist of what may follow the person
+// sense was tried first and is strictly worse: the person sense is most often
+// followed by an ORDINARY VERB ("has the candidate shipped anything at
+// scale?"), and open-class verbs cannot be enumerated either — but getting one
+// wrong there silently drops a real recruiting question, which is the more
+// damaging direction. So the blocklist stands, and the sweep over 106 product
+// terms is what keeps it honest.
+// `id`/`ids` are deliberately ABSENT from this list: "the decoy candidate ID"
+// is a recruiting field, not an ML term, and the isolation probe in
+// RemainingDefects2026_08_01 depends on it staying personal.
+const CANDIDATE_TECHNICAL_HEAD = 'generation|generator|generators|set|sets|list|lists|key|keys|pool|pools|sampling|sample|samples|ranking|rankings|retrieval|selection|selections|item|items|region|regions|box|boxes|window|windows|phase|phases|stage|stages|model|models|score|scores|vector|vectors|embedding|embeddings|index|indexes|indices|match|matches|pair|pairs|answer|answers|token|tokens|node|nodes|edge|edges|path|paths|solution|solutions|split|splits|label|labels|class|classes|cluster|clusters|document|documents|passage|passages|chunk|chunks|span|spans|entity|entities|point|points|project|projects|service|services|pipeline|pipelines|system|systems|module|modules|feature|features|api|apis|endpoint|endpoints|table|tables|column|columns|field|fields|record|records|row|rows|query|queries|step|steps|threshold|thresholds|filter|filters|queue|queues|buffer|buffers|cache|caches|count|counts|size|sizes|length|limit|limits|algorithm|algorithms|function|functions|method|methods|strategy|strategies|logic|code|repo|repos|branch|branches|build|builds|job|jobs|task|tasks|worker|workers|handler|handlers|graph|graphs|tree|trees|batch|batches';
+// Up to two words may sit between the determiner and the noun — "the decoy
+// candidate ID", "the second strongest candidate". Requiring adjacency dropped
+// the decoy-isolation probe, which is exactly the kind of real recruiting
+// phrasing this pattern must not lose.
+const CANDIDATE_PERSON_RE = new RegExp(
+  `\\b(?:candidates?['’]s?\\b|(?:the|this|that|each|our|both|either)\\s+(?:\\S+\\s+){0,2}candidates?\\b(?!\\s+(?:${CANDIDATE_TECHNICAL_HEAD})\\b))`,
+);
+const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the applicant|applicant'?s?)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -197,7 +252,35 @@ const JOB_RE = /\b(this role|the role|this position|the position|job description
 // transcript only where a transcript can exist — in technical-interview it
 // routed "Who owns the follow-up?" to a source the mode forbids and the
 // attached postmortem was never searched.
-const MEETING_EVENT_RE = /\b(we (decided|agreed|discussed|assigned|concluded)|did (we|anyone)|action items?|(discussion|discussed|said) so far|decisions? (made|recorded|so far)|last (call|meeting)|standup|sync\b)\b/;
+const MEETING_EVENT_RE = /\b(we (decided|agreed|discussed|assigned|concluded)|did (we|anyone)|action items?|(discussion|discussed|said) so far|decisions? (made|recorded|so far)|last (call|meeting))\b/;
+// RECURRING-MEETING NOUNS, framed (T2, 2026-08-28). `standup` and `sync` used
+// to sit in MEETING_EVENT_RE above as bare words. Swept over 106 product terms
+// (experiments/mode-audit/collision-sweep.ts) they were two of only three
+// tokens in this file that misrouted on the noun ALONE: "the sync" names half
+// the integration features ever shipped, so "How does the sync handle retries?"
+// claimed the transcript and the attached reference file describing that very
+// feature was dropped from the plan — and in a mode that authorizes no
+// transcript (technical-interview, looking-for-work) shouldRetrieve went FALSE
+// and nothing was retrieved at all. The beta report that opened this
+// investigation is a field-service <-> CRM **sync**.
+//
+// The tokens are kept, but only where the clause FRAMES them as a meeting:
+// a recurrence/team qualifier ("the daily standup"), an explicit meeting head
+// noun ("standup notes", "sync meeting"), the compound "sync-up", or a
+// temporal/locative frame ("in the standup", "at yesterday's standup").
+//
+// `sync` deliberately gets the NARROWEST treatment — a head noun or "sync-up",
+// never a bare determiner and never a temporal frame. "What happens during the
+// nightly sync?" is a data pipeline far more often than it is a meeting, and
+// nothing is lost by the strictness: every verb-shaped phrasing that mentions a
+// real one ("what did we decide in the sync?", "any action items from the
+// sync?") is already caught by MEETING_EVENT_RE, so `sync` was carrying almost
+// no true positives of its own.
+//
+// This stays out of MEETING_EVENT_RE rather than joining it because the
+// distinction is per-clause and worth reading: that pattern is a list of things
+// that ARE meeting events, this one is a list of things that only sometimes are.
+const MEETING_EVENT_NOUN_RE = /\b(?:(?:daily|weekly|nightly|morning|afternoon|team|our|sprint|scrum|monday|tuesday|wednesday|thursday|friday)\s+(?:\S+\s+)?stand-?ups?|stand-?ups?\s+(?:meetings?|calls?|notes?|minutes?|recaps?)|(?:in|at|during|after|before|from)\s+(?:the|our|this|that|last|next|(?:today|yesterday|tomorrow)['’]?s)\s+(?:\S+\s+)?stand-?ups?|sync-?ups?|syncs?\s+(?:meetings?|calls?|notes?|minutes?|recaps?))\b/;
 const MEETING_ATTRIBUTION_RE = /\b(who owns|owns the|owner\b|who (agreed|committed|said|is responsible)|assigned to|was (decided|agreed|assigned))\b/;
 // DECISION-STATUS — "is it decided whether…" asks whether a decision EXISTS.
 // The brief can state it (pre-made decisions, open questions) and the
@@ -541,7 +624,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       types.add('DOCUMENT_FACT'); noteClaim('DOCUMENT_FACT', clause);
     }
 
+    const candidateAsPerson = tokenFramingOn()
+      ? CANDIDATE_PERSON_RE.test(clause)
+      : LEGACY_CANDIDATE_PERSON_RE.test(clause);
     const personal = !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
+      || candidateAsPerson
       || (FIRST_PERSON_RE.test(clause)
         && !TECH_SELF_TALK_RE.test(clause)
         && !CODING_TASK_RE.test(clause)
@@ -669,7 +756,10 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       // source-contract patch?") stays transcript-only.
       const proposedCue = /\b(proposed|planned|suggested|pre-?meeting|risk register|register|agenda|briefs?)\b/.test(clause);
       const attribution = MEETING_ATTRIBUTION_RE.test(clause);
-      const meetingEvent = MEETING_EVENT_RE.test(clause) || (meetingMode && attribution);
+      const recurringMeetingNoun = tokenFramingOn()
+        ? MEETING_EVENT_NOUN_RE.test(clause)
+        : LEGACY_MEETING_EVENT_NOUN_RE.test(clause);
+      const meetingEvent = MEETING_EVENT_RE.test(clause) || recurringMeetingNoun || (meetingMode && attribution);
       const decisionStatus = DECISION_STATUS_RE.test(clause);
       const meetingContext = MEETING_CONTEXT_RE.test(clause);
       const referenceFact = REFERENCE_FACT_RE.test(clause);
@@ -1069,11 +1159,37 @@ function hasCapsOrIdentifierEntity(text: string): boolean {
 // retriever can fetch (conversation state arrives with the turn; it is not a
 // queryable pool).
 const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
-const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEntries(
-  (Object.entries(CLAIM_AUTHORITY) as Array<[ClaimType, { authoritative: SourceType[] }]>)
-    .filter(([, a]) => a.authoritative.length > 0)
-    .map(([claim, a]) => [claim, a.authoritative.filter((s) => !NON_RETRIEVABLE.includes(s))]),
-);
+// Derived PER CALL, not at module load (2026-08-28). It used to be a
+// `Object.fromEntries(...)` const, which was correct while the authority table
+// was a frozen literal — T1 makes it flag-dependent, and a module-load
+// derivation would freeze whatever the environment was at import time, making
+// the flag unobservable to any test that sets it afterwards. Same freezing trap
+// `FlagSpec.default` documents in intelligenceFlags.ts.
+//
+// Still DERIVED, which is the property that matters: the comment above records
+// two separate incidents where this was a hand-maintained second copy of the
+// authority table, drifted from it, and made a claim silently unreachable.
+//
+// `hasDocuments` gates T1's widening HERE and nowhere else, and the asymmetry is
+// deliberate. This map decides REACHABILITY — whether a claim reports
+// `unsupportedInMode`, which is what licenses the composer's "not established by
+// any available source" instruction. Widening it unconditionally would tell a
+// user with no files at all that their employment claim is supported, and the
+// anti-fabrication guards for "what are my strengths?" in a profile-less mode
+// would stop firing. A reference file may evidence the user's own work — but
+// only if there is one.
+//
+// The admission side (`authorityOf` / `claimRequirements.authoritativeSources`)
+// is widened unconditionally, and does not need this gate: it runs against
+// chunks that were actually retrieved, and a retrieved chunk is proof a document
+// exists.
+const claimToSource = (claim: ClaimType, hasDocuments: boolean): SourceType[] => {
+  const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
+  if (!authoritative.length) return [];
+  // DOCUMENT_FACT narrows rather than derives — see the override note below.
+  if (claim === 'DOCUMENT_FACT') return DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  return authoritative.filter((s) => !NON_RETRIEVABLE.includes(s));
+};
 // RETRIEVAL narrowing (deep-run 2, issue 5): a résumé/JD may still EVIDENCE a
 // document-deictic claim (authority stays wide — "the canary written in this
 // résumé"), but DOCUMENT_FACT does not RETRIEVE from identity pools by
@@ -1082,7 +1198,7 @@ const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEnt
 // "last-page canary" NONE in technical-interview while the identical question
 // passed in Sales, whose plan held REFERENCE_FILE alone). Questions that point
 // at the résumé/JD claim those sides explicitly (deictic side-claims above).
-CLAIM_TO_SOURCE.DOCUMENT_FACT = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
+const DOCUMENT_FACT_RETRIEVAL_SOURCES: SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
@@ -1099,7 +1215,7 @@ export function classifyTurn(input: ClassificationInput): Classification {
   const wanted = new Set<SourceType>();
   const unreachable = new Set<SourceType>();
   for (const c of claims) {
-    const srcs = CLAIM_TO_SOURCE[c] ?? [];
+    const srcs = claimToSource(c, input.hasAttachedDocuments === true);
     if (!srcs.length) continue;
     const allowedSrcs = srcs.filter((s) => input.policy.allowedSourceTypes.includes(s));
     if (allowedSrcs.length) for (const s of allowedSrcs) wanted.add(s);

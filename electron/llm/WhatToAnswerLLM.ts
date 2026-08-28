@@ -492,7 +492,49 @@ The user triggered this action with a coding problem on screen and NO new questi
                     }
                     if (referenceFilesAllowed) {
                         const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
-                        const governedWtaTurn = Boolean(_cog?.govern && forceDocumentGrounding && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'));
+                        // `!v3OwnedTurn` (T3-minimal, 2026-08-28). This is the
+                        // in-file copy of the gate at LLMHelper.ts:6656, and it
+                        // was the ONLY copy missing that term — a duplicated-
+                        // logic drift, not a design decision.
+                        //
+                        // When V3 composes the turn it has already run its own
+                        // governed retrieval and produced `v3Prompt`. Letting
+                        // the legacy Context OS pack ALSO govern splices two
+                        // governance layers into one turn: the pack resolves
+                        // against reference files only (EvidenceResolver.ts:326),
+                        // so an "introduce yourself" / "what are your AI
+                        // projects" question — answerable from the profile, and
+                        // answered correctly when typed into manual chat —
+                        // resolves `refuse_insufficient_evidence`, the block
+                        // below blanks `typedCandidateProfile`, and the canned
+                        // refusal hard-returns at :806 WITHOUT EVER CALLING THE
+                        // MODEL. V3's composed prompt, not consulted until
+                        // :1008, is discarded unread.
+                        //
+                        // Manual chat has always been protected: it passes
+                        // `{ v3Owned: true }` (ipcHandlers.ts:1473) one layer
+                        // down for exactly this reason. This is the same
+                        // protection, at the layer that actually needed it.
+                        //
+                        // The condition lives in ONE place now
+                        // (context-os/wtaGovernanceGate.ts). It was written out
+                        // three times before, and the copy that drifted is the
+                        // whole defect.
+                        const { wtaGovernanceDecision } = require('../intelligence/context-os/wtaGovernanceGate') as typeof import('../intelligence/context-os/wtaGovernanceGate');
+                        const _gate = wtaGovernanceDecision({
+                            govern: Boolean(_cog?.govern),
+                            v3PromptPresent: Boolean((requestSnapshot as any)?.v3Prompt),
+                            forceDocumentGrounding: Boolean(forceDocumentGrounding),
+                            evidencePackFlagEnabled: isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
+                            yieldToV3FlagEnabled: isIntelligenceFlagEnabled('wtaGovernanceYieldsToV3'),
+                        });
+                        const governedWtaTurn = _gate.resolvePack;
+                        if (_gate.yieldedToV3) {
+                            console.log('[WhatToAnswerLLM] Context OS governance yielded to the V3-composed turn', {
+                                turnId: _cog?.contract?.turnId,
+                                reason: 'v3_owned_turn',
+                            });
+                        }
                         if (governedWtaTurn) {
                             const activeMode = modesManager.getActiveMode?.();
                             if (!activeMode || !modesManager.getReferenceFiles || !modesManager.retrieveHybridRaw) {
@@ -774,7 +816,34 @@ The user triggered this action with a coding problem on screen and NO new questi
             try {
                 const _cog = requestSnapshot?.contextOsGeneration as import('../intelligence/context-os').ContextOsGenerationContext | undefined;
                 const { isIntelligenceFlagEnabled } = require('../intelligence/intelligenceFlags');
-                if (_cog && _cog.govern && isIntelligenceFlagEnabled('contextOsEvidencePackEnabled')) {
+                // The SECOND copy of the gate, and the one that actually
+                // refuses (T3-minimal, 2026-08-28). Guarding only the resolver
+                // gate above is not enough: this block does not test
+                // `forceDocumentGrounding` or `governedWtaTurn` at all, and its
+                // pack falls back to `_cog.evidencePack` — supplied by the
+                // caller — so a V3 turn whose resolution was skipped above
+                // would still reach `refuse_insufficient_evidence` below and
+                // hard-return before any model call.
+                //
+                // Same shared decision as the resolver gate — one function, so
+                // these two can no longer drift apart the way this one drifted
+                // from LLMHelper's.
+                //
+                // Downstream is already protected: `_wtaRoute` sets
+                // `v3Owned: true` at :1081 and LLMHelper's gate has carried
+                // `!v3OwnedTurn` since it was written. This closes the last
+                // unguarded position.
+                const { wtaGovernanceDecision } = require('../intelligence/context-os/wtaGovernanceGate') as typeof import('../intelligence/context-os/wtaGovernanceGate');
+                // `forceDocumentGrounding` is deliberately not passed: it is
+                // block-scoped to the retrieval region above and out of scope
+                // here, and `renderPack` does not consult it.
+                const _renderGate = wtaGovernanceDecision({
+                    govern: Boolean(_cog?.govern),
+                    v3PromptPresent: Boolean((requestSnapshot as any)?.v3Prompt),
+                    evidencePackFlagEnabled: isIntelligenceFlagEnabled('contextOsEvidencePackEnabled'),
+                    yieldToV3FlagEnabled: isIntelligenceFlagEnabled('wtaGovernanceYieldsToV3'),
+                });
+                if (_cog && _renderGate.renderPack) {
                     const { buildInsufficientPropertyAnswer, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
                     const pack = governedEvidencePack ?? _cog.evidencePack;
                     if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');

@@ -514,6 +514,12 @@ docs/*
 !docs/specs/
 !docs/specs/auto-answer-v2-spec.md.md
 !docs/specs/auto-answer-v3-amendments.md
+# Reference-retrieval investigation + fix plan (2026-08-28 beta report). These
+# are the handover contract for the next agent — a fresh session must be able to
+# pick the work up from these four files alone, and a worktree agent cannot see
+# an ignored path at all. Same reasoning as the autopilot entries above.
+!docs/retrieval-handoff/
+!docs/retrieval-handoff/**
 benchmark-results/
 
 

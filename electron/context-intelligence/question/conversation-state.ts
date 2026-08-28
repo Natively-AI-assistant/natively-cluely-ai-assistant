@@ -14,8 +14,9 @@
 //   2. Prior assistant output is a REFERENT, never evidence. It can tell you what
 //      "it" refers to; it can never support a factual claim.
 
-import type { EvidenceScope, PriorTurnDecision } from '../contracts/types';
+import type { EvidenceScope, PriorTurnDecision, SourceType } from '../contracts/types';
 import { scopeKey } from '../contracts/types';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 import { isBareFollowUp, isResponseRequest, isContinuationFragment } from './turn-classifier';
 
 export interface ConversationTurn {
@@ -52,6 +53,22 @@ export interface ConversationState {
    * scope change.
    */
   previousDecision?: PriorTurnDecision;
+  /**
+   * The source types the last RETRIEVAL turn actually planned (T5, 2026-08-28).
+   *
+   * A bare follow-up ("Why?", "What did you monitor after that?") produces NO
+   * claims of its own — its subject lives in the previous turn — so the plan
+   * falls through to the unclaimed-retrieval fallback, which consults document
+   * pools only and deliberately excludes identity pools. That exclusion is
+   * correct for its own case ("Reverse a linked list in Python" must not
+   * retrieve resumes) and wrong here: the follow-up's subject is exactly the
+   * thing the previous turn already found a pool for.
+   *
+   * Preserved across intervening FAST turns for the same reason
+   * `previousDecision` is: a definition question between two grounded turns must
+   * not erase the pool the follow-up belongs to.
+   */
+  previousPlannedSourceTypes?: SourceType[];
   unresolvedReferences: string[];
   updatedAt: number;
 }
@@ -216,6 +233,9 @@ export interface AdvanceInput {
   /** This turn's source decision, when it retrieved. Absent ⇒ the previous
    *  decision is PRESERVED, not cleared. */
   decision?: PriorTurnDecision;
+  /** This turn's planned source types, when it retrieved. Absent or empty =>
+   *  the previous turn's are PRESERVED, not cleared (see the field's note). */
+  plannedSourceTypes?: readonly SourceType[];
   at?: number;
 }
 
@@ -260,6 +280,9 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
     previousEvidenceIds: input.evidenceIds ?? [],
     previousSourceIds: input.sourceIds ?? [],
     previousDecision: input.decision ? boundDecision(input.decision) : base.previousDecision,
+    previousPlannedSourceTypes: input.plannedSourceTypes?.length
+      ? [...new Set(input.plannedSourceTypes)]
+      : base.previousPlannedSourceTypes,
     unresolvedReferences: [],
     updatedAt: input.at ?? 0,
   };
@@ -442,7 +465,9 @@ export interface ResolvedReference {
     | 'REPHRASE_ANCHORED_TO_PREVIOUS_QUESTION'
     | 'ANCHORED_TO_PREVIOUS_QUESTION'
     | 'PERSONAL_PRONOUN_NO_KNOWN_PERSON'
-    | 'CURRENT_TURN_SELF_CONTAINED';
+    | 'CURRENT_TURN_SELF_CONTAINED'
+    // T7 (2026-08-28): the state belongs to a DIFFERENT scope than this turn.
+    | 'SCOPE_CHANGED';
 }
 
 /**
@@ -462,9 +487,30 @@ export interface ResolvedReference {
  * the referent when no topic/entity exists — the previous answer stays a
  * referent-only summary, never evidence.
  */
-export function resolveReference(question: string, state: ConversationState | null): ResolvedReference {
+export function resolveReference(
+  question: string,
+  state: ConversationState | null,
+  scope?: EvidenceScope,
+): ResolvedReference {
   const q = question.trim();
   if (!state) return { resolved: q, usedState: false, reason: 'NO_CONVERSATION_STATE' };
+
+  // T7 (2026-08-28) — SCOPE CHECK. `continuitySourceIds` below has always
+  // compared `state.scopeId` before reusing source ids; this function never did,
+  // though it reuses something more dangerous: the active TOPIC, which rewrites
+  // the retrieval query itself.
+  //
+  // `advance()` does reset on scope change, but `orchestrate()` resolves the
+  // referent BEFORE it advances — so the first turn after any meeting or mode
+  // change resolved against the previous scope's topic, and a "that project"
+  // follow-up silently pointed at the project from the meeting that just ended.
+  // Resetting on write cannot protect a read that happens first.
+  //
+  // Scope is OPTIONAL so callers that genuinely have none behave exactly as
+  // before; only a caller that knows its scope gets the check.
+  if (scope && isRetrievalFixEnabled('referentScopeCheck') && state.scopeId !== scopeKey(scope)) {
+    return { resolved: q, usedState: false, reason: 'SCOPE_CHANGED' };
+  }
 
   // Pronoun DETECTION only: drop the `its own` / `their own` idiom, which can
   // never refer outside the sentence (see NONREFERENTIAL_POSSESSIVE_RE). `q`

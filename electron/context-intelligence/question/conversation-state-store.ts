@@ -48,6 +48,8 @@ export interface AdvanceTurnInput {
   evidenceIds?: string[];
   sourceIds?: string[];
   decision?: import('../contracts/types').PriorTurnDecision;
+  /** This turn's planned source types (T5) — a bare follow-up reuses them. */
+  plannedSourceTypes?: readonly import('../contracts/types').SourceType[];
 }
 
 /** Advance after a decided turn. Called by orchestrate(); scope changes reset. */
@@ -59,6 +61,7 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
     evidenceIds: input.evidenceIds,
     sourceIds: input.sourceIds,
     decision: input.decision,
+    plannedSourceTypes: input.plannedSourceTypes,
     at: 0,
   });
   s.delete(input.sessionId);           // re-insert to refresh LRU position
@@ -85,8 +88,15 @@ export function recordAnswerSummary(sessionId: string, answerText: string): void
 }
 
 /** Resolve a question against the session's state. Pure pass-through when no state. */
-export function resolveAgainstSession(sessionId: string, question: string): ResolvedReference {
-  return resolveReference(question, getConversationState(sessionId));
+export function resolveAgainstSession(
+  sessionId: string,
+  question: string,
+  scope?: EvidenceScope,
+): ResolvedReference {
+  // `scope` (T7): when the caller knows this turn's scope, a referent from a
+  // DIFFERENT scope is not resolved against. Optional so existing callers are
+  // byte-for-byte unchanged.
+  return resolveReference(question, getConversationState(sessionId), scope);
 }
 
 /** Mode switches and session resets must not carry referents across. */

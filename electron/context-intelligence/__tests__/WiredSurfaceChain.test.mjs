@@ -89,8 +89,13 @@ describe('the composed prompt carries the safety contract', () => {
 });
 
 describe('unsupported-in-mode reaches the prompt as a gap, not a general answer', () => {
+  // UPDATED 2026-08-28 (T8): "How many backend roles are we opening this
+  // quarter?" is bare meeting-CONTEXT wording, which now legitimately claims the
+  // reference side as an alternative in technical-interview (the mode gained a
+  // reference pool). A meeting EVENT still has nothing but the transcript to
+  // evidence it, so it remains the honest witness for this property.
   test('a meeting question in technical-interview discloses rather than answering', async () => {
-    const { result, composed } = await chain('How many backend roles are we opening this quarter?');
+    const { result, composed } = await chain('What did we decide in the standup?');
     assert.notEqual(result.decision.retrievalPlan.path, 'FAST');
     assert.equal(result.trace.fallbackUsed, 'STRICT_NOT_FOUND');
     assert.ok(composed.sections.includes('no_evidence'),
