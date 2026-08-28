@@ -187,17 +187,27 @@ describe('T1 — what did NOT change', () => {
     assert.equal(isProhibitedFor('RESUME', 'USER_MOTIVATION'), true);
   });
 
-  test('USER_PROJECT is deliberately NOT widened', () => {
-    // It already admits PROJECT_FILE and CODING_SAMPLE, and no measured
-    // interview phrasing routes to it — widening it would add reach with no
-    // defect to show for it. Pinned so a future change is visible, not silent.
-    assert.deepEqual(claimAuthority('USER_PROJECT'), CLAIM_AUTHORITY.USER_PROJECT);
+  // REVERSED 2026-08-29. This asserted "USER_PROJECT is deliberately NOT
+  // widened", on the stated grounds that no measured interview phrasing routed
+  // to it. That was true of the SYNTHETIC question set and false of the real
+  // one: run against the reporter's own sanitized pack in General mode, three of
+  // his twelve questions produce USER_PROJECT and each resolved
+  // shouldRetrieve=false. The exclusion was an artifact of the corpus, so the
+  // assertion is now the opposite — and the reason is recorded rather than the
+  // test quietly flipped.
+  test('USER_PROJECT IS widened — it is the project-shaped claim', () => {
+    assert.ok(claimAuthority('USER_PROJECT').authoritative.includes('REFERENCE_FILE'));
+    // and the widening is additive: nothing it already admitted was removed.
+    for (const s of CLAIM_AUTHORITY.USER_PROJECT.authoritative) {
+      assert.ok(claimAuthority('USER_PROJECT').authoritative.includes(s), s);
+    }
   });
 
-  test('only the three named claims are widened at all', () => {
+  test('only the four project-shaped claims are widened at all', () => {
     const widened = Object.keys(CLAIM_AUTHORITY).filter((c) =>
       claimAuthority(c).authoritative.length > CLAIM_AUTHORITY[c].authoritative.length);
-    assert.deepEqual(widened.sort(), ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_SKILL']);
+    assert.deepEqual(widened.sort(),
+      ['USER_EDUCATION', 'USER_EMPLOYMENT', 'USER_PROJECT', 'USER_SKILL']);
   });
 
   test('no mode gains a source its own policy does not authorize', () => {

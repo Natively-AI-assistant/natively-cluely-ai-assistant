@@ -149,6 +149,32 @@ const CANDIDATE_PERSON_RE = new RegExp(
   `\\b(?:candidates?['’]s?\\b|(?:the|this|that|each|our|both|either)\\s+(?:\\S+\\s+){0,2}candidates?\\b(?!\\s+(?:${CANDIDATE_TECHNICAL_HEAD})\\b))`,
 );
 const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me about yourself|yourself|walk me through your|my|the applicant|applicant'?s?)\b/;
+// SECOND PERSON WITH A LEXICAL VERB (2026-08-29).
+//
+// PERSONAL_RE above covers second person carried by an AUXILIARY — "did you",
+// "do you", "have you", "your". It does not cover second person carried by the
+// MAIN VERB, and interviewers use that constantly:
+//
+//   "Tell me about the AI agent you BUILT."
+//   "Walk me through one integration you OWNED from requirements to production."
+//   "Tell me about a real production failure, not a hypothetical."
+//
+// All three came from the reporter's own question list. Each produced
+// GENERAL_TECHNICAL — no claim, no required source, shouldRetrieve=FALSE — so
+// the reference file describing that exact work was never queried.
+//
+// Note this is the OPPOSITE failure from RC1 and lands in the same place. RC1 is
+// PERSONAL_RE matching too much, so the turn becomes a USER_* claim no document
+// could evidence. This is PERSONAL_RE matching too little, so the turn becomes
+// general knowledge and retrieval never runs. Both end at "no evidence", which
+// is why one report described a single symptom.
+//
+// PAST TENSE ONLY, and that is the whole guard. Past tense is autobiographical
+// ("the agent you built"); present and conditional are hypothetical ("how would
+// you build a rate limiter?", "how do you test this?") and must keep their
+// general-knowledge route. The distinction is grammatical rather than a keyword
+// list, so it does not need maintaining as vocabulary drifts.
+const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|set up|worked on)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -231,7 +257,40 @@ const EMPLOYMENT_RE = /\b(work(ed)? at|employer|company you|role at|position at|
 // concept question, took the FAST path, and a JD that lists SIX named stages
 // lost to a generic three-round model answer — with a clean trace (answerability
 // FULL, zero evidence). The stages live in the JD, so this is a JOB claim.
-const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|requirement\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
+const JOB_RE = /\b(this role|the role|this position|the position|job description|jd\b|responsibilit\w*|required (skills?|languages?|qualifications?|experience|technolog\w*)|preferred skills?|compensation|base salar\w*|salary (band|range)s?|the salary\b|the team you|qualification\w*|minimum quals?|(interview|hiring|recruitment) (process|stages?|rounds?|loops?|steps?|timeline))\b/;
+// `requirement\w*` REMOVED from JOB_RE and reframed below (2026-08-29).
+//
+// It was a bare token of exactly the class T2 removed. In software, "requirements"
+// are the SPEC A PROJECT WAS BUILT FROM; in a job posting they are what the
+// employer demands. JOB_RE read every occurrence as the second.
+//
+// Found in the reporter's own question list, first question:
+//
+//   "Walk me through one integration you owned from REQUIREMENTS through
+//    production."
+//
+//   -> JOB_REQUIREMENT / JOB_REQUIRED_SKILL
+//   -> `requires JOB_DESCRIPTION, which mode "general" does not authorize`
+//   -> shouldRetrieve = FALSE
+//
+// So his opening question — a pure project narrative — retrieved nothing at all,
+// because it used the ordinary engineering sense of the word. The 106-term sweep
+// missed it because that sweep substitutes product NAMES into two templates and
+// never produced a phrase containing "requirements".
+//
+// A job requirement now needs job framing: an explicit job/role noun attached to
+// it, a "requirements for the role" shape, or "meet the requirements". Every
+// other JOB_RE alternative ("this role", "job description", "qualifications")
+// already establishes that context on its own, so nothing that was a genuine JD
+// question stops being one.
+//
+// The "meet ... requirement" arm allows up to four intervening words, because a
+// first draft without them broke a real JD test: "Do I meet the two-year
+// PROFESSIONAL EXPERIENCE requirement?" puts the modifiers between the verb and
+// the noun, and that question genuinely does need the JD side.
+const JOB_REQUIREMENT_FRAMED_RE = /\b(?:(?:job|role|position|posting|listing|hiring|minimum|mandatory|must[- ]have|basic|essential|technical)\s+requirements?|requirements?\s+(?:for|of)\s+(?:the\s+|this\s+)?(?:role|position|job|posting|candidate)|(?:meet|meets|meeting|satisfy|satisfies)\s+(?:the\s+)?(?:\S+\s+){0,4}requirements?)\b/;
+/** Pre-2026-08-29 behaviour, kept verbatim behind the kill switch. */
+const LEGACY_JOB_REQUIREMENT_RE = /\brequirement\w*\b/;
 
 // Split 2026-08-01 (Defect A): the old single MEETING_RE conflated TRANSCRIPT
 // EVENTS (things people said/decided/assigned — only the live transcript can
@@ -627,8 +686,11 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     const candidateAsPerson = tokenFramingOn()
       ? CANDIDATE_PERSON_RE.test(clause)
       : LEGACY_CANDIDATE_PERSON_RE.test(clause);
+    // Second person carried by the main verb rather than an auxiliary.
+    const secondPersonPast = tokenFramingOn() && SECOND_PERSON_PAST_RE.test(clause);
     const personal = !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
       || candidateAsPerson
+      || secondPersonPast
       || (FIRST_PERSON_RE.test(clause)
         && !TECH_SELF_TALK_RE.test(clause)
         && !CODING_TASK_RE.test(clause)
@@ -684,7 +746,10 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
 
-    if (JOB_RE.test(clause)) {
+    const jobRequirementNoun = tokenFramingOn()
+      ? JOB_REQUIREMENT_FRAMED_RE.test(clause)
+      : LEGACY_JOB_REQUIREMENT_RE.test(clause);
+    if (JOB_RE.test(clause) || jobRequirementNoun) {
       // In a document-centric mode WITHOUT a job description, JD vocabulary is
       // document vocabulary: "What is the base salary band for a backend L4?"
       // in Seminar is a lookup in the compensation-policy reference file. Left
