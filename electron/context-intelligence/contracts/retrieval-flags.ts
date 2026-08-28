@@ -81,6 +81,12 @@ export const RETRIEVAL_FLAGS = {
     default: true,
     why: 'RC5: a global score sort across ports discarded the status partition, per-type round-robin and per-document interleave, and compared incomparable score scales',
   },
+  /** Interview-prep modes honour an EXPLICIT reference-files switch (2026-08-29). */
+  interviewPrepHonorsReferenceSwitch: {
+    env: 'NATIVELY_RETRIEVAL_INTERVIEW_PREP_HONORS_REFERENCE_SWITCH',
+    default: true,
+    why: 'RC4 remainder: T8 made reference files REACHABLE in technical-interview, but buildUserSourceContract pinned defaultOwner=profile, so forceDocumentGrounding stayed off even when the user ticked the switch',
+  },
   /** T7 — referent resolution compares the turn's scope before reusing a topic. */
   referentScopeCheck: {
     env: 'NATIVELY_RETRIEVAL_REFERENT_SCOPE_CHECK',
