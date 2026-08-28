@@ -75,6 +75,12 @@ export const RETRIEVAL_FLAGS = {
     default: true,
     why: 'RC3: the unclaimed-retrieval fallback excluded identity pools from resolved follow-ups too',
   },
+  /** T6 — combining ports preserves each port's slot guarantees instead of re-sorting. */
+  portCombinationPreservesSlots: {
+    env: 'NATIVELY_RETRIEVAL_PORT_COMBINATION_PRESERVES_SLOTS',
+    default: true,
+    why: 'RC5: a global score sort across ports discarded the status partition, per-type round-robin and per-document interleave, and compared incomparable score scales',
+  },
   /** T7 — referent resolution compares the turn's scope before reusing a topic. */
   referentScopeCheck: {
     env: 'NATIVELY_RETRIEVAL_REFERENT_SCOPE_CHECK',
