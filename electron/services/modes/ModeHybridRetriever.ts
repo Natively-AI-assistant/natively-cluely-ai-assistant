@@ -238,7 +238,23 @@ function hashContent(content: string): string {
  * index, and content alone cannot express that.
  */
 function indexHash(content: string): string {
-    return `${hashContent(content)}.c${CHUNKER_VERSION}`;
+    // TRIMMED HERE, not at the call sites (2026-08-29). Two of the three callers
+    // hashed `file.content` raw while `indexFileInner` hashed
+    // `file.content.trim()`, so any file with surrounding whitespace produced two
+    // different hashes and `needsReindexing` was PERMANENTLY true — the file
+    // re-chunked and re-embedded on every single launch, forever, with no error
+    // and no visible symptom beyond the bill.
+    //
+    // Observed on a copy of a real user database: `04_competitors.csv` has one
+    // trailing newline (415 chars raw, 414 trimmed) and still reported
+    // needsReindex=true immediately after a successful re-index, while the two
+    // PDFs — whose content happens to have no surrounding whitespace — settled
+    // correctly. Predates the chunker version; `.c2` only made it cost more.
+    //
+    // Normalizing inside the hash rather than at each call site is the point: a
+    // fourth caller cannot reintroduce the drift, and `indexFileInner` passing
+    // already-trimmed content stays correct because trim is idempotent.
+    return `${hashContent((content || '').trim())}.c${CHUNKER_VERSION}`;
 }
 
 interface ChunkCandidate {
