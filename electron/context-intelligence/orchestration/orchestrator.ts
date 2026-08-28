@@ -20,7 +20,7 @@ import type {
 import { freezeTurnDecision } from '../contracts/types';
 import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../policies/mode-policy-registry';
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
-import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
+import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 
@@ -107,7 +107,10 @@ function buildClaimRequirements(
   clauses: Partial<Record<string, string>> = {},
 ): ClaimRequirement[] {
   return claimTypes.map((ct) => {
-    const authority = CLAIM_AUTHORITY[ct as keyof typeof CLAIM_AUTHORITY];
+    // `claimAuthority()`, not the raw table: T1's widening is resolved per
+    // call, and `authoritativeSources` here is what the retrieval plan and
+    // the admission filter both read.
+    const authority = claimAuthority(ct as keyof typeof CLAIM_AUTHORITY);
     const isPrivate = authority.authoritative.length > 0;
     return {
       claimType: ct as ClaimRequirement['claimType'],

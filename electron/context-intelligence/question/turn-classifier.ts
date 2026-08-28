@@ -18,7 +18,7 @@
 
 import type { QuestionType, ClaimType, RetrievalPath, SourceType } from '../contracts/types';
 import type { ModePolicy } from '../policies/mode-policy-registry';
-import { CLAIM_AUTHORITY } from '../policies/source-authority-policy';
+import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 
 // T2's kill switch, read PER CALL. A module-level `const on = isRetrievalFix…()`
@@ -1159,11 +1159,37 @@ function hasCapsOrIdentifierEntity(text: string): boolean {
 // retriever can fetch (conversation state arrives with the turn; it is not a
 // queryable pool).
 const NON_RETRIEVABLE: readonly SourceType[] = ['CONVERSATION_STATE'];
-const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEntries(
-  (Object.entries(CLAIM_AUTHORITY) as Array<[ClaimType, { authoritative: SourceType[] }]>)
-    .filter(([, a]) => a.authoritative.length > 0)
-    .map(([claim, a]) => [claim, a.authoritative.filter((s) => !NON_RETRIEVABLE.includes(s))]),
-);
+// Derived PER CALL, not at module load (2026-08-28). It used to be a
+// `Object.fromEntries(...)` const, which was correct while the authority table
+// was a frozen literal — T1 makes it flag-dependent, and a module-load
+// derivation would freeze whatever the environment was at import time, making
+// the flag unobservable to any test that sets it afterwards. Same freezing trap
+// `FlagSpec.default` documents in intelligenceFlags.ts.
+//
+// Still DERIVED, which is the property that matters: the comment above records
+// two separate incidents where this was a hand-maintained second copy of the
+// authority table, drifted from it, and made a claim silently unreachable.
+//
+// `hasDocuments` gates T1's widening HERE and nowhere else, and the asymmetry is
+// deliberate. This map decides REACHABILITY — whether a claim reports
+// `unsupportedInMode`, which is what licenses the composer's "not established by
+// any available source" instruction. Widening it unconditionally would tell a
+// user with no files at all that their employment claim is supported, and the
+// anti-fabrication guards for "what are my strengths?" in a profile-less mode
+// would stop firing. A reference file may evidence the user's own work — but
+// only if there is one.
+//
+// The admission side (`authorityOf` / `claimRequirements.authoritativeSources`)
+// is widened unconditionally, and does not need this gate: it runs against
+// chunks that were actually retrieved, and a retrieved chunk is proof a document
+// exists.
+const claimToSource = (claim: ClaimType, hasDocuments: boolean): SourceType[] => {
+  const authoritative = (hasDocuments ? claimAuthority(claim) : CLAIM_AUTHORITY[claim]).authoritative;
+  if (!authoritative.length) return [];
+  // DOCUMENT_FACT narrows rather than derives — see the override note below.
+  if (claim === 'DOCUMENT_FACT') return DOCUMENT_FACT_RETRIEVAL_SOURCES;
+  return authoritative.filter((s) => !NON_RETRIEVABLE.includes(s));
+};
 // RETRIEVAL narrowing (deep-run 2, issue 5): a résumé/JD may still EVIDENCE a
 // document-deictic claim (authority stays wide — "the canary written in this
 // résumé"), but DOCUMENT_FACT does not RETRIEVE from identity pools by
@@ -1172,7 +1198,7 @@ const CLAIM_TO_SOURCE: Partial<Record<ClaimType, SourceType[]>> = Object.fromEnt
 // "last-page canary" NONE in technical-interview while the identical question
 // passed in Sales, whose plan held REFERENCE_FILE alone). Questions that point
 // at the résumé/JD claim those sides explicitly (deictic side-claims above).
-CLAIM_TO_SOURCE.DOCUMENT_FACT = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
+const DOCUMENT_FACT_RETRIEVAL_SOURCES: SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
@@ -1189,7 +1215,7 @@ export function classifyTurn(input: ClassificationInput): Classification {
   const wanted = new Set<SourceType>();
   const unreachable = new Set<SourceType>();
   for (const c of claims) {
-    const srcs = CLAIM_TO_SOURCE[c] ?? [];
+    const srcs = claimToSource(c, input.hasAttachedDocuments === true);
     if (!srcs.length) continue;
     const allowedSrcs = srcs.filter((s) => input.policy.allowedSourceTypes.includes(s));
     if (allowedSrcs.length) for (const s of allowedSrcs) wanted.add(s);

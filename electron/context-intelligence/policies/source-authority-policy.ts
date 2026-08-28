@@ -6,6 +6,7 @@
 // See docs/context-intelligence-v3/06_SOURCE_AUTHORITY_SPEC.md
 
 import type { ClaimType, SourceType, EvidenceScope, AuthorizedSource } from '../contracts/types';
+import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 
 export interface ClaimAuthority {
   authoritative: SourceType[];
@@ -79,11 +80,91 @@ export const CLAIM_AUTHORITY: Record<ClaimType, ClaimAuthority> = {
   RECOMMENDATION:    { authoritative: [], prohibited: [] },
 };
 
+// ── T1: a user's own reference file may evidence their own work ─────────────
+//
+// THE DEFECT (docs/retrieval-handoff/01-ROOT-CAUSES.md RC1, the master cause).
+// `PERSONAL_RE` makes any second-person question a USER_* claim, and
+// REFERENCE_FILE was authoritative for NO USER_* claim. In an interview every
+// question is second person, so an uploaded reference file describing the
+// user's own projects was unreachable for every one of them — in all nine
+// modes. Measured: 0 of 6 realistic interviewer phrasings reached the file
+// anywhere; 3 of 3 neutral document-shaped lookups reached it everywhere. Proved
+// with perfect retrieval: a chunk LITERALLY CONTAINING THE ANSWER at score 0.99
+// is discarded by 9/9 modes, evidence=0, answerability=NONE.
+//
+// The routing was deliberate — "personal experience" belongs in the résumé. The
+// defect is that the product separately invites users to upload reference files
+// describing their work, and then makes those files unreadable for every
+// question about that work. The user's own workaround was to duplicate facts
+// into the Real-time Prompt, which is injected unconditionally and never passes
+// this gate — the workaround succeeded precisely because it bypassed it.
+//
+// WHY THIS IS THE SAME CHANGE MADE FOR USER_PROJECT ON 2026-08-01
+// PROJECT_FILE and CODING_SAMPLE were added to USER_PROJECT (line 43) for
+// exactly this reason: a correctly-typed chunk was retrieved and then dropped by
+// claim authority. This is that repair, applied to the claims interview
+// questions actually produce.
+//
+// SCOPE, and why it stops where it does:
+//   • USER_EMPLOYMENT and USER_SKILL — measured: all six second-person
+//     phrasings produce USER_EMPLOYMENT, one also USER_SKILL. These two are the
+//     whole of the reported failure.
+//   • USER_EDUCATION — same shape, included for consistency; conditional on the
+//     contamination suite staying green.
+//   • USER_PROJECT is deliberately NOT widened. It already admits PROJECT_FILE
+//     and CODING_SAMPLE, and no measured interview phrasing routes to it, so
+//     adding REFERENCE_FILE there would widen retrieval with no defect to show
+//     for it.
+//   • USER_MOTIVATION is untouched. A document describing what someone BUILT
+//     cannot evidence why they want a job; that inference is exactly what the
+//     motivation claim's narrow list exists to prevent.
+//
+// WHAT IS NOT WIDENED, AND MUST NEVER BE
+// Every `prohibited` list is byte-identical. The JD-as-experience protection —
+// a job description stating what the EMPLOYER wants can never evidence what the
+// USER has — lives there, and nothing here touches it. A mode must also
+// authorize a source type for it to be reachable at all, so this cannot give a
+// mode a pool its own policy forbids.
+const USER_CLAIM_DOCUMENT_WIDENING: Partial<Record<ClaimType, SourceType[]>> = {
+  USER_EMPLOYMENT: ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
+  USER_SKILL:      ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
+  USER_EDUCATION:  ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'],
+};
+
+/**
+ * The authority for a claim, with T1's widening applied.
+ *
+ * Resolved PER CALL rather than baked into `CLAIM_AUTHORITY` at module load.
+ * That is not a style choice: `turn-classifier.ts` derives `CLAIM_TO_SOURCE`
+ * from this table, and a module-load derivation would freeze whatever the
+ * environment happened to be at import time — the flag would then be
+ * unobservable to any test that sets it after importing, and to any caller that
+ * resolves settings later in boot. It is the same freezing trap `FlagSpec.default`
+ * documents in intelligenceFlags.ts.
+ *
+ * Prefer this over reading `CLAIM_AUTHORITY` directly. The raw table stays
+ * exported because it is the legacy shape and reading it is correct wherever
+ * only the PROHIBITED side or list-emptiness matters — neither of which this
+ * widening can change.
+ */
+export function claimAuthority(claim: ClaimType): ClaimAuthority {
+  const base = CLAIM_AUTHORITY[claim];
+  const extra = USER_CLAIM_DOCUMENT_WIDENING[claim];
+  if (!extra || !isRetrievalFixEnabled('referenceFilesEvidenceUserClaims')) return base;
+  // `prohibited` is passed through untouched, by construction.
+  return {
+    authoritative: [...base.authoritative, ...extra.filter((s) => !base.authoritative.includes(s))],
+    prohibited: base.prohibited,
+  };
+}
+
 export function isAuthoritativeFor(source: SourceType, claim: ClaimType): boolean {
-  return CLAIM_AUTHORITY[claim].authoritative.includes(source);
+  return claimAuthority(claim).authoritative.includes(source);
 }
 
 export function isProhibitedFor(source: SourceType, claim: ClaimType): boolean {
+  // Never widened — see the note above. Read straight from the base table so
+  // that stays true even if `claimAuthority` grows another caller.
   return CLAIM_AUTHORITY[claim].prohibited.includes(source);
 }
 
