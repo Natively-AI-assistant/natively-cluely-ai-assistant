@@ -3051,7 +3051,11 @@ export class IntelligenceEngine extends EventEmitter {
                         // authoritative evidence ("screenshot attached but code not
                         // generated"). Same predicate the legacy path already uses for
                         // _wtaHasVisualContext (line ~1228).
-                        hasScreenContext: Boolean(options?.screenContext) || (imagePaths?.length ?? 0) > 0,
+                        // One shared visual-context predicate for attached
+                        // pixels, periodic OCR, and browser DOM capture.  DOM
+                        // used to be omitted here even though the legacy path
+                        // already treated it as current-screen evidence.
+                        hasScreenContext: _wtaHasVisualContext,
                         // The live meeting's own recent words, into the composer's
                         // labelled untrusted section. Without this, a live meeting
                         // question under V3 composed a no-evidence disclosure even
@@ -4017,7 +4021,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // REPLACE a correct answer with "I could not find that in
                     // the retrieved sections of the document." Same line as
                     // declineYieldsToAttachedImages (refusalPolicy.ts).
-                    && !(imagePaths?.length)
+                    && !_wtaHasVisualContext
                     && this.currentGenerationId === generationId) {
                     const docQuestion = (answerPlan.question || question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
                     // T4 (2026-08-28) — see the long note at the docContextBlock

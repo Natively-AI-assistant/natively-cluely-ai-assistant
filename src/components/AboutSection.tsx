@@ -14,6 +14,8 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
     const t = useT();
     const isLight = useResolvedTheme() === 'light';
     const donationClickTimeRef = useRef<number | null>(null);
+    const appVersion = import.meta.env.VITE_APP_VERSION || 'unknown';
+    const buildCommit = import.meta.env.VITE_BUILD_COMMIT || 'unknown';
 
     // Initial check for donation status not needed for visuals anymore (since we removed key input)
     // but we might want to hide the support button if donated? 
@@ -66,7 +68,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
 
             {/* What's New Section */}
             <div>
-                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{t("What's New in v2.8.7")}</h4>
+                <h4 className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-2 px-1">{`What's New in v${appVersion}`}</h4>
                 <div className="bg-bg-item-surface rounded-xl border border-border-subtle overflow-hidden">
                     {/* 1. Auto Answer */}
                     <div className="p-3 border-b border-border-subtle bg-bg-card/50">
@@ -410,6 +412,9 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                         ))}
                     </div>
                 </div>
+                <p className="mt-4 text-[11px] text-text-tertiary font-mono">
+                    {`Version ${appVersion} · Build ${buildCommit}`}
+                </p>
             </div>
         </div >
     );

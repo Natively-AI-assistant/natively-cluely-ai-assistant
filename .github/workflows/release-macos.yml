@@ -52,12 +52,41 @@ jobs:
     # the job is killed mid-retry and the retry buys nothing.
     timeout-minutes: 180
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           # Defaults to the triggering ref (tag on push, selected ref on dispatch).
           # No untrusted-input ref interpolation.
+          # Keep the checkout credential available to the explicit, path-limited
+          # private-submodule step below. The release needs only `premium`; an
+          # explicit checkout avoids fetching the unrelated natively-api tree
+          # and provides credentials for the separate private repository.
+          persist-credentials: true
+
+      - name: Detect submodule token
+        id: submodule_token
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::error::A SUBMODULE_TOKEN or GH_APP_TOKEN with access to Natively-AI-assistant/natively-premium is required for a release build."
+            exit 1
+          fi
+
+      - name: Checkout premium submodule
+        if: steps.submodule_token.outputs.available == 'true'
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
+              submodule update --init --force -- premium
+          test -f premium/electron/knowledge/CompanyResearchEngine.ts
 
       - name: Setup Node
         uses: actions/setup-node@v4
