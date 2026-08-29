@@ -104,6 +104,7 @@ const DEFAULT_MAX_INSTRUCTIONS_PREVIEW = 280;
 export const DEFAULT_BUILTIN_SKILL_IDS: ReadonlySet<string> = new Set([
     'humanize-ai-text',  // visible id (slug of `name:` field)
     'humanize-text',     // on-disk folder name
+    'ponytail',
 ]);
 const MAX_ERRORS = 25;
 const SLUG_MAX_LEN = 80;

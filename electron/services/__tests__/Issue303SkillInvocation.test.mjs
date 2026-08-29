@@ -145,12 +145,31 @@ describe('SkillsManager invocation API', () => {
 		);
 	});
 
-	test('default overlay-chat skill is Meeting Copilot in JavaScript', () => {
+	test('default overlay-chat skill is ponytail (JS Meeting Copilot), separate from humanize', () => {
 		const source = read('electron/services/SkillsManager.ts');
+		const humanizeStart = source.indexOf('const BUILTIN_HUMANIZE_TEXT');
+		const humanizeEnd = source.indexOf('const LEGACY_BUILTIN_HUMANIZE_TEXTS');
+		assert.ok(humanizeStart >= 0 && humanizeEnd > humanizeStart);
+		const humanizeBody = source.slice(humanizeStart, humanizeEnd);
+		assert.equal(
+			humanizeBody.includes('## Meeting Copilot'),
+			false,
+			'humanize builtin must not contain the coding/meeting template',
+		);
 		assert.match(
 			source,
 			/const MEETING_COPILOT_INSTRUCTIONS/,
-			'Meeting Copilot must be the always-on overlay chat skill',
+			'Meeting Copilot template must live in the ponytail skill',
+		);
+		assert.match(
+			source,
+			/Senior AI Engineering Partner/,
+			'ponytail must include the co-pilot system role',
+		);
+		assert.match(
+			source,
+			/# Question type router/,
+			'ponytail must route coding vs output-based vs system design',
 		);
 		assert.match(
 			source,
@@ -164,18 +183,33 @@ describe('SkillsManager invocation API', () => {
 		);
 		assert.match(
 			source,
-			/## 2\. Brute Force Implementation/,
-			'default skill must include a brute-force JS section',
+			/## 2\. Brute Force \(/,
+			'default skill must include a brute-force section with Why + visual',
 		);
 		assert.match(
 			source,
-			/## 3\. Optimised Implementation/,
-			'default skill must include an optimised JS section',
+			/\*\*Why:\*\*/,
+			'coding template must include thought-process Why bullets',
 		);
 		assert.match(
 			source,
-			/## 4\. Mental Mapping/,
-			'default skill must end with Mental Mapping',
+			/## 3\. Optimised \(/,
+			'default skill must include an optimised section with Why + visual',
+		);
+		assert.match(
+			source,
+			/## 1\. The Output/,
+			'ponytail must include the output-based template',
+		);
+		assert.match(
+			source,
+			/\{ id: 'ponytail', content: BUILTIN_PONYTAIL_TEXT \}/,
+			'ponytail must be a seeded builtin, separate from humanize',
+		);
+		assert.match(
+			source,
+			/public buildDefaultChatSkillPromptBlock\(\)/,
+			'default chat injection helper must exist',
 		);
 	});
 });

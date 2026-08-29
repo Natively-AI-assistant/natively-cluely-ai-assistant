@@ -403,7 +403,7 @@ export const SkillsSettings: React.FC = () => {
 					</h3>
 					<p className="text-xs text-text-secondary">
 						{t(
-							'Meeting Copilot applies to every overlay chat (JS, Core Answer, Mental Mapping). Type /skill-name or $skill-name to use a different skill for that message.',
+							'Ponytail co-pilot (coding with Why + visual, output-based, system design, Node/JS/AWS) applies to every overlay chat. Type /humanize-ai-text to rewrite prose, or /ponytail to pin this skill.',
 						)}
 					</p>
 				</div>
