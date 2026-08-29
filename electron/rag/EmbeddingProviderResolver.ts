@@ -30,7 +30,12 @@ export class EmbeddingProviderResolver {
   /** Cloud providers get a bounded probe-retry before we demote (hysteresis). */
   private static readonly CLOUD_PROBE_ATTEMPTS = 3;
   private static readonly CLOUD_PROBE_BACKOFF_MS = 400;
-  private static readonly CLOUD_PROVIDER_NAMES = new Set(['openai', 'gemini']);
+  // 'natively' added 2026-08-30. It is a billed network round-trip like the
+  // other two, so a single 429 or blip must not demote it — demotion changes the
+  // active embedding SPACE and strands every persisted vector, which is the
+  // thrash this hysteresis exists to prevent. Omitting it gave the managed tier
+  // ONE probe attempt where openai/gemini get three.
+  private static readonly CLOUD_PROVIDER_NAMES = new Set(['openai', 'gemini', 'natively']);
 
   /**
    * Probe a provider's availability. For CLOUD providers (which require a real

@@ -75,10 +75,31 @@ describe('EmbeddingProviderResolver explicit key-management policy', () => {
     assert.doesNotMatch(initArgs, /process\.env\.(OPENAI_API_KEY|GOOGLE_API_KEY|GEMINI_API_KEY)/, 'Settings reinit must not resurrect removed UI keys from process.env');
   });
 
-  test('RAGManager forwards explicitKeyManagement into EmbeddingPipeline.initialize()', () => {
+  // REWRITTEN 2026-08-30. This asserted three literal spellings —
+  // `explicitKeyManagement?: boolean`, `explicitKeyManagement: config.…`,
+  // `explicitKeyManagement: keys.…` — which pinned in place the very hand-listing
+  // that was the bug. RAGManagerConfig re-declared six embedding fields by name
+  // and the constructor re-listed the same six into `initialize()`, so anything
+  // `buildEmbeddingConfig()` produces beyond those six was silently dropped on a
+  // normal app start. A test that REQUIRED the hand-list could only hold that in
+  // place.
+  //
+  // The property worth guarding is the opposite one: the config is forwarded
+  // WHOLE, so no future field can be dropped by omission. That subsumes
+  // explicitKeyManagement rather than weakening the guarantee.
+  test('RAGManager forwards the WHOLE embedding config into EmbeddingPipeline.initialize()', () => {
     const source = read('electron/rag/RAGManager.ts');
-    assert.match(source, /explicitKeyManagement\?:\s*boolean/, 'RAGManager config/input should accept explicitKeyManagement');
-    assert.match(source, /explicitKeyManagement:\s*config\.explicitKeyManagement/, 'constructor path should forward explicitKeyManagement');
-    assert.match(source, /explicitKeyManagement:\s*keys\.explicitKeyManagement/, 'initializeEmbeddings path should forward explicitKeyManagement');
+
+    assert.match(source, /RAGManagerConfig extends Partial<AppAPIConfig>/,
+      'the config must carry the pipeline TYPE, not a copy of some of its field names');
+    assert.match(source, /this\.embeddingPipeline\.initialize\(embeddingConfig\)/,
+      'the constructor must forward the rest-spread, not a hand-listed subset');
+    assert.match(source, /const \{ db: _db, dbPath: _dbPath, extPath: _extPath, \.\.\.embeddingConfig \} = config/,
+      'only RAGManager-owned fields may be withheld from the pipeline');
+    assert.match(source, /initializeEmbeddings\(keys: AppAPIConfig\)/,
+      'the second entry point must take the same type; a narrower one reads as though the rest were unsupported');
+
+    assert.doesNotMatch(source, /explicitKeyManagement:\s*config\.explicitKeyManagement/,
+      'hand-listing it again would reintroduce the drift this test now guards against');
   });
 });
