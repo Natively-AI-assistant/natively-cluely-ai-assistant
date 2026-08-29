@@ -4193,6 +4193,10 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         data: data,
         timeout: 60_000,
+        // The URL above is the only destination that passed the SSRF policy.
+        // Never replay the prompt, credentials, or image body to an unchecked
+        // redirect target.
+        maxRedirects: 0,
       });
 
       // 6. Extract Answer
@@ -8692,6 +8696,9 @@ let isMultimodal = !!(imagePaths?.length);
       data,
       timeout: 60_000,
       signal: abortSignal,
+      // The initial URL is validated immediately above. Refuse redirects so
+      // Axios cannot resend Direct Assist data to an unvalidated destination.
+      maxRedirects: 0,
     });
     if (abortSignal?.aborted) return;
 
