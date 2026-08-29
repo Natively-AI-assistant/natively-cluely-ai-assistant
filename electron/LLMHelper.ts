@@ -4384,6 +4384,8 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         body: serializedBody,
         signal: customAbort.signal,
+        // Do not replay credentials or generated content to an unchecked URL.
+        redirect: 'manual',
       });
       clearTimeout(customTimeout);
 
@@ -8830,6 +8832,11 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         body: JSON.stringify(body),
         signal: streamAbort.signal,
+        // WHATWG fetch follows redirects by default and can replay this body
+        // and its credentials to a destination that never passed provider
+        // selection or network-safety checks. Treat every redirect as an HTTP
+        // error instead of following it.
+        redirect: 'manual',
       });
       clearTimeout(streamTimeout);
 
