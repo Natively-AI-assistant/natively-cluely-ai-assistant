@@ -23,9 +23,10 @@ on:
   # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
   # calls) — see the checkout steps below, which fetch it explicitly.
   #
-  # Note the earlier plan recorded here (`submodules: true` + `token:`) does NOT
-  # work in this repo: the tree has an undescribed `natively-api` gitlink that
-  # makes the recursive submodule init abort before `premium` is ever cloned.
+  # Do not use `submodules: true` here. Both gitlinks are registered, but this
+  # build needs only the private `premium` dependency; fetching it explicitly
+  # avoids an unrelated natively-api checkout and lets us provide the separate
+  # repository credential only to the command that needs it.
   schedule:
     - cron: '0 9 * * 1' # Every Monday at 09:00 UTC
 
@@ -53,16 +54,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
-          # `natively-api` — but .gitmodules only describes `premium`.
-          # `submodules: true` runs `git submodule update --init --recursive`,
-          # which aborts on the undescribed one:
-          #
-          #   fatal: No url found for submodule path 'natively-api' in .gitmodules
-          #
-          # and it aborts BEFORE cloning `premium`, so the checkout would fail
-          # while still leaving the directory empty. The explicit step below is
-          # path-limited to `premium` and therefore unaffected by the orphan.
+          # NOT `submodules: true`. Both gitlinks are now registered, but this
+          # build needs only `premium`, which is private and requires a token
+          # with access to that separate repository. The explicit step below is
+          # path-limited to the build dependency and supplies that credential.
+          # It avoids fetching the unrelated natively-api checkout on every leg.
           #
           # persist-credentials keeps the checkout token in .git/config so the
           # submodule clone can reuse the header rewrite configured below.
@@ -115,7 +111,7 @@ jobs:
           # written to disk, so there is no cleanup step that could be skipped
           # by an earlier failure and leave a credential behind in the workspace.
           #
-          # Path-limited to `premium` on purpose — see the checkout comment above.
+          # Path-limited to the only submodule required by this build.
           git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
               submodule update --init --force -- premium
           # Prove the checkout really produced the file the typecheck needs,

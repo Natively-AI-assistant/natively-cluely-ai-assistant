@@ -85,6 +85,66 @@ import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGround
 // to carry its own copy, which had already drifted and was erasing an enforced
 // scope on every write.
 import { mergeProviderDataScopes } from './llm/ProviderRouter';
+import {
+  DirectAssistService,
+  type DirectAssistRequestInput,
+  type DirectAssistStreamEvent,
+} from './direct-assist';
+
+type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
+
+interface DirectAssistRendererRequest {
+  requestId: string;
+  source: DirectAssistSource;
+  currentRequest: string;
+  skillId?: string;
+  manualContext?: string;
+  referenceContext?: string;
+  pageContext?: {
+    dom?: string;
+    ocr?: string;
+    url?: string;
+    title?: string;
+  } | null;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  transcript?: string;
+  imagePaths?: string[];
+  requestedLanguage?: string;
+  requestedFormat?: string;
+  maxContextChars?: number;
+}
+
+interface DirectAssistIpcError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+const DIRECT_ASSIST_REQUEST_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const DIRECT_ASSIST_MAX_CURRENT_REQUEST_CHARS = 100_000;
+const DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS = 200_000;
+const DIRECT_ASSIST_MAX_HISTORY_TURNS = 64;
+const DIRECT_ASSIST_MAX_IMAGES = 5;
+const DIRECT_ASSIST_MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const DIRECT_ASSIST_IMAGE_MIMES: Readonly<Record<string, string>> = Object.freeze({
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+});
+
+/**
+ * Both arguments must already be canonical real paths. `path.relative` uses
+ * the host platform's path rules, including case-insensitive root comparison
+ * on Windows. An alternate drive/UNC root remains absolute and is rejected.
+ */
+function isDirectAssistCanonicalPathInsideRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative);
+}
 
 // Generic tokens excluded when splitting OKF entity names / card titles into
 // distinctive words for the document-grounded false-refusal gate (2026-07-02).
@@ -5840,6 +5900,585 @@ export function initializeIpcHandlers(appState: AppState): void {
       ? { success: true }
       : { success: false, error: 'Settings store is unavailable; the change was not saved.' };
   });
+
+  // ── Direct Assist ────────────────────────────────────────────────────────
+  // Direct Assist is deliberately isolated from gemini-chat-stream, WTA, RAG,
+  // Context V3, planners, validators, and repair passes. The renderer supplies
+  // the current-turn inputs; main resolves the selected model and optional
+  // skill once, validates attachments, and dispatches exactly one backend
+  // stream. `source` is the renderer surface for supersession purposes, so a
+  // new typed request never aborts an independent screenshot request.
+  type ActiveDirectAssistRequest = {
+    requestId: string;
+    source: DirectAssistSource;
+    senderId: number;
+    controller: AbortController;
+  };
+  const activeDirectAssistBySurface = new Map<string, ActiveDirectAssistRequest>();
+  const activeDirectAssistByRequest = new Map<string, ActiveDirectAssistRequest>();
+
+  const directAssistSurfaceKey = (senderId: number, source: DirectAssistSource): string =>
+    `${senderId}:${source}`;
+  const directAssistRequestKey = (senderId: number, requestId: string): string =>
+    `${senderId}:${requestId}`;
+  const directAssistError = (
+    code: string,
+    message: string,
+    retryable = false,
+  ): DirectAssistIpcError => ({ code, message, retryable });
+  const sendDirectAssistEvent = (sender: any, payload: unknown): void => {
+    if (!sender || sender.isDestroyed?.()) return;
+    sender.send('direct-assist-event', payload);
+  };
+  const rejectDirectAssist = (
+    sender: any,
+    requestId: string,
+    error: DirectAssistIpcError,
+  ): { accepted: false; requestId: string; error: DirectAssistIpcError } => {
+    sendDirectAssistEvent(sender, {
+      type: 'error',
+      requestId,
+      sequence: 0,
+      partial: false,
+      error,
+    });
+    return { accepted: false, requestId, error };
+  };
+
+  const sniffDirectAssistImage = (
+    imagePath: string,
+  ): 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp' | null => {
+    let fd: number | undefined;
+    try {
+      fd = fs.openSync(imagePath, 'r');
+      const header = Buffer.alloc(12);
+      const bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+      const isPng = bytesRead >= 8
+        && header.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      const isJpeg = bytesRead >= 3
+        && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+      const signature6 = header.subarray(0, 6).toString('ascii');
+      const isGif = bytesRead >= 6 && (signature6 === 'GIF87a' || signature6 === 'GIF89a');
+      const isWebp = bytesRead >= 12
+        && header.subarray(0, 4).toString('ascii') === 'RIFF'
+        && header.subarray(8, 12).toString('ascii') === 'WEBP';
+      if (isPng) return 'image/png';
+      if (isJpeg) return 'image/jpeg';
+      if (isGif) return 'image/gif';
+      if (isWebp) return 'image/webp';
+      return null;
+    } catch {
+      return null;
+    } finally {
+      if (fd !== undefined) {
+        try { fs.closeSync(fd); } catch { /* best effort */ }
+      }
+    }
+  };
+
+  const normalizeDirectAssistRequest = (
+    raw: unknown,
+  ): { request?: DirectAssistRendererRequest; error?: DirectAssistIpcError; requestId: string } => {
+    const candidate = raw && typeof raw === 'object'
+      ? raw as Record<string, unknown>
+      : null;
+    const requestId = typeof candidate?.requestId === 'string' ? candidate.requestId : 'invalid';
+    if (!candidate || !DIRECT_ASSIST_REQUEST_ID_RE.test(requestId)) {
+      return {
+        requestId,
+        error: directAssistError('INVALID_REQUEST', 'A valid renderer-generated request ID is required.'),
+      };
+    }
+    if (candidate.source !== 'typed' && candidate.source !== 'stt' && candidate.source !== 'screenshot') {
+      return {
+        requestId,
+        error: directAssistError('INVALID_REQUEST', 'Direct Assist source is invalid.'),
+      };
+    }
+    if (
+      typeof candidate.currentRequest !== 'string'
+      || candidate.currentRequest.trim().length === 0
+      || candidate.currentRequest.length > DIRECT_ASSIST_MAX_CURRENT_REQUEST_CHARS
+    ) {
+      return {
+        requestId,
+        error: directAssistError(
+          candidate.currentRequest && String(candidate.currentRequest).length > DIRECT_ASSIST_MAX_CURRENT_REQUEST_CHARS
+            ? 'CONTEXT_TOO_LARGE'
+            : 'INVALID_REQUEST',
+          'The current Direct Assist request is missing or too large.',
+        ),
+      };
+    }
+
+    const optionalTextFields = [
+      'skillId',
+      'manualContext',
+      'referenceContext',
+      'transcript',
+      'requestedLanguage',
+      'requestedFormat',
+    ] as const;
+    for (const key of optionalTextFields) {
+      const value = candidate[key];
+      if (value !== undefined && typeof value !== 'string') {
+        return {
+          requestId,
+          error: directAssistError('INVALID_REQUEST', `Direct Assist field "${key}" is invalid.`),
+        };
+      }
+    }
+    for (const key of ['manualContext', 'referenceContext', 'transcript'] as const) {
+      const value = candidate[key] as string | undefined;
+      if (value && value.length > DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS) {
+        return {
+          requestId,
+          error: directAssistError('CONTEXT_TOO_LARGE', `Direct Assist field "${key}" is too large.`),
+        };
+      }
+    }
+    if ((candidate.skillId as string | undefined)?.length && (candidate.skillId as string).length > 128) {
+      return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist skill ID is invalid.') };
+    }
+    if ((candidate.requestedLanguage as string | undefined)?.length && (candidate.requestedLanguage as string).length > 64) {
+      return { requestId, error: directAssistError('INVALID_REQUEST', 'Requested language is invalid.') };
+    }
+    if ((candidate.requestedFormat as string | undefined)?.length && (candidate.requestedFormat as string).length > 128) {
+      return { requestId, error: directAssistError('INVALID_REQUEST', 'Requested format is invalid.') };
+    }
+
+    let pageContext: DirectAssistRendererRequest['pageContext'];
+    if (candidate.pageContext !== undefined && candidate.pageContext !== null) {
+      if (typeof candidate.pageContext !== 'object' || Array.isArray(candidate.pageContext)) {
+        return { requestId, error: directAssistError('INVALID_REQUEST', 'Page context is invalid.') };
+      }
+      const rawPage = candidate.pageContext as Record<string, unknown>;
+      for (const key of ['dom', 'ocr', 'url', 'title'] as const) {
+        if (rawPage[key] !== undefined && typeof rawPage[key] !== 'string') {
+          return { requestId, error: directAssistError('INVALID_REQUEST', `Page context field "${key}" is invalid.`) };
+        }
+      }
+      if (
+        ((rawPage.dom as string | undefined)?.length ?? 0) > DOM_CONTEXT_MAX_CHARS
+        || ((rawPage.ocr as string | undefined)?.length ?? 0) > DOM_CONTEXT_MAX_CHARS
+      ) {
+        return { requestId, error: directAssistError('CONTEXT_TOO_LARGE', 'Page context is too large.') };
+      }
+      if (((rawPage.url as string | undefined)?.length ?? 0) > 4096
+          || ((rawPage.title as string | undefined)?.length ?? 0) > 1024) {
+        return { requestId, error: directAssistError('CONTEXT_TOO_LARGE', 'Page metadata is too large.') };
+      }
+      pageContext = Object.freeze({
+        dom: rawPage.dom as string | undefined,
+        ocr: rawPage.ocr as string | undefined,
+        url: rawPage.url as string | undefined,
+        title: rawPage.title as string | undefined,
+      });
+    } else if (candidate.pageContext === null) {
+      pageContext = null;
+    }
+
+    let history: DirectAssistRendererRequest['history'];
+    if (candidate.history !== undefined) {
+      if (!Array.isArray(candidate.history) || candidate.history.length > DIRECT_ASSIST_MAX_HISTORY_TURNS) {
+        return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist history is invalid.') };
+      }
+      history = [];
+      let historyChars = 0;
+      for (const rawTurn of candidate.history) {
+        if (
+          !rawTurn
+          || typeof rawTurn !== 'object'
+          || ((rawTurn as any).role !== 'user' && (rawTurn as any).role !== 'assistant')
+          || typeof (rawTurn as any).content !== 'string'
+        ) {
+          return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist history contains an invalid turn.') };
+        }
+        historyChars += (rawTurn as any).content.length;
+        if (historyChars > DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS) {
+          return { requestId, error: directAssistError('CONTEXT_TOO_LARGE', 'Direct Assist history is too large.') };
+        }
+        history.push(Object.freeze({
+          role: (rawTurn as any).role,
+          content: (rawTurn as any).content,
+        }));
+      }
+      Object.freeze(history);
+    }
+
+    let imagePaths: string[] | undefined;
+    if (candidate.imagePaths !== undefined) {
+      if (
+        !Array.isArray(candidate.imagePaths)
+        || candidate.imagePaths.length > DIRECT_ASSIST_MAX_IMAGES
+        || candidate.imagePaths.some((value) => typeof value !== 'string' || value.trim().length === 0)
+      ) {
+        return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'Image attachment payload is invalid.') };
+      }
+      const { validateImagePath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
+      const userDataDir = app.getPath('userData');
+      let canonicalUserDataDir: string;
+      try {
+        canonicalUserDataDir = fs.realpathSync.native(userDataDir);
+      } catch {
+        return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'The app attachment directory is unavailable.') };
+      }
+      imagePaths = [];
+      for (const rendererPath of candidate.imagePaths as string[]) {
+        try {
+          // Do not trust validateImagePath's original-path fallback: a path can
+          // look allowlisted while a symlink/junction resolves outside userData.
+          // Canonical containment is the authoritative Direct Assist boundary.
+          const canonicalPath = fs.realpathSync.native(rendererPath);
+          if (!isDirectAssistCanonicalPathInsideRoot(canonicalUserDataDir, canonicalPath)) {
+            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment was rejected.') };
+          }
+          const validation = validateImagePath(rendererPath, userDataDir);
+          if (!validation.isValid) {
+            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment was rejected.') };
+          }
+          const stat = fs.statSync(canonicalPath);
+          if (!stat.isFile() || stat.size <= 0 || stat.size > DIRECT_ASSIST_MAX_IMAGE_BYTES) {
+            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment has an invalid size or type.') };
+          }
+          const detectedMime = sniffDirectAssistImage(canonicalPath);
+          if (
+            !detectedMime
+            || DIRECT_ASSIST_IMAGE_MIMES[path.extname(canonicalPath).toLowerCase()] !== detectedMime
+          ) {
+            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An attachment is not a supported image.') };
+          }
+          imagePaths.push(canonicalPath);
+        } catch {
+          return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment is unavailable.') };
+        }
+      }
+      Object.freeze(imagePaths);
+    }
+
+    let maxContextChars: number | undefined;
+    if (candidate.maxContextChars !== undefined) {
+      if (
+        typeof candidate.maxContextChars !== 'number'
+        || !Number.isInteger(candidate.maxContextChars)
+        || candidate.maxContextChars < 4_000
+        || candidate.maxContextChars > 500_000
+      ) {
+        return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist context limit is invalid.') };
+      }
+      maxContextChars = candidate.maxContextChars;
+    }
+
+    const request: DirectAssistRendererRequest = Object.freeze({
+      requestId,
+      source: candidate.source as DirectAssistSource,
+      currentRequest: candidate.currentRequest,
+      skillId: candidate.skillId as string | undefined,
+      manualContext: candidate.manualContext as string | undefined,
+      referenceContext: candidate.referenceContext as string | undefined,
+      pageContext,
+      history,
+      transcript: candidate.transcript as string | undefined,
+      imagePaths,
+      requestedLanguage: candidate.requestedLanguage as string | undefined,
+      requestedFormat: candidate.requestedFormat as string | undefined,
+      maxContextChars,
+    });
+    return { requestId, request };
+  };
+
+  const resolveDirectAssistSkill = (
+    request: DirectAssistRendererRequest,
+  ): {
+    currentRequest?: string;
+    skill?: DirectAssistRequestInput['skill'];
+    error?: DirectAssistIpcError;
+  } => {
+    const prefix = request.currentRequest.match(/^\s*[/$]([a-z0-9][a-z0-9_-]{0,127})(?:\s+([\s\S]*))?$/i);
+    const prefixSkillId = prefix?.[1];
+    const explicitSkillId = request.skillId?.trim();
+    if (
+      prefixSkillId
+      && explicitSkillId
+      && prefixSkillId.toLowerCase() !== explicitSkillId.toLowerCase()
+    ) {
+      return { error: directAssistError('INVALID_REQUEST', 'Conflicting Direct Assist skill selections were supplied.') };
+    }
+    const requestedSkillId = prefixSkillId || explicitSkillId;
+    if (!requestedSkillId) return { currentRequest: request.currentRequest, skill: null };
+
+    const skill = SkillsManager.getInstance().getSkill(requestedSkillId);
+    if (!skill) {
+      return { error: directAssistError('SKILL_NOT_FOUND', 'The requested Direct Assist skill was not found.') };
+    }
+    if (skill.enabled === false) {
+      return { error: directAssistError('SKILL_DISABLED', 'The requested Direct Assist skill is disabled.') };
+    }
+    const currentRequest = prefix ? (prefix[2] ?? '').trim() : request.currentRequest;
+    if (!currentRequest) {
+      return { error: directAssistError('INVALID_REQUEST', 'A request is required after the skill name.') };
+    }
+    return {
+      currentRequest,
+      skill: Object.freeze({
+        id: skill.id,
+        name: skill.name,
+        instructions: skill.instructions,
+      }),
+    };
+  };
+
+  safeHandle('get-direct-assist-enabled', async () => {
+    return SettingsManager.getInstance().getDirectAssistEnabled();
+  });
+
+  safeHandle('set-direct-assist-enabled', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_type' };
+    }
+    const settings = SettingsManager.getInstance();
+    if (enabled && settings.isDirectAssistKilledByOperator()) {
+      return { success: false, error: 'operator_kill_switch' };
+    }
+    if (!settings.set('directAssistEnabled', enabled)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    const effective = settings.getDirectAssistEnabled();
+    if (!effective) {
+      for (const active of new Set(activeDirectAssistByRequest.values())) {
+        active.controller.abort();
+      }
+    }
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('direct-assist-enabled-changed', effective);
+    });
+    return { success: true };
+  });
+
+  safeHandle('direct-assist-stream', async (event, rawRequest: unknown) => {
+    const normalized = normalizeDirectAssistRequest(rawRequest);
+    if (normalized.error || !normalized.request) {
+      return rejectDirectAssist(
+        event.sender,
+        normalized.requestId,
+        normalized.error ?? directAssistError('INVALID_REQUEST', 'Direct Assist request is invalid.'),
+      );
+    }
+    const request = normalized.request;
+    const settings = SettingsManager.getInstance();
+    if (!settings.getDirectAssistEnabled()) {
+      return rejectDirectAssist(
+        event.sender,
+        request.requestId,
+        directAssistError(
+          settings.isDirectAssistKilledByOperator() ? 'DIRECT_ASSIST_KILLED' : 'DIRECT_ASSIST_DISABLED',
+          settings.isDirectAssistKilledByOperator()
+            ? 'Direct Assist is disabled by the operator kill switch.'
+            : 'Direct Assist is disabled in Settings.',
+        ),
+      );
+    }
+
+    const resolvedSkill = resolveDirectAssistSkill(request);
+    if (resolvedSkill.error || !resolvedSkill.currentRequest) {
+      return rejectDirectAssist(
+        event.sender,
+        request.requestId,
+        resolvedSkill.error ?? directAssistError('INVALID_REQUEST', 'Direct Assist request is invalid.'),
+      );
+    }
+
+    const senderId = Number(event.sender?.id);
+    if (!Number.isFinite(senderId)) {
+      return rejectDirectAssist(
+        event.sender,
+        request.requestId,
+        directAssistError('INVALID_REQUEST', 'Direct Assist sender is invalid.'),
+      );
+    }
+    const requestKey = directAssistRequestKey(senderId, request.requestId);
+    if (activeDirectAssistByRequest.has(requestKey)) {
+      return rejectDirectAssist(
+        event.sender,
+        request.requestId,
+        directAssistError('INVALID_REQUEST', 'Direct Assist request ID is already active.'),
+      );
+    }
+
+    let service: DirectAssistService;
+    let selection: DirectAssistRequestInput['selection'];
+    try {
+      const llmHelper = appState.processingHelper.getLLMHelper();
+      const selected = llmHelper.getDirectAssistSelection();
+      if (!selected || typeof selected.provider !== 'string' || typeof selected.model !== 'string') {
+        throw new Error('selection_unavailable');
+      }
+      selection = Object.freeze({ provider: selected.provider, model: selected.model });
+      service = new DirectAssistService(llmHelper);
+    } catch {
+      return rejectDirectAssist(
+        event.sender,
+        request.requestId,
+        directAssistError('NO_PROVIDER_CONFIGURED', 'No usable Direct Assist provider is configured.'),
+      );
+    }
+
+    const surfaceKey = directAssistSurfaceKey(senderId, request.source);
+    const prior = activeDirectAssistBySurface.get(surfaceKey);
+    if (prior) prior.controller.abort();
+
+    const controller = new AbortController();
+    const active: ActiveDirectAssistRequest = {
+      requestId: request.requestId,
+      source: request.source,
+      senderId,
+      controller,
+    };
+    activeDirectAssistBySurface.set(surfaceKey, active);
+    activeDirectAssistByRequest.set(requestKey, active);
+
+    const onSenderDestroyed = (): void => controller.abort();
+    event.sender.once?.('destroyed', onSenderDestroyed);
+
+    const directRequest: DirectAssistRequestInput = Object.freeze({
+      requestId: request.requestId,
+      source: request.source,
+      selection,
+      currentRequest: resolvedSkill.currentRequest,
+      skill: resolvedSkill.skill ?? null,
+      manualContext: request.manualContext,
+      referenceContext: request.referenceContext,
+      pageContext: request.pageContext,
+      history: request.history,
+      transcript: request.transcript,
+      imagePaths: request.imagePaths,
+      requestedLanguage: request.requestedLanguage,
+      requestedFormat: request.requestedFormat,
+      maxContextChars: request.maxContextChars,
+    });
+
+    void (async () => {
+      let terminalSent = false;
+      let startSent = false;
+      let lastSequence = 0;
+      let fullText = '';
+      const sendTerminal = (
+        payload: DirectAssistStreamEvent | {
+          type: 'error' | 'cancel';
+          requestId: string;
+          sequence: number;
+          partial?: boolean;
+          error?: DirectAssistIpcError;
+        },
+      ): void => {
+        if (terminalSent) return;
+        terminalSent = true;
+        sendDirectAssistEvent(event.sender, payload);
+      };
+
+      try {
+        for await (const streamEvent of service.stream(directRequest, controller.signal)) {
+          if (terminalSent) break;
+          if (streamEvent.requestId !== request.requestId) {
+            throw new Error('request_correlation_failed');
+          }
+          if (streamEvent.type === 'start') {
+            if (startSent) throw new Error('duplicate_start');
+            startSent = true;
+            sendDirectAssistEvent(event.sender, streamEvent);
+            continue;
+          }
+          if (streamEvent.type === 'delta') {
+            if (!startSent || streamEvent.sequence <= lastSequence) {
+              throw new Error('non_monotonic_stream');
+            }
+            lastSequence = streamEvent.sequence;
+            fullText += streamEvent.text;
+            sendDirectAssistEvent(event.sender, streamEvent);
+            continue;
+          }
+          lastSequence = Math.max(lastSequence, streamEvent.sequence);
+          if (streamEvent.type === 'done') {
+            sendTerminal({ ...streamEvent, fullText } as DirectAssistStreamEvent);
+          } else {
+            sendTerminal(streamEvent);
+          }
+          break;
+        }
+        if (!terminalSent) {
+          if (controller.signal.aborted) {
+            sendTerminal({
+              type: 'cancel',
+              requestId: request.requestId,
+              sequence: lastSequence + 1,
+            });
+          } else {
+            sendTerminal({
+              type: 'error',
+              requestId: request.requestId,
+              sequence: lastSequence + 1,
+              partial: lastSequence > 0,
+              error: directAssistError(
+                'INCOMPLETE_STREAM',
+                'The Direct Assist stream ended before completion.',
+                true,
+              ),
+            });
+          }
+        }
+      } catch {
+        if (controller.signal.aborted) {
+          sendTerminal({
+            type: 'cancel',
+            requestId: request.requestId,
+            sequence: lastSequence + 1,
+          });
+        } else {
+          sendTerminal({
+            type: 'error',
+            requestId: request.requestId,
+            sequence: lastSequence + 1,
+            partial: lastSequence > 0,
+            error: directAssistError(
+              'INCOMPLETE_STREAM',
+              'The Direct Assist stream failed before completion.',
+              true,
+            ),
+          });
+        }
+      } finally {
+        event.sender.removeListener?.('destroyed', onSenderDestroyed);
+        if (activeDirectAssistBySurface.get(surfaceKey) === active) {
+          activeDirectAssistBySurface.delete(surfaceKey);
+        }
+        if (activeDirectAssistByRequest.get(requestKey) === active) {
+          activeDirectAssistByRequest.delete(requestKey);
+        }
+      }
+    })();
+
+    return { accepted: true, requestId: request.requestId };
+  });
+
+  safeHandle(
+    'direct-assist-cancel',
+    async (event, requestId: unknown, source?: unknown) => {
+      if (
+        typeof requestId !== 'string'
+        || !DIRECT_ASSIST_REQUEST_ID_RE.test(requestId)
+        || (source !== undefined && source !== 'typed' && source !== 'stt' && source !== 'screenshot')
+      ) {
+        return { success: false, cancelled: false, error: 'invalid_request' };
+      }
+      const senderId = Number(event.sender?.id);
+      const active = activeDirectAssistByRequest.get(directAssistRequestKey(senderId, requestId));
+      if (!active || (source !== undefined && active.source !== source)) {
+        return { success: true, cancelled: false };
+      }
+      active.controller.abort();
+      return { success: true, cancelled: true };
+    },
+  );
 
   safeHandle('get-code-verification', async () => {
     // Default OFF: code verification is currently disabled. Only true when the
