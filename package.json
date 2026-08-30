@@ -93,6 +93,7 @@
     "benchmark:l4-aggregate": "node --experimental-strip-types benchmarks/profile-intelligence/aggregate_l4_progress.ts",
     "test:l4-aggregator": "node --test benchmarks/profile-intelligence/aggregate_l4_progress.selftest.mjs",
     "benchmark:manual-ui-truth": "cross-env NODE_NO_WARNINGS=1 BENCHMARK_MODEL=gemini-3.1-flash-lite node benchmarks/profile-intelligence/run_manual_ui_truth_eval.ts",
+    "benchmark:reranker:run": "npm run build:electron && node benchmarks/reranker-eval/run.mjs",
     "verify:hindsight": "node scripts/verify-hindsight.mjs",
     "verify:packaged-local-assets": "node scripts/verify-packaged-local-assets.mjs",
     "verify:mac-app-local-assets": "node scripts/verify-packaged-local-assets.mjs",
