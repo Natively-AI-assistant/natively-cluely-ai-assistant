@@ -59,6 +59,28 @@ export async function runLocalReranker(repoRoot, modelId, poolEntries) {
   }
 
   const reranker = getLocalReranker();
+
+  // Fast-fail on an uncached model BEFORE isAvailable()/rerank() ever touch
+  // the worker. isCached() is a synchronous-ish local filesystem check (no
+  // network, no subprocess) that mirrors exactly what ensureLoaded() would
+  // need on disk — so a model with no files under resources/models/ fails in
+  // milliseconds with an actionable message, instead of burning the full
+  // WORKER_INIT_TIMEOUT_MS (60s) attempting to load/download it and then
+  // failing with a generic worker-timeout error. Applies to any modelId this
+  // function is called with, not just bge-reranker-large: isCached() on an
+  // already-cached model (e.g. bge-reranker-base, pre-fetched by
+  // scripts/download-models.js) returns true immediately and this branch is
+  // a no-op for it.
+  const cached = await reranker.isCached();
+  if (!cached) {
+    return {
+      perQuery: [],
+      peakRssMb: 0,
+      failed: true,
+      error: `model "${modelId}" is not cached under resources/models/ — pre-fetch it before running this benchmark, e.g.: curl -C - -L "https://huggingface.co/${modelId}/resolve/main/tokenizer.json" -o "resources/models/${modelId}/tokenizer.json" (and similarly for config.json, tokenizer_config.json, and onnx/model_quantized.onnx) — see LocalReranker.ts's resolveModelPath() for the exact expected directory layout`,
+    };
+  }
+
   const available = await reranker.isAvailable();
   if (!available) {
     return { perQuery: [], peakRssMb: 0, failed: true, error: `model "${modelId}" did not become available (see console warnings above for the underlying load error)` };

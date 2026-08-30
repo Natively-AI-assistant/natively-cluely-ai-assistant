@@ -85,7 +85,19 @@ async function main() {
       const out = execFileSync(
         process.execPath,
         ['--input-type=module', '-e', script, '--', path.join(resultsDir, '_pools.json'), repoRoot, modelId],
-        { encoding: 'utf8', maxBuffer: 1024 * 1024 * 64, stdio: ['ignore', 'pipe', 'inherit'] },
+        {
+          encoding: 'utf8',
+          maxBuffer: 1024 * 1024 * 64,
+          stdio: ['ignore', 'pipe', 'inherit'],
+          // Defense-in-depth, not the primary safety: LocalReranker.ts's own
+          // WORKER_INIT_TIMEOUT_MS (60s) plus its worker.unref() already
+          // keep a stuck load from hanging the process today. This bounds
+          // the subprocess independently of that implementation detail (out
+          // of this task's control) so a future change there that removes
+          // unref() fails this script visibly instead of hanging forever.
+          // Generous enough for a real model load + full pool rerank pass.
+          timeout: 180_000,
+        },
       );
       const result = JSON.parse(out.trim().split('\n').pop());
       writeResult(name, { candidate: name, skipped: false, ...result });
@@ -93,9 +105,22 @@ async function main() {
       // execFileSync's own e.message embeds the full inline -e source (not
       // useful in a report); the real diagnostic already streamed to this
       // process's stderr live (stdio: 'inherit' below), so keep this short.
-      const status = e.status !== undefined ? e.status : 'unknown';
-      const sig = e.signal ? `, signal ${e.signal}` : '';
-      writeResult(name, { candidate: name, skipped: false, failed: true, error: `subprocess failed (exit ${status}${sig}) — see console output above for the underlying error`, perQuery: [] });
+      // A timeout kill (see the `timeout` option above) is a DISTINCT case:
+      // Node sets e.code === 'ETIMEDOUT' and e.status === null (not
+      // undefined, and not a real exit code — the parent killed the child,
+      // the child never exited on its own) with e.signal === 'SIGTERM'.
+      // Reporting that as "exit null, signal SIGTERM — see console output
+      // above" would be actively misleading: there IS no underlying error in
+      // the console, the process was still working when it got killed.
+      let error;
+      if (e.code === 'ETIMEDOUT') {
+        error = `subprocess timed out after 180s loading/running "${modelId}" — see LocalReranker.ts's WORKER_INIT_TIMEOUT_MS and this script's execFileSync timeout option`;
+      } else {
+        const status = e.status !== undefined && e.status !== null ? e.status : 'unknown';
+        const sig = e.signal ? `, signal ${e.signal}` : '';
+        error = `subprocess failed (exit ${status}${sig}) — see console output above for the underlying error`;
+      }
+      writeResult(name, { candidate: name, skipped: false, failed: true, error, perQuery: [] });
     }
   }
 
