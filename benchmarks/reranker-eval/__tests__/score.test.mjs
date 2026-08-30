@@ -1,7 +1,7 @@
 // benchmarks/reranker-eval/__tests__/score.test.mjs
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeCandidateMetrics, findDisagreements } from '../score.mjs';
+import { computeCandidateMetrics, findDisagreements, isContentFreeChunk, findContentFreeTopPicks, renderReport } from '../score.mjs';
 
 const pools = [
   { queryId: 'q1', goldChunkPoolIndices: [1] },
@@ -108,5 +108,100 @@ describe('findDisagreements', () => {
     ];
     const disagreements = findDisagreements(manyPools, candidateResults, 2);
     assert.equal(disagreements.length, 2);
+  });
+
+  test('exposes totalCount so callers know how many disagreeing queries were truncated', () => {
+    const manyPools = Array.from({ length: 5 }, (_, i) => ({
+      queryId: `q${i}`, query: `query ${i}`, goldChunkPoolIndices: [0], pool: [{ text: 'a' }, { text: 'b' }],
+    }));
+    const candidateResults = [
+      { name: 'a', result: { failed: false, skipped: false, perQuery: manyPools.map((p) => ({ queryId: p.queryId, order: [0, 1] })) } },
+      { name: 'b', result: { failed: false, skipped: false, perQuery: manyPools.map((p) => ({ queryId: p.queryId, order: [1, 0] })) } },
+    ];
+    const limited = findDisagreements(manyPools, candidateResults, 2);
+    assert.equal(limited.length, 2);
+    assert.equal(limited.totalCount, 5, 'totalCount reflects all 5 disagreements, not just the 2 shown');
+
+    const unlimited = findDisagreements(manyPools, candidateResults, 15);
+    assert.equal(unlimited.totalCount, 5, 'totalCount matches length when nothing was truncated');
+  });
+
+  test('topChunkText only gets an ellipsis when the underlying text was actually longer than the truncation length', () => {
+    const poolsMixedLength = [
+      {
+        queryId: 'q1',
+        query: 'q',
+        goldChunkPoolIndices: [0],
+        pool: [{ text: 'x'.repeat(100) }, { text: 'a short chunk' }],
+      },
+    ];
+    const candidateResults = [
+      { name: 'a', result: { failed: false, skipped: false, perQuery: [{ queryId: 'q1', order: [0] }] } },
+      { name: 'b', result: { failed: false, skipped: false, perQuery: [{ queryId: 'q1', order: [1] }] } },
+    ];
+    const disagreements = findDisagreements(poolsMixedLength, candidateResults);
+    const byName = Object.fromEntries(disagreements[0].picks.map((p) => [p.name, p]));
+    assert.ok(byName['a'].topChunkText.endsWith('...'), 'a 100-char chunk truncated to 80 chars should end with an ellipsis');
+    assert.equal(byName['a'].topChunkText.length, 83, '80 chars of content plus the 3-char ellipsis');
+    assert.equal(byName['b'].topChunkText, 'a short chunk', 'a chunk under the truncation length must NOT get a fake ellipsis appended');
+  });
+});
+
+describe('isContentFreeChunk', () => {
+  test('flags a bare document-title chunk as content-free', () => {
+    assert.equal(isContentFreeChunk('# Priya Nair'), true);
+  });
+
+  test('flags an empty section heading (with the [context: ...] annotation prefix) as content-free', () => {
+    assert.equal(isContentFreeChunk('[context: Experience] ## Experience\n'), true);
+  });
+
+  test('flags a LONG bare title with no body as content-free — length alone must not be the only signal', () => {
+    // A heading-only chunk whose title text happens to be long (a JD title,
+    // not a short name) is still "bare" in the sense that matters: there is
+    // no body underneath it. A pure character-count threshold would miss
+    // this and undercount real content-free picks.
+    assert.equal(isContentFreeChunk('# Senior Backend Engineer — CloudScale Systems'), true);
+  });
+
+  test('does not flag a heading with real body content', () => {
+    assert.equal(isContentFreeChunk('[context: Education] ## Education\nB.S. Computer Science, University of Washington, 2019.'), false);
+  });
+
+  test('treats missing/empty text as content-free rather than throwing', () => {
+    assert.equal(isContentFreeChunk(''), true);
+    assert.equal(isContentFreeChunk(null), true);
+  });
+});
+
+describe('findContentFreeTopPicks', () => {
+  test('counts content-free #1 picks per live candidate across every query, excluding skipped/failed candidates', () => {
+    const pools = [
+      { queryId: 'q1', pool: [{ text: '# Priya Nair' }, { text: 'real content about a migration project' }] },
+      { queryId: 'q2', pool: [{ text: '# Priya Nair' }, { text: 'more real content here' }] },
+    ];
+    const candidateResults = [
+      { name: 'always-title', result: { failed: false, skipped: false, perQuery: [{ queryId: 'q1', order: [0, 1] }, { queryId: 'q2', order: [0, 1] }] } },
+      { name: 'always-real', result: { failed: false, skipped: false, perQuery: [{ queryId: 'q1', order: [1, 0] }, { queryId: 'q2', order: [1, 0] }] } },
+      { name: 'skipped-one', result: { failed: false, skipped: true, perQuery: [] } },
+    ];
+    const stats = findContentFreeTopPicks(pools, candidateResults);
+    assert.equal(stats.length, 2, 'the skipped candidate is excluded entirely');
+    const byName = Object.fromEntries(stats.map((s) => [s.name, s]));
+    assert.deepEqual(byName['always-title'], { name: 'always-title', count: 2, total: 2 });
+    assert.deepEqual(byName['always-real'], { name: 'always-real', count: 0, total: 2 });
+  });
+});
+
+describe('renderReport verdict scoping', () => {
+  test('names a skipped candidate and states it remains unmeasured, rather than folding it into "no candidate clears the budget"', () => {
+    const candidateMetrics = [
+      { name: 'baseline', metrics: { mrr: 0.4, recallAt1: 0.3, recallAt3: 0.5, ndcg: 0.4, p50LatencyMs: 0, p95LatencyMs: 0, peakRssMb: null }, result: { skipped: false, failed: false } },
+      { name: 'slow-winner', metrics: { mrr: 0.7, recallAt1: 0.6, recallAt3: 0.8, ndcg: 0.7, p50LatencyMs: 6000, p95LatencyMs: 6500, peakRssMb: 2000 }, result: { skipped: false, failed: false } },
+      { name: 'cohere-rerank-v3.5', metrics: null, result: { skipped: true, failed: false } },
+    ];
+    const report = renderReport(candidateMetrics, []);
+    assert.match(report, /cohere-rerank-v3\.5.*SKIPPED.*remains unmeasured/s);
+    assert.match(report, /does not evaluate it/);
   });
 });

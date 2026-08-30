@@ -104,7 +104,7 @@ async function main() {
     } catch (e) {
       // execFileSync's own e.message embeds the full inline -e source (not
       // useful in a report); the real diagnostic already streamed to this
-      // process's stderr live (stdio: 'inherit' below), so keep this short.
+      // process's stderr live (stdio: 'inherit' above), so keep this short.
       // A timeout kill (see the `timeout` option above) is a DISTINCT case:
       // Node sets e.code === 'ETIMEDOUT' and e.status === null (not
       // undefined, and not a real exit code — the parent killed the child,
