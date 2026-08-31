@@ -264,6 +264,43 @@ test('cancellation keeps the partial so the next attempt can resume', async () =
   assert.ok(!fs.existsSync(dest), 'nothing may appear at the real path');
 });
 
+test('a slow BODY is not aborted by the connect timeout', async () => {
+  // Regression. AbortSignal.timeout() cannot be cancelled, so composing it into
+  // fetch's signal aborts the whole request including the body. A real 128MB
+  // download aborted twice at 30s and only survived because resume caught it.
+  // The timer must be cleared once the headers land.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url, init) => {
+      if (String(url).includes('/api/models/')) return metadataResponse('abc');
+      const signal = init?.signal;
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (k) => (k.toLowerCase() === 'content-length' ? '4' : null) },
+        body: new ReadableStream({
+          async start(controller) {
+            // Emit slowly, and assert the request signal stays unaborted
+            // throughout — that is the whole property under test.
+            for (const byte of [1, 2, 3, 4]) {
+              await new Promise((r) => setTimeout(r, 15));
+              assert.equal(signal?.aborted, false, 'the body must not be on the connect clock');
+              controller.enqueue(new Uint8Array([byte]));
+            }
+            controller.close();
+          },
+        }),
+      };
+    },
+  });
+
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(fs.readFileSync(dest).length, 4);
+});
+
 test('an unresolved repo id is refused before any request', async () => {
   const dir = tmpDir();
   let called = false;

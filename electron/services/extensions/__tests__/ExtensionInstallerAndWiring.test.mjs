@@ -105,16 +105,29 @@ test('a symlink anywhere in the payload refuses the whole install', () => {
   assert.match(res.errors.join(' '), /symlink/);
 });
 
-test('node_modules is not copied, and the omission is reported', () => {
+test('node_modules IS copied, because the entrypoint needs it at runtime', () => {
+  // Skipping it looks like an obvious saving and is a trap: the Ettin extension
+  // does `await import('onnxruntime-node')` at init, so an install without
+  // node_modules succeeds and then fails to start.
   const { dir } = makeSource();
-  fs.mkdirSync(path.join(dir, 'node_modules', 'big'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'node_modules', 'big', 'index.js'), 'x'.repeat(1000));
+  fs.mkdirSync(path.join(dir, 'node_modules', 'onnxruntime-node'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'node_modules', 'onnxruntime-node', 'index.js'), 'module.exports = {};');
 
-  const root = tmpDir();
-  const res = stageFromDirectory(dir, { rootOverride: root });
+  const res = stageFromDirectory(dir, { rootOverride: tmpDir() });
   assert.equal(res.ok, true);
-  assert.ok(!fs.existsSync(path.join(res.payloadDir, 'node_modules')));
-  assert.match(res.warnings.join(' '), /node_modules/, 'a silent omission is worse than a noted one');
+  assert.ok(fs.existsSync(path.join(res.payloadDir, 'node_modules', 'onnxruntime-node', 'index.js')),
+    'a broken install is worse than a large one');
+});
+
+test('a native addon is reported, because an ABI mismatch reads as a Natively crash', () => {
+  const { dir } = makeSource();
+  fs.mkdirSync(path.join(dir, 'node_modules', 'ort', 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'node_modules', 'ort', 'bin', 'onnxruntime.node'), 'binary');
+
+  const res = stageFromDirectory(dir, { rootOverride: tmpDir() });
+  assert.equal(res.ok, true);
+  assert.match(res.warnings.join(' '), /native addon/i);
+  assert.match(res.warnings.join(' '), /Electron/, 'the warning must say WHICH ABI');
 });
 
 test('a reinstall replaces the payload rather than merging into it', () => {

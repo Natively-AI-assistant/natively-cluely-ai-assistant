@@ -35,12 +35,22 @@ const MAX_PAYLOAD_FILES = 20_000;
 const MAX_PAYLOAD_BYTES = 512 * 1024 * 1024;
 
 /**
- * Directories never copied out of a source tree. `node_modules` is the
- * important one: the three in-tree reranker extensions each carry one, and
- * copying it would multiply the install size by orders of magnitude while
- * pulling in code the manifest never declared.
+ * Directories never copied out of a source tree.
+ *
+ * `node_modules` is deliberately NOT on this list. Skipping it looks like an
+ * obvious saving — the Ettin extension's is 264MB — but its entrypoint does
+ * `await import('onnxruntime-node')` at init, so an install without it succeeds
+ * and then fails to start with a module-not-found error. A broken install is
+ * worse than a large one. The size ceiling below is what bounds this instead.
+ *
+ * `.bin` IS skipped. npm fills `node_modules/.bin` with symlinked CLI shims
+ * (tsc, semver, tsserver), which would otherwise trip the symlink refusal below
+ * and make every real extension uninstallable. They are build-time tools; no
+ * entrypoint resolves through them at runtime. The refusal still applies
+ * everywhere else, which is where a symlink could actually point somewhere it
+ * should not.
  */
-const SKIPPED_DIRS = new Set(['node_modules', '.git', '.github', '__tests__', 'src']);
+const SKIPPED_DIRS = new Set(['.git', '.github', '.bin']);
 
 export interface StageResult {
   ok: boolean;
@@ -120,6 +130,18 @@ export function stageFromDirectory(
   if (survey.skipped.length > 0) {
     warnings.push(`not copied: ${survey.skipped.join(', ')}`);
   }
+  if (survey.nativeAddons.length > 0) {
+    // A prebuilt .node is compiled against ONE ABI. The extension host is an
+    // Electron utilityProcess, so an addon built for plain Node fails at init
+    // with ERR_DLOPEN_FAILED and a NODE_MODULE_VERSION mismatch — which reads
+    // as a Natively crash rather than as an extension that needs rebuilding.
+    // Nothing here can fix that, so say it plainly instead of discovering it
+    // at load time.
+    warnings.push(
+      `contains ${survey.nativeAddons.length} native addon(s) (${survey.nativeAddons.slice(0, 2).join(', ')}). ` +
+      'These must be built for Electron\'s ABI, not plain Node, or the extension will fail to start.',
+    );
+  }
 
   const destination = extensionDir(id, opts.rootOverride);
   try {
@@ -169,10 +191,10 @@ export async function fetchRemoteRegistry(
 
 // ---------------------------------------------------------------------------
 
-interface Survey { files: number; bytes: number; symlinks: string[]; skipped: string[] }
+interface Survey { files: number; bytes: number; symlinks: string[]; skipped: string[]; nativeAddons: string[] }
 
 function surveyTree(root: string): Survey {
-  const out: Survey = { files: 0, bytes: 0, symlinks: [], skipped: [] };
+  const out: Survey = { files: 0, bytes: 0, symlinks: [], skipped: [], nativeAddons: [] };
 
   const walk = (dir: string, rel: string): void => {
     let entries: fs.Dirent[];
@@ -186,6 +208,7 @@ function surveyTree(root: string): Survey {
         continue;
       }
       if (!entry.isFile()) continue;
+      if (entry.name.endsWith('.node')) out.nativeAddons.push(childRel);
       out.files += 1;
       try { out.bytes += fs.statSync(path.join(dir, entry.name)).size; } catch { /* counted as 0 */ }
     }
