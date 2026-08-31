@@ -12,6 +12,11 @@ const { build, context } = require('esbuild');
 // TS7-legal setting) — and tsc has not been the emitter for dist-electron for a
 // long time anyway. Type-checking in watch mode is `tsc --noEmit --watch`.
 const WATCH = process.argv.includes('--watch');
+// Fork pull requests cannot receive the repository secret needed to fetch the
+// private premium submodule. This opt-in mode still bundles every core Electron
+// entrypoint, but leaves private runtime imports unresolved for the packaged
+// premium build to supply. Normal development and release builds are unchanged.
+const CORE_SMOKE = process.env.NATIVELY_CORE_SMOKE === '1';
 const path = require('path');
 const fs = require('fs');
 
@@ -43,6 +48,16 @@ if (fs.existsSync(premiumDir)) {
 }
 
 const start = Date.now();
+
+const coreSmokePremiumExternalPlugin = {
+  name: 'core-smoke-premium-external',
+  setup(esbuild) {
+    esbuild.onResolve({ filter: /^(?:\.\.\/)+premium(?:\/|$)/ }, (args) => ({
+      path: args.path,
+      external: true,
+    }));
+  },
+};
 
 const buildOptions = {
   entryPoints,
@@ -100,6 +115,7 @@ const buildOptions = {
     '.ts': 'ts',
     '.js': 'js',
   },
+  plugins: CORE_SMOKE ? [coreSmokePremiumExternalPlugin] : [],
   // EVAL-ONLY DNS fix, injected at the very top of every output bundle (runs
   // BEFORE esbuild's deferred __esm module initializers — a top-level statement
   // inside main.ts gets wrapped in a lazy init that never ran at process start).
@@ -149,6 +165,9 @@ if (WATCH) {
     console.log('[build-electron] watching for changes...');
   }).catch(onFailure);
 } else {
+  if (CORE_SMOKE) {
+    console.log('[build-electron] Core smoke mode: private premium imports are external');
+  }
   build(buildOptions).then(() => {
     copyAssets();
     console.log(`[build-electron] Done in ${Date.now() - start}ms`);

@@ -1,10 +1,37 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { execFileSync } from 'node:child_process'
 import { version } from './package.json'
 
 // Inject version so the React frontend can read it via import.meta.env.VITE_APP_VERSION
 process.env.VITE_APP_VERSION = version;
+
+// Bake source provenance into the renderer. Packaged apps cannot rely on a
+// `.git` directory being present at runtime, so the commit must be resolved at
+// build time (CI may provide an explicit SHA when building from an archive).
+const explicitBuildCommit = process.env.NATIVELY_BUILD_COMMIT || process.env.GITHUB_SHA;
+let buildCommit = explicitBuildCommit?.trim() || 'unknown';
+if (buildCommit === 'unknown') {
+    try {
+        buildCommit = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], {
+            cwd: __dirname,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], {
+            cwd: __dirname,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        if (dirty) buildCommit = `${buildCommit}-dirty`;
+    } catch {
+        // Source archives without Git metadata remain explicitly "unknown".
+    }
+}
+process.env.VITE_BUILD_COMMIT = buildCommit.startsWith('unknown')
+    ? buildCommit
+    : `${buildCommit.slice(0, 12)}${buildCommit.endsWith('-dirty') ? '-dirty' : ''}`;
 
 // https://vitejs.dev/config/
 export default defineConfig({

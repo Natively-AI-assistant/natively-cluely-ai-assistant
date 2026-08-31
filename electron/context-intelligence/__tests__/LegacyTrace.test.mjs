@@ -99,6 +99,16 @@ describe('never carries source content', () => {
     const json = JSON.stringify(sink.all()[0]);
     assert.ok(!json.includes('SECRET RESUME LINE'), 'no source text may reach the sink');
   });
+
+  test('user questions are reduced to lengths before reaching the sink', () => {
+    recordLegacyTurn(input({ originalQuestion: 'PRIVATE INTERVIEW QUESTION' }));
+    const trace = sink.all()[0];
+    const json = JSON.stringify(trace);
+    assert.ok(!json.includes('PRIVATE INTERVIEW QUESTION'));
+    assert.equal(trace.originalQuestion, undefined);
+    assert.equal(trace.originalQuestionLength, 26);
+    assert.equal(trace.resolvedQuestion, undefined);
+  });
 });
 
 describe('bounded memory', () => {
