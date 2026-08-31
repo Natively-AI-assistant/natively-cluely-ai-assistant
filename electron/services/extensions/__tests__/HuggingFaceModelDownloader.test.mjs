@@ -150,6 +150,7 @@ test('a resumed download sends Range and appends the 206 tail', async () => {
   const dir = tmpDir();
   const dest = path.join(dir, MODEL.file);
   fs.writeFileSync(`${dest}.part`, 'hello ');   // 6 bytes already on disk
+  fs.writeFileSync(`${dest}.part.rev`, 'abc');  // ...from THIS revision; unstamped is stale
 
   let rangeHeader = null;
   const dl = new HuggingFaceModelDownloader({
@@ -171,6 +172,7 @@ test('a server that IGNORES Range restarts from zero instead of corrupting the f
   const dir = tmpDir();
   const dest = path.join(dir, MODEL.file);
   fs.writeFileSync(`${dest}.part`, 'hello ');
+  fs.writeFileSync(`${dest}.part.rev`, 'abc');
 
   const dl = new HuggingFaceModelDownloader({
     fetchImpl: async (url) => (String(url).includes('/api/models/')
@@ -187,6 +189,7 @@ test('a 416 discards the partial rather than renaming something unverified', asy
   const dir = tmpDir();
   const dest = path.join(dir, MODEL.file);
   fs.writeFileSync(`${dest}.part`, 'far too much content already');
+  fs.writeFileSync(`${dest}.part.rev`, 'abc');
 
   let calls = 0;
   const dl = new HuggingFaceModelDownloader({
@@ -208,6 +211,7 @@ test('progress uses the server length, and a 206 length is the REMAINDER', async
   const dir = tmpDir();
   const dest = path.join(dir, MODEL.file);
   fs.writeFileSync(`${dest}.part`, 'hello ');   // 6 of 11
+  fs.writeFileSync(`${dest}.part.rev`, 'abc');
 
   const fractions = [];
   const dl = new HuggingFaceModelDownloader({
@@ -242,6 +246,74 @@ test('re-downloading over an existing file replaces it', async () => {
   await dl.download(MODEL, dest, () => {}, new AbortController().signal);
   assert.equal(fs.readFileSync(dest, 'utf8'), 'new weights');
   assert.ok(!fs.existsSync(`${dest}.part`));
+});
+
+test('a partial from a DIFFERENT revision is discarded, not resumed onto', async () => {
+  // The nasty one. Pinning the sha within one download() call does not help a
+  // partial left by an earlier session: resuming appends a new revision's tail
+  // to an old revision's head. That file is corrupt, plausible in size, and for
+  // any manifest entry with sha256:null it PASSES verification, because
+  // ModelStore.verify() treats an unknown hash as "record it" not "check it".
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  fs.writeFileSync(`${dest}.part`, 'OLD-REVISION-HEAD');
+  fs.writeFileSync(`${dest}.part.rev`, 'oldsha111');
+
+  let rangeSeen;
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url, init) => {
+      if (String(url).includes('/api/models/')) return metadataResponse('newsha222');
+      rangeSeen = init?.headers?.Range ?? null;
+      return bodyResponse(Buffer.from('complete new file'), { headers: { 'content-length': '17' } });
+    },
+  });
+
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(rangeSeen, null, 'a stale partial must not be resumed onto');
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'complete new file');
+});
+
+test('an UNSTAMPED partial is treated as stale', async () => {
+  // It predates this mechanism; there is no way to know which revision wrote it.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  fs.writeFileSync(`${dest}.part`, 'mystery bytes');
+
+  let rangeSeen;
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url, init) => {
+      if (String(url).includes('/api/models/')) return metadataResponse('abc');
+      rangeSeen = init?.headers?.Range ?? null;
+      return bodyResponse(Buffer.from('fresh'), { headers: { 'content-length': '5' } });
+    },
+  });
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(rangeSeen, null);
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'fresh');
+});
+
+test('a partial from the SAME revision is still resumed', async () => {
+  // The fix must not throw away legitimate resume — that is the whole point of
+  // keeping the partial on cancellation.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  fs.writeFileSync(`${dest}.part`, 'hello ');
+  fs.writeFileSync(`${dest}.part.rev`, 'samesha');
+
+  let rangeSeen;
+  const dl = new HuggingFaceModelDownloader({
+    fetchImpl: async (url, init) => {
+      if (String(url).includes('/api/models/')) return metadataResponse('samesha');
+      rangeSeen = init?.headers?.Range ?? null;
+      return bodyResponse(Buffer.from('model'), { status: 206, headers: { 'content-length': '5' } });
+    },
+  });
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(rangeSeen, 'bytes=6-');
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'hello model');
+  assert.ok(!fs.existsSync(`${dest}.part.rev`), 'the stamp is cleaned up on success');
 });
 
 test('a persistent HTTP error eventually throws, bounded', async () => {

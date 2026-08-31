@@ -144,6 +144,23 @@ export function stageFromDirectory(
   }
 
   const destination = extensionDir(id, opts.rootOverride);
+
+  // Reinstalling from the installed directory itself is a natural thing to try
+  // — edit in place, then reinstall — and the wholesale delete below would
+  // destroy the payload before copyTree ever reads it. Same if the source sits
+  // anywhere underneath it.
+  const src = path.resolve(sourceDir);
+  const dst = path.resolve(destination);
+  if (src === dst || src.startsWith(dst + path.sep)) {
+    return {
+      ok: false,
+      errors: [
+        `${sourceDir} is inside this extension's own installed directory. ` +
+        'Copy it somewhere else first — installing from here would delete the source.',
+      ],
+    };
+  }
+
   try {
     // A reinstall replaces the payload wholesale. Merging would leave files from
     // a previous version behind, and a stale module beside a new entrypoint is a

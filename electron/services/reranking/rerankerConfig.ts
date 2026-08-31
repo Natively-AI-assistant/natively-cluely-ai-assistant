@@ -258,8 +258,44 @@ export function buildHostedFallbackPort(): RerankSeamPort | null {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getLocalReranker } = require('../../rag/LocalReranker');
     const local = getLocalReranker();
-    return local ? { rerank: (q: string, p: string[]) => local.rerank(q, p) } : null;
+    if (!local) return null;
+    return { rerank: (q: string, p: string[]) => rerankInSafeBatches(local, q, p) };
   } catch {
     return null;
   }
+}
+
+/**
+ * The built-in reranker's batch ceiling, mirroring `RERANK_BATCH_SIZE` in
+ * ModeHybridRetriever.
+ *
+ * The fallback CANNOT inherit the caller's batch. The hosted port asks the seam
+ * for the whole 30-candidate pool in one call (that is the entire point of its
+ * `batchSize`), so when a hosted rerank fails and this port takes over, it is
+ * handed all 30 passages at once. Passing those straight to `LocalReranker`
+ * would be a 30-pair joint-encoding forward pass — precisely what
+ * RERANK_BATCH_SIZE exists to prevent, and what its comment names as the
+ * ONNX-arena crash trigger. So the fallback re-chunks on its own behalf.
+ */
+const LOCAL_FALLBACK_BATCH_SIZE = 6;
+
+async function rerankInSafeBatches(
+  local: { rerank(q: string, p: string[]): Promise<Array<{ index: number; score: number }> | null> },
+  query: string,
+  passages: string[],
+): Promise<Array<{ index: number; score: number }> | null> {
+  const all: Array<{ index: number; score: number }> = [];
+
+  for (let i = 0; i < passages.length; i += LOCAL_FALLBACK_BATCH_SIZE) {
+    const batch = passages.slice(i, i + LOCAL_FALLBACK_BATCH_SIZE);
+    const scored = await local.rerank(query, batch);
+    // A partial result is worse than none: an unscored candidate sinks to
+    // -Infinity in the host's ordering, below chunks the reranker never saw. If
+    // any batch fails, abandon the whole fallback and keep the existing order.
+    if (!scored || scored.length !== batch.length) return null;
+    for (const r of scored) all.push({ index: i + r.index, score: r.score });
+  }
+
+  all.sort((a, b) => b.score - a.score);
+  return all;
 }

@@ -1629,7 +1629,18 @@ export class ModeHybridRetriever {
             for (let i = 0; i < poolTexts.length; i += rerankBatchSize) {
                 const batchTexts = poolTexts.slice(i, i + rerankBatchSize);
                 const batchResults = await reranker.rerank(queryText, batchTexts);
-                if (!batchResults || batchResults.length === 0) continue;
+                // A PARTIAL ranking is worse than none. rankScore(c, true)
+                // returns -Infinity for a candidate with no rerankScore, so
+                // survivors of a failed batch sink below every chunk the
+                // reranker never even looked at. With the built-in this was
+                // unreachable (it fails all-or-nothing), but a port that splits
+                // the pool into independent out-of-process calls can lose one
+                // batch and keep the rest — which silently buries 6 candidates.
+                // Abandon the whole rerank and keep the pre-rerank order.
+                if (!batchResults || batchResults.length !== batchTexts.length) {
+                    console.warn('[ModeHybridRetriever] rerank batch incomplete (keeping cosine order)');
+                    return null;
+                }
                 for (const r of batchResults) {
                     allResults.push({ ...r, originalIndex: i + r.index });
                 }
