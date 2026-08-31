@@ -203,9 +203,27 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
 
     // Two signals: the caller's cancellation, and a connect timeout that must
     // NOT apply to the body. A 400MB model on a slow link is not a stuck
-    // request, and one timeout covering both would abort it at the worst moment.
-    const connect = AbortSignal.timeout(CONNECT_TIMEOUT_MS);
-    const res = await doFetch(url, { headers, signal: AbortSignal.any([signal, connect]) });
+    // request, and one timeout covering both aborts it at the worst moment.
+    //
+    // `AbortSignal.timeout()` cannot be cancelled, so using it here would do
+    // exactly the thing this comment says not to: fetch's signal aborts the
+    // whole request, body included. Measured — a real 128MB download aborted
+    // twice at 30s and only completed because resume caught it. So the timer is
+    // a controller we own, and it is cleared the moment the headers land.
+    const connectController = new AbortController();
+    const connectTimer = setTimeout(
+      () => connectController.abort(new Error(`no response headers within ${CONNECT_TIMEOUT_MS}ms`)),
+      CONNECT_TIMEOUT_MS,
+    );
+
+    let res: Response;
+    try {
+      res = await doFetch(url, { headers, signal: AbortSignal.any([signal, connectController.signal]) });
+    } finally {
+      // Headers are in (or the request failed). Either way the body is no longer
+      // on this clock; only the caller's own signal can stop it now.
+      clearTimeout(connectTimer);
+    }
 
     if (res.status === 416) {
       // "Range not satisfiable": the .part is at least as long as the file. It is
