@@ -158,7 +158,24 @@ this repo — they are sibling repos at `/Users/evin/natively-extensions/`:
 | `natively-extension-registry` | — | metadata-only registry (`registry.json`, weight guard, validate script) | — | MIT |
 
 Each has `src/`, `dist/`, `__tests__/conformance.test.mjs`, `LICENSE`, `registry-entry.json`,
-`manifest.base.json` and a generator. They are real, working adapters.
+`manifest.base.json` and a generator.
+
+**Corrected 2026-09-01 after running them.** They are real adapters, but they are
+not all working:
+
+- **Ettin** — `init()` loads real weights and succeeds (1159 ms with the 32m
+  model), but `scoreBatch()` throws *"ONNX tokenisation/inference is not
+  implemented yet. This adapter is a scaffold; implement scoreBatch() against
+  real weights before enabling this extension."* It cannot rerank.
+- **Jina / Qwen** — rerank is fully implemented, including the "score every
+  candidate or the host rejects the ranking wholesale" rule. Both POST to a local
+  `llama-server` `/v1/rerank`, and `llama-server` is not on this machine's PATH,
+  so neither has been run.
+
+So the three extensions are structure plus one unfinished method and one missing
+binary — not three finished rerankers. Core handles both cases correctly (a
+throwing extension falls back to the existing ordering), but no local extension
+reranker can be measured until one of them can actually score.
 
 **Their manifests validate against Core's live schema.** Core moved in lockstep: the
 `repoPath` field these manifests use is already in `ExtensionManifest.ts:67`, with a
