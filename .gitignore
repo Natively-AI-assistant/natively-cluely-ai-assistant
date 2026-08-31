@@ -550,3 +550,9 @@ benchmark-results/
 /researc
 
 benchmarks/reranker-eval/results/
+
+# Reranker/embedding evaluation artefacts and non-shipped weights.
+# bge-reranker-large is NOT in scripts/download-models.js's manifest — it is a
+# benchmark-only model (~553MB) and must never enter the repo or a build.
+resources/models/Xenova/bge-reranker-large/
+embedding-benchmark/
