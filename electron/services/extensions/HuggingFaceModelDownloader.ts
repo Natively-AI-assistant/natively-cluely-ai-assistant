@@ -167,7 +167,27 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
         // Rename only after the write stream has closed. On Windows an open
         // handle makes this fail with EBUSY/EPERM, and the failure looks like a
         // permissions problem rather than a sequencing one.
-        fs.renameSync(partPath, destination);
+        //
+        // The destination can already exist: `ModelStore.download()` does not
+        // skip a model that is already `ready`, so re-downloading one lands
+        // here with a file in place. POSIX rename replaces silently. Windows is
+        // where this bites — if anything still holds the old file open (an ONNX
+        // session in a loaded extension is the obvious case) the replace fails,
+        // so unlink first and, if it still fails, say WHY rather than emitting a
+        // bare EPERM that reads as a permissions bug.
+        try { fs.rmSync(destination, { force: true }); } catch { /* replaced below, or fails loudly */ }
+        try {
+          fs.renameSync(partPath, destination);
+        } catch (e: any) {
+          if (e?.code === 'EPERM' || e?.code === 'EBUSY' || e?.code === 'EACCES') {
+            throw new Error(
+              `could not replace ${path.basename(destination)}: the existing file is in use. ` +
+              'Turn the extension off before re-downloading its model. ' +
+              `(${e.code})`,
+            );
+          }
+          throw e;
+        }
         onProgress(1);
         return;
       } catch (e) {
