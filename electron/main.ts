@@ -8,6 +8,7 @@
 // ============================================================================
 import './nativeArchGate';
 
+import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
 import * as crypto from "crypto"
 import path from "path"
@@ -2472,14 +2473,9 @@ export class AppState {
           // Re-resolve the embedding provider given that Ollama might now be available
           if (this.ragManager) {
              console.log('[AppState] Ollama model ready, re-evaluating RAG pipeline provider');
-             const { CredentialsManager } = require('./services/CredentialsManager');
-             const cm = CredentialsManager.getInstance();
-             this.ragManager.initializeEmbeddings({
-                openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-                geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-                ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
-                providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-             });
+             // One shared builder — this site used to omit geminiKeys (killing key
+             // rotation) and would have omitted the Natively key the same way.
+             this.ragManager.initializeEmbeddings(buildEmbeddingConfig());
              this.scheduleModeReferenceIndexRetry();
           }
         }
@@ -2495,31 +2491,14 @@ export class AppState {
       const sqliteDb = db.getDb();
 
       if (sqliteDb) {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        const cm = CredentialsManager.getInstance();
-        const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
-        const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
-        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
-        // key (429 → per-key cooldown → next key) instead of failing the index.
-        const geminiKeys = (() => {
-          const pool: string[] = [];
-          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
-          add(cm.getGeminiApiKey());
-          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
-          return pool;
-        })();
-
-        const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
+        // Credentials, the Gemini rotation pool and the provider-scope policy are
+        // all assembled by buildEmbeddingConfig() now — see the note there about
+        // the four sites that used to hand-roll this and had already drifted.
         this.ragManager = new RAGManager({
             db: sqliteDb,
             dbPath: db.getDbPath(),
             extPath: db.getExtPath(),
-            openaiKey,
-            geminiKey,
-            geminiKeys,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes
+            ...buildEmbeddingConfig(),
         });
         this.ragManager.setLLMHelper(this.processingHelper.getLLMHelper());
 
@@ -8461,6 +8440,28 @@ async function initializeApp() {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
   }
 
+  // Extensions. Until this call nothing constructed an ExtensionManager, so no
+  // extension could run in a shipped build regardless of what the on-disk
+  // registry said.
+  //
+  // This does NOT enable anything. `install()` records enabled:false
+  // unconditionally, `loadEnabled()` starts only what the user switched on, and
+  // the rerank seam still requires BOTH the `extensionRerankers` flag (default
+  // off) AND exactly one enabled reranker extension. Wiring the source in is
+  // what makes those gates reachable, not what opens them.
+  //
+  // Deliberately not awaited: an extension that is slow to start must not delay
+  // a usable window, and every failure inside is already isolated per extension.
+  try {
+    const { wireExtensions, startExtensions } = require('./services/extensions/appWiring');
+    const extensionManager = wireExtensions();
+    void startExtensions(extensionManager);
+  } catch (err: any) {
+    // A subsystem that cannot be built leaves the built-in reranker in place,
+    // which is the correct degradation. It must never stop the app starting.
+    console.warn('[extensions] wiring failed (non-fatal):', err?.message || err);
+  }
+
   // Load the Google Service Account key for Speech-to-Text: the persisted path
   // first, then GOOGLE_APPLICATION_CREDENTIALS (set in a terminal but not for a
   // Spotlight launch).
@@ -9028,6 +9029,15 @@ if (process.env.THINKING_MATRIX === '1') {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();
     } catch { /* instrumentation must never block a quit */ }
+    // Extension utilityProcesses are children of this process. One left running
+    // keeps the app alive after every window has closed, which presents as a
+    // hang on quit rather than as an error anyone sees. Fire-and-forget:
+    // will-quit is synchronous, and stop() already hard-kills after asking for
+    // a graceful dispose.
+    try {
+      const { disposeExtensions } = require('./services/extensions/appWiring');
+      void disposeExtensions();
+    } catch { /* teardown must never block a quit */ }
     appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');

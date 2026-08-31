@@ -1931,6 +1931,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('reranker:set-config', next),
   setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
   testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
+
+  // Extensions. Reranker extensions surface inside Settings > Reranker.
+  listExtensions: () => ipcRenderer.invoke('extensions:list'),
+  installExtensionFromFolder: () => ipcRenderer.invoke('extensions:install-from-folder'),
+  setExtensionEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-enabled', id, enabled),
+  removeExtension: (id: string) => ipcRenderer.invoke('extensions:remove', id),
+  acknowledgeExtensionLicense: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:acknowledge-license', id, modelKey),
+  downloadExtensionModel: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:download-model', id, modelKey),
+  cancelExtensionModelDownload: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:cancel-download', id, modelKey),
+  browseExtensionRegistry: (url?: string) => ipcRenderer.invoke('extensions:browse-registry', url),
+  onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => {
+    const subscription = (_e: any, payload: any) => callback(payload);
+    ipcRenderer.on('extensions:model-progress', subscription);
+    return () => { ipcRenderer.removeListener('extensions:model-progress', subscription); };
+  },
   getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
   setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
   getContextDebugConfig: () => ipcRenderer.invoke('context-debug:get-config'),

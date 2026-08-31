@@ -449,6 +449,33 @@ export interface ElectronAPI {
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
   setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  listExtensions: () => Promise<{
+    available: boolean
+    extensions: Array<{
+      id: string; name: string; version: string; type: string
+      author: string; homepage: string; source: string
+      enabled: boolean; running: boolean; disabledReason: string | null
+      permissions: string[]
+      models: Array<{
+        key: string; format: string; approxBytes: number
+        state: 'not-downloaded' | 'downloading' | 'ready' | 'verification-failed' | 'blocked-unacknowledged'
+        bytes: number | null; reason: string | null
+        license: {
+          spdx: string; url: string
+          commercialUseRestricted: boolean; requiresAcknowledgement: boolean; acknowledged: boolean
+        }
+      }>
+    }>
+  }>
+  installExtensionFromFolder: () => Promise<{ success: boolean; id?: string; error?: string; errors?: string[]; warnings?: string[] }>
+  setExtensionEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  removeExtension: (id: string) => Promise<{ success: boolean; error?: string }>
+  acknowledgeExtensionLicense: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
+  downloadExtensionModel: (id: string, modelKey: string) => Promise<{ success: boolean; status?: unknown; error?: string; message?: string }>
+  cancelExtensionModelDownload: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
+  browseExtensionRegistry: (url?: string) => Promise<{ ok: boolean; entries: Array<{ id: string; repo: string; latestVersion: string; apiVersion: string; category: string; modelLicenses?: string[] }> }>
+  onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => () => void
+
   testReranker: (choice?: { model?: string }) => Promise<{
     success: boolean
     model?: string
