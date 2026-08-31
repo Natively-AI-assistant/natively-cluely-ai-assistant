@@ -289,6 +289,48 @@ test('stream idle watchdog aborts a stalled sole dispatch with a stable error', 
   assert.equal(outcome.value.state, 'failed');
 });
 
+test('a provider iterator that rejects after the idle watchdog wins the race never becomes an unhandled rejection', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const fakeTimer = createFakeTimerScheduler();
+  let rejectProviderNext;
+  const service = new DirectAssistService({
+    streamDirectAssist() {
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            next: () => new Promise((_resolve, reject) => { rejectProviderNext = reject; }),
+            return: async () => ({ done: true, value: undefined }),
+          };
+        },
+      };
+    },
+  }, { streamIdleTimeoutMs: 25, timerScheduler: fakeTimer.scheduler });
+
+  const unhandled = [];
+  const onUnhandledRejection = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandledRejection);
+  try {
+    const stream = service.stream(baseInput());
+    assert.equal((await stream.next()).value.type, 'start');
+    const terminal = stream.next();
+    await Promise.resolve();
+    assert.equal(fakeTimer.fire(), true);
+    const event = (await terminal).value;
+    assert.equal(event.type, 'error');
+    assert.equal(event.error.code, 'STREAM_IDLE_TIMEOUT');
+    await stream.next();
+
+    // The idle watchdog already won the race and the terminal event is out
+    // the door — this is the loser settling LATE, the exact shape of a
+    // socket reset arriving after a local timeout gave up on it.
+    rejectProviderNext(new Error('socket reset after idle timeout'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
+  }
+  assert.deepEqual(unhandled, [], 'the loser of the race must not surface as an unhandledRejection');
+});
+
 test('stream idle watchdog is reset by every non-empty provider delta', async () => {
   const { DirectAssistService } = await loadDirectAssist();
   const fakeTimer = createFakeTimerScheduler();

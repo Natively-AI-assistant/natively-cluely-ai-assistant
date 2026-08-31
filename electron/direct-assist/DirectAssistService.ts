@@ -125,8 +125,15 @@ export class DirectAssistService {
         if (abortSignal?.aborted) break;
         let item: IteratorResult<string, void>;
         try {
+          // DEFUSE the racing next() promise: if the idle watchdog or dispatch
+          // abort wins the race, this promise is still pending and unobserved —
+          // when the provider's in-flight request later rejects it would surface
+          // as an unhandledRejection (fatal in Electron main). Attach a no-op
+          // catch so the loser can never be an unhandled rejection.
+          const nextP = providerIterator.next();
+          nextP.catch(() => { /* loser of the race — defused */ });
           item = await Promise.race([
-            providerIterator.next(),
+            nextP,
             idlePromise!,
             dispatchAbortPromise,
           ]);
