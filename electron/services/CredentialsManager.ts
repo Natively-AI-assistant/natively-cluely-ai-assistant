@@ -77,6 +77,20 @@ export interface StoredCredentials {
     curlProviders?: CurlProvider[];
     defaultModel?: string;
     nativelyApiKey?: string;
+    /**
+     * Optional bearer token for a user-hosted OpenAI-compatible embedding
+     * endpoint. Lives here rather than in settings.json because that file is
+     * plaintext on disk; LM Studio and llama.cpp need no token at all, but a
+     * LiteLLM/proxy deployment does.
+     */
+    customEmbeddingApiKey?: string;
+    /**
+     * OpenRouter key, used for EMBEDDINGS. OpenRouter is otherwise reachable in
+     * this app only as a cURL/custom chat provider, which has no typed slot.
+     */
+    openrouterApiKey?: string;
+    /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
+    voyageApiKey?: string;
     // STT Provider settings
     sttProvider?: 'none' | 'google' | 'groq' | 'openai' | 'deepgram' | 'elevenlabs' | 'azure' | 'ibmwatson' | 'soniox' | 'nvidia_nim' | 'natively' | 'local-whisper';
     nvidiaNimSttModel?: string;
@@ -794,6 +808,39 @@ export class CredentialsManager {
         // Cluely-class interactive latency target. Full Flash / Pro remain
         // user-selectable for harder problems.
         return this.credentials.defaultModel || 'gemini-3.1-flash-lite';
+    }
+
+    public getVoyageApiKey(): string | undefined {
+        return this.credentials.voyageApiKey;
+    }
+
+    public setVoyageApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set voyage api key')) return false;
+        this.credentials.voyageApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getOpenrouterApiKey(): string | undefined {
+        return this.credentials.openrouterApiKey;
+    }
+
+    public setOpenrouterApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set openrouter api key')) return false;
+        this.credentials.openrouterApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getCustomEmbeddingApiKey(): string | undefined {
+        return this.credentials.customEmbeddingApiKey;
+    }
+
+    public setCustomEmbeddingApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set custom embedding api key')) return false;
+        this.credentials.customEmbeddingApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
     }
 
     public getNativelyApiKey(): string | undefined {

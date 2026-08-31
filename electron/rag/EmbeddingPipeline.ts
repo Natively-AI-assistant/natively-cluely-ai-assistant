@@ -7,6 +7,8 @@ import Database from 'better-sqlite3';
 import { VectorStore } from './VectorStore';
 
 import { EmbeddingProviderResolver, AppAPIConfig } from './EmbeddingProviderResolver';
+import { embeddingConfigChanged } from './embeddingConfigIdentity';
+import { describeEmbeddingProvider, type EmbeddingProviderDescription } from './embeddingStatus';
 import { IEmbeddingProvider } from './providers/IEmbeddingProvider';
 import { LocalEmbeddingProvider } from './providers/LocalEmbeddingProvider';
 
@@ -121,9 +123,16 @@ export class EmbeddingPipeline {
         console.log('[EmbeddingPipeline] Initializing with config:', {
             openaiKey: !!config.openaiKey,
             geminiKey: !!config.geminiKey,
+            nativelyApiKey: !!config.nativelyApiKey,
             ollamaUrl: config.ollamaUrl || null,
             geminiEmbeddingModel: config.geminiEmbeddingModel || null,
             geminiEmbeddingDims: config.geminiEmbeddingDims || null,
+            // The fields that actually DECIDE the provider. Without them the log
+            // showed six credential booleans and nothing about the choice, so a
+            // config that had silently lost the user's selection looked identical
+            // to one that carried it.
+            embeddingMode: config.embeddingMode || 'auto',
+            embeddingProvider: config.embeddingProvider || null,
         });
         this.initPromise = this._doInitialize(config);
         return this.initPromise;
@@ -135,19 +144,11 @@ export class EmbeddingPipeline {
      * re-resolve away from that provider rather than keeping the stale instance.
      */
     private _isConfigChanged(prev: AppAPIConfig, next: AppAPIConfig): boolean {
-        const norm = (value?: string) => (value || '').trim();
-        const normList = (values?: string[]) => (values || []).map(norm).filter(Boolean).join('\n');
-        const normScopes = (value: AppAPIConfig['providerDataScopes']) => JSON.stringify(value || {});
-        return (
-            norm(prev.openaiKey) !== norm(next.openaiKey) ||
-            norm(prev.geminiKey) !== norm(next.geminiKey) ||
-            norm(prev.ollamaUrl) !== norm(next.ollamaUrl) ||
-            normList(prev.geminiKeys) !== normList(next.geminiKeys) ||
-            norm(prev.geminiEmbeddingModel) !== norm(next.geminiEmbeddingModel) ||
-            (prev.geminiEmbeddingDims || 0) !== (next.geminiEmbeddingDims || 0) ||
-            normScopes(prev.providerDataScopes) !== normScopes(next.providerDataScopes) ||
-            Boolean(prev.explicitKeyManagement) !== Boolean(next.explicitKeyManagement)
-        );
+        // Delegated to ONE comparator shared with the config builder. This used
+        // to be a hand-maintained field list here, and a field missing from it
+        // means changing that setting re-initializes nothing and reports no
+        // error — the "I changed it and nothing happened" bug.
+        return embeddingConfigChanged(prev, next);
     }
 
     private async _doInitialize(config: AppAPIConfig): Promise<void> {
@@ -186,7 +187,19 @@ export class EmbeddingPipeline {
                 // RAGManager.scheduleAutoReindex() handles the user-facing notification
                 // and the actual re-embedding. Here we only log — emitting a warning IPC
                 // too would double-notify.
-                console.log(`[EmbeddingPipeline] Found ${incompatibleCount} meetings in an incompatible embedding space (last: ${lastSpace ?? 'unknown'}, active: ${activeSpace}). Auto-reindex will handle them.`);
+                // Report the ROW count as the trigger, and say so when the state
+                // row already matches. Printing "last: X, active: X" for an
+                // equal pair reads as a false positive — it is actually the
+                // resume path for a re-index that was interrupted after the
+                // marker was written but before every meeting was re-embedded.
+                const resumed = lastSpace === activeSpace;
+                console.log(
+                    `[EmbeddingPipeline] ${incompatibleCount} meeting(s) still hold vectors from another embedding space; active is ${activeSpace}`
+                    + (resumed
+                        ? ' (marker already updated — resuming an interrupted re-index).'
+                        : ` (previous space: ${lastSpace ?? 'unknown'}).`)
+                    + ' Auto-reindex will handle them.'
+                );
             }
 
             // Save active space
@@ -267,6 +280,17 @@ export class EmbeddingPipeline {
      */
     getActiveProviderName(): string | undefined {
         return this.provider?.name;
+    }
+
+    /**
+     * Full description of the RESOLVED provider for the settings panel.
+     *
+     * Deliberately reports what is actually running rather than what settings
+     * asked for: the two differ whenever a chosen provider was unavailable and
+     * the chain fell through, which is precisely the case the user needs to see.
+     */
+    getActiveProviderDescription(): EmbeddingProviderDescription {
+        return describeEmbeddingProvider(this.provider);
     }
 
     /**

@@ -28,6 +28,8 @@ import groqMark from '../../assets/provider-logos/groq.svg?raw';
 import openaiMark from '../../assets/provider-logos/openai.svg?raw';
 import ollamaMark from '../../assets/provider-logos/ollama.svg?raw';
 import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
+import openrouterMark from '../../assets/provider-logos/openrouter.svg?raw';
+import voyageMark from '../../assets/provider-logos/voyage.svg?raw';
 // LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
 // URL rather than inlined markup. No currentColor to resolve in a PNG, so <img>
 // loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
@@ -53,6 +55,12 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     codex:    { mono: 'CX', brand: '#10A37F' },
     litellm:  { mono: 'LL', brand: '#8B5CF6' },
     ollama:   { mono: 'OL', brand: '#9CA3AF' },
+    // Marks are vendored, so `mono` is only a safety net. The brand hexes drive
+    // the tile wash and are the published brand colours from lobehub's -color
+    // variants: OpenRouter lime, Voyage deep teal. The MARKS themselves take the
+    // monochrome variant — see the README's "Colour vs monochrome".
+    openrouter: { mono: 'OR', brand: '#C8FF00' },
+    voyage:   { mono: 'VY', brand: '#012E33' },
     natively: { mono: 'NA', brand: '#7C9CF5' },
 };
 
@@ -79,6 +87,8 @@ export const AI_PROVIDER_MARKS: Record<string, string> = {
     codex: openaiMark,
     ollama: ollamaMark,
     nvidia_nim: nvidiaMark,
+    openrouter: openrouterMark,
+    voyage: voyageMark,
 };
 
 /** True when this provider resolves to a real mark rather than a fallback. */

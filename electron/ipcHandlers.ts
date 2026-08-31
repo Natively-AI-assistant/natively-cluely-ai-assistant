@@ -1,6 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
 import * as fs from 'fs';
@@ -6459,6 +6460,425 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── Embedding settings ──────────────────────────────────────────────────────
+  // The embedding model is configured INDEPENDENTLY of the generation model.
+  // Retrieval quality bounds answer quality, so a user must be able to see and
+  // change what embeds their project — see src/components/settings/EmbeddingSettings.tsx.
+
+  safeHandle('embedding:get-status', async () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const pipeline = appState.getRAGManager()?.getEmbeddingPipeline();
+    // The RESOLVED provider, not the configured one: they differ whenever a
+    // choice was unavailable and the chain fell through, which is exactly what
+    // the user needs to see.
+    const active = pipeline?.getActiveProviderDescription?.() ?? { configured: false };
+    // §5: the confused-user case — a strong third-party generation provider is
+    // configured and the user reasonably assumes it handles everything, while
+    // retrieval quietly stays on a lightweight embedder. Computed HERE (not in
+    // the renderer) so the predicate has one tested implementation.
+    const { shouldWarnAboutLightweightEmbeddings } = require('./rag/embeddingStatus');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const configuredProviders = [
+      cm.getOpenaiApiKey() ? 'openai' : null,
+      cm.getGeminiApiKey() ? 'gemini' : null,
+      cm.getClaudeApiKey() ? 'anthropic' : null,
+      cm.getGroqApiKey() ? 'groq' : null,
+      cm.getDeepseekApiKey() ? 'deepseek' : null,
+      // OpenRouter has its OWN credential now (the embeddings panel owns it).
+    // This read the LiteLLM key, so a real OpenRouter key was invisible to the
+    // lightweight-embedding warning while a LiteLLM-only user was reported as
+    // having OpenRouter configured.
+    cm.getOpenrouterApiKey?.() ? 'openrouter' : null,
+    cm.getLitellmApiKey?.() ? 'litellm' : null,
+    ].filter(Boolean);
+
+    const acknowledged = !!settings.get('embeddingLightweightAcknowledged');
+    return {
+      active,
+      configured: settings.get('embedding') || { mode: 'auto' },
+      acknowledged,
+      scopeAllowsCloud: settings.get('providerDataScopes')?.embeddings !== false,
+      shouldWarn: shouldWarnAboutLightweightEmbeddings({
+        embeddingSpace: (active as any)?.space,
+        generationProviders: configuredProviders,
+        acknowledged,
+      }),
+    };
+  });
+
+  // The full per-provider catalogue. Every provider is returned even when it is
+  // unavailable, with the REASON — omitting one leaves the user unable to tell
+  // "Natively doesn't support this" from "you haven't added a key".
+  // Live-discovered embedding models per cloud provider. In memory only: it is a
+  // cache of a remote list, and a stale one on disk would outlive a key change.
+  const fetchedEmbeddingModels: Record<string, any[]> = {};
+
+  safeHandle('embedding:get-catalog', async () => {
+    const { listOllamaEmbeddingModels } = require('./rag/ollamaEmbeddingModels');
+    const { buildEmbeddingCatalog } = require('./rag/embeddingCatalog');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+
+    const url = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const ollamaModels = await listOllamaEmbeddingModels(url);
+    // listOllamaEmbeddingModels returns [] both when the daemon is down and when
+    // it has no embedders pulled; ask the daemon directly so the panel can say
+    // which it is.
+    let ollamaReachable = ollamaModels.length > 0;
+    if (!ollamaReachable) {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        ollamaReachable = await llmHelper.isOllamaReachable();
+      } catch { ollamaReachable = false; }
+    }
+
+    // A user-hosted OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM…).
+    const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
+    const customModels = customEndpoint
+      ? await require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
+      : [];
+
+    // Public listing: fetched with the key when present, without it otherwise.
+    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+    const openrouterModels = await listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() });
+
+    return {
+      providers: buildEmbeddingCatalog({
+        ollamaReachable,
+        ollamaModels,
+        customEndpoint,
+        customModels,
+        hasOpenrouterKey: !!cm.getOpenrouterApiKey?.(),
+        hasVoyageKey: !!cm.getVoyageApiKey?.(),
+        openrouterModels,
+        hasOpenaiKey: !!cm.getOpenaiApiKey(),
+        hasGeminiKey: !!cm.getGeminiApiKey(),
+        hasNativelyKey: !!cm.getNativelyApiKey(),
+        cloudBlocked: SettingsManager.getInstance().get('providerDataScopes')?.embeddings === false,
+        fetchedModels: fetchedEmbeddingModels,
+      }),
+      // Lets the panel gate first-open discovery, exactly as ProviderCard does.
+      hasCatalog: {
+        openai: Array.isArray(fetchedEmbeddingModels.openai),
+        gemini: Array.isArray(fetchedEmbeddingModels.gemini),
+      },
+    };
+  });
+
+  // Discovery against the provider's own list API — the same endpoints the AI
+  // Providers card uses for chat models, filtered for embedders.
+  safeHandle('embedding:fetch-models', async (_evt, providerId: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const { fetchEmbeddingModels } = require('./rag/embeddingModelFetch');
+    const cm = CredentialsManager.getInstance();
+    const key = providerId === 'openai' ? cm.getOpenaiApiKey()
+      : providerId === 'gemini' ? cm.getGeminiApiKey()
+        : undefined;
+    if (!key) return { success: false, error: 'no_key', models: [] };
+
+    const models = await fetchEmbeddingModels(providerId, key);
+    // Record the attempt even when empty, so first-open discovery does not
+    // re-fire on every expand — the user can still refresh explicitly.
+    fetchedEmbeddingModels[providerId] = models;
+    return { success: true, models, count: models.length };
+  });
+
+  // Verify a model really works BEFORE indexing a whole project with it.
+  // Distinguishes "not installed" from "bad key" from "daemon down" — a single
+  // "failed" would leave the user with nothing to act on.
+  safeHandle('embedding:test', async (_evt, choice?: { provider?: string; model?: string }) => {
+    const started = Date.now();
+    try {
+      const { EmbeddingProviderResolver } = require('./rag/EmbeddingProviderResolver');
+      const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+      const base = buildEmbeddingConfig();
+      // Apply the requested model for EVERY provider, not just Ollama. The panel
+      // sends the row's model id; honouring it for one provider meant Test either
+      // reported "not configured" for a freshly-keyed Voyage/OpenRouter/custom
+      // (no model saved yet, so no candidate is built) or silently tested a
+      // DIFFERENT model than the row the button belongs to.
+      const withChosenModel = (): Record<string, unknown> => {
+        if (!choice?.model) return base;
+        switch (choice.provider) {
+          case 'ollama':     return { ...base, ollamaEmbeddingModel: choice.model, ollamaEmbeddingDims: undefined };
+          case 'voyage':     return { ...base, voyageEmbeddingModel: choice.model, voyageEmbeddingDims: undefined };
+          case 'openrouter': return { ...base, openrouterEmbeddingModel: choice.model, openrouterEmbeddingDims: undefined };
+          case 'openai':     return { ...base, openaiEmbeddingModel: choice.model, openaiEmbeddingDims: undefined };
+          case 'gemini':     return { ...base, geminiEmbeddingModel: choice.model, geminiEmbeddingDims: undefined };
+          case 'custom':     return { ...base, customEmbeddingModel: choice.model, customEmbeddingDims: undefined };
+          default:           return base;
+        }
+      };
+      const config = withChosenModel();
+        // Measure EVERY provider's width, not just Ollama's: resolve() calls all
+        // four helpers, so a test path that calls one reports a reachable
+        // custom/OpenRouter/Voyage model as 'not configured'.
+      const measured = await EmbeddingProviderResolver.withMeasuredVoyageDims(
+        await EmbeddingProviderResolver.withMeasuredOpenRouterDims(
+          await EmbeddingProviderResolver.withMeasuredCustomDims(
+            await EmbeddingProviderResolver.withMeasuredOllamaDims(config),
+          ),
+        ),
+      );
+      const candidates = EmbeddingProviderResolver.buildCandidates(measured);
+      const provider = choice?.provider
+        ? candidates.find((p: any) => p.name === choice.provider)
+        : candidates[0];
+      if (!provider) {
+        return { ok: false, error: 'not_configured', message: `No usable ${choice?.provider || 'embedding'} provider. Check that the model is installed and any required API key is set.` };
+      }
+      const vector = await provider.embedQuery('Natively embedding test');
+      return {
+        ok: true,
+        provider: provider.name,
+        model: provider.model,
+        dimensions: vector.length,
+        space: provider.space,
+        latencyMs: Date.now() - started,
+      };
+    } catch (error: any) {
+      // Never surface a raw error containing a key.
+      const status = error?.status;
+      const message = status === 401 || status === 403
+        ? 'Authentication failed — check the API key for this provider.'
+        : status === 429
+          ? 'Rate limited or out of quota for this provider.'
+          : (error?.message || 'Embedding request failed.');
+      return { ok: false, error: 'request_failed', status, message, latencyMs: Date.now() - started };
+    }
+  });
+
+  safeHandle('embedding:set-config', async (_evt, next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => {
+
+    // Refuse a provider that cannot actually run, BEFORE persisting anything.
+    // The resolver correctly yields no candidate for one with no credentials and
+    // resolve() then falls through to the bundled model — so without this the
+    // user picks Gemini, sees MiniLM, and has no idea why.
+    if (next?.mode === 'manual' && next?.provider) {
+      const { validateEmbeddingSelection } = require('./rag/embeddingSelection');
+      const { buildEmbeddingCatalog } = require('./rag/embeddingCatalog');
+      const { CredentialsManager: CM } = require('./services/CredentialsManager');
+      const { SettingsManager: SM } = require('./services/SettingsManager');
+      const cmGuard = CM.getInstance();
+      let ollamaUp = false;
+      try { ollamaUp = await appState.processingHelper.getLLMHelper().isOllamaReachable(); } catch { ollamaUp = false; }
+      const verdict = validateEmbeddingSelection(next.provider, buildEmbeddingCatalog({
+        ollamaReachable: ollamaUp,
+        hasOpenaiKey: !!cmGuard.getOpenaiApiKey(),
+        hasGeminiKey: !!cmGuard.getGeminiApiKey(),
+        hasNativelyKey: !!cmGuard.getNativelyApiKey(),
+        // Every provider the guard can refuse must be represented here, or it
+        // refuses one that is actually configured. Voyage and OpenRouter were
+        // missing, so selecting either was ALWAYS rejected as "no key" — for a
+        // key the user had just saved.
+        hasVoyageKey: !!cmGuard.getVoyageApiKey?.(),
+        hasOpenrouterKey: !!cmGuard.getOpenrouterApiKey?.(),
+        openrouterModels: [{ id: next.model || 'x', label: next.model || 'x', dimensions: 0, dimensionsVerified: false }],
+        customEndpoint: SM.getInstance().get('customEmbeddingEndpoint') || '',
+        customModels: (SM.getInstance().get('customEmbeddingEndpoint') || '') ? [{ id: next.model || 'x' }] : [],
+        cloudBlocked: SM.getInstance().get('providerDataScopes')?.embeddings === false,
+      }));
+      if (!verdict.ok) return { success: false, error: verdict.error, message: verdict.message };
+    }
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const ragManager = appState.getRAGManager();
+    const pipeline = ragManager?.getEmbeddingPipeline();
+    const previousSpace = pipeline?.getActiveSpaceKey?.();
+
+    // A model chosen without a MEASURED width would stamp a wrong space key over
+    // the vectors, so measure here rather than trusting anything from the UI.
+    let dimensions = next?.dimensions;
+    // Voyage documents a default of 1024, but the width is still MEASURED: the
+    // catalogue is curated (Voyage has no models endpoint) so it can go stale,
+    // and a wrong width stamps a wrong space key over real vectors.
+    if (next?.provider === 'voyage' && next?.model) {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { probeVoyageEmbeddingDimensions } = require('./rag/voyageEmbeddingModels');
+      const requested = dimensions;
+      // Probe through a RAW request, not through the provider: the provider's
+      // validate() throws on any length other than the one it was constructed
+      // with, so probing through it could only ever confirm its own guess.
+      const measured = await probeVoyageEmbeddingDimensions(
+        next.model, CredentialsManager.getInstance().getVoyageApiKey?.() || '', undefined, requested,
+      );
+      if (measured == null) {
+        return {
+          success: false,
+          error: 'dimensions_unmeasurable',
+          message: `Could not get an embedding from "${next.model}" via Voyage. Check your key and that this model is available to your account.`,
+        };
+      }
+      // The domain models (voyage-code-4, voyage-finance-2, voyage-law-2) are
+      // fixed at 1024. Storing a width Voyage did not actually produce would
+      // make every later embed fail its length check as a RETRYABLE error, so
+      // indexing would retry forever and never succeed.
+      if (requested && measured !== requested) {
+        return {
+          success: false,
+          error: 'dimensions_unsupported',
+          message: `"${next.model}" returned ${measured} dimensions when asked for ${requested}. It does not support that width — pick ${measured}, or choose another model.`,
+        };
+      }
+      dimensions = measured;
+    }
+    if (next?.provider === 'openrouter' && next?.model) {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { probeOpenRouterEmbeddingDimensions } = require('./rag/openrouterEmbeddingModels');
+      const requested = dimensions;
+      const measured = await probeOpenRouterEmbeddingDimensions(
+        next.model, CredentialsManager.getInstance().getOpenrouterApiKey?.() || '', undefined, requested,
+      );
+      if (measured == null) {
+        return {
+          success: false,
+          error: 'dimensions_unmeasurable',
+          message: `Could not get an embedding from "${next.model}" via OpenRouter. Check your key has credit and that this model is available to your account.`,
+        };
+      }
+      // OpenRouter FORWARDS `dimensions`; whether the upstream model honours it
+      // is the model's business. Silently storing a width the user did not pick
+      // would mis-describe their own index, so say what happened instead.
+      if (requested && measured !== requested) {
+        return {
+          success: false,
+          error: 'dimensions_unsupported',
+          message: `"${next.model}" returned ${measured} dimensions when asked for ${requested}. It does not support that width — pick ${measured}, or choose another model.`,
+        };
+      }
+      dimensions = measured;
+    }
+    if (next?.provider === 'custom' && next?.model && !dimensions) {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { probeCustomEmbeddingDimensions } = require('./rag/customEmbeddingModels');
+      const endpoint = settings.get('customEmbeddingEndpoint') || '';
+      const measured = await probeCustomEmbeddingDimensions(
+        endpoint, next.model, CredentialsManager.getInstance().getCustomEmbeddingApiKey?.(),
+      );
+      if (measured == null) {
+        return {
+          success: false,
+          error: 'dimensions_unmeasurable',
+          message: `Could not get an embedding from "${next.model}" at ${endpoint || 'the configured endpoint'}. Check the server is running and that this model can embed.`,
+        };
+      }
+      dimensions = measured;
+    }
+    if (next?.provider === 'ollama' && next?.model && !dimensions) {
+      const { probeOllamaEmbeddingDimensions } = require('./rag/ollamaEmbeddingModels');
+      const measured = await probeOllamaEmbeddingDimensions(process.env.OLLAMA_URL || 'http://localhost:11434', next.model);
+      if (measured == null) {
+        return { success: false, error: 'dimensions_unmeasurable', message: `Could not measure the embedding size of "${next.model}". Check that it is installed and supports embeddings.` };
+      }
+      dimensions = measured;
+    }
+
+    // R-24: a refused write (degraded settings store) must NOT report success —
+    // re-initializing the pipeline and telling the user the model changed, on a
+    // value the disk never received, silently reverts on the next launch.
+    if (!settings.set('embedding', {
+      mode: (next?.mode as any) || 'auto',
+      provider: next?.provider as any,
+      model: next?.model,
+      dimensions,
+    })) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the embedding settings. Your settings store is unavailable.' };
+    }
+
+    const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+    await ragManager?.initializeEmbeddings(buildEmbeddingConfig());
+    const activeSpace = pipeline?.getActiveSpaceKey?.();
+
+    // A space change means existing vectors are no longer comparable. The
+    // auto-reindex sweep already handles the work; the UI's job is to SAY so
+    // rather than let a silent re-index start.
+    return {
+      success: true,
+      previousSpace,
+      activeSpace,
+      reindexRequired: !!previousSpace && !!activeSpace && previousSpace !== activeSpace,
+    };
+  });
+
+  // Save the user-hosted endpoint (and its optional token). Separate from
+  // set-config because the endpoint must be stored BEFORE its models can be
+  // listed or a model's width measured.
+  // OpenRouter's key. It has no slot in AI Providers (OpenRouter is only reachable
+  // there as a cURL provider), so the embeddings panel owns it.
+  // Voyage's key. Voyage is embeddings-only in this app, so AI Providers has no
+  // slot for it and the embeddings panel owns it.
+  safeHandle('embedding:set-voyage-key', async (_evt, key: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const saved = CredentialsManager.getInstance().setVoyageApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('embedding:set-openrouter-key', async (_evt, key: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const saved = CredentialsManager.getInstance().setOpenrouterApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+    const models = await listOpenRouterEmbeddingModels({ apiKey: (key || '').trim() || undefined });
+    return { success: true, models, count: models.length };
+  });
+
+  safeHandle('embedding:set-custom-endpoint', async (_evt, input: { url?: string; apiKey?: string }) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const { normalizeCustomBaseUrl } = require('./rag/providers/CustomEmbeddingProvider');
+    const settings = SettingsManager.getInstance();
+
+    const raw = (input?.url || '').trim();
+    // Store the NORMALIZED url so the space key (which includes the host) is
+    // stable whether the user pasted the bare host or the /v1 form.
+    const normalized = raw ? normalizeCustomBaseUrl(raw) : '';
+    if (raw && !normalized) {
+      return { success: false, error: 'invalid_url', message: 'That does not look like a valid URL. Example: http://localhost:1234' };
+    }
+
+    // R-24: a refused write must not report success.
+    if (!settings.set('customEmbeddingEndpoint', normalized || undefined)) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the endpoint. Your settings store is unavailable.' };
+    }
+    if (input?.apiKey !== undefined) {
+      const saved = CredentialsManager.getInstance().setCustomEmbeddingApiKey(input.apiKey || '');
+      if (saved === false) {
+        return { success: false, error: 'credential_store_degraded', message: 'Could not save the token. Your credential store is unavailable.' };
+      }
+    }
+
+    const { listCustomEmbeddingModels } = require('./rag/customEmbeddingModels');
+    const models = normalized
+      ? await listCustomEmbeddingModels(normalized, CredentialsManager.getInstance().getCustomEmbeddingApiKey?.())
+      : [];
+    return {
+      success: true,
+      endpoint: normalized || null,
+      models,
+      // Distinguish "not reachable / not an embeddings server" from "saved fine
+      // but you have not picked a model yet".
+      reachable: models.length > 0,
+    };
+  });
+
+  safeHandle('embedding:acknowledge-lightweight', async (_evt, acknowledged: boolean) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    // R-24: reporting success on a refused write would hide the warning for this
+    // session and bring it back on the next launch, which reads as a bug.
+    if (!SettingsManager.getInstance().set('embeddingLightweightAcknowledged', !!acknowledged)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    return { success: true };
+  });
+
   safeHandle('get-available-ollama-models', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
@@ -6672,13 +7092,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (keyChanged) {
         const ragManager = appState.getRAGManager();
         if (ragManager) {
-          ragManager.initializeEmbeddings({
-            openaiKey: cm.getOpenaiApiKey() || undefined,
+          ragManager.initializeEmbeddings(buildEmbeddingConfig({
             geminiKey: apiKey || undefined,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
             explicitKeyManagement: true,
-          });
+          }));
           appState.scheduleModeReferenceIndexRetry();
         }
       }
@@ -6752,13 +7169,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (keyChanged) {
         const ragManager = appState.getRAGManager();
         if (ragManager) {
-          ragManager.initializeEmbeddings({
+          ragManager.initializeEmbeddings(buildEmbeddingConfig({
             openaiKey: apiKey || undefined,
-            geminiKey: cm.getGeminiApiKey() || undefined,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
             explicitKeyManagement: true,
-          });
+          }));
           appState.scheduleModeReferenceIndexRetry();
         }
       }

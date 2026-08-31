@@ -460,6 +460,44 @@ interface ElectronAPI {
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
+  // ── Embedding settings (configured independently of the generation model) ──
+  getEmbeddingStatus: () => Promise<{
+    active: { configured: boolean; provider?: string | null; model?: string | null; dimensions?: number | null; space?: string | null; location?: 'on-device' | 'cloud' | 'unknown'; lightweight?: boolean };
+    configured: { mode?: 'auto' | 'manual'; provider?: string; model?: string; dimensions?: number };
+    acknowledged: boolean;
+    scopeAllowsCloud: boolean;
+    /** §5: a third-party AI provider is configured while embeddings stay lightweight. */
+    shouldWarn: boolean;
+  }>;
+  getEmbeddingCatalog: () => Promise<{
+    providers: Array<{
+      id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local'
+      name: string
+      cloud: boolean
+      managed?: boolean
+      available: boolean
+      unavailableReason?: 'no_key' | 'not_running' | 'blocked_by_policy' | 'not_configured'
+      endpoint?: string
+      capabilityUnknown?: boolean
+      models: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[]; lightweight?: boolean; recommended?: boolean; note?: string }>
+    }>
+    hasCatalog?: { openai?: boolean; gemini?: boolean }
+  }>;
+  testEmbeddingModel: (choice?: { provider?: string; model?: string }) => Promise<{
+    ok: boolean; provider?: string; model?: string; dimensions?: number; space?: string; latencyMs?: number; error?: string; status?: number; message?: string;
+  }>;
+  setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => Promise<{
+    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; error?: string; message?: string;
+  }>;
+  fetchEmbeddingModels: (providerId: string) => Promise<{
+    success: boolean; models?: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[] }>; count?: number; error?: string
+  }>;
+  setEmbeddingVoyageKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  setEmbeddingOpenRouterKey: (key: string) => Promise<{ success: boolean; models?: unknown[]; count?: number; error?: string; message?: string }>;
+  setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
+  }>;
+  acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
   getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>;
@@ -1869,6 +1907,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
+  getEmbeddingStatus: () => ipcRenderer.invoke('embedding:get-status'),
+  getEmbeddingCatalog: () => ipcRenderer.invoke('embedding:get-catalog'),
+  testEmbeddingModel: (choice?: { provider?: string; model?: string }) => ipcRenderer.invoke('embedding:test', choice),
+  setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => ipcRenderer.invoke('embedding:set-config', next),
+  fetchEmbeddingModels: (providerId: string) => ipcRenderer.invoke('embedding:fetch-models', providerId),
+  setEmbeddingVoyageKey: (key: string) => ipcRenderer.invoke('embedding:set-voyage-key', key),
+  setEmbeddingOpenRouterKey: (key: string) => ipcRenderer.invoke('embedding:set-openrouter-key', key),
+  setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => ipcRenderer.invoke('embedding:set-custom-endpoint', input),
+  acknowledgeLightweightEmbeddings: (acknowledged: boolean) => ipcRenderer.invoke('embedding:acknowledge-lightweight', acknowledged),
   getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
   setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
   getContextDebugConfig: () => ipcRenderer.invoke('context-debug:get-config'),
