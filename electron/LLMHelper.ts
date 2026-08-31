@@ -4362,6 +4362,14 @@ let isMultimodal = !!(imagePaths?.length);
       body = injectImageIntoMessages(body, base64Image, imagePath);
     }
 
+    // 4b. SECURITY (P1): Validate URL against SSRF before making the request
+    const { validateUrlForSsrf } = require('./utils/curlUtils');
+    const urlValidation = validateUrlForSsrf(url);
+    if (!urlValidation.isValid) {
+      console.error(`[LLMHelper] executeCustomProvider: SSRF blocked: ${urlValidation.reason}`);
+      throw new Error(`SSRF protection blocked URL (${urlValidation.reason})`);
+    }
+
     // 5. Execute Fetch (30s timeout — same as RestSTT uploads)
     const customAbort = new AbortController();
     const customTimeout = setTimeout(() => customAbort.abort(), 30_000);
@@ -8811,6 +8819,19 @@ let isMultimodal = !!(imagePaths?.length);
     // No-op for non-OpenAI formats and templates already containing a proper image_url part.
     if (base64Image && preparedImagePath) {
       body = injectImageIntoMessages(body, base64Image, preparedImagePath);
+    }
+
+    // SECURITY (P1): Validate URL against SSRF before dispatching, same as
+    // streamWithDirectCurl and chatWithCurl.
+    const { validateUrlForSsrf } = require('./utils/curlUtils');
+    const urlValidation = validateUrlForSsrf(url);
+    if (!urlValidation.isValid) {
+      if (strictErrors) {
+        throw new DirectAssistError('INVALID_REQUEST', 'The custom provider URL was blocked by network safety policy.');
+      }
+      console.error(`[LLMHelper] streamWithCustom: SSRF blocked: ${urlValidation.reason}`);
+      yield `Error: SSRF protection blocked URL (${urlValidation.reason})`;
+      return;
     }
 
     const streamAbort = new AbortController();

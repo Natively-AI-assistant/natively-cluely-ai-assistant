@@ -153,6 +153,35 @@ test('fetch-based custom providers refuse redirects instead of replaying sensiti
   }
 });
 
+test('fetch-based custom providers validate their destination against SSRF-protected ranges', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = source.slice(entry.start, end);
+    const validationAt = body.indexOf('validateUrlForSsrf');
+    const fetchAt = body.indexOf('fetch(url, {');
+
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination against SSRF-protected ranges`);
+    assert.ok(fetchAt > validationAt, `${entry.name} should validate before dispatch`);
+  }
+});
+
 test('path traversal is blocked in URL variable substitution', () => {
   const source = read('electron/LLMHelper.ts');
 
