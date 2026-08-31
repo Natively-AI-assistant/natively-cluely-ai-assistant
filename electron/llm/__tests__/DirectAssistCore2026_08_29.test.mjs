@@ -431,6 +431,25 @@ test('LLMHelper Direct boundary contains no legacy stream/fallback entrypoint', 
   assert.match(boundary, /streamWithCodexCli\(directUserPrompt, request\.systemPrompt, false, imagePaths, abortSignal, model\)/);
 });
 
+test('transcript privacy denial only hard-blocks Direct Assist when the prompt actually carries transcript content', () => {
+  const source = fs.readFileSync(path.resolve(root, 'electron/LLMHelper.ts'), 'utf8');
+  const start = source.indexOf('private async *streamDirectAssistFrozen(');
+  const end = source.indexOf('\n  /**', start + 20);
+  const boundary = source.slice(start, end);
+
+  // scopesForPayload()'s 'transcript' tag is a last-boundary backstop that
+  // fires on ANY non-empty prompt text — Direct Assist's userPrompt always
+  // has a "CURRENT REQUEST" section, so deniedScopes.includes('transcript')
+  // used to be true for every request. TRANSCRIPT_BLOCKED_BY_PRIVACY must
+  // require directScopes (derived from the prompt's own markup) to confirm
+  // real transcript content too, or every typed/screenshot-only request with
+  // the transcript scope denied fails outright.
+  assert.match(
+    boundary,
+    /if \(deniedScopes\.includes\('transcript'\) && directScopes\.includes\('transcript'\)\) \{\s*\n\s*throw new DirectAssistError\(\s*\n\s*'TRANSCRIPT_BLOCKED_BY_PRIVACY'/,
+  );
+});
+
 test('Direct private-vision guard blocks cloud images before Natively transport', () => {
   const source = fs.readFileSync(path.resolve(root, 'electron/LLMHelper.ts'), 'utf8');
   const policyStart = source.indexOf('private assertOutboundImagesAllowed(');
