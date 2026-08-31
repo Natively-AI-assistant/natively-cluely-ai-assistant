@@ -116,6 +116,38 @@ export interface AppSettings {
     // documented in docs/engineering/LOCAL_DB_ENCRYPTION_DESIGN.md.
     // 'forever' (default), '7d', '30d', or 'never' (do not store transcripts).
     meetingRetention?: 'forever' | '7d' | '30d' | 'never';
+    /**
+     * Embedding configuration, independent of the generation model.
+     *
+     * 'auto' (the default) keeps the existing priority chain, so an upgrading
+     * user's active embedding SPACE is unchanged and nothing is re-indexed.
+     * 'manual' pins an explicit provider/model.
+     *
+     * `dimensions` is the MEASURED width for the chosen model, never a guess —
+     * see electron/rag/ollamaEmbeddingModels.ts. It is cached here so a probe is
+     * not repeated on every launch.
+     */
+    embedding?: {
+        mode?: 'auto' | 'manual';
+        provider?: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local';
+        model?: string;
+        dimensions?: number;
+    };
+    /**
+     * A user-hosted OpenAI-compatible embedding endpoint — LM Studio
+     * (http://localhost:1234/v1), llama.cpp's llama-server (:8080/v1), vLLM,
+     * text-embeddings-inference, a LiteLLM proxy.
+     *
+     * The optional bearer token is NOT here: it lives in CredentialsManager,
+     * because this file is plaintext on disk.
+     */
+    customEmbeddingEndpoint?: string;
+    /**
+     * The user chose "Continue with MiniLM". Suppresses the lightweight-embedding
+     * warning permanently — an unstoppable warning is worse than none, and this
+     * one must not become something to click past.
+     */
+    embeddingLightweightAcknowledged?: boolean;
     providerDataScopes?: {
         transcript?: boolean;
         screenshots?: boolean;

@@ -183,7 +183,13 @@ export class RAGManager {
     // everything at runtime via `{...keys}` — which is precisely why the managed
     // tier worked here and not in the constructor — but its type named only six
     // fields, so it read as though the rest were unsupported.
-    initializeEmbeddings(keys: AppAPIConfig): void {
+    // Returns the pipeline's init promise. It used to return void, so
+    // `await ragManager.initializeEmbeddings(...)` resolved on the next
+    // microtask — long before the provider was re-resolved — and every caller
+    // that then read getActiveSpaceKey() saw the OLD space. That made
+    // set-config's `reindexRequired` permanently false, so a genuine model
+    // switch re-indexed the whole corpus with no warning.
+    initializeEmbeddings(keys: AppAPIConfig): Promise<void> {
         const initPromise = this.embeddingPipeline.initialize({
             ...keys,
             explicitKeyManagement: keys.explicitKeyManagement,
@@ -192,15 +198,19 @@ export class RAGManager {
         // but a NULL metadata column (common for meetings embedded before this metadata
         // write was introduced, or where the write silently failed).
         if (initPromise && typeof initPromise.then === 'function') {
-            initPromise.then(() => {
+            // RETURNED, not just chained: a caller that awaits this needs the
+            // provider actually re-resolved before it reads getActiveSpaceKey().
+            // The backfill and re-index scheduling stay attached here so the
+            // fire-and-forget callers keep their existing behaviour.
+            return initPromise.then(() => {
                 this._backfillEmbeddingProviderMetadata();
                 this.scheduleAutoReindex();
             }).catch(() => { /* silent — backfill is non-critical */ });
-        } else {
-            // Synchronous path (shouldn't happen but be safe)
-            this._backfillEmbeddingProviderMetadata();
-            this.scheduleAutoReindex();
         }
+        // Synchronous path (shouldn't happen but be safe)
+        this._backfillEmbeddingProviderMetadata();
+        this.scheduleAutoReindex();
+        return Promise.resolve();
     }
 
     private _backfillEmbeddingProviderMetadata(): void {
