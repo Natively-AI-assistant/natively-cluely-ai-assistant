@@ -7184,6 +7184,188 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── Extensions ───────────────────────────────────────────────────────────
+  //
+  // Reranker extensions surface INSIDE Settings > Reranker, not in a separate
+  // pane: only one reranker can own the seam, so two places to configure one
+  // would let a user set two things that cannot both be active.
+  //
+  // Nothing here enables an extension implicitly, and nothing downloads without
+  // an explicit call from a user action.
+
+  const extensionManager = () => {
+    const { getExtensionManager } = require('./services/extensions/appWiring');
+    return getExtensionManager();
+  };
+
+  safeHandle('extensions:list', async () => {
+    const manager = extensionManager();
+    if (!manager) return { available: false, extensions: [] };
+
+    const { ModelStore } = require('./services/extensions/ModelStore');
+    const { getLicenseLedger } = require('./services/extensions/LicenseLedger');
+    const store = new ModelStore({});
+    const ledger = getLicenseLedger();
+    const running = manager.running();
+
+    const extensions = manager.list().map((r: any) => ({
+      id: r.id,
+      name: r.manifest.name,
+      version: r.manifest.version,
+      type: r.manifest.type,
+      author: r.manifest.author,
+      homepage: r.manifest.homepage,
+      source: r.source,
+      enabled: r.enabled,
+      running: running.includes(r.id),
+      disabledReason: r.disabledReason ?? null,
+      permissions: r.grantedPermissions,
+      models: (r.manifest.models ?? []).map((m: any) => {
+        const status = store.status(r.id, m);
+        return {
+          key: m.key,
+          format: m.format,
+          approxBytes: m.approxBytes,
+          state: status.state,
+          bytes: status.bytes ?? null,
+          reason: status.reason ?? null,
+          license: {
+            spdx: m.license.spdx,
+            url: m.license.url,
+            commercialUseRestricted: m.license.commercialUseRestricted,
+            requiresAcknowledgement: m.license.requiresAcknowledgement,
+            acknowledged: ledger.hasAcknowledged(r.id, m.key, m.license.spdx),
+          },
+        };
+      }),
+    }));
+
+    return { available: true, extensions };
+  });
+
+  safeHandle('extensions:install-from-folder', async () => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+
+    const { dialog, BrowserWindow } = require('electron');
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const picked = await dialog.showOpenDialog(parent, {
+      title: 'Choose an extension folder',
+      properties: ['openDirectory'],
+      message: 'Select the folder containing the extension\'s extension.json',
+    });
+    if (picked.canceled || picked.filePaths.length === 0) return { success: false, error: 'cancelled' };
+
+    const { stageFromDirectory } = require('./services/extensions/ExtensionInstaller');
+    const staged = stageFromDirectory(picked.filePaths[0]);
+    if (!staged.ok) return { success: false, error: 'stage_failed', errors: staged.errors };
+
+    // The trust prompt lives inside install(). A refusal there leaves the staged
+    // payload on disk but no registry record, so nothing can load it.
+    const result = await manager.install({
+      manifestJson: staged.manifestJson,
+      source: `local:${picked.filePaths[0]}`,
+      payloadDir: staged.payloadDir,
+    });
+    if (!result.ok) return { success: false, error: 'install_refused', errors: result.errors };
+
+    return {
+      success: true,
+      id: result.record.id,
+      warnings: [...(staged.warnings ?? []), ...result.warnings],
+    };
+  });
+
+  safeHandle('extensions:set-enabled', async (_evt, id: string, enabled: boolean) => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    const ok = enabled ? manager.enable(id) : manager.disable(id, 'disabled by the user');
+    if (!ok) return { success: false, error: 'not_installed' };
+    if (enabled) { void manager.load(id); } else { void manager.unload(id); }
+    return { success: true };
+  });
+
+  safeHandle('extensions:remove', async (_evt, id: string) => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    return { success: manager.remove(id) };
+  });
+
+  safeHandle('extensions:acknowledge-license', async (_evt, id: string, modelKey: string) => {
+    // Recording consent, so it must come from a real user action and must name
+    // the exact terms agreed to. A licence that later CHANGES invalidates this,
+    // because the user agreed to different terms — that is LicenseLedger's rule,
+    // not something this handler can weaken.
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    const record = manager.get(id);
+    const model = record?.manifest.models?.find((m: any) => m.key === modelKey);
+    if (!model) return { success: false, error: 'unknown_model' };
+
+    const { getLicenseLedger } = require('./services/extensions/LicenseLedger');
+    getLicenseLedger().acknowledge(id, modelKey, model.license.spdx);
+    return { success: true };
+  });
+
+  // One in-flight download per (extension, model). A second request for the same
+  // model returns the existing controller's state rather than starting a race
+  // that would have two writers on one .part file.
+  const extensionDownloads = new Map<string, AbortController>();
+
+  safeHandle('extensions:download-model', async (event: any, id: string, modelKey: string) => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    const record = manager.get(id);
+    const model = record?.manifest.models?.find((m: any) => m.key === modelKey);
+    if (!model) return { success: false, error: 'unknown_model' };
+
+    const key = `${id}::${modelKey}`;
+    if (extensionDownloads.has(key)) return { success: false, error: 'already_downloading' };
+
+    const { ModelStore } = require('./services/extensions/ModelStore');
+    const { HuggingFaceModelDownloader } = require('./services/extensions/HuggingFaceModelDownloader');
+    const store = new ModelStore({ downloader: new HuggingFaceModelDownloader({ logger: console }) });
+
+    const controller = new AbortController();
+    extensionDownloads.set(key, controller);
+    const sender = event?.sender;
+    let lastSent = 0;
+    try {
+      const status = await store.download(id, model, (fraction: number) => {
+        // Throttled: a 400MB download emits thousands of chunk callbacks, and a
+        // renderer message per chunk would cost more than the download.
+        const now = Date.now();
+        if (now - lastSent < 200 && fraction < 1) return;
+        lastSent = now;
+        try { sender?.send('extensions:model-progress', { id, modelKey, fraction }); } catch { /* window gone */ }
+      }, controller.signal);
+      return { success: status.state === 'ready', status };
+    } catch (e: any) {
+      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+    } finally {
+      extensionDownloads.delete(key);
+    }
+  });
+
+  safeHandle('extensions:cancel-download', async (_evt, id: string, modelKey: string) => {
+    const controller = extensionDownloads.get(`${id}::${modelKey}`);
+    if (!controller) return { success: false, error: 'not_downloading' };
+    controller.abort();
+    return { success: true };
+  });
+
+  safeHandle('extensions:browse-registry', async (_evt, url?: string) => {
+    // METADATA ONLY. Ids, repositories, versions, licence identifiers. No code
+    // and no weights cross this boundary — obtaining a payload stays an explicit
+    // user act, because an entrypoint is code that runs on their machine and the
+    // sandbox is not a boundary against a hostile extension.
+    const { fetchRemoteRegistry } = require('./services/extensions/ExtensionInstaller');
+    const target = url || process.env.NATIVELY_EXTENSION_REGISTRY_URL
+      || 'https://raw.githubusercontent.com/evinjohnn/natively-extension-registry/main/registry.json';
+    const result = await fetchRemoteRegistry(target);
+    return { ok: result.ok, entries: result.entries };
+  });
+
   safeHandle('get-available-ollama-models', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
