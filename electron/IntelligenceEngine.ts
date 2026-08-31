@@ -59,10 +59,10 @@ import { LiveTranscriptBrain } from './intelligence/LiveTranscriptBrain';
 import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // Type-only (fully erased at runtime, adds no require()). `getKnowledgeOrchestrator()`
 // is declared `: any`, so the orchestrator's real result type is invisible here and
-// tsc collapsed the grounding result to `{}`. Naming it restores genuine checking on
-// the seven property reads below instead of masking them with a cast.
+// tsc collapsed the grounding result to `{}`. The structural contract belongs to the
+// source-available boundary so a core type-check does not require private sources.
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
-import type { PromptAssemblyResult } from '../premium/electron/knowledge/ContextAssembler';
+import type { PromptAssemblyResult } from './premium/contracts';
 
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
