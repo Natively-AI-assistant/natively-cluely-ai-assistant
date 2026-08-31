@@ -2108,6 +2108,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
     // --- Default Model ---
     const [defaultModel, setDefaultModel] = useState<string>('gemini-3.7-flash');
+    const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
+    const [directAssistBusy, setDirectAssistBusy] = useState(false);
+    const [directAssistError, setDirectAssistError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
@@ -2298,6 +2301,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setDefaultModel(result.model);
                 }
 
+                const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
+                setDirectAssistEnabled(directEnabled === true);
+
                 // Check Ollama
                 checkOllama();
 
@@ -2320,6 +2326,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             unsubs.push(window.electronAPI.onGroqFastTextChanged((enabled: boolean) => {
                 setFastResponseMode(enabled);
                 localStorage.setItem('natively_groq_fast_text', String(enabled));
+            }));
+        }
+        if (window.electronAPI?.onDirectAssistEnabledChanged) {
+            unsubs.push(window.electronAPI.onDirectAssistEnabledChanged((enabled: boolean) => {
+                setDirectAssistEnabled(enabled === true);
+                setDirectAssistError('');
             }));
         }
         if (window.electronAPI?.onCredentialsChanged) {
@@ -3310,6 +3322,48 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             setDefaultModel(val);
                             // @ts-ignore - persist as default + update runtime + broadcast
                             window.electronAPI?.setDefaultModel(val).catch(console.error);
+                        }}
+                    />
+                </div>
+
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
+                            <AipBadge tone="info" label={t('Beta')} />
+                        </div>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('Sends your current typed, spoken, screenshot, and page input straight to the active model without meeting retrieval or answer rewriting.')}
+                        </p>
+                        {directAssistError && (
+                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
+                        )}
+                    </div>
+                    <AipSwitch
+                        checked={directAssistEnabled}
+                        disabled={directAssistBusy}
+                        label={t('Direct Assist')}
+                        onChange={async () => {
+                            if (directAssistBusy) return;
+                            const previous = directAssistEnabled;
+                            const next = !previous;
+                            setDirectAssistBusy(true);
+                            setDirectAssistError('');
+                            setDirectAssistEnabled(next);
+                            try {
+                                const result = await window.electronAPI?.setDirectAssistEnabled?.(next);
+                                if (!result?.success) {
+                                    setDirectAssistEnabled(previous);
+                                    setDirectAssistError(result?.error || t('Could not update Direct Assist.'));
+                                }
+                            } catch (error) {
+                                setDirectAssistEnabled(previous);
+                                setDirectAssistError(
+                                    error instanceof Error ? error.message : t('Could not update Direct Assist.'),
+                                );
+                            } finally {
+                                setDirectAssistBusy(false);
+                            }
                         }}
                     />
                 </div>

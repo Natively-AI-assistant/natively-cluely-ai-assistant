@@ -5,9 +5,9 @@
 //
 // ── REWRITTEN 2026-08-07 ─────────────────────────────────────────────────────
 //
-// The original fix added SCREEN_CODE_ASK_RE so an explicit code ask WITH screen
-// evidence also claims CODING_TASK. That implementation was reverted out of the
-// working tree; the claim is still absent, pinned below.
+// The direct-answer hardening restores SCREEN_CODE_ASK_RE so an explicit code
+// ask WITH screen evidence also claims CODING_TASK.  The screen is the missing
+// subject; without it the same phrase remains an underspecified follow-up.
 //
 // Unlike the other suites in this batch this one is NOT about denials — no
 // composed prompt here refuses, before or after the 2026-08-07 composer fix
@@ -35,39 +35,34 @@ describe('explicit code-ask + screen evidence', () => {
     'Give me the code for this',
     'can you show me the code?',
   ]) {
-    test(`"${q}" WITH screen context anchors to the screen but does not claim CODING_TASK`, () => {
+    test(`"${q}" WITH screen context anchors to the screen and claims CODING_TASK`, () => {
       const r = classify(q, { hasScreenContext: true });
       // Screen anchoring — the half that works, and the half that matters most:
       // the turn is bound to the screenshot rather than answered from thin air.
       assert.ok(r.questionTypes.includes('SCREEN_SPECIFIC'),
         `screen anchoring must be preserved, got: ${r.questionTypes.join(',')}`);
       assert.ok(r.requiredSourceTypes.includes('SCREEN_CONTEXT'), `got: ${r.requiredSourceTypes.join(',')}`);
-      // KNOWN GAP: no CODING_TASK claim, so the coding-task capability path is
-      // not entered. Pinned, NOT endorsed — if SCREEN_CODE_ASK_RE is restored,
-      // this assertion flips and the test should be updated to expect
-      // CODING_TASK. That would be an improvement, not a regression.
-      assert.ok(!r.questionTypes.includes('CODING_TASK'),
-        `code-ask routing changed — update this test to expect CODING_TASK. got: ${r.questionTypes.join(',')}`);
+      assert.ok(r.questionTypes.includes('CODING_TASK'),
+        `screen-backed code ask must enter the coding capability path. got: ${r.questionTypes.join(',')}`);
+      assert.ok(!r.questionTypes.includes('PERSONAL_EXPERIENCE'),
+        `screen ownership must not request profile evidence. got: ${r.questionTypes.join(',')}`);
     });
   }
 
-  test('"show the code from my screen" additionally claims a profile source (known oddity)', () => {
+  test('"show the code from my screen" does not claim a profile source', () => {
     const r = classify('show the code from my screen', { hasScreenContext: true });
     assert.ok(r.questionTypes.includes('SCREEN_SPECIFIC'), `got: ${r.questionTypes.join(',')}`);
-    // KNOWN ODDITY: the possessive "my" is read as a profile reference, so a
-    // screen question asks for RESUME authority it has no use for. Harmless —
-    // the 2026-08-07 composer fix means an unauthorized-source verdict no
-    // longer withholds the answer — but it is a real mis-route, recorded so it
-    // is visible rather than folded into a passing test.
-    assert.ok(r.questionTypes.includes('PERSONAL_EXPERIENCE'),
-      `routing changed — if "my screen" no longer reads as a profile reference, update this test. got: ${r.questionTypes.join(',')}`);
-    assert.ok(r.requiredSourceTypes.includes('RESUME'), `got: ${r.requiredSourceTypes.join(',')}`);
+    assert.ok(r.questionTypes.includes('CODING_TASK'), `got: ${r.questionTypes.join(',')}`);
+    assert.ok(!r.questionTypes.includes('PERSONAL_EXPERIENCE'), `got: ${r.questionTypes.join(',')}`);
+    assert.ok(!r.requiredSourceTypes.includes('RESUME'), `got: ${r.requiredSourceTypes.join(',')}`);
   });
 
-  test('a non-code screen question shows the same possessive oddity and no CODING_TASK', () => {
+  test('a non-code screen question stays screen-only and does not claim profile evidence', () => {
     const r = classify('what is shown on my screen?', { hasScreenContext: true });
     assert.ok(!r.questionTypes.includes('CODING_TASK'));
     assert.ok(r.questionTypes.includes('SCREEN_SPECIFIC'), `got: ${r.questionTypes.join(',')}`);
+    assert.ok(!r.questionTypes.includes('PERSONAL_EXPERIENCE'), `got: ${r.questionTypes.join(',')}`);
+    assert.ok(!r.requiredSourceTypes.includes('RESUME'), `got: ${r.requiredSourceTypes.join(',')}`);
   });
 
   // ── unchanged guards: already true against the current classifier ──
