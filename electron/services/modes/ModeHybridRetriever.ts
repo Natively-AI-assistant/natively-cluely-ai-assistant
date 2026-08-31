@@ -1532,9 +1532,27 @@ export class ModeHybridRetriever {
 
         try {
             let reranker = this.rerankerOverride;
+
+            // An enabled reranker EXTENSION takes over this seam — it never runs
+            // BESIDE the built-in. That keeps one rerank stage, one budget and
+            // one fallback, and it is what ModeSpeculativeRerank.test.mjs's
+            // source guards require ("no new unbounded await"). Resolution is
+            // synchronous; with no extension owning the seam it returns null and
+            // everything below behaves exactly as before.
+            const extensionPort = this.rerankerOverride ? null : (() => {
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    return require('../reranking/RerankerRegistry').getRerankerRegistry().resolvePort();
+                } catch { return null; }
+            })();
+            if (!reranker && extensionPort) {
+                reranker = extensionPort;
+            }
+
             // Only run telemetry when the production singleton is in use —
-            // the test override lacks isAvailable/isCached.
-            const productionReranker = this.rerankerOverride ? null : (() => {
+            // the test override lacks isAvailable/isCached, and so does the
+            // extension port.
+            const productionReranker = (this.rerankerOverride || extensionPort) ? null : (() => {
                 try {
                     // eslint-disable-next-line @typescript-eslint/no-var-requires
                     return require('../../rag/LocalReranker').getLocalReranker();
@@ -1594,9 +1612,22 @@ export class ModeHybridRetriever {
                 return null;
             }
 
+            // RERANK_BATCH_SIZE exists to bound the ONNX arena (see its comment).
+            // That reasoning is specific to an in-process forward pass. A port
+            // whose cost is a network round trip, or an out-of-process call,
+            // pays that batching five times over for no benefit — ~5x the
+            // latency and, for a hosted reranker, ~5x the spend, which is enough
+            // to push a model that clears RERANK_BUDGET_MS past it. So a port
+            // may declare the batch size it wants; the built-in declares none
+            // and keeps the existing value exactly.
+            const declaredBatch = (reranker as { batchSize?: number }).batchSize;
+            const rerankBatchSize = Number.isFinite(declaredBatch) && (declaredBatch as number) > 0
+                ? Math.min(poolTexts.length, Math.floor(declaredBatch as number))
+                : RERANK_BATCH_SIZE;
+
             const allResults: Array<{ index: number; score: number; originalIndex: number }> = [];
-            for (let i = 0; i < poolTexts.length; i += RERANK_BATCH_SIZE) {
-                const batchTexts = poolTexts.slice(i, i + RERANK_BATCH_SIZE);
+            for (let i = 0; i < poolTexts.length; i += rerankBatchSize) {
+                const batchTexts = poolTexts.slice(i, i + rerankBatchSize);
                 const batchResults = await reranker.rerank(queryText, batchTexts);
                 if (!batchResults || batchResults.length === 0) continue;
                 for (const r of batchResults) {

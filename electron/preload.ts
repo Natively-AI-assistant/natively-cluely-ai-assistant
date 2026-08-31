@@ -1916,6 +1916,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setEmbeddingOpenRouterKey: (key: string) => ipcRenderer.invoke('embedding:set-openrouter-key', key),
   setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => ipcRenderer.invoke('embedding:set-custom-endpoint', input),
   acknowledgeLightweightEmbeddings: (acknowledged: boolean) => ipcRenderer.invoke('embedding:acknowledge-lightweight', acknowledged),
+
+  // Reranker. One surface, provider as a choice inside it. The OpenRouter key is
+  // the SAME credential the embedding and generation paths use — this never
+  // reads it back, only reports whether one is configured.
+  getRerankerStatus: () => ipcRenderer.invoke('reranker:get-status'),
+  getRerankerCatalog: (opts?: { refresh?: boolean }) => ipcRenderer.invoke('reranker:get-catalog', opts),
+  setRerankerConfig: (next: {
+    provider?: 'local' | 'openrouter';
+    openrouterModel?: string;
+    candidateCount?: number;
+    topN?: number;
+    fallbackToLocal?: boolean;
+  }) => ipcRenderer.invoke('reranker:set-config', next),
+  setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
+  testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
   getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
   setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
   getContextDebugConfig: () => ipcRenderer.invoke('context-debug:get-config'),

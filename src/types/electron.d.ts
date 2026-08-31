@@ -409,6 +409,58 @@ export interface ElectronAPI {
     success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
   }>
   acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>
+
+  // ── Reranker ───────────────────────────────────────────────────────────
+  // Embedding retrieval finds the candidate set; reranking decides the order of
+  // those candidates. Configured independently of the embedding provider.
+  getRerankerStatus: () => Promise<{
+    provider: 'local' | 'openrouter'
+    openrouterModel: string | null
+    candidateCount: number | null
+    topN: number | null
+    fallbackToLocal: boolean
+    /** Presence only. The key itself never crosses the IPC boundary. */
+    hasApiKey: boolean
+    eligible: boolean
+    ineligibleReason: 'provider-not-selected' | 'local-only-mode' | 'reference-files-scope-denied' | 'no-api-key' | 'no-model' | null
+    ineligibleMessage: string | null
+    builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean }
+    /** What would actually run right now, resolved the way retrieval resolves it. */
+    effective: { kind: 'local' | 'extension' | 'openrouter'; id: string | null }
+    lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
+  }>
+  getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
+    models: Array<{
+      id: string; label: string; vendor: string; contextLength?: number
+      free: boolean; multimodal: boolean
+      group: 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other'
+      note?: string; description?: string
+    }>
+    /** True when discovery failed and these are the last known models. */
+    stale: boolean
+    fetchedAt: number | null
+    error?: string
+  }>
+  setRerankerConfig: (next: {
+    provider?: 'local' | 'openrouter'
+    openrouterModel?: string
+    candidateCount?: number
+    topN?: number
+    fallbackToLocal?: boolean
+  }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
+  setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  testReranker: (choice?: { model?: string }) => Promise<{
+    success: boolean
+    model?: string
+    /** Round trip INCLUDING network. Not model inference time. */
+    latencyMs?: number
+    costUsd?: number | null
+    scoresFinite?: boolean
+    indicesValid?: boolean
+    rankedExpectedFirst?: boolean
+    error?: string
+    message?: string
+  }>
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
   getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>

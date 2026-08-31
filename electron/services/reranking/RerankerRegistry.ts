@@ -8,12 +8,27 @@
  * built-in at that same seam, so there remains exactly one rerank stage, one
  * budget, one fallback and one telemetry line.
  *
- * That is not only a design preference — `ModeSpeculativeRerank.test.mjs`
- * carries source-guard assertions that rerank "stays inside the existing
- * raceWithBudget envelope (no new unbounded await)". A second call site would
- * fail those by design.
+ * A note on how load-bearing that is. `ModeSpeculativeRerank.test.mjs:161`
+ * ("rerank stays inside the existing raceWithBudget envelope (no new unbounded
+ * await)") is often cited as enforcing this. Read what it asserts: it reads
+ * `llm/WhatToAnswerLLM.ts` and checks the HYBRID RETRIEVAL call is wrapped in
+ * `raceWithBudget`. It says nothing about this file or about
+ * `ModeHybridRetriever`, which hand-rolls its own setTimeout + Promise.race and
+ * contains no `raceWithBudget` symbol at all. A second rerank call site would
+ * NOT fail it.
  *
- * Priority at the seam: test override > enabled extension > built-in.
+ * So the single seam is a deliberate design decision, not a test-enforced
+ * invariant. Treat it as binding — but do not assume a net catches you.
+ *
+ * Priority at the seam:
+ *
+ *   test override > OpenRouter (when the provider is set to it) > enabled extension > built-in
+ *
+ * OpenRouter sits ahead of extensions because it is an explicit user choice of
+ * provider, where an enabled extension is a standing preference. It is NOT an
+ * extension itself: hosted rerank has no weights, no licence to acknowledge and
+ * no binary to spawn, so putting it behind the extension host would gate it on
+ * an unrelated flag and duplicate the OpenRouter client this repo already has.
  *
  * Everything here fails CLOSED to the built-in ordering. A reranker that is
  * missing, disabled, slow, throwing, or that answers incompletely yields
@@ -35,9 +50,23 @@ export const EXTENSION_RERANK_TIMEOUT_MS = 10_000;
  */
 export interface RerankSeamPort {
   rerank(query: string, passages: string[]): Promise<Array<{ index: number; score: number }> | null>;
+  /**
+   * How many passages this port wants per `rerank()` call. Omitted means "use
+   * the caller's default".
+   *
+   * `ModeHybridRetriever` splits its 30-candidate pool into batches of 6, which
+   * is an ONNX arena-memory measure (see RERANK_BATCH_SIZE's comment there), not
+   * a latency one. For a port whose cost is a network round trip rather than a
+   * forward pass, that batching multiplies both latency and spend by ~5 and can
+   * turn a model that clears RERANK_BUDGET_MS into one that does not. Such a
+   * port declares a larger size and gets the pool in one call.
+   */
+  readonly batchSize?: number;
 }
 
 export interface RerankOutcome {
+  /** Which kind of reranker ran, so telemetry can tell hosted from local. */
+  provider?: 'openrouter' | 'extension';
   rerankerId: string;
   candidateCount: number;
   latencyMs: number;
@@ -67,6 +96,23 @@ export interface RerankerRegistryOptions {
   /** Flag reader. Injected so tests never mutate the real flag registry. */
   isEnabled: () => boolean;
   source: ExtensionRerankerSource | null;
+  /**
+   * The hosted reranker, when the user has selected a hosted provider AND it is
+   * usable. Returning null means "not selected, not configured, or not
+   * permitted" — every one of those policy questions is answered by the factory,
+   * so this registry stays synchronous and testable without a network.
+   *
+   * Local-only mode is one of those questions, and it is decided there. This
+   * registry never learns what local-only means; it only ever sees null.
+   */
+  hostedPort?: () => RerankSeamPort | null;
+  /**
+   * A built-in reranker to try when the hosted one fails, and only when the user
+   * has opted into that. Null/absent means a hosted failure keeps the existing
+   * order, which is the default: silently substituting a different model would
+   * reorder the user's evidence by something they did not choose.
+   */
+  hostedFallbackPort?: () => RerankSeamPort | null;
   timeoutMs?: number;
   onOutcome?: (outcome: RerankOutcome) => void;
   logger?: { warn(message: string, ...args: unknown[]): void };
@@ -120,9 +166,95 @@ export class RerankerRegistry {
    * is synchronous so it adds no await to the retrieval path.
    */
   resolvePort(): RerankSeamPort | null {
+    // Hosted first, because selecting a hosted provider is an explicit,
+    // deliberate choice, where an enabled extension is a standing preference.
+    // The factory has already decided every policy question — provider
+    // selected, key present, model chosen, local-only not in force — so a
+    // non-null return here means "this may run".
+    const hosted = this.resolveHostedPort();
+    if (hosted) return hosted;
+
     const extensionId = this.activeExtensionId();
     if (!extensionId) return null;
     return { rerank: (query, passages) => this.rerankVia(extensionId, query, passages) };
+  }
+
+  /**
+   * Wrap the hosted port so a failure is reported once, and so the optional
+   * local fallback runs only when the user asked for it.
+   *
+   * The wrapper preserves the hosted port's `batchSize`. Dropping it would
+   * silently restore the seam's default batching and turn one request into five.
+   */
+  private resolveHostedPort(): RerankSeamPort | null {
+    const hosted = this.options.hostedPort?.() ?? null;
+    if (!hosted) return null;
+
+    const now = this.options.now ?? (() => Date.now());
+    const registry = this;
+
+    return {
+      batchSize: hosted.batchSize,
+      async rerank(query, passages) {
+        const startedAt = now();
+        let result: Array<{ index: number; score: number }> | null = null;
+        let reason: string | undefined;
+
+        try {
+          result = await hosted.rerank(query, passages);
+          if (!result) reason = 'hosted reranker returned no ranking';
+        } catch (error) {
+          // A hosted reranker must not be able to throw into retrieval.
+          reason = error instanceof Error ? error.message : String(error);
+        }
+
+        if (result) {
+          registry.options.onOutcome?.({
+            provider: 'openrouter',
+            rerankerId: 'openrouter',
+            candidateCount: passages.length,
+            latencyMs: now() - startedAt,
+            fallback: false,
+          });
+          return result;
+        }
+
+        // Fallback is opt-in. Without it, a hosted failure keeps the existing
+        // order rather than quietly reordering the user's evidence with a model
+        // they did not pick.
+        const fallbackPort = registry.options.hostedFallbackPort?.() ?? null;
+        if (fallbackPort) {
+          registry.options.logger?.warn(
+            `[reranking] OpenRouter reranker unavailable (${reason ?? 'unknown'}); ` +
+            'using the local reranker for this request.',
+          );
+          try {
+            const local = await fallbackPort.rerank(query, passages);
+            registry.options.onOutcome?.({
+              provider: 'openrouter',
+              rerankerId: 'openrouter->local',
+              candidateCount: passages.length,
+              latencyMs: now() - startedAt,
+              fallback: true,
+              reason,
+            });
+            return local;
+          } catch {
+            /* fall through to the no-rerank outcome below */
+          }
+        }
+
+        registry.options.onOutcome?.({
+          provider: 'openrouter',
+          rerankerId: 'openrouter',
+          candidateCount: passages.length,
+          latencyMs: now() - startedAt,
+          fallback: true,
+          reason,
+        });
+        return null;
+      },
+    };
   }
 
   private async rerankVia(
@@ -136,6 +268,7 @@ export class RerankerRegistry {
 
     const report = (fallback: boolean, reason?: string): void => {
       this.options.onOutcome?.({
+        provider: 'extension',
         rerankerId: extensionId,
         candidateCount: passages.length,
         latencyMs: now() - startedAt,
@@ -282,6 +415,26 @@ function defaultOptions(): RerankerRegistryOptions {
     // Nothing constructs ExtensionManager yet (that lands with Phase 5 wiring),
     // so the default source is null and the built-in reranker keeps the seam.
     source: null,
+    hostedPort: () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { buildHostedRerankPort } = require('./rerankerConfig') as typeof import('./rerankerConfig');
+        return buildHostedRerankPort();
+      } catch {
+        // An unreadable configuration is not permission to send document text
+        // to a third party. Fall through to the local path.
+        return null;
+      }
+    },
+    hostedFallbackPort: () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { buildHostedFallbackPort } = require('./rerankerConfig') as typeof import('./rerankerConfig');
+        return buildHostedFallbackPort();
+      } catch {
+        return null;
+      }
+    },
     onOutcome: (outcome) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -289,6 +442,7 @@ function defaultOptions(): RerankerRegistryOptions {
         telemetryService.track({
           name: 'extension_rerank',
           properties: {
+            provider: outcome.provider,
             rerankerId: outcome.rerankerId,
             candidateCount: outcome.candidateCount,
             latencyMs: outcome.latencyMs,
