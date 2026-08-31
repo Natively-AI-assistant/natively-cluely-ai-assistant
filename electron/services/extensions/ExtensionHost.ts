@@ -453,10 +453,21 @@ class UtilityProcessExtensionHost implements ExtensionHost {
 
   /**
    * Work the MAIN process performs on the extension's behalf once the broker
-   * has allowed it. Only `fetch` is genuinely proxied: the child never holds a
-   * socket, so an allowed host cannot become a different host after the check.
-   * `process.spawn` and the filesystem kinds are decision-only — see
-   * `host/sandbox.ts` for why proxying those would buy nothing.
+   * has allowed it. Only `fetch` is genuinely proxied — `process.spawn` and the
+   * filesystem kinds are decision-only, see `host/sandbox.ts` for why proxying
+   * those would buy nothing.
+   *
+   * The child never holds a socket, but that alone does NOT make the approved
+   * host binding. Two ways it used to slip:
+   *
+   *   1. The broker decides on `body.request.host`, while the fetch used
+   *      `body.payload.url` — a separate field the child also controls. A child
+   *      could ask about an allowed host and pass a URL for another.
+   *   2. `fetch` follows redirects by default, so an allowed host answering 302
+   *      could hand the request to one that was never checked.
+   *
+   * Both are closed below: the URL's own host must match what was approved, and
+   * redirects are followed manually with the broker re-consulted per hop.
    */
   private async performBrokeredWork(body: BrokerRequest['body']): Promise<unknown> {
     if (body.request.kind !== 'network.connect') return { allowed: true };
@@ -464,7 +475,50 @@ class UtilityProcessExtensionHost implements ExtensionHost {
     const payload = body.payload as { url?: string; init?: Record<string, unknown> } | undefined;
     if (!payload?.url) throw new Error('network request carried no URL');
 
-    const response = await fetch(payload.url, payload.init as RequestInit | undefined);
+    const grant = {
+      extensionId: this.extensionId,
+      granted: this.options.manifest.permissions,
+      modelDir: this.options.modelDir,
+      allowedHosts: this.options.manifest.allowedHosts,
+      allowedBinaries: this.options.manifest.allowedBinaries,
+    };
+
+    /** Re-decide for a concrete URL, so the approval always matches what is fetched. */
+    const approve = (raw: string): URL => {
+      let url: URL;
+      try {
+        url = new URL(raw);
+      } catch {
+        throw new Error(`network request carried an unparseable URL`);
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error(`network request used an unsupported protocol ${url.protocol}`);
+      }
+      const port = url.port ? Number(url.port) : (url.protocol === 'https:' ? 443 : 80);
+      const decision = this.options.broker.decide(grant, { kind: 'network.connect', host: url.hostname, port });
+      if (!decision.allowed) {
+        this.options.logger?.warn(`[${this.extensionId}] denied network.connect to ${url.hostname}: ${decision.reason}`);
+        throw new Error(`network request to ${url.hostname} is not allowed: ${decision.reason}`);
+      }
+      return url;
+    };
+
+    let current = approve(payload.url);
+    let response: Response;
+    // Bounded: a redirect loop must not spin the main process.
+    for (let hop = 0; ; hop++) {
+      if (hop > 5) throw new Error('too many redirects');
+      response = await fetch(current.toString(), {
+        ...(payload.init as RequestInit | undefined),
+        redirect: 'manual',
+      });
+      if (response.status < 300 || response.status >= 400) break;
+      const location = response.headers.get('location');
+      if (!location) break;
+      // Resolve relative Locations against the current URL, then re-approve.
+      current = approve(new URL(location, current).toString());
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer());
     return {
       status: response.status,

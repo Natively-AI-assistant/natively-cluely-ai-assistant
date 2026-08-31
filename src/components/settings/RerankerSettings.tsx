@@ -133,6 +133,7 @@ export const RerankerSettings: React.FC = () => {
     const [busyModel, setBusyModel] = useState<string | null>(null);
     const [installing, setInstalling] = useState(false);
     const [installError, setInstallError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const refreshStatus = useCallback(async () => {
         const next = await window.electronAPI.getRerankerStatus?.();
@@ -165,8 +166,16 @@ export const RerankerSettings: React.FC = () => {
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions()]);
-            if (!cancelled) setLoading(false);
+            try {
+                await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions()]);
+            } catch (e) {
+                // safeHandle does not wrap handler bodies, so an IPC handler that
+                // throws rejects here. Without this the panel spins on "Loading…"
+                // forever with no retry short of reopening Settings.
+                if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
         })();
         return () => { cancelled = true; };
     }, [refreshStatus, loadCatalog, loadExtensions]);
@@ -240,8 +249,39 @@ export const RerankerSettings: React.FC = () => {
         return (
             <div className="aip-root space-y-5 pb-10" data-theme={aipTheme}>
                 <div className="aip-card p-5 flex items-center gap-2">
-                    <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                    <span className="aip-muted text-xs">{t('Loading reranker settings…')}</span>
+                    {loading && !loadError ? (
+                        <>
+                            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                            <span className="aip-muted text-xs">{t('Loading reranker settings…')}</span>
+                        </>
+                    ) : (
+                        <>
+                            <AlertCircle size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                            <span className="aip-muted text-xs flex-1">
+                                {loadError ?? t('Could not read the reranker settings.')}
+                            </span>
+                            <button
+                                type="button"
+                                className="aip-btn"
+                                data-size="sm"
+                                onClick={() => {
+                                    setLoadError(null);
+                                    setLoading(true);
+                                    void (async () => {
+                                        try {
+                                            await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions()]);
+                                        } catch (e) {
+                                            setLoadError(e instanceof Error ? e.message : String(e));
+                                        } finally {
+                                            setLoading(false);
+                                        }
+                                    })();
+                                }}
+                            >
+                                {t('Try again')}
+                            </button>
+                        </>
+                    )}
                 </div>
                 <style>{AIP_CSS}</style>
             </div>
@@ -260,8 +300,17 @@ export const RerankerSettings: React.FC = () => {
     const saveKey = async () => {
         if (!keyDraft.trim()) return;
         setSavingKey(true);
+        setInstallError(null);
         try {
-            await window.electronAPI.setRerankerOpenRouterKey?.(keyDraft.trim());
+            const res = await window.electronAPI.setRerankerOpenRouterKey?.(keyDraft.trim());
+            if (res && res.success === false) {
+                // The handler RETURNS a refusal rather than throwing, so the draft
+                // must survive it — clearing the field on a failed save loses the
+                // key the user just typed and leaves the badge reading "Not set"
+                // with nothing shown.
+                setInstallError(res.message || res.error || t('Could not save the key.'));
+                return;
+            }
             setKeyDraft('');
             await Promise.all([refreshStatus(), loadCatalog(true)]);
         } finally {
@@ -574,6 +623,12 @@ export const RerankerSettings: React.FC = () => {
                         <p className="text-[10px] aip-muted">
                             {t('This is the same OpenRouter key Natively uses elsewhere. Setting it here updates it everywhere.')}
                         </p>
+                        {installError && (
+                            <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                <span className="min-w-0">{installError}</span>
+                            </div>
+                        )}
                         <div className="aip-provider-row">
                             <div className="aip-provider-field">
                                 <div className="aip-field">

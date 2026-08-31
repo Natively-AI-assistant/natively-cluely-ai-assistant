@@ -305,16 +305,21 @@ export class RerankerRegistry {
         timer = setTimeout(() => resolve('timeout'), timeoutMs);
       });
 
-      // Ensure it is running. A disabled or crashed extension resolves to null
-      // below rather than throwing into the retrieval path.
-      if (!source.running().includes(extensionId)) {
-        await source.load(extensionId);
-      }
+      // Ensure it is running, INSIDE the race. A cold start is not free — an
+      // extension that spawns llama-server and waits for it to answer can take
+      // seconds — and awaiting it out here spent the budget before the rerank
+      // began, then reported "timed out" against whatever was left. Worse, a
+      // load() that never settles meant this method never resolved: the finally
+      // never ran, the timer was never cleared, and abort() never fired. The
+      // ceiling the docstring promises was not actually enforced.
+      const attempt = (async () => {
+        if (!source.running().includes(extensionId)) {
+          await source.load(extensionId);
+        }
+        return source.rerank(extensionId, query, candidates, passages.length, controller.signal);
+      })();
 
-      const result = await Promise.race([
-        source.rerank(extensionId, query, candidates, passages.length, controller.signal),
-        timeout,
-      ]);
+      const result = await Promise.race([attempt, timeout]);
 
       if (result === 'timeout') {
         controller.abort();

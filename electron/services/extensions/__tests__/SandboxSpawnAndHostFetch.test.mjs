@@ -1,0 +1,165 @@
+/**
+ * Two holes that only open once the sandbox is actually installed.
+ *
+ * Both were invisible to the existing tests because those call the factories
+ * directly — `createChildProcessShim()` without `installSandbox()`, so the
+ * `Module._load` patch is never in play.
+ */
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../../../..');
+const require = createRequire(import.meta.url);
+
+const { createExtensionHost } = require(path.join(repoRoot, 'dist-electron/electron/services/extensions/ExtensionHost.js'));
+
+// ── the authorised spawn path must not recurse ────────────────────────────
+
+test('an authorised spawn works AFTER the sandbox is installed', () => {
+  // Reproduced in a child process, because installSandbox() patches
+  // Module._load for the whole process and this runner needs its own.
+  //
+  // The bug: the shim's spawn called require('child_process'), which goes
+  // through the very patch that returns the shim, so `real.spawn` WAS the
+  // shim's own spawn — infinite recursion, RangeError, and the only path that
+  // is supposed to work was the one that could not. Both llama.cpp-backed
+  // reranker extensions depend on it.
+  const sandboxPath = path.join(repoRoot, 'dist-electron/electron/services/extensions/host/sandbox.js');
+  const script = `
+    const { installSandbox } = require(${JSON.stringify(sandboxPath)});
+    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: ['node'], brokerFetch: async () => { throw new Error('unused'); } });
+    const cp = require('child_process');
+    const child = cp.spawn(process.execPath, ['-e', 'process.exit(0)']);
+    if (typeof child.pid !== 'number') { console.log('NO_PID'); process.exit(1); }
+    console.log('SPAWN_OK');
+  `;
+  let out;
+  try {
+    out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 20_000 });
+  } catch (e) {
+    const combined = String(e.stdout ?? '') + String(e.stderr ?? '');
+    assert.ok(!/Maximum call stack/i.test(combined),
+      'the authorised spawn recursed — the shim must not require() its own patched module');
+    throw new Error(`authorised spawn failed: ${combined.slice(0, 400)}`);
+  }
+  assert.match(out, /SPAWN_OK/);
+});
+
+test('an unauthorised binary is still refused after the sandbox is installed', () => {
+  const sandboxPath = path.join(repoRoot, 'dist-electron/electron/services/extensions/host/sandbox.js');
+  const script = `
+    const { installSandbox } = require(${JSON.stringify(sandboxPath)});
+    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: ['llama-server'], brokerFetch: async () => { throw new Error('unused'); } });
+    try { require('child_process').spawn('curl', []); console.log('LEAKED'); }
+    catch (e) { console.log(/allowedBinaries/.test(e.message) ? 'REFUSED' : 'OTHER:' + e.message); }
+  `;
+  const out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 20_000 });
+  assert.match(out, /REFUSED/, 'the fix must not open the allowlist');
+});
+
+// ── the approved host must bind the actual fetch ──────────────────────────
+
+function makeHost({ allowedHosts = ['api.example.com'], permissions = ['network.remote'] } = {}) {
+  const decisions = [];
+  return {
+    decisions,
+    host: createExtensionHost({
+      manifest: {
+        id: 'probe', name: 'Probe', version: '1.0.0', apiVersion: '1', type: 'reranker',
+        entrypoint: 'dist/index.js', author: 'a', homepage: 'https://x.example',
+        engines: { natively: '*' }, permissions, allowedHosts, models: [],
+      },
+      extensionDir: '/tmp/probe',
+      modelDir: '/tmp/probe-models',
+      broker: {
+        decide: (_grant, request) => {
+          decisions.push(request);
+          if (request.kind !== 'network.connect') return { allowed: true };
+          return allowedHosts.includes(request.host)
+            ? { allowed: true }
+            : { allowed: false, reason: `host ${request.host} is not in allowedHosts` };
+        },
+      },
+      config: {},
+      logger: { debug() {}, info() {}, warn() {}, error() {} },
+      onCrash: () => {},
+    }),
+  };
+}
+
+const brokered = (url) => ({ request: { kind: 'network.connect', host: 'api.example.com', port: 443 }, payload: { url } });
+
+test('the URL that is fetched is the URL that was approved', async () => {
+  // The broker decided on body.request.host; the fetch used body.payload.url,
+  // a separate field the child also controls. Asking about an allowed host
+  // while passing a URL for another must not work.
+  const { host, decisions } = makeHost();
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('fetch must not be reached'); };
+  try {
+    await assert.rejects(
+      () => host.performBrokeredWork(brokered('https://evil.example/steal')),
+      /not allowed/,
+    );
+    assert.ok(decisions.some(d => d.host === 'evil.example'),
+      'the decision must be re-taken against the URL actually being fetched');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('a redirect to an unapproved host is refused, not followed', async () => {
+  const { host } = makeHost();
+  const original = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    seen.push(String(url));
+    assert.equal(init?.redirect, 'manual', 'redirects must not be followed by fetch itself');
+    return {
+      status: 302,
+      statusText: 'Found',
+      headers: new Map([['location', 'https://evil.example/payload']]),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    };
+  };
+  // `headers` needs .get and .entries
+  const wrap = globalThis.fetch;
+  globalThis.fetch = async (u, i) => {
+    const r = await wrap(u, i);
+    r.headers = { get: (k) => (k.toLowerCase() === 'location' ? 'https://evil.example/payload' : null), entries: () => [] };
+    return r;
+  };
+  try {
+    await assert.rejects(
+      () => host.performBrokeredWork(brokered('https://api.example.com/ok')),
+      /evil\.example is not allowed/,
+    );
+    assert.deepEqual(seen, ['https://api.example.com/ok'], 'only the approved hop may be fetched');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('an approved request still succeeds', async () => {
+  const { host } = makeHost();
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    status: 200,
+    statusText: 'OK',
+    headers: { get: () => null, entries: () => [['content-type', 'application/json']] },
+    arrayBuffer: async () => new TextEncoder().encode('{"ok":true}').buffer,
+  });
+  try {
+    const result = await host.performBrokeredWork(brokered('https://api.example.com/thing'));
+    assert.equal(result.status, 200);
+    assert.equal(Buffer.from(result.bodyBase64, 'base64').toString('utf8'), '{"ok":true}');
+  } finally {
+    globalThis.fetch = original;
+  }
+});

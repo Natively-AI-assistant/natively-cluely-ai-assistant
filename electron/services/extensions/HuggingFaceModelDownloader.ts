@@ -144,7 +144,17 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
     const revision = (await this.resolveRevision(repo)) ?? 'main';
     const url = buildResolveUrl(repo, revision, repoPath);
     const partPath = `${destination}.part`;
+    // Which revision the bytes in `.part` came from. Pinning the sha within one
+    // download() call is not enough: a partial left by an EARLIER session
+    // belongs to whatever revision was current then, and resuming onto it
+    // appends a new revision's tail to an old revision's head. That file is
+    // corrupt, plausible in size, and — for any manifest entry with
+    // `sha256: null`, which is most of them — passes verification, because
+    // ModelStore.verify() treats an unknown hash as "record it", not "check it".
+    // So the partial is only reusable when it provably came from this revision.
+    const stampPath = `${partPath}.rev`;
     fs.mkdirSync(path.dirname(destination), { recursive: true });
+    discardStalePartial(partPath, stampPath, revision, this.options.logger);
 
     // approxBytes is the manifest's estimate and is only a fallback for the
     // progress denominator. The server's own Content-Length wins whenever it is
@@ -156,6 +166,10 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
       if (signal.aborted) throw new Error('download cancelled');
 
       const already = safeSize(partPath);
+      // Stamp BEFORE writing any bytes, not only when resuming: a first-time
+      // download interrupted before its stamp existed would be discarded by the
+      // next session, losing the resume this whole mechanism exists to protect.
+      writeStamp(stampPath, revision);
       try {
         await this.fetchInto(url, partPath, already, signal, (received) => {
           const total = totalBytes || 0;
@@ -176,6 +190,7 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
         // so unlink first and, if it still fails, say WHY rather than emitting a
         // bare EPERM that reads as a permissions bug.
         try { fs.rmSync(destination, { force: true }); } catch { /* replaced below, or fails loudly */ }
+        try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ }
         try {
           fs.renameSync(partPath, destination);
         } catch (e: any) {
@@ -287,6 +302,38 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
     // what makes the rename above safe on Windows.
     await pipeline(Readable.fromWeb(res.body.pipeThrough(counter) as any), out);
   }
+}
+
+/**
+ * Drop a partial that cannot be proved to belong to `revision`.
+ *
+ * Absent stamp is treated as stale, not as "probably fine": an unstamped
+ * partial predates this mechanism, and there is no way to tell which revision
+ * wrote it.
+ */
+function discardStalePartial(
+  partPath: string,
+  stampPath: string,
+  revision: string,
+  logger?: { info(msg: string): void; warn(msg: string): void },
+): void {
+  if (safeSize(partPath) === 0) return;
+
+  let stamped: string | null = null;
+  try { stamped = fs.readFileSync(stampPath, 'utf8').trim(); } catch { stamped = null; }
+
+  if (stamped === revision) return;
+
+  logger?.info(
+    `[extensions] discarding a partial download from ${stamped ? `revision ${stamped}` : 'an unknown revision'}; ` +
+    `the current revision is ${revision}`,
+  );
+  try { fs.rmSync(partPath, { force: true }); } catch { /* best effort */ }
+  try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ }
+}
+
+function writeStamp(stampPath: string, revision: string): void {
+  try { fs.writeFileSync(stampPath, revision, 'utf8'); } catch { /* the partial is then treated as stale */ }
 }
 
 function safeSize(filePath: string): number {

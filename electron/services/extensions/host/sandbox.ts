@@ -237,6 +237,22 @@ function serializableInit(init: unknown): Record<string, unknown> | undefined {
  * during the handshake. Every other export throws, so an extension reaching for
  * `exec` (a shell, and therefore an allowlist bypass) fails loudly.
  */
+/**
+ * The real `child_process`, captured at module load — which is necessarily
+ * BEFORE `installSandbox()` patches `Module._load`.
+ *
+ * This is not a micro-optimisation. Calling `require('child_process')` from
+ * inside the shim goes through the very `Module._load` patch that returns the
+ * shim, so `real.spawn` would be the shim's own `spawn` and an authorised spawn
+ * would recurse until `RangeError: Maximum call stack size exceeded`. The
+ * authorised path — the only path that is supposed to work — was the one that
+ * could not. Both llama.cpp-backed reranker extensions depend on it.
+ */
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const REAL_CHILD_PROCESS = require('child_process') as {
+  spawn: (c: string, a?: readonly string[], o?: unknown) => unknown;
+};
+
 export function createChildProcessShim(
   granted: ReadonlySet<ExtensionPermission>,
   preauthorizedBinaries: readonly string[],
@@ -263,9 +279,8 @@ export function createChildProcessShim(
       // Authorised: perform the real spawn here in the child, so stdio streams
       // and process lifetime behave exactly as the adapter expects. Routing the
       // streams through the main process would buy nothing — see the header.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const real = require('child_process') as { spawn: (c: string, a?: readonly string[], o?: unknown) => unknown };
-      return real.spawn(command, args, options);
+      // REAL_CHILD_PROCESS, never require() — see its docstring.
+      return REAL_CHILD_PROCESS.spawn(command, args, options);
     },
     exec: refuse('exec'),
     execSync: refuse('execSync'),
