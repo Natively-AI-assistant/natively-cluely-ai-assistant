@@ -224,6 +224,26 @@ test('progress uses the server length, and a 206 length is the REMAINDER', async
 
 // ── failure ───────────────────────────────────────────────────────────────
 
+test('re-downloading over an existing file replaces it', async () => {
+  // ModelStore.download() does not skip a model that is already `ready`, so this
+  // path is reachable in normal use. POSIX rename replaces silently; Windows
+  // does not when anything holds the old file open, which is why the
+  // destination is unlinked first.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  fs.writeFileSync(dest, 'an older version of the weights');
+
+  const dl = new HuggingFaceModelDownloader({
+    fetchImpl: async (url) => (String(url).includes('/api/models/')
+      ? metadataResponse('abc')
+      : bodyResponse(Buffer.from('new weights'), { headers: { 'content-length': '11' } })),
+  });
+
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'new weights');
+  assert.ok(!fs.existsSync(`${dest}.part`));
+});
+
 test('a persistent HTTP error eventually throws, bounded', async () => {
   const dir = tmpDir();
   let attempts = 0;

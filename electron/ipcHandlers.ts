@@ -7168,17 +7168,27 @@ export function initializeIpcHandlers(appState: AppState): void {
         // is not broken, and refusing to save on it would be overreach.
         rankedExpectedFirst: rankedFirst === 0,
       };
-      settings.set('reranker', {
+      // The probe result is real whether or not it can be cached. Reporting
+      // `success: false` here would misdescribe a connection that genuinely
+      // worked — but silently claiming the record persisted is the bug
+      // RefusedSettingWriteReported2026_08_21 exists to catch. So the outcome
+      // and the persistence are reported separately.
+      const persisted = settings.set('reranker', {
         ...stored,
         lastTest: { at: new Date().toISOString(), model, latencyMs: stats.requestLatencyMs, ok: true },
       });
-      return result;
+      return persisted ? result : { ...result, persistError: 'settings_store_degraded' };
     } catch (e: any) {
       const kind = e?.kind || 'network';
-      settings.set('reranker', {
+      // Same reasoning as the success path: a refused cache write must not be
+      // silent, but it also must not overwrite the real reason the test failed.
+      const persisted = settings.set('reranker', {
         ...stored,
         lastTest: { at: new Date().toISOString(), model, latencyMs: 0, ok: false, failure: kind },
       });
+      if (!persisted) {
+        console.warn('[reranking] could not record the last test result: settings_store_degraded');
+      }
       // e.message is already a describeFailure() sentence and carries no key.
       return { success: false, error: kind, message: String(e?.message || 'The rerank request failed.') };
     }

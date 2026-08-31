@@ -485,6 +485,8 @@ export interface ElectronAPI {
     scoresFinite?: boolean
     indicesValid?: boolean
     rankedExpectedFirst?: boolean
+    /** The probe ran, but its result could not be cached to settings. */
+    persistError?: string
     error?: string
     message?: string
   }>
