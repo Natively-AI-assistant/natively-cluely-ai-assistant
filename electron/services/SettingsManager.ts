@@ -134,6 +134,34 @@ export interface AppSettings {
         dimensions?: number;
     };
     /**
+     * Reranker configuration, independent of BOTH the generation model and the
+     * embedding model. Embedding retrieval finds the candidate set; reranking
+     * decides the order of those candidates, and a user may reasonably want a
+     * local embedder with a hosted reranker, or the reverse.
+     *
+     * Absent means provider 'local' — exactly today's behaviour with the
+     * built-in bge-reranker-base — so an upgrading user's reranker cannot change
+     * because a new setting appeared. See electron/services/reranking/rerankerConfig.ts.
+     *
+     * The OpenRouter API key is NOT here: it lives in CredentialsManager, and it
+     * is the SAME `openrouterApiKey` the embedding and generation paths use.
+     * This file is plaintext on disk.
+     */
+    reranker?: {
+        provider?: 'local' | 'openrouter';
+        openrouterModel?: string;
+        candidateCount?: number;
+        topN?: number;
+        fallbackToLocal?: boolean;
+        lastTest?: {
+            at: string;
+            model: string;
+            latencyMs: number;
+            ok: boolean;
+            failure?: string;
+        };
+    };
+    /**
      * A user-hosted OpenAI-compatible embedding endpoint — LM Studio
      * (http://localhost:1234/v1), llama.cpp's llama-server (:8080/v1), vLLM,
      * text-embeddings-inference, a LiteLLM proxy.

@@ -1233,8 +1233,86 @@ export function initializeIpcHandlers(appState: AppState): void {
               console.warn('[V3] profile hydration failed — continuing with mode attachments only:', (profErr as Error)?.message ?? profErr);
             }
 
+            // The skill prefix is stripped for V3 too — otherwise the model reads
+            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
+            // Declared here rather than at the buildV3Prompt call below because
+            // screen understanding (next block) needs it as the vision prompt.
+            const v3Question = String((skillStrippedMessage ?? message) || '');
+
+            // ── SCREEN CONTEXT (2026-08-28) ─────────────────────────────
+            // Until now an attached screenshot reached the provider as bytes and
+            // NOTHING else: SCREEN_CONTEXT had no producer, so the turn planned
+            // [SCREEN_CONTEXT], retrieved nothing, and the composer told the
+            // model "no supporting evidence was retrieved" while the image sat
+            // in the same payload. And because no description was ever stored,
+            // the next turn had no idea a screenshot had existed — the reported
+            // community defect.
+            //
+            // Describing it ONCE here fixes both: the description becomes real
+            // SCREEN_CONTEXT evidence for this turn, and rides the conversation
+            // ring so later turns can still answer questions about it without
+            // the image ever being re-sent.
+            //
+            // Additive and non-blocking: any failure leaves the turn exactly as
+            // it was before this block existed (bytes only), because the port is
+            // simply omitted. It must never fail a live answer.
+            let v3ScreenDescription = '';
+            if (imagePaths?.length) {
+              try {
+                const {
+                  getScreenUnderstandingService,
+                } = require('./services/screen/ScreenUnderstandingService');
+                const { CredentialsManager } = require('./services/CredentialsManager');
+                const settings = SettingsManager.getInstance();
+                const credentials = CredentialsManager.getInstance();
+                const providerScopes = settings.get('providerDataScopes') || {};
+                const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
+                const sur = await getScreenUnderstandingService().understand({
+                  modeId: modeId,
+                  transcript: v3Question,
+                  userAction: 'manual_use_screen',
+                  qualityMode: 'balanced',
+                  imagePaths,
+                  // The SAME privacy switches the what-to-say path honours. This
+                  // is a second call site for one policy, not a second policy:
+                  // `private_vision` keeps the description local, and a denied
+                  // `screenshots` scope keeps it off cloud providers.
+                  screenUnderstandingMode: settings.getScreenUnderstandingMode(),
+                  technicalInterviewVisionFirst: settings.getTechnicalInterviewVisionFirst(),
+                  providerPolicy: {
+                    localOnly: settings.getScreenUnderstandingMode() === 'private_vision',
+                    allowScreenshots: providerScopes.screenshots !== false,
+                    visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
+                    localVisionAvailable,
+                  },
+                });
+                if (sur?.status === 'available') {
+                  v3ScreenDescription = [
+                    sur.visibleSummary,
+                    sur.extractedText,
+                    ...(sur.codeBlocks ?? []),
+                    ...(sur.tables ?? []).map((t: any) => t.markdown).filter(Boolean),
+                  ].filter((part: unknown) => typeof part === 'string' && part.trim()).join('\n\n');
+                }
+              } catch (screenErr: any) {
+                // NEVER silent (§22.1): degrading to bytes-only is a real
+                // behaviour change for this turn, so it is logged.
+                console.warn('[V3] screen understanding failed — continuing with image bytes only:',
+                  screenErr?.message ?? screenErr);
+              }
+            }
+            const v3ScreenPort = v3ScreenDescription
+              ? require('./context-intelligence/retrieval/screen-retrieval-port')
+                  .createScreenRetrievalPort({
+                    description: v3ScreenDescription,
+                    userId: V3_USER_ID,
+                    sessionId: String(senderId),
+                  })
+              : null;
+
             const v3Ports = [
               modePort,
+              ...(v3ScreenPort ? [v3ScreenPort] : []),
               ...(v3ProfilePort ? [v3ProfilePort] : []),
               ...(wantsMeeting ? [createMeetingRetrievalPort({
                 retriever: ragForV3!.getRetriever(),
@@ -1252,9 +1330,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             // block previously carried its own copy of all of that — two copies
             // of a security-relevant construction is how the tokenizer copies
             // drifted (§2 of the architecture review).
-            // The skill prefix is stripped for V3 too — otherwise the model reads
-            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
-            const v3Question = String((skillStrippedMessage ?? message) || '');
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
@@ -1265,6 +1340,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               // as authoritative evidence. Manual chat has no periodic-capture OCR
               // object at all, so imagePaths is the only screen signal here.
               hasScreenContext: (imagePaths?.length ?? 0) > 0,
+              // Settings > Intelligence > Memory > "Chat history". Read HERE, not
+              // in the bridge: context-intelligence has no dependency on the flag
+              // registry (see contracts/retrieval-flags.ts for what the first one
+              // would cost), so the value is passed in like every other input.
+              multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
               // Routed coding verdict, same as the WTA path (see
               // BridgeInput.codingTask). Without it the bridge falls back to its
               // keyword regex, which misses ordinary phrasings like "Write a BFS
@@ -1590,7 +1670,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!v3Truncated) {
                 try {
                   const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
-                  recordAnswerSummary(String(senderId), finalText);
+                  // Third argument is what makes a screenshot survive its own
+                  // turn: the description enters the conversation ring, so a
+                  // later "what was in that screenshot?" has something to read.
+                  recordAnswerSummary(String(senderId), finalText, v3ScreenDescription || undefined);
                 } catch { /* continuity only */ }
                 try {
                   // The user/answer PAIR is the antecedent unit for follow-up
@@ -6877,6 +6960,228 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'settings_store_degraded' };
     }
     return { success: true };
+  });
+
+  // ── Reranker ─────────────────────────────────────────────────────────────
+  //
+  // ONE section in Settings, with the provider as a choice inside it. There is
+  // deliberately no separate "Local Reranker" and "OpenRouter Reranker" pane:
+  // only one reranker can own the seam, so two panes would let a user configure
+  // two things that cannot both be active.
+  //
+  // Embedding retrieval finds the candidate set; reranking decides the order of
+  // those candidates. The two are configured independently on purpose — a local
+  // embedder with a hosted reranker, or the reverse, are both valid.
+
+  // Last known rerank catalogue. In memory: it caches a remote list, and a stale
+  // copy on disk would outlive a key change or a model retirement. When
+  // OpenRouter is unreachable the previous value is served rather than an empty
+  // picker, which is what §16 means by "preserve the last known models".
+  let lastKnownRerankCatalog: any[] = [];
+  let lastKnownRerankCatalogAt = 0;
+
+  safeHandle('reranker:get-catalog', async (_evt, opts?: { refresh?: boolean }) => {
+    const { listOpenRouterRerankModels, CATALOG_TTL_MS } = require('./rag/openrouterRerankModels');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+
+    const fresh = Date.now() - lastKnownRerankCatalogAt < CATALOG_TTL_MS;
+    if (fresh && !opts?.refresh && lastKnownRerankCatalog.length > 0) {
+      return { models: lastKnownRerankCatalog, stale: false, fetchedAt: lastKnownRerankCatalogAt };
+    }
+
+    // Browsing works unauthenticated — the capability filter is server-side — so
+    // the catalogue and its metadata are visible BEFORE a key exists.
+    const apiKey = CredentialsManager.getInstance().getOpenrouterApiKey?.() || undefined;
+    const models = await listOpenRouterRerankModels({ apiKey });
+
+    if (models.length > 0) {
+      lastKnownRerankCatalog = models;
+      lastKnownRerankCatalogAt = Date.now();
+      return { models, stale: false, fetchedAt: lastKnownRerankCatalogAt };
+    }
+    // Discovery failed. Never crash, never empty the picker.
+    return {
+      models: lastKnownRerankCatalog,
+      stale: true,
+      fetchedAt: lastKnownRerankCatalogAt || null,
+      error: 'discovery_unavailable',
+    };
+  });
+
+  safeHandle('reranker:get-status', async () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const {
+      evaluateHostedEligibility, describeIneligibility, DEFAULT_RERANKER_SETTINGS,
+      isLocalOnlyMode, referenceFilesScopeAllowed,
+    } = require('./services/reranking/rerankerConfig');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    const provider = stored.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+    // Presence only. The key itself never crosses this boundary.
+    const hasApiKey = Boolean(CredentialsManager.getInstance().getOpenrouterApiKey?.());
+
+    const eligibility = evaluateHostedEligibility({
+      provider,
+      hasApiKey,
+      model: stored.openrouterModel,
+      localOnly: isLocalOnlyMode(),
+      referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+    });
+
+    // The built-in, described honestly: "bundled" is not the same as "loadable".
+    let builtIn: any = { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true };
+    try {
+      const { getLocalReranker } = require('./rag/LocalReranker');
+      const local = getLocalReranker();
+      builtIn = {
+        ...builtIn,
+        cached: local ? await local.isCached?.() : false,
+        available: local ? await local.isAvailable?.() : false,
+      };
+    } catch { /* leave the defaults; an unreadable local reranker is not an error here */ }
+
+    // Which reranker would actually run right now, resolved the same way the
+    // retrieval path resolves it — so the panel cannot disagree with reality.
+    let activeExtensionId: string | null = null;
+    try {
+      const { getRerankerRegistry } = require('./services/reranking/RerankerRegistry');
+      activeExtensionId = getRerankerRegistry().activeExtensionId();
+    } catch { /* no registry: the built-in owns the seam */ }
+
+    const effective = eligibility.eligible
+      ? { kind: 'openrouter', id: stored.openrouterModel }
+      : activeExtensionId
+        ? { kind: 'extension', id: activeExtensionId }
+        : { kind: 'local', id: builtIn.id };
+
+    return {
+      provider,
+      openrouterModel: stored.openrouterModel ?? null,
+      candidateCount: stored.candidateCount ?? null,
+      topN: stored.topN ?? null,
+      fallbackToLocal: stored.fallbackToLocal === true,
+      hasApiKey,
+      eligible: eligibility.eligible,
+      ineligibleReason: eligibility.reason ?? null,
+      ineligibleMessage: eligibility.reason ? describeIneligibility(eligibility.reason) : null,
+      builtIn,
+      effective,
+      lastTest: stored.lastTest ?? null,
+    };
+  });
+
+  safeHandle('reranker:set-config', async (_evt, next: {
+    provider?: 'local' | 'openrouter';
+    openrouterModel?: string;
+    candidateCount?: number;
+    topN?: number;
+    fallbackToLocal?: boolean;
+  }) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const current = (settings.get('reranker') as any) || {};
+
+    const merged: any = { ...current };
+    if (next.provider === 'local' || next.provider === 'openrouter') merged.provider = next.provider;
+    if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
+    if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
+    // Clamp rather than reject: a nonsensical depth should not be storable, and
+    // silently keeping the old value is less confusing than an error toast.
+    if (Number.isFinite(next.candidateCount)) {
+      merged.candidateCount = Math.max(1, Math.min(30, Math.floor(next.candidateCount as number)));
+    }
+    if (Number.isFinite(next.topN)) {
+      merged.topN = Math.max(1, Math.min(merged.candidateCount ?? 30, Math.floor(next.topN as number)));
+    }
+
+    if (!settings.set('reranker', merged)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    return { success: true, reranker: merged };
+  });
+
+  safeHandle('reranker:set-openrouter-key', async (_evt, key: string) => {
+    // The SAME credential the embedding and generation paths use. One
+    // OPENROUTER_API_KEY, not a second copy owned by this panel.
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const saved = CredentialsManager.getInstance().setOpenrouterApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('reranker:test', async (_evt, choice?: { model?: string }) => {
+    // Sends ONE real rerank request through the exact path retrieval uses, so a
+    // green test cannot pass while the real call fails. A cheaper probe (a
+    // /models read, say) would prove only that the key exists.
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const {
+      isLocalOnlyMode, referenceFilesScopeAllowed, describeIneligibility,
+    } = require('./services/reranking/rerankerConfig');
+    const { OpenRouterReranker } = require('./services/reranking/OpenRouterReranker');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    const model = (choice?.model || stored.openrouterModel || '').trim();
+
+    // The privacy gate applies to the test too. A "Test connection" button that
+    // ignores it would be the one request a local-only user never consented to.
+    if (isLocalOnlyMode()) {
+      return { success: false, error: 'local-only-mode', message: describeIneligibility('local-only-mode') };
+    }
+    if (!referenceFilesScopeAllowed()) {
+      return { success: false, error: 'reference-files-scope-denied', message: describeIneligibility('reference-files-scope-denied') };
+    }
+
+    const reranker = new OpenRouterReranker({
+      getApiKey: () => CredentialsManager.getInstance().getOpenrouterApiKey?.(),
+      getModel: () => model,
+    });
+
+    // A deterministic 3-document probe with an obvious right answer, so the
+    // check is "did it rank sensibly", not merely "did it return 200".
+    const query = 'What is the capital city of France?';
+    const documents = [
+      'Paris is the capital and most populous city of France.',
+      'The Rhine is a river in Central and Western Europe.',
+      'Photosynthesis converts light energy into chemical energy.',
+    ];
+
+    try {
+      const { order, stats } = await reranker.rerankOrThrow(query, documents);
+      const scoresFinite = order.every((o: any) => Number.isFinite(o.score));
+      const indicesValid = order.every((o: any) => o.index >= 0 && o.index < documents.length);
+      const rankedFirst = order[0]?.index;
+
+      const result = {
+        success: true,
+        model,
+        latencyMs: stats.requestLatencyMs,
+        costUsd: stats.costUsd ?? null,
+        scoresFinite,
+        indicesValid,
+        // Reported, never enforced: a model that ranks this "wrong" is odd but
+        // is not broken, and refusing to save on it would be overreach.
+        rankedExpectedFirst: rankedFirst === 0,
+      };
+      settings.set('reranker', {
+        ...stored,
+        lastTest: { at: new Date().toISOString(), model, latencyMs: stats.requestLatencyMs, ok: true },
+      });
+      return result;
+    } catch (e: any) {
+      const kind = e?.kind || 'network';
+      settings.set('reranker', {
+        ...stored,
+        lastTest: { at: new Date().toISOString(), model, latencyMs: 0, ok: false, failure: kind },
+      });
+      // e.message is already a describeFailure() sentence and carries no key.
+      return { success: false, error: kind, message: String(e?.message || 'The rerank request failed.') };
+    }
   });
 
   safeHandle('get-available-ollama-models', async () => {

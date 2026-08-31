@@ -1,0 +1,265 @@
+/**
+ * The reranker's user-facing configuration, and the policy that turns it into a
+ * port the seam may use.
+ *
+ * Everything the registry refuses to know lives here: which provider the user
+ * picked, whether a key exists, whether local-only mode forbids a network call.
+ * The registry only ever sees a port or null, which is what keeps it
+ * synchronous and testable without a network or an Electron app object.
+ *
+ * There is ONE reranker section in Settings. Provider is a choice inside it, not
+ * a second section — a "Local Reranker" panel beside an "OpenRouter Reranker"
+ * panel would let a user configure two things that cannot both be active.
+ */
+
+export type RerankerProvider = 'local' | 'openrouter';
+
+export interface RerankerSettings {
+  /**
+   * Defaults to 'local'. An upgrading user's reranker must not change because a
+   * new setting appeared, so absent === local === exactly today's behaviour.
+   */
+  provider?: RerankerProvider;
+  /** OpenRouter model id. No default is hard-coded — see defaultRerankModel(). */
+  openrouterModel?: string;
+  /** How many candidates to send. Absent keeps ModeHybridRetriever's own pool size. */
+  candidateCount?: number;
+  /** How many to keep. Absent keeps the seam's existing behaviour (all of them). */
+  topN?: number;
+  /**
+   * Opt-in: when the hosted reranker fails, try the built-in one for that
+   * request. Default OFF — a silent substitution reorders evidence with a model
+   * the user did not choose.
+   */
+  fallbackToLocal?: boolean;
+  /** Cached from the last successful "Test connection", for the settings panel. */
+  lastTest?: {
+    at: string;
+    model: string;
+    latencyMs: number;
+    ok: boolean;
+    failure?: string;
+  };
+}
+
+export const DEFAULT_RERANKER_SETTINGS: Required<Pick<RerankerSettings, 'provider' | 'fallbackToLocal'>> = {
+  provider: 'local',
+  fallbackToLocal: false,
+};
+
+/**
+ * Why the hosted reranker may not run. Returned rather than thrown so the
+ * settings panel can explain the state instead of just hiding the option.
+ */
+export type HostedIneligibility =
+  | 'provider-not-selected'
+  | 'local-only-mode'
+  | 'reference-files-scope-denied'
+  | 'no-api-key'
+  | 'no-model';
+
+export interface HostedEligibility {
+  eligible: boolean;
+  reason?: HostedIneligibility;
+}
+
+export interface EligibilityInputs {
+  provider: RerankerProvider;
+  hasApiKey: boolean;
+  model: string | undefined;
+  /** `LLMHelper.isLocalOnly()`. See isLocalOnlyMode() below for what this is worth today. */
+  localOnly: boolean;
+  /**
+   * `providerDataScopes.reference_files`. This is the control that actually
+   * ships, and it describes exactly what hosted rerank sends: retrieved document
+   * snippets. A user who turned it off has said those snippets do not leave this
+   * machine, and a rerank request is a way for them to leave.
+   */
+  referenceFilesScopeAllowed: boolean;
+}
+
+/**
+ * The whole hosted-rerank gate, as a pure function so both the runtime path and
+ * the settings panel reach the same verdict from the same inputs — and so the
+ * local-only guarantee is a test, not an inspection.
+ *
+ * Order matters: local-only is checked BEFORE the key and the model, so a
+ * local-only user is told the truth ("hosted rerankers are unavailable") rather
+ * than being invited to fix a key that would still not be used.
+ */
+export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
+  if (input.provider !== 'openrouter') return { eligible: false, reason: 'provider-not-selected' };
+  if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
+  if (!input.referenceFilesScopeAllowed) return { eligible: false, reason: 'reference-files-scope-denied' };
+  if (!input.hasApiKey) return { eligible: false, reason: 'no-api-key' };
+  if (!input.model || !input.model.trim()) return { eligible: false, reason: 'no-model' };
+  return { eligible: true };
+}
+
+export function describeIneligibility(reason: HostedIneligibility): string {
+  switch (reason) {
+    case 'provider-not-selected':
+      return 'The reranker provider is set to Local.';
+    case 'local-only-mode':
+      return 'Local-only mode is enabled. Hosted rerankers are unavailable.';
+    case 'reference-files-scope-denied':
+      return 'Reference-file content is not allowed to leave this machine '
+        + '(Settings > Privacy). Hosted reranking would send retrieved document text, '
+        + 'so it is unavailable.';
+    case 'no-api-key':
+      return 'No OpenRouter API key is configured.';
+    case 'no-model':
+      return 'No OpenRouter rerank model is selected.';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Runtime readers
+//
+// Lazy `require` throughout, and every one wrapped: this module is reached from
+// the retrieval hot path, and a missing or half-initialised singleton must
+// degrade to "local", never throw into retrieval. esbuild gives every electron
+// TS file its own bundle, so a top-level import here would also inline a second
+// copy of each singleton — see services/extensions/singleton.ts.
+// ---------------------------------------------------------------------------
+
+export function readRerankerSettings(): RerankerSettings {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { SettingsManager } = require('../SettingsManager');
+    return (SettingsManager.getInstance().getSettings()?.reranker as RerankerSettings) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function readOpenRouterApiKey(): string | undefined {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { CredentialsManager } = require('../CredentialsManager');
+    const stored = CredentialsManager.getInstance().getOpenrouterApiKey();
+    if (stored && stored.trim()) return stored.trim();
+  } catch { /* fall through to env */ }
+  // The same OPENROUTER_API_KEY the rest of the app uses. One credential, not two.
+  const env = (process.env.OPENROUTER_API_KEY || '').trim();
+  return env || undefined;
+}
+
+/**
+ * True when the user has turned on local-only mode.
+ *
+ * A caveat worth writing down rather than discovering later: `setLocalOnlyMode()`
+ * has NO production caller in this app — `CodexVisionPayload2026_08_05.test.mjs:341`
+ * says so explicitly — so `LLMHelper.isLocalOnlyMode` is always false in a
+ * shipped build. This check is therefore future-proofing, not the real gate.
+ * The real gate is referenceFilesScopeAllowed() below, which reads a control
+ * that ships and is enforced at every other outbound boundary.
+ */
+export function isLocalOnlyMode(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('../../LLMHelper');
+    const helper = mod?.getLLMHelper?.() ?? mod?.llmHelper ?? null;
+    if (helper && typeof helper.isLocalOnly === 'function') return Boolean(helper.isLocalOnly());
+  } catch { /* no helper reachable; not evidence of local-only */ }
+  return false;
+}
+
+/**
+ * Whether retrieved reference-file text may leave this machine.
+ *
+ * This is THE privacy gate for hosted reranking, because rerank candidates are
+ * reference-file content — the same bytes `LLMHelper` already refuses to send
+ * when this scope is denied (LLMHelper.ts:581, 6424).
+ *
+ * Matches the repo's existing reading of the flag (`!== false`: allowed unless
+ * explicitly denied) but fails CLOSED when settings cannot be read at all. A
+ * policy reader that fails OPEN is exactly the bug
+ * OutboundBoundaryUniversality2026_08_01.test.mjs was written about.
+ */
+export function referenceFilesScopeAllowed(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { SettingsManager } = require('../SettingsManager');
+    const scopes = SettingsManager.getInstance().getSettings()?.providerDataScopes;
+    return scopes?.reference_files !== false;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Port construction
+// ---------------------------------------------------------------------------
+
+import type { RerankSeamPort } from './RerankerRegistry';
+
+/**
+ * The hosted port, or null when it may not run.
+ *
+ * Called synchronously on the retrieval path, once per query, so it does no I/O
+ * — every input is a cheap local read. It returns null far more often than not,
+ * and null is the cheap path.
+ */
+export function buildHostedRerankPort(): RerankSeamPort | null {
+  const settings = readRerankerSettings();
+  const apiKey = readOpenRouterApiKey();
+  const model = settings.openrouterModel;
+
+  const verdict = evaluateHostedEligibility({
+    provider: settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider,
+    hasApiKey: Boolean(apiKey),
+    model,
+    localOnly: isLocalOnlyMode(),
+    referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+  });
+  if (!verdict.eligible) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { OpenRouterReranker } = require('./OpenRouterReranker') as typeof import('./OpenRouterReranker');
+  return new OpenRouterReranker({
+    // Re-read per call rather than closing over the values: a key or model
+    // changed in Settings must take effect without a restart.
+    getApiKey: () => readOpenRouterApiKey(),
+    getModel: () => readRerankerSettings().openrouterModel,
+    onStats: (stats) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { telemetryService } = require('../telemetry/TelemetryService');
+        telemetryService.track({
+          name: 'rerank_request',
+          properties: {
+            provider: 'openrouter',
+            model: stats.model,
+            // Named for what it measures. This includes the network round trip
+            // and is NOT model inference time.
+            requestLatencyMs: stats.requestLatencyMs,
+            candidateCount: stats.candidateCount,
+            ok: stats.ok,
+            failure: stats.failure,
+            costUsd: stats.costUsd,
+            httpStatus: stats.httpStatus,
+          },
+        });
+      } catch { /* telemetry never blocks retrieval */ }
+    },
+    logger: console,
+  });
+}
+
+/**
+ * The built-in reranker as a seam port, for the opt-in hosted fallback.
+ * Null when the user has not opted in, so the default hosted failure stays
+ * "keep the existing order".
+ */
+export function buildHostedFallbackPort(): RerankSeamPort | null {
+  if (readRerankerSettings().fallbackToLocal !== true) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getLocalReranker } = require('../../rag/LocalReranker');
+    const local = getLocalReranker();
+    return local ? { rerank: (q: string, p: string[]) => local.rerank(q, p) } : null;
+  } catch {
+    return null;
+  }
+}

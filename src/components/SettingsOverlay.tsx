@@ -7,7 +7,7 @@ import {
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
     ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, ListOrdered
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -17,6 +17,8 @@ import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
+import { EmbeddingSettings } from './settings/EmbeddingSettings';
+import { RerankerSettings } from './settings/RerankerSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
@@ -409,6 +411,8 @@ const SETTINGS_NAV_ORDER = [
     'general',
     'plans',
     'ai-providers',
+    'embedding',
+    'reranker',
     'skills',
     'calendar',
     'audio',
@@ -1882,6 +1886,20 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('embedding')}
+                                        className={navItemClass(activeTab === 'embedding')}
+                                    >
+                                        {activeTab === 'embedding' && navActivePill}
+                                        <Boxes size={16} /> {t('Embeddings')}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('reranker')}
+                                        className={navItemClass(activeTab === 'reranker')}
+                                    >
+                                        {activeTab === 'reranker' && navActivePill}
+                                        <ListOrdered size={16} /> {t('Reranker')}
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('skills')}
                                         className={navItemClass(activeTab === 'skills')}
                                     >
@@ -2665,6 +2683,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                             {activeTab === 'ai-providers' && (
                                 <AIProvidersSettings
+                                    onNavigate={setActiveTab}
                                     aiResponseLanguage={aiResponseLanguage}
                                     availableAiLanguages={availableAiLanguages}
                                     isAiLangDropdownOpen={isAiLangDropdownOpen}
@@ -3817,6 +3836,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                             {activeTab === 'phone-mirror' && (
                                 <PhoneMirrorSettings />
+                            )}
+
+                            {activeTab === 'reranker' && (
+                                <RerankerSettings />
+                            )}
+                            {activeTab === 'embedding' && (
+                                <EmbeddingSettings onNavigate={setActiveTab} />
                             )}
 
                             {activeTab === 'intelligence' && (
