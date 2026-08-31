@@ -94,6 +94,21 @@ test('main resolves and strips enabled skills, including underscore IDs', () => 
   assert.match(ipc, /instructions: skill\.instructions/);
 });
 
+test('an unresolved text-prefix skill guess falls back to plain text instead of rejecting the request', () => {
+  // A leading "/" or "$" word that doesn't resolve to a real skill is ordinary
+  // text far more often than an intended skill invocation ("$50 is that a
+  // fair price...", "/explain this regex") — only an explicit UI skill
+  // selection (skillId) should hard-fail with SKILL_NOT_FOUND on a miss.
+  const resolveStart = ipc.indexOf('const resolveDirectAssistSkill =');
+  const resolveEnd = ipc.indexOf('\n  safeHandle(', resolveStart);
+  const resolveBlock = ipc.slice(resolveStart, resolveEnd);
+  assert.ok(resolveStart >= 0 && resolveEnd > resolveStart);
+  assert.match(
+    resolveBlock,
+    /if \(!explicitSkillId\) return \{ currentRequest: request\.currentRequest, skill: null \};\s*\n\s*return \{ error: directAssistError\('SKILL_NOT_FOUND'/,
+  );
+});
+
 test('attachments and captured page data are validated before Direct Assist dispatch', () => {
   assert.match(ipc, /const DIRECT_ASSIST_MAX_IMAGES = 5/);
   assert.match(ipc, /candidate\.imagePaths\.length > DIRECT_ASSIST_MAX_IMAGES/);
