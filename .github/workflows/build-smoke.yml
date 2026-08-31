@@ -23,9 +23,10 @@ on:
   # '../premium/electron/**/*.ts', and esbuild bundles require('../premium/…')
   # calls) — see the checkout steps below, which fetch it explicitly.
   #
-  # Note the earlier plan recorded here (`submodules: true` + `token:`) does NOT
-  # work in this repo: the tree has an undescribed `natively-api` gitlink that
-  # makes the recursive submodule init abort before `premium` is ever cloned.
+  # Do not use `submodules: true` here. Both gitlinks are registered, but this
+  # build needs only the private `premium` dependency; fetching it explicitly
+  # avoids an unrelated natively-api checkout and lets us provide the separate
+  # repository credential only to the command that needs it.
   schedule:
     - cron: '0 9 * * 1' # Every Monday at 09:00 UTC
 
@@ -53,51 +54,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # NOT `submodules: true`. The tree carries TWO gitlinks — `premium` and
-          # `natively-api` — but .gitmodules only describes `premium`.
-          # `submodules: true` runs `git submodule update --init --recursive`,
-          # which aborts on the undescribed one:
-          #
-          #   fatal: No url found for submodule path 'natively-api' in .gitmodules
-          #
-          # and it aborts BEFORE cloning `premium`, so the checkout would fail
-          # while still leaving the directory empty. The explicit step below is
-          # path-limited to `premium` and therefore unaffected by the orphan.
+          # NOT `submodules: true`. Both gitlinks are now registered, but this
+          # build needs only `premium`, which is private and requires a token
+          # with access to that separate repository. The explicit step below is
+          # path-limited to the build dependency and supplies that credential.
+          # It avoids fetching the unrelated natively-api checkout on every leg.
           #
           # persist-credentials keeps the checkout token in .git/config so the
           # submodule clone can reuse the header rewrite configured below.
           persist-credentials: true
 
-      # `premium` is a PRIVATE submodule (Natively-AI-assistant/natively-premium)
-      # that both build steps genuinely need: electron/tsconfig.premium-check.json includes
-      # ../premium/electron/**/*.ts, and esbuild bundles require('../premium/…')
-      # calls. Without it every run dies at the first typecheck with
-      #   TS2307: Cannot find module '../../premium/electron/knowledge/CompanyResearchEngine'
-      # which is what every run of this workflow has done since it was added.
-      #
-      # GITHUB_TOKEN cannot read another private repo, so a token with access is
-      # required. Absent one, this step is SKIPPED rather than failed: the job
-      # then dies at the typecheck exactly as it does today, which is no worse
-      # than the status quo and keeps the reason visible in the step list.
-      #
-      # Two steps, because a step's own `env:` is NOT in scope for its `if:`.
-      # This one publishes the availability as an output the next step can gate
-      # on, without ever putting the secret itself in a condition.
-      - name: Detect submodule token
-        id: submodule_token
+      # Fork PRs cannot receive repository secrets, so they cannot fetch the
+      # private premium submodule. They run a real core compile + focused core
+      # tests instead. Trusted PRs and main must have the credential and keep
+      # running the complete premium build/test gate; a missing trusted secret
+      # is an explicit failure, never a silent downgrade.
+      - name: Select smoke scope
+        id: smoke_scope
         env:
           SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         shell: bash
         run: |
           if [ -n "${SUBMODULE_TOKEN:-}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK_PR" = "true" ]; then
+            echo "mode=core" >> "$GITHUB_OUTPUT"
+            echo "::notice::Private premium source is unavailable to fork PRs; running the fork-safe core smoke scope."
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No SUBMODULE_TOKEN/GH_APP_TOKEN; the private premium submodule cannot be fetched and the typecheck step will fail on TS2307."
+            echo "mode=invalid" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Require premium credential on trusted runs
+        if: steps.smoke_scope.outputs.mode == 'invalid'
+        shell: bash
+        run: |
+          echo "::error::Trusted Build Smoke requires SUBMODULE_TOKEN or GH_APP_TOKEN to fetch the private premium submodule."
+          exit 1
+
+      - name: Report fork-safe smoke scope
+        if: steps.smoke_scope.outputs.mode == 'core'
+        shell: bash
+        run: |
+          {
+            echo "### Fork-safe Build Smoke"
+            echo "Private premium source is not exposed to fork pull requests."
+            echo "This run compiles the core Electron graph and executes focused Direct Assist, screenshot-priority, SSRF, trace, and coding-task tests."
+            echo "Trusted runs still require and validate the full premium integration."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout premium submodule
-        if: steps.submodule_token.outputs.available == 'true'
+        if: steps.smoke_scope.outputs.mode == 'full'
         env:
           SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN || secrets.GH_APP_TOKEN }}
         shell: bash
@@ -115,7 +122,7 @@ jobs:
           # written to disk, so there is no cleanup step that could be skipped
           # by an earlier failure and leave a credential behind in the workspace.
           #
-          # Path-limited to `premium` on purpose — see the checkout comment above.
+          # Path-limited to the only submodule required by this build.
           git -c url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf="https://github.com/" \
               submodule update --init --force -- premium
           # Prove the checkout really produced the file the typecheck needs,
@@ -184,7 +191,7 @@ jobs:
       # require() and nothing else checks them: premium/ has no tsconfig of its own.
       # This runs them at the strictness they were written against.
       - name: Typecheck premium submodule (TypeScript 7)
-        if: steps.submodule_token.outputs.available == 'true'
+        if: steps.smoke_scope.outputs.mode == 'full'
         run: npm run typecheck:premium
 
       # Insurance for one release cycle: if TS 7 ever diverges from the compiler
@@ -201,7 +208,12 @@ jobs:
         run: npm run build
 
       - name: Build Electron main process
+        if: steps.smoke_scope.outputs.mode == 'full'
         run: npm run build:electron
+
+      - name: Build Electron main process (fork-safe core)
+        if: steps.smoke_scope.outputs.mode == 'core'
+        run: npm run build:electron:core-smoke
 
       # `test -f` is a POSIX builtin and does not exist in the Windows runner's
       # default shell (PowerShell). Node is guaranteed present on both legs.
@@ -253,8 +265,13 @@ jobs:
       # TODO: fix the remaining 41 Windows failures in `npm test`, then drop its
       # `continue-on-error` too and the leg is enforcing on both platforms.
       - name: Run Electron unit tests
+        if: steps.smoke_scope.outputs.mode == 'full'
         continue-on-error: ${{ runner.os == 'Windows' }}
         run: npm test
+
+      - name: Run fork-safe core Electron tests
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode == 'core' }}
+        run: npm run test:core-smoke
 
       # The four test steps here are INDEPENDENT suites over disjoint globs, so
       # each of the three below carries `!cancelled()`. Without it a failed step
@@ -276,7 +293,7 @@ jobs:
       # longer needs muting — and a muted step cannot report the regression it
       # exists to catch.
       - name: Run intelligence unit tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode == 'full' }}
         run: npm run test:intelligence
 
       # Covers src/lib/__tests__ and src/lib/onboarding/__tests__ (renderer-side
@@ -287,7 +304,7 @@ jobs:
       # mirror), so a real production-catalog regression fails CI, not just the
       # hand-maintained mirror.
       - name: Run src/lib unit tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
         run: npm run test:lib
 
       # Runs on BOTH legs by design. scripts/package-app.js and
@@ -297,7 +314,7 @@ jobs:
       # resolver / signal-table as parameters, so each leg exercises both
       # platform shapes rather than only its own.
       - name: Run build-script unit tests
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.smoke_scope.outputs.mode != 'invalid' }}
         run: npm run test:scripts
 
   api-smoke:

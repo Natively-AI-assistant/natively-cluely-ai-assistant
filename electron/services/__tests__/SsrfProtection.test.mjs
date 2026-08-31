@@ -88,6 +88,100 @@ test('axios call in chatWithCurl uses validated URL', () => {
   assert.ok(hasValidation, 'URL should be validated before axios call');
 });
 
+test('custom cURL transports never follow an unvalidated redirect target', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy chatWithCurl',
+      start: source.indexOf('public async chatWithCurl('),
+      endMarker: '\n  /**\n   * Non-streaming Claude generation',
+    },
+    {
+      name: 'Direct Assist cURL adapter',
+      start: source.indexOf('private async *streamWithDirectCurl('),
+      endMarker: '\n  // --- CUSTOM PROVIDER STREAMING ---',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+    const body = source.slice(entry.start, end);
+    const validationAt = body.indexOf('validateUrlForSsrf');
+    const axiosAt = body.indexOf('axios({');
+    const redirectsAt = body.indexOf('maxRedirects: 0');
+
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination`);
+    assert.ok(axiosAt > validationAt, `${entry.name} should validate before dispatch`);
+    assert.ok(
+      redirectsAt > axiosAt,
+      `${entry.name} must disable redirects so the request body is not replayed to an unchecked URL`,
+    );
+  }
+});
+
+test('fetch-based custom providers refuse redirects instead of replaying sensitive bodies', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = source.slice(entry.start, end);
+    const fetchAt = body.indexOf('fetch(url, {');
+    const manualRedirectAt = body.indexOf("redirect: 'manual'");
+
+    assert.ok(fetchAt >= 0, `${entry.name} should dispatch through fetch`);
+    assert.ok(
+      manualRedirectAt > fetchAt,
+      `${entry.name} must use manual redirects so fetch cannot replay prompt data to another URL`,
+    );
+  }
+});
+
+test('fetch-based custom providers validate their destination against SSRF-protected ranges', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = source.slice(entry.start, end);
+    const validationAt = body.indexOf('validateUrlForSsrf');
+    const fetchAt = body.indexOf('fetch(url, {');
+
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination against SSRF-protected ranges`);
+    assert.ok(fetchAt > validationAt, `${entry.name} should validate before dispatch`);
+  }
+});
+
 test('path traversal is blocked in URL variable substitution', () => {
   const source = read('electron/LLMHelper.ts');
 

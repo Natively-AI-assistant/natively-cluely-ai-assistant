@@ -274,6 +274,7 @@ import {
 } from '../lib/overlayStreamingCodeUi.mjs';
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
+import { buildDirectWhatToSayPayload } from '../lib/directAssistWhatToSayPayload.mjs';
 import {
   applyFirstStreamingToken,
   commitStreamingFlush,
@@ -432,6 +433,45 @@ interface Message {
     currency: string;
   };
 }
+
+type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
+
+interface DirectAssistHistoryTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface ActiveDirectAssistRequest {
+  requestId: string;
+  source: DirectAssistSource;
+  currentRequest: string;
+  placeholderId: string;
+  lastSequence: number;
+  answerText: string;
+  completed?: boolean;
+}
+
+type DirectAssistRendererEvent =
+  | { type: 'start'; requestId: string; provider: string; model: string }
+  | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
+  | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
+  | { type: 'cancel'; requestId: string; sequence: number };
+
+const createDirectAssistRequestId = (): string => {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+  return `direct-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const directAssistSkillId = (request: string): string | undefined => {
+  const match = request.match(/^\s*[/$]([a-z0-9][a-z0-9_-]*)(?=\s|$)/i);
+  return match?.[1];
+};
+
+const directAssistErrorText = (code: string, message: string): string =>
+  `❌ ${code}: ${message}`;
 
 interface NativelyInterfaceProps {
   onEndMeeting?: () => void;
@@ -1673,6 +1713,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   // Settings State with Persistence
   const [isUndetectable, setIsUndetectable] = useState(false);
+  // Direct Assist is a persisted SettingsManager flag (default OFF, with a
+  // main-process kill switch). It is deliberately not mirrored to localStorage:
+  // every renderer must observe the same effective value the backend enforces.
+  const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
   const [hideChatHidesWidget, setHideChatHidesWidget] = useState(() => {
     const stored = localStorage.getItem('natively_hideChatHidesWidget');
     return stored ? stored === 'true' : true;
@@ -1804,6 +1848,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     });
     return () => unsubscribe();
   }, [refreshCurrentModel]);
+
+  useEffect(() => {
+    let mounted = true;
+    window.electronAPI?.getDirectAssistEnabled?.()
+      .then((enabled) => {
+        if (mounted) setDirectAssistEnabled(enabled === true);
+      })
+      .catch(() => {
+        if (mounted) setDirectAssistEnabled(false);
+      });
+    const unsubscribe = window.electronAPI?.onDirectAssistEnabledChanged?.((enabled) => {
+      if (mounted) setDirectAssistEnabled(enabled === true);
+    });
+    return () => {
+      mounted = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   // Dynamic Action Button Mode (Recap vs Brainstorm)
   const [actionButtonMode, setActionButtonMode] = useState<'recap' | 'brainstorm'>('recap');
@@ -3750,6 +3812,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // or 'phone'). Supersession is scoped to a surface because both paths
   // allocate stream ids from ONE shared counter in the main process.
   const chatStreamSourceRef = useRef<string | null>(null);
+  // Direct Assist owns a separate request-correlated stream and a deliberately
+  // isolated history. Only a successful terminal `done` appends turns here;
+  // transcript cards, RAG, WTA, partial output and cancelled turns never enter it.
+  const activeDirectAssistRef = useRef<ActiveDirectAssistRequest | null>(null);
+  const directAssistHistoryRef = useRef<DirectAssistHistoryTurn[]>([]);
   // Active LIVE-ANSWER generation id (audit finding #3, full). The live what-to-
   // answer path streams on `intelligence-token-batch` (kind='suggested_answer')
   // keyed only on intent, so two back-to-back live answers share the same intent
@@ -3759,6 +3826,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // generation. null = no id adopted yet (id-less items are always accepted →
   // backward compatible with the code-hint / brainstorm streams that omit it).
   const liveAnswerGenIdRef = useRef<number | null>(null);
+  // Direct Assist supersedes every legacy WTA generation visible to this
+  // renderer. The numeric MAX tombstone rejects tagged generations through the
+  // existing newest-wins guard; this companion flag also rejects older/id-less
+  // finals after the Direct reveal has sealed and activeDirectAssistRef clears.
+  // A deliberate new legacy WTA/code-hint/brainstorm request revives the lane.
+  const legacyIntelligenceTombstonedRef = useRef(false);
   // Deferred-finalize bookkeeping. THE ONE mechanism for "commit this row's
   // final isStreaming:false only once the reveal ticker has actually caught
   // up to the full text" — used by BOTH:
@@ -4041,6 +4114,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       cancelAnimationFrame(streamingCodeRafRef.current);
       streamingCodeRafRef.current = null;
     }
+    const direct = activeDirectAssistRef.current;
+    if (direct?.completed && direct.placeholderId === pending.msgId) {
+      activeDirectAssistRef.current = null;
+    }
     setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
   }, []);
 
@@ -4245,6 +4322,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingMsgIdRef.current = null;
       streamingIntentRef.current = null;
       streamingRenderModeRef.current = 'imperative';
+      const direct = activeDirectAssistRef.current;
+      if (direct?.completed && direct.placeholderId === pending.msgId) {
+        activeDirectAssistRef.current = null;
+      }
       setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
     }, safetyNetMs);
     if (!reuseMsgId) {
@@ -4295,6 +4376,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       streamingMsgIdRef.current = null;
       streamingIntentRef.current = null;
       streamingRenderModeRef.current = 'imperative';
+      const direct = activeDirectAssistRef.current;
+      if (direct?.completed && direct.placeholderId === pending.msgId) {
+        activeDirectAssistRef.current = null;
+      }
       setMessages((prev) => commitStreamingFlush(prev, pending.msgId, pending.text));
     }, safetyNetMs);
     ensureRevealTicker(msgId);
@@ -4581,7 +4666,265 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     }
   }, []);
 
+  const consumeDirectPageContext = useCallback(() => {
+    const rawDom = (window as any).lastCapturedDOM;
+    const dom = typeof rawDom === 'string' && rawDom.trim().length > 0
+      ? rawDom.substring(0, DOM_CONTEXT_MAX_CHARS)
+      : undefined;
+    const meta = dom ? capturedMetaRef.current : null;
+
+    // Page context is single-use in Direct Assist. Clear all renderer copies at
+    // the same time so a later turn cannot silently inherit a previous page.
+    if (typeof (window as any).lastCapturedDOM === 'string') {
+      (window as any).lastCapturedDOM = '';
+    }
+    capturedEnvelopeRef.current = null;
+    capturedMetaRef.current = null;
+    if (dom) setPageContext(null);
+
+    return dom
+      ? {
+          dom,
+          ...(meta?.url ? { url: meta.url } : {}),
+          ...(meta?.title ? { title: meta.title } : {}),
+        }
+      : undefined;
+  }, []);
+
+  const settleDirectAssistIncomplete = useCallback((
+    active: ActiveDirectAssistRequest,
+    terminalLabel: string,
+  ) => {
+    if (streamingMsgIdRef.current === active.placeholderId) {
+      if (streamingRafRef.current !== null) {
+        cancelAnimationFrame(streamingRafRef.current);
+        streamingRafRef.current = null;
+      }
+      if (streamingCodeRafRef.current !== null) {
+        cancelAnimationFrame(streamingCodeRafRef.current);
+        streamingCodeRafRef.current = null;
+      }
+      pendingFinalizeRef.current = null;
+      if (pendingFinalizeTimeoutRef.current !== null) {
+        clearTimeout(pendingFinalizeTimeoutRef.current);
+        pendingFinalizeTimeoutRef.current = null;
+      }
+      streamingNodeRef.current = null;
+      streamingTextRef.current = '';
+      streamingMsgIdRef.current = null;
+      streamingIntentRef.current = null;
+      streamingRenderModeRef.current = 'imperative';
+    }
+
+    setMessages((prev) => {
+      const idx = prev.findLastIndex((message) => message.id === active.placeholderId);
+      if (idx === -1) return prev;
+      if (!active.answerText && terminalLabel === 'Request cancelled.') {
+        return prev.filter((_, messageIndex) => messageIndex !== idx);
+      }
+      const text = active.answerText
+        ? `${active.answerText}\n\n_Incomplete — ${terminalLabel}_`
+        : terminalLabel;
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        text,
+        isStreaming: false,
+        isCode: text.includes('```') || text.includes('#include'),
+      };
+      return updated;
+    });
+    setIsProcessing(false);
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onDirectAssistEvent) return;
+    const unsubscribe = window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {
+      const active = activeDirectAssistRef.current;
+      if (!active || event.requestId !== active.requestId) return;
+      if (active.completed) return;
+
+      if (event.type === 'start') return;
+
+      if (event.type === 'delta') {
+        if (event.sequence <= active.lastSequence) return;
+        active.lastSequence = event.sequence;
+        if (!event.text) return;
+        active.answerText += event.text;
+        queueToken('chat', event.text);
+        return;
+      }
+
+      // Terminal events carry the last emitted delta sequence, not the next
+      // sequence. Accept equality so start -> delta(1) -> done(1) seals; only a
+      // genuinely older terminal event is stale.
+      if (event.sequence < active.lastSequence) return;
+      active.lastSequence = event.sequence;
+
+      if (event.type === 'done') {
+        const answer = event.fullText ?? active.answerText;
+        if (!answer) {
+          activeDirectAssistRef.current = null;
+          settleDirectAssistIncomplete(
+            active,
+            directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
+          );
+          return;
+        }
+
+        // The ONLY Direct history write. Both rows are appended atomically after
+        // a successful terminal event, then bounded by completed turns.
+        const completedTurns: DirectAssistHistoryTurn[] = [
+          ...directAssistHistoryRef.current,
+          { role: 'user', content: active.currentRequest },
+          { role: 'assistant', content: answer },
+        ];
+        directAssistHistoryRef.current = completedTurns.slice(-24);
+        setIsProcessing(false);
+
+        if (streamingMsgIdRef.current === active.placeholderId) {
+          // Keep Direct ownership until the reveal actually seals. Clearing it
+          // at the provider's done event would let a late legacy token enter the
+          // still-streaming row during the paced final reveal.
+          active.completed = true;
+          finalizeWhenRevealCaughtUp(active.placeholderId, 'chat', answer);
+        } else {
+          activeDirectAssistRef.current = null;
+          setMessages((prev) => prev.map((message) =>
+            message.id === active.placeholderId
+              ? {
+                  ...message,
+                  text: answer,
+                  isStreaming: false,
+                  isCode: answer.includes('```') || answer.includes('#include'),
+                }
+              : message,
+          ));
+        }
+        return;
+      }
+
+      if (event.type === 'error') {
+        activeDirectAssistRef.current = null;
+        settleDirectAssistIncomplete(
+          active,
+          directAssistErrorText(event.error.code, event.error.message),
+        );
+        return;
+      }
+
+      activeDirectAssistRef.current = null;
+      settleDirectAssistIncomplete(active, 'Request cancelled.');
+    });
+    return () => unsubscribe?.();
+  }, [finalizeWhenRevealCaughtUp, queueToken, settleDirectAssistIncomplete]);
+
+  const beginDirectAssist = useCallback(async ({
+    source,
+    currentRequest,
+    imagePaths,
+    pageContext: directPageContext,
+    transcript,
+  }: {
+    source: DirectAssistSource;
+    currentRequest: string;
+    imagePaths?: string[];
+    pageContext?: { dom?: string; ocr?: string; url?: string; title?: string };
+    transcript?: string;
+  }) => {
+    legacyIntelligenceTombstonedRef.current = true;
+    liveAnswerGenIdRef.current = Number.MAX_SAFE_INTEGER;
+
+    const previous = activeDirectAssistRef.current;
+    if (previous) {
+      activeDirectAssistRef.current = null;
+      if (!previous.completed) {
+        void window.electronAPI?.cancelDirectAssist?.(previous.requestId, previous.source).catch(() => {});
+        settleDirectAssistIncomplete(previous, 'Superseded by a newer request.');
+      }
+    }
+
+    // Direct and legacy streams share the single answer panel. Retire any legacy
+    // owner before reserving the Direct placeholder; requestId correlation then
+    // rejects every late Direct event from an older turn.
+    window.electronAPI?.cancelChatStream?.();
+    chatStreamIdRef.current = null;
+    chatStreamSourceRef.current = null;
+    forceFinalizeStaleRagStream();
+    flushToken();
+
+    const requestId = createDirectAssistRequestId();
+    const placeholderId = genMessageId();
+    const active: ActiveDirectAssistRequest = {
+      requestId,
+      source,
+      currentRequest,
+      placeholderId,
+      lastSequence: -1,
+      answerText: '',
+    };
+    activeDirectAssistRef.current = active;
+    streamingMsgIdRef.current = placeholderId;
+    streamingIntentRef.current = 'chat';
+    streamingTextRef.current = '';
+    streamingNodeRef.current = null;
+    streamingRenderModeRef.current = 'imperative';
+    pinAnswerPanelRef.current();
+    setIsProcessing(true);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: placeholderId,
+        role: 'system',
+        text: '',
+        intent: 'chat',
+        isStreaming: true,
+      },
+    ]);
+
+    try {
+      const response = await window.electronAPI.startDirectAssist({
+        requestId,
+        source,
+        // Preserve the current instruction byte-for-byte, including a /skill or
+        // $skill prefix. Main resolves `skillId`; it does not need renderer-side
+        // prompt rewriting or instruction injection.
+        currentRequest,
+        skillId: directAssistSkillId(currentRequest),
+        history: directAssistHistoryRef.current.slice(-24),
+        ...(directPageContext ? { pageContext: directPageContext } : {}),
+        ...(imagePaths && imagePaths.length > 0 ? { imagePaths } : {}),
+        ...(transcript ? { transcript } : {}),
+      });
+      if (activeDirectAssistRef.current?.requestId !== requestId) return;
+      if (!response.accepted || response.requestId !== requestId) {
+        activeDirectAssistRef.current = null;
+        const code = response.error?.code || 'DIRECT_ASSIST_REJECTED';
+        const message = response.error?.message || 'Direct Assist could not start this request.';
+        settleDirectAssistIncomplete(active, directAssistErrorText(code, message));
+      }
+    } catch (error) {
+      if (activeDirectAssistRef.current?.requestId !== requestId) return;
+      activeDirectAssistRef.current = null;
+      settleDirectAssistIncomplete(
+        active,
+        directAssistErrorText(
+          'DIRECT_ASSIST_UNAVAILABLE',
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    }
+  }, [flushToken, forceFinalizeStaleRagStream, settleDirectAssistIncomplete]);
+
   const cancelActiveChatStream = useCallback(() => {
+    const direct = activeDirectAssistRef.current;
+    if (direct) {
+      activeDirectAssistRef.current = null;
+      if (!direct.completed) {
+        void window.electronAPI?.cancelDirectAssist?.(direct.requestId, direct.source).catch(() => {});
+        settleDirectAssistIncomplete(direct, 'Request cancelled.');
+      }
+    }
     window.electronAPI?.cancelChatStream?.();
     chatStreamIdRef.current = null;
     chatStreamSourceRef.current = null;
@@ -4611,7 +4954,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       cancelAnimationFrame(tokenBufRef.current.raf);
       tokenBufRef.current.raf = null;
     }
-  }, [flushToken]);
+  }, [flushToken, settleDirectAssistIncomplete]);
 
   const resetChatState = useCallback(() => {
     cancelActiveChatStream();
@@ -4620,6 +4963,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     setAnswerPanelPinned(false);
     lastManualSubmitRef.current = null;
     manualSubmitInFlightRef.current = false;
+    directAssistHistoryRef.current = [];
   }, [cancelActiveChatStream]);
 
   const finalizeStreamingByIntent = useCallback(
@@ -4885,6 +5229,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // AI Suggestions from native audio (legacy)
     cleanups.push(
       window.electronAPI.onSuggestionProcessingStart(() => {
+        if (activeDirectAssistRef.current) return;
+        // A processing-start event is the only trustworthy boundary for a new
+        // native legacy suggestion; revive after Direct's old generation was
+        // tombstoned, never merely because the Direct reveal finished.
+        legacyIntelligenceTombstonedRef.current = false;
+        liveAnswerGenIdRef.current = null;
         setIsProcessing(true);
         setIsExpanded(true);
       }),
@@ -4892,6 +5242,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onSuggestionGenerated((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setIsProcessing(false);
         pinAnswerPanel();
         setMessages((prev) => [
@@ -4907,6 +5259,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onSuggestionError((err) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setIsProcessing(false);
         setMessages((prev) => [
           ...prev,
@@ -4921,6 +5275,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswerToken((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         pinAnswerPanel();
         // Coaching now arrives via onIntelligenceNegotiationCoaching only —
         // sentinel detection on this stream has been removed.
@@ -4930,6 +5286,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswer((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         // Phase 4 defense-in-depth (forensic-report §6b): drop a final answer
         // belonging to a generation that's already been superseded by a newer
         // one — same supersession guard the streaming token path applies via
@@ -4966,6 +5324,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // path) so a late token batch can't append onto a row we're removing.
     cleanups.push(
       window.electronAPI.onIntelligenceSuggestedAnswerDiscard?.(() => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setIsProcessing(false);
         if (streamingNodeRef.current) streamingNodeRef.current.innerHTML = '';
         streamingNodeRef.current = null;
@@ -4994,6 +5354,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // engine also guards by generationId; this is the renderer-side backstop.)
     cleanups.push(
       window.electronAPI.onIntelligenceCodeVerified?.((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           if (!last || last.role !== 'system') return prev; // superseded by a newer turn
@@ -5013,6 +5375,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // so a genuine correction is never silently dropped.
     cleanups.push(
       window.electronAPI.onIntelligenceCodeCorrection?.((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         setMessages((prev) => {
           const last = prev[prev.length - 1];
           const corrected = {
@@ -5042,9 +5406,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // safety nets and only fire if some other code path emits them.
     cleanups.push(
       window.electronAPI.onIntelligenceTokenBatch((data) => {
+        if (activeDirectAssistRef.current) return;
         const { kind, items } = data;
         if (!items || items.length === 0) return;
         if (kind === 'suggested_answer') {
+          if (legacyIntelligenceTombstonedRef.current) return;
           pinAnswerPanel();
           for (const it of items) {
             // #3 (full): drop tokens belonging to a superseded live answer so a
@@ -5080,6 +5446,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // tokens through suggested_answer anymore).
     cleanups.push(
       window.electronAPI.onIntelligenceNegotiationCoaching((data) => {
+        if (activeDirectAssistRef.current) return;
+        if (legacyIntelligenceTombstonedRef.current) return;
         // Flush any pending streamed tokens before swapping the streaming
         // row to a coaching card; otherwise rAF-buffered text would be
         // appended onto the card row's empty text after this setMessages.
@@ -5119,6 +5487,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // STREAMING: Refinement
     cleanups.push(
       window.electronAPI.onIntelligenceRefinedAnswerToken((data) => {
+        if (activeDirectAssistRef.current) return;
         // PERF: rAF-coalesce per-token state updates.
         queueToken(data.intent, data.token);
       }),
@@ -5126,6 +5495,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceRefinedAnswer((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent(data.intent, data.answer);
       }),
@@ -5134,12 +5504,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // STREAMING: Recap
     cleanups.push(
       window.electronAPI.onIntelligenceRecapToken((data) => {
+        if (activeDirectAssistRef.current) return;
         queueToken('recap', data.token);
       }),
     );
 
     cleanups.push(
       window.electronAPI.onIntelligenceRecap((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('recap', data.summary);
       }),
@@ -5159,12 +5531,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceFollowUpQuestionsToken((data) => {
+        if (activeDirectAssistRef.current) return;
         queueToken('follow_up_questions', data.token);
       }),
     );
 
     cleanups.push(
       window.electronAPI.onIntelligenceFollowUpQuestionsUpdate((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('follow_up_questions', data.questions);
       }),
@@ -5172,6 +5546,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceClarify((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('clarify', data.clarification);
       }),
@@ -5179,6 +5554,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceManualStarted(() => {
+        if (activeDirectAssistRef.current) return;
         setIsExpanded(true);
         setIsProcessing(true);
         prepareIntelligenceStreamPlaceholder('chat');
@@ -5187,6 +5563,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceManualResult((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         finalizeStreamingByIntent('chat', `🎯 **Answer:**\n\n${data.answer}`);
       }),
@@ -5194,6 +5571,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     cleanups.push(
       window.electronAPI.onIntelligenceError((data) => {
+        if (activeDirectAssistRef.current) return;
         setIsProcessing(false);
         setMessages((prev) => [
           ...prev,
@@ -5315,10 +5693,63 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
     // Create AI response placeholder AFTER user message so thinking dots + response
     // appear BELOW the question card (not above it)
-    prepareIntelligenceStreamPlaceholder('what_to_answer');
+    if (!directAssistEnabled) {
+      legacyIntelligenceTombstonedRef.current = false;
+      liveAnswerGenIdRef.current = null;
+      prepareIntelligenceStreamPlaceholder('what_to_answer');
+    }
     analytics.trackCommandExecuted('what_to_say');
 
     try {
+      if (directAssistEnabled) {
+        // Direct screenshot requests never trigger automatic page capture. A
+        // deliberate, already-captured page is still consumed once and can ride
+        // alongside the image because the user explicitly attached both.
+        const directPageContext = consumeDirectPageContext();
+        if (directPageContext) {
+          setMessages((prev) => prev.map((message) =>
+            message.id === questionCardId
+              ? {
+                  ...message,
+                  pageContext: {
+                    title: directPageContext.title,
+                    url: directPageContext.url,
+                  },
+                }
+              : message,
+          ));
+        }
+        // The rolling bar is already capped at 8 KiB. Keep the latest few STT
+        // segments so a question split by punctuation/finalization stays intact,
+        // while older meeting discussion cannot become the primary request.
+        const directTranscriptSnapshot = pendingRollingPartialRef.current
+          ? mergeRollingTranscriptPartial(rollingTranscript, pendingRollingPartialRef.current)
+          : rollingTranscript;
+        const interviewerRequest = directTranscriptSnapshot
+          .split('  ·  ')
+          .slice(-4)
+          .join('  ·  ')
+          .trim()
+          .slice(-8192);
+        const hasScreenshots = currentAttachments.length > 0;
+        const directWhatToSayPayload = buildDirectWhatToSayPayload({
+          interviewerRequest,
+          dynamicPromptInstruction,
+          hasScreenshots,
+        });
+        await beginDirectAssist({
+          source: directWhatToSayPayload.source,
+          currentRequest: directWhatToSayPayload.currentRequest,
+          imagePaths: currentAttachments.map((attachment) => attachment.path),
+          pageContext: directPageContext,
+          // When a screenshot is the request surface, retain STT provenance as a
+          // separate untrusted field so main can enforce transcript scope instead
+          // of disguising meeting audio as typed text.
+          transcript: directWhatToSayPayload.transcript,
+        });
+        return;
+      }
+
       // Smart Browser Context v2 — just-in-time auto-attach. If NO manual context
       // is already captured, ask the extension for the best auto context (it only
       // attaches a high-confidence coding page; sensitive/unknown pages are
@@ -5471,7 +5902,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       pinAnswerPanel();
     } finally {
       endOverlayAction('what_to_say');
-      setIsProcessing(false);
+      // A Direct stream outlives the start IPC acknowledgement; its correlated
+      // terminal event owns the processing state. Legacy WTA is request/response.
+      if (!directAssistEnabled) setIsProcessing(false);
     }
   };
 
@@ -5599,6 +6032,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       ]);
       return;
     }
+    legacyIntelligenceTombstonedRef.current = false;
+    liveAnswerGenIdRef.current = null;
     setIsExpanded(true);
     setIsProcessing(true);
     pinAnswerPanel();
@@ -5652,6 +6087,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
   const handleBrainstorm = async () => {
     if (!tryBeginOverlayAction('brainstorm')) return;
+    legacyIntelligenceTombstonedRef.current = false;
+    liveAnswerGenIdRef.current = null;
     setIsExpanded(true);
     setIsProcessing(true);
     analytics.trackCommandExecuted('brainstorm');
@@ -5716,6 +6153,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // without a streamId (back-compat) are always accepted.
     cleanups.push(
       window.electronAPI.onGeminiStreamToken((token, meta) => {
+        // Direct Assist owns this overlay row while active. A legacy token that
+        // was already queued before cancellation must never be adopted into it.
+        if (activeDirectAssistRef.current) return;
         const decision = resolveChatStreamToken(
           chatStreamIdRef.current, meta?.streamId,
           chatStreamSourceRef.current, (meta as any)?.source,
@@ -5730,6 +6170,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Stream Done
     cleanups.push(
       window.electronAPI.onGeminiStreamDone((data) => {
+        if (activeDirectAssistRef.current) return;
         // Ignore a done from a superseded stream (audit finding #3) so it can't
         // tear down a newer stream's row. A done without a streamId is honored
         // (back-compat). On an honored done we clear the adopted id.
@@ -5875,6 +6316,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // Stream Error
     cleanups.push(
       window.electronAPI.onGeminiStreamError((error, meta?: { streamId?: number | null; source?: string }) => {
+        if (activeDirectAssistRef.current) return;
         // Guard (2026-07-31): a tagged error belonging to another stream must
         // not tear down the one we're rendering. A phone-mirror failure carries
         // source:'phone-mirror' and no streamId; a desktop failure carries the
@@ -5939,6 +6381,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // event adds the user turn + streaming placeholder before tokens arrive.
     cleanups.push(
       window.electronAPI.onPhoneMirrorIncomingChat(({ message }) => {
+        if (activeDirectAssistRef.current) return;
         flushToken();
         requestStartTimeRef.current = Date.now();
         const userId = genMessageId();
@@ -6065,6 +6508,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamChunk) {
       cleanups.push(
         window.electronAPI.onRAGStreamChunk((data: { chunk: string }) => {
+          if (activeDirectAssistRef.current) return;
           ragArrivedTextRef.current += data.chunk;
           ensureRagRevealTicker();
         }),
@@ -6074,6 +6518,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamComplete) {
       cleanups.push(
         window.electronAPI.onRAGStreamComplete(() => {
+          if (activeDirectAssistRef.current) return;
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           if (STREAM_RENDER_CONFIG.flushImmediatelyOnComplete) {
@@ -6113,11 +6558,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (window.electronAPI.onRAGStreamError) {
       cleanups.push(
         window.electronAPI.onRAGStreamError((data: { error: string }) => {
+          if (activeDirectAssistRef.current) return;
+          flushRagChunkBuffer();
           // Errors are always instant, never deferred — flushRagChunkBuffer
           // resets ragDoneRef/accumulator/pacer so a still-running ticker
           // (if any) can't later overwrite the error text appended below
           // with a stale `fullText.slice(0, revealedLen)` commit.
-          flushRagChunkBuffer();
           setIsProcessing(false);
           requestStartTimeRef.current = null;
           setMessages((prev) => {
@@ -6156,9 +6602,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setIsManualRecording(false);
         setManualTranscript('');
 
-        window.electronAPI
-          .finalizeMicSTT()
-          .catch((err) => console.error('[NativelyInterface] Failed to send finalizeMicSTT:', err));
+        // Wait for the final STT flush acknowledgement before snapshotting refs.
+        // Older preloads may never acknowledge, so cap the wait and allow one
+        // short renderer turn for the final transcript IPC to land.
+        try {
+          await Promise.race([
+            window.electronAPI.finalizeMicSTT(),
+            new Promise<void>((resolve) => setTimeout(resolve, 750)),
+          ]);
+          await new Promise<void>((resolve) => setTimeout(resolve, 50));
+        } catch (err) {
+          console.error('[NativelyInterface] Failed to finalize mic STT:', err);
+        }
 
         const currentAttachments = attachedContext;
         setAttachedContext([]);
@@ -6205,10 +6660,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           return;
         }
 
+        const userMessageId = genMessageId();
         setMessages((prev) => [
           ...prev,
           {
-            id: genMessageId(),
+            id: userMessageId,
             role: 'user',
             text: question,
             hasScreenshot: currentAttachments.length > 0,
@@ -6220,6 +6676,33 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 50);
+
+        if (directAssistEnabled) {
+          const directPageContext = consumeDirectPageContext();
+          if (directPageContext) {
+            setMessages((prev) => prev.map((message) =>
+              message.id === userMessageId
+                ? {
+                    ...message,
+                    pageContext: {
+                      title: directPageContext.title,
+                      url: directPageContext.url,
+                    },
+                  }
+                : message,
+            ));
+          }
+          await beginDirectAssist({
+            // A recording turn with no recognized speech is image-only. Mark it
+            // as screenshot input so transcript privacy does not reject a valid
+            // deliberate capture that contains no transcript at all.
+            source: question ? 'stt' : 'screenshot',
+            currentRequest: question || 'Analyze the attached screenshot.',
+            imagePaths: currentAttachments.map((attachment) => attachment.path),
+            pageContext: directPageContext,
+          });
+          return;
+        }
 
         // A previous turn's RAG answer may still be deferred-draining (see
         // forceFinalizeStaleRagStream's declaration) — force it to its final
@@ -6349,6 +6832,7 @@ Provide only the answer, nothing else.`;
   const handleManualSubmit = async () => {
     if (!inputValue.trim() && attachedContext.length === 0) return;
 
+    const rawUserText = inputValue;
     const userText = inputValue.trim();
     const nowMs = Date.now();
     if (manualSubmitInFlightRef.current) return;
@@ -6367,7 +6851,6 @@ Provide only the answer, nothing else.`;
     lastManualSubmitRef.current = { text: userText, atMs: nowMs };
 
     const currentAttachments = attachedContext;
-    const conversationContextForSubmit = buildConversationContextFromMessages(messages);
 
     // Clear inputs immediately
     setInputValue('');
@@ -6393,10 +6876,11 @@ Provide only the answer, nothing else.`;
         : prev,
     );
 
+    const userMessageId = genMessageId();
     setMessages((prev) => [
       ...prev,
       {
-        id: genMessageId(),
+        id: userMessageId,
         role: 'user',
         text: userText || (currentAttachments.length > 0 ? 'Analyze this screenshot' : ''),
         hasScreenshot: currentAttachments.length > 0,
@@ -6409,6 +6893,38 @@ Provide only the answer, nothing else.`;
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
+
+    if (directAssistEnabled) {
+      try {
+        const directPageContext = consumeDirectPageContext();
+        if (directPageContext) {
+          setMessages((prev) => prev.map((message) =>
+            message.id === userMessageId
+              ? {
+                  ...message,
+                  pageContext: {
+                    title: directPageContext.title,
+                    url: directPageContext.url,
+                  },
+                }
+              : message,
+          ));
+        }
+        await beginDirectAssist({
+          source: 'typed',
+          // Keep the user's typed instruction unchanged. Only an attachment-only
+          // turn needs a deterministic fallback because it has no text to retain.
+          currentRequest: rawUserText.trim().length > 0
+            ? rawUserText
+            : 'Analyze the attached screenshot.',
+          imagePaths: currentAttachments.map((attachment) => attachment.path),
+          pageContext: directPageContext,
+        });
+      } finally {
+        manualSubmitInFlightRef.current = false;
+      }
+      return;
+    }
 
     // A previous turn's RAG answer may still be deferred-draining (see
     // forceFinalizeStaleRagStream's declaration) — force it to its final
@@ -6444,6 +6960,7 @@ Provide only the answer, nothing else.`;
     setIsExpanded(true);
     setIsProcessing(true);
     pinAnswerPanel();
+    const conversationContextForSubmit = buildConversationContextFromMessages(messages);
 
     try {
       // JIT RAG pre-flight: try to use indexed meeting context first
@@ -7947,6 +8464,7 @@ Provide only the answer, nothing else.`;
     const report = [
       '## STT Diagnostic Report',
       `App Version: ${version}`,
+      `Build Commit: ${import.meta.env.VITE_BUILD_COMMIT || 'unknown'}`,
       `Platform: ${osVersion} (${arch})`,
       `---`,
       `Microphone Provider: ${sttUserProvider}`,
@@ -9167,6 +9685,16 @@ Provide only the answer, nothing else.`;
                       </span>
                       <ChevronDown size={14} className="shrink-0 transition-transform" />
                     </button>
+
+                    {directAssistEnabled && (
+                      <span
+                        className="px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide text-emerald-300 bg-emerald-400/10 border border-emerald-400/20"
+                        title={t('Direct Assist sends the current request straight to the active model')}
+                        data-testid="direct-assist-badge"
+                      >
+                        {t('Direct')}
+                      </span>
+                    )}
 
                     <div className="w-px h-3 mx-1" style={appearance.dividerStyle} />
 
