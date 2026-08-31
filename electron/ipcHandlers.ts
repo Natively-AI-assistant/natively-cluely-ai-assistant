@@ -6209,6 +6209,15 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     const skill = SkillsManager.getInstance().getSkill(requestedSkillId);
     if (!skill) {
+      // A slash/dollar-prefixed leading word that doesn't resolve to a real
+      // skill is ordinary text far more often than an intended skill
+      // invocation ("$50 is that a fair price...", "/explain this regex") —
+      // the renderer's matching detector (directAssistSkillId) is advisory
+      // only, main is authoritative. Only hard-fail when a skill was
+      // explicitly selected via the UI's skill picker (explicitSkillId),
+      // where there is no ambiguity about intent; a bare text-prefix guess
+      // that misses just falls back to plain text.
+      if (!explicitSkillId) return { currentRequest: request.currentRequest, skill: null };
       return { error: directAssistError('SKILL_NOT_FOUND', 'The requested Direct Assist skill was not found.') };
     }
     if (skill.enabled === false) {
