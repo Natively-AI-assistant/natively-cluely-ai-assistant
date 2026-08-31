@@ -53,11 +53,39 @@ describe('redaction — a trace must never hold private content', () => {
     assert.ok(r.items.every((i) => i.content === undefined));
   });
 
+  test('redacts questions, retrieval queries, and conversation referents', () => {
+    const r = redactTrace({
+      originalQuestion: 'solve the code shown on screen',
+      resolvedQuestion: 'Solve the attached coding problem in C++.',
+      retrievalAttempts: [{ queries: ['private meeting phrase', 'another private phrase'] }],
+      referentResolution: {
+        activePerson: 'private candidate name',
+        activeTopic: 'private project topic',
+        previousQuestion: 'private prior interview question',
+        referent: 'private screen selection',
+      },
+    });
+    const json = JSON.stringify(r);
+    for (const secret of [
+      'solve the code shown on screen', 'Solve the attached coding problem in C++.',
+      'private meeting phrase', 'another private phrase', 'private candidate name',
+      'private project topic', 'private prior interview question', 'private screen selection',
+    ]) assert.ok(!json.includes(secret), `trace leaked: ${secret}`);
+    assert.equal(r.originalQuestionLength, 30);
+    assert.equal(r.resolvedQuestionLength, 41);
+    assert.equal(r.retrievalAttempts[0].queriesCount, 2);
+    assert.equal(r.retrievalAttempts[0].queriesLength, 44);
+  });
+
   test('a fully-populated trace survives redaction with identity intact', () => {
     const r = redactTrace(baseTrace());
     assert.equal(r.acceptedEvidence[0].evidenceId, 'ev-1');
     assert.equal(r.acceptedEvidence[0].versionId, 'v2', 'version must survive — it is the top measured risk');
     assert.equal(r.acceptedEvidence[0].scopeId, 'u:u1');
+    assert.equal(r.originalQuestion, undefined);
+    assert.equal(r.resolvedQuestion, undefined);
+    assert.equal(r.originalQuestionLength, 22);
+    assert.equal(r.resolvedQuestionLength, 26);
   });
 });
 
@@ -82,6 +110,19 @@ describe('shadow-mode decision diffing', () => {
     const d = compareDecisions(baseTrace({ engine: 'legacy', groundingPolicy: 'OPEN_KNOWLEDGE' }), baseTrace());
     assert.equal(d.length, 1);
     assert.equal(d[0].field, 'groundingPolicy');
+  });
+
+  test('question divergence never copies private question text into the diff', () => {
+    const legacyQuestion = 'PRIVATE LEGACY INTERVIEW QUESTION';
+    const v3Question = 'PRIVATE V3 INTERVIEW QUESTION';
+    const d = compareDecisions(
+      baseTrace({ engine: 'legacy', resolvedQuestion: legacyQuestion }),
+      baseTrace({ resolvedQuestion: v3Question }),
+    );
+    const json = JSON.stringify(d);
+    assert.ok(d.some((x) => x.field === 'resolvedQuestion'));
+    assert.ok(!json.includes(legacyQuestion));
+    assert.ok(!json.includes(v3Question));
   });
 
   test('detects a different accepted-evidence set', () => {

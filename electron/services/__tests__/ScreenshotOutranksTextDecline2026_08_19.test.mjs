@@ -1,11 +1,12 @@
 // electron/services/__tests__/ScreenshotOutranksTextDecline2026_08_19.test.mjs
 //
 // User directive 2026-08-19: "no context of screenshot is dropped if the
-// contexts disagree." A screenshot is the user DELIBERATELY handing the turn
-// its evidence; every canned decline in the Context OS govern path is a
-// verdict about the TEXT universe only. Audit found four decline sites that
-// could discard user-attached pixels; manual chat's clarify short-circuit was
-// the only one already image-gated (`!imagePaths?.length`, ipcHandlers).
+// contexts disagree." A screenshot, browser DOM capture, or screen OCR is the
+// user DELIBERATELY handing the turn its current-screen evidence; every canned
+// decline in the Context OS govern path is a verdict about the other TEXT
+// universe only. Audit found four decline sites that could discard that visual
+// evidence; manual chat's clarify short-circuit was the only one already image-
+// gated (`!imagePaths?.length`, ipcHandlers).
 //
 // The rule is now the pure predicate declineYieldsToAttachedImages
 // (refusalPolicy.ts), wired at:
@@ -44,9 +45,24 @@ describe('declineYieldsToAttachedImages (pure rule)', () => {
     );
   });
 
-  test('no screenshot → never yields (bounded-universe refusals stay honest)', () => {
+  test('refuse + DOM/OCR screen text → yields (same current-screen evidence)', () => {
+    assert.equal(
+      declineYieldsToAttachedImages({
+        answerPolicy: 'refuse_insufficient_evidence',
+        hasAttachedImages: false,
+        hasScreenText: true,
+      }),
+      true,
+    );
+  });
+
+  test('no current-screen evidence → never yields (bounded-universe refusals stay honest)', () => {
     for (const answerPolicy of ['refuse_insufficient_evidence', 'ask_clarification']) {
-      assert.equal(declineYieldsToAttachedImages({ answerPolicy, hasAttachedImages: false }), false, answerPolicy);
+      assert.equal(
+        declineYieldsToAttachedImages({ answerPolicy, hasAttachedImages: false, hasScreenText: false }),
+        false,
+        answerPolicy,
+      );
     }
   });
 
@@ -73,27 +89,40 @@ describe('declineYieldsToAttachedImages (pure rule)', () => {
 
 // Wiring drift-guards: structural facts only (identifiers/gates), per repo
 // convention (ContextOsRefusalGoverns2026_08_11 pattern).
-describe('decline sites are image-exempted', () => {
+describe('decline sites preserve current-screen evidence', () => {
   const read = (p) => fs.readFileSync(path.resolve(process.cwd(), p), 'utf8');
 
   test('WhatToAnswerLLM govern block gates its short-circuits on the predicate', () => {
     const src = read('electron/llm/WhatToAnswerLLM.ts');
-    assert.match(src, /declineYieldsToAttachedImages\(\{\s*answerPolicy: pack\.answerPolicy,\s*hasAttachedImages,/);
+    assert.match(src, /declineYieldsToAttachedImages\(\{\s*answerPolicy: pack\.answerPolicy,\s*hasAttachedImages,\s*hasScreenText,/);
   });
 
   test('LLMHelper govern block gates its short-circuits on the predicate', () => {
     const src = read('electron/LLMHelper.ts');
-    assert.match(src, /_declineYieldsLLM\(\{ answerPolicy: pack\.answerPolicy, hasAttachedImages: Boolean\(imagePaths\?\.length\) \}\)/);
+    assert.match(
+      src,
+      /_declineYieldsLLM\(\{\s*answerPolicy: pack\.answerPolicy,\s*hasAttachedImages: Boolean\(imagePaths\?\.length\),\s*hasScreenText: routeOptions\?\.hasScreenText === true,/,
+    );
   });
 
-  test('LLMHelper final-prompt boundary dispatches instead of refusing when images attached', () => {
+  test('WhatToAnswerLLM threads its DOM/OCR signal through StreamRouteOptions', () => {
+    const routePolicy = read('electron/llm/streamContextPolicy.ts');
+    const wta = read('electron/llm/WhatToAnswerLLM.ts');
+    assert.match(routePolicy, /export interface StreamRouteOptions[\s\S]*hasScreenText\?: boolean;/);
+    assert.match(wta, /contextOsGeneration: governedWtaContextOs,[\s\S]{0,500}hasScreenText,/);
+  });
+
+  test('LLMHelper final-prompt boundary receives both visual channels', () => {
     const src = read('electron/LLMHelper.ts');
     // Pin NARROWED 2026-08-19 (code review): the boundary yield is keyed on the
     // validator's REASON, not on `!ok` alone. Only the two decline reasons
     // yield to pixels; a structural failure or forbidden_evidence_rendered
     // must still fail closed, or a source-isolation leak would be dispatched
     // to every cloud provider unvalidated whenever a screenshot is attached.
-    assert.match(src, /_boundaryYields\(\{\s*reason: finalPromptValidation\.reason,/);
+    assert.match(
+      src,
+      /_boundaryYields\(\{\s*reason: finalPromptValidation\.reason,\s*hasAttachedImages: Boolean\(imagePaths\?\.length\),\s*hasScreenText: routeOptions\?\.hasScreenText === true,/,
+    );
     assert.doesNotMatch(
       src,
       /if \(!finalPromptValidation\.ok && imagePaths\?\.length\) \{/,
@@ -101,12 +130,18 @@ describe('decline sites are image-exempted', () => {
     );
   });
 
-  test('boundaryDeclineYieldsToAttachedImages yields ONLY for decline reasons', () => {
+  test('boundaryDeclineYieldsToAttachedImages yields for either visual channel, ONLY on decline reasons', () => {
     for (const reason of ['answer_policy_ask_clarification', 'answer_policy_refuse_insufficient_evidence']) {
       assert.equal(boundaryDeclineYieldsToAttachedImages({ reason, hasAttachedImages: true }), true, reason);
       assert.equal(boundaryDeclineYieldsToAttachedImages({ reason, hasAttachedImages: false }), false, reason);
+      assert.equal(
+        boundaryDeclineYieldsToAttachedImages({ reason, hasAttachedImages: false, hasScreenText: true }),
+        true,
+        `${reason} with DOM/OCR`,
+      );
     }
-    // Source isolation and structural integrity NEVER yield, pixels or not.
+    // Source isolation and structural integrity NEVER yield, regardless of the
+    // visual transport.
     for (const reason of [
       'forbidden_evidence_rendered:profile_resume',
       'rendered_manifest_invalid',
@@ -114,15 +149,20 @@ describe('decline sites are image-exempted', () => {
       'missing_required_evidence_family:reference_files',
     ]) {
       assert.equal(boundaryDeclineYieldsToAttachedImages({ reason, hasAttachedImages: true }), false, reason);
+      assert.equal(
+        boundaryDeclineYieldsToAttachedImages({ reason, hasAttachedImages: false, hasScreenText: true }),
+        false,
+        `${reason} with DOM/OCR`,
+      );
     }
   });
 
-  test('post-stream doc-grounded validator skips image turns (answer-swap site)', () => {
+  test('post-stream doc-grounded validator skips every visual-context turn (answer-swap site)', () => {
     const src = read('electron/IntelligenceEngine.ts');
     // The validator gate: hasReferenceFiles && doc-shaped && image-exempt.
     assert.match(
       src,
-      /hasReferenceFiles\)\s*&& isDocGroundedAnswerType\(answerPlan\.answerType\)[\s\S]{0,700}&& !\(imagePaths\?\.length\)/,
+      /hasReferenceFiles\)\s*&& isDocGroundedAnswerType\(answerPlan\.answerType\)[\s\S]{0,700}&& !_wtaHasVisualContext/,
     );
   });
 

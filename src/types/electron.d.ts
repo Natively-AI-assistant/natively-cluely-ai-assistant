@@ -32,6 +32,37 @@ export interface DynamicActionPayload {
   }
 }
 
+export type DirectAssistSource = 'typed' | 'stt' | 'screenshot'
+
+export interface DirectAssistRequest {
+  requestId: string
+  source: DirectAssistSource
+  currentRequest: string
+  skillId?: string
+  manualContext?: string
+  referenceContext?: string
+  pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  transcript?: string
+  imagePaths?: string[]
+  requestedLanguage?: string
+  requestedFormat?: string
+  maxContextChars?: number
+}
+
+export interface DirectAssistError {
+  code: string
+  message: string
+  retryable: boolean
+}
+
+export type DirectAssistEvent =
+  | { type: 'start'; requestId: string; provider: string; model: string }
+  | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
+  | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
+  | { type: 'cancel'; requestId: string; sequence: number }
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
@@ -312,6 +343,16 @@ export interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>
+  startDirectAssist: (request: DirectAssistRequest) => Promise<{
+    accepted: boolean
+    requestId: string
+    error?: DirectAssistError
+  }>
+  cancelDirectAssist: (
+    requestId: string,
+    source?: DirectAssistSource
+  ) => Promise<{ success: boolean; cancelled: boolean; error?: string }>
+  onDirectAssistEvent: (callback: (event: DirectAssistEvent) => void) => () => void
   generateClarify: () => Promise<{ clarification: string | null }>
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
@@ -651,6 +692,9 @@ export interface ElectronAPI {
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getDirectAssistEnabled: () => Promise<boolean>;
+  setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;

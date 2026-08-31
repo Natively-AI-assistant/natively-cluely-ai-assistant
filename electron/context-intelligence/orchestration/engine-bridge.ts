@@ -336,12 +336,13 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         profileJobDescriptionSources: (input.resolvedProfileSources ?? []).filter((s) => s.role === 'profile_job_description').length,
         profileFactSources: (input.resolvedProfileSources ?? []).filter((s) => s.role === 'profile_fact').length,
         resolvedSources: input.resolvedProfileSources ?? [],
-        // Defect D/F telemetry (2026-08-01): the resolver's decision and the
-        // retrieval funnel were both invisible — a stale referent rewrite and a
-        // "0 raw candidates" vs "all candidates filtered" distinction each had
-        // to be reconstructed from answer prose.
-        originalQuestion: result.trace.originalQuestion,
-        resolvedQuestion: result.trace.resolvedQuestion,
+        // Preserve enough signal to spot a resolver rewrite without writing the
+        // user's typed, spoken, document, or screen-derived text to production
+        // logs. Full content remains available only through the explicit,
+        // development-only debug-content opt-in.
+        originalQuestionLength: result.trace.originalQuestion.length,
+        resolvedQuestionLength: result.trace.resolvedQuestion.length,
+        questionWasRewritten: result.trace.originalQuestion !== result.trace.resolvedQuestion,
         intent: result.trace.questionTypes,
         knowledgePolicy: policy.groundingPolicy,
         path: result.decision.retrievalPlan.path,
