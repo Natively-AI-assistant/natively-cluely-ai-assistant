@@ -9478,7 +9478,16 @@ let isMultimodal = !!(imagePaths?.length);
         'Screenshots and current page data are disabled for cloud providers.',
       );
     }
-    if (deniedScopes.includes('transcript')) {
+    // scopesForPayload()'s 'transcript' tag is a last-boundary backstop that
+    // fires on ANY non-empty prompt text, not only when the prompt actually
+    // carries transcript-derived content — Direct Assist's userPrompt always
+    // has a "CURRENT REQUEST" section, so it fires on every request. Hard-block
+    // only when directScopes (derived from the prompt's own <transcript>/
+    // <recent_transcript>/"# Conversation so far" markup) confirms real
+    // transcript content; otherwise fall through and let
+    // stripDeniedScopedBlocksFromMessage below remove whatever actually
+    // matched (a no-op when nothing did), same as the legacy chat path.
+    if (deniedScopes.includes('transcript') && directScopes.includes('transcript')) {
       throw new DirectAssistError(
         'TRANSCRIPT_BLOCKED_BY_PRIVACY',
         'Transcript data is disabled for cloud providers, so this request was not sent.',
