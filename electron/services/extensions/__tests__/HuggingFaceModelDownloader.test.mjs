@@ -413,3 +413,113 @@ test('a non-huggingface source is refused', async () => {
     /unsupported model source/,
   );
 });
+
+// ── an UNRESOLVED revision must never be stamped ──────────────────────────
+// resolveRevision() returns null on any non-2xx, bad JSON, or its 20s timeout.
+// The download still proceeds against the default branch, but treating that
+// fallback as a revision is what makes two different HEADs look identical.
+
+test('a failed revision lookup leaves the partial UNSTAMPED', async () => {
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url) => (String(url).includes('/api/models/')
+      ? { ok: false, status: 503, json: async () => ({}), headers: { get: () => null } }
+      : bodyResponse(Buffer.from('body'), { headers: { 'content-length': '4' } })),
+  });
+
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'body');
+  assert.ok(!fs.existsSync(`${dest}.part.rev`), 'no stamp survives a completed download');
+});
+
+test('two consecutive failed lookups do NOT resume onto each other', async () => {
+  // The dangerous case: stamping the literal 'main' twice makes bytes from two
+  // genuinely different HEADs compare equal and get concatenated.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  // A partial left by a previous session that also could not resolve.
+  fs.writeFileSync(`${dest}.part`, 'old-head-prefix');
+  fs.writeFileSync(`${dest}.part.rev`, 'main');
+
+  let rangeSeen = 'unset';
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url, init) => {
+      if (String(url).includes('/api/models/')) {
+        return { ok: false, status: 500, json: async () => ({}), headers: { get: () => null } };
+      }
+      rangeSeen = init?.headers?.Range ?? null;
+      return bodyResponse(Buffer.from('whole'), { headers: { 'content-length': '5' } });
+    },
+  });
+
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(rangeSeen, null, 'must refetch from zero, never Range-resume an unprovable partial');
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'whole');
+});
+
+// ── replacing an existing model must never destroy it first ───────────────
+
+test('re-downloading over an existing model replaces it and leaves no debris', async () => {
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  fs.writeFileSync(dest, 'the previously working model');
+
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url) => (String(url).includes('/api/models/')
+      ? metadataResponse('cafe1234')
+      : bodyResponse(Buffer.from('replacement'), { headers: { 'content-length': '11' } })),
+  });
+
+  await dl.download(MODEL, dest, () => {}, new AbortController().signal);
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'replacement');
+  assert.ok(!fs.existsSync(`${dest}.old`), 'the move-aside backup is cleaned up on success');
+  assert.ok(!fs.existsSync(`${dest}.part`), 'no partial is left behind');
+  assert.ok(!fs.existsSync(`${dest}.part.rev`), 'no stamp is left behind');
+});
+
+test('a failed replace keeps BOTH the old model and the resumable partial', async () => {
+  // The Windows case the friendly EPERM message exists for: an extension still
+  // holds the old file open. Simulated by making the final rename throw.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  fs.writeFileSync(dest, 'the previously working model');
+
+  // Thrown on EVERY attempt: the downloader retries, so a one-shot failure
+  // would simply be recovered and prove nothing about the failure path.
+  const realRename = fs.renameSync;
+  fs.renameSync = (from, to) => {
+    if (String(from).endsWith('.part')) {
+      const e = new Error('in use');
+      e.code = 'EBUSY';
+      throw e;
+    }
+    return realRename(from, to);
+  };
+
+  try {
+    const dl = new HuggingFaceModelDownloader({
+      logger: { info: () => {}, warn: () => {} },
+      fetchImpl: async (url) => (String(url).includes('/api/models/')
+        ? metadataResponse('cafe1234')
+        : bodyResponse(Buffer.from('replacement'), { headers: { 'content-length': '11' } })),
+    });
+    await assert.rejects(
+      () => dl.download(MODEL, dest, () => {}, new AbortController().signal),
+      /in use|EBUSY/i,
+    );
+  } finally {
+    fs.renameSync = realRename;
+  }
+
+  assert.equal(
+    fs.readFileSync(dest, 'utf8'),
+    'the previously working model',
+    'the user must not be left with no model at all',
+  );
+  assert.ok(fs.existsSync(`${dest}.part.rev`), 'the stamp survives so the finished .part is resumable');
+});
