@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useId } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useId, useMemo } from 'react';
 import { useT } from '../i18n';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { ArrowLeft, Search, Mail, Link, ChevronDown, Play, ArrowUp, Copy, Check, MoreHorizontal, Settings, ArrowRight, RefreshCw, Info, Eye, EyeOff, History, Pencil, X, ChevronRight } from 'lucide-react';
@@ -14,6 +14,7 @@ import remarkGfm from 'remark-gfm';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-light';
 import { vividDarkCodeTheme } from '../lib/codeTheme';
 import { splitGistLine } from '../lib/displayMarkup';
+import { splitIntoWordRuns } from '../lib/textRevealAnimation.mjs';
 
 registerPrismLanguages();
 
@@ -896,7 +897,282 @@ interface Meeting {
         answer?: string;
         items?: string[];
     }>;
+    summaryStatus?: MeetingSummaryStatus;
 }
+
+// Mirrors SummaryStatus in electron/services/meeting/MeetingSummaryV3.ts. The
+// renderer can't import from electron/, so this copy has to move with it; the
+// allow-list below is validated against the same set in
+// DatabaseManager.updateSummaryStatus.
+type MeetingSummaryStatus =
+    | 'queued'
+    | 'chunking'
+    | 'summarizing_chunks'
+    | 'reducing'
+    | 'validating'
+    | 'completed'
+    | 'failed';
+
+// Gate the skeleton on the status ALLOW-LIST, never on "the summary is empty".
+// Three separate states persist an empty detailedSummary and must not shimmer:
+// a failed generation, the zero-eligible "Chat session" path (which is written
+// straight to 'completed'), and pre-column rows whose status is undefined.
+const SUMMARY_IN_PROGRESS: ReadonlySet<string> = new Set<MeetingSummaryStatus>([
+    'queued',
+    'chunking',
+    'summarizing_chunks',
+    'reducing',
+    'validating',
+]);
+
+// One placeholder line. Height is the type's cap height, not its line box, and
+// the radius is a full pill — it should read as a stroke of text waiting to be
+// set, not as a wireframe block. The tone carries the note's own typographic
+// hierarchy (see --mn-skel-* in index.css); the breath lives in `.mn-skel`.
+const SkeletonLine: React.FC<{
+    w: number | string;
+    h?: number;
+    tone?: 'strong' | 'base' | 'soft';
+    className?: string;
+}> = ({ w, h = 10, tone = 'base', className = '' }) => (
+    <div
+        aria-hidden="true"
+        className={`mn-skel ${className}`}
+        style={{ width: w, height: h, borderRadius: h / 2, background: `var(--mn-skel-${tone})` }}
+    />
+);
+
+// Ragged line lengths — an even column of identical bars reads as a loading
+// widget; prose has a short last line and sentences that don't end together.
+const SKELETON_SECTIONS: ReadonlyArray<ReadonlyArray<string>> = [
+    ['94%', '77%', '86%'],
+    ['90%', '71%', '83%', '62%'],
+    ['88%', '58%'],
+];
+
+// Document-order text cascade, paced by VISUAL LINE.
+//
+// It used to be paced per word, with headings costing a fixed block weight, and
+// the whole thing normalised into a 620ms cap. Measured on a representative V3
+// note (28 visual lines, 153 animated nodes) that produced a 4ms median step
+// against a 160ms fade — a 2.5% stagger, which the eye cannot resolve. Every
+// word of a bullet therefore arrived together and the note read as it was
+// reported: block by block. The cap had silently crushed the cascade it was
+// meant to bound.
+//
+// The unit is now the visual line, measured after layout (see the cadence
+// effect), because that is the unit a reader's eye actually moves in. Words
+// sharing a line share one delay; the sweep travels DOWN the note rather than
+// along it, which is what iOS/macOS text materialisation reads like.
+//
+// STEP is the natural line-to-line beat. FLOOR is the reason the old pacing
+// failed: normalising into a cap with no lower bound lets the step collapse to
+// nothing on a long note. Below ~20ms consecutive lines are indistinguishable,
+// so the cap yields to the floor and a very long note simply runs a little past
+// it — most of that note is off-screen anyway on the fixed 732px panel.
+//
+// The step also sets the BAND — how many lines are mid-fade at any instant, which
+// is FADE / STEP. That ratio, not the step alone, is what decides whether the
+// reveal reads as a continuous sweep or as lines popping one after another:
+//
+//   step 40 / fade 220  →  ~5 lines   a hard edge stepping down the note
+//   step 28 / fade 220  →  ~8 lines   a soft gradient
+//   step 36 / fade 320  →  ~9 lines   slower, and softer still  ← current
+//
+// So slowing the reveal down is done by lengthening BOTH together. Raising the
+// step alone would make it slower and MORE stepped, which is the opposite of
+// seamless. A 22-line note now settles at ~1.4s (was ~1.1s).
+const REVEAL_LINE_STEP_MS = 36;
+const REVEAL_LINE_STEP_MIN_MS = 20;
+const REVEAL_CASCADE_CAP_MS = 1400;
+
+// The longer leg of the per-line animation. MUST stay in step with
+// `mn-line-blur` in src/index.css: the teardown timer is derived from it,
+// and a timer that fires early snaps the un-revealed tail to full opacity.
+const REVEAL_LINE_FADE_MS = 320;
+
+// Lines are ~20px apart at the tightest text size on this panel (measured on the
+// follow-up <pre>), so 5px separates real lines while still absorbing the couple
+// of pixels a differently-sized inline (<code>, <strong>) can sit off by. It is
+// deliberately NOT large enough to need to absorb a bullet dot's `mt-2` offset —
+// dots are excluded from measurement and inherit their bullet's first line.
+const REVEAL_LINE_TOLERANCE_PX = 5;
+
+// The cascade cannot start at t=0. This component mounts INSIDE Launcher's
+// list → notes transition, whose content layer fades in over 340ms after a 150ms
+// delay — so a cascade starting immediately runs, and finishes, behind a panel
+// the reader cannot see yet. Measured: the first word animated at panel opacity
+// 0.00, and every word of a 30-word note had already settled by the time the
+// panel reached full opacity at 533ms. The reveal was real and completely
+// invisible.
+//
+// 300ms is the panel's own delay plus roughly half its fade: the first words land
+// as the surface becomes legible and the bulk of the wave plays against a fully
+// opaque panel, without ever leaving a visible-but-empty note on screen. It also
+// suits the other trigger — the placeholder's 260ms defocus finishes just as the
+// words begin.
+const REVEAL_START_DELAY_MS = 300;
+
+/** Delay for a unit sitting on visual line `lineIndex`. */
+const revealDelayMs = (lineIndex: number, stepMs: number) =>
+    Math.round(REVEAL_START_DELAY_MS + lineIndex * stepMs);
+
+/** Line-to-line beat for a note of `lineCount` visual lines. The cap bounds the
+ *  envelope on ordinary notes; the floor stops it collapsing on long ones. */
+const revealStepFor = (lineCount: number) => Math.round(Math.min(
+    REVEAL_LINE_STEP_MS,
+    Math.max(REVEAL_LINE_STEP_MIN_MS, REVEAL_CASCADE_CAP_MS / Math.max(1, lineCount - 1)),
+));
+
+/** What the cadence effect measures: which visual line each animated unit landed
+ *  on, plus the beat that spacing implies. `null` until the first layout pass. */
+type RevealCadence = { lineOf: number[]; step: number; lineCount: number };
+
+const HANDOFF_EASE = [0.23, 1, 0.32, 1] as [number, number, number, number];
+
+// The pipeline's real stages, in order. The note is never 0% done (work started
+// the moment the meeting ended) and never 100% (it isn't saved yet), so the rail
+// is scaled across n+1 slots and can only ever move forward.
+const SUMMARY_STAGES: ReadonlyArray<MeetingSummaryStatus> = [
+    'queued', 'chunking', 'summarizing_chunks', 'reducing', 'validating',
+];
+
+/**
+ * The Summary tab while the note is still being written. Deliberately shaped
+ * like the finished note rather than like a spinner: same overview block, same
+ * "Summary" heading, same bullet rhythm, same follow-up card, same line boxes.
+ *
+ * One intentional divergence from the Company Intel skeleton it's modelled on:
+ * that panel prints its section headers as real text because its sections are
+ * fixed. A meeting's come from the mode template in `sectionsV3` and are unknown
+ * until generation finishes, so every header below "Summary" is a bar rather
+ * than a guessed title.
+ */
+const MeetingNotesSkeleton: React.FC<{
+    status: MeetingSummaryStatus | undefined;
+    isLight: boolean;
+    still: boolean;
+    t: (text: string) => string;
+}> = ({ status, isLight, still, t }) => {
+    const statusLabel =
+        status === 'chunking' ? t('Reading the transcript')
+        : status === 'summarizing_chunks' ? t('Summarizing')
+        : status === 'reducing' ? t('Pulling it together')
+        : status === 'validating' ? t('Checking it against the transcript')
+        : t('Writing your notes');
+
+    const stage = SUMMARY_STAGES.indexOf(status as MeetingSummaryStatus);
+    const progress = ((stage < 0 ? 0 : stage) + 1) / (SUMMARY_STAGES.length + 1);
+
+    // Sections lift in on a short ease-out stagger, the same beat the real
+    // note's cards use. Reduced motion keeps the fade and drops the travel.
+    const enter = (i: number) => (still
+        ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
+        : {
+            initial: { opacity: 0, y: 8 },
+            animate: { opacity: 1, y: 0 },
+            transition: { duration: 0.28, ease: [0.23, 1, 0.32, 1] as [number, number, number, number], delay: 0.05 * i },
+        });
+
+    // h-[23px] is the real bullet's line box (text-sm x leading-relaxed), so the
+    // list keeps its exact height when the sentences arrive — the rows swap in
+    // place instead of the page growing under the reader.
+    const bullet = (dot: { className?: string; style?: React.CSSProperties }, w: string, key: React.Key) => (
+        <li key={key} className="flex items-start gap-3">
+            <div className={`mn-skel shrink-0 mt-2 w-1.5 h-1.5 rounded-full ${dot.className ?? ''}`} style={dot.style} />
+            <div className="h-[23px] flex items-center min-w-0 flex-1">
+                <SkeletonLine w={w} />
+            </div>
+        </li>
+    );
+
+    return (
+        // No aria-busy here: it tells assistive tech to hold announcements until
+        // it flips to false, and this whole region unmounts the moment the notes
+        // land — it would never flip, so the progress label would never be read.
+        <div role="status" aria-live="polite" data-generating="true">
+            <span className="sr-only">{statusLabel}</span>
+
+            {/* Overview prose + its rule. The real note opens with this block, so
+                leaving it out floats everything below it ~240px up the page and
+                drops it again the moment the notes land. */}
+            <motion.div {...enter(0)} className="pb-5 border-b border-border-subtle" aria-hidden="true">
+                {['97%', '99%', '93%', '46%'].map((w, i) => (
+                    <div key={i} className="h-[23px] flex items-center">
+                        <SkeletonLine w={w} />
+                    </div>
+                ))}
+            </motion.div>
+
+            {/* Sits where the real note's toolbar sits, so nothing jumps when the
+                toolbar replaces it. The rail is the honest part: the pipeline
+                reports five real stages, so show which one you're on instead of
+                a dot that pulses and says nothing. */}
+            <motion.div {...enter(1)} className="mt-6 mb-6 flex items-center gap-2.5" aria-hidden="true">
+                <div className="h-[3px] w-11 rounded-full overflow-hidden shrink-0" style={{ background: 'var(--mn-skel-base)' }}>
+                    <motion.div
+                        className="h-full w-full rounded-full bg-accent-primary"
+                        style={{ transformOrigin: 'left center' }}
+                        initial={{ scaleX: still ? progress : 0 }}
+                        animate={{ scaleX: progress }}
+                        // Apple's move/reposition spring: critically damped,
+                        // response 0.4. No bounce — nothing was flicked, and a
+                        // progress rail that overshoots is lying twice.
+                        transition={still ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.4 }}
+                    />
+                </div>
+                <AnimatePresence initial={false} mode="wait">
+                    <motion.span
+                        key={statusLabel}
+                        initial={still ? { opacity: 0 } : { opacity: 0, y: 3 }}
+                        animate={still ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                        exit={still ? { opacity: 0 } : { opacity: 0, y: -3 }}
+                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                        className="text-[11px] font-medium text-text-tertiary"
+                    >
+                        {statusLabel}
+                    </motion.span>
+                </AnimatePresence>
+            </motion.div>
+
+            {/* "Summary" is the one heading the note always has, so it's real text. */}
+            <motion.section {...enter(2)} className="mb-8">
+                <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Summary')}</h2>
+                <ul className="space-y-3">
+                    {SKELETON_SECTIONS[0].map((w, i) => bullet({ className: 'bg-blue-400/70' }, w, i))}
+                </ul>
+            </motion.section>
+
+            {SKELETON_SECTIONS.slice(1).map((widths, si) => (
+                <motion.section key={si} {...enter(3 + si)} className="mb-8">
+                    {/* h-7 matches the text-lg heading's line box, so the real title
+                        lands without shifting the bullets under it. */}
+                    <div className="h-7 flex items-center mb-4">
+                        <SkeletonLine w={si === 0 ? 168 : 132} h={13} tone="strong" />
+                    </div>
+                    <ul className="space-y-3">
+                        {widths.map((w, i) => bullet({ style: { background: 'var(--text-secondary)', opacity: 0.5 } }, w, i))}
+                    </ul>
+                </motion.section>
+            ))}
+
+            {/* Follow-up draft — header bar plus the bordered prose card. */}
+            <motion.section {...enter(5)} className="mb-8">
+                <div className="h-7 flex items-center mb-3">
+                    <SkeletonLine w={118} h={13} tone="strong" />
+                </div>
+                <div className={`p-3 rounded-[10px] border ${isLight ? 'border-black/[0.06] bg-black/[0.015]' : 'border-white/10 bg-white/[0.02]'}`}>
+                    {/* h-5 is the draft's own line box (text-[12.5px] x leading-relaxed). */}
+                    {['86%', '93%', '69%'].map((w, i) => (
+                        <div key={i} className="h-5 flex items-center">
+                            <SkeletonLine w={w} h={9} tone="soft" />
+                        </div>
+                    ))}
+                </div>
+            </motion.section>
+        </div>
+    );
+};
 
 interface MeetingDetailsProps {
     meeting: Meeting;
@@ -938,7 +1214,20 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const v3Tldr = meeting.detailedSummary?.tldr || [];
     const v3WhatChanged = meeting.detailedSummary?.whatChanged || [];
     const v3Mode = meeting.detailedSummary?.mode;
-    const v3SummaryStatus = (meeting as any).summaryStatus as string | undefined;
+    const v3SummaryStatus = meeting.summaryStatus;
+
+    // Post-meeting generation state. `isSummaryGenerating` drives the skeleton;
+    // `hasRenderableNotes` keeps the failure card off a meeting whose V3 pass
+    // failed but whose V2 fallback still produced something worth showing.
+    const isSummaryGenerating = SUMMARY_IN_PROGRESS.has(v3SummaryStatus ?? '');
+    const hasRenderableNotes = Boolean(
+        isV3Summary
+        || meeting.detailedSummary?.overview?.trim()
+        || (meeting.detailedSummary?.actionItems?.length ?? 0) > 0
+        || (meeting.detailedSummary?.keyPoints?.length ?? 0) > 0,
+    );
+    const showSummaryFailure = v3SummaryStatus === 'failed' && !hasRenderableNotes;
+
 
     // Normalize follow-up draft (object in V3, legacy string).
     const rawFollowUp = meeting.detailedSummary?.followUpDraft;
@@ -957,7 +1246,279 @@ const MeetingDetails: React.FC<MeetingDetailsProps> = ({ meeting: initialMeeting
     const [pendingScrollTs, setPendingScrollTs] = useState<number | null>(null);
     const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
     const [speakerDraft, setSpeakerDraft] = useState('');
+    // Armed for exactly one materialisation: on mount when the notes are already
+    // there, and again the moment generation finishes. Dropped when the cascade
+    // ends, after which React renders plain strings — so no span survives into
+    // selection, copy, or a later re-render.
+    const [revealing, setRevealing] = useState(false);
+    // Measured in a layout pass, not derivable at render time — which line each
+    // animated unit landed on once the text had actually wrapped. `null` means
+    // "not measured yet": the first pass renders the units held invisible and
+    // this effect supplies the delays before the browser ever paints them.
+    const [cadence, setCadence] = useState<RevealCadence | null>(null);
+    const notesRef = useRef<HTMLDivElement | null>(null);
     const prefersReducedMotion = useReducedMotion();
+
+    useEffect(() => {
+        if (isSummaryGenerating || !hasRenderableNotes) { setRevealing(false); setCadence(null); return; }
+        setRevealing(true);
+        setCadence(null);
+    }, [isSummaryGenerating, hasRenderableNotes]);
+
+    // The placeholder defocuses out on this Framer exit, on a layer that unmounts
+    // straight after — so it can leave no filter behind — while the note itself
+    // materialises word by word underneath (see revealWords / index.css). The
+    // words carry the focus work: an additional 6px blur on the whole layer would
+    // nest under each word's own 2px blur and compound both.
+    //
+    // AnimatePresence runs in popLayout mode so the outgoing layer leaves flow on
+    // the same frame the exit starts — animating `position` by hand left one frame
+    // with BOTH layers in flow, and that momentary reflow was enough to send the
+    // tab row's shared-layout indicator flying across the header.
+    const handoffExit = prefersReducedMotion
+        ? { opacity: 0, transition: { duration: 0.16 } }
+        : { opacity: 0, filter: 'blur(6px)', transition: { duration: 0.26, ease: HANDOFF_EASE } };
+    const revealOn = revealing && !prefersReducedMotion;
+
+    // ── Cadence measurement ────────────────────────────────────────────────
+    // Runs BEFORE paint, so the two passes are invisible: pass 1 renders every
+    // animated unit carrying `data-rw` and held at opacity 0 (`.mn-line-hold`),
+    // this reads where each one actually landed, and the setState re-render
+    // supplies the delays. React owns the spans throughout — nothing is written
+    // into the DOM behind its back, so an unrelated re-render mid-cascade cannot
+    // strip the delays off again.
+    //
+    // Measurement is scoped to the NOTES FLOW, and the title is placed ahead of it
+    // by construction rather than by geometry. That is not a shortcut — measuring
+    // across the two boxes is unsound, in both available coordinate systems:
+    //
+    //   • Viewport rects: the title lives in a `position: sticky` header. The notes
+    //     also land under a reader already watching the placeholder — the other
+    //     trigger REVEAL_START_DELAY_MS was tuned for — and by then <main> may be
+    //     scrolled. A stuck title does not scroll away, so its rect top lands BELOW
+    //     content that precedes it in document order, the monotonic grouping never
+    //     advances, and the whole prefix collapses onto one line. Measured at
+    //     scrollTop 260: title + both overview lines all arrived together.
+    //   • offsetTop: no better. Chrome reports a sticky element's STUCK offset, so
+    //     the title measured 352 against the overview's 232 — same collapse, and
+    //     the chain walk needed to compare depths buys nothing.
+    //
+    // Within the notes flow nothing is sticky, so a plain rect delta is exact, and
+    // it is a DIFFERENCE — immune to the translate/scale Launcher's page transition
+    // may still be applying while this runs. The title is always the line above
+    // that flow, which needs no measuring at all.
+    useLayoutEffect(() => {
+        if (!revealOn) { setCadence(null); return; }
+        if (cadence) return;
+        const root = notesRef.current;
+        if (!root) return;
+        const units = root.querySelectorAll<HTMLElement>('[data-rw]');
+        if (!units.length) { setCadence({ lineOf: [], step: REVEAL_LINE_STEP_MS, lineCount: 1 }); return; }
+
+        const originTop = root.getBoundingClientRect().top;
+        const lineOf: number[] = [];
+        // Line 0 is the title, which sits above this flow and is not measured, so
+        // the first measured line is line 1.
+        let lineIndex = 0;
+        let lineTop = -Infinity;
+        // Document order is also visual order here, so a top that has moved further
+        // down than the tolerance starts a new line and nothing needs sorting.
+        for (const unit of units) {
+            const top = unit.getBoundingClientRect().top - originTop;
+            if (top > lineTop + REVEAL_LINE_TOLERANCE_PX) { lineIndex += 1; lineTop = top; }
+            lineOf[Number(unit.dataset.rw)] = lineIndex;
+        }
+        const lineCount = lineIndex + 1;
+        setCadence({ lineOf, step: revealStepFor(lineCount), lineCount });
+    }, [revealOn, cadence]);
+
+    // Teardown, derived from the cadence that was actually assigned rather than
+    // from a cap — the floor lets a long note run past CAP, and a timer that
+    // fires early would drop `revealing`, re-render plain strings, and snap the
+    // un-revealed tail to full opacity mid-sweep.
+    useEffect(() => {
+        if (!revealing || !cadence) return;
+        const settles = revealDelayMs(Math.max(0, cadence.lineCount - 1), cadence.step) + REVEAL_LINE_FADE_MS;
+        const id = setTimeout(() => setRevealing(false), settles + 80);
+        return () => clearTimeout(id);
+    }, [revealing, cadence]);
+
+    // The cascade allocator. A plain `let` in the render body: recomputed from
+    // scratch on every render, so it needs no ref and is StrictMode-safe. The JSX
+    // below is built in document order, so the counter walks the note the way a
+    // reader does, and the index it hands out is the key the measured `lineOf`
+    // table is read back with.
+    let revealSlot = 0;
+
+    /** Props for one animated unit at reveal index `idx`: invisible while the
+     *  cadence is being measured, then animating on its measured line. */
+    const revealAt = (idx: number): { className: string; style?: React.CSSProperties; 'data-rw'?: number } => {
+        if (!cadence) return { className: 'mn-line-hold', 'data-rw': idx };
+        return {
+            className: 'mn-line-cascade',
+            style: { animationDelay: `${revealDelayMs(cadence.lineOf[idx] ?? 0, cadence.step)}ms` },
+            'data-rw': idx,
+        };
+    };
+
+    /** Body text, materialising line by line. The two passes render DIFFERENT
+     *  shapes, on purpose:
+     *
+     *  Pass 1 gives every word its own span, because that is the only way to see
+     *  where the text wrapped — the measurement reads one box per word.
+     *
+     *  Pass 2 emits ONE span per visual line. Once the grouping is known the
+     *  per-word spans have no job left, and collapsing them is what makes the
+     *  cascade cheap: a representative note goes from 188 animated nodes and 376
+     *  running animations to 29 and 58. Measured: the cascade's own frame cost at
+     *  the start of the sweep roughly halves. It also looks better — the blur now
+     *  covers a whole line as one surface instead of leaving a per-word island at
+     *  every space.
+     *
+     *  Line breaks are preserved because the concatenated text is byte-identical
+     *  and inline elements do not affect line breaking; the whitespace a break
+     *  falls on is kept with the line before it. */
+    const revealWords = (text: string): React.ReactNode => {
+        if (!revealOn) return text;
+        const runs = splitIntoWordRuns(text);
+        if (!cadence) {
+            return runs.map((run, i) => (run.isWord
+                ? <span key={i} {...revealAt(revealSlot++)}>{run.text}</span>
+                : <React.Fragment key={i}>{run.text}</React.Fragment>));
+        }
+        const out: React.ReactNode[] = [];
+        let buf = '';
+        let line: number | null = null;
+        const flush = () => {
+            if (!buf) return;
+            out.push(
+                <span
+                    key={out.length}
+                    className="mn-line-cascade"
+                    style={{ animationDelay: `${revealDelayMs(line ?? 0, cadence.step)}ms` }}
+                >{buf}</span>,
+            );
+            buf = '';
+        };
+        for (const run of runs) {
+            if (run.isWord) {
+                const at = cadence.lineOf[revealSlot++] ?? 0;
+                if (line !== null && at !== line) flush();
+                line = at;
+            }
+            buf += run.text;
+        }
+        flush();
+        return out;
+    };
+
+    /** The title. It leads the cascade on line 0 by construction: it lives in the
+     *  sticky header, a box that cannot be soundly measured against the notes flow
+     *  (see the cadence effect), and it is unconditionally the line above it. Takes
+     *  no reveal index, because it is never measured. */
+    const revealLead = (): { cls: string; style?: React.CSSProperties } => {
+        if (!revealOn) return { cls: '' };
+        if (!cadence) return { cls: ' mn-line-hold' };
+        return { cls: ' mn-line-cascade', style: { animationDelay: `${revealDelayMs(0, cadence.step)}ms` } };
+    };
+
+    /** A unit that is measured as a whole — a heading whose words must not be
+     *  split. Occupies one line of the cascade. */
+    const revealBlock = (): { cls: string; style?: React.CSSProperties; 'data-rw'?: number } => {
+        if (!revealOn) return { cls: '' };
+        const { className, style, ...rest } = revealAt(revealSlot++);
+        return { cls: ` ${className}`, style, ...rest };
+    };
+
+    /** A unit that must NOT be measured, because its own box does not sit on the
+     *  line it belongs to — the bullet dots carry `mt-2`, which would otherwise
+     *  either split a line or force the grouping tolerance wide enough to merge
+     *  two real ones. `idx` is the reveal index of the first word of the bullet
+     *  text the dot introduces, so the dot lands exactly with it. */
+    const revealWith = (idx: number): { cls: string; style?: React.CSSProperties } => {
+        if (!revealOn) return { cls: '' };
+        if (!cadence) return { cls: ' mn-line-hold' };
+        return {
+            cls: ' mn-line-cascade',
+            style: { animationDelay: `${revealDelayMs(cadence.lineOf[idx] ?? 0, cadence.step)}ms` },
+        };
+    };
+
+    /** An opacity-only floor under a subtree whose text is wrapped word by word.
+     *  It is MEASURED like any other unit — its own box top is the top of its first
+     *  line of text, so it clusters onto that line and can only ever hide text that
+     *  would otherwise have popped in at t=0.
+     *
+     *  It deliberately does NOT read `lineOf[revealSlot]`. ReactMarkdown renders in
+     *  a child pass, so the word spans inside this container are allocated their
+     *  indices long AFTER this function runs — the slot counter here points at an
+     *  unrelated later unit, which would hold the overview hidden past its own
+     *  words' delays. Measuring the container sidesteps the ordering entirely. */
+    const revealGuard = (): { cls: string; style?: React.CSSProperties; 'data-rw'?: number } => {
+        if (!revealOn) return { cls: '' };
+        const { className, style, ...rest } = revealAt(revealSlot++);
+        return { cls: className === 'mn-line-hold' ? ' mn-line-hold' : ' mn-line-guard', style, ...rest };
+    };
+
+    /** ReactMarkdown renders the overview, so its text never passed through
+     *  `revealWords` and the whole paragraph — the largest slab of prose in the
+     *  note — arrived as one block. This maps the string children of every
+     *  text-bearing element through the cascade. Elements are visited in render
+     *  order, which is document order, so the slot counter stays coherent. */
+    const revealMarkdownChildren = (children: React.ReactNode): React.ReactNode => {
+        if (!revealOn) return children;
+        return React.Children.map(children, (child) =>
+            (typeof child === 'string' ? revealWords(child) : child));
+    };
+
+    // Keep the view live while the note is still being written. The meeting row
+    // changes underneath us — the status advances queued → … → completed and the
+    // notes land in one write — but this component seeds from a prop and never
+    // re-reads it, and Launcher's `meetings-updated` handler refreshes only the
+    // list, not the open meeting. Without this the placeholder would never resolve.
+    //
+    // Both signals are needed. `meetings-updated` now fires on completion AND on
+    // hard failure, which makes both swaps immediate — but the stage advances
+    // (queued → chunking → reducing → …) are written straight to SQLite and never
+    // broadcast, so on the listener alone the progress rail would sit frozen for
+    // the whole generation. The poll reads those, and backstops any notification
+    // that never arrives. Both are torn down the moment generation ends.
+    useEffect(() => {
+        if (!isSummaryGenerating) return;
+        let cancelled = false;
+        const refresh = async () => {
+            try {
+                const fresh = await window.electronAPI?.getMeetingDetails?.(meeting.id) as Meeting | undefined;
+                if (cancelled || !fresh) return;
+                // Re-seed the row-key arrays alongside the notes: they were built
+                // from the empty placeholder, so the legacy lists would otherwise
+                // render with undefined keys the first time real items arrive.
+                if (!SUMMARY_IN_PROGRESS.has(fresh.summaryStatus ?? '')) {
+                    setActionItemKeys((fresh.detailedSummary?.actionItems ?? []).map(() => genMessageId()));
+                    setKeyPointKeys((fresh.detailedSummary?.keyPoints ?? []).map(() => genMessageId()));
+                }
+                setMeeting(fresh);
+            } catch { /* swallow — the next tick retries */ }
+        };
+        // Back off rather than stop. A generation still going after ten minutes is
+        // almost certainly hung — recoverUnprocessedMeetings only retries such a
+        // row at the NEXT app start — but "almost certainly" is not certain, and a
+        // poll that simply retired would leave the placeholder breathing at a view
+        // that has quietly stopped listening. Widening to 30s costs nothing (a
+        // local sqlite read) and keeps a late completion able to land.
+        const startedMs = Date.now();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const schedule = () => {
+            const delay = Date.now() - startedMs < 600_000 ? 2_000 : 30_000;
+            timer = setTimeout(async () => {
+                await refresh();
+                if (!cancelled) schedule();
+            }, delay);
+        };
+        schedule();
+        const off = window.electronAPI?.onMeetingsUpdated?.(() => { void refresh(); });
+        return () => { cancelled = true; if (timer) clearTimeout(timer); off?.(); };
+    }, [isSummaryGenerating, meeting.id]);
 
     const copyRecipe = (text: string) => {
         navigator.clipboard?.writeText(text || '').catch(() => { /* swallow */ });
@@ -1216,14 +1777,41 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 {new Date(meeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                             </div>
 
-                            {/* Editable Title */}
-                            <EditableTextBlock
-                                initialValue={meeting.title}
-                                onSave={handleTitleSave}
-                                tagName="h1"
-                                className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
-                                multiline={false}
-                            />
+                            {/* Editable Title — a bar while the note is being written. The
+                                placeholder row's title is the literal "Processing...", and
+                                regeneration overwrites the title on completion anyway, so an
+                                editable field here would only invite an edit that gets thrown
+                                away. h-11 is the field's own height (36px line box + py-1),
+                                so the real title lands without moving the tabs. */}
+                            {/* The title rides the same handoff as the body (see
+                                handoffExit/handoffEnter) rather than snapping from bar to
+                                text. Only the OUTGOING layer is taken out of flow, so a
+                                long title still sizes this box for itself — a fixed height
+                                here would clip the two-line case. */}
+                            <div className="relative">
+                                <AnimatePresence initial={false} mode="popLayout">
+                                    {isSummaryGenerating ? (
+                                        <motion.div
+                                            key="title-generating"
+                                            className="h-11 flex items-center"
+                                            aria-hidden="true"
+                                            exit={handoffExit}
+                                        >
+                                            <SkeletonLine w={260} h={22} tone="strong" />
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div key="title" {...(() => { const r = revealLead(); return { className: r.cls.trim() || undefined, style: r.style }; })()}>
+                                            <EditableTextBlock
+                                                initialValue={meeting.title}
+                                                onSave={handleTitleSave}
+                                                tagName="h1"
+                                                className="text-3xl font-bold text-text-primary tracking-tight -ml-2 px-2 py-1 rounded-md transition-colors"
+                                                multiline={false}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
                         </div>
 
                         {/* Moved Actions: Follow-up & Share (REMOVED per user request) */}
@@ -1263,9 +1851,13 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                         </div>
 
                         {/* Copy Button - Inline with Tabs (Always visible) */}
+                        {/* handleCopy's summary branch reads detailedSummary, which is a
+                            truthy-but-empty placeholder during generation — copying would
+                            silently yield a header and nothing else. */}
                         <button
                             onClick={handleCopy}
-                            className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors"
+                            disabled={activeTab === 'summary' && isSummaryGenerating}
+                            className="flex items-center gap-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:text-text-secondary"
                         >
                             {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                             {isCopied ? t('Copied') : activeTab === 'summary' ? t('Copy full summary') : activeTab === 'transcript' ? t('Copy full transcript') : t('Copy usage')}
@@ -1284,29 +1876,90 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                     <div className="space-y-8">
                         {/* Using standard divs for content, framer motion for layout */}
                         {activeTab === 'summary' && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                                {/* Overview - Rendered as Markdown */}
-                                {meeting.detailedSummary?.overview && (
-                                <div className="pb-5 border-b border-border-subtle prose prose-sm max-w-none">
+                        <div className="relative">
+                        <AnimatePresence initial={false} mode="popLayout">
+                        {isSummaryGenerating ? (
+                            <motion.div
+                                key="generating"
+                                exit={handoffExit}
+                            >
+                                <MeetingNotesSkeleton
+                                    status={v3SummaryStatus}
+                                    isLight={isLight}
+                                    still={Boolean(prefersReducedMotion)}
+                                    t={t}
+                                />
+                            </motion.div>
+                        ) : showSummaryFailure ? (
+                            /* Generation failed with nothing to fall back on. The transcript
+                               is already saved, and regenerateSavedMeeting only needs that —
+                               so the retry is real, not a dead-end message. */
+                            <motion.div
+                                key="failed"
+                                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                                transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
+                                className={`px-4 py-5 rounded-[10px] border ${isLight ? 'border-black/[0.08] bg-black/[0.015]' : 'border-white/10 bg-white/[0.02]'}`}
+                            >
+                                <p className="text-sm font-semibold text-text-primary mb-1">{t("Notes couldn't be generated")}</p>
+                                <p className="text-[12.5px] text-text-secondary leading-relaxed mb-4">
+                                    {t('The full transcript is saved — you can generate the notes again.')}
+                                </p>
+                                <motion.button
+                                    type="button"
+                                    onClick={() => handleRegenerate()}
+                                    disabled={isRegenerating}
+                                    whileTap={prefersReducedMotion || isRegenerating ? undefined : { scale: 0.97 }}
+                                    transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                                    className={`h-8 inline-flex items-center gap-1.5 text-[12px] font-medium px-3 rounded-md text-text-primary disabled:opacity-50 transition-colors ${isLight ? 'bg-black/[0.05] hover:bg-black/[0.09]' : 'bg-white/[0.06] hover:bg-white/[0.1]'}`}
+                                >
+                                    <RefreshCw
+                                        className={`w-3.5 h-3.5 shrink-0 ${isRegenerating && !prefersReducedMotion ? 'animate-spin' : ''}`}
+                                        strokeWidth={2}
+                                    />
+                                    <span>{isRegenerating ? t('Generating…') : t('Try again')}</span>
+                                </motion.button>
+                            </motion.div>
+                        ) : (
+                            <motion.div
+                                key="notes"
+                                ref={notesRef}
+                                className={revealing && prefersReducedMotion ? 'mn-reveal-reduced' : undefined}
+                            >
+                                {/* Overview — the largest slab of prose in the note, and the one that made
+                                    the old cascade read as "block by block": it renders through ReactMarkdown,
+                                    so its text never passed through revealWords and the whole paragraph
+                                    arrived on a single delay. The overrides below route every element's string
+                                    children through the cascade, so it now sweeps line by line like the rest.
+
+                                    The container keeps an OPACITY-ONLY guard on the first of those lines. It is
+                                    not decoration: react-markdown can emit text this component does not override
+                                    (a table cell, a code span), and anything unwrapped would otherwise sit at
+                                    full opacity from the very first frame while the prose around it swept in —
+                                    which reads worse than the block reveal being replaced. Opacity only, because
+                                    a blur here would nest under each word's own blur and compound both. */}
+                                {meeting.detailedSummary?.overview && (() => { const g = revealGuard(); return (
+                                <div className={`pb-5 border-b border-border-subtle prose prose-sm max-w-none${g.cls}`} style={g.style} data-rw={g['data-rw']}>
                                     <ReactMarkdown
                                         remarkPlugins={[remarkGfm]}
                                         components={{
-                                            h1: ({ node, ...props }) => <h1 className="text-xl font-bold text-text-primary mt-4 mb-2" {...props} />,
-                                            h2: ({ node, ...props }) => <h2 className="text-lg font-semibold text-text-primary mt-4 mb-2" {...props} />,
-                                            h3: ({ node, ...props }) => <h3 className="text-base font-semibold text-text-primary mt-3 mb-1" {...props} />,
-                                            p: ({ node, ...props }) => <p className="text-sm text-text-secondary leading-relaxed mb-2" {...props} />,
+                                            h1: ({ node, children, ...props }) => <h1 className="text-xl font-bold text-text-primary mt-4 mb-2" {...props}>{revealMarkdownChildren(children)}</h1>,
+                                            h2: ({ node, children, ...props }) => <h2 className="text-lg font-semibold text-text-primary mt-4 mb-2" {...props}>{revealMarkdownChildren(children)}</h2>,
+                                            h3: ({ node, children, ...props }) => <h3 className="text-base font-semibold text-text-primary mt-3 mb-1" {...props}>{revealMarkdownChildren(children)}</h3>,
+                                            p: ({ node, children, ...props }) => <p className="text-sm text-text-secondary leading-relaxed mb-2" {...props}>{revealMarkdownChildren(children)}</p>,
                                             ul: ({ node, ...props }) => <ul className="list-disc ml-4 mb-2 space-y-1" {...props} />,
                                             ol: ({ node, ...props }) => <ol className="list-decimal ml-4 mb-2 space-y-1" {...props} />,
-                                            li: ({ node, ...props }) => <li className="text-sm text-text-secondary" {...props} />,
-                                            strong: ({ node, ...props }) => <strong className="font-semibold text-text-primary" {...props} />,
-                                            a: ({ node, ...props }) => <a className="text-accent-primary hover:underline" {...props} />,
+                                            li: ({ node, children, ...props }) => <li className="text-sm text-text-secondary" {...props}>{revealMarkdownChildren(children)}</li>,
+                                            em: ({ node, children, ...props }) => <em {...props}>{revealMarkdownChildren(children)}</em>,
+                                            strong: ({ node, children, ...props }) => <strong className="font-semibold text-text-primary" {...props}>{revealMarkdownChildren(children)}</strong>,
+                                            a: ({ node, children, ...props }) => <a className="text-accent-primary hover:underline" {...props}>{revealMarkdownChildren(children)}</a>,
                                             ...makeTableComponents('text-sm leading-relaxed'),
                                         }}
                                     >
                                         {meeting.detailedSummary?.overview || ''}
                                     </ReactMarkdown>
                                 </div>
-                                )}
+                                ); })()}
 
                                 {/* V3 — product-grade structured notes: fast skim, decisions, actions, open questions, risks, quality.
                                     The four callout cards below form one coherent family: same radius, padding, icon
@@ -1457,19 +2110,27 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 )}
 
                                 {/* Summary on top — outcome-first, grounded. Then the mode's template sections below. */}
-                                {isV3Summary && v3Tldr.length > 0 && (
+                                {isV3Summary && v3Tldr.length > 0 && (() => { const h = revealBlock(); return (
                                     <section className="mb-8">
-                                        <h2 className="text-lg font-semibold text-text-primary mb-4">{t('Summary')}</h2>
+                                        <h2 className={`text-lg font-semibold text-text-primary mb-4${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Summary')}</h2>
                                         <ul className="space-y-3">
-                                            {v3Tldr.map((item, i) => (
+                                            {v3Tldr.map((item, i) => {
+                                                // The dot rides the first word of its own bullet (see revealWith):
+                                                // its `mt-2` box would otherwise measure as a line of its own.
+                                                const dot = revealWith(revealSlot);
+                                                return (
                                                 <li key={i} className="flex items-start gap-3 group">
-                                                    <div className="mt-2 w-1.5 h-1.5 rounded-full bg-blue-400/70 shrink-0" />
-                                                    <p className="text-sm text-text-secondary leading-relaxed">{item}</p>
+                                                    <div
+                                                        className={`mt-2 w-1.5 h-1.5 rounded-full bg-blue-400/70 shrink-0${dot.cls}`}
+                                                        style={dot.style}
+                                                    />
+                                                    <p className="text-sm text-text-secondary leading-relaxed">{revealWords(item)}</p>
                                                 </li>
-                                            ))}
+                                                );
+                                            })}
                                         </ul>
                                     </section>
-                                )}
+                                ); })()}
 
                                 {/* The mode's note-section TEMPLATE — the primary notes layout (e.g. Questions and
                                     responses, Discovery, Action items). Rendered right under Summary, in template order.
@@ -1478,24 +2139,41 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     <>
                                         {meeting.detailedSummary.sectionsV3
                                             .filter(section => SHOW_NEXT_STEPS || !isNextStepsSectionTitle(section.title))
-                                            .map((section) => (
+                                            .map((section) => {
+                                            const h = revealBlock();
+                                            return (
                                             <section key={section.id} className="mb-8">
-                                                <h2 className="text-lg font-semibold text-text-primary mb-4">{section.title}</h2>
+                                                <h2 className={`text-lg font-semibold text-text-primary mb-4${h.cls}`} style={h.style} data-rw={h['data-rw']}>{section.title}</h2>
                                                 <ul className="space-y-3">
-                                                    {section.bullets.map((bullet, i) => (
+                                                    {section.bullets.map((bullet, i) => {
+                                                        const dot = revealWith(revealSlot);
+                                                        return (
                                                         <li key={bullet.id || i} className="flex items-start gap-3">
-                                                            <div className="mt-2 w-1.5 h-1.5 rounded-full bg-text-secondary/60 shrink-0" />
+                                                            {/* The colour rides a style object, not `bg-text-secondary/60`:
+                                                                `text-secondary` is a bare var() reference, so Tailwind cannot
+                                                                recompute its alpha and that utility compiled to NOTHING —
+                                                                every bullet in the mode's note sections rendered with an
+                                                                invisible dot. Same token, alpha applied where it works. */}
+                                                            <div
+                                                                className={`mt-2 w-1.5 h-1.5 rounded-full shrink-0${dot.cls}`}
+                                                                // The alpha rides IN the colour rather than on `opacity`: the
+                                                                // reveal animates opacity 0 → 1 with fill-mode `both`, so an
+                                                                // `opacity: 0.6` here would be overridden to 1 for as long as the
+                                                                // animation is applied and then snap back when the class drops.
+                                                                style={{ background: 'color-mix(in srgb, var(--text-secondary) 60%, transparent)', ...dot.style }}
+                                                            />
                                                             <div className="min-w-0 flex-1">
-                                                                <p className="text-sm text-text-secondary leading-relaxed">{bullet.text}</p>
+                                                                <p className="text-sm text-text-secondary leading-relaxed">{revealWords(bullet.text)}</p>
                                                                 {showEvidence && evidenceLabel(bullet.evidence) && (
                                                                     <button type="button" onClick={() => jumpToEvidence(bullet.evidence)} className="text-[11px] text-accent-primary hover:text-accent-hover mt-1 text-left">↳ {evidenceLabel(bullet.evidence)}</button>
                                                                 )}
                                                             </div>
                                                         </li>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </ul>
                                             </section>
-                                        ))}
+                                            ); })}
                                     </>
                                 )}
 
@@ -1601,10 +2279,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                 )}
 
                                 {/* V3 follow-up draft — human prose, copy + regenerate + tone. */}
-                                {isV3Summary && followUpBody.trim() && (
+                                {isV3Summary && followUpBody.trim() && (() => { const h = revealBlock(); return (
                                     <section className="mb-8">
                                         <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
-                                            <h2 className="text-lg font-semibold text-text-primary">{t('Follow-up draft')}</h2>
+                                            <h2 className={`text-lg font-semibold text-text-primary${h.cls}`} style={h.style} data-rw={h['data-rw']}>{t('Follow-up draft')}</h2>
                                             <div className="flex items-center gap-1 p-1 rounded-lg bg-white/[0.03] border border-border-subtle">
                                                 {/* Copy — with a real copied-confirmation state. */}
                                                 <motion.button
@@ -1677,10 +2355,10 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                                 />
                                             </div>
                                         </div>
-                                        {followUpSubject && <p className="text-[12.5px] text-text-tertiary mb-1">{t('Subject:')} {followUpSubject}</p>}
-                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{followUpBody}</pre>
+                                        {followUpSubject && <p className="text-[12.5px] text-text-tertiary mb-1">{revealWords(t('Subject:'))} {revealWords(followUpSubject)}</p>}
+                                        <pre className="text-[12.5px] text-text-secondary leading-relaxed whitespace-pre-wrap font-sans select-text cursor-text p-3 rounded-[10px] border border-white/10 bg-white/[0.02]">{revealWords(followUpBody)}</pre>
                                     </section>
-                                )}
+                                ); })()}
 
                                 {/* Action Items - Only show if there are items */}
                                 {!isV3Summary && meeting.detailedSummary?.actionItems && meeting.detailedSummary.actionItems.length > 0 && (
@@ -1859,6 +2537,9 @@ ${meeting.detailedSummary.keyPoints?.map(item => `- ${item}`).join('\n') || 'Non
                                     </div>
                                 )}
                             </motion.div>
+                        )}
+                        </AnimatePresence>
+                        </div>
                         )}
 
                         {activeTab === 'transcript' && (
