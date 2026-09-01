@@ -2754,7 +2754,14 @@ body {
   cursor: default;
 }
 
-.overlay-shell-surface {
+/* Container query root for the overlay chat shell.
+   Scoped to its OWN class rather than .overlay-shell-surface: that class is
+   also on the settings popup, the model-selector panel and the settings
+   overlay, and `container-type: inline-size` brings layout + style containment
+   with it (a new stacking context, a new containing block for fixed-position
+   descendants, a new BFC). Only the chat shell needs to be queryable, so only
+   the chat shell becomes a container. */
+.overlay-shell-container {
   container-type: inline-size;
   container-name: overlay-shell;
 }
@@ -2764,6 +2771,37 @@ body {
 @container overlay-shell (max-width: 560px) {
   .overlay-input-placeholder-full { display: none; }
   .overlay-input-placeholder-compact { display: inline; }
+}
+
+/* Resize handles. The hit strips are invisible; the cursor is the entire
+   affordance, so without these rules the feature is undiscoverable. `se` gets a
+   faint corner chevron on hover — the one handle worth advertising. */
+.resize-handle {
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+.resize-handle-e { cursor: ew-resize; }
+.resize-handle-s { cursor: ns-resize; }
+.resize-handle-se { cursor: nwse-resize; }
+
+.resize-handle-se::after {
+  content: '';
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  border-bottom-right-radius: 3px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+.resize-handle-se:hover::after { opacity: 0.35; }
+
+@media (prefers-reduced-motion: reduce) {
+  .resize-handle-se::after { transition: none; }
 }
 
 .drag-region {

@@ -37,6 +37,14 @@ export interface ElectronAPI {
     width: number
     height: number
   }) => Promise<void>
+  // X-anchored overlay resize. Resolves with the size the main process
+  // ACTUALLY applied after its floor(workArea * 0.9) clamp — the renderer
+  // adopts that value so its panel width, toggle anchor and hover-gate margin
+  // never drift from the real window. Optional: older preloads lack it.
+  updateContentDimensionsCentered?: (dimensions: {
+    width: number
+    height: number
+  }) => Promise<{ width: number; height: number } | undefined>
   // Overlay aux windows (pill / resize toggle) coordination
   sendOverlayUiState?: (state: Record<string, unknown>) => Promise<void>
   onOverlayUiState?: (
