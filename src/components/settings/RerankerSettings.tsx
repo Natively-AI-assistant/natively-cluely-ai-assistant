@@ -1039,44 +1039,46 @@ export const RerankerSettings: React.FC = () => {
                 </div>
 
                 {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
-                <div className="aip-provider-row">
-                    {status.hasApiKey && (
-                        <button
-                            type="button"
-                            onClick={() => void runTest()}
-                            disabled={testing || !status.hasApiKey || !status.openrouterModel}
-                            className="aip-btn shrink-0"
-                            data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
-                            title={testResult?.message || t('Test Connection')}
-                        >
-                            {testing
-                                ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                : testResult?.success
-                                    ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                    : testResult
-                                        ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                        : <>{t('Test Connection')}</>}
-                        </button>
-                    )}
+                {(status.hasApiKey || catalog.length > 0) && (
+                    <div className="aip-provider-row">
+                        {status.hasApiKey && (
+                            <button
+                                type="button"
+                                onClick={() => void runTest()}
+                                disabled={testing || !status.hasApiKey || !status.openrouterModel}
+                                className="aip-btn shrink-0"
+                                data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
+                                title={testResult?.message || t('Test Connection')}
+                            >
+                                {testing
+                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                    : testResult?.success
+                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                        : testResult
+                                            ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                            : <>{t('Test Connection')}</>}
+                            </button>
+                        )}
 
-                    {/* Provider Model Selector matching EmbeddingSettings */}
-                    {catalog.length > 0 && (
-                        <AipModelList
-                            models={catalog.map(m => ({
-                                id: m.id,
-                                label: m.vendor ? `${m.label} · ${m.vendor}` : m.label,
-                            }))}
-                            optIn
-                            enabled={isOpenRouterActive && status.openrouterModel ? [status.openrouterModel] : []}
-                            defaultId={isOpenRouterActive ? (status.openrouterModel ?? undefined) : undefined}
-                            onToggle={(id) => void setConfig({ provider: 'openrouter', openrouterModel: id })}
-                            onSetDefault={(id) => void setConfig({ provider: 'openrouter', openrouterModel: id })}
-                            onReset={() => {}}
-                            refreshing={refreshing}
-                            onRefresh={async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
-                        />
-                    )}
-                </div>
+                        {/* Provider Model Selector matching EmbeddingSettings */}
+                        {catalog.length > 0 && (
+                            <AipModelList
+                                models={catalog.map(m => ({
+                                    id: m.id,
+                                    label: m.vendor ? `${m.label} · ${m.vendor}` : m.label,
+                                }))}
+                                optIn
+                                enabled={isOpenRouterActive && status.openrouterModel ? [status.openrouterModel] : []}
+                                defaultId={isOpenRouterActive ? (status.openrouterModel ?? undefined) : undefined}
+                                onToggle={(id) => void setConfig({ provider: 'openrouter', openrouterModel: id })}
+                                onSetDefault={(id) => void setConfig({ provider: 'openrouter', openrouterModel: id })}
+                                onReset={() => {}}
+                                refreshing={refreshing}
+                                onRefresh={async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
+                            />
+                        )}
+                    </div>
+                )}
 
                 {catalogStale && (
                     <p className="aip-meta aip-provider-note">
@@ -1091,10 +1093,10 @@ export const RerankerSettings: React.FC = () => {
                 )}
             </div>
 
-            {/* Provider Card 4: Community Extensions */}
-            <div className="aip-card aip-provider">
+            {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
+            <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
-                    <Puzzle size={16} strokeWidth={1.75} aria-hidden="true" />
+                    <Puzzle size={16} className="text-[var(--aip-accent)] shrink-0" aria-hidden="true" />
                     <h4 className="aip-card-title truncate min-w-0">{t('Reranker Extensions')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
                         <span className="aip-meta inline-flex items-center gap-1.5">
@@ -1114,169 +1116,210 @@ export const RerankerSettings: React.FC = () => {
                         </button>
                     </div>
                 </div>
-                <p className="text-[10px] aip-muted px-1 pb-1">
-                    {t('An extension teaches Natively to use custom reranking models. Extensions run locally and carry their own license.')}
+
+                <p className="text-[10px] aip-muted px-1">
+                    {t('An extension teaches Natively to use custom reranking models. Extensions run locally with full data privacy.')}
                 </p>
 
                 {installError && (
-                    <div className="aip-inline-warn flex items-start gap-2 mt-2" role="status">
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">{installError}</span>
                     </div>
                 )}
 
                 {enabledRerankerCount > 1 && (
-                    <div className="aip-inline-warn flex items-start gap-2 mt-2" role="status">
+                    <div className="aip-inline-warn flex items-start gap-2" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span>{t('More than one reranker extension is turned on, so none of them is being used. Turn off all but one.')}</span>
                     </div>
                 )}
 
-                <div className="aip-well p-3 space-y-3 my-2">
+                <div className="aip-well p-2.5 space-y-2.5">
                     {rerankerExtensions.length === 0 ? (
-                        <p className="text-[10px] aip-muted text-center py-2">{t('No reranker extensions installed.')}</p>
+                        <div className="text-center py-6 px-4 space-y-2 border border-dashed border-white/10 rounded-md">
+                            <Puzzle size={20} className="mx-auto text-white/30" aria-hidden="true" />
+                            <p className="text-xs text-white/70 font-medium">{t('No custom extensions installed')}</p>
+                            <p className="text-[10px] aip-muted max-w-xs mx-auto">
+                                {t('Install a local reranker extension from a folder to use custom scoring models.')}
+                            </p>
+                            <button
+                                type="button"
+                                className="aip-btn mt-2"
+                                data-size="sm"
+                                disabled={installing || !extensionsAvailable}
+                                onClick={() => void installFromFolder()}
+                            >
+                                <FolderOpen size={12} strokeWidth={1.75} aria-hidden="true" />
+                                <span>{t('Install Extension')}</span>
+                            </button>
+                        </div>
                     ) : (
-                        rerankerExtensions.map(ext => (
-                            <div key={ext.id} className="p-3 rounded-md border border-white/5 bg-white/[0.015] space-y-2.5">
-                                <div className="flex items-center justify-between gap-2">
-                                    <div className="min-w-0 flex-1">
-                                        <div className="text-xs font-medium text-white truncate">{ext.name} <span className="aip-muted font-normal">{ext.version}</span></div>
-                                        <div className="text-[10px] aip-muted truncate">{ext.author} · {ext.id}</div>
+                        rerankerExtensions.map(ext => {
+                            const modelsReady = ext.models.every(m => m.state === 'ready');
+                            return (
+                                <div key={ext.id} className="aip-card p-3 space-y-2.5 transition-colors hover:bg-white/[0.02]">
+                                    {/* Extension Header Row */}
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                            <span
+                                                aria-hidden="true"
+                                                className="w-1.5 h-1.5 rounded-full shrink-0"
+                                                style={{
+                                                    background: ext.running ? 'var(--aip-accent)' : ext.enabled ? 'var(--aip-tertiary)' : 'transparent',
+                                                    border: ext.enabled || ext.running ? undefined : '1px solid var(--aip-border-strong)',
+                                                }}
+                                            />
+                                            <span className="text-xs font-semibold text-white truncate">{ext.name}</span>
+                                            <span className="text-[10px] aip-muted font-mono">{ext.version}</span>
+                                            <AipBadge
+                                                tone={ext.running ? 'ok' : ext.enabled ? 'info' : 'neutral'}
+                                                label={ext.running ? t('Running') : ext.enabled ? t('Starting') : t('Off')}
+                                            />
+                                        </div>
+
+                                        {/* Header Controls: Switch Toggle & Delete */}
+                                        <div className="shrink-0 flex items-center gap-3">
+                                            <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                                                <AipSwitch
+                                                    label={`${t('Use')} ${ext.name}`}
+                                                    checked={ext.enabled}
+                                                    disabled={!ext.enabled && !modelsReady}
+                                                    onChange={async (next) => {
+                                                        await window.electronAPI.setExtensionEnabled?.(ext.id, next);
+                                                        await Promise.all([loadExtensions(), refreshStatus()]);
+                                                    }}
+                                                />
+                                            </label>
+                                            <button
+                                                type="button"
+                                                className="aip-btn shrink-0"
+                                                data-size="sm"
+                                                data-variant="danger-ghost"
+                                                disabled={ext.enabled}
+                                                title={ext.enabled ? t('Turn off before removing') : t('Remove extension')}
+                                                onClick={async () => {
+                                                    await window.electronAPI.removeExtension?.(ext.id);
+                                                    await Promise.all([loadExtensions(), refreshStatus()]);
+                                                }}
+                                            >
+                                                <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                            </button>
+                                        </div>
                                     </div>
-                                    <AipBadge
-                                        tone={ext.running ? 'ok' : ext.enabled ? 'info' : 'neutral'}
-                                        label={ext.running ? t('Running') : ext.enabled ? t('Starting') : t('Off')}
-                                    />
-                                </div>
 
-                                {ext.disabledReason && (
-                                    <p className="text-[10px] aip-muted">{t('Turned off')}: {ext.disabledReason}</p>
-                                )}
+                                    {ext.disabledReason && (
+                                        <p className="text-[10px] aip-muted pl-3.5">{t('Turned off')}: {ext.disabledReason}</p>
+                                    )}
 
-                                {ext.models.map(m => {
-                                    const key = `${ext.id}::${m.key}`;
-                                    const pct = progress[key];
-                                    const downloading = busyModel === key || m.state === 'downloading';
-                                    const blocked = m.state === 'blocked-unacknowledged';
-                                    return (
-                                        <div key={m.key} className="space-y-1.5 border-t border-white/5 pt-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="text-[11px] font-medium text-white truncate">{m.key}</div>
-                                                    <div className="text-[10px] aip-muted truncate">
-                                                        {[
-                                                            m.format.toUpperCase(),
-                                                            humanBytes(m.bytes ?? m.approxBytes),
-                                                            m.license.spdx,
-                                                            m.license.commercialUseRestricted ? t('non-commercial') : null,
-                                                        ].filter(Boolean).join(' · ')}
+                                    {/* Extension Models */}
+                                    {ext.models.map(m => {
+                                        const key = `${ext.id}::${m.key}`;
+                                        const pct = progress[key];
+                                        const downloading = busyModel === key || m.state === 'downloading';
+                                        const blocked = m.state === 'blocked-unacknowledged';
+
+                                        return (
+                                            <div key={m.key} className="space-y-1.5 pl-3.5 pt-1.5 border-t border-white/5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-[11px] font-medium text-white truncate">{m.key}</div>
+                                                        <div className="text-[10px] aip-muted truncate">
+                                                            {[
+                                                                m.format.toUpperCase(),
+                                                                humanBytes(m.bytes ?? m.approxBytes),
+                                                                m.license.spdx,
+                                                                m.license.commercialUseRestricted ? t('non-commercial') : null,
+                                                            ].filter(Boolean).join(' · ')}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="shrink-0">
+                                                        {m.state === 'ready' ? (
+                                                            <AipBadge tone="ok" label={t('Ready')} />
+                                                        ) : downloading ? (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                onClick={() => void window.electronAPI.cancelExtensionModelDownload?.(ext.id, m.key)}
+                                                            >
+                                                                <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Cancel')}</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                disabled={blocked}
+                                                                title={blocked ? (m.reason ?? undefined) : undefined}
+                                                                onClick={() => void downloadModel(ext.id, m.key)}
+                                                            >
+                                                                <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Download')}</span>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                {m.state === 'ready' ? (
-                                                    <AipBadge tone="ok" label={t('Ready')} />
-                                                ) : downloading ? (
-                                                    <button type="button" className="aip-btn" data-size="sm" onClick={() => void window.electronAPI.cancelExtensionModelDownload?.(ext.id, m.key)}>
-                                                        <X size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                        <span>{t('Cancel')}</span>
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="aip-btn"
-                                                        data-size="sm"
-                                                        disabled={blocked}
-                                                        title={blocked ? (m.reason ?? undefined) : undefined}
-                                                        onClick={() => void downloadModel(ext.id, m.key)}
-                                                    >
-                                                        <Download size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                        <span>{t('Download')}</span>
-                                                    </button>
+
+                                                {downloading && (
+                                                    <div className="space-y-1 pt-1">
+                                                        <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round((pct || 0) * 100)}%` }} />
+                                                        </div>
+                                                        <div className="text-[10px] aip-muted flex justify-between">
+                                                            <span>{typeof pct === 'number' ? `${Math.round(pct * 100)}%` : t('Starting…')}</span>
+                                                            <span>{typeof pct === 'number' ? `${humanBytes(Math.round(pct * m.approxBytes))} / ${humanBytes(m.approxBytes)}` : ''}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {m.state === 'verification-failed' && (
+                                                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                                        <span className="min-w-0">{m.reason ?? t('The downloaded file did not match its expected checksum.')}</span>
+                                                    </div>
+                                                )}
+
+                                                {m.license.requiresAcknowledgement && !m.license.acknowledged && (
+                                                    <div className="space-y-1.5 p-2 rounded bg-white/5 border border-white/5 mt-1">
+                                                        <p className="text-[10px] aip-muted">
+                                                            {t('This model requires licence acceptance')} ({m.license.spdx})
+                                                            {m.license.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
+                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                data-variant="ghost"
+                                                                onClick={() => window.electronAPI.openExternal?.(m.license.url)}
+                                                            >
+                                                                <ExternalLink size={12} strokeWidth={1.75} />
+                                                                <span>{t('Read licence')}</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn"
+                                                                data-size="sm"
+                                                                onClick={async () => {
+                                                                    await window.electronAPI.acknowledgeExtensionLicense?.(ext.id, m.key);
+                                                                    await loadExtensions();
+                                                                }}
+                                                            >
+                                                                <Check size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                                <span>{t('Accept terms')}</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 )}
                                             </div>
-
-                                            {downloading && (
-                                                <div className="text-[10px] aip-muted">
-                                                    {typeof pct === 'number'
-                                                        ? `${Math.round(pct * 100)}% · ${humanBytes(Math.round(pct * m.approxBytes))} / ${humanBytes(m.approxBytes)}`
-                                                        : t('Starting…')}
-                                                </div>
-                                            )}
-
-                                            {m.state === 'verification-failed' && (
-                                                <div className="aip-inline-warn flex items-start gap-2" role="status">
-                                                    <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
-                                                    <span className="min-w-0">{m.reason ?? t('The downloaded file did not match its expected checksum.')}</span>
-                                                </div>
-                                            )}
-
-                                            {m.license.requiresAcknowledgement && !m.license.acknowledged && (
-                                                <div className="space-y-1.5 p-2 rounded bg-white/5">
-                                                    <p className="text-[10px] aip-muted">
-                                                        {t('This model is licensed')} {m.license.spdx}
-                                                        {m.license.commercialUseRestricted ? ` — ${t('it may not be used commercially')}` : ''}
-                                                        {'. '}
-                                                        {t('Natively does not distribute it. Read the licence before downloading.')}
-                                                    </p>
-                                                    <div className="flex items-center gap-2">
-                                                        <button type="button" className="aip-btn" data-size="sm" onClick={() => window.electronAPI.openExternal?.(m.license.url)}>
-                                                            <ExternalLink size={12} strokeWidth={1.75} />
-                                                            <span>{t('Read the licence')}</span>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="aip-btn"
-                                                            data-size="sm"
-                                                            onClick={async () => {
-                                                                await window.electronAPI.acknowledgeExtensionLicense?.(ext.id, m.key);
-                                                                await loadExtensions();
-                                                            }}
-                                                        >
-                                                            <Check size={12} strokeWidth={1.75} aria-hidden="true" />
-                                                            <span>{t('I accept these terms')}</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-
-                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
-                                    <label className="flex items-center gap-2.5 text-xs cursor-pointer select-none">
-                                        <AipSwitch
-                                            label={t('Use this reranker')}
-                                            checked={ext.enabled}
-                                            disabled={!ext.enabled && !ext.models.every(m => m.state === 'ready')}
-                                            onChange={async (next) => {
-                                                await window.electronAPI.setExtensionEnabled?.(ext.id, next);
-                                                await Promise.all([loadExtensions(), refreshStatus()]);
-                                            }}
-                                        />
-                                        <span>
-                                            {t('Use this reranker')}
-                                            {!ext.enabled && !ext.models.every(m => m.state === 'ready') && (
-                                                <span className="aip-muted"> · {t('download its model first')}</span>
-                                            )}
-                                        </span>
-                                    </label>
-                                    <button
-                                        type="button"
-                                        className="aip-btn"
-                                        data-size="sm"
-                                        data-variant="danger-ghost"
-                                        disabled={ext.enabled}
-                                        title={ext.enabled ? t('Turn it off before removing it.') : undefined}
-                                        onClick={async () => {
-                                            await window.electronAPI.removeExtension?.(ext.id);
-                                            await Promise.all([loadExtensions(), refreshStatus()]);
-                                        }}
-                                    >
-                                        <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
-                                        <span>{t('Remove')}</span>
-                                    </button>
+                                        );
+                                    })}
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
