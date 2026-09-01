@@ -774,10 +774,15 @@ export function badgeForCaptureOutcome(kind: string): { text: string; title: str
 }
 
 /**
- * Surface a hotkey capture failure on the toolbar icon: badge + title, and
- * (Chrome 127+) try to open the popup outright so the grant is one click away.
- * openPopup throws when the browser window isn't focused or a popup is already
- * open — that's fine, the badge still marks the icon the desktop pill points at.
+ * Surface a hotkey capture failure on the toolbar icon: badge + title only.
+ * This is only reached from the desktop-push path (handleCaptureDom), which
+ * has no user gesture — forcibly calling chrome.action.openPopup() here would
+ * pull focus off the page the user is looking at (and be page-observable via
+ * blur/focus) for a capture the user never initiated. The popup's own
+ * "Capture" button (the `case 'capture'` message handler below) already runs
+ * inside a real user gesture and grants access without needing this nudge to
+ * open anything — the badge/title alone is enough to point the user at the
+ * icon.
  */
 function nudgeGrantViaAction(kind: string): void {
   const badge = badgeForCaptureOutcome(kind);
@@ -787,9 +792,6 @@ function nudgeGrantViaAction(kind: string): void {
     void chrome.action.setBadgeBackgroundColor?.({ color: '#f59e0b' });
     void chrome.action.setTitle({ title: badge.title });
   } catch (_) { /* badge is best-effort */ }
-  try {
-    void chrome.action.openPopup?.().catch(() => {});
-  } catch (_) { /* pre-127 or unfocused window */ }
 }
 
 /** Clear the grant nudge (a capture succeeded or the origin was granted). */
