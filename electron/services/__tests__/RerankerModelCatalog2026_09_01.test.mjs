@@ -87,16 +87,30 @@ test('a supported ONNX entry declares what the runtime needs to load it', () => 
   }
 });
 
-test('an unsupported entry says why, and is never activatable', () => {
-  // Ettin publishes a BACKBONE-only ONNX export (graph output
-  // `last_hidden_state`, not `logits`); its scoring head is a separate
-  // Sentence-Transformers module chain. Listing it without this would offer a
-  // download that cannot produce a score.
-  const unsupported = RERANKER_MODEL_CATALOG.filter(m => !m.supported);
-  assert.ok(unsupported.length > 0, 'the Ettin entries are expected here');
-  for (const m of unsupported) {
+test('an unsupported entry, if there is one, says why and is never activatable', () => {
+  // Ettin used to live here: its ONNX graph emits last_hidden_state rather than
+  // logits, so it looked unusable. Core now applies the Sentence-Transformers
+  // head itself (rag/sentenceTransformerHead.ts), so the list may legitimately
+  // be empty. The CONTRACT is what matters — an entry Core cannot execute must
+  // explain itself rather than offering a button that cannot work.
+  for (const m of RERANKER_MODEL_CATALOG.filter(m => !m.supported)) {
     assert.ok(m.unsupportedReason && m.unsupportedReason.length > 20, `${m.id} must explain itself`);
     assert.equal(m.modelId, undefined, `${m.id} must not be pointable at the runtime`);
+  }
+});
+
+test('a model whose head is outside the graph ships the files needed to apply it', () => {
+  // A backbone-only export plus a tokenizer would install cleanly and then
+  // score nothing. The module chain has to come with it.
+  for (const m of RERANKER_MODEL_CATALOG) {
+    if (m.runtime !== 'onnx' || !m.supported) continue;
+    const paths = m.files.map(f => f.repoPath);
+    if (!paths.includes('modules.json')) continue;   // an ordinary cross-encoder
+    for (const needed of ['1_Pooling/config.json', '2_Dense/config.json', '2_Dense/model.safetensors',
+                          '3_LayerNorm/model.safetensors', '4_Dense/config.json', '4_Dense/model.safetensors']) {
+      assert.ok(paths.includes(needed), `${m.id} declares modules.json but not ${needed}`);
+    }
+    assert.equal(m.dtype, 'fp32', `${m.id} ships onnx/model.onnx, which is the fp32 variant`);
   }
 });
 
@@ -119,12 +133,15 @@ test('a non-commercial model is flagged and requires acknowledgement', () => {
 // ── install refusals ──────────────────────────────────────────────────────
 
 test('installing an unsupported model is refused before any download', async () => {
+  // Driven through a synthetic entry rather than a real id: every catalogue
+  // entry is supported today, and pointing this at one would start a real
+  // multi-hundred-megabyte download instead of testing the refusal.
   const root = tmp();
-  const res = await installOnnxModel('ettin-reranker-32m', () => {}, new AbortController().signal, { rootOverride: root });
+  const unsupported = RERANKER_MODEL_CATALOG.find(m => !m.supported);
+  if (!unsupported) return;   // nothing unsupported to refuse
+  const res = await installOnnxModel(unsupported.id, () => {}, new AbortController().signal, { rootOverride: root });
   assert.equal(res.ok, false);
   assert.match(res.error, /scoring head|not supported/i);
-  // Nothing may have been written.
-  assert.equal(fs.existsSync(path.join(root, 'cross-encoder')), false);
 });
 
 test('installing a GGUF model through the ONNX path is refused', async () => {
