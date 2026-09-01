@@ -47,6 +47,27 @@ interface RerankerStatus {
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
 
+interface LocalCatalogModel {
+    id: string;
+    name: string;
+    runtime: 'onnx' | 'gguf';
+    repo: string;
+    params: string;
+    note: string;
+    bytes: number;
+    recommended: boolean;
+    license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean };
+    state: 'not-installed' | 'partial' | 'installed';
+    bytesOnDisk: number;
+    selected: boolean;
+    extensionId: string | null;
+    extensionInstalled: boolean | null;
+    requiresBinary: string | null;
+    supported: boolean;
+    unsupportedReason: string | null;
+    activatable: boolean;
+}
+
 interface ExtensionModel {
     key: string;
     format: string;
@@ -134,10 +155,29 @@ export const RerankerSettings: React.FC = () => {
     const [installing, setInstalling] = useState(false);
     const [installError, setInstallError] = useState<string | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [catalogModels, setCatalogModels] = useState<LocalCatalogModel[]>([]);
+    const [builtInSelected, setBuiltInSelected] = useState(true);
+    const [modelProgress, setModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
+    const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
+    const [catalogError, setCatalogError] = useState<string | null>(null);
 
     const refreshStatus = useCallback(async () => {
         const next = await window.electronAPI.getRerankerStatus?.();
         if (next) setStatus(next as RerankerStatus);
+    }, []);
+
+    const loadCatalogModels = useCallback(async () => {
+        const res = await window.electronAPI.listLocalRerankerModels?.();
+        if (!res) return;
+        setCatalogModels((res.models ?? []) as LocalCatalogModel[]);
+        setBuiltInSelected(Boolean(res.builtInSelected));
+    }, []);
+
+    useEffect(() => {
+        const off = window.electronAPI.onLocalRerankerModelProgress?.(({ id, fraction, currentFile }) => {
+            setModelProgress(prev => ({ ...prev, [id]: { fraction, file: currentFile } }));
+        });
+        return () => { off?.(); };
     }, []);
 
     const loadExtensions = useCallback(async () => {
@@ -167,7 +207,7 @@ export const RerankerSettings: React.FC = () => {
         let cancelled = false;
         (async () => {
             try {
-                await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions()]);
+                await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
             } catch (e) {
                 // safeHandle does not wrap handler bodies, so an IPC handler that
                 // throws rejects here. Without this the panel spins on "Loading…"
@@ -178,7 +218,7 @@ export const RerankerSettings: React.FC = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [refreshStatus, loadCatalog, loadExtensions]);
+    }, [refreshStatus, loadCatalog, loadExtensions, loadCatalogModels]);
 
     const setConfig = useCallback(async (next: Parameters<NonNullable<typeof window.electronAPI.setRerankerConfig>>[0]) => {
         await window.electronAPI.setRerankerConfig?.(next);
@@ -211,6 +251,48 @@ export const RerankerSettings: React.FC = () => {
         () => rerankerExtensions.filter(e => e.enabled).length,
         [rerankerExtensions],
     );
+
+    const installCatalogModel = useCallback(async (id: string) => {
+        setBusyCatalogId(id);
+        setCatalogError(null);
+        try {
+            const res = await window.electronAPI.installLocalRerankerModel?.(id);
+            if (res && !res.success) {
+                setCatalogError(res.message || res.error || t('Download failed.'));
+            }
+            await loadCatalogModels();
+        } finally {
+            setBusyCatalogId(null);
+            setModelProgress(prev => { const next = { ...prev }; delete next[id]; return next; });
+        }
+    }, [loadCatalogModels, t]);
+
+    const useCatalogModel = useCallback(async (id: string | null) => {
+        setBusyCatalogId(id ?? 'built-in');
+        setCatalogError(null);
+        try {
+            const res = await window.electronAPI.useLocalRerankerModel?.(id);
+            // Activation self-tests before committing, so a failure here means
+            // the PREVIOUS reranker is still the active one — say that rather
+            // than leaving the row looking selected.
+            if (res && !res.success) setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
+            await Promise.all([loadCatalogModels(), refreshStatus()]);
+        } finally {
+            setBusyCatalogId(null);
+        }
+    }, [loadCatalogModels, refreshStatus, t]);
+
+    const removeCatalogModel = useCallback(async (id: string) => {
+        setBusyCatalogId(id);
+        setCatalogError(null);
+        try {
+            const res = await window.electronAPI.removeLocalRerankerModel?.(id);
+            if (res && !res.success) setCatalogError(res.message || res.error || t('Could not remove this model.'));
+            await loadCatalogModels();
+        } finally {
+            setBusyCatalogId(null);
+        }
+    }, [loadCatalogModels, t]);
 
     const installFromFolder = useCallback(async () => {
         setInstalling(true);
@@ -269,7 +351,7 @@ export const RerankerSettings: React.FC = () => {
                                     setLoading(true);
                                     void (async () => {
                                         try {
-                                            await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions()]);
+                                            await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
                                         } catch (e) {
                                             setLoadError(e instanceof Error ? e.message : String(e));
                                         } finally {
@@ -414,6 +496,135 @@ export const RerankerSettings: React.FC = () => {
                         <p className="text-[10px] aip-muted px-1 pb-1">
                             {t('Included with Natively. Runs on this device and needs no account.')}
                         </p>
+                    </div>
+
+                    {/* Direct install. No extension folder to stage: these download
+                        straight from Hugging Face into the directory Natively's own
+                        reranker already reads. */}
+                    <div className="aip-card p-5 space-y-3">
+                        <label className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                            {t('Download a different reranker')}
+                        </label>
+                        <p className="text-[10px] aip-muted">
+                            {t('These download directly from Hugging Face. Natively never ships model files — nothing is downloaded until you ask.')}
+                        </p>
+
+                        {catalogError && (
+                            <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                <span className="min-w-0">{catalogError}</span>
+                            </div>
+                        )}
+
+                        {/* The bundled model is a row like any other, so "go back to
+                            the one that shipped" is one click and not a hunt. */}
+                        <div className="aip-card p-3" data-active={builtInSelected ? 'true' : undefined}>
+                            <div className="flex items-center gap-2">
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-xs truncate">{status.builtIn.name}</div>
+                                    <div className="text-[10px] aip-muted truncate">{t('Included with Natively')}</div>
+                                </div>
+                                {builtInSelected
+                                    ? <AipBadge tone="ok" label={t('In use')} />
+                                    : (
+                                        <button type="button" className="aip-btn" data-size="sm"
+                                            disabled={busyCatalogId !== null}
+                                            onClick={() => void useCatalogModel(null)}>
+                                            <span>{t('Use')}</span>
+                                        </button>
+                                    )}
+                            </div>
+                        </div>
+
+                        {catalogModels.map(m => {
+                            const prog = modelProgress[m.id];
+                            const busy = busyCatalogId === m.id;
+                            const installed = m.state === 'installed';
+                            const needsExtension = m.runtime === 'gguf' && m.extensionInstalled === false;
+                            return (
+                                <div key={m.id} className="aip-card p-3 space-y-2" data-active={m.selected ? 'true' : undefined} data-off={m.supported ? undefined : 'true'}>
+                                    <div className="flex items-center gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-xs truncate">{m.name}</span>
+                                                {m.recommended && m.supported && <AipBadge tone="info" label={t('Recommended')} />}
+                                            </div>
+                                            <div className="text-[10px] aip-muted truncate">
+                                                {[m.params, humanBytes(m.bytes), m.license.spdx,
+                                                  m.license.commercialUseRestricted ? t('non-commercial') : null]
+                                                    .filter(Boolean).join(' · ')}
+                                            </div>
+                                        </div>
+                                        {m.selected
+                                            ? <AipBadge tone="ok" label={t('In use')} />
+                                            : installed
+                                                ? <AipBadge tone="info" label={t('Downloaded')} />
+                                                : null}
+                                    </div>
+
+                                    <p className="text-[10px] aip-muted">{m.note}</p>
+
+                                    {/* An entry Core cannot execute says so instead of
+                                        offering a button that cannot work. */}
+                                    {!m.supported && m.unsupportedReason && (
+                                        <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                            <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                            <span className="min-w-0">{m.unsupportedReason}</span>
+                                        </div>
+                                    )}
+
+                                    {needsExtension && (
+                                        <p className="text-[10px] aip-muted">
+                                            {t('Runs through the')} <code>{m.extensionId}</code> {t('extension, which is not installed yet.')}
+                                            {m.requiresBinary ? ` ${t('It also needs')} ${m.requiresBinary} ${t('on your PATH.')}` : ''}
+                                        </p>
+                                    )}
+
+                                    {busy && prog && (
+                                        <div className="text-[10px] aip-muted">
+                                            {`${Math.round(prog.fraction * 100)}% · ${humanBytes(Math.round(prog.fraction * m.bytes))} / ${humanBytes(m.bytes)} · ${prog.file}`}
+                                        </div>
+                                    )}
+
+                                    {m.supported && (
+                                        <div className="flex items-center gap-2">
+                                            {!installed && (
+                                                busy ? (
+                                                    <button type="button" className="aip-btn" data-size="sm"
+                                                        onClick={() => void window.electronAPI.cancelLocalRerankerModel?.(m.id)}>
+                                                        <X size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                        <span>{t('Cancel')}</span>
+                                                    </button>
+                                                ) : (
+                                                    <button type="button" className="aip-btn" data-size="sm"
+                                                        disabled={busyCatalogId !== null || needsExtension}
+                                                        onClick={() => void installCatalogModel(m.id)}>
+                                                        <Download size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                        <span>{t('Download')}</span>
+                                                    </button>
+                                                )
+                                            )}
+                                            {installed && m.activatable && !m.selected && (
+                                                <button type="button" className="aip-btn" data-size="sm"
+                                                    disabled={busyCatalogId !== null}
+                                                    onClick={() => void useCatalogModel(m.id)}>
+                                                    {busy ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : null}
+                                                    <span>{t('Use')}</span>
+                                                </button>
+                                            )}
+                                            {installed && !m.selected && (
+                                                <button type="button" className="aip-btn ml-auto" data-size="sm"
+                                                    disabled={busyCatalogId !== null}
+                                                    onClick={() => void removeCatalogModel(m.id)}>
+                                                    <Trash2 size={12} strokeWidth={1.75} aria-hidden="true" />
+                                                    <span>{t('Remove')}</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {/* Reranker extensions. Listed here rather than in a separate

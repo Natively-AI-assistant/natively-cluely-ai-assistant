@@ -283,6 +283,75 @@ needing a rebuild.
 
 ---
 
+## Direct install (no extension)
+
+`Settings → Reranker → Download a different reranker`.
+
+A curated catalogue (`electron/rag/rerankerModelCatalog.ts`) downloads a model
+straight from Hugging Face into the directory `LocalReranker.resolveModelPath()`
+already searches first:
+
+```
+<userData>/local-models/<org>/<name>/tokenizer.json
+                                    /config.json
+                                    /onnx/model_quantized.onnx
+```
+
+That is the layout transformers.js expects, so a completed download is loadable
+by the reranker Core already ships. **No new runtime, no adapter, no extension
+to stage.** Selection persists as `settings.reranker.localModelId`;
+`reloadLocalReranker()` disposes the running worker so the switch takes effect
+without a restart, and activation runs a real two-passage rerank before it
+commits — a model that fails to load leaves the previous one active.
+
+### This is a data table, not model-specific code
+
+`docs/extensions.md`'s rule — Core contains no model-specific code — still
+holds. A supported entry contributes a repository, a file list, a licence, a
+`modelId` and a `dtype`. The runtime that executes it is the ONNX cross-encoder
+Core already ships for `bge-reranker-base`. The rule yields for models the
+existing runtime already handles; it still applies to anything needing a new one.
+
+### What is listed, and why
+
+| Model | Size | Runs in Core? |
+| --- | --- | --- |
+| MS MARCO MiniLM L6 (`Xenova/ms-marco-MiniLM-L-6-v2`) | 24 MB | **yes** — measured 157 ms |
+| mxbai Rerank XSmall (`mixedbread-ai/mxbai-rerank-xsmall-v1`) | 96 MB | **yes** — measured 524 ms |
+| BGE Reranker Large (`Xenova/bge-reranker-large`) | 580 MB | yes — slowest to load |
+| Ettin Reranker 32M / 68M / 150M | 131–600 MB | **no** — see below |
+| Jina v3.5 Q4_K_M, Qwen3 0.6B Q4_K_M (GGUF) | 397 / 484 MB | no — via extension + llama.cpp |
+
+Every entry marked runnable had its ONNX graph opened and checked for a `logits`
+output before it was listed.
+
+### Why Ettin is listed but not installable
+
+`cross-encoder/ettin-reranker-*`'s `onnx/model.onnx` was loaded with
+onnxruntime. Its graph output is **`last_hidden_state`, not `logits`** — the
+export is the transformer backbone only. The scoring head lives outside the
+graph, in the repository's Sentence-Transformers module chain (`1_Pooling`,
+`2_Dense`, `3_LayerNorm`, `4_Dense`, as safetensors), and transformers.js has no
+equivalent module pipeline.
+
+Loaded through Core's runtime the model initialises cleanly and then returns
+`output.logits === undefined`, which surfaces as *"unexpected logits shape —
+skipping rerank"*. This is almost certainly also why the Ettin extension's own
+`scoreBatch()` is an unimplemented scaffold.
+
+The entries stay in the catalogue, disabled, with that reason shown — so the
+answer to "why can't I install Ettin" is visible rather than absent. Supporting
+them means implementing pooling + dense + layer-norm on top of the backbone
+output, which is extension work, not a catalogue entry.
+
+### GGUF goes through the extension, not through Core
+
+Core has no llama.cpp. A GGUF downloaded into a Core directory would be
+hundreds of megabytes nothing can execute, so those route through the owning
+extension's `ModelStore` — which is also what keeps the `LicenseLedger` gate
+intact for Jina's CC-BY-NC-4.0. If the extension is not installed, the UI says
+so instead of downloading dead bytes.
+
 ## Settings
 
 **One** section: `Settings → Reranker` (`src/components/settings/RerankerSettings.tsx`).
@@ -375,6 +444,14 @@ rejects an incomplete ranking wholesale.
 - Under Electron: stage → install (recorded `enabled: false`) → flag gate
   refuses → enable → real `utilityProcess` starts → `resolvePort()` → rerank
   across the process boundary in 1 ms with correct ordering → `unloadAll()`.
+
+**Verified for direct install**
+- `Xenova/ms-marco-MiniLM-L-6-v2` and `mixedbread-ai/mxbai-rerank-xsmall-v1`
+  downloaded from Hugging Face through the installer, sha256-checked, then run
+  on Core's existing runtime: 157 ms and 524 ms, both ranking the relevant
+  passages first.
+- Ettin's backbone-only export confirmed by reading the ONNX graph's output
+  names with onnxruntime.
 
 **Not verified**
 - macOS only. Nothing here has been executed on Windows.
