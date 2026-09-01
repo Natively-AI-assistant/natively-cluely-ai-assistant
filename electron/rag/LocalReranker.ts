@@ -500,7 +500,11 @@ function readSelectedLocalReranker(): { modelId: string; dtype: string } | null 
     try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { SettingsManager } = require('../services/SettingsManager');
-        const id = (SettingsManager.getInstance().getSettings()?.reranker as any)?.localModelId;
+        // `.get(key)` — SettingsManager has no getSettings(). Calling one threw
+        // into the catch below, which returned null, so a selected model was
+        // silently ignored and the bundled one kept running while the UI
+        // reported the switch had succeeded.
+        const id = (SettingsManager.getInstance().get('reranker') as any)?.localModelId;
         if (!id || typeof id !== 'string') return null;
 
         // eslint-disable-next-line @typescript-eslint/no-var-requires
