@@ -39,7 +39,7 @@ interface DirectAssistError {
 }
 
 type DirectAssistEvent =
-  | { type: 'start'; requestId: string; provider: string; model: string }
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
