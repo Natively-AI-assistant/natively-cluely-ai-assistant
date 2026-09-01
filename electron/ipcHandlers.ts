@@ -656,15 +656,19 @@ export function initializeIpcHandlers(appState: AppState): void {
     },
   );
 
-  // X-anchored variant: the window's X origin never moves. The overlay window
-  // is a FIXED WIDTH (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and the
-  // renderer always reports that width, so in practice this is a pure
-  // height-only, top-anchored resize. Channel name is historical (it used to
-  // keep the center fixed across width changes).
+  // X-anchored variant: the window's X origin never moves. The renderer reports
+  // the WINDOW width (which only changes when the user drags a resize handle),
+  // so during an expand/collapse animation this is a pure height-only,
+  // top-anchored resize. Channel name is historical (it used to keep the center
+  // fixed across width changes).
+  //
+  // RESOLVES with the size actually applied after the main-process clamp, so
+  // the renderer can adopt it instead of drifting from the real window. See
+  // WindowHelper.setOverlayDimensionsAnchored.
   safeHandle(
     'update-content-dimensions-centered',
     async (event, { width, height }: { width: number; height: number }) => {
-      if (!width || !height) return;
+      if (!width || !height) return undefined;
       const senderWebContents = event.sender;
       const overlayWin = appState.getWindowHelper().getOverlayWindow();
       if (
@@ -672,8 +676,9 @@ export function initializeIpcHandlers(appState: AppState): void {
         !overlayWin.isDestroyed() &&
         overlayWin.webContents.id === senderWebContents.id
       ) {
-        appState.getWindowHelper().setOverlayDimensionsAnchored(width, height);
+        return appState.getWindowHelper().setOverlayDimensionsAnchored(width, height);
       }
+      return undefined;
     },
   );
 
@@ -777,11 +782,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     appState.getWindowHelper().isOverlayGroupDragManaged(),
   );
 
-  // (Removed) 'animate-overlay-width' — the overlay window is a FIXED WIDTH
-  // (WindowHelper.OVERLAY_DEFAULT_WIDTH = 732) and is NEVER width-resized.
-  // The expand/contract animation is CSS-only in the renderer (the panel
-  // tweens 600↔732 centered inside the fixed window), so every
-  // 'update-content-dimensions-centered' report is height-only — a
+  // (Removed) 'animate-overlay-width' — the overlay window's width changes ONLY
+  // on an explicit user resize, never as part of the expand/contract animation.
+  // That animation is CSS-only in the renderer (the panel tweens
+  // collapsed↔expanded centered inside the window), so every
+  // 'update-content-dimensions-centered' report during it is height-only — a
   // top-anchored resize that does not move X. No sideways jump, no per-frame
   // transparent-window re-raster. See NativelyInterface.startTransition.
 

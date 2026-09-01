@@ -416,8 +416,21 @@ export class WindowHelper {
   // EDGE CASE: if the grown window would overflow the work area's right edge,
   // the X clamp below shifts the window left — that one case can show a
   // one-frame shift, same as any clamped move always could.
-  public setOverlayDimensionsAnchored(width: number, height: number): void {
-    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+  //
+  // RETURNS the size actually APPLIED after clamping. The renderer needs this:
+  // it mirrors the same floor(workArea * 0.9) clamp locally, but the display it
+  // measures (window.screen.availWidth) and the one this method measures
+  // (the work area of the display the window sits on) can disagree — on a
+  // multi-monitor setup they routinely do. Adopting the echoed value keeps the
+  // renderer's panel width, the toggle anchor and the hover-gate margin locked
+  // to the window that actually exists, instead of the one it asked for.
+  public setOverlayDimensionsAnchored(
+    width: number,
+    height: number,
+  ): { width: number; height: number } {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) {
+      return { width, height };
+    }
 
     const currentBounds = this.overlayWindow.getBounds();
     const currentContentSize = this.overlayWindow.getContentSize();
@@ -456,7 +469,7 @@ export class WindowHelper {
         currentContentSize,
         computed: { x: newX, y: newY, width: newWidth, height: newHeight },
       });
-      return;
+      return { width: currentContentSize[0], height: currentContentSize[1] };
     }
 
     // Atomic frame change: a single setBounds avoids the 1-frame split where
@@ -464,19 +477,25 @@ export class WindowHelper {
     // is what causes the shell to visibly slide and snap during code-expansion.
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
+    const appliedContentSize = this.overlayWindow.getContentSize();
     traceOverlayResize('setOverlayDimensionsAnchored:applied', {
       requested: { width, height },
       appliedBounds: this.overlayBounds,
-      contentSizeAfter: this.overlayWindow.getContentSize(),
+      contentSizeAfter: appliedContentSize,
     });
+    return { width: appliedContentSize[0], height: appliedContentSize[1] };
   }
 
-  // NOTE: the overlay window is a FIXED WIDTH (OVERLAY_DEFAULT_WIDTH = 732)
-  // for its entire visible lifetime; the renderer always reports that fixed
-  // width, so every report here is height-only (width delta 0) — top-anchored,
-  // X never moves, no width setBounds ever. The expand/contract animation is
-  // CSS-only in the renderer (panel tweens 600↔732 centered inside the fixed
-  // window). See NativelyInterface.startTransition for the renderer side.
+  // NOTE: the overlay window's width is FIXED FOR THE WHOLE LIFETIME OF AN
+  // ANIMATION. It is born at OVERLAY_DEFAULT_WIDTH (732) and only ever changes
+  // when the USER drags a resize handle (or on restore of a previously dragged
+  // size) — never during the expand/contract spring, which stays CSS-only in
+  // the renderer (the panel tweens collapsed↔expanded centered inside the
+  // window). So every report arriving here DURING an animation is still
+  // height-only (width delta 0): top-anchored, X never moves, no width
+  // setBounds. See NativelyInterface.startTransition for the renderer side and
+  // src/lib/overlayCustomSize.mjs for why the invariant is per-animation
+  // rather than per-lifetime.
 
   public createWindow(): void {
     if (this.launcherWindow !== null) return; // Already created
@@ -1392,12 +1411,22 @@ export class WindowHelper {
     this.repositionOverlayPopovers();
   }
 
-  // The panel's live LEFT margin inside the fixed window: (732 - panelW)/2,
-  // derived from the streamed togglePanelRight = (732 + panelW)/2. Popover
+  // The panel's live LEFT margin inside the window: (windowW - panelW)/2,
+  // derived from the streamed togglePanelRight = (windowW + panelW)/2. Popover
   // anchors are stored relative to the panel, not the window, so they follow
   // the symmetric width spring.
+  //
+  // Reads the window's LIVE width rather than OVERLAY_DEFAULT_WIDTH: the user
+  // can now resize the overlay, and the renderer streams togglePanelRight
+  // against whatever width the window actually has. Using the constant here
+  // while the renderer used the live width would offset every popover by
+  // (732 - actualWidth) / 2.
   public getOverlayPanelLeftMargin(): number {
-    return Math.max(0, WindowHelper.OVERLAY_DEFAULT_WIDTH - this.togglePanelRight);
+    const windowWidth =
+      this.overlayWindow && !this.overlayWindow.isDestroyed()
+        ? this.overlayWindow.getContentSize()[0]
+        : WindowHelper.OVERLAY_DEFAULT_WIDTH;
+    return Math.max(0, windowWidth - this.togglePanelRight);
   }
 
   // Re-anchor any open overlay popovers (settings / model-selector) to the

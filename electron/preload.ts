@@ -48,7 +48,10 @@ type DirectAssistEvent =
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
-  updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
+  updateContentDimensionsCentered: (dimensions: {
+    width: number;
+    height: number;
+  }) => Promise<{ width: number; height: number } | undefined>;
   sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
   onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
   sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
