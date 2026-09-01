@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Check, ChevronDown, Cloud, Download, FolderOpen, HardDrive, KeyRound, Loader2, RefreshCw, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_CSS, AipBadge, type AipTone } from './AIProvidersSettings';
+import { AIP_CSS, AipBadge, AipSelect, type AipSelectOption, type AipTone } from './AIProvidersSettings';
 
 /**
  * Settings > Reranker.
@@ -243,6 +243,110 @@ export const RerankerSettings: React.FC = () => {
      * marked unavailable. Dropping it would leave the panel showing nothing
      * selected while the setting still holds it.
      */
+    /**
+     * Every reranker that could be active right now, as one list.
+     *
+     * Mirrors Settings > Embeddings: the card at the top answers "what is
+     * running" and lets you change it in one control, and the cards below are
+     * for managing (downloading, removing, keys). An option only appears here if
+     * selecting it would actually work — a model that is not downloaded, or a
+     * hosted model with no key, is offered in the sections below, not here.
+     */
+    const activeOptions: AipSelectOption[] = useMemo(() => {
+        const options: AipSelectOption[] = [
+            { id: 'local::built-in', name: `${status?.builtIn.name ?? 'BGE Reranker Base'} — ${t('Included')}` },
+        ];
+
+        for (const m of catalogModels) {
+            if (!m.activatable || m.state !== 'installed') continue;
+            options.push({ id: `local::${m.id}`, name: `${m.name} — ${t('On-device')}` });
+        }
+
+        for (const ext of extensions.filter(e => e.type === 'reranker')) {
+            // An extension whose model is not ready cannot be enabled, so it is
+            // not a choice yet.
+            if (!ext.models.every(m => m.state === 'ready')) continue;
+            options.push({ id: `extension::${ext.id}`, name: `${ext.name} — ${t('Extension')}` });
+        }
+
+        if (status?.hasApiKey) {
+            for (const m of catalog) {
+                options.push({ id: `openrouter::${m.id}`, name: `${m.label} — ${t('OpenRouter')}` });
+            }
+        }
+
+        return options;
+    }, [status?.builtIn.name, status?.hasApiKey, catalogModels, extensions, catalog, t]);
+
+    const activeOptionId = useMemo(() => {
+        if (status?.effective.kind === 'openrouter') return `openrouter::${status.effective.id ?? ''}`;
+        if (status?.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
+        const selected = catalogModels.find(m => m.selected);
+        return selected ? `local::${selected.id}` : 'local::built-in';
+    }, [status?.effective, catalogModels]);
+
+    /**
+     * One control, four destinations. Each branch reuses the same validated path
+     * the section below it uses, so the selector cannot activate something by a
+     * route that skips a check.
+     */
+    const chooseActive = useCallback(async (optionId: string) => {
+        const [kind, ...rest] = optionId.split('::');
+        const id = rest.join('::');
+        setBusyCatalogId(optionId);
+        setCatalogError(null);
+        try {
+            if (kind === 'openrouter') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
+            } else if (kind === 'extension') {
+                // Exactly one reranker extension may be enabled: the registry
+                // refuses to choose between two rather than reordering evidence
+                // by whichever sorted first. So turn the others off here.
+                await window.electronAPI.setRerankerConfig?.({ provider: 'local' });
+                for (const ext of extensions.filter(e => e.type === 'reranker' && e.enabled && e.id !== id)) {
+                    await window.electronAPI.setExtensionEnabled?.(ext.id, false);
+                }
+                await window.electronAPI.setExtensionEnabled?.(id, true);
+            } else {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'local' });
+                for (const ext of extensions.filter(e => e.type === 'reranker' && e.enabled)) {
+                    await window.electronAPI.setExtensionEnabled?.(ext.id, false);
+                }
+                // Self-tests the model before committing; a failure rolls back.
+                const res = await window.electronAPI.useLocalRerankerModel?.(id === 'built-in' ? null : id);
+                if (res && !res.success) {
+                    setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
+                }
+            }
+            await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions()]);
+        } finally {
+            setBusyCatalogId(null);
+        }
+    }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, t]);
+
+    /**
+     * The subtitle under "Active Reranker" — the same role the embedding card's
+     * "3072 dimensions · On-device" line plays. Everything here is a fact the
+     * app actually knows: where it runs, its size on disk, the measured latency
+     * of the last hosted request. Nothing is estimated.
+     */
+    const activeDetail = useMemo(() => {
+        if (!status) return '';
+        const parts: string[] = [];
+
+        if (status.effective.kind === 'openrouter') {
+            parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'extension') {
+            parts.push(t('On-device'), t('Provided by an extension'));
+        } else {
+            const selected = catalogModels.find(m => m.selected);
+            parts.push(t('On-device'));
+            parts.push(selected ? humanBytes(selected.bytesOnDisk || selected.bytes) : t('Included with Natively'));
+        }
+        return parts.join(' · ');
+    }, [status, catalogModels, t]);
+
     const rerankerExtensions = useMemo(
         () => extensions.filter(e => e.type === 'reranker'),
         [extensions],
@@ -421,28 +525,42 @@ export const RerankerSettings: React.FC = () => {
                 </p>
             </header>
 
-            {/* What is actually running right now — resolved the same way retrieval
-                resolves it, so this card cannot disagree with reality. */}
+            {/* Active Reranker — mirrors Settings > Embeddings' Active Model card:
+                this answers "what is running" and changes it in one control; the
+                cards below are for managing models, keys and extensions. */}
             <div className="aip-card p-5">
                 <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
                     <div className="min-w-0 flex-1">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">
                             {t('Active Reranker')}
                         </label>
-                        <p className="text-[10px] aip-muted mt-0.5 truncate">
-                            {`${effectiveLabel} · ${effectiveLocation}`}
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {activeDetail}
                         </p>
                     </div>
-                    <div className="shrink-0 flex items-center gap-2">
-                        {status.effective.kind === 'openrouter'
-                            ? <Cloud size={14} strokeWidth={1.75} aria-hidden="true" />
-                            : <HardDrive size={14} strokeWidth={1.75} aria-hidden="true" />}
-                        <AipBadge tone={effectiveTone} label={status.effective.kind === 'local' ? t('Built in') : t('Active')} />
+
+                    <div className="shrink-0 relative min-w-[200px] max-w-[320px] w-full sm:w-64">
+                        <AipSelect
+                            label={t('Active Reranker')}
+                            value={activeOptionId}
+                            options={activeOptions}
+                            emptyLabel={t('No rerankers available')}
+                            disabled={busyCatalogId !== null}
+                            disabledHint={busyCatalogId !== null ? t('Switching…') : undefined}
+                            onChange={(id) => { void chooseActive(id); }}
+                        />
                     </div>
                 </div>
 
-                {/* The user picked OpenRouter but something stops it. Say so, and say
-                    what is running instead — never switch silently. */}
+                {catalogError && (
+                    <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
+                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                        <span className="min-w-0">{catalogError}</span>
+                    </div>
+                )}
+
+                {/* The user picked a hosted reranker but something stops it. Say so,
+                    and say what is running instead — never switch silently. */}
                 {status.provider === 'openrouter' && !status.eligible && (
                     <div className="aip-inline-warn flex items-start gap-2 pt-3" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
@@ -454,39 +572,17 @@ export const RerankerSettings: React.FC = () => {
                 )}
             </div>
 
-            {/* Provider */}
-            <div className="aip-card p-5 space-y-3">
-                <label className="block text-xs font-medium uppercase tracking-wide aip-hero">{t('Provider')}</label>
-                <div className="flex gap-2 flex-wrap">
-                    {(['local', 'openrouter'] as RerankerProvider[]).map(p => (
-                        <button
-                            key={p}
-                            type="button"
-                            className="aip-btn"
-                            data-active={status.provider === p ? 'true' : undefined}
-                            aria-pressed={status.provider === p}
-                            onClick={() => void setConfig({ provider: p })}
-                        >
-                            {p === 'local' ? <HardDrive size={13} strokeWidth={1.75} /> : <Cloud size={13} strokeWidth={1.75} />}
-                            <span>{p === 'local' ? t('Local') : t('OpenRouter')}</span>
-                            {status.provider === p && <Check size={13} strokeWidth={1.75} className="aip-accent-fg" aria-hidden="true" />}
-                        </button>
-                    ))}
-                </div>
-                <p className="text-[10px] aip-muted">
-                    {status.provider === 'local'
-                        ? t('Everything stays on this device. Works offline.')
-                        : t('Hosted reranking sends the retrieved document text to OpenRouter. For fully private retrieval, use a local reranker.')}
-                </p>
-            </div>
-
-            {status.provider === 'local' && (
+            {/* On-device — the provider card, matching Settings > Embeddings. */}
+            {true && (
                 <>
                     <div className="aip-card aip-provider">
                         <div className="aip-provider-head">
                             <HardDrive size={16} strokeWidth={1.75} aria-hidden="true" />
                             <h4 className="aip-card-title truncate min-w-0">{status.builtIn.name}</h4>
                             <div className="ml-auto flex items-center gap-2 shrink-0">
+                                <span className="aip-meta inline-flex items-center gap-1.5">
+                                    <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
+                                </span>
                                 <AipBadge
                                     tone={status.builtIn.available ? 'ok' : status.builtIn.cached ? 'warn' : 'neutral'}
                                     label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('Not loaded')}
@@ -521,7 +617,7 @@ export const RerankerSettings: React.FC = () => {
                         <div className="aip-card p-3" data-active={builtInSelected ? 'true' : undefined}>
                             <div className="flex items-center gap-2">
                                 <div className="min-w-0 flex-1">
-                                    <div className="text-xs truncate">{status.builtIn.name}</div>
+                                    <div className="text-xs truncate aip-text">{status.builtIn.name}</div>
                                     <div className="text-[10px] aip-muted truncate">{t('Included with Natively')}</div>
                                 </div>
                                 {builtInSelected
@@ -546,7 +642,7 @@ export const RerankerSettings: React.FC = () => {
                                     <div className="flex items-center gap-2">
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 min-w-0">
-                                                <span className="text-xs truncate">{m.name}</span>
+                                                <span className="text-xs truncate aip-text">{m.name}</span>
                                                 {m.recommended && m.supported && <AipBadge tone="info" label={t('Recommended')} />}
                                             </div>
                                             <div className="text-[10px] aip-muted truncate">
@@ -677,7 +773,7 @@ export const RerankerSettings: React.FC = () => {
                             <div key={ext.id} className="aip-card p-3 space-y-2">
                                 <div className="flex items-center gap-2">
                                     <div className="min-w-0 flex-1">
-                                        <div className="text-xs truncate">{ext.name} <span className="aip-muted">{ext.version}</span></div>
+                                        <div className="text-xs truncate aip-text">{ext.name} <span className="aip-muted">{ext.version}</span></div>
                                         <div className="text-[10px] aip-muted truncate">{ext.author} · {ext.id}</div>
                                     </div>
                                     <AipBadge
@@ -699,7 +795,7 @@ export const RerankerSettings: React.FC = () => {
                                         <div key={m.key} className="space-y-1 border-t border-white/5 pt-2">
                                             <div className="flex items-center gap-2">
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="text-[11px] truncate">{m.key}</div>
+                                                    <div className="text-[11px] truncate aip-text">{m.key}</div>
                                                     <div className="text-[10px] aip-muted truncate">
                                                         {[
                                                             m.format.toUpperCase(),
@@ -820,8 +916,27 @@ export const RerankerSettings: React.FC = () => {
                 </>
             )}
 
-            {status.provider === 'openrouter' && (
+            {/* Hosted — always rendered. Gating this on the provider already
+                being OpenRouter would mean the key field only appears after you
+                have switched to a provider you cannot use yet. */}
+            {true && (
                 <>
+                    <div className="aip-card aip-provider">
+                        <div className="aip-provider-head">
+                            <Cloud size={16} strokeWidth={1.75} aria-hidden="true" />
+                            <h4 className="aip-card-title truncate min-w-0">{t('OpenRouter')}</h4>
+                            <div className="ml-auto flex items-center gap-2 shrink-0">
+                                <span className="aip-meta inline-flex items-center gap-1.5">
+                                    <Cloud size={12} strokeWidth={1.75} /> {t('Hosted')}
+                                </span>
+                                <AipBadge tone={status.hasApiKey ? 'ok' : 'warn'} label={status.hasApiKey ? t('Key set') : t('No key')} />
+                            </div>
+                        </div>
+                        <p className="text-[10px] aip-muted px-1 pb-1">
+                            {t('Hosted reranking sends the retrieved document text to OpenRouter. For fully private retrieval, use an on-device reranker.')}
+                        </p>
+                    </div>
+
                     {/* Key. Presence only — the stored key is never read back into
                         the renderer, so there is nothing here to leak. */}
                     <div className="aip-card p-5 space-y-3">
@@ -910,10 +1025,14 @@ export const RerankerSettings: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className="min-w-0 flex-1 text-left"
-                                                    onClick={() => void setConfig({ openrouterModel: m.id })}
+                                                    // Picking a model here ACTIVATES it, the way choosing a
+                                                    // model inside a provider card does in Settings > Embeddings.
+                                                    // Setting the model without the provider would tick a row
+                                                    // that is not actually running.
+                                                    onClick={() => void setConfig({ provider: 'openrouter', openrouterModel: m.id })}
                                                 >
                                                     <div className="flex items-center gap-2 min-w-0">
-                                                        <span className="truncate text-xs">{m.label}</span>
+                                                        <span className="truncate text-xs aip-text">{m.label}</span>
                                                         {selected && <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0" aria-hidden="true" />}
                                                     </div>
                                                     <div className="text-[10px] aip-muted truncate">
