@@ -685,8 +685,8 @@ export const RerankerSettings: React.FC = () => {
                 )}
             </div>
 
-            {/* Provider Card 1: Local Reranker */}
-            <div className="aip-card aip-provider">
+            {/* Provider Card 1: Unified Local Reranker & Model Library Card */}
+            <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
                     <PlatformMark />
                     <h4 className="aip-card-title truncate min-w-0">{t('Local Reranker')}</h4>
@@ -701,28 +701,22 @@ export const RerankerSettings: React.FC = () => {
                     </div>
                 </div>
 
-                <p className="text-[10px] aip-muted px-1 pb-1 pt-1">
-                    {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face below.')}
-                </p>
-            </div>
+                <div className="flex items-center justify-between gap-3 flex-wrap text-[10px] aip-muted px-1">
+                    <p className="min-w-0 flex-1">
+                        {t('Runs on this device with zero data sent externally. Built-in BGE model shipped with Natively, or download open models directly from Hugging Face.')}
+                    </p>
+                    <span className="shrink-0 font-medium tabular-nums text-white/70">
+                        {installedCount}/{totalCount} {t('installed')}
+                        {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
+                    </span>
+                </div>
 
-            {/* Provider Card 2: Ultra-Optimized Model Library Card */}
-            <div className="aip-card aip-provider space-y-3">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h4 className="aip-card-title">{t('Model Library')}</h4>
-                            <span className="text-[11px] font-medium tabular-nums" style={{ color: 'var(--aip-tertiary)' }}>
-                                {installedCount}/{totalCount} {t('installed')}
-                                {installedBytes > 0 && <> · {humanBytes(installedBytes)}</>}
-                            </span>
-                        </div>
-                        {recommendedModelName && (
-                            <p className="text-[11px] mt-0.5" style={{ color: 'var(--aip-tertiary)' }}>
-                                {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium" style={{ color: 'var(--aip-secondary)' }}>{recommendedModelName}</span>
-                            </p>
-                        )}
-                    </div>
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                    {recommendedModelName ? (
+                        <p className="text-[11px] px-1" style={{ color: 'var(--aip-tertiary)' }}>
+                            {t('Best for this')} {isMac ? 'Mac' : 'PC'}: <span className="font-medium" style={{ color: 'var(--aip-secondary)' }}>{recommendedModelName}</span>
+                        </p>
+                    ) : <div />}
 
                     {/* Filter Tabs */}
                     <div className="flex items-center gap-1 bg-white/5 p-0.5 rounded-md text-[11px]">
