@@ -46,7 +46,7 @@ function traceOverlayResize(event: string, data: Record<string, unknown>): void 
 }
 
 const startUrl = isDev
-  ? 'http://localhost:5180'
+  ? 'http://127.0.0.1:5180'
   : `file://${path.join(__dirname, '../../dist/index.html')}`;
 
 export class WindowHelper {
@@ -698,7 +698,7 @@ export class WindowHelper {
     this.launcherWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       console.error(`[WindowHelper] did-fail-load: ${errorCode} ${errorDescription}`);
       // DEV SELF-HEAL (2026-07-10): in dev, the renderer loads from the Vite
-      // server at http://localhost:5180. If that server is momentarily
+      // server at http://127.0.0.1:5180. If that server is momentarily
       // unavailable (a slow first `npm start`, an HMR reconnect, or a stale
       // server from a prior run being replaced), the load fails and — with no
       // retry — the window stays permanently black (its native backgroundColor).

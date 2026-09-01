@@ -12,15 +12,18 @@ const { build, context } = require('esbuild');
 // TS7-legal setting) — and tsc has not been the emitter for dist-electron for a
 // long time anyway. Type-checking in watch mode is `tsc --noEmit --watch`.
 const WATCH = process.argv.includes('--watch');
-// Fork pull requests cannot receive the repository secret needed to fetch the
-// private premium submodule. This opt-in mode still bundles every core Electron
-// entrypoint, but leaves private runtime imports unresolved for the packaged
-// premium build to supply. Normal development and release builds are unchanged.
-const CORE_SMOKE = process.env.NATIVELY_CORE_SMOKE === '1';
 const path = require('path');
 const fs = require('fs');
-
 const rootDir = path.resolve(__dirname, '..');
+const premiumElectronDir = path.resolve(rootDir, 'premium/electron');
+const premiumPresent = fs.existsSync(premiumElectronDir);
+// Fork PRs and source-available checkouts cannot fetch the private premium
+// submodule. CORE_SMOKE still bundles every core Electron entrypoint, but
+// leaves private runtime imports unresolved so LicenseManager / knowledge
+// modules load (or fail) at runtime via the existing feature gate. Explicit
+// NATIVELY_CORE_SMOKE=1 keeps the old opt-in; missing premium/electron does
+// the same automatically so `npm start` works without the private repo.
+const CORE_SMOKE = process.env.NATIVELY_CORE_SMOKE === '1' || !premiumPresent;
 const outDir = path.resolve(rootDir, 'dist-electron');
 
 const entryPoints = [];
@@ -166,7 +169,11 @@ if (WATCH) {
   }).catch(onFailure);
 } else {
   if (CORE_SMOKE) {
-    console.log('[build-electron] Core smoke mode: private premium imports are external');
+    console.log(
+      premiumPresent
+        ? '[build-electron] Core smoke mode: private premium imports are external'
+        : '[build-electron] premium submodule missing; compiling with private imports external (source-available mode)'
+    );
   }
   build(buildOptions).then(() => {
     copyAssets();

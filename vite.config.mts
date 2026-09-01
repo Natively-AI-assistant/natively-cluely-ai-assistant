@@ -48,6 +48,10 @@ export default defineConfig({
         extensions: ['.mts', '.ts', '.tsx', '.mjs', '.js', '.jsx', '.json'],
     },
     server: {
+        // Windows often resolves `localhost` to ::1 while Vite binds IPv6-only,
+        // which leaves wait-on and Electron unable to connect. Pin IPv4 loopback
+        // so npm start can actually reach the dev server on both platforms.
+        host: '127.0.0.1',
         port: 5180,
         watch: {
             ignored: [
