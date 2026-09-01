@@ -80,6 +80,37 @@ describe('base URL normalization', () => {
     assert.equal(normalizeCustomBaseUrl('   '), null);
     assert.equal(normalizeCustomBaseUrl(undefined), null);
   });
+
+  test('a scheme-less host:port is coerced, not silently accepted broken', () => {
+    // THE trap. `new URL('localhost:1234')` PARSES — `localhost:` becomes the
+    // scheme and `1234` the path, leaving the host empty. That used to be
+    // stored verbatim as a valid endpoint, and every request then failed with
+    // "could not reach the custom embedding endpoint", which sends the user to
+    // debug their server instead of their typo. Dropping http:// is the most
+    // likely thing anyone types.
+    assert.equal(normalizeCustomBaseUrl('localhost:1234'), 'http://localhost:1234/v1');
+    assert.equal(normalizeCustomBaseUrl('127.0.0.1:8080'), 'http://127.0.0.1:8080/v1');
+    assert.equal(normalizeCustomBaseUrl('my-server.local:1234'), 'http://my-server.local:1234/v1');
+    assert.equal(normalizeCustomBaseUrl('localhost'), 'http://localhost/v1');
+  });
+
+  test('a non-HTTP scheme is refused', () => {
+    // These also parse, and were stored. fetch would reject them later, with a
+    // message about the network rather than about the URL.
+    assert.equal(normalizeCustomBaseUrl('ftp://x/v1'), null);
+    assert.equal(normalizeCustomBaseUrl('file:///etc/passwd'), null);
+    assert.equal(normalizeCustomBaseUrl('javascript:alert(1)'), null);
+  });
+
+  test('genuinely unusable input is still null', () => {
+    assert.equal(normalizeCustomBaseUrl('not a url at all'), null);
+    assert.equal(normalizeCustomBaseUrl('http://'), null);
+  });
+
+  test('https and explicit ports survive the coercion path', () => {
+    assert.equal(normalizeCustomBaseUrl('https://embeddings.example.com'), 'https://embeddings.example.com/v1');
+    assert.equal(normalizeCustomBaseUrl('http://192.168.1.50:8080/v1'), 'http://192.168.1.50:8080/v1');
+  });
 });
 
 describe('identity', () => {
