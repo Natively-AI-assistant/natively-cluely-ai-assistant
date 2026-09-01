@@ -123,6 +123,109 @@ function humanBytes(bytes: number): string {
     return `${Math.round(bytes / 1e3)} KB`;
 }
 
+interface FloatingSelectOption {
+    id: string;
+    name: string;
+}
+
+interface FloatingSelectProps {
+    value: string;
+    options: FloatingSelectOption[];
+    onChange: (value: string) => void;
+    placeholder?: string;
+    disabled?: boolean;
+    className?: string;
+    containerClassName?: string;
+    ariaLabel?: string;
+    title?: string;
+    disabledHint?: string;
+}
+
+/**
+ * Floating select matching EmbeddingModelSelect design in EmbeddingSettings.
+ * Menu floats absolutely so opening it does NOT expand or stretch the parent card container.
+ */
+const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
+    value,
+    options,
+    onChange,
+    placeholder,
+    disabled = false,
+    className = '',
+    containerClassName = 'relative min-w-[200px] max-w-[320px] w-full sm:w-64',
+    ariaLabel,
+    title,
+    disabledHint,
+}) => {
+    const t = useT();
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const selectedOption = options.find(o => o.id === value);
+    const resolvedLabel = selectedOption
+        ? selectedOption.name
+        : (placeholder || t('Select reranker'));
+
+    return (
+        <div className={containerClassName} ref={containerRef}>
+            <button
+                type="button"
+                onClick={() => !disabled && setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+                aria-haspopup="listbox"
+                aria-label={ariaLabel}
+                title={disabled ? disabledHint || title : title}
+                disabled={disabled}
+                className={`aip-select-trigger cursor-pointer flex items-center justify-between w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
+            >
+                <span className="truncate pr-2 text-xs font-medium text-white">{resolvedLabel}</span>
+                <ChevronDown size={14} strokeWidth={1.75} className={`aip-select-chevron transition-transform duration-150 shrink-0 ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+
+            {isOpen && (
+                <div
+                    role="listbox"
+                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[240px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
+                >
+                    {options.map((option) => (
+                        <button
+                            key={option.id}
+                            type="button"
+                            role="option"
+                            aria-selected={value === option.id}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onChange(option.id);
+                                setIsOpen(false);
+                            }}
+                            className={`aip-select-option flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-xs cursor-pointer transition-colors hover:bg-white/10 ${value === option.id ? 'aip-text font-medium bg-white/5' : ''}`}
+                        >
+                            <span className="truncate flex-1">{option.name}</span>
+                            {value === option.id && (
+                                <Check size={13} strokeWidth={1.75} className="aip-accent-fg shrink-0 ml-2" aria-hidden="true" />
+                            )}
+                        </button>
+                    ))}
+                    {options.length === 0 && (
+                        <div className="aip-select-empty px-3 py-2 text-xs aip-muted">{t('No rerankers available')}</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
 export const RerankerSettings: React.FC = () => {
     const t = useT();
     const aipTheme = useResolvedTheme();
@@ -654,12 +757,12 @@ export const RerankerSettings: React.FC = () => {
                         </p>
                     </div>
 
-                    <div className="shrink-0 relative min-w-[200px] max-w-[320px] w-full sm:w-64">
-                        <AipSelect
-                            label={t('Active Reranker')}
+                    <div className="shrink-0 relative">
+                        <RerankerModelSelect
+                            ariaLabel={t('Active Reranker')}
                             value={activeOptionId}
                             options={activeOptions}
-                            emptyLabel={t('No rerankers available')}
+                            placeholder={t('No rerankers available')}
                             disabled={busyCatalogId !== null}
                             disabledHint={busyCatalogId !== null ? t('Switching…') : undefined}
                             onChange={(id) => { void chooseActive(id); }}
