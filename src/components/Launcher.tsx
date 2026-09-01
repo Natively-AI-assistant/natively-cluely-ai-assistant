@@ -1201,21 +1201,22 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
                                                                                 onClick={async () => {
                                                                                     setActiveMenuId(null);
                                                                                     analytics.trackPdfExported();
-                                                                                    // Fetch full details if needed
-                                                                                    if (window.electronAPI && window.electronAPI.getMeetingDetails) {
-                                                                                        try {
-                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id);
-                                                                                            if (fullMeeting) {
-                                                                                                generateMeetingPDF(fullMeeting);
-                                                                                            } else {
-                                                                                                generateMeetingPDF(m);
-                                                                                            }
-                                                                                        } catch (e) {
-                                                                                            console.error("Failed to fetch details for PDF", e);
-                                                                                            generateMeetingPDF(m);
+                                                                                    // Resolve full details when available, else fall back to the
+                                                                                    // list item. Wrapped in one try/catch so a failure anywhere —
+                                                                                    // including the CJK-font load inside generateMeetingPDF — is
+                                                                                    // surfaced instead of becoming an unhandled rejection.
+                                                                                    let target = m;
+                                                                                    try {
+                                                                                        if (window.electronAPI && window.electronAPI.getMeetingDetails) {
+                                                                                            const fullMeeting = await window.electronAPI.getMeetingDetails(m.id).catch((e) => {
+                                                                                                console.error("Failed to fetch details for PDF", e);
+                                                                                                return null;
+                                                                                            });
+                                                                                            if (fullMeeting) target = fullMeeting;
                                                                                         }
-                                                                                    } else {
-                                                                                        generateMeetingPDF(m);
+                                                                                        await generateMeetingPDF(target);
+                                                                                    } catch (e) {
+                                                                                        console.error("Failed to export meeting PDF", e);
                                                                                     }
                                                                                 }}
                                                                             >
