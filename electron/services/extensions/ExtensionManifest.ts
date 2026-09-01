@@ -66,6 +66,15 @@ const modelSchema = z.object({
    */
   repoPath: z.string().min(1).optional(),
   approxBytes: z.number().int().positive(),
+  /**
+   * A pinned commit sha in the source repository. When present the download
+   * uses it verbatim instead of resolving the repo's current HEAD, which is
+   * what makes a file with `sha256: null` verifiable at all: nothing checks its
+   * bytes, so identity of the commit is the only protection it has. It also
+   * stops a multi-file model from straddling two revisions if the repo moves
+   * mid-install. Full 40-char sha only — a branch name would move.
+   */
+  revision: z.string().regex(/^[a-f0-9]{40}$/i).optional(),
   /** Recorded on first verified download when not known ahead of time. */
   sha256: z.string().regex(/^[a-f0-9]{64}$/i).nullable().optional(),
   license: modelLicenseSchema,

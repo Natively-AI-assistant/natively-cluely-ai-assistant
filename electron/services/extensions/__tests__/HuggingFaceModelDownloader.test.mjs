@@ -523,3 +523,52 @@ test('a failed replace keeps BOTH the old model and the resumable partial', asyn
   );
   assert.ok(fs.existsSync(`${dest}.part.rev`), 'the stamp survives so the finished .part is resumable');
 });
+
+// ── a PINNED revision must be used verbatim ───────────────────────────────
+// The reranker catalogue pins a 40-char sha per model and its header states
+// that the pin is what protects files carrying `sha256: null` (nothing checks
+// their bytes). That is only true if the pin actually reaches the download.
+
+test('a pinned revision is used verbatim and skips the metadata lookup', async () => {
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+  const PIN = 'a09144355adeed5f58c8ed011d209bf8ee5a1fec';
+
+  const urls = [];
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      return bodyResponse(Buffer.from('pinned'), { headers: { 'content-length': '6' } });
+    },
+  });
+
+  await dl.download({ ...MODEL, revision: PIN }, dest, () => {}, new AbortController().signal);
+
+  assert.ok(!urls.some((u) => u.includes('/api/models/')), 'a pin needs no live resolution');
+  assert.ok(urls.some((u) => u.includes(`/resolve/${PIN}/`)), `expected the pin in ${urls}`);
+  assert.ok(!urls.some((u) => u.includes('/resolve/main/')), 'a moving branch would defeat the pin');
+  assert.equal(fs.readFileSync(dest, 'utf8'), 'pinned');
+});
+
+test('a pin that is not a full commit sha is ignored, not trusted', async () => {
+  // A manifest is downloaded content; "main" or a short sha would move.
+  const dir = tmpDir();
+  const dest = path.join(dir, MODEL.file);
+
+  const urls = [];
+  const dl = new HuggingFaceModelDownloader({
+    logger: { info: () => {}, warn: () => {} },
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      return String(url).includes('/api/models/')
+        ? metadataResponse('beef0000')
+        : bodyResponse(Buffer.from('resolved'), { headers: { 'content-length': '8' } });
+    },
+  });
+
+  await dl.download({ ...MODEL, revision: 'main' }, dest, () => {}, new AbortController().signal);
+
+  assert.ok(urls.some((u) => u.includes('/api/models/')), 'falls back to live resolution');
+  assert.ok(urls.some((u) => u.includes('/resolve/beef0000/')));
+});
