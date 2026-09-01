@@ -22,6 +22,12 @@ export interface RerankerSettings {
   provider?: RerankerProvider;
   /** OpenRouter model id. No default is hard-coded — see defaultRerankModel(). */
   openrouterModel?: string;
+  /**
+   * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the bundled
+   * bge-reranker-base. ONNX entries are read by LocalReranker; GGUF entries are
+   * run by llama.cpp through buildLocalGgufPort().
+   */
+  localModelId?: string;
   /** How many candidates to send. Absent keeps ModeHybridRetriever's own pool size. */
   candidateCount?: number;
   /**
@@ -296,4 +302,53 @@ async function rerankInSafeBatches(
 
   all.sort((a, b) => b.score - a.score);
   return all;
+}
+
+// ---------------------------------------------------------------------------
+// Local GGUF
+// ---------------------------------------------------------------------------
+
+/** Cached per model path: loading a 400MB GGUF per query would be absurd. */
+let ggufPort: { id: string; port: RerankSeamPort } | null = null;
+
+/**
+ * The seam port for a selected local GGUF model, or null.
+ *
+ * ONNX selections are handled inside `LocalReranker` (it reads the same setting
+ * and swaps its own modelId), so this covers only the runtime Core cannot
+ * express that way. Returning null lets the chain fall through to the built-in.
+ */
+export function buildLocalGgufPort(): RerankSeamPort | null {
+  const id = readRerankerSettings().localModelId;
+  if (!id) return null;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { findCatalogModel } = require('../../rag/rerankerModelCatalog') as typeof import('../../rag/rerankerModelCatalog');
+    const model = findCatalogModel(id);
+    if (!model || model.runtime !== 'gguf' || !model.supported) return null;
+
+    const cached = ggufPort;
+    if (cached?.id === id) return cached.port;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ggufModelFile } = require('./localModelInstaller') as typeof import('./localModelInstaller');
+    const file = ggufModelFile(id);
+    if (!file) return null;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { GgufReranker } = require('../../rag/GgufReranker') as typeof import('../../rag/GgufReranker');
+    // Selection changed: tear the old worker (and its several hundred MB) down.
+    void (cached?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
+    ggufPort = { id, port: new GgufReranker(file) };
+    return ggufPort.port;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the cached GGUF port. Called when the selection changes. */
+export function resetLocalGgufPort(): void {
+  void (ggufPort?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
+  ggufPort = null;
 }

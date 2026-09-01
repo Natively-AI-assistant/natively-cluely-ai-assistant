@@ -22,7 +22,7 @@ const require = createRequire(import.meta.url);
 
 const { RERANKER_MODEL_CATALOG, findCatalogModel } =
   require(path.join(repoRoot, 'dist-electron/electron/rag/rerankerModelCatalog.js'));
-const { statusOf, listCatalogStatus, installOnnxModel, removeOnnxModel, modelDirectory } =
+const { statusOf, listCatalogStatus, installCatalogModel, removeCatalogModel, modelDirectory } =
   require(path.join(repoRoot, 'dist-electron/electron/services/reranking/localModelInstaller.js'));
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'natively-cat-'));
@@ -114,11 +114,26 @@ test('a model whose head is outside the graph ships the files needed to apply it
   }
 });
 
-test('a GGUF entry names the extension and binary that run it', () => {
-  for (const m of RERANKER_MODEL_CATALOG.filter(m => m.runtime === 'gguf')) {
-    assert.ok(m.extensionId, `${m.id} needs an extensionId — Core has no llama.cpp`);
-    assert.ok(m.requiresBinary, `${m.id} must name the binary it needs`);
-    assert.equal(m.modelId, undefined, 'a GGUF model must never be handed to the ONNX runtime');
+test('a supported GGUF entry is runnable by Core, not by an extension', () => {
+  // Core runs GGUF in-process through llama.cpp now, so a supported entry needs
+  // no extension and no binary on PATH. It must also never be handed to the
+  // ONNX runtime.
+  for (const m of RERANKER_MODEL_CATALOG.filter(m => m.runtime === 'gguf' && m.supported)) {
+    assert.equal(m.modelId, undefined, `${m.id} must never reach the ONNX runtime`);
+    assert.equal(m.dtype, undefined, 'dtype is an ONNX concept');
+    assert.equal(m.files.length, 1, 'a GGUF model is one file');
+    assert.match(m.files[0].repoPath, /\.gguf$/);
+    assert.ok(m.files[0].sha256, 'the weights must be verifiable');
+  }
+});
+
+test('an unsupported GGUF entry explains itself instead of naming a workaround', () => {
+  // jina-reranker-v3.5 and qwen3-reranker are qwen3-architecture generative
+  // models with no ranking head; llama.cpp refuses them outright. Measured.
+  const unsupported = RERANKER_MODEL_CATALOG.filter(m => m.runtime === 'gguf' && !m.supported);
+  assert.ok(unsupported.length >= 2, 'jina and qwen3 are expected here');
+  for (const m of unsupported) {
+    assert.match(m.unsupportedReason, /ranking head/i, `${m.id} must say why`);
   }
 });
 
@@ -139,19 +154,21 @@ test('installing an unsupported model is refused before any download', async () 
   const root = tmp();
   const unsupported = RERANKER_MODEL_CATALOG.find(m => !m.supported);
   if (!unsupported) return;   // nothing unsupported to refuse
-  const res = await installOnnxModel(unsupported.id, () => {}, new AbortController().signal, { rootOverride: root });
+  const res = await installCatalogModel(unsupported.id, () => {}, new AbortController().signal, { rootOverride: root });
   assert.equal(res.ok, false);
-  assert.match(res.error, /scoring head|not supported/i);
+  assert.match(res.error, /scoring head|ranking head|not supported/i);
 });
 
-test('installing a GGUF model through the ONNX path is refused', async () => {
-  const res = await installOnnxModel('jina-reranker-v3.5-q4km', () => {}, new AbortController().signal, { rootOverride: tmp() });
+test('an unsupported GGUF model is refused before any download', async () => {
+  // jina/qwen3 GGUFs are qwen3-architecture generative models: llama.cpp
+  // refuses to rank them, so downloading ~400MB would buy nothing.
+  const res = await installCatalogModel('jina-reranker-v3.5-q4km', () => {}, new AbortController().signal, { rootOverride: tmp() });
   assert.equal(res.ok, false);
-  assert.match(res.error, /gguf/i);
+  assert.match(res.error, /ranking head|not supported/i);
 });
 
 test('an unknown id is refused', async () => {
-  const res = await installOnnxModel('no-such-model', () => {}, new AbortController().signal, { rootOverride: tmp() });
+  const res = await installCatalogModel('no-such-model', () => {}, new AbortController().signal, { rootOverride: tmp() });
   assert.equal(res.ok, false);
 });
 
@@ -187,11 +204,11 @@ test('the install directory is nested per org and name, not one literal segment'
 });
 
 test('removing a model that is not installed is harmless', () => {
-  const res = removeOnnxModel('ms-marco-minilm-l6', tmp());
+  const res = removeCatalogModel('ms-marco-minilm-l6', tmp());
   assert.equal(res.ok, true);
 });
 
-test('a GGUF model cannot be removed through the local-model path', () => {
-  const res = removeOnnxModel('jina-reranker-v3.5-q4km', tmp());
-  assert.equal(res.ok, false);
+test('a GGUF model CAN be removed now that Core installs it', () => {
+  const res = removeCatalogModel('bge-reranker-v2-m3-q4km', tmp());
+  assert.equal(res.ok, true);
 });

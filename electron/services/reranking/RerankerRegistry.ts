@@ -113,6 +113,11 @@ export interface RerankerRegistryOptions {
    * reorder the user's evidence by something they did not choose.
    */
   hostedFallbackPort?: () => RerankSeamPort | null;
+  /**
+   * A local GGUF model the user selected, run by llama.cpp. Null when the
+   * selection is ONNX (the built-in handles those) or nothing is selected.
+   */
+  localGgufPort?: () => RerankSeamPort | null;
   timeoutMs?: number;
   onOutcome?: (outcome: RerankOutcome) => void;
   logger?: { warn(message: string, ...args: unknown[]): void };
@@ -175,8 +180,14 @@ export class RerankerRegistry {
     if (hosted) return hosted;
 
     const extensionId = this.activeExtensionId();
-    if (!extensionId) return null;
-    return { rerank: (query, passages) => this.rerankVia(extensionId, query, passages) };
+    if (extensionId) {
+      return { rerank: (query, passages) => this.rerankVia(extensionId, query, passages) };
+    }
+
+    // A locally selected GGUF model. ONNX selections need nothing here — the
+    // built-in reranker reads the same setting and swaps its own model — but
+    // llama.cpp is a different runtime, so it takes the seam directly.
+    return this.options.localGgufPort?.() ?? null;
   }
 
   /**
@@ -428,6 +439,15 @@ function defaultOptions(): RerankerRegistryOptions {
       } catch {
         // An unreadable configuration is not permission to send document text
         // to a third party. Fall through to the local path.
+        return null;
+      }
+    },
+    localGgufPort: () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { buildLocalGgufPort } = require('./rerankerConfig') as typeof import('./rerankerConfig');
+        return buildLocalGgufPort();
+      } catch {
         return null;
       }
     },
