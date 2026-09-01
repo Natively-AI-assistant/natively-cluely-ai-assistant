@@ -449,6 +449,38 @@ export interface ElectronAPI {
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
   setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  listLocalRerankerModels: () => Promise<{
+    models: Array<{
+      id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
+      params: string; note: string; bytes: number; recommended: boolean
+      license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      state: 'not-installed' | 'partial' | 'installed'
+      bytesOnDisk: number
+      selected: boolean
+      /** GGUF only: the extension that can execute it. */
+      extensionId: string | null
+      extensionInstalled: boolean | null
+      /** GGUF only: a binary that must be on PATH, e.g. llama-server. */
+      requiresBinary: string | null
+      /** False when Core cannot execute it even once downloaded. */
+      supported: boolean
+      unsupportedReason: string | null
+      /** Only supported ONNX models run in Core's own runtime and can be activated here. */
+      activatable: boolean
+    }>
+    selectedId: string | null
+    builtInSelected: boolean
+  }>
+  installLocalRerankerModel: (id: string) => Promise<{
+    success: boolean; error?: string; message?: string; extensionId?: string; digests?: Record<string, string>
+  }>
+  cancelLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  removeLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  useLocalRerankerModel: (id: string | null) => Promise<{
+    success: boolean; activeId?: string | null; topIndex?: number; error?: string; message?: string
+  }>
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+
   listExtensions: () => Promise<{
     available: boolean
     extensions: Array<{

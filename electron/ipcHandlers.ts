@@ -7194,6 +7194,200 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  // ── Direct reranker model install ────────────────────────────────────────
+  //
+  // Downloading a model without staging an extension folder. Two shapes, and
+  // the difference is not cosmetic:
+  //
+  //   ONNX  — lands in <userData>/local-models/<org>/<name>/, which is the
+  //           directory LocalReranker already searches FIRST. Core runs it with
+  //           the cross-encoder runtime it already ships for bge; there is no
+  //           new adapter and no new dependency.
+  //   GGUF  — Core has no llama.cpp. Downloading one into a Core directory
+  //           would produce hundreds of megabytes nothing can execute, so these
+  //           route through the owning extension's ModelStore, which is also
+  //           what keeps the LicenseLedger gate intact for Jina's CC-BY-NC-4.0.
+
+  const localModelDownloads = new Map<string, AbortController>();
+
+  safeHandle('reranker:list-local-models', async () => {
+    const { listCatalogStatus } = require('./services/reranking/localModelInstaller');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const selectedId = ((SettingsManager.getInstance().get('reranker') as any) || {}).localModelId ?? null;
+
+    // Which GGUF models could actually run: their extension installed AND the
+    // binary present. Reported rather than assumed, so nothing reads "Ready"
+    // for a file that cannot be executed.
+    let installedExtensions: string[] = [];
+    try {
+      const manager = extensionManager();
+      installedExtensions = manager ? manager.list().map((r: any) => r.id) : [];
+    } catch { /* extensions unavailable */ }
+
+    const models = listCatalogStatus().map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      runtime: m.runtime,
+      repo: m.repo,
+      params: m.params,
+      note: m.note,
+      bytes: m.bytes,
+      recommended: m.recommended === true,
+      license: m.license,
+      state: m.status.state,
+      bytesOnDisk: m.status.bytesOnDisk,
+      selected: selectedId === m.id,
+      extensionId: m.extensionId ?? null,
+      extensionInstalled: m.extensionId ? installedExtensions.includes(m.extensionId) : null,
+      requiresBinary: m.requiresBinary ?? null,
+      supported: m.supported,
+      unsupportedReason: m.unsupportedReason ?? null,
+      // Only a SUPPORTED ONNX entry can be activated from here; a GGUF one is
+      // run by its extension and is selected by enabling that extension.
+      activatable: m.runtime === 'onnx' && m.supported,
+    }));
+
+    return { models, selectedId, builtInSelected: !selectedId };
+  });
+
+  safeHandle('reranker:install-local-model', async (event: any, id: string) => {
+    const { findCatalogModel } = require('./rag/rerankerModelCatalog');
+    const model = findCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (localModelDownloads.has(id)) return { success: false, error: 'already_downloading' };
+
+    const sender = event?.sender;
+    let lastSent = 0;
+    const emit = (fraction: number, currentFile: string) => {
+      const now = Date.now();
+      if (now - lastSent < 200 && fraction < 1) return;
+      lastSent = now;
+      try { sender?.send('reranker:model-progress', { id, fraction, currentFile }); } catch { /* window gone */ }
+    };
+
+    const controller = new AbortController();
+    localModelDownloads.set(id, controller);
+    try {
+      if (model.runtime === 'gguf') {
+        // Route through the extension that can run it, so the licence gate and
+        // the model directory are the extension system's, not a second copy.
+        const manager = extensionManager();
+        if (!manager) return { success: false, error: 'extensions_unavailable' };
+        const record = manager.get(model.extensionId);
+        if (!record) {
+          return {
+            success: false,
+            error: 'extension_required',
+            extensionId: model.extensionId,
+            message: `${model.name} is run by the ${model.extensionId} extension. Install that extension first.`,
+          };
+        }
+        const file = model.files[0].repoPath;
+        const manifestModel = (record.manifest.models ?? []).find((m: any) => m.file === file || m.repoPath === file);
+        if (!manifestModel) {
+          return { success: false, error: 'model_not_in_manifest', message: `The installed ${model.extensionId} extension does not declare ${file}.` };
+        }
+
+        const { ModelStore } = require('./services/extensions/ModelStore');
+        const { HuggingFaceModelDownloader } = require('./services/extensions/HuggingFaceModelDownloader');
+        const store = new ModelStore({ downloader: new HuggingFaceModelDownloader({ logger: console }) });
+        // Throws when the licence has not been acknowledged — Jina is
+        // CC-BY-NC-4.0 with requiresAcknowledgement, and that refusal holds even
+        // if the bytes are already on disk.
+        const status = await store.download(model.extensionId, manifestModel, (f: number) => emit(f, file), controller.signal);
+        return { success: status.state === 'ready', status };
+      }
+
+      const { installOnnxModel } = require('./services/reranking/localModelInstaller');
+      const result = await installOnnxModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
+      if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
+      return { success: true, digests: result.digests };
+    } catch (e: any) {
+      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+    } finally {
+      localModelDownloads.delete(id);
+    }
+  });
+
+  safeHandle('reranker:cancel-local-model', async (_evt, id: string) => {
+    const controller = localModelDownloads.get(id);
+    if (!controller) return { success: false, error: 'not_downloading' };
+    controller.abort();
+    return { success: true };
+  });
+
+  safeHandle('reranker:remove-local-model', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    // Never delete the model that is currently in use — the app would be left
+    // pointing at a directory that no longer exists.
+    if (stored.localModelId === id) {
+      return { success: false, error: 'in_use', message: 'This reranker is in use. Choose another one before removing it.' };
+    }
+    const { removeOnnxModel } = require('./services/reranking/localModelInstaller');
+    const res = removeOnnxModel(id);
+    return { success: res.ok, message: res.error };
+  });
+
+  safeHandle('reranker:use-local-model', async (_evt, id: string | null) => {
+    // Activation VALIDATES before it commits. The previous reranker stays in
+    // place unless the new one has actually loaded and produced a sane ranking,
+    // so a bad model can never leave the app without a working reranker.
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findCatalogModel } = require('./rag/rerankerModelCatalog');
+    const { statusOf } = require('./services/reranking/localModelInstaller');
+    const { reloadLocalReranker, getLocalReranker } = require('./rag/LocalReranker');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    const previous = stored.localModelId ?? null;
+
+    if (id !== null) {
+      const model = findCatalogModel(id);
+      if (!model) return { success: false, error: 'unknown_model' };
+      if (model.runtime !== 'onnx') {
+        return { success: false, error: 'not_activatable', message: `${model.name} is run by its extension; enable that extension instead.` };
+      }
+      if (!model.supported) {
+        return { success: false, error: 'not_supported', message: model.unsupportedReason ?? `${model.name} is not supported by this build.` };
+      }
+      const status = statusOf(model);
+      if (status.state !== 'installed') {
+        return { success: false, error: 'not_installed', message: `${model.name} is not fully downloaded (missing ${status.missing.join(', ')}).` };
+      }
+    }
+
+    if (!settings.set('reranker', { ...stored, localModelId: id })) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    // The constructor reads the setting, so the switch only happens once the
+    // old instance is disposed and dropped.
+    reloadLocalReranker('reranker model changed');
+
+    try {
+      const reranker = getLocalReranker();
+      const ranked = await reranker.rerank(
+        'What is the capital city of France?',
+        ['Paris is the capital and most populous city of France.', 'The Rhine is a river in Central and Western Europe.'],
+      );
+      const ok = Array.isArray(ranked) && ranked.length === 2
+        && ranked.every((r: any) => Number.isFinite(r.score));
+      if (!ok) throw new Error('the model loaded but did not return a usable ranking');
+
+      return { success: true, activeId: id, topIndex: ranked[0].index };
+    } catch (e: any) {
+      // Roll back to whatever was working before, and say so.
+      settings.set('reranker', { ...stored, localModelId: previous });
+      reloadLocalReranker('activation failed; reverted');
+      return {
+        success: false,
+        error: 'activation_failed',
+        message: `Couldn't activate this reranker: ${String(e?.message || e)}. Your previous reranker is still active.`,
+      };
+    }
+  });
+
   // ── Extensions ───────────────────────────────────────────────────────────
   //
   // Reranker extensions surface INSIDE Settings > Reranker, not in a separate

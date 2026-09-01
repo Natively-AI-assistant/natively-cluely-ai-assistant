@@ -1932,6 +1932,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
   testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
 
+  // Direct model install: download a reranker without staging an extension.
+  listLocalRerankerModels: () => ipcRenderer.invoke('reranker:list-local-models'),
+  installLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:install-local-model', id),
+  cancelLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:cancel-local-model', id),
+  removeLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:remove-local-model', id),
+  useLocalRerankerModel: (id: string | null) => ipcRenderer.invoke('reranker:use-local-model', id),
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
+    const subscription = (_e: any, payload: any) => callback(payload);
+    ipcRenderer.on('reranker:model-progress', subscription);
+    return () => { ipcRenderer.removeListener('reranker:model-progress', subscription); };
+  },
+
   // Extensions. Reranker extensions surface inside Settings > Reranker.
   listExtensions: () => ipcRenderer.invoke('extensions:list'),
   installExtensionFromFolder: () => ipcRenderer.invoke('extensions:install-from-folder'),

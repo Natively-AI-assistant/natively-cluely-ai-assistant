@@ -149,6 +149,12 @@ export interface AppSettings {
      */
     reranker?: {
         provider?: 'local' | 'openrouter';
+        /**
+         * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
+         * bundled bge-reranker-base. Only ONNX entries are valid here: a GGUF
+         * model is executed by its extension, not by Core's runtime.
+         */
+        localModelId?: string;
         openrouterModel?: string;
         candidateCount?: number;
         topN?: number;

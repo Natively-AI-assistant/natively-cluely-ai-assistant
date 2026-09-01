@@ -91,7 +91,13 @@ class LocalRerankerImpl {
     private readonly dtype: string;
 
     constructor() {
-        this.modelId = (process.env.NATIVELY_RERANKER_MODEL || '').trim() || DEFAULT_RERANKER_MODEL;
+        // Resolution order: env override > the user's selected model > default.
+        // The env var stays FIRST so an experiment or a CI pin still wins over
+        // stored settings, which is what every other model knob in this repo does.
+        const selected = readSelectedLocalReranker();
+        this.modelId = (process.env.NATIVELY_RERANKER_MODEL || '').trim()
+            || selected?.modelId
+            || DEFAULT_RERANKER_MODEL;
         // Resolve the bundled model dir with the same candidate-search pattern
         // as LocalEmbeddingProvider.resolveModelPath — try packaged
         // resourcesPath/models, then app-relative resources/models (works for
@@ -107,7 +113,14 @@ class LocalRerankerImpl {
         // download fetches the quantized variant, so this keeps both the
         // installer and the loaded footprint small. NATIVELY_RERANKER_DTYPE
         // overrides (e.g. 'fp32') for accuracy experiments.
-        this.dtype = (process.env.NATIVELY_RERANKER_DTYPE || 'q8').trim() || 'q8';
+        // dtype is PER MODEL, not global. bge-reranker-base ships
+        // `onnx/model_quantized.onnx` (q8); the Ettin repositories ship
+        // `onnx/model.onnx` (fp32) plus architecture-specific int8 exports that
+        // cannot be one cross-platform choice. Applying the q8 default to an
+        // Ettin model asks transformers.js for a file that is not there.
+        this.dtype = (process.env.NATIVELY_RERANKER_DTYPE || '').trim()
+            || selected?.dtype
+            || 'q8';
     }
 
     private static resolveModelPath(modelId: string): string {
@@ -419,18 +432,30 @@ class LocalRerankerImpl {
         }
     }
 
-    /** Test-only: reset cached load state so a test can re-exercise loading. */
-    __resetForTests(): void {
+    /**
+     * Tear the worker down and forget every cached load decision.
+     *
+     * Public because switching models needs exactly this: the modelId and dtype
+     * are read in the constructor, so a new selection only takes effect once
+     * this instance is disposed and replaced. Without it, "Use this model" would
+     * silently do nothing until the next launch.
+     */
+    dispose(reason = 'disposed'): void {
         if (this.worker) {
             this.worker.terminate().catch(() => {});
             this.worker = null;
         }
-        // Release any held ONNX gate slot so subsequent tests start clean.
+        // Release any held ONNX gate slot so the next load starts clean.
         if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
-        this.rejectAllPending(new Error('reset for tests'));
+        this.rejectAllPending(new Error(reason));
         this.loadingPromise = null;
         this.loadFailed = false;
         this.loaded = false;
+    }
+
+    /** Test-only alias, kept so existing tests read the same. */
+    __resetForTests(): void {
+        this.dispose('reset for tests');
     }
 
     /**
@@ -460,6 +485,51 @@ let _instance: LocalRerankerImpl | null = null;
 export function getLocalReranker(): LocalRerankerImpl {
     if (!_instance) _instance = new LocalRerankerImpl();
     return _instance;
+}
+
+/**
+ * The model the user selected, or null for the built-in.
+ *
+ * Read lazily and defensively: this runs on the retrieval path via the
+ * constructor, and a missing or half-initialised SettingsManager must fall back
+ * to the bundled model rather than throw. esbuild bundles every electron file
+ * separately, so a top-level import would inline a second SettingsManager —
+ * see services/extensions/singleton.ts.
+ */
+function readSelectedLocalReranker(): { modelId: string; dtype: string } | null {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SettingsManager } = require('../services/SettingsManager');
+        const id = (SettingsManager.getInstance().getSettings()?.reranker as any)?.localModelId;
+        if (!id || typeof id !== 'string') return null;
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { findCatalogModel } = require('./rerankerModelCatalog') as typeof import('./rerankerModelCatalog');
+        const entry = findCatalogModel(id);
+        // Only ONNX entries run in THIS runtime. A GGUF selection is executed by
+        // its extension, and honouring it here would point transformers.js at a
+        // directory containing one .gguf file it cannot read.
+        if (!entry || entry.runtime !== 'onnx' || !entry.modelId) return null;
+        return { modelId: entry.modelId, dtype: entry.dtype ?? 'fp32' };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Swap the active local reranker.
+ *
+ * Disposes the running instance and drops the singleton so the next
+ * `getLocalReranker()` rebuilds against the current selection. Callers must
+ * have written the setting FIRST — the constructor is what reads it.
+ *
+ * `ModesManager.prewarmModeReferenceIndex` calls `getLocalReranker()` each time
+ * rather than holding a reference, so a warm instance cannot survive this.
+ */
+export function reloadLocalReranker(reason = 'model changed'): void {
+    const previous = _instance;
+    _instance = null;
+    try { previous?.dispose(reason); } catch { /* a failed teardown must not block the switch */ }
 }
 
 export type { LocalRerankerImpl };
