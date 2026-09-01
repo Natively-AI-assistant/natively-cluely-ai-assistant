@@ -43,7 +43,6 @@ interface RerankerStatus {
     provider: RerankerProvider;
     openrouterModel: string | null;
     candidateCount: number | null;
-    topN: number | null;
     fallbackToLocal: boolean;
     hasApiKey: boolean;
     eligible: boolean;

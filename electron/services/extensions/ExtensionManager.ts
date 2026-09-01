@@ -261,12 +261,22 @@ export class ExtensionManager {
     return { ok: true, record, warnings: validation.warnings };
   }
 
-  /** Remove an extension, its models, and its registry entry. */
-  remove(id: string): boolean {
+  /**
+   * Remove an extension, its models, and its registry entry.
+   *
+   * `async` because the unload has to COMPLETE before the directories go: the
+   * child process holds its model files open, and on Windows an open handle
+   * makes rmSync fail with EBUSY/EPERM — leaving multi-gigabyte weights behind
+   * while the registry entry disappears, so nothing can ever find them to
+   * clean up. `void this.unload(id)` raced exactly that.
+   */
+  async remove(id: string): Promise<boolean> {
     const record = this.registry.get(id);
     if (!record) return false;
 
-    void this.unload(id);
+    await this.unload(id).catch((e) => {
+      this.logger.warn(`unload before remove failed for "${id}"`, errText(e));
+    });
     this.modelStore.removeAll(id);
     try {
       fs.rmSync(extensionDir(id, this.rootOverride), { recursive: true, force: true });

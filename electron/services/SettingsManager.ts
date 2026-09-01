@@ -157,7 +157,6 @@ export interface AppSettings {
         localModelId?: string;
         openrouterModel?: string;
         candidateCount?: number;
-        topN?: number;
         fallbackToLocal?: boolean;
         lastTest?: {
             at: string;

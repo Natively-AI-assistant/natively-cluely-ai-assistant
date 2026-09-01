@@ -1926,7 +1926,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     provider?: 'local' | 'openrouter';
     openrouterModel?: string;
     candidateCount?: number;
-    topN?: number;
     fallbackToLocal?: boolean;
   }) => ipcRenderer.invoke('reranker:set-config', next),
   setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),

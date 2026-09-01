@@ -417,7 +417,6 @@ export interface ElectronAPI {
     provider: 'local' | 'openrouter'
     openrouterModel: string | null
     candidateCount: number | null
-    topN: number | null
     fallbackToLocal: boolean
     /** Presence only. The key itself never crosses the IPC boundary. */
     hasApiKey: boolean
@@ -445,7 +444,6 @@ export interface ElectronAPI {
     provider?: 'local' | 'openrouter'
     openrouterModel?: string
     candidateCount?: number
-    topN?: number
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
   setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
