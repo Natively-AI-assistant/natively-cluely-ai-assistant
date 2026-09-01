@@ -31,7 +31,7 @@
     "dist": "npm run app:build",
     "dist:signed": "npm run app:build:signed && node scripts/upload-release.mjs",
     "build:native": "node scripts/build-native.js",
-    "test": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\" \"electron/lib/__tests__/**/*.test.mjs\" \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\" \"electron/audio/__tests__/**/*.test.mjs\" \"electron/audio/whisper/__tests__/**/*.test.mjs\" \"electron/audio/whisper/nemotron/__tests__/**/*.test.mjs\" \"electron/rag/__tests__/**/*.test.mjs\" \"electron/utils/__tests__/**/*.test.mjs\" \"electron/update/**/*.test.mjs\"",
+    "test": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/services/extensions/__tests__/**/*.test.mjs\" \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\" \"electron/lib/__tests__/**/*.test.mjs\" \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\" \"electron/audio/__tests__/**/*.test.mjs\" \"electron/audio/whisper/__tests__/**/*.test.mjs\" \"electron/audio/whisper/nemotron/__tests__/**/*.test.mjs\" \"electron/rag/__tests__/**/*.test.mjs\" \"electron/utils/__tests__/**/*.test.mjs\" \"electron/update/**/*.test.mjs\"",
     "test:auto-answer": "npm run build:electron && node --test \"electron/intelligence/autoAnswer/__tests__/**/*.test.mjs\"",
     "test:auto-answer:judge": "npm run build:electron && node electron/intelligence/autoAnswer/__tests__/judgeEval.mjs",
     "test:intelligence": "npm run build:electron && node --test \"electron/intelligence/__tests__/**/*.test.mjs\" \"electron/context-intelligence/__tests__/**/*.test.mjs\"",
@@ -80,7 +80,7 @@
     "test:intelligence:ui:grader": "node --experimental-strip-types intelligence-eval-real-ui/grader-unit-checks.mjs",
     "benchmark:livememory": "cross-env NODE_NO_WARNINGS=1 NATIVELY_ENABLE_LIVE_SESSION_MEMORY=on node benchmarks/profile-intelligence/run_live_session_memory_eval.ts",
     "test:llm": "npm run build:electron && node --test \"electron/llm/__tests__/**/*.test.mjs\" \"electron/llm/codeVerification/__tests__/**/*.test.mjs\"",
-    "test:services": "npm run build:electron && node --test \"electron/services/__tests__/**/*.test.mjs\"",
+    "test:services": "npm run build:electron && node --test \"electron/services/__tests__/**/*.test.mjs\" \"electron/services/extensions/__tests__/**/*.test.mjs\"",
     "test:meeting-notes": "npm run build:electron && node --test \"electron/services/meeting/__tests__/**/*.test.mjs\"",
     "eval:meeting-notes": "npm run build:electron && cross-env NODE_NO_WARNINGS=1 node benchmarks/meeting-notes/run_meeting_notes_eval.mjs",
     "test:electron": "npm run build:electron && node scripts/run-with-env.mjs --default-tmpdir NATIVELY_TEST_USERDATA=natively-test-userdata --set ELECTRON_RUN_AS_NODE=1 -- electron --test \"electron/services/__tests__/**/*.test.mjs\"",
@@ -150,7 +150,9 @@
       "**/node_modules/@huggingface/jinja/**",
       "**/node_modules/onnxruntime-common/**",
       "**/node_modules/onnxruntime-node/**",
-      "**/node_modules/onnxruntime-web/**"
+      "**/node_modules/onnxruntime-web/**",
+      "**/node_modules/node-llama-cpp/**",
+      "**/node_modules/@node-llama-cpp/**"
     ],
     "directories": {
       "output": "release",
@@ -282,6 +284,7 @@
     "electron-is-dev": "^3.0.1",
     "esbuild": "0.21.5",
     "husky": "^9.1.7",
+    "js-tiktoken": "^1.0.21",
     "patch-package": "^8.0.1",
     "postcss": "^8.4.49",
     "react-doctor": "^0.2.10",
@@ -331,6 +334,7 @@
     "lucide-react": "^0.460.0",
     "mammoth": "^1.11.0",
     "marked": "^18.0.4",
+    "node-llama-cpp": "^3.20.0",
     "onnxruntime-common": "1.22.0",
     "onnxruntime-node": "1.22.0",
     "openai": "^6.22.0",
@@ -354,7 +358,8 @@
     "three": "^0.182.0",
     "tree-kill": "^1.2.2",
     "uuid": "^11.0.3",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "optionalDependencies": {
     "@vectorize-io/hindsight-client": "^0.8.2",
