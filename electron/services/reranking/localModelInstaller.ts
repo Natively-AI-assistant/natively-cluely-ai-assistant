@@ -192,6 +192,9 @@ export async function installOnnxModel(
           source: 'huggingface',
           repo: model.repo,
           repoPath: file.repoPath,
+          // The catalogue pins a sha per model; without forwarding it here the
+          // downloader resolved the live default branch instead, once per file.
+          revision: model.revision,
           // The downloader only uses `file` for messages here; the real
           // destination is passed explicitly.
           file: path.basename(file.repoPath),

@@ -189,6 +189,26 @@ const RERANK_CANDIDATE_POOL = 30;
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
 
+/**
+ * How many candidates to rerank, from Settings > Reranker.
+ *
+ * Clamped to RERANK_CANDIDATE_POOL: a larger pool is not the user's to raise
+ * here, because the ceiling exists for the ONNX arena and the latency budget,
+ * not as a preference. Absent or unreadable settings keep the existing default,
+ * so this cannot change behaviour for anyone who has not touched the control.
+ */
+function resolveRerankPoolSize(): number {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SettingsManager } = require('../SettingsManager');
+        const chosen = (SettingsManager.getInstance().get('reranker') as any)?.candidateCount;
+        if (Number.isFinite(chosen) && chosen > 0) {
+            return Math.min(RERANK_CANDIDATE_POOL, Math.floor(chosen));
+        }
+    } catch { /* settings unavailable: keep the default */ }
+    return RERANK_CANDIDATE_POOL;
+}
+
 function keylessManualRetrievalUsesLexical(): boolean {
     const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();
     if (['0', 'false', 'off', 'disabled', 'no'].includes(raw)) return false;
@@ -1588,7 +1608,11 @@ export class ModeHybridRetriever {
                 }
             }
 
-            const pool = sorted.slice(0, RERANK_CANDIDATE_POOL);
+            // How many candidates the user chose to rerank. Until now this
+            // setting was written by Settings > Reranker and read by nothing,
+            // so the control looked live and did nothing.
+            const poolSize = resolveRerankPoolSize();
+            const pool = sorted.slice(0, poolSize);
             const poolTexts = pool.map((c: ChunkCandidate) => c.text);
             // Chunked inference — see RERANK_BATCH_SIZE for the crash-forensics
             // rationale. Each batch returns results with INDEXES RELATIVE TO THE
@@ -1632,10 +1656,18 @@ export class ModeHybridRetriever {
                 // A PARTIAL ranking is worse than none. rankScore(c, true)
                 // returns -Infinity for a candidate with no rerankScore, so
                 // survivors of a failed batch sink below every chunk the
-                // reranker never even looked at. With the built-in this was
-                // unreachable (it fails all-or-nothing), but a port that splits
-                // the pool into independent out-of-process calls can lose one
-                // batch and keep the rest — which silently buries 6 candidates.
+                // reranker never even looked at — silently burying whichever
+                // candidates the failed batch happened to contain.
+                //
+                // This is REACHABLE ON THE BUILT-IN, not only on a hosted port:
+                // LocalReranker.rerank returns null per call on a worker
+                // timeout, on a thrown error, and on a short `scores` array. So
+                // one transient timeout on batch 3 of 5 abandons all five, and
+                // the answer falls back to cosine order. That is the intended
+                // trade — a wholly correct cosine ordering beats a rerank
+                // ordering with a third of the pool pinned at -Infinity — but
+                // it is a real cost on the default local path, not a
+                // theoretical one, so do not "optimise" it back to `continue`.
                 // Abandon the whole rerank and keep the pre-rerank order.
                 if (!batchResults || batchResults.length !== batchTexts.length) {
                     console.warn('[ModeHybridRetriever] rerank batch incomplete (keeping cosine order)');
@@ -1665,9 +1697,9 @@ export class ModeHybridRetriever {
             for (let i = 0; i < pool.length; i++) {
                 if (!used.has(i)) reordered.push({ ...pool[i] });
             }
-            // Append the un-pooled tail (beyond RERANK_CANDIDATE_POOL) unchanged
-            // so we never DROP candidates the budget step might still want.
-            for (let i = RERANK_CANDIDATE_POOL; i < sorted.length; i++) {
+            // Append the un-pooled tail unchanged so we never DROP candidates
+            // the budget step might still want.
+            for (let i = poolSize; i < sorted.length; i++) {
                 reordered.push(sorted[i]);
             }
             return reordered;

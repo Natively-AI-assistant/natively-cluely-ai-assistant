@@ -141,13 +141,20 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
       throw new Error(`model "${model.key}" declares an unsafe repository path ${JSON.stringify(repoPath)}`);
     }
 
+    // A PINNED revision wins outright. The reranker catalogue pins a 40-char
+    // sha per model and its header states that the pin "is what protects"
+    // files carrying `sha256: null` — which the downloader records rather than
+    // checks. Resolving live instead would make that claim false, and would let
+    // one multi-file install take file 1 from revision A and file 5 from
+    // revision B if the repo moved in between.
+    const pinned = isSafeRevision(model.revision) ? model.revision! : null;
     // `resolved` is null when the metadata call failed (non-2xx, bad JSON, or
     // the 20s timeout). We still download — from the default branch — but a
     // null revision must never be STAMPED: the literal 'main' compares equal to
     // itself across sessions, so two consecutive metadata failures would make
     // bytes from two genuinely different HEADs look resumable against each
     // other. That is the exact corruption the stamp exists to prevent.
-    const resolved = await this.resolveRevision(repo);
+    const resolved = pinned ?? (await this.resolveRevision(repo));
     const revision = resolved ?? 'main';
     const url = buildResolveUrl(repo, revision, repoPath);
     const partPath = `${destination}.part`;
@@ -373,6 +380,11 @@ function discardStalePartial(
 
 function writeStamp(stampPath: string, revision: string): void {
   try { fs.writeFileSync(stampPath, revision, 'utf8'); } catch { /* the partial is then treated as stale */ }
+}
+
+/** A revision is only usable as a pin if it is a full commit sha. */
+export function isSafeRevision(revision: unknown): revision is string {
+  return typeof revision === 'string' && /^[a-f0-9]{40}$/i.test(revision);
 }
 
 function safeSize(filePath: string): number {
