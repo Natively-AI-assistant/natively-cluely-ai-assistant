@@ -2097,9 +2097,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // (WindowHelper.getOverlayPanelLeftMargin) and the click-through hover gate —
   // all read it, so they cannot disagree about how wide the window is.
   // See src/lib/overlayCustomSize.mjs for the full rationale.
+  // Two different numbers, previously conflated into one:
+  //   customWindowWidth  — what the USER pinned. Persisted. Drives the REQUEST.
+  //   appliedWindowWidth — what the main process actually granted after its
+  //                        floor(workArea * 0.9) clamp. Session-only. Drives
+  //                        every geometry consumer, so the panel never renders
+  //                        wider than the window it lives in.
+  // Collapsing them made a clamp sticky: on a display too small for the 732
+  // default the clamped value became the renderer's "custom" width and was
+  // re-requested verbatim forever, so moving to a larger display never restored
+  // the default.
   const [customWindowWidth, setCustomWindowWidth] = useState<number | null>(
     restoredOverlaySize.width,
   );
+  const [appliedWindowWidth, setAppliedWindowWidth] = useState<number | null>(null);
   // The pinned window HEIGHT is a ref, not state: nothing RENDERS from it (the
   // scroll budget flows through the `verticalCap` motion value, and the size
   // reporters read it imperatively), so holding it in state would only add a
@@ -2111,7 +2122,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // are bit-identical to the constants they replace. Recomputed per render like
   // the old literals were — every dependency array that listed the literals
   // already lists these, so no memoisation is needed or wanted.
-  const SHELL_WIDTH_EXPANDED = customWindowWidth ?? OVERLAY_DEFAULT_WINDOW_WIDTH;
+  // What we ASK the OS for — the user's pin, else the default. Never the
+  // clamped result, or a clamp would latch permanently.
+  const REQUESTED_WINDOW_WIDTH = customWindowWidth ?? OVERLAY_DEFAULT_WINDOW_WIDTH;
+  // What the window actually IS. All panel/anchor/hover-gate geometry uses this.
+  const SHELL_WIDTH_EXPANDED = appliedWindowWidth ?? REQUESTED_WINDOW_WIDTH;
   const SHELL_WIDTH_COLLAPSED = collapsedWidthFor(SHELL_WIDTH_EXPANDED);
   // The OS overlay window's width. Equals SHELL_WIDTH_EXPANDED always (the
   // panel fills the window edge-to-edge when expanded), and at its default
@@ -2125,6 +2140,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // — re-sending the hover-gate handshake IPC each time.
   const overlayWindowWidthRef = useRef(OVERLAY_WINDOW_WIDTH);
   overlayWindowWidthRef.current = OVERLAY_WINDOW_WIDTH;
+  // The size reporters ask for this, not for the effective width.
+  const requestedWindowWidthRef = useRef(REQUESTED_WINDOW_WIDTH);
+  requestedWindowWidthRef.current = REQUESTED_WINDOW_WIDTH;
   // The PANEL always starts COLLAPSED. A restored custom size sizes the
   // WINDOW, not the panel's expand state — seeding the panel with the window
   // width would boot it visually expanded while codeExpandedRef and
@@ -2140,6 +2158,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ≤ the budget the OS window will be granted, so the footer (model selector /
   // settings / send) can never be cropped below the clamped window edge.
   const verticalCap = useMotionValue(Infinity);
+  // 1 while the user has pinned a window height. widthDerivedScrollMax tops out
+  // at 560, and the shell is an auto-height column, so with the width bound
+  // still applied the PANEL could never exceed chrome+560 however tall the
+  // WINDOW was told to be — leaving a tall transparent strip below the panel
+  // that still swallowed clicks (the hover gate tests clientX only). When a
+  // height is pinned, the measured cap is the only bound that should apply.
+  const heightIsPinned = useMotionValue(0);
   // scrollMaxH is the chat viewport's MAX-HEIGHT, derived from the LIVE
   // `shellWidth` motion value (the panel's actual animating width) mins'd against
   // the measured vertical budget cap. Binding it to the live width means the
@@ -2153,14 +2178,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // verticalScrollCap helper instead of an ad-hoc `height - 160`, and — because
   // verticalCap is a motion value — makes a pure-height drag (the `s` handle,
   // which never changes shellWidth) actually recompute the scroll budget.
-  const scrollMaxH = useTransform([shellWidth, verticalCap], ([w, cap]: number[]) =>
-    Math.min(
-      widthDerivedScrollMax(w, {
-        collapsedWidth: SHELL_WIDTH_COLLAPSED,
-        expandedWidth: SHELL_WIDTH_EXPANDED,
-      }),
-      cap,
-    ),
+  const scrollMaxH = useTransform(
+    [shellWidth, verticalCap, heightIsPinned],
+    ([w, cap, pinned]: number[]) =>
+      pinned
+        ? cap
+        : Math.min(
+            widthDerivedScrollMax(w, {
+              collapsedWidth: SHELL_WIDTH_COLLAPSED,
+              expandedWidth: SHELL_WIDTH_EXPANDED,
+            }),
+            cap,
+          ),
   );
   // NOTE: the resize toggle and the TopPill no longer render in this window at
   // all — each lives in its OWN tiny BrowserWindow (see
@@ -2432,11 +2461,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     if (!applied) return;
     const { width, height } = applied;
     if (typeof width === 'number' && width > 0 && width !== overlayWindowWidthRef.current) {
+      // The PANEL has to move with the window. Leaving shellWidth alone let a
+      // width restored from a bigger display sit wider than the window it was
+      // clamped into: the hover gate then computes a NEGATIVE margin and
+      // reports the whole window interactive, and the streamed panelRight
+      // points past the window's own right edge. Setting it is also the only
+      // thing that re-anchors the toggle and popover windows at all — that
+      // stream fires from shellWidth's 'change', nothing else.
+      const wasExpanded = shellWidth.get() >= overlayWindowWidthRef.current - 1;
       // Written before the state update so the toggle-anchor stream and the
       // hover gate — both of which read this ref — are correct immediately,
       // not one render late.
       overlayWindowWidthRef.current = width;
-      setCustomWindowWidth(width);
+      setAppliedWindowWidth(width);
+      shellWidth.set(wasExpanded ? width : collapsedWidthFor(width));
     }
     // Only reconcile the height when the user actually pinned one; otherwise
     // the window is content-sized and there is nothing to hold.
@@ -2449,7 +2487,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       customOverlayHeightRef.current = height;
       measureVerticalCapRef.current?.();
     }
-  }, []);
+  }, [shellWidth]);
 
   // Single canonical size-reporter. Width is ALWAYS the fixed
   // OVERLAY_WINDOW_WIDTH (the OS window never width-resizes — the CSS panel
@@ -2496,7 +2534,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // width setBounds on every frame of the spring (re-rastering a transparent
     // blurred window) and would desynchronise the toggle anchor, the popover
     // margin and the hover gate, all of which are computed against the window.
-    const width = overlayWindowWidthRef.current;
+    const width = requestedWindowWidthRef.current;
     // A user-pinned height wins over measured content: the chat scrolls inside
     // the chosen size rather than growing the window (measureVerticalCap has
     // already bounded the scroll area to match).
@@ -2577,7 +2615,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       });
     }
     verticalCap.set(nextCap);
-  }, [attachedContext.length, verticalCap]);
+    heightIsPinned.set(grantableHeight !== null ? 1 : 0);
+  }, [attachedContext.length, verticalCap, heightIsPinned]);
   measureVerticalCapRef.current = measureVerticalCap;
 
   // NOTE: the old per-frame "chase" subscriber that pushed the live shell width
@@ -2700,7 +2739,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Window width, not panel width — see reportShellSize. During the spring
       // this is constant, so the main process still sees widthDelta 0 and the
       // resize collapses to a pure height-only, top-anchored setBounds.
-      const width = overlayWindowWidthRef.current;
+      const width = requestedWindowWidthRef.current;
       const targetHeight = customOverlayHeightRef.current || height;
       if (window.electronAPI?.updateContentDimensionsCentered) {
         void window.electronAPI
@@ -3011,12 +3050,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
       const startX = e.clientX;
       const startY = e.clientY;
-      // Start from the WINDOW width, not the live panel width: the drag resizes
-      // the window, and the panel follows it.
-      const startWidth = OVERLAY_WINDOW_WIDTH;
+      // The panel fills the window for the duration of a drag, so in CLIENT
+      // coordinates the panel's right edge IS the window width. Seeding from
+      // the pointer's x therefore makes that edge track the cursor with no
+      // constant offset. Seeding from OVERLAY_WINDOW_WIDTH instead (732) while
+      // the panel sat collapsed (600, centred, right edge at 666) made the very
+      // first 1px move jump the panel 132px wider and left the handle
+      // permanently ~67px off the pointer for the rest of the drag.
+      const widthDriven = direction === 'e' || direction === 'se';
+      const startWidth = widthDriven ? Math.round(e.clientX) : OVERLAY_WINDOW_WIDTH;
       // Whether the HEIGHT was already pinned before this drag. An east-only
       // drag must not silently freeze the height as a side effect of widening.
       const pinsHeight = pinsHeightFor(direction, customOverlayHeightRef.current !== null);
+      // Mirror of pinsHeight. writeCustomOverlaySize's contract is that each
+      // axis is pinned by the handle that actually drove it; persisting a width
+      // after a pure `s` drag would silently freeze it too.
+      const pinsWidth = customWindowWidth !== null || widthDriven;
       const startHeight =
         customOverlayHeightRef.current ??
         contentRef.current?.offsetHeight ??
@@ -3082,6 +3131,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const RESIZE_REPORT_INTERVAL_MS = 33;
       let lastSentAt = 0;
 
+      // Pointer TRAVEL, not "the computed frame differs from the start frame".
+      // computeResizeFrame clamps the pass-through height to the measured
+      // floor, so on a short chat the very first frame already differs at ZERO
+      // delta — which made an ordinary click pin and persist a size.
+      const DRAG_THRESHOLD_PX = 3;
+
       const move = (event: PointerEvent) => {
         if (!isResizingRef.current) return;
         // Self-healing net: if the button is already up we missed the pointerup
@@ -3093,10 +3148,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           end();
           return;
         }
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        if (!moved) {
+          if (Math.abs(dx) <= DRAG_THRESHOLD_PX && Math.abs(dy) <= DRAG_THRESHOLD_PX) return;
+          moved = true;
+        }
         const next = computeResizeFrame({
           direction,
-          dx: event.clientX - startX,
-          dy: event.clientY - startY,
+          dx,
+          dy,
           startWidth,
           startHeight,
           maxWidth,
@@ -3104,7 +3165,6 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           minHeight,
         });
         if (next.width === latest.width && next.height === latest.height) return;
-        moved = true;
         applyLocal(next);
         const now = Date.now();
         if (now - lastSentAt < RESIZE_REPORT_INTERVAL_MS) return;
@@ -3148,7 +3208,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             const settledHeight =
               typeof applied?.height === 'number' ? applied.height : latest.height;
             overlayWindowWidthRef.current = settledWidth;
-            setCustomWindowWidth(settledWidth);
+            setAppliedWindowWidth(settledWidth);
+            if (pinsWidth) setCustomWindowWidth(settledWidth);
             shellWidth.set(settledWidth);
             if (pinsHeight) {
               customOverlayHeightRef.current = settledHeight;
@@ -3157,7 +3218,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             if (
               !writeCustomOverlaySize(
                 typeof window !== 'undefined' ? window.localStorage : null,
-                { width: settledWidth, height: pinsHeight ? settledHeight : null },
+                {
+                  width: pinsWidth ? settledWidth : null,
+                  height: pinsHeight ? settledHeight : null,
+                },
               )
             ) {
               console.warn(
@@ -3190,12 +3254,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     clearCustomOverlaySize(typeof window !== 'undefined' ? window.localStorage : null);
     customOverlayHeightRef.current = null;
     setCustomWindowWidth(null);
+    setAppliedWindowWidth(null);
     manualWidthOverrideRef.current = null;
     shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
-    // No manual re-report needed: clearing the state changes
-    // OVERLAY_WINDOW_WIDTH, which changes reportShellSize's identity, which
-    // re-runs the sizing effect with the DEFAULT width. Reporting here instead
-    // would send the stale width captured in this render's closure.
+    // No manual re-report needed: the sizing effect lists `customWindowWidth`
+    // in its deps, so clearing it re-runs that effect and reports the DEFAULT
+    // width. (reportShellSize's own identity no longer changes with the width —
+    // it reads a ref — so it is the effect dep, not the callback identity, that
+    // does this now.) Reporting here instead would send the stale width
+    // captured in this render's closure.
   }, [shellWidth]);
 
   // ── Aux-window bridge ─────────────────────────────────────────────────────
