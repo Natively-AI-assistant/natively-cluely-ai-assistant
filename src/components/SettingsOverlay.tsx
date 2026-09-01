@@ -1906,6 +1906,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'skills' && navActivePill}
                                         <Folder size={16} /> {t('Skills')}
                                     </button>
+                                    {/* Temporarily hidden — TODO: re-enable Calendar settings nav item
                                     <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={navItemClass(activeTab === 'calendar')}
@@ -1913,6 +1914,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
+                                    */}
                                     <button
                                         onClick={() => setActiveTab('audio')}
                                         className={navItemClass(activeTab === 'audio')}
