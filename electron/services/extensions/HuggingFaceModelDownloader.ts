@@ -141,7 +141,14 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
       throw new Error(`model "${model.key}" declares an unsafe repository path ${JSON.stringify(repoPath)}`);
     }
 
-    const revision = (await this.resolveRevision(repo)) ?? 'main';
+    // `resolved` is null when the metadata call failed (non-2xx, bad JSON, or
+    // the 20s timeout). We still download — from the default branch — but a
+    // null revision must never be STAMPED: the literal 'main' compares equal to
+    // itself across sessions, so two consecutive metadata failures would make
+    // bytes from two genuinely different HEADs look resumable against each
+    // other. That is the exact corruption the stamp exists to prevent.
+    const resolved = await this.resolveRevision(repo);
+    const revision = resolved ?? 'main';
     const url = buildResolveUrl(repo, revision, repoPath);
     const partPath = `${destination}.part`;
     // Which revision the bytes in `.part` came from. Pinning the sha within one
@@ -154,7 +161,7 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
     // So the partial is only reusable when it provably came from this revision.
     const stampPath = `${partPath}.rev`;
     fs.mkdirSync(path.dirname(destination), { recursive: true });
-    discardStalePartial(partPath, stampPath, revision, this.options.logger);
+    discardStalePartial(partPath, stampPath, resolved, this.options.logger);
 
     // approxBytes is the manifest's estimate and is only a fallback for the
     // progress denominator. The server's own Content-Length wins whenever it is
@@ -169,7 +176,11 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
       // Stamp BEFORE writing any bytes, not only when resuming: a first-time
       // download interrupted before its stamp existed would be discarded by the
       // next session, losing the resume this whole mechanism exists to protect.
-      writeStamp(stampPath, revision);
+      // Only a RESOLVED revision may be stamped; an unresolved one leaves the
+      // partial unstamped, which the next session treats as stale and discards.
+      // Re-downloading is the safe failure; concatenating two revisions is not.
+      if (resolved) writeStamp(stampPath, resolved);
+      else { try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ } }
       try {
         await this.fetchInto(url, partPath, already, signal, (received) => {
           const total = totalBytes || 0;
@@ -189,11 +200,30 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
         // session in a loaded extension is the obvious case) the replace fails,
         // so unlink first and, if it still fails, say WHY rather than emitting a
         // bare EPERM that reads as a permissions bug.
-        try { fs.rmSync(destination, { force: true }); } catch { /* replaced below, or fails loudly */ }
-        try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ }
+        // POSIX rename over an existing file is ALREADY an atomic replace, so
+        // unlinking first would only widen a window in which the user has
+        // neither the old model nor the new one. Windows is the platform that
+        // needs the old file out of the way — so move it ASIDE there rather
+        // than deleting it, and put it back if the replace fails. Either way
+        // the user never ends up with no model at all.
+        const backupPath = `${destination}.old`;
+        let backedUp = false;
         try {
+          if (process.platform === 'win32' && fs.existsSync(destination)) {
+            try { fs.rmSync(backupPath, { force: true }); } catch { /* best effort */ }
+            fs.renameSync(destination, backupPath);
+            backedUp = true;
+          }
           fs.renameSync(partPath, destination);
         } catch (e: any) {
+          // Restore the previous model, and KEEP the stamp: the .part file is
+          // complete and correctly stamped, so the next attempt resumes at 100%
+          // instead of re-fetching several hundred megabytes. Deleting the
+          // stamp before the rename (as this used to) meant every failed
+          // Windows replace also threw away a finished download.
+          if (backedUp && !fs.existsSync(destination)) {
+            try { fs.renameSync(backupPath, destination); } catch { /* best effort */ }
+          }
           if (e?.code === 'EPERM' || e?.code === 'EBUSY' || e?.code === 'EACCES') {
             throw new Error(
               `could not replace ${path.basename(destination)}: the existing file is in use. ` +
@@ -202,6 +232,11 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
             );
           }
           throw e;
+        }
+        // Committed. Only now are the stamp and the displaced old file dead.
+        try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ }
+        if (backedUp) {
+          try { fs.rmSync(backupPath, { force: true }); } catch { /* best effort */ }
         }
         onProgress(1);
         return;
@@ -314,7 +349,7 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
 function discardStalePartial(
   partPath: string,
   stampPath: string,
-  revision: string,
+  revision: string | null,
   logger?: { info(msg: string): void; warn(msg: string): void },
 ): void {
   if (safeSize(partPath) === 0) return;
@@ -322,7 +357,11 @@ function discardStalePartial(
   let stamped: string | null = null;
   try { stamped = fs.readFileSync(stampPath, 'utf8').trim(); } catch { stamped = null; }
 
-  if (stamped === revision) return;
+  // `revision === null` means we could not resolve which revision the server
+  // would serve THIS time, so no partial can be proven to match it — including
+  // an unstamped one, where `stamped === revision` would otherwise be
+  // null === null and wrongly pass.
+  if (revision !== null && stamped === revision) return;
 
   logger?.info(
     `[extensions] discarding a partial download from ${stamped ? `revision ${stamped}` : 'an unknown revision'}; ` +

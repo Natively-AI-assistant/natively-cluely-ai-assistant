@@ -7377,13 +7377,22 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       return { success: true, activeId: id, topIndex: ranked[0].index };
     } catch (e: any) {
-      // Roll back to whatever was working before, and say so.
-      settings.set('reranker', { ...stored, localModelId: previous });
-      reloadLocalReranker('activation failed; reverted');
+      // Roll back to whatever was working before — and only CLAIM the rollback
+      // if the write actually landed. The success path a few lines up already
+      // treats a refused `settings.set` as a hard failure
+      // ('settings_store_degraded'); this path discarded the same return value,
+      // so a degraded store left the FAILED model stored while telling the user
+      // their previous reranker was still active.
+      const reverted = settings.set('reranker', { ...stored, localModelId: previous });
+      reloadLocalReranker(
+        reverted ? 'activation failed; reverted' : 'activation failed; revert was refused',
+      );
       return {
         success: false,
         error: 'activation_failed',
-        message: `Couldn't activate this reranker: ${String(e?.message || e)}. Your previous reranker is still active.`,
+        message: reverted
+          ? `Couldn't activate this reranker: ${String(e?.message || e)}. Your previous reranker is still active.`
+          : `Couldn't activate this reranker: ${String(e?.message || e)}. The previous setting could not be restored either, so reranking may be unavailable until you choose one again.`,
       };
     }
   });

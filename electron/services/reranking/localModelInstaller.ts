@@ -60,9 +60,37 @@ export function localModelsRoot(override?: string): string {
     const userData = app?.getPath?.('userData');
     if (userData) return path.join(userData, 'local-models');
   } catch { /* app not ready */ }
-  // Mirrors LocalReranker's own HOME fallback for ELECTRON_RUN_AS_NODE probes.
+  return path.join(fallbackUserDataDir(), 'local-models');
+}
+
+/**
+ * The `app.getPath('userData')` layout, rebuilt by hand for the one path where
+ * `app` is unavailable (ELECTRON_RUN_AS_NODE probes and tests).
+ *
+ * This used to read USERPROFILE and then join a macOS
+ * `Library/Application Support` onto it, which on Windows produces
+ * `C:\Users\x\Library\Application Support\natively\local-models` — a
+ * directory nothing else in the app ever looks in, so an installed model would
+ * be invisible to the reranker that is supposed to load it. Repo convention
+ * (CLAUDE.md, "Filesystem and paths") forbids hardcoding an OS-specific path in
+ * shared code for exactly this reason.
+ */
+function fallbackUserDataDir(): string {
   const home = process.env.HOME || process.env.USERPROFILE || process.cwd();
-  return path.join(home, 'Library', 'Application Support', 'natively', 'local-models');
+  switch (process.platform) {
+    case 'darwin':
+      return path.join(home, 'Library', 'Application Support', 'natively');
+    case 'win32':
+      return path.join(
+        process.env.APPDATA || path.join(home, 'AppData', 'Roaming'),
+        'natively',
+      );
+    default:
+      return path.join(
+        process.env.XDG_CONFIG_HOME || path.join(home, '.config'),
+        'natively',
+      );
+  }
 }
 
 export function modelDirectory(model: LocalRerankerModel, rootOverride?: string): string {

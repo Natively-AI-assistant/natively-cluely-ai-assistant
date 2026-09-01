@@ -173,6 +173,42 @@ interface PendingCall {
  *  - **Exit rejects everything in flight.** A call whose child died must fail,
  *    not hang until some outer timeout notices.
  */
+/**
+ * Headers a redirect must NOT carry across an origin boundary. This is the set
+ * undici drops in its own redirect handler; the brokered fetch below follows
+ * redirects by hand (it has to re-run the allowedHosts check on every hop), so
+ * it has to drop them explicitly or an extension's credential for host A gets
+ * forwarded to host B.
+ */
+const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'proxy-authorization'];
+
+/**
+ * Build the RequestInit for the NEXT hop of a hand-followed redirect, applying
+ * the two Fetch-spec rules the runtime would have applied for us:
+ *
+ *  - 303 (and 301/302 on a POST) becomes a GET with no body;
+ *  - a cross-origin hop drops the credential headers.
+ */
+function followRedirectInit(
+  init: RequestInit,
+  from: URL,
+  to: URL,
+  status: number,
+): RequestInit {
+  const next: RequestInit = { ...init };
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (status === 303 || ((status === 301 || status === 302) && method === 'POST')) {
+    next.method = 'GET';
+    delete next.body;
+  }
+  if (from.origin !== to.origin) {
+    const headers = new Headers((init.headers as HeadersInit | undefined) ?? undefined);
+    for (const name of CREDENTIAL_HEADERS) headers.delete(name);
+    next.headers = headers;
+  }
+  return next;
+}
+
 class UtilityProcessExtensionHost implements ExtensionHost {
   readonly extensionId: string;
 
@@ -504,19 +540,25 @@ class UtilityProcessExtensionHost implements ExtensionHost {
     };
 
     let current = approve(payload.url);
+    let init: RequestInit = { ...(payload.init as RequestInit | undefined) };
     let response: Response;
     // Bounded: a redirect loop must not spin the main process.
     for (let hop = 0; ; hop++) {
       if (hop > 5) throw new Error('too many redirects');
-      response = await fetch(current.toString(), {
-        ...(payload.init as RequestInit | undefined),
-        redirect: 'manual',
-      });
+      response = await fetch(current.toString(), { ...init, redirect: 'manual' });
       if (response.status < 300 || response.status >= 400) break;
       const location = response.headers.get('location');
       if (!location) break;
       // Resolve relative Locations against the current URL, then re-approve.
-      current = approve(new URL(location, current).toString());
+      const next = approve(new URL(location, current).toString());
+      // Following a redirect BY HAND means re-implementing the two things the
+      // runtime's own redirect handling does for free. Replaying `init`
+      // verbatim (as this loop used to) forwards the extension's Authorization
+      // / Cookie headers to the redirect target — and because a manifest may
+      // list several allowedHosts, that target can be a DIFFERENT host than the
+      // one the credential belongs to.
+      init = followRedirectInit(init, current, next, response.status);
+      current = next;
     }
 
     const buffer = Buffer.from(await response.arrayBuffer());
