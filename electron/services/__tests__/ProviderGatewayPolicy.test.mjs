@@ -167,7 +167,18 @@ test('AIProvidersSettings renders cloud provider data scope controls wired to re
 
 test('main and ProcessingHelper hydrate ragManager.initializeEmbeddings with policy', () => {
   const ph = read('electron/ProcessingHelper.ts');
-  assert.match(ph, /providerDataScopes/);
+  // VACUOUS BEFORE: /providerDataScopes/ matched only the COMMENT at
+  // ProcessingHelper.ts:113, so this passed whether or not the policy reached
+  // the resolver — the one thing it exists to check. ProcessingHelper no longer
+  // names the policy at all; it goes through buildEmbeddingConfig(), which is
+  // what has to be asserted.
+  assert.match(ph, /initializeEmbeddings\(buildEmbeddingConfig\(\)\)/,
+    'ProcessingHelper must hand the resolver the shared builder, not a hand-written object');
+  assert.match(ph, /require\('\.\/rag\/embeddingConfigIdentity'\)/);
+  // The hand-written object is the defect this guards against: it silently
+  // dropped the user's embeddingMode/provider selection.
+  assert.doesNotMatch(ph, /initializeEmbeddings\(\s*\{/,
+    'a literal config object here clobbers the startup config');
 
   // main.ts no longer names the policy directly: it goes through
   // buildEmbeddingConfig(), the single builder shared by all four embedding

@@ -24,8 +24,6 @@ export interface RerankerSettings {
   openrouterModel?: string;
   /** How many candidates to send. Absent keeps ModeHybridRetriever's own pool size. */
   candidateCount?: number;
-  /** How many to keep. Absent keeps the seam's existing behaviour (all of them). */
-  topN?: number;
   /**
    * Opt-in: when the hosted reranker fails, try the built-in one for that
    * request. Default OFF — a silent substitution reorders evidence with a model

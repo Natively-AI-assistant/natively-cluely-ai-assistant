@@ -7060,7 +7060,6 @@ export function initializeIpcHandlers(appState: AppState): void {
       provider,
       openrouterModel: stored.openrouterModel ?? null,
       candidateCount: stored.candidateCount ?? null,
-      topN: stored.topN ?? null,
       fallbackToLocal: stored.fallbackToLocal === true,
       hasApiKey,
       eligible: eligibility.eligible,
@@ -7076,7 +7075,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     provider?: 'local' | 'openrouter';
     openrouterModel?: string;
     candidateCount?: number;
-    topN?: number;
     fallbackToLocal?: boolean;
   }) => {
     const { SettingsManager } = require('./services/SettingsManager');
@@ -7091,9 +7089,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     // silently keeping the old value is less confusing than an error toast.
     if (Number.isFinite(next.candidateCount)) {
       merged.candidateCount = Math.max(1, Math.min(30, Math.floor(next.candidateCount as number)));
-    }
-    if (Number.isFinite(next.topN)) {
-      merged.topN = Math.max(1, Math.min(merged.candidateCount ?? 30, Math.floor(next.topN as number)));
     }
 
     if (!settings.set('reranker', merged)) {
@@ -7501,7 +7496,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('extensions:remove', async (_evt, id: string) => {
     const manager = extensionManager();
     if (!manager) return { success: false, error: 'extensions_unavailable' };
-    return { success: manager.remove(id) };
+    // remove() is async now: it must finish unloading before deleting the
+    // model directories, or Windows leaves the weights behind.
+    return { success: await manager.remove(id) };
   });
 
   safeHandle('extensions:acknowledge-license', async (_evt, id: string, modelKey: string) => {
@@ -7573,8 +7570,22 @@ export function initializeIpcHandlers(appState: AppState): void {
     // user act, because an entrypoint is code that runs on their machine and the
     // sandbox is not a boundary against a hostile extension.
     const { fetchRemoteRegistry } = require('./services/extensions/ExtensionInstaller');
-    const target = url || process.env.NATIVELY_EXTENSION_REGISTRY_URL
-      || 'https://raw.githubusercontent.com/evinjohnn/natively-extension-registry/main/registry.json';
+    const DEFAULT_REGISTRY = 'https://raw.githubusercontent.com/evinjohnn/natively-extension-registry/main/registry.json';
+    const requested = url || process.env.NATIVELY_EXTENSION_REGISTRY_URL || DEFAULT_REGISTRY;
+
+    // The renderer can pass any string here, and this handler makes the main
+    // process fetch it. Restrict it to https so a compromised or careless
+    // renderer cannot turn this into a general-purpose request proxy —
+    // file://, http:// to a loopback service, and anything else are refused.
+    let target: string;
+    try {
+      const parsed = new URL(requested);
+      if (parsed.protocol !== 'https:') throw new Error('registry must be https');
+      target = parsed.toString();
+    } catch {
+      return { ok: false, entries: [], error: 'invalid_registry_url' };
+    }
+
     const result = await fetchRemoteRegistry(target);
     return { ok: result.ok, entries: result.entries };
   });
