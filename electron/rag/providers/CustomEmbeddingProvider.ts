@@ -33,17 +33,44 @@ export interface CustomEmbeddingOptions {
  * a proxy mounted under a prefix (`https://gw/proxy/v1`) intact — rewriting that
  * would break the very deployments this provider exists for.
  *
- * Returns null for blank input so callers can distinguish "not configured".
+ * TWO TRAPS IN `new URL()`, both of which used to pass:
+ *
+ *  1. `localhost:1234` PARSES. `localhost:` is read as the scheme and `1234` as
+ *     the path, leaving the host EMPTY — so it was stored as a valid endpoint
+ *     and every request then failed with "could not reach the endpoint", which
+ *     sends the user to check their server instead of their typo. Dropping the
+ *     scheme is the single most likely thing to type, so it is coerced to
+ *     `http://` rather than rejected.
+ *  2. Any scheme parses. `ftp://host/v1` was accepted and stored.
+ *
+ * So: coerce a scheme-less input, then require http/https AND a real host.
+ *
+ * Returns null for blank or unusable input so callers can distinguish
+ * "not configured" from "configured wrongly".
  */
 export function normalizeCustomBaseUrl(raw?: string | null): string | null {
   const trimmed = (raw || '').trim();
   if (!trimmed) return null;
   const withoutTrailing = trimmed.replace(/\/+$/, '');
+
+  // `host:port` and bare `host` get http://; anything already carrying a
+  // scheme is left alone so the protocol check below can reject it honestly.
+  //
+  // Tested against `trimmed`, NOT `withoutTrailing`: stripping trailing slashes
+  // turns "http://" into "http:", which no longer looks like a scheme and would
+  // be coerced into "http://http:" — a URL with the host "http" that then
+  // parses cleanly and is stored.
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
+  const candidate = hasScheme ? withoutTrailing : `http://${withoutTrailing}`;
+
   let parsed: URL;
-  try { parsed = new URL(withoutTrailing); } catch { return null; }
+  try { parsed = new URL(candidate); } catch { return null; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (!parsed.host) return null;
+
   // No path at all (or just "/") → this is a bare host; add the conventional /v1.
-  if (parsed.pathname === '' || parsed.pathname === '/') return `${withoutTrailing}/v1`;
-  return withoutTrailing;
+  if (parsed.pathname === '' || parsed.pathname === '/') return `${candidate}/v1`;
+  return candidate;
 }
 
 /** Host identity used in the space key. */
