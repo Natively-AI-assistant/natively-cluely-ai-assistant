@@ -2779,6 +2779,10 @@ body {
 .resize-handle {
   -webkit-app-region: no-drag;
   touch-action: none;
+  /* Replaces preventDefault() on pointerdown, which would have suppressed the
+     compatibility mouse events that `dblclick` (the reset gesture) needs. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .resize-handle-e { cursor: ew-resize; }
 .resize-handle-s { cursor: ns-resize; }
@@ -2787,10 +2791,12 @@ body {
 .resize-handle-se::after {
   content: '';
   position: absolute;
-  right: 5px;
-  bottom: 5px;
-  width: 9px;
-  height: 9px;
+  /* Kept inside the 12px strip below the footer controls, which now sit above
+     the handles (z-60) — so the chevron is never painted over. */
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   border-bottom-right-radius: 3px;

@@ -14,7 +14,9 @@ import {
   clearCustomOverlaySize,
   maxWindowWidthFor,
   maxWindowHeightFor,
+  minWindowHeightFor,
   collapsedWidthFor,
+  pinsHeightFor,
   computeResizeFrame,
 } from '../overlayCustomSize.mjs';
 
@@ -179,6 +181,50 @@ describe('overlayCustomSize', () => {
     });
   });
 
+  describe('pinsHeightFor', () => {
+    test('height-driving directions pin the height', () => {
+      assert.equal(pinsHeightFor('s', false), true);
+      assert.equal(pinsHeightFor('se', false), true);
+    });
+    test('an east-only drag does NOT pin the height', () => {
+      // Regression guard: computeResizeFrame clamps the pass-through height to
+      // the display budget, so an 'e' drag on an overlay that is already taller
+      // than the budget yields a CHANGED height. Treating that as a pin would
+      // freeze the height as a side effect of merely widening the window.
+      assert.equal(pinsHeightFor('e', false), false);
+      const frame = computeResizeFrame({
+        direction: 'e',
+        dx: 50,
+        dy: 0,
+        startWidth: 732,
+        startHeight: 2000,
+        maxHeight: maxWindowHeightFor(1080),
+      });
+      assert.equal(frame.height, 972, 'height is clamped even on an east drag');
+      assert.notEqual(frame.height, 2000);
+    });
+    test('an already-pinned height stays pinned through a width-only drag', () => {
+      assert.equal(pinsHeightFor('e', true), true);
+    });
+  });
+
+  describe('minWindowHeightFor', () => {
+    test('derives the floor from measured chrome, not a constant', () => {
+      // The shell is overflow-hidden: dragging shorter than
+      // chrome + a usable scroll viewport clips the footer.
+      assert.equal(minWindowHeightFor(180), 300);
+      assert.equal(minWindowHeightFor(240, 150), 390);
+    });
+    test('never returns below the window minimum for tiny chrome', () => {
+      assert.equal(minWindowHeightFor(0), OVERLAY_MIN_WINDOW_HEIGHT);
+      assert.equal(minWindowHeightFor(50), OVERLAY_MIN_WINDOW_HEIGHT);
+    });
+    test('unmeasured chrome falls back to the window minimum', () => {
+      assert.equal(minWindowHeightFor(NaN), OVERLAY_MIN_WINDOW_HEIGHT);
+      assert.equal(minWindowHeightFor(-1), OVERLAY_MIN_WINDOW_HEIGHT);
+    });
+  });
+
   describe('computeResizeFrame', () => {
     const start = { startWidth: 732, startHeight: 500 };
 
@@ -224,6 +270,28 @@ describe('overlayCustomSize', () => {
       // clamps, or the persisted width drifts from the applied one forever.
       assert.equal(frame.width, 1728);
       assert.equal(frame.height, 972);
+    });
+    test('honours a caller-supplied measured floor above the constant', () => {
+      const frame = computeResizeFrame({
+        direction: 'se',
+        dx: 0,
+        dy: -9999,
+        startWidth: 732,
+        startHeight: 600,
+        minHeight: minWindowHeightFor(180),
+      });
+      assert.equal(frame.height, 300, 'cannot be dragged shorter than chrome + scroll');
+    });
+    test('a measured floor below the constant never lowers the constant', () => {
+      const frame = computeResizeFrame({
+        direction: 'se',
+        dx: 0,
+        dy: -9999,
+        startWidth: 732,
+        startHeight: 600,
+        minHeight: 50,
+      });
+      assert.equal(frame.height, OVERLAY_MIN_WINDOW_HEIGHT);
     });
     test('a ceiling below the floor still yields the floor (tiny display)', () => {
       const frame = computeResizeFrame({

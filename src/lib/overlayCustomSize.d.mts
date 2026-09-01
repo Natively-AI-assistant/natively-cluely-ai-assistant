@@ -40,6 +40,7 @@ export function clearCustomOverlaySize(
   storage: OverlaySizeStorage | null | undefined,
 ): boolean;
 
+export function minWindowHeightFor(chromeHeight: number, minScroll?: number): number;
 export function maxWindowWidthFor(availWidth: number): number;
 export function maxWindowHeightFor(availHeight: number): number;
 export function collapsedWidthFor(windowWidth: number): number;
@@ -54,7 +55,13 @@ export interface ComputeResizeFrameParams {
   startHeight: number;
   maxWidth?: number;
   maxHeight?: number;
+  minHeight?: number;
 }
+
+export function pinsHeightFor(
+  direction: OverlayResizeDirection,
+  heightAlreadyPinned: boolean,
+): boolean;
 
 export function computeResizeFrame(
   params: ComputeResizeFrameParams,

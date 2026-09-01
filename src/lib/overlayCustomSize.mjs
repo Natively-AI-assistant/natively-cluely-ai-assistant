@@ -141,6 +141,16 @@ export function clearCustomOverlaySize(storage) {
 }
 
 /**
+ * The shortest the overlay may be dragged, given how tall its non-scrolling
+ * chrome currently measures. Below this the overflow-hidden shell would lay out
+ * taller than its own window and clip the footer.
+ */
+export function minWindowHeightFor(chromeHeight, minScroll = 120) {
+  if (!Number.isFinite(chromeHeight) || chromeHeight < 0) return OVERLAY_MIN_WINDOW_HEIGHT;
+  return Math.max(OVERLAY_MIN_WINDOW_HEIGHT, Math.ceil(chromeHeight) + minScroll);
+}
+
+/**
  * The widest window the main process will actually grant on this display,
  * mirroring WindowHelper's floor(workArea.width * 0.9) clamp. Falls back to the
  * absolute ceiling when the display size is unknown (the main process clamps
@@ -187,6 +197,20 @@ export function collapsedWidthFor(windowWidth) {
 }
 
 /**
+ * Does this drag PIN the window height?
+ *
+ * Only a height-driving direction does — or a drag that started with the height
+ * already pinned. This matters because computeResizeFrame also CLAMPS the
+ * pass-through height to the display budget, so an east-only drag that starts
+ * taller than that budget produces a changed height without the user ever
+ * having asked for a height pin. Treating that as a pin would freeze the
+ * overlay's height as a side effect of merely widening it.
+ */
+export function pinsHeightFor(direction, heightAlreadyPinned) {
+  return Boolean(heightAlreadyPinned) || direction === 's' || direction === 'se';
+}
+
+/**
  * Geometry for one pointer-move frame of a resize drag.
  *
  * Only EAST-side directions exist ('e', 's', 'se'). West-side handles would
@@ -205,7 +229,13 @@ export function computeResizeFrame(params) {
     startHeight,
     maxWidth = OVERLAY_MAX_WINDOW_WIDTH,
     maxHeight = OVERLAY_MAX_WINDOW_HEIGHT,
+    // The floor is a CALLER-SUPPLIED measurement, not a constant: the shell is
+    // overflow-hidden, so its real minimum is (measured chrome + a usable
+    // scroll viewport). A fixed 216 floor lets a tall-chrome build be dragged
+    // shorter than its own footer and clip it.
+    minHeight = OVERLAY_MIN_WINDOW_HEIGHT,
   } = params;
+  const heightFloor = Math.max(OVERLAY_MIN_WINDOW_HEIGHT, Math.round(minHeight));
   const widthDriven = direction === 'e' || direction === 'se';
   const heightDriven = direction === 's' || direction === 'se';
   return {
@@ -216,8 +246,8 @@ export function computeResizeFrame(params) {
     ),
     height: clamp(
       Math.round(heightDriven ? startHeight + dy : startHeight),
-      OVERLAY_MIN_WINDOW_HEIGHT,
-      Math.max(OVERLAY_MIN_WINDOW_HEIGHT, maxHeight),
+      heightFloor,
+      Math.max(heightFloor, maxHeight),
     ),
   };
 }
