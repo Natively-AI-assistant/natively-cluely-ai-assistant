@@ -58,6 +58,12 @@ export interface DirectAssistRequestInput {
   readonly pageContext?: DirectAssistPageContext | null;
   readonly history?: readonly DirectAssistHistoryTurn[];
   readonly transcript?: string;
+  /**
+   * The live session's last 180 seconds of transcript, server-populated.
+   * Distinct from `transcript`, which for screenshot requests carries only
+   * the current turn's spoken text.
+   */
+  readonly meetingTranscript?: string;
   readonly imagePaths?: readonly string[];
   /** Explicit value is a fallback; a language stated in currentRequest wins. */
   readonly requestedLanguage?: string;
@@ -79,6 +85,7 @@ export interface DirectAssistRequest {
   readonly pageContext: DirectAssistPageContext | null;
   readonly history: readonly DirectAssistHistoryTurn[];
   readonly transcript: string;
+  readonly meetingTranscript: string;
   readonly imagePaths: readonly string[];
   readonly requestedLanguage: string | null;
   readonly requestedFormat: string | null;
@@ -143,6 +150,9 @@ export type DirectAssistStreamEvent =
       readonly requestId: string;
       readonly provider: DirectAssistProvider;
       readonly model: string;
+      /** Field names dropped by prepareDirectAssistPrompt to fit the context
+       *  window. Safe for the renderer: no user content, just field names. */
+      readonly trimmedFields: readonly string[];
     }
   | {
       readonly type: 'delta';

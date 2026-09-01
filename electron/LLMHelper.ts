@@ -70,6 +70,7 @@ import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter'
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone } from './llm/groqModels';
 import { DirectAssistError } from './direct-assist/errors';
+import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER } from './direct-assist/requestBuilder';
 import type {
   DirectAssistDispatchRequest,
   DirectAssistProvider,
@@ -9481,13 +9482,24 @@ let isMultimodal = !!(imagePaths?.length);
     // scopesForPayload()'s 'transcript' tag is a last-boundary backstop that
     // fires on ANY non-empty prompt text, not only when the prompt actually
     // carries transcript-derived content — Direct Assist's userPrompt always
-    // has a "CURRENT REQUEST" section, so it fires on every request. Hard-block
-    // only when directScopes (derived from the prompt's own <transcript>/
-    // <recent_transcript>/"# Conversation so far" markup) confirms real
-    // transcript content; otherwise fall through and let
-    // stripDeniedScopedBlocksFromMessage below remove whatever actually
-    // matched (a no-op when nothing did), same as the legacy chat path.
-    if (deniedScopes.includes('transcript') && directScopes.includes('transcript')) {
+    // has a "CURRENT REQUEST" section, so it fires on every request.
+    //
+    // directScopes.includes('transcript') is NOT the right gate either:
+    // meetingTranscript (the live session's last 180s, added unconditionally
+    // to every Direct Assist request) is correctly tagged
+    // <evidence source_type="MEETING_TRANSCRIPT">, so directScopes includes
+    // 'transcript' on almost every request during a live meeting. Gating the
+    // hard block on that would re-fail every typed/reference-file question
+    // the instant any meeting audio exists, regardless of relevance.
+    //
+    // The only case that must hard-fail rather than silently strip-and-
+    // continue is screenshot's CURRENT TURN SPEECH: it IS the current
+    // request (see this file's system-prompt authority line), so answering
+    // with it removed would answer a different, incomplete question.
+    // meetingTranscript, history and everything else are optional context by
+    // design — stripDeniedScopedBlocksFromMessage below removes them and the
+    // request proceeds, same as the legacy chat path.
+    if (deniedScopes.includes('transcript') && request.userPrompt.includes(DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER)) {
       throw new DirectAssistError(
         'TRANSCRIPT_BLOCKED_BY_PRIVACY',
         'Transcript data is disabled for cloud providers, so this request was not sent.',

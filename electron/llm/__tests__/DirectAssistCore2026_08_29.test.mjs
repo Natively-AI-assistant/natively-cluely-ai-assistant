@@ -2,14 +2,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 const distDirectAssist = path.resolve(root, 'dist-electron/electron/direct-assist/index.js');
+const require = createRequire(import.meta.url);
 
 async function loadDirectAssist() {
   return import(pathToFileURL(distDirectAssist).href);
+}
+
+/** Bare LLMHelper instance (prototype methods only — no network, no settings
+ *  store, no provider clients), the pattern established in
+ *  ProviderDataScopeOutbound2026_08_01.test.mjs, so the REAL privacy-scope
+ *  regexes run against a REAL prepareDirectAssistPrompt() output instead of
+ *  matching a hand-typed fixture string. */
+function llmHelperCaller() {
+  const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
+  const self = Object.create(LLMHelper.prototype);
+  return (name, ...args) => LLMHelper.prototype[name].call(self, ...args);
 }
 
 function baseInput(overrides = {}) {
@@ -221,6 +234,145 @@ test('context trimming removes transcript first and never truncates current requ
   assert.equal(prepared.userPrompt.split(skill).length - 1, 1);
 });
 
+test('meetingTranscript renders as its own block for every source, alongside whatever transcript already carries', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const meeting = 'MEETING_TRANSCRIPT_LAST_180S: the interviewer just asked about Big-O.';
+  for (const source of ['typed', 'stt', 'screenshot']) {
+    const prepared = prepareDirectAssistPrompt(baseInput({
+      source,
+      meetingTranscript: meeting,
+      ...(source === 'screenshot' ? { transcript: 'current turn speech snippet' } : {}),
+    }));
+    assert.match(prepared.userPrompt, /<evidence source_type="MEETING_TRANSCRIPT">/, `source=${source}`);
+    assert.match(prepared.userPrompt, new RegExp(meeting.replace(/[+-]/g, '\\$&')), `source=${source}`);
+  }
+});
+
+test('typed requests drop meetingTranscript before referenceContext when oversized', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    source: 'typed',
+    meetingTranscript: `meeting-low-${'m'.repeat(700)}`,
+    referenceContext: 'reference-must-survive',
+    manualContext: 'manual-short',
+    pageContext: { ocr: 'page-short' },
+    history: [{ role: 'user', content: 'history-short' }],
+    maxContextChars: 1024,
+  }));
+
+  assert.deepEqual(prepared.trimmedFields, ['meetingTranscript']);
+  assert.doesNotMatch(prepared.userPrompt, /meeting-low/);
+  assert.match(prepared.userPrompt, /reference-must-survive/);
+  assert.match(prepared.userPrompt, /history-short/);
+});
+
+test('stt and screenshot requests drop referenceContext before meetingTranscript when oversized', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  for (const source of ['stt', 'screenshot']) {
+    const prepared = prepareDirectAssistPrompt(baseInput({
+      source,
+      meetingTranscript: 'meeting-transcript-must-survive',
+      referenceContext: `reference-low-${'r'.repeat(700)}`,
+      manualContext: 'manual-short',
+      pageContext: { ocr: 'page-short' },
+      history: [{ role: 'user', content: 'history-short' }],
+      maxContextChars: 1024,
+    }));
+
+    assert.ok(prepared.trimmedFields.includes('referenceContext'), `source=${source}`);
+    assert.doesNotMatch(prepared.userPrompt, /reference-low/, `source=${source}`);
+    assert.match(prepared.userPrompt, /meeting-transcript-must-survive/, `source=${source}`);
+  }
+});
+
+test('full per-source trim order: typed protects referenceContext longer, stt/screenshot protect meetingTranscript longest', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  // Padded so the LAST-standing field alone still exceeds maxContextChars
+  // (the requestBuilder floor is 1024) — otherwise the cascade can stop early
+  // and the test would pass without actually exercising the full order.
+  const pad = (label) => `${label}-${label[0].repeat(950)}`;
+
+  const typed = prepareDirectAssistPrompt(baseInput({
+    source: 'typed',
+    transcript: pad('transcript-low'),
+    meetingTranscript: pad('meeting-low'),
+    manualContext: pad('manual-low'),
+    pageContext: { ocr: pad('page-low') },
+    referenceContext: pad('reference-low'),
+    history: [{ role: 'user', content: pad('history-low') }],
+    maxContextChars: 1024,
+  }));
+  assert.deepEqual(
+    typed.trimmedFields,
+    ['transcript', 'meetingTranscript', 'history', 'referenceContext', 'pageContext', 'manualContext'],
+  );
+
+  const stt = prepareDirectAssistPrompt(baseInput({
+    source: 'stt',
+    transcript: pad('transcript-low'),
+    meetingTranscript: pad('meeting-low'),
+    manualContext: pad('manual-low'),
+    pageContext: { ocr: pad('page-low') },
+    referenceContext: pad('reference-low'),
+    history: [{ role: 'user', content: pad('history-low') }],
+    maxContextChars: 1024,
+  }));
+  assert.deepEqual(
+    stt.trimmedFields,
+    ['transcript', 'history', 'referenceContext', 'pageContext', 'manualContext', 'meetingTranscript'],
+  );
+});
+
+test('buildDirectAssistReferenceContext concatenates raw file content with no cap under budget', async () => {
+  const { buildDirectAssistReferenceContext } = await loadDirectAssist();
+  const built = buildDirectAssistReferenceContext([
+    { fileName: 'notes.md', content: 'first file content' },
+    { fileName: 'spec.md', content: 'second file content' },
+  ]);
+  assert.match(built, /# notes\.md/);
+  assert.match(built, /first file content/);
+  assert.match(built, /# spec\.md/);
+  assert.match(built, /second file content/);
+  assert.doesNotMatch(built, /\[\.\.\.truncated\]/);
+});
+
+test('buildDirectAssistReferenceContext caps a single oversized file with a truncation marker, not an all-or-nothing drop', async () => {
+  const { buildDirectAssistReferenceContext } = await loadDirectAssist();
+  const huge = 'x'.repeat(50_000);
+  const built = buildDirectAssistReferenceContext(
+    [{ fileName: 'huge.md', content: huge }],
+    1_000,
+  );
+  assert.ok(built.length <= 1_000 + 200, 'capped output should be close to the requested budget');
+  assert.match(built, /\[\.\.\.truncated\]/);
+  assert.match(built, /# huge\.md/, 'the file name survives even when its content is truncated');
+});
+
+test('buildDirectAssistReferenceContext caps the cross-file total, preserving earlier files over later ones', async () => {
+  const { buildDirectAssistReferenceContext } = await loadDirectAssist();
+  const built = buildDirectAssistReferenceContext(
+    [
+      { fileName: 'first.md', content: 'a'.repeat(600) },
+      { fileName: 'second.md', content: 'b'.repeat(600) },
+    ],
+    1_000,
+  );
+  assert.match(built, /# first\.md/);
+  assert.match(built, /a{600}/);
+  assert.match(built, /\[\.\.\.truncated\]/);
+  assert.ok(built.length <= 1_000 + 200);
+});
+
+test('buildDirectAssistReferenceContext skips empty/blank file content without emitting an empty section', async () => {
+  const { buildDirectAssistReferenceContext } = await loadDirectAssist();
+  const built = buildDirectAssistReferenceContext([
+    { fileName: 'empty.md', content: '   ' },
+    { fileName: 'real.md', content: 'actual content' },
+  ]);
+  assert.doesNotMatch(built, /# empty\.md/);
+  assert.match(built, /# real\.md/);
+});
+
 test('request builder rejects a forged provider identifier at runtime', async () => {
   const { buildDirectAssistRequest } = await loadDirectAssist();
   assert.throws(
@@ -257,6 +409,29 @@ test('service dispatches exactly once to the frozen provider/model and preserves
   assert.deepEqual(events.filter((event) => event.type === 'delta').map((event) => event.text), ['raw ', 'provider output']);
   assert.deepEqual(events.filter((event) => event.type === 'delta').map((event) => event.sequence), [1, 2]);
   assert.equal(result.state, 'complete');
+});
+
+test('the start event reports which fields prepareDirectAssistPrompt trimmed, so the renderer can notify the user', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = {
+    streamDirectAssist() {
+      return (async function* () { yield 'ok'; })();
+    },
+  };
+  const service = new DirectAssistService(transport);
+
+  const untrimmed = await collect(service.stream(baseInput()));
+  const start1 = untrimmed.events.find((event) => event.type === 'start');
+  assert.deepEqual(start1.trimmedFields, []);
+
+  const trimmed = await collect(service.stream(baseInput({
+    source: 'typed',
+    meetingTranscript: `meeting-low-${'m'.repeat(700)}`,
+    referenceContext: 'reference-must-survive',
+    maxContextChars: 1024,
+  })));
+  const start2 = trimmed.events.find((event) => event.type === 'start');
+  assert.deepEqual(start2.trimmedFields, ['meetingTranscript']);
 });
 
 test('stream idle watchdog aborts a stalled sole dispatch with a stable error', async () => {
@@ -431,7 +606,7 @@ test('LLMHelper Direct boundary contains no legacy stream/fallback entrypoint', 
   assert.match(boundary, /streamWithCodexCli\(directUserPrompt, request\.systemPrompt, false, imagePaths, abortSignal, model\)/);
 });
 
-test('transcript privacy denial only hard-blocks Direct Assist when the prompt actually carries transcript content', () => {
+test('transcript privacy denial only hard-blocks Direct Assist when the CURRENT REQUEST itself depends on protected speech', () => {
   const source = fs.readFileSync(path.resolve(root, 'electron/LLMHelper.ts'), 'utf8');
   const start = source.indexOf('private async *streamDirectAssistFrozen(');
   const end = source.indexOf('\n  /**', start + 20);
@@ -440,14 +615,63 @@ test('transcript privacy denial only hard-blocks Direct Assist when the prompt a
   // scopesForPayload()'s 'transcript' tag is a last-boundary backstop that
   // fires on ANY non-empty prompt text — Direct Assist's userPrompt always
   // has a "CURRENT REQUEST" section, so deniedScopes.includes('transcript')
-  // used to be true for every request. TRANSCRIPT_BLOCKED_BY_PRIVACY must
-  // require directScopes (derived from the prompt's own markup) to confirm
-  // real transcript content too, or every typed/screenshot-only request with
-  // the transcript scope denied fails outright.
+  // used to be true for every request. The naive fix — gate on
+  // directScopes.includes('transcript') — is ALSO wrong: meetingTranscript is
+  // now correctly tagged <evidence source_type="MEETING_TRANSCRIPT"> (so it
+  // gets stripped, not leaked), which makes directScopes include 'transcript'
+  // on almost every request during a live meeting. Gating the HARD BLOCK on
+  // that would re-fail every typed/reference-file question the instant any
+  // meeting audio exists, regardless of relevance — the exact over-blocking
+  // this file's next test up (looking-for-work-style) was already fixed for.
+  //
+  // The only case that must hard-fail rather than silently strip-and-continue
+  // is screenshot's CURRENT TURN SPEECH: it IS the current request (the
+  // system prompt's own authority line says so), so answering with it removed
+  // would be answering a different, incomplete question. meetingTranscript,
+  // ordinary history and everything else are optional context by design (the
+  // system prompt: 'meeting transcript' is explicitly the LOWEST-authority
+  // item) — silently dropping them and continuing is correct, not a leak.
   assert.match(
     boundary,
-    /if \(deniedScopes\.includes\('transcript'\) && directScopes\.includes\('transcript'\)\) \{\s*\n\s*throw new DirectAssistError\(\s*\n\s*'TRANSCRIPT_BLOCKED_BY_PRIVACY'/,
+    /if \(deniedScopes\.includes\('transcript'\) && request\.userPrompt\.includes\(DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER\)\) \{\s*\n\s*throw new DirectAssistError\(\s*\n\s*'TRANSCRIPT_BLOCKED_BY_PRIVACY'/,
   );
+});
+
+test('meetingTranscript is classified as transcript-scoped and actually stripped from the dispatched prompt when denied (real regex, real prepared prompt)', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const call = llmHelperCaller();
+  const secret = 'SECRET_MEETING_CONTENT_marcus_said_launch_slips_to_q3';
+
+  for (const source of ['typed', 'stt', 'screenshot']) {
+    const prepared = prepareDirectAssistPrompt(baseInput({ source, meetingTranscript: secret }));
+    assert.match(prepared.userPrompt, /<evidence source_type="MEETING_TRANSCRIPT">/, `source=${source}`);
+
+    const directScopes = call('inferEmbeddedMessageScopes', prepared.userPrompt);
+    assert.ok(directScopes.includes('transcript'), `source=${source} meetingTranscript must classify as transcript scope`);
+
+    const scrubbed = call('stripDeniedScopedBlocksFromMessage', prepared.userPrompt, ['transcript']);
+    assert.doesNotMatch(scrubbed, new RegExp(secret), `source=${source} meetingTranscript leaked past a denied transcript scope`);
+  }
+});
+
+test('a typed or stt request carries no CURRENT_TURN_SPEECH marker, so meetingTranscript alone never trips the hard block', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  for (const source of ['typed', 'stt']) {
+    const prepared = prepareDirectAssistPrompt(baseInput({
+      source,
+      meetingTranscript: 'ambient meeting content, not the current request',
+    }));
+    assert.doesNotMatch(prepared.userPrompt, /CURRENT TURN SPEECH \(PART OF CURRENT REQUEST\)/, `source=${source}`);
+  }
+});
+
+test('screenshot current-turn speech still carries the CURRENT_TURN_SPEECH marker, so the hard block still protects it', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    source: 'screenshot',
+    transcript: 'What is the time complexity of this approach?',
+  }));
+  assert.match(prepared.userPrompt, /CURRENT TURN SPEECH \(PART OF CURRENT REQUEST\)/);
 });
 
 test('Direct private-vision guard blocks cloud images before Natively transport', () => {

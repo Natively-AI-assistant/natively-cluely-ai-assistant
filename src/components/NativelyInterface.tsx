@@ -413,6 +413,11 @@ interface Message {
   // the card, mirroring the "Screenshot attached" label — without it the pill
   // vanishes on use and nothing in the chat shows which page fed the answer.
   pageContext?: { title?: string; url?: string };
+  // Field names Direct Assist dropped to fit the model's context window (e.g.
+  // "referenceContext", "meetingTranscript") — never user content, just the
+  // name. Renders a small "context trimmed" notice on the question card so an
+  // incomplete-seeming answer isn't a silent mystery.
+  trimmedFields?: string[];
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -446,13 +451,16 @@ interface ActiveDirectAssistRequest {
   source: DirectAssistSource;
   currentRequest: string;
   placeholderId: string;
+  /** The user-role question card this request answers, so a 'start' event's
+   *  trimmedFields can be stamped onto the right card. */
+  userMessageId?: string;
   lastSequence: number;
   answerText: string;
   completed?: boolean;
 }
 
 type DirectAssistRendererEvent =
-  | { type: 'start'; requestId: string; provider: string; model: string }
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
@@ -888,6 +896,20 @@ const hostnameFromUrl = (url?: string): string | undefined => {
   }
 };
 
+// Human-readable label for a Direct Assist trimmedFields entry (a field name
+// from requestBuilder.ts). Falls back to the raw name for a field this map
+// hasn't been updated for, rather than rendering nothing.
+const DIRECT_ASSIST_TRIMMED_FIELD_LABELS: Record<string, string> = {
+  transcript: 'spoken text',
+  meetingTranscript: 'recent transcript',
+  history: 'conversation history',
+  referenceContext: 'reference files',
+  pageContext: 'screen content',
+  manualContext: 'manual notes',
+};
+const directAssistTrimmedFieldLabel = (field: string): string =>
+  DIRECT_ASSIST_TRIMMED_FIELD_LABELS[field] ?? field;
+
 // Smart Browser Context v2 — category-specific chip label. Falls back to the
 // host + "page ready" for legacy plain-string captures (no envelope category).
 const CATEGORY_CHIP_LABEL: Record<string, string> = {
@@ -1087,6 +1109,22 @@ const MessageRow = React.memo(
               </div>
             )}
             {renderMessageText(msg)}
+            {/* Direct Assist dropped one or more context fields to fit the
+                model's context window (see requestBuilder's per-source drop
+                order) — surfaced so a thin-looking answer isn't a silent
+                mystery. Field names only, never the dropped content. */}
+            {msg.role === 'user' && msg.trimmedFields && msg.trimmedFields.length > 0 && (
+              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
+                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate max-w-[260px]">
+                  {t('Context trimmed')}
+                  {' · '}
+                  {msg.trimmedFields.map((field) => t(directAssistTrimmedFieldLabel(field))).join(', ')}
+                  {' '}
+                  {t('omitted (over context limit)')}
+                </span>
+              </div>
+            )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
               <div className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-green-500" title={`Ran ${msg.codeVerified.total} test case(s) successfully`}>
@@ -4744,7 +4782,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (!active || event.requestId !== active.requestId) return;
       if (active.completed) return;
 
-      if (event.type === 'start') return;
+      if (event.type === 'start') {
+        // Stamp which fields Direct Assist dropped to fit the context window
+        // onto the question card, so a thin-looking answer isn't a silent
+        // mystery. userMessageId is only set for surfaces that create a
+        // distinct question card (all current callers do).
+        if (event.trimmedFields?.length && active.userMessageId) {
+          const userMessageId = active.userMessageId;
+          setMessages((prev) => prev.map((message) =>
+            message.id === userMessageId
+              ? { ...message, trimmedFields: [...event.trimmedFields] }
+              : message,
+          ));
+        }
+        return;
+      }
 
       if (event.type === 'delta') {
         if (event.sequence <= active.lastSequence) return;
@@ -4825,12 +4877,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     imagePaths,
     pageContext: directPageContext,
     transcript,
+    userMessageId,
   }: {
     source: DirectAssistSource;
     currentRequest: string;
     imagePaths?: string[];
     pageContext?: { dom?: string; ocr?: string; url?: string; title?: string };
     transcript?: string;
+    userMessageId?: string;
   }) => {
     legacyIntelligenceTombstonedRef.current = true;
     liveAnswerGenIdRef.current = Number.MAX_SAFE_INTEGER;
@@ -4860,6 +4914,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       source,
       currentRequest,
       placeholderId,
+      userMessageId,
       lastSequence: -1,
       answerText: '',
     };
@@ -5746,6 +5801,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // separate untrusted field so main can enforce transcript scope instead
           // of disguising meeting audio as typed text.
           transcript: directWhatToSayPayload.transcript,
+          userMessageId: questionCardId,
         });
         return;
       }
@@ -6700,6 +6756,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             currentRequest: question || 'Analyze the attached screenshot.',
             imagePaths: currentAttachments.map((attachment) => attachment.path),
             pageContext: directPageContext,
+            userMessageId,
           });
           return;
         }
@@ -6919,6 +6976,7 @@ Provide only the answer, nothing else.`;
             : 'Analyze the attached screenshot.',
           imagePaths: currentAttachments.map((attachment) => attachment.path),
           pageContext: directPageContext,
+          userMessageId,
         });
       } finally {
         manualSubmitInFlightRef.current = false;
