@@ -320,7 +320,8 @@ existing runtime already handles; it still applies to anything needing a new one
 | mxbai Rerank XSmall (`mixedbread-ai/mxbai-rerank-xsmall-v1`) | 96 MB | **yes** — measured 524 ms |
 | BGE Reranker Large (`Xenova/bge-reranker-large`) | 580 MB | yes — slowest to load |
 | Ettin Reranker 32M / 68M / 150M | 132–603 MB | **yes** — head applied outside the graph |
-| Jina v3.5 Q4_K_M, Qwen3 0.6B Q4_K_M (GGUF) | 397 / 484 MB | no — via extension + llama.cpp |
+| BGE Reranker v2 m3 Q4_K_M (GGUF) | 438 MB | **yes** — llama.cpp, 71 ms warm |
+| Jina v3.5 Q4_K_M, Qwen3 0.6B Q4_K_M (GGUF) | 397 / 484 MB | no — no ranking head, see below |
 
 Every entry marked runnable had its ONNX graph opened and checked for a `logits`
 output before it was listed.
@@ -366,13 +367,35 @@ Two details worth keeping:
   a non-`cls` pooling mode, a non-F32 tensor and an unknown activation:
   approximating any of them produces a plausible wrong ordering with no error.
 
-### GGUF goes through the extension, not through Core
+### GGUF runs in Core, via llama.cpp
 
-Core has no llama.cpp. A GGUF downloaded into a Core directory would be
-hundreds of megabytes nothing can execute, so those route through the owning
-extension's `ModelStore` — which is also what keeps the `LicenseLedger` gate
-intact for Jina's CC-BY-NC-4.0. If the extension is not installed, the UI says
-so instead of downloading dead bytes.
+`node-llama-cpp` gives Core a second local runtime. `electron/rag/GgufReranker.ts`
+is the seam port; inference runs in `ggufRerankerWorker.ts`, a worker thread —
+the same rule the ONNX reranker follows after the 2026-07-05 SIGTRAP crashes,
+because llama.cpp is a native addon that can abort the thread it runs on.
+
+**llama.cpp only ranks a model that has a ranking head.** Measured:
+
+| GGUF | arch | result |
+| --- | --- | --- |
+| bge-reranker-v2-m3 Q4_K_M | `bert` | **works** — 1708 ms cold, **71 ms warm** |
+| jina-reranker-v3.5 Q4_K_M | `qwen3` | refused: no ranking head |
+| qwen3-reranker-0.6b Q4_K_M | `qwen3` | refused: no ranking head |
+
+The two refusals are not a bug to fix here. Both are generative models scored a
+completely different way — the reference `rerank.py` in Jina's own GGUF repo
+needs a **patched** llama.cpp (sliding-window fix), the `llama-embedding` binary
+with `--output-token-ids` to extract per-token hidden states, and a separate
+`projector.safetensors` applied by cosine similarity. No JS binding exposes
+that. Qwen3-Reranker would need yes/no token-logit scoring, which is not
+implemented. Both are listed with that reason, and the installer refuses them
+before spending several hundred megabytes.
+
+Packaging note: the two `node-llama-cpp` trees are in `asarUnpack`. The existing
+`**/*.node` and `**/*.dylib` patterns do **not** cover the backend libraries it
+ships — `libggml-blas.so`, `libggml-cpu-apple_m1/m2_m3/m4.so`, `libggml-metal.so`
+are `.so` on macOS and llama.cpp dlopens them at runtime. Without the explicit
+entries the runtime works in dev and fails only once packaged.
 
 ## Settings
 
@@ -468,6 +491,10 @@ rejects an incomplete ranking wholesale.
   across the process boundary in 1 ms with correct ordering → `unloadAll()`.
 
 **Verified for direct install**
+- BGE Reranker v2 m3 (GGUF, 438 MB) installed through the app's own installer,
+  sha256 verified, then reranked through the worker-backed seam port: 1708 ms
+  cold, 71 ms warm, correct ordering. `rankAll` confirmed to return scores in
+  input order and to score duplicate passages identically.
 - Ettin 32M installed through the app's own installer (12 files, 132 MB) and
   scored against sentence-transformers: max difference 4.05e-6, identical
   ranking. The ordinary cross-encoders still take the logits path unchanged.

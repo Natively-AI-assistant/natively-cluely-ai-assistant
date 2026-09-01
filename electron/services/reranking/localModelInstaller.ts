@@ -141,13 +141,17 @@ export interface InstallResult {
 }
 
 /**
- * Download every file of an ONNX catalogue entry.
+ * Download every file of a catalogue entry, ONNX or GGUF.
+ *
+ * The mechanics are identical — files into a directory under the local-models
+ * root — so the runtimes do not each need their own installer. Only what reads
+ * the result afterwards differs.
  *
  * Progress is reported across the WHOLE model, weighted by the real file sizes,
  * so a 597MB weights file does not sit at "33%" while two small files finish
  * instantly.
  */
-export async function installOnnxModel(
+export async function installCatalogModel(
   id: string,
   onProgress: (p: InstallProgress) => void,
   signal: AbortSignal,
@@ -155,9 +159,6 @@ export async function installOnnxModel(
 ): Promise<InstallResult> {
   const model = findCatalogModel(id);
   if (!model) return { ok: false, modelId: id, error: `unknown model "${id}"` };
-  if (model.runtime !== 'onnx') {
-    return { ok: false, modelId: id, error: `${model.name} is a ${model.runtime} model and cannot run in this runtime` };
-  }
   if (!model.supported) {
     // Refuse the download rather than spending hundreds of megabytes on bytes
     // this build cannot score. See the catalogue header for what was measured.
@@ -188,7 +189,7 @@ export async function installOnnxModel(
       await downloader.download(
         {
           key: `${model.id}:${file.repoPath}`,
-          format: 'onnx',
+          format: model.runtime,
           source: 'huggingface',
           repo: model.repo,
           repoPath: file.repoPath,
@@ -236,10 +237,9 @@ export async function installOnnxModel(
 }
 
 /** Delete an installed ONNX model's directory. */
-export function removeOnnxModel(id: string, rootOverride?: string): { ok: boolean; error?: string } {
+export function removeCatalogModel(id: string, rootOverride?: string): { ok: boolean; error?: string } {
   const model = findCatalogModel(id);
   if (!model) return { ok: false, error: `unknown model "${id}"` };
-  if (model.runtime !== 'onnx') return { ok: false, error: 'only locally installed models can be removed here' };
   try {
     fs.rmSync(modelDirectory(model, rootOverride), { recursive: true, force: true });
     return { ok: true };
@@ -256,4 +256,18 @@ function sha256File(filePath: string): Promise<string> {
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
   });
+}
+
+/**
+ * Absolute path to a GGUF entry's weights.
+ *
+ * Null for anything else, so a caller cannot hand an ONNX directory to
+ * llama.cpp or a .gguf to transformers.js.
+ */
+export function ggufModelFile(id: string, rootOverride?: string): string | null {
+  const model = findCatalogModel(id);
+  if (!model || model.runtime !== 'gguf') return null;
+  const file = model.files[0];
+  if (!file) return null;
+  return path.join(modelDirectory(model, rootOverride), ...file.repoPath.split('/'));
 }

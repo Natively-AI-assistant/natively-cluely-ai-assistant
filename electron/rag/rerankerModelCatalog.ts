@@ -28,11 +28,12 @@
  * Every model marked `supported: true` had its ONNX graph checked for a
  * `logits` output before it was listed.
  *
- * The GGUF entries are the opposite case, and they are treated differently on
- * purpose (see `runtime` below). Core has no llama.cpp. Downloading a GGUF into
- * a Core-owned directory would produce several hundred megabytes that nothing
- * can execute, so those route through the owning extension's `ModelStore`
- * instead — which is also what keeps the licence gate intact.
+ * The GGUF entries run on llama.cpp, in-process, via node-llama-cpp. That
+ * runtime only scores models with a ranking head: measured, bge-reranker-v2-m3
+ * (arch bert) works, while jina-reranker-v3.5 and qwen3-reranker-0.6b are
+ * qwen3-architecture generative models that llama.cpp refuses outright. Those
+ * two are listed unsupported WITH THE REASON rather than offering a download
+ * that cannot produce a score.
  *
  * EVERY NUMBER HERE WAS READ FROM THE HUGGING FACE API ON 2026-09-01
  *
@@ -142,7 +143,6 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     dtype: 'q8',
     revision: 'b5c6e9da73abc3711f593f705371cdbe9e0fe422',
     supported: true,
-    recommended: true,
     files: [
       { repoPath: 'onnx/model_quantized.onnx', bytes: 87245802, sha256: '15ef19a6de90be7d52b627f2c784107bd806e64826450f41fb75fa4f0179ab30' },
       { repoPath: 'tokenizer.json', bytes: 8649139, sha256: null },
@@ -272,6 +272,24 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     note: 'The strongest Ettin. Largest download of the three.',
   },
 
+  // ── GGUF, run by llama.cpp in-process (node-llama-cpp) ──────────────────
+  {
+    id: 'bge-reranker-v2-m3-q4km',
+    name: 'BGE Reranker v2 m3',
+    runtime: 'gguf',
+    repo: 'gpustack/bge-reranker-v2-m3-GGUF',
+    revision: '3093af03b1a635e67b084b1d8c03c5f5e020fd05',
+    supported: true,
+    recommended: true,
+    files: [
+      { repoPath: 'bge-reranker-v2-m3-Q4_K_M.gguf', bytes: 438376864, sha256: 'e186a244ed455b4ab66ec64339ce7427a6ae13f5c0b5e544de96e50f0f8b3673' },
+    ],
+    bytes: 438376864,
+    license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
+    params: '568M · Q4_K_M',
+    note: 'Multilingual, and the strongest local reranker measured here. Runs on llama.cpp.',
+  },
+
   // ── GGUF: needs llama.cpp, which Core does not ship ─────────────────────
   {
     id: 'jina-reranker-v3.5-q4km',
@@ -279,7 +297,9 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     runtime: 'gguf',
     repo: 'jinaai/jina-reranker-v3.5-GGUF',
     revision: '884f7c67aa3ac24edb89064da8c7bfd03f4a90f5',
-    supported: true,
+    supported: false,
+    unsupportedReason:
+      'Its GGUF is a qwen3-architecture generative model with no ranking head, so llama.cpp refuses to score it. The reference rerank.py in its own repo needs a patched llama.cpp, per-token hidden states and a separate projector file.',
     files: [
       { repoPath: 'jina-reranker-v3.5-Q4_K_M.gguf', bytes: 396709504, sha256: '40ec64a1b8c18a40a79bbd7b516115aec158791e56452e734c36c52a76c245a1' },
     ],
@@ -291,7 +311,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
       requiresAcknowledgement: true,
     },
     params: '0.6B · Q4_K_M',
-    note: 'Non-commercial licence. Runs through the Jina extension and llama.cpp.',
+    note: 'Not usable yet — see below.',
     extensionId: 'jina-reranker-v35',
     requiresBinary: 'llama-server',
   },
@@ -301,14 +321,16 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     runtime: 'gguf',
     repo: 'QuantFactory/Qwen3-Reranker-0.6B-GGUF',
     revision: '9bdee8f1ad01d7896a20823d5affd66c494eee8b',
-    supported: true,
+    supported: false,
+    unsupportedReason:
+      'Its GGUF is a qwen3-architecture generative model with no ranking head, so llama.cpp refuses to score it. It would need yes/no token-logit scoring, which Natively does not implement yet.',
     files: [
       { repoPath: 'Qwen3-Reranker-0.6B.Q4_K_M.gguf', bytes: 483835680, sha256: '783d816e7541ba78a5105f949a010217fecf31795c267d69ffa5a96403dff4a7' },
     ],
     bytes: 483835680,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/QuantFactory/Qwen3-Reranker-0.6B-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '0.6B · Q4_K_M',
-    note: 'Multilingual. Runs through the Qwen3 extension and llama.cpp.',
+    note: 'Not usable yet — see below.',
     extensionId: 'qwen3-reranker',
     requiresBinary: 'llama-server',
   },
