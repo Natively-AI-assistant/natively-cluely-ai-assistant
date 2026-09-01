@@ -87,6 +87,7 @@ import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGround
 import { mergeProviderDataScopes } from './llm/ProviderRouter';
 import {
   DirectAssistService,
+  buildDirectAssistReferenceContext,
   type DirectAssistRequestInput,
   type DirectAssistStreamEvent,
 } from './direct-assist';
@@ -6349,6 +6350,41 @@ export function initializeIpcHandlers(appState: AppState): void {
     const onSenderDestroyed = (): void => controller.abort();
     event.sender.once?.('destroyed', onSenderDestroyed);
 
+    // referenceContext and meetingTranscript are always server-computed, not
+    // taken from the renderer (which never sends either): raw, unchunked,
+    // unranked — every attached reference file's full text (capped only by a
+    // total-size safety ceiling, see buildDirectAssistReferenceContext), and
+    // the live session's last 180s of transcript (the same window the legacy
+    // live auto-answer path already reads via getFormattedContext). Direct
+    // Assist has no retrieval step of its own; this is the entire "evidence",
+    // left for the model to read itself.
+    //
+    // Both catches fail closed to '' (getActiveModeInfo() has a documented
+    // real throw case — see the FAIL-CLOSED comment ~line 3182 above) rather
+    // than reject the request: a missing mode/session should not block an
+    // otherwise-answerable typed question. Logged, unlike that ~3182 case,
+    // because an empty result here is otherwise indistinguishable from
+    // "nothing to include" — exactly the silent-mystery gap this feature's
+    // trimmedFields notice exists to close, so a load failure should not be
+    // invisible to both the notice AND the logs.
+    let referenceContext = '';
+    try {
+      const { ModesManager } = require('./services/ModesManager');
+      const activeModeId = ModesManager.getInstance().getActiveModeInfo()?.id;
+      if (activeModeId) {
+        referenceContext = buildDirectAssistReferenceContext(ModesManager.getInstance().getReferenceFiles(activeModeId));
+      }
+    } catch (error) {
+      console.warn('[direct-assist] reference files unavailable, proceeding without them:', (error as Error)?.message);
+    }
+
+    let meetingTranscript = '';
+    try {
+      meetingTranscript = appState.getIntelligenceManager()?.getFormattedContext?.(180) ?? '';
+    } catch (error) {
+      console.warn('[direct-assist] live session transcript unavailable, proceeding without it:', (error as Error)?.message);
+    }
+
     const directRequest: DirectAssistRequestInput = Object.freeze({
       requestId: request.requestId,
       source: request.source,
@@ -6356,10 +6392,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       currentRequest: resolvedSkill.currentRequest,
       skill: resolvedSkill.skill ?? null,
       manualContext: request.manualContext,
-      referenceContext: request.referenceContext,
+      referenceContext,
       pageContext: request.pageContext,
       history: request.history,
       transcript: request.transcript,
+      meetingTranscript,
       imagePaths: request.imagePaths,
       requestedLanguage: request.requestedLanguage,
       requestedFormat: request.requestedFormat,
