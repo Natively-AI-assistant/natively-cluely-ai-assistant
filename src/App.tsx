@@ -8,6 +8,7 @@ import Launcher from "./components/Launcher"
 import ModelSelectorWindow from "./components/ModelSelectorWindow"
 import { OverlayPillWindow, OverlayToggleWindow } from "./components/OverlayAuxWindows"
 import SettingsOverlay from "./components/SettingsOverlay"
+import HelpModal from "./components/HelpModal"
 import StartupSequence from "./components/StartupSequence"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import UpdateBanner from "./components/UpdateBanner"
@@ -196,6 +197,8 @@ const App: React.FC = () => {
   }, [showStartup]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string>('general');
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [helpInitialTab, setHelpInitialTab] = useState<'setup' | 'permissions' | 'audio' | 'ai-providers' | 'features' | 'troubleshooting'>('setup');
   const [activeManagerPanel, setActiveManagerPanel] = useState<ManagerPanel>(null);
   const [managerPanelDirection, setManagerPanelDirection] = useState<ManagerPanelDirection>('forward');
   const managerDialogRef = useRef<HTMLDivElement>(null);
@@ -217,6 +220,14 @@ const App: React.FC = () => {
     setActiveManagerPanel(null);
     setSettingsInitialTab(tab);
     setIsSettingsOpen(true);
+  }, []);
+
+  const openHelpExclusive = useCallback((tab: 'setup' | 'permissions' | 'audio' | 'ai-providers' | 'features' | 'troubleshooting' = 'setup') => {
+    managerOpenerRef.current = null;
+    setActiveManagerPanel(null);
+    setIsSettingsOpen(false);
+    setHelpInitialTab(tab);
+    setIsHelpOpen(true);
   }, []);
 
   const openProfileExclusive = useCallback(() => {
@@ -449,26 +460,36 @@ const App: React.FC = () => {
   // toasters never appear over the user's settings interaction.
   useEffect(() => {
     if (!isLauncherWindow && !isDefault) return;
-    if (isSettingsOpen || isManagerOpen) {
+    if (isSettingsOpen || isManagerOpen || isHelpOpen) {
       emitOrchestratorEvent({ type: 'launcher:unmounted' });
     } else {
       emitOrchestratorEvent({ type: 'launcher:mounted' });
     }
-  }, [isSettingsOpen, isManagerOpen, isLauncherWindow, isDefault]);
+  }, [isSettingsOpen, isManagerOpen, isHelpOpen, isLauncherWindow, isDefault]);
 
   // Settings keeps priority; the shared manager owns a single Escape path for
   // both Modes and Profile Intelligence.
   useEffect(() => {
-    if (!isSettingsOpen && !isManagerOpen) return;
+    if (!isSettingsOpen && !isManagerOpen && !isHelpOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
       if (isSettingsOpen) { setIsSettingsOpen(false); return; }
+      if (isHelpOpen) { setIsHelpOpen(false); return; }
       closeManagerPanel();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isSettingsOpen, isManagerOpen, closeManagerPanel]);
+  }, [isSettingsOpen, isManagerOpen, isHelpOpen, closeManagerPanel]);
+
+  // First launch only: surface the Setup guide once so new users see it
+  // without having to find the help icon themselves.
+  useEffect(() => {
+    if (!isLauncherWindow && !isDefault) return;
+    if (localStorage.getItem('natively_setup_autoshown_v1')) return;
+    localStorage.setItem('natively_setup_autoshown_v1', 'true');
+    openHelpExclusive('setup');
+  }, [isLauncherWindow, isDefault, openHelpExclusive]);
 
 
 
@@ -1073,6 +1094,7 @@ const App: React.FC = () => {
                   <Launcher
                     onStartMeeting={handleStartMeeting}
                     onOpenSettings={(tab = 'general') => openSettingsExclusive(tab)}
+                    onOpenHelp={() => openHelpExclusive('setup')}
                     onOpenProfile={() => openProfileExclusive()}
                     onOpenModes={() => openModesExclusive()}
                     onPageChange={setIsLauncherMainView}
@@ -1089,6 +1111,12 @@ const App: React.FC = () => {
                   initialTab={settingsInitialTab}
                   initialIsPremium={hasLoadedLicense ? isPremiumActive : null}
                   initialHasNativelyKey={hasNativelyApi}
+                />
+                <HelpModal
+                  isOpen={isHelpOpen}
+                  onClose={() => setIsHelpOpen(false)}
+                  initialTab={helpInitialTab}
+                  onOpenSettings={(tab) => { setIsHelpOpen(false); openSettingsExclusive(tab); }}
                 />
                 <AnimatePresence>
                   {activeManagerPanel && (
