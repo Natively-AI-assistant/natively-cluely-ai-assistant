@@ -548,3 +548,5 @@ benchmark-results/
 /natively_debug.size*
 /pitch/
 /researc
+
+benchmarks/reranker-eval/results/

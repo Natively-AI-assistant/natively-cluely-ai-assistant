@@ -46,6 +46,12 @@ test('preload and renderer declarations expose one correlated Direct Assist brid
     assert.match(source, /setDirectAssistEnabled/);
     assert.match(source, /onDirectAssistEnabledChanged/);
     assert.match(source, /type: 'error'[\s\S]{0,140}partial: boolean/);
+    // The 'start' event's trimmedFields field has drifted before (fixed
+    // 2026-09-01): electron/direct-assist/types.ts, src/types/electron.d.ts
+    // and NativelyInterface.tsx's local DirectAssistRendererEvent were kept
+    // in sync while preload.ts's own local duplicate was missed — no compile
+    // error, since onDirectAssistEvent forwards the raw IPC object untouched.
+    assert.match(source, /type: 'start'[\s\S]{0,140}trimmedFields: string\[\]/);
   }
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-stream', request\)/);
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-cancel', requestId, source\)/);
@@ -185,9 +191,24 @@ test('validated scoped fields remain intact for local provider selection and bac
   assert.match(normalizeBlock, /\n\s*imagePaths,\n/);
 
   assert.match(streamBlock, /const directRequest: DirectAssistRequestInput = Object\.freeze/);
-  assert.match(streamBlock, /referenceContext: request\.referenceContext/);
   assert.match(streamBlock, /pageContext: request\.pageContext/);
   assert.match(streamBlock, /history: request\.history/);
   assert.match(streamBlock, /transcript: request\.transcript/);
   assert.match(streamBlock, /imagePaths: request\.imagePaths/);
+});
+
+test('referenceContext and meetingTranscript are always server-populated, ignoring whatever the renderer sent', () => {
+  // The renderer never has to (and today never does) supply these — main
+  // reads mode_reference_files and the live session directly, the same raw
+  // full-text/full-window sources the legacy WTA path already uses, with no
+  // chunking, embedding, or ranking involved.
+  assert.doesNotMatch(
+    streamBlock,
+    /referenceContext: request\.referenceContext/,
+    'referenceContext must be server-computed, not passed through from the renderer',
+  );
+  assert.match(streamBlock, /ModesManager\.getInstance\(\)[\s\S]{0,20}\.getReferenceFiles\(/);
+  assert.match(streamBlock, /\n\s*referenceContext,\n/);
+  assert.match(streamBlock, /getFormattedContext\??\.?\(180\)/);
+  assert.match(streamBlock, /\n\s*meetingTranscript,\n/);
 });
