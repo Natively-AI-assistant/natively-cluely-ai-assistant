@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Check, ChevronDown, Cloud, ExternalLink, HardDrive, KeyRound, Loader2, Monitor, Server, Trash2 } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
-import { AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipSelectOption, type AipTone } from './AIProvidersSettings';
+import { AIP_CSS, AipBadge, AipModelList, AipProviderMark, type AipTone } from './AIProvidersSettings';
 import { isMac, isWindows } from '../../utils/platformUtils';
 
 // Embeddings — configured INDEPENDENTLY of the generation model.
@@ -108,13 +108,50 @@ const KEY_PLACEHOLDERS: Record<string, string> = {
 };
 
 /**
+ * The model on its own, with any vendor path stripped.
+ *
+ * OpenRouter ids are already namespaced (`voyage/voyage-4-lite`), so pairing
+ * one with its provider produced a three-part name that read as a path and not
+ * as a model. The last segment is the model everywhere: `voyage/voyage-4-lite`
+ * and `Xenova/all-MiniLM-L6-v2` both reduce to the part a user would say out
+ * loud. A curated label with no slash is already bare and passes through.
+ */
+const bareModelName = (label: string): string => {
+    const segments = label.split('/');
+    return segments[segments.length - 1] || label;
+};
+
+/**
+ * `provider/model` — the form the menu uses so two routes to the same model
+ * stay distinguishable (`openrouter/voyage-4-lite` vs `voyage/voyage-4-lite`).
+ * Provider IDs are the short single tokens the catalogue defines, which is why
+ * they, and not the display names ("Voyage AI", "Custom endpoint"), are what a
+ * path segment is built from.
+ */
+const qualifiedModelName = (providerId: string, label: string): string =>
+    `${providerId}/${bareModelName(label)}`;
+
+/**
+ * A model gets TWO names.
+ *
+ * Closed, the trigger is a statement of fact — the model you are using — and
+ * "voyage-4-lite — OpenRouter" (or, for an OpenRouter id, the doubly
+ * qualified "voyage/voyage-4-lite — OpenRouter") buries that fact in
+ * routing detail. Open, the list is a comparison, and there the qualifier is
+ * the whole point: the same model is reachable through more than one provider
+ * and the rows must be told apart. So `triggerName` is the bare model and
+ * `name` is `provider/model`.
+ */
+interface EmbeddingSelectOption { id: string; name: string; triggerName?: string }
+
+/**
  * Floating popover model selector for Active Model card.
  * Uses floating absolute positioning (`aip-float.absolute.top-full.right-0.z-50`)
  * so opening the menu floats on top without extending or expanding the card container height.
  */
 interface EmbeddingModelSelectProps {
     value: string;
-    options: { id: string; name: string }[];
+    options: EmbeddingSelectOption[];
     onChange: (value: string) => void;
     placeholder?: string;
     disabled?: boolean;
@@ -138,7 +175,7 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     placeholder,
     disabled = false,
     className = '',
-    containerClassName = 'relative min-w-[200px] max-w-[320px] w-full sm:w-64',
+    containerClassName = 'relative min-w-[140px] max-w-[224px] w-full sm:w-[179px]',
     ariaLabel,
     title,
 }) => {
@@ -157,7 +194,9 @@ const EmbeddingModelSelect: React.FC<EmbeddingModelSelectProps> = ({
     }, []);
 
     const selectedOption = options.find(o => o.id === value);
-    const resolvedLabel = selectedOption ? selectedOption.name : (placeholder || t('Select model'));
+    const resolvedLabel = selectedOption
+        ? (selectedOption.triggerName || selectedOption.name)
+        : (placeholder || t('Select model'));
 
     return (
         <div className={containerClassName} ref={containerRef}>
@@ -439,7 +478,7 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
         } finally { setEndpointSaving(false); }
     }, [endpointDraft, customApiKeyDraft, refresh, t]);
 
-    const activeOptions: AipSelectOption[] = useMemo(() => {
+    const activeOptions: EmbeddingSelectOption[] = useMemo(() => {
         return providers
             .flatMap(p => {
                 const primaryModels = p.models.filter(m =>
@@ -449,19 +488,22 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                 const targetModels = primaryModels.length > 0 ? primaryModels : p.models.slice(0, 1);
                 return targetModels.map(m => ({
                     id: `${p.id}::${m.id}`,
-                    name: `${m.label || m.id} — ${p.name}`,
+                    name: qualifiedModelName(p.id, m.label || m.id),
+                    triggerName: bareModelName(m.label || m.id),
                 }));
             });
     }, [providers, active]);
 
     const activeOptionId = active.provider && active.model ? `${active.provider}::${active.model}` : '';
 
+    // Placeholder for the CLOSED trigger only — an active model the option list
+    // does not carry (a non-recommended pick, or a catalogue that has not loaded
+    // yet). It follows the trigger's rule, not the menu's: bare model name.
     const activeDisplayLabel = useMemo(() => {
         if (!active.model) return t('Select embedding model');
         const matched = activeOptions.find(o => o.id === activeOptionId);
-        if (matched) return matched.name;
-        const providerName = active.provider ? (active.provider.charAt(0).toUpperCase() + active.provider.slice(1)) : '';
-        return `${active.model}${providerName ? ` — ${providerName}` : ''}`;
+        if (matched) return matched.triggerName || matched.name;
+        return bareModelName(active.model);
     }, [active, activeOptionId, activeOptions, t]);
 
     const activeModelDetails = useMemo(() => {

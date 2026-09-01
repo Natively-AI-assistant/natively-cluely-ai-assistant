@@ -127,7 +127,7 @@ export function readRerankerSettings(): RerankerSettings {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { SettingsManager } = require('../SettingsManager');
-    return (SettingsManager.getInstance().getSettings()?.reranker as RerankerSettings) ?? {};
+    return (SettingsManager.getInstance().get('reranker') as RerankerSettings) ?? {};
   } catch {
     return {};
   }
@@ -181,7 +181,7 @@ export function referenceFilesScopeAllowed(): boolean {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { SettingsManager } = require('../SettingsManager');
-    const scopes = SettingsManager.getInstance().getSettings()?.providerDataScopes;
+    const scopes = SettingsManager.getInstance().get('providerDataScopes');
     return scopes?.reference_files !== false;
   } catch {
     return false;

@@ -279,6 +279,48 @@ describe('active model selector', () => {
     assert.match(src, /activeOptions/);
   });
 
+  test('the closed trigger shows the model, the open menu shows provider/model', () => {
+    // 2026-09-01: options read `${label} — ${provider.name}`, and an OpenRouter
+    // label is ALREADY namespaced, so the closed trigger said
+    // "voyage/voyage-4-lite — OpenRouter" — three names for one model, with the
+    // one a user actually recognises in the middle. Closed is a statement, open
+    // is a comparison; only the comparison needs the qualifier.
+    const src = panel();
+    const i = src.indexOf('const activeOptions');
+    assert.notEqual(i, -1);
+    const block = src.slice(i, src.indexOf('const activeOptionId', i));
+    assert.match(block, /name: qualifiedModelName\(p\.id, m\.label \|\| m\.id\)/,
+      'the menu row must be provider-qualified');
+    assert.match(block, /triggerName: bareModelName\(m\.label \|\| m\.id\)/,
+      'the trigger must be the bare model');
+    assert.doesNotMatch(block, /—/, 'the em-dash provider suffix must be gone');
+
+    // And the trigger must actually PREFER the short name; an option type with
+    // a field nothing reads would type-check and ship the old label.
+    assert.match(src, /selectedOption\.triggerName \|\| selectedOption\.name/);
+  });
+
+  test('the qualifier is provider/model — the LAST path segment, not the first', () => {
+    // `voyage/voyage-4-lite` must reduce to `voyage-4-lite`, never to `voyage`.
+    // Taking [0] type-checks, passes a curated-label case, and silently renames
+    // every OpenRouter model to its vendor.
+    const src = panel();
+    const i = src.indexOf('const bareModelName');
+    assert.notEqual(i, -1);
+    const block = src.slice(i, src.indexOf('const qualifiedModelName'));
+    assert.match(block, /segments\[segments\.length - 1\]/);
+    assert.doesNotMatch(block, /segments\[0\]/);
+    assert.match(src, /\$\{providerId\}\/\$\{bareModelName\(label\)\}/,
+      'the menu name is a provider ID and a bare model, in that order');
+  });
+
+  test('an option with no short name still labels its trigger', () => {
+    // The same control renders the dimension picker, whose options are plain
+    // `{id, name}` widths. A required triggerName would blank that trigger.
+    const src = panel();
+    assert.match(src, /interface EmbeddingSelectOption \{ id: string; name: string; triggerName\?: string \}/);
+  });
+
   test('an unusable provider cannot be SELECTED, wherever the selector lists it', () => {
     // 2026-08-30: the panel was redesigned and its selector no longer filters on
     // p.available. That filter was the only thing preventing a keyless provider
