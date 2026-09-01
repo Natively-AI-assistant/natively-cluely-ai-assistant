@@ -513,6 +513,27 @@ export class WindowHelper {
         preload: path.join(__dirname, 'preload.js'),
         scrollBounce: true,
         webSecurity: !isDev, // DEBUG: Disable web security only in dev
+        // The launcher's boot reveal (the black logo splash handing over to the
+        // launcher UI) is driven by Framer Motion, which advances only on
+        // requestAnimationFrame. Chromium STOPS rAF outright — not throttles it,
+        // stops it — for any window whose document is hidden, which on both
+        // macOS and Windows includes a window merely covered by another app's
+        // window, an app hidden with Cmd+H, and a window on an inactive Space or
+        // virtual desktop. Timers are only throttled (~1Hz), so the splash's
+        // dismissal timer still fires and React state still advances — but the
+        // AnimatePresence exit never completes, so the full-screen black splash
+        // is never unmounted, and the launcher underneath never leaves its
+        // `initial` opacity 0. The window stays painted on the black logo until
+        // the user brings it forward, which is the "the app only finishes
+        // starting up if it has focus" report. Opting the launcher out of
+        // background throttling keeps rAF running so the boot sequence completes
+        // wherever the window happens to be. Same flag, same reason, as
+        // SettingsWindowHelper and ModelSelectorWindowHelper.
+        //
+        // NOTE: this ALSO makes the Page Visibility API report this window as
+        // 'visible' while it is hidden. See the usage-tick gate in
+        // src/components/Launcher.tsx, which had to stop relying on it.
+        backgroundThrottling: false,
       },
       show: false, // DEBUG: Force show -> Fixed white screen, now relies on ready-to-show
       // Platform-specific frame settings
