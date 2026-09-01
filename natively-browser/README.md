@@ -1,9 +1,17 @@
 # Natively Page Context — companion browser extension
 
 A minimal, privacy-correct Manifest V3 extension that sends the **active tab's
-readable content** to your local Natively desktop app, **once, on demand**. It
-never runs in the background, never auto-captures, and only ever talks to your
-own machine over loopback.
+readable content** to your local Natively desktop app, once per capture, and
+only ever talks to your own machine over loopback.
+
+Capture is either explicit (hotkey or the popup's **Capture this page** button)
+or automatic: when **Auto-detect coding problems** / **Auto-attach coding
+context** are enabled in Natively's **Settings → Sync → Smart Browser
+Context** (on by default), the desktop can request the active tab's content
+before generating an answer on a page it classifies as a coding/interview
+problem, with no click or hotkey press required. See
+[Capture](#capture) below for both paths and how to turn automatic capture
+off.
 
 It is part of the [Natively](../) monorepo and is licensed under the
 **Natively Personal Use Source License v1.0**, same as the desktop app. Source
@@ -99,6 +107,15 @@ changes. You only re-pair if you click **Rotate token** in Settings.
   isn't reachable, the desktop takes a screenshot instead.
 - **From the popup:** click the toolbar icon → **Capture this page** (works while
   Chrome is focused).
+- **Automatic (default on):** when the desktop's **Smart Browser Context**
+  settings have **Auto-detect coding problems** and **Auto-attach coding
+  context** enabled (`electron/services/SettingsManager.ts`'s
+  `getBrowserContextSettings()` — both default `true`), the desktop asks the
+  extension for the active tab's content before answering, on a page it
+  classifies as a coding/interview problem — no hotkey, popup click, or other
+  user action required for that request. Turn this off in Natively
+  **Settings → Sync → Smart Browser Context**, or use only the manual hotkey/
+  popup capture above.
 
 Each capture pushes **once**. The desktop shows a "Captured: \<title\>" chip and
 consumes it on the next "What to say".
