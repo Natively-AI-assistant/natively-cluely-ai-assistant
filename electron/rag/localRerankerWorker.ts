@@ -16,19 +16,32 @@
 //   { type: 'rerank', requestId, query, passages: string[] }
 //     -> { type: 'result', requestId, scores: number[] } | { type: 'error', requestId, error }
 
+import * as path from 'path';
 import { parentPort } from 'worker_threads';
 import { getBoundedOnnxSessionOptions } from '../utils/onnxThreadConfig';
+import {
+  hasSentenceTransformerHead, loadSentenceTransformerHead, scoreWithHead,
+  type SentenceTransformerHead,
+} from './sentenceTransformerHead';
 
 if (!parentPort) throw new Error('localRerankerWorker must be run as a Worker thread');
 
 let model: any = null;
 let tokenizer: any = null;
 let loadingPromise: Promise<void> | null = null;
+/**
+ * Set when the model keeps its scoring head OUTSIDE the ONNX graph, as
+ * `cross-encoder/ettin-reranker-*` does. Null for an ordinary cross-encoder
+ * whose graph already emits `logits`.
+ */
+let stHead: SentenceTransformerHead | null = null;
 
 // @huggingface/transformers is ESM-only — must use a true dynamic import().
 // `new Function` keeps this opaque to TypeScript's commonjs rewrite. See
 // LocalEmbeddingProvider.ts for the full explanation of this trick.
-async function loadTransformers(): Promise<{ AutoModelForSequenceClassification: any; AutoTokenizer: any; env: any }> {
+async function loadTransformers(): Promise<{
+  AutoModelForSequenceClassification: any; AutoModel: any; AutoTokenizer: any; env: any;
+}> {
   return (new Function('return import("@huggingface/transformers")')()) as any;
 }
 
@@ -37,7 +50,7 @@ async function ensureLoaded(msg: any): Promise<void> {
   if (loadingPromise) return loadingPromise;
 
   loadingPromise = (async () => {
-    const { AutoModelForSequenceClassification, AutoTokenizer, env } = await loadTransformers();
+    const { AutoModelForSequenceClassification, AutoModel, AutoTokenizer, env } = await loadTransformers();
 
     const isPackaged = !!msg.isPackaged;
     if (isPackaged) {
@@ -48,17 +61,34 @@ async function ensureLoaded(msg: any): Promise<void> {
       env.cacheDir = msg.modelPath;
     }
 
+    // Some rerankers export only the transformer body and keep the scoring head
+    // beside it as a Sentence-Transformers module chain. Those must be loaded
+    // with AutoModel (which yields last_hidden_state); asking
+    // AutoModelForSequenceClassification for them yields an undefined `logits`
+    // and a rerank that silently returns nothing.
+    const modelDir = path.join(msg.modelPath, ...String(msg.modelId).split('/'));
+    let head: SentenceTransformerHead | null = null;
+    if (hasSentenceTransformerHead(modelDir)) {
+      head = loadSentenceTransformerHead(modelDir);
+      console.log(
+        `[LocalRerankerWorker] ${msg.modelId} keeps its scoring head outside the graph; `
+        + `loaded ${head.modules.length} module(s).`,
+      );
+    }
+
     console.log(`[LocalRerankerWorker] Loading cross-encoder (${msg.modelId})...`);
     const loadedTokenizer = await AutoTokenizer.from_pretrained(msg.modelId, {
       local_files_only: isPackaged,
     });
-    const loadedModel = await AutoModelForSequenceClassification.from_pretrained(msg.modelId, {
+    const loader = head ? AutoModel : AutoModelForSequenceClassification;
+    const loadedModel = await loader.from_pretrained(msg.modelId, {
       local_files_only: isPackaged,
       dtype: msg.dtype || 'q8',
       session_options: getBoundedOnnxSessionOptions(),
     } as any);
     tokenizer = loadedTokenizer;
     model = loadedModel;
+    stHead = head;
     console.log('[LocalRerankerWorker] Cross-encoder loaded successfully.');
   })();
 
@@ -68,6 +98,7 @@ async function ensureLoaded(msg: any): Promise<void> {
     loadingPromise = null;
     model = null;
     tokenizer = null;
+    stHead = null;
     throw e;
   }
 }
@@ -90,6 +121,26 @@ parentPort.on('message', async (msg: any) => {
         { text_pair: passages, padding: true, truncation: true },
       );
       const output = await model(inputs);
+
+      if (stHead) {
+        // last_hidden_state is [batch, tokens, width]; each sequence is scored
+        // from its own CLS vector through the module chain.
+        const hidden = output?.last_hidden_state;
+        const raw: Float32Array | undefined = hidden?.data ?? hidden?.ort_tensor?.data;
+        const dims: number[] | undefined = hidden?.dims ?? hidden?.ort_tensor?.dims;
+        if (!raw || !dims || dims.length !== 3) {
+          throw new Error('the backbone returned no usable last_hidden_state');
+        }
+        const [batch, tokens, width] = dims;
+        const perSequence = tokens * width;
+        const headScores: number[] = [];
+        for (let b = 0; b < batch; b++) {
+          headScores.push(scoreWithHead(stHead, raw.subarray(b * perSequence, (b + 1) * perSequence) as Float32Array, width));
+        }
+        parentPort!.postMessage({ type: 'result', requestId: msg.requestId, scores: headScores });
+        return;
+      }
+
       const logits = output?.logits;
       const data: Float32Array | number[] | undefined = logits?.data ?? logits?.ort_tensor?.data;
       const scores = data ? Array.from(data as any).map(Number) : [];

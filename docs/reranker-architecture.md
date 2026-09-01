@@ -319,30 +319,52 @@ existing runtime already handles; it still applies to anything needing a new one
 | MS MARCO MiniLM L6 (`Xenova/ms-marco-MiniLM-L-6-v2`) | 24 MB | **yes** — measured 157 ms |
 | mxbai Rerank XSmall (`mixedbread-ai/mxbai-rerank-xsmall-v1`) | 96 MB | **yes** — measured 524 ms |
 | BGE Reranker Large (`Xenova/bge-reranker-large`) | 580 MB | yes — slowest to load |
-| Ettin Reranker 32M / 68M / 150M | 131–600 MB | **no** — see below |
+| Ettin Reranker 32M / 68M / 150M | 132–603 MB | **yes** — head applied outside the graph |
 | Jina v3.5 Q4_K_M, Qwen3 0.6B Q4_K_M (GGUF) | 397 / 484 MB | no — via extension + llama.cpp |
 
 Every entry marked runnable had its ONNX graph opened and checked for a `logits`
 output before it was listed.
 
-### Why Ettin is listed but not installable
+### Ettin keeps its scoring head outside the ONNX graph
 
-`cross-encoder/ettin-reranker-*`'s `onnx/model.onnx` was loaded with
-onnxruntime. Its graph output is **`last_hidden_state`, not `logits`** — the
-export is the transformer backbone only. The scoring head lives outside the
-graph, in the repository's Sentence-Transformers module chain (`1_Pooling`,
-`2_Dense`, `3_LayerNorm`, `4_Dense`, as safetensors), and transformers.js has no
-equivalent module pipeline.
-
-Loaded through Core's runtime the model initialises cleanly and then returns
+`cross-encoder/ettin-reranker-*`'s `onnx/model.onnx` emits **`last_hidden_state`,
+not `logits`** — the export is the transformer backbone only. Loaded with
+`AutoModelForSequenceClassification` it initialises cleanly and then returns
 `output.logits === undefined`, which surfaces as *"unexpected logits shape —
-skipping rerank"*. This is almost certainly also why the Ettin extension's own
-`scoreBatch()` is an unimplemented scaffold.
+skipping rerank"*. That is what made it look unsupported.
 
-The entries stay in the catalogue, disabled, with that reason shown — so the
-answer to "why can't I install Ettin" is visible rather than absent. Supporting
-them means implementing pooling + dense + layer-norm on top of the backbone
-output, which is extension work, not a catalogue entry.
+The scoring head is real, it just lives beside the graph as a
+Sentence-Transformers module chain:
+
+```
+modules.json
+  0 Transformer   -> the ONNX graph        last_hidden_state [B, T, W]
+  1 Pooling       1_Pooling                pooling_mode: "cls"
+  2 Dense         2_Dense                  W -> W, GELU, no bias
+  3 LayerNorm     3_LayerNorm              W
+  4 Dense         4_Dense                  W -> 1, Identity, bias   => the score
+```
+
+`electron/rag/sentenceTransformerHead.ts` implements it: a safetensors reader
+and the four modules. The worker detects `modules.json`, loads the backbone with
+`AutoModel` instead, and applies the chain per sequence. An ordinary
+cross-encoder is untouched — it still takes the `logits` path.
+
+**Validated numerically, not by eye.** sentence-transformers 5.5.1 + torch 2.12
+scoring the 32M model on four pairs gives
+`[-2.4756, 5.6259, -3.9399, 4.2273]`; this implementation reproduces them to
+**4.05e-6** with identical ranking, in 321 ms. Those numbers are pinned in
+`SentenceTransformerHead.test.mjs`.
+
+Two details worth keeping:
+
+- **GELU is the exact form** (`0.5x(1+erf(x/√2))`), not the tanh approximation.
+  `nn.GELU` defaults to exact, and the two differ by ~1e-3 — small enough to
+  look fine, large enough to reorder near-tied passages.
+- **A chain not ending in a 1-wide Dense is refused.** That is an embedding
+  model, and running it would yield a vector where a score is expected. So are
+  a non-`cls` pooling mode, a non-F32 tensor and an unknown activation:
+  approximating any of them produces a plausible wrong ordering with no error.
 
 ### GGUF goes through the extension, not through Core
 
@@ -446,6 +468,9 @@ rejects an incomplete ranking wholesale.
   across the process boundary in 1 ms with correct ordering → `unloadAll()`.
 
 **Verified for direct install**
+- Ettin 32M installed through the app's own installer (12 files, 132 MB) and
+  scored against sentence-transformers: max difference 4.05e-6, identical
+  ranking. The ordinary cross-encoders still take the logits path unchanged.
 - `Xenova/ms-marco-MiniLM-L-6-v2` and `mixedbread-ai/mxbai-rerank-xsmall-v1`
   downloaded from Hugging Face through the installer, sha256-checked, then run
   on Core's existing runtime: 157 ms and 524 ms, both ranking the relevant
@@ -457,10 +482,8 @@ rejects an incomplete ranking wholesale.
 - macOS only. Nothing here has been executed on Windows.
 - The Jina and Qwen extensions need `llama-server` on `PATH`; it is not
   installed on this machine, so their rerank path is reviewed, not run.
-- The Ettin adapter's `scoreBatch()` is a scaffold that throws
-  *"ONNX tokenisation/inference is not implemented yet"*. Its `init()` loads real
-  weights and succeeds; it cannot yet score. Core handles this correctly — the
-  throw falls back to the existing ordering — but the extension cannot rerank
-  until that method is implemented in its own repository.
+- The Ettin *extension*'s `scoreBatch()` is still a scaffold that throws. It is
+  now redundant for these models: Core runs them directly through the catalogue,
+  so the extension is not the route to Ettin any more.
 - No hosted rerank has been run through the live app UI; the OpenRouter path is
   covered by unit tests against a mocked fetch plus the benchmark's real API run.
