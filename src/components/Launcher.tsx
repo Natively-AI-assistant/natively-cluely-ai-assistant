@@ -228,8 +228,28 @@ const Launcher: React.FC<LauncherProps> = ({ onStartMeeting, onOpenSettings, onO
 
         // Orchestrator: usage-time accumulator. Tick every 30s while launcher
         // is mounted and the window is foregrounded.
+        //
+        // This gate samples document.hasFocus() rather than
+        // document.visibilityState. The launcher window is created with
+        // `backgroundThrottling: false` (see WindowHelper.createWindow and the
+        // boot-reveal bug it fixes), and that option makes the Page Visibility
+        // API report this window as 'visible' even while it is hidden — so a
+        // visibilityState gate here would accrue usage time for a launcher the
+        // user has Cmd+H'd or covered behind another window.
+        //
+        // hasFocus() is sampled at tick time rather than tracked through the
+        // focus/blur handlers above, so there is no seeded-state or missed-event
+        // window to get out of sync: it is the ground truth those events report.
+        //
+        // KNOWN NARROWING, deliberate: this is stricter than the old gate. A
+        // launcher that is on screen and being read, but does not hold keyboard
+        // focus, no longer accrues usage time — where visibilityState would have
+        // counted it. Under `backgroundThrottling: false` there is no renderer-
+        // side signal left that distinguishes "on screen but unfocused" from
+        // "hidden", and under-counting an unfocused window is the safer error
+        // for this counter than billing time for a hidden one.
         const usageTimer = setInterval(() => {
-            if (document.visibilityState === 'visible') {
+            if (document.hasFocus()) {
                 emitOrchestratorEvent({ type: 'usage:tick', deltaMs: 30_000 });
             }
         }, 30_000);
