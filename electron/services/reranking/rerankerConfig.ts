@@ -340,7 +340,10 @@ export function buildLocalGgufPort(): RerankSeamPort | null {
     const { GgufReranker } = require('../../rag/GgufReranker') as typeof import('../../rag/GgufReranker');
     // Selection changed: tear the old worker (and its several hundred MB) down.
     void (cached?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
-    ggufPort = { id, port: new GgufReranker(file) };
+    // 'rank' vs 'yes-no' is a property of the model, not a preference: giving a
+    // causal LM to the ranking API is a refusal, and giving a ranking model the
+    // yes/no prompt is a meaningless number.
+    ggufPort = { id, port: new GgufReranker(file, model.scoring ?? 'rank') };
     return ggufPort.port;
   } catch {
     return null;
