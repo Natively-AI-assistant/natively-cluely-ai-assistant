@@ -289,6 +289,15 @@ export class IntelligenceEngine extends EventEmitter {
     // the first final turn while questionLedgerShadow is enabled.
     private questionLedgerShadow: import('./llm/questionLedger').QuestionLedger | null = null;
     private speculativeText: string | null = null;
+    /**
+     * A speculative prefetch that COMPLETED before anything adopted it. A
+     * speculative stream never renders (the judge may still say no), so its
+     * text used to be returned to a `.catch`-only caller and lost; the
+     * dispatch then "adopted" a stream that no longer existed and showed
+     * nothing (live session 2026-09-03, 13-q4). Held here, gated by the same
+     * speculativeText / expiry window, so adoption can reveal it instead.
+     */
+    private speculativeAnswer: { generationId: number; question: string; confidence: number; text: string } | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
     private readonly SPECULATIVE_DEBOUNCE_MS = 350;
@@ -756,7 +765,17 @@ export class IntelligenceEngine extends EventEmitter {
      * and are allowed to supersede.
      */
     canAutoAnswer(): boolean {
-        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') return false;
+        if (this.activeMode !== 'idle' && this.activeMode !== 'assist') {
+            // The engine's OWN speculative prefetch is not "busy": the dispatch
+            // that arrives now is the one that adopts it. Refusing it parked a
+            // 1.0-answerability verdict until the next candidate superseded it
+            // (live session 2026-09-03, 13-q6). A manual press or an automatic
+            // run has no speculative identity and still refuses.
+            const ownPrefetchLive = this.activeMode === 'what_to_say'
+                && this.speculativeGenerationId !== null
+                && this.speculativeGenerationId === this.currentGenerationId;
+            if (!ownPrefetchLive) return false;
+        }
         if (Date.now() - this.lastTriggerTime < this.automaticTriggerCooldown) return false;
         return true;
     }
@@ -824,19 +843,38 @@ export class IntelligenceEngine extends EventEmitter {
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.speculativeQuestionId = null;
+                const finished = this.speculativeAnswer;
+                this.speculativeAnswer = null;
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
-                    console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing`);
                     this.lastTriggerTime = Date.now();
                     this.lastTriggerQuestion = trigger.lastQuestion ?? null;
-                    // The running speculative stream IS the automatic answer now.
-                    if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
-                    return;
+                    const stillStreaming = this.activeMode === 'what_to_say'
+                        && this.speculativeGenerationId !== null
+                        && this.speculativeGenerationId === this.currentGenerationId;
+                    if (stillStreaming) {
+                        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — continuing; revealed at completion`);
+                        // The running speculative stream IS the automatic answer
+                        // now. It never streamed to the UI, so completion reveals
+                        // it (see the isSpeculative completion branch).
+                        if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
+                        return;
+                    }
+                    if (finished) {
+                        console.log(`[IntelligenceEngine] Speculative stream accepted (Jaccard=${similarity.toFixed(2)}) — already finished; revealing`);
+                        this.revealSpeculativeAnswer(finished, trigger.automatic === true);
+                        return;
+                    }
+                    // Accepted, but the stream neither runs nor finished (aborted
+                    // or errored between prefetch and dispatch): answer afresh.
+                    console.warn('[IntelligenceEngine] Speculative stream accepted but nothing to adopt (aborted?) — restarting');
+                } else {
+                    console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
                 }
-                console.log(`[IntelligenceEngine] Speculative stream rejected (Jaccard=${similarity.toFixed(2)}) — restarting`);
             } else {
                 console.log(`[IntelligenceEngine] Speculative result discarded (expired=${expired}, noQuestion=${!trigger.lastQuestion})`);
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
+                this.speculativeAnswer = null;
             }
             // IMPORTANT: no await between this increment and runWhatShouldISay below —
             // the increment must be synchronous with the new stream launch to preserve generation-id ordering.
@@ -922,6 +960,65 @@ export class IntelligenceEngine extends EventEmitter {
         console.log(`[IntelligenceEngine] Auto Answer prefetch fired while the judge decides`, { questionId, length: trimmed.length });
         this.runWhatShouldISay(trimmed, 0.9, undefined, { speculative: true })
             .catch(err => console.error('[IntelligenceEngine] Auto Answer prefetch error:', err));
+    }
+
+    /**
+     * A speculative run finished. It never rendered, so this is where its text
+     * is kept for adoption — or revealed at once if the dispatch already
+     * adopted the stream while it was in flight.
+     *
+     * Deliberately does NOT stamp lastTriggerTime / lastTriggerQuestion: the
+     * cooldown slot belongs to the real trigger (it is stamped on adoption).
+     * Stamping it here made the planner refuse the adoption of a just-finished
+     * prefetch as a "cooldown" repeat of itself (live session 2026-09-03).
+     * The speculativeText window still throttles a second prefetch.
+     */
+    private completeSpeculativeRun(generationId: number, question: string | undefined, confidence: number, text: string): string {
+        const finished = { generationId, question: question || 'inferred', confidence, text };
+        const adoptedInFlight = this.automaticGenerationId === generationId && this.currentGenerationId === generationId;
+        if (adoptedInFlight) {
+            this.speculativeText = null;
+            this.speculativeTextExpiry = Infinity;
+            this.speculativeQuestionId = null;
+            this.speculativeAnswer = null;
+        } else {
+            this.speculativeAnswer = finished;
+            this.speculativeTextExpiry = Date.now() + this.triggerCooldown + 500;
+        }
+        this.setMode('idle');
+        if (adoptedInFlight) this.revealSpeculativeAnswer(finished, true);
+        return text;
+    }
+
+    /**
+     * Show a prefetched answer the dispatch adopted. Mirrors the tail of the
+     * live path in the smallest honest way: the always-on artifact cleanup,
+     * the session record, one token emit to open the row, then the final.
+     * Validation and repair passes are skipped — a speculative run was
+     * generated from the same prompt as a live one, and a late answer that
+     * exists beats a validated one that never shows.
+     */
+    private revealSpeculativeAnswer(finished: { generationId: number; question: string; confidence: number; text: string }, automatic: boolean): void {
+        let text = finished.text;
+        try {
+            const cleaned = cleanAnswerArtifacts(text);
+            if (cleaned.trim().length >= 10) text = cleaned;
+        } catch (err) {
+            console.warn('[IntelligenceEngine] Prefetched answer cleanup failed; revealing it as generated:', err);
+        }
+        if (!text.trim()) {
+            console.warn('[IntelligenceEngine] Prefetched answer was empty — nothing to reveal');
+            return;
+        }
+        // The prefetch never emitted, so the renderer never saw its generation.
+        // Mint a fresh one: the engine is idle here, so nothing is superseded.
+        const generationId = ++this.currentGenerationId;
+        this.automaticGenerationId = automatic ? generationId : null;
+        console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
+        this.emit('suggested_answer_token', text, finished.question, finished.confidence, generationId);
+        this.session.addAssistantMessage(text, undefined, 'what_to_answer');
+        this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
+        this.emit('suggested_answer', text, finished.question, finished.confidence, generationId);
     }
 
     /** Auto Answer V3: identity of the speculative cache, for keyed/embedding reuse. */
@@ -1123,6 +1220,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (forceFresh && !isSpeculative) {
             this.speculativeText = null;
             this.speculativeTextExpiry = Infinity;
+            this.speculativeAnswer = null;
         }
 
         // Cooldown bypass: explicit images (user intent), speculative pre-fetch, or
@@ -1187,6 +1285,7 @@ export class IntelligenceEngine extends EventEmitter {
         if (isSpeculative) {
             this.speculativeText = question ?? null;
             this.speculativeTextExpiry = now + this.triggerCooldown + 5000;
+            this.speculativeAnswer = null;
         }
 
         // ── Live-path latency trace (click → first useful token → render) ──
@@ -1369,12 +1468,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return null;
                 }
                 if (isSpeculative) {
-                    this.speculativeText = null;
-                    this.speculativeTextExpiry = Infinity;
-                    this.lastTriggerTime = Date.now();
-                    this.lastTriggerQuestion = question ?? null;
-                    this.setMode('idle');
-                    return answer || buildGracefulRetry(question);
+                    return this.completeSpeculativeRun(generationId, question, confidence, answer || buildGracefulRetry(question));
                 }
                 if (answer && IntelligenceEngine.isNonAnswerSentinel(answer)) {
                     this.setMode('idle');
@@ -5050,11 +5144,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (isSpeculative) {
-                this.lastTriggerTime = Date.now();
-                this.lastTriggerQuestion = question ?? null;
-                this.speculativeTextExpiry = this.lastTriggerTime + this.triggerCooldown + 500;
-                this.setMode('idle');
-                return fullAnswer;
+                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer);
             }
 
             // Keep the RAW answer (with the hidden <verification_spec>) for
@@ -6381,6 +6471,7 @@ export class IntelligenceEngine extends EventEmitter {
         }
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
+        this.speculativeAnswer = null;
     }
 
     /**

@@ -1682,3 +1682,37 @@ leaving a guard nothing exercised. 57/57, typecheck clean.
   duplicate guard compares `lastAnsweredText` exactly, so near-duplicates pass.
 * `1-q13` fired at **a=0.4** on *"I recommend maybe sharing your screen."* — the same weak band flagged in the
   replay analysis. Everything at 0.9 was a real ask.
+
+---
+
+## 2026-09-03 — live session gen 13: both real questions lost to the prefetch; user channel made inert
+
+Packaged 2.8.8, Auto Answer on, general mode, a real call. Telemetry (`logs/telemetry.jsonl` under the
+app's user-data directory — the packaged app persists nothing else) shows 13 candidates, two positive
+verdicts, zero answers shown:
+
+| id | verdict | what happened |
+| --- | --- | --- |
+| `13-q4` | technical_question, a=0.9, `held_applied` → `decision: auto` | The prefetch had FINISHED 2 s earlier. Its text went to a `.catch`-only caller and was dropped; the dispatch "adopted" a stream that no longer existed and returned. Independently, completion had stamped `lastTriggerTime`, so the planner would have refused the adoption as a `cooldown` repeat of itself. |
+| `13-q6` | technical_question, a=1.0, `held_applied` | The prefetch was STILL STREAMING. `canAutoAnswer` saw mode `what_to_say` and said busy; the dispatch parked; 195 ms later `13-q7` bumped `judgeSeq` and the retry exited with no telemetry and no log. |
+
+The remaining candidates were `stale` — continuous speech, working as designed.
+
+**Fixes (all shared logic, no platform branch):**
+1. `IntelligenceEngine.completeSpeculativeRun` keeps a finished prefetch's text (`speculativeAnswer`, gated
+   by the existing `speculativeText` window) and no longer stamps `lastTriggerTime`; adoption stamps it.
+2. Adoption (`handleSuggestionTriggerInner`) distinguishes a prefetch still streaming (revealed at
+   completion), one already finished (`revealSpeculativeAnswer` now), and one that aborted (fresh run).
+3. `canAutoAnswer` accepts a dispatch while the engine's OWN prefetch is live — that dispatch is the adopter.
+4. `SimpleAutoAnswer.deliver` reports a park dropped by supersession as `auto_answer_ignored`
+   (`superseded_while_parked`) with a log line. Never a silent exit again.
+
+**Policy change (user decision, same day):** the user channel is INERT. The user answers the moment the
+question lands, so their own speech no longer cancels a stream, clears a candidate, or drops a parked or
+held verdict. The 2026-08-24 lenient-mic policy and the echo latch (`ECHO_*`, `GENUINE_ANSWER_MIN_WORDS`)
+are gone with it; `USER_BACKCHANNEL` stays as the interviewer-side prefilter.
+
+Pinned in `AutoAnswerSimple.test.mjs` (rewritten user-channel tests, loud park drop) and the new
+`AutoAnswerPrefetchReveal2026_09_03.test.mjs` (finished prefetch revealed, in-flight prefetch adopted and
+revealed at completion, cooldown not stamped, manual press never leaks a prefetch). Auto Answer suites
+85/85, electron typecheck clean. Not yet run against a live call.

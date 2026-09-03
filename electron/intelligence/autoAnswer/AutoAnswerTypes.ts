@@ -115,6 +115,8 @@ export type AutoAnswerSkipReason =
     | 'user_barge_in'
     /** The user channel is carrying the interviewer's audio (speakers, not headphones). */
     | 'mic_echo'
+    /** A dispatch parked behind a busy engine was superseded by newer interviewer speech before the engine freed up. */
+    | 'superseded_while_parked'
     // Lifecycle reasons carried over from the PR #497 gate and the Phase 1 pending slot
     | 'no_question'
     | 'already_answered'
