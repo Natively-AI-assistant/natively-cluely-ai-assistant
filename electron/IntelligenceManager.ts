@@ -20,7 +20,7 @@ export type { TranscriptSegment, SuggestionTrigger, ContextItem } from './Sessio
 export type { IntelligenceMode, IntelligenceModeEvents } from './IntelligenceEngine';
 export type { DynamicAction } from './services/dynamic-actions/DynamicAction';
 
-export const GEMINI_FLASH_MODEL = "gemini-3.7-flash";
+export const GEMINI_FLASH_MODEL = "gemini-3.8-flash";
 export const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite";
 
 /**
