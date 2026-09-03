@@ -114,6 +114,28 @@ test('a model whose head is outside the graph ships the files needed to apply it
   }
 });
 
+test('a configPatch only ever targets a file with no declared hash', () => {
+  // Patching a verified file would leave bytes on disk that no longer match
+  // what was checked, and the next install would look corrupt.
+  for (const m of RERANKER_MODEL_CATALOG) {
+    if (!m.configPatch) continue;
+    const cfg = m.files.find(f => f.repoPath === 'config.json');
+    assert.ok(cfg, `${m.id} declares a configPatch but never downloads config.json`);
+    assert.equal(cfg.sha256, null, `${m.id} patches a config.json that carries a sha256`);
+  }
+});
+
+test('jina v2 declares the model_type transformers.js needs', () => {
+  // Its config.json ships no model_type and points auto_map at custom Python
+  // modelling code. transformers.js cannot execute that and fails with
+  // "Unsupported model type: null" — measured, before this was added.
+  const jina = RERANKER_MODEL_CATALOG.find(m => m.id === 'jina-reranker-v2-multilingual');
+  assert.ok(jina, 'jina v2 is expected in the catalogue');
+  assert.equal(jina.configPatch?.model_type, 'xlm-roberta');
+  assert.equal(jina.supported, true);
+  assert.equal(jina.license.commercialUseRestricted, true, 'CC-BY-NC must be flagged');
+});
+
 test('a supported GGUF entry is runnable by Core, not by an extension', () => {
   // Core runs GGUF in-process through llama.cpp now, so a supported entry needs
   // no extension and no binary on PATH. It must also never be handed to the

@@ -320,6 +320,7 @@ existing runtime already handles; it still applies to anything needing a new one
 | mxbai Rerank XSmall (`mixedbread-ai/mxbai-rerank-xsmall-v1`) | 96 MB | **yes** — measured 524 ms |
 | BGE Reranker Large (`Xenova/bge-reranker-large`) | 580 MB | yes — slowest to load |
 | Ettin Reranker 32M / 68M / 150M | 132–603 MB | **yes** — head applied outside the graph |
+| Jina Reranker v2 Multilingual (ONNX) | 297 MB | **yes** — 782 ms, CC-BY-NC |
 | BGE Reranker v2 m3 Q4_K_M (GGUF) | 438 MB | **yes** — llama.cpp `rank`, 71 ms warm |
 | Qwen3 Reranker 0.6B Q4_K_M (GGUF) | 484 MB | **yes** — yes/no scoring, ~87 ms per passage |
 | Jina v3.5 Q4_K_M (GGUF) | 397 MB | no — needs a patched llama.cpp, see below |
@@ -425,8 +426,19 @@ the pool size is the whole story: 5 → 437 ms, 10 → 882 ms, 20 → 1831 ms,
 30 → 2374 ms. Ten candidates fits inside `RERANK_BUDGET_MS`; the default thirty
 does not. "Candidates to rerank" in Settings is the control for this.
 
-Jina remains out of reach, and the reason is structural rather than a missing
-flag. v3.5 is a **listwise** reranker: its own `rerank.py` builds ONE prompt
+**Jina v2 is available and works** — `jinaai/jina-reranker-v2-base-multilingual`
+is a real `XLMRobertaForSequenceClassification` cross-encoder with an ONNX
+build, so Core runs it on the runtime it already has. It needs one declared
+fixup: its `config.json` ships no `model_type` and points `auto_map` at custom
+Python modelling code, which transformers.js cannot execute — it fails with
+"Unsupported model type: null". The catalogue's `configPatch` writes
+`model_type: "xlm-roberta"` after download. That is accurate rather than a
+workaround: the architecture is standard and the ONNX graph is already traced,
+so the custom code (flash attention) was never going to run anyway. A
+`configPatch` is refused for any file carrying a declared sha256.
+
+**Jina v3.5 remains out of reach**, and the reason is structural rather than a
+missing flag. v3.5 is a **listwise** reranker: its own `rerank.py` builds ONE prompt
 containing the query and every passage, marks positions with `<|rerank_token|>`
 and `<|embed_token|>`, runs `llama-embedding --output-token-ids` to emit
 **N+2 per-token hidden states** from that single pass, and scores each document
@@ -440,10 +452,19 @@ in node-llama-cpp exposes per-token hidden states, and scoring each document in
 its own pass would not be the same model — a listwise representation is
 conditioned on the whole list.
 
-The routes are to vendor the `llama-embedding` binary (which their script also
-says needs a patched llama.cpp for the sliding-window pattern) or to wait for
-per-token hidden states in the binding. Its entry says this, and the installer
-refuses it before spending 397 MB.
+Both routes out were checked, and both are blocked upstream:
+
+- **Vendor the `llama-embedding` binary.** Its own script needs `--output-token-ids`
+  *and* a sliding-window fix for qwen3. That fix is llama.cpp PR **#26286**,
+  opened 2026-07-29 and **still open** — so this means maintaining a patched
+  fork, built and signed for every platform, re-done on each llama.cpp bump.
+- **Wait for the binding.** `ControlledEvaluateIndexOutput.next` exposes only
+  `token`, `confidence` and `probabilities` — vocabulary space. `pooling`
+  appears in node-llama-cpp solely as GGUF metadata being *read*, never as a
+  settable option, so llama.cpp cannot even be asked for unpooled per-token
+  output through it.
+
+Its entry says this, and the installer refuses it before spending 397 MB.
 
 Packaging note: the two `node-llama-cpp` trees are in `asarUnpack`. The existing
 `**/*.node` and `**/*.dylib` patterns do **not** cover the backend libraries it
@@ -545,6 +566,10 @@ rejects an incomplete ranking wholesale.
   across the process boundary in 1 ms with correct ordering → `unloadAll()`.
 
 **Verified for direct install**
+- Jina Reranker v2 Multilingual installed clean through the installer (297 MB)
+  and ranked correctly in English (782 ms) and German (504 ms). This is the
+  answer to "make Jina work": v3.5 cannot run here, but Jina's own v2 is a
+  proper cross-encoder and does.
 - Qwen3 Reranker 0.6B (GGUF, 484 MB) scored through llama.cpp with its own
   yes/no protocol and checked against the fp32 reference: same relevant/
   irrelevant separation, every document within quantisation noise.
