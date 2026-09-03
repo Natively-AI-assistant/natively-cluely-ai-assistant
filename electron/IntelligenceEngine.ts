@@ -2,6 +2,7 @@
 // LLM mode routing and orchestration.
 // Extracted from IntelligenceManager to decouple LLM logic from state management.
 
+import type { SessionWriteDecision } from './llm/FinalAnswerGenerationPolicy';
 import { EventEmitter } from 'events';
 import { LLMHelper } from './LLMHelper';
 import { SessionTracker, TranscriptSegment, SuggestionTrigger, ContextItem } from './SessionTracker';
@@ -168,6 +169,16 @@ export interface IntelligenceModeEvents {
     'dynamic_action_emitted': (action: DynamicAction) => void;
 }
 
+/** A speculative prefetch that completed unadopted, held for the dispatch that may adopt it. */
+interface SpeculativeAnswer {
+    generationId: number;
+    question: string;
+    confidence: number;
+    text: string;
+    /** The run's own session-write decision (e.g. do_not_store for a truncated stream); undefined on the legacy answerLLM path. */
+    writeDecision: SessionWriteDecision | undefined;
+}
+
 export class IntelligenceEngine extends EventEmitter {
     // Mode state
     private activeMode: IntelligenceMode = 'idle';
@@ -297,7 +308,7 @@ export class IntelligenceEngine extends EventEmitter {
      * nothing (live session 2026-09-03, 13-q4). Held here, gated by the same
      * speculativeText / expiry window, so adoption can reveal it instead.
      */
-    private speculativeAnswer: { generationId: number; question: string; confidence: number; text: string } | null = null;
+    private speculativeAnswer: SpeculativeAnswer | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
     private readonly SPECULATIVE_DEBOUNCE_MS = 350;
@@ -973,8 +984,11 @@ export class IntelligenceEngine extends EventEmitter {
      * prefetch as a "cooldown" repeat of itself (live session 2026-09-03).
      * The speculativeText window still throttles a second prefetch.
      */
-    private completeSpeculativeRun(generationId: number, question: string | undefined, confidence: number, text: string): string {
-        const finished = { generationId, question: question || 'inferred', confidence, text };
+    private completeSpeculativeRun(
+        generationId: number, question: string | undefined, confidence: number, text: string,
+        writeDecision: SessionWriteDecision | undefined,
+    ): string {
+        const finished: SpeculativeAnswer = { generationId, question: question || 'inferred', confidence, text, writeDecision };
         const adoptedInFlight = this.automaticGenerationId === generationId && this.currentGenerationId === generationId;
         if (adoptedInFlight) {
             this.speculativeText = null;
@@ -993,12 +1007,15 @@ export class IntelligenceEngine extends EventEmitter {
     /**
      * Show a prefetched answer the dispatch adopted. Mirrors the tail of the
      * live path in the smallest honest way: the always-on artifact cleanup,
-     * the session record, one token emit to open the row, then the final.
-     * Validation and repair passes are skipped — a speculative run was
-     * generated from the same prompt as a live one, and a late answer that
-     * exists beats a validated one that never shows.
+     * the session record under the run's own write decision, one token emit
+     * to open the row, then the final. Validation and repair passes are
+     * skipped — a speculative run was generated from the same prompt as a
+     * live one, and a late answer that exists beats a validated one that
+     * never shows. The write decision is NOT skipped: a prefetch the provider
+     * cut short is shown, like any truncated live answer, but it must not
+     * become prior_assistant_responses evidence for the next turn.
      */
-    private revealSpeculativeAnswer(finished: { generationId: number; question: string; confidence: number; text: string }, automatic: boolean): void {
+    private revealSpeculativeAnswer(finished: SpeculativeAnswer, automatic: boolean): void {
         let text = finished.text;
         try {
             const cleaned = cleanAnswerArtifacts(text);
@@ -1016,8 +1033,12 @@ export class IntelligenceEngine extends EventEmitter {
         this.automaticGenerationId = automatic ? generationId : null;
         console.log(`[IntelligenceEngine] Revealing the prefetched answer (${text.length} chars, prefetch gen ${finished.generationId} → ${generationId})`);
         this.emit('suggested_answer_token', text, finished.question, finished.confidence, generationId);
-        this.session.addAssistantMessage(text, undefined, 'what_to_answer');
-        this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
+        this.session.addAssistantMessage(text, finished.writeDecision, 'what_to_answer');
+        if (finished.writeDecision?.policy !== 'do_not_store') {
+            this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
+        } else {
+            console.warn(`[IntelligenceEngine] Prefetched answer revealed but not stored (${finished.writeDecision.reason ?? 'do_not_store'})`);
+        }
         this.emit('suggested_answer', text, finished.question, finished.confidence, generationId);
     }
 
@@ -1468,7 +1489,7 @@ export class IntelligenceEngine extends EventEmitter {
                     return null;
                 }
                 if (isSpeculative) {
-                    return this.completeSpeculativeRun(generationId, question, confidence, answer || buildGracefulRetry(question));
+                    return this.completeSpeculativeRun(generationId, question, confidence, answer || buildGracefulRetry(question), undefined);
                 }
                 if (answer && IntelligenceEngine.isNonAnswerSentinel(answer)) {
                     this.setMode('idle');
@@ -5144,7 +5165,7 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (isSpeculative) {
-                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer);
+                return this.completeSpeculativeRun(generationId, question, confidence, fullAnswer, wtaWriteDecision);
             }
 
             // Keep the RAW answer (with the hidden <verification_spec>) for
