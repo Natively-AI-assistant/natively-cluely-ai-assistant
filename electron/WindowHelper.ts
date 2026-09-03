@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, screen, systemPreferences } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppState } from './main';
+import type { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import {
   LAUNCHER_ASPECT_RATIO,
@@ -2317,6 +2317,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
             this.pillWindow?.setOpacity(1);
@@ -2415,6 +2416,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
             if (!inactive) this.launcherWindow.focus();
@@ -2538,10 +2540,25 @@ export class WindowHelper {
     menu.popup({ window: win, x: point.x, y: point.y });
   }
 
+  private finishOpacityShield(): void {
+    if (!this.opacityTimeout) return;
+    clearTimeout(this.opacityTimeout);
+    this.opacityTimeout = null;
+
+    for (const win of [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+    ]) {
+      if (win && !win.isDestroyed() && win.isVisible()) win.setOpacity(1);
+    }
+  }
+
   public minimizeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     win.minimize();
   }
 
@@ -2797,7 +2814,7 @@ export class WindowHelper {
   public closeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     // On Windows/Linux the 'close' event listener intercepts this
     // and hides to tray unless the app is actually quitting.
     win.close();
