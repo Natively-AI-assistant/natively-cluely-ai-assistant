@@ -414,8 +414,11 @@ export interface ElectronAPI {
   // Embedding retrieval finds the candidate set; reranking decides the order of
   // those candidates. Configured independently of the embedding provider.
   getRerankerStatus: () => Promise<{
-    provider: 'local' | 'openrouter'
+    provider: 'local' | 'openrouter' | 'jina'
     openrouterModel: string | null
+    jinaModel: string | null
+    /** The model id for whichever hosted provider is selected. */
+    hostedModel: string | null
     candidateCount: number | null
     fallbackToLocal: boolean
     /** Presence only. The key itself never crosses the IPC boundary. */
@@ -425,7 +428,7 @@ export interface ElectronAPI {
     ineligibleMessage: string | null
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean }
     /** What would actually run right now, resolved the way retrieval resolves it. */
-    effective: { kind: 'local' | 'extension' | 'openrouter'; id: string | null }
+    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null }
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
   }>
   getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
@@ -441,12 +444,26 @@ export interface ElectronAPI {
     error?: string
   }>
   setRerankerConfig: (next: {
-    provider?: 'local' | 'openrouter'
+    provider?: 'local' | 'openrouter' | 'jina'
     openrouterModel?: string
+    jinaModel?: string
     candidateCount?: number
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
   setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setRerankerHostedKey: (provider: string, key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  getRerankerHostedProviders: () => Promise<{
+    providers: Array<{
+      id: 'openrouter' | 'jina'
+      name: string
+      keyUrl: string
+      keyPlaceholder: string
+      staticCatalogue: boolean
+      models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>
+      /** Presence only — the key never crosses this boundary. */
+      hasApiKey: boolean
+    }>
+  }>
   listLocalRerankerModels: () => Promise<{
     models: Array<{
       id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
@@ -794,6 +811,7 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
 
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;

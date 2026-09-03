@@ -11,7 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { registryFile } from './paths';
+import { extensionDir, registryFile } from './paths';
 import { processSingleton, resetProcessSingleton } from './singleton';
 import { validateManifest, type ExtensionManifest } from './ExtensionManifest';
 import type { ExtensionPermission } from './types';
@@ -47,17 +47,25 @@ export interface ExtensionRegistryOptions {
   filePath?: string;
   /** Running app version, for re-validating manifests on load. */
   appVersion: string;
+  /**
+   * Storage root override, used to locate each entry's payload directory.
+   * Production leaves this unset and the default `~/.natively` root applies;
+   * tests point it at a temp directory.
+   */
+  rootOverride?: string;
 }
 
 export class ExtensionRegistry {
   private readonly filePath: string;
   private readonly appVersion: string;
+  private readonly rootOverride?: string;
   private records: Map<string, ExtensionRecord> | null = null;
   private readonly loadWarnings: string[] = [];
 
   constructor(options: ExtensionRegistryOptions) {
     this.filePath = options.filePath ?? registryFile();
     this.appVersion = options.appVersion;
+    this.rootOverride = options.rootOverride;
   }
 
   list(): ExtensionRecord[] {
@@ -150,6 +158,27 @@ export class ExtensionRegistry {
           continue;
         }
 
+        // An entry whose payload directory is gone is not installed, whatever
+        // the file says. Found live on 2026-09-03: a leftover probe whose
+        // directory had been deleted still counted as an enabled reranker, and
+        // because the seam refuses to choose between two of those, it silently
+        // disabled the user's real extension. Nothing could self-heal it —
+        // the seam only COUNTS enabled entries, so the dead one was never
+        // loaded and never crashed, and the crash counter never saw it.
+        let payloadDir: string;
+        try {
+          payloadDir = extensionDir(entry.id, this.rootOverride);
+        } catch {
+          this.loadWarnings.push(`dropped "${entry.id}": id is not usable as a directory name`);
+          continue;
+        }
+        if (!directoryExists(payloadDir)) {
+          this.loadWarnings.push(
+            `dropped "${entry.id}": its payload directory is missing (${payloadDir}), so it can never load`,
+          );
+          continue;
+        }
+
         // A grant is only ever narrowed on load, never widened: anything the
         // manifest no longer declares is discarded.
         const declared = new Set(validation.manifest.permissions);
@@ -183,6 +212,14 @@ export class ExtensionRegistry {
     const tmp = this.filePath + '.' + String(process.pid) + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
     fs.renameSync(tmp, this.filePath);
+  }
+}
+
+function directoryExists(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
   }
 }
 

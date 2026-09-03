@@ -699,22 +699,23 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                 )}
 
                 {/* Action row: Test Connection & Models List */}
-                <div className="aip-provider-row">
-                    {hasStored && (
-                        <button
-                            type="button"
-                            onClick={() => void handleTestProvider(p.id)}
-                            disabled={testStatus[p.id] === 'testing'}
-                            className="aip-btn shrink-0"
-                            data-tone={testStatus[p.id] === 'success' ? 'ok' : testStatus[p.id] === 'error' ? 'danger' : undefined}
-                            title={testErrors[p.id] || t('Test Connection')}
-                        >
-                            {testStatus[p.id] === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
-                                testStatus[p.id] === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
-                                    testStatus[p.id] === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
-                                        <>{t('Test Connection')}</>}
-                        </button>
-                    )}
+                {(hasStored || hasWidthPicker || p.models.length > 0) && (
+                    <div className="aip-provider-row">
+                        {hasStored && (
+                            <button
+                                type="button"
+                                onClick={() => void handleTestProvider(p.id)}
+                                disabled={testStatus[p.id] === 'testing'}
+                                className="aip-btn shrink-0"
+                                data-tone={testStatus[p.id] === 'success' ? 'ok' : testStatus[p.id] === 'error' ? 'danger' : undefined}
+                                title={testErrors[p.id] || t('Test Connection')}
+                            >
+                                {testStatus[p.id] === 'testing' ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</> :
+                                    testStatus[p.id] === 'success' ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</> :
+                                        testStatus[p.id] === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
+                                            <>{t('Test Connection')}</>}
+                            </button>
+                        )}
 
                     {/* Dimensions — between Test and the model list, and RENDERED
                         WHENEVER THE PROVIDER SUPPORTS WIDTHS rather than only while
@@ -855,6 +856,7 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                     )}
 
                 </div>
+                )}
 
                 {empty && <p className="aip-meta aip-provider-note">{empty}</p>}
                 {reason && <p className="aip-meta aip-provider-note">{reason}</p>}

@@ -336,7 +336,11 @@ test('the registry narrows a stored grant to what the manifest still declares', 
     }],
   }, null, 2));
 
-  const registry = new ExtensionRegistry({ filePath: file, appVersion: APP_VERSION });
+  // The payload has to exist, or the entry is dropped as uninstallable before
+  // grant narrowing is ever reached — see StaleRegistryEntryBlocksSeam.
+  fs.mkdirSync(path.join(root, 'extensions', 'jina-reranker'), { recursive: true });
+
+  const registry = new ExtensionRegistry({ filePath: file, appVersion: APP_VERSION, rootOverride: root });
   assert.deepEqual(registry.get('jina-reranker').grantedPermissions, ['filesystem.models']);
 });
 

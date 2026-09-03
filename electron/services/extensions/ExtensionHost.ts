@@ -33,6 +33,17 @@ import {
   type HostRequestBody,
 } from './ExtensionRpc';
 
+/**
+ * Ceiling on a single brokered `fetch()` body, in bytes.
+ *
+ * The broker buffers the whole body in the MAIN process and base64-encodes it,
+ * so peak cost is ~2.33x this. 32 MB is far above any API response an extension
+ * legitimately needs (a rerank reply is kilobytes) and far below anything that
+ * threatens the process that owns the UI. Model weights are downloaded by the
+ * model store, which streams to disk — not through this path.
+ */
+export const MAX_BROKERED_BODY_BYTES = 32 * 1024 * 1024;
+
 /** Crashes within one session before an extension is disabled automatically. */
 export const CRASH_LIMIT_PER_SESSION = 3;
 
@@ -398,12 +409,25 @@ class UtilityProcessExtensionHost implements ExtensionHost {
         } catch { /* the child is gone; there is nothing left to cancel */ }
       };
 
+      // Declared before the timer so every settle path can reach it. The
+      // timeout used to reject directly, bypassing the wrapped reject below —
+      // so a timed-out call left `onAbort` registered on the CALLER's signal,
+      // and that closure retains `operation`, `reject` and the whole promise
+      // chain. A caller that reuses one signal across a retrieval (or across
+      // turns) accumulated one per timeout for the life of that signal.
+      const removeAbort = (): void => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+      };
+
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        removeAbort();
         cancelChild();
         reject(new ExtensionTimeoutError(this.extensionId, operation, timeoutMs));
       }, timeoutMs);
 
+      // `once: true` means a FIRED abort removes itself; this handles the far
+      // more common case of a call that settles some other way.
       const onAbort = (): void => {
         const entry = this.pending.get(id);
         if (!entry) return;
@@ -416,11 +440,11 @@ class UtilityProcessExtensionHost implements ExtensionHost {
 
       this.pending.set(id, {
         resolve: ((value: ExtensionReplyBody) => {
-          if (signal) signal.removeEventListener('abort', onAbort);
+          removeAbort();
           resolve(value);
         }) as never,
         reject: (error: Error) => {
-          if (signal) signal.removeEventListener('abort', onAbort);
+          removeAbort();
           reject(error);
         },
         timer,
@@ -577,7 +601,30 @@ class UtilityProcessExtensionHost implements ExtensionHost {
       current = next;
     }
 
+    // Bounded, because this runs in the MAIN process — the one that owns every
+    // BrowserWindow. An unbounded body here is not just an extension's problem:
+    // the peak is roughly 2.33x its size (the ArrayBuffer, then the Buffer copy,
+    // then a base64 string 1.33x larger again), plus another structured-clone
+    // copy when it crosses to the utilityProcess. A 500 MB download would peak
+    // over 1.1 GB of main-process heap and take the UI down with it.
+    //
+    // Content-Length first so an oversized body is refused before it is read at
+    // all; the post-read check catches a chunked response that declared none.
+    const declared = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > MAX_BROKERED_BODY_BYTES) {
+      throw new Error(
+        `[natively] response body of ${declared} bytes exceeds the ${MAX_BROKERED_BODY_BYTES}-byte ` +
+        'brokered-fetch limit. Large downloads must go through the model store, not fetch().',
+      );
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.byteLength > MAX_BROKERED_BODY_BYTES) {
+      throw new Error(
+        `[natively] response body of ${buffer.byteLength} bytes exceeds the ` +
+        `${MAX_BROKERED_BODY_BYTES}-byte brokered-fetch limit.`,
+      );
+    }
     return {
       status: response.status,
       statusText: response.statusText,

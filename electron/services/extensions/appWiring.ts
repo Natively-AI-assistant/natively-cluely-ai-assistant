@@ -21,6 +21,7 @@ import { getExtensionRegistry } from './ExtensionRegistry';
 import { ModelStore } from './ModelStore';
 import { HuggingFaceModelDownloader } from './HuggingFaceModelDownloader';
 import { peekProcessSingleton, processSingleton, resetProcessSingleton } from './singleton';
+import { lookupKnownModelSupport } from '../reranking/knownModelSupport';
 
 const SINGLETON_KEY = 'ExtensionManagerApp';
 
@@ -71,6 +72,24 @@ export function buildInstallPromptText(prompt: InstallPrompt): { message: string
         m.requiresAcknowledgement ? 'licence acknowledgement required' : null,
       ].filter(Boolean).join(' · ');
       lines.push(`  • ${m.key} — ${flags}`);
+    }
+
+    // Core sometimes ships the very same model and has already found it
+    // unrunnable. Reranking fails invisibly — wrong scores read as worse
+    // answers, not as an error — so this belongs in front of the user BEFORE
+    // they consent, not in a log afterwards.
+    const known = prompt.models.filter((m) => m.knownUnsupportedReason);
+    if (known.length > 0) {
+      lines.push('');
+      lines.push('Natively ships these same models and cannot run them:');
+      for (const m of known) {
+        lines.push(`  • ${m.repo ?? m.key} — ${m.knownUnsupportedReason}`);
+      }
+      lines.push('');
+      lines.push(
+        'This extension brings its own runtime, so it may work where Natively does not. ' +
+        'If it does not, reranking will silently get worse rather than fail.',
+      );
     }
   }
 
@@ -124,6 +143,10 @@ export function wireExtensions(options: WireExtensionsOptions = {}): ExtensionMa
       rootOverride: options.rootOverride,
       confirmInstall: options.confirmInstall ?? defaultConfirmInstall,
       logger: consoleExtensionLogger(),
+      // Lets the trust prompt say so when Core ships this same model and has
+      // already found it unrunnable. Advisory only — the extension brings its
+      // own runtime, so it may work where Core's does not.
+      modelSupport: lookupKnownModelSupport,
     });
 
     // Hand the seam its source. This does NOT enable anything: the
@@ -153,8 +176,48 @@ export function wireExtensions(options: WireExtensionsOptions = {}): ExtensionMa
   });
 }
 
+/**
+ * Warn about anything the user has enabled that Core already knows cannot work.
+ *
+ * The install prompt covers new installs, but an extension enabled BEFORE this
+ * check existed would never see it. Reranking has no visible failure mode —
+ * wrong scores just look like worse answers — so an already-enabled
+ * known-unrunnable model has to announce itself somewhere.
+ */
+export function warnAboutKnownUnsupportedModels(manager: ExtensionManager): string[] {
+  const warnings: string[] = [];
+  let records;
+  try {
+    records = manager.list();
+  } catch {
+    return warnings;
+  }
+
+  for (const record of records) {
+    if (!record.enabled) continue;
+    for (const model of record.manifest.models ?? []) {
+      const known = lookupKnownModelSupport(model.repo);
+      if (!known || known.supported) continue;
+      warnings.push(
+        `[extensions] "${record.id}" is enabled and uses ${model.repo}, which Natively ships as ` +
+        `"${known.catalogId}" and cannot run: ${known.reason ?? 'no reason recorded'} ` +
+        'This extension supplies its own runtime, so it may behave differently — but if scores look wrong, this is why.',
+      );
+    }
+  }
+
+  for (const w of warnings) console.warn(w);
+  return warnings;
+}
+
 /** Start every extension the user has enabled. Failures are isolated per extension. */
 export async function startExtensions(manager: ExtensionManager): Promise<void> {
+  try {
+    warnAboutKnownUnsupportedModels(manager);
+  } catch (e) {
+    // Never let a diagnostic stop extensions from starting.
+    console.warn('[extensions] support check failed:', e);
+  }
   try {
     await manager.loadEnabled();
   } catch (e) {

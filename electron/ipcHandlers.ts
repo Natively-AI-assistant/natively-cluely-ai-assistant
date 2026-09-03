@@ -5894,6 +5894,77 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getVerboseLogging();
   });
 
+
+  /**
+   * Export = collect the local diagnostic files into ONE timestamped folder
+   * and reveal it. Nothing is uploaded; sharing is the user's explicit action
+   * from there. Deliberately a folder, not an archive — the repo has no zip
+   * dependency and adding one for this is not worth the packaging surface.
+   *
+   * Cross-platform: every path goes through app.getPath(), and
+   * shell.showItemInFolder reveals in Finder on macOS and Explorer on Windows.
+   */
+  safeHandle('export-debug-logs', async () => {
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const outDir = path.join(app.getPath('documents'), `natively-debug-${stamp}`);
+      fs.mkdirSync(outDir, { recursive: true });
+
+      const copied: string[] = [];
+      const copyIfPresent = (src: string, destName: string) => {
+        try {
+          if (!fs.existsSync(src)) return;
+          fs.copyFileSync(src, path.join(outDir, destName));
+          copied.push(destName);
+        } catch { /* one unreadable file must not abort the export */ }
+      };
+
+      // 1. Main log + the rotated prior session (which is where a crash the
+      //    user is chasing actually lives — see shouldTruncatePriorLog).
+      const docs = app.getPath('documents');
+      copyIfPresent(path.join(docs, 'natively_debug.log'), 'natively_debug.log');
+      copyIfPresent(path.join(docs, 'natively_debug.log.prev'), 'natively_debug.log.prev');
+
+      // 2. Structured per-turn JSONL records.
+      try {
+        const { flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+        await flushContextDebugWriter();
+      } catch { /* writer may not be configured */ }
+      try {
+        const cdDir = path.join(app.getPath('logs'), 'context-debug');
+        if (fs.existsSync(cdDir)) {
+          for (const f of fs.readdirSync(cdDir)) {
+            if (f.endsWith('.jsonl')) copyIfPresent(path.join(cdDir, f), f);
+          }
+        }
+      } catch { /* best-effort */ }
+
+      // 3. Environment header, so a log read weeks later is self-describing.
+      const info = {
+        exportedAt: new Date().toISOString(),
+        appVersion: app.getVersion(),
+        electron: process.versions.electron,
+        node: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        osRelease: os.release(),
+        packaged: app.isPackaged,
+        verboseLogging: appState.getVerboseLogging(),
+        contextDebugLevel: SettingsManager.getInstance().getContextDebugLevel(),
+        files: copied,
+        note: 'Credentials are redacted unconditionally at every level. At '
+          + "'full', user content (transcripts, questions, answers) is kept "
+          + 'verbatim — review before sharing.',
+      };
+      fs.writeFileSync(path.join(outDir, 'system-info.json'), JSON.stringify(info, null, 2));
+
+      shell.showItemInFolder(path.join(outDir, 'system-info.json'));
+      return { success: true, path: outDir, files: copied };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
   safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
     appState.setVerboseLogging(enabled);
     return { success: true };
@@ -7030,13 +7101,15 @@ export function initializeIpcHandlers(appState: AppState): void {
     const settings = SettingsManager.getInstance();
     const stored = (settings.get('reranker') as any) || {};
     const provider = stored.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+    const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
     // Presence only. The key itself never crosses this boundary.
-    const hasApiKey = Boolean(CredentialsManager.getInstance().getOpenrouterApiKey?.());
+    const hasApiKey = Boolean(readHostedApiKey(provider));
+    const hostedModel = readHostedModel(stored) ?? null;
 
     const eligibility = evaluateHostedEligibility({
       provider,
       hasApiKey,
-      model: stored.openrouterModel,
+      model: hostedModel ?? undefined,
       localOnly: isLocalOnlyMode(),
       referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
     });
@@ -7066,7 +7139,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch { /* no registry: the built-in owns the seam */ }
 
     const effective = eligibility.eligible
-      ? { kind: 'openrouter', id: stored.openrouterModel }
+      ? { kind: provider, id: hostedModel }
       : activeExtensionId
         ? { kind: 'extension', id: activeExtensionId }
         : { kind: 'local', id: builtIn.id };
@@ -7074,6 +7147,8 @@ export function initializeIpcHandlers(appState: AppState): void {
     return {
       provider,
       openrouterModel: stored.openrouterModel ?? null,
+      jinaModel: stored.jinaModel ?? null,
+      hostedModel,
       candidateCount: stored.candidateCount ?? null,
       fallbackToLocal: stored.fallbackToLocal === true,
       hasApiKey,
@@ -7087,8 +7162,9 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('reranker:set-config', async (_evt, next: {
-    provider?: 'local' | 'openrouter';
+    provider?: 'local' | 'openrouter' | 'jina';
     openrouterModel?: string;
+    jinaModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => {
@@ -7097,8 +7173,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     const current = (settings.get('reranker') as any) || {};
 
     const merged: any = { ...current };
-    if (next.provider === 'local' || next.provider === 'openrouter') merged.provider = next.provider;
+    if (next.provider === 'local' || next.provider === 'openrouter' || next.provider === 'jina') {
+      merged.provider = next.provider;
+    }
     if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
+    if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
     if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
@@ -7110,6 +7189,31 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: 'settings_store_degraded' };
     }
     return { success: true, reranker: merged };
+  });
+
+  safeHandle('reranker:set-hosted-key', async (_evt, provider: string, key: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const saved = provider === 'jina'
+      ? cm.setJinaApiKey(key || '')
+      : cm.setOpenrouterApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('reranker:hosted-providers', async () => {
+    const { HOSTED_RERANK_PROVIDERS } = require('./rag/hostedRerankProviders');
+    const { readHostedApiKey } = require('./services/reranking/rerankerConfig');
+    return {
+      providers: Object.values(HOSTED_RERANK_PROVIDERS).map((p: any) => ({
+        id: p.id, name: p.name, keyUrl: p.keyUrl, keyPlaceholder: p.keyPlaceholder,
+        staticCatalogue: p.staticCatalogue, models: p.models,
+        // Presence only — the key never crosses this boundary.
+        hasApiKey: Boolean(readHostedApiKey(p.id)),
+      })),
+    };
   });
 
   safeHandle('reranker:set-openrouter-key', async (_evt, key: string) => {
@@ -7136,7 +7240,11 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     const settings = SettingsManager.getInstance();
     const stored = (settings.get('reranker') as any) || {};
-    const model = (choice?.model || stored.openrouterModel || '').trim();
+    const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
+    const { hostedRerankProvider } = require('./rag/hostedRerankProviders');
+    const provider = stored.provider === 'jina' ? 'jina' : 'openrouter';
+    const descriptor = hostedRerankProvider(provider);
+    const model = (choice?.model || readHostedModel(stored) || '').trim();
 
     // The privacy gate applies to the test too. A "Test connection" button that
     // ignores it would be the one request a local-only user never consented to.
@@ -7148,7 +7256,9 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
 
     const reranker = new OpenRouterReranker({
-      getApiKey: () => CredentialsManager.getInstance().getOpenrouterApiKey?.(),
+      baseUrl: descriptor?.baseUrl,
+      providerId: provider,
+      getApiKey: () => readHostedApiKey(provider),
       getModel: () => model,
     });
 
@@ -7410,6 +7520,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     const { ModelStore } = require('./services/extensions/ModelStore');
     const { getLicenseLedger } = require('./services/extensions/LicenseLedger');
+    const { lookupKnownModelSupport: knownModelSupport } =
+      require('./services/reranking/knownModelSupport') as typeof import('./services/reranking/knownModelSupport');
     const store = new ModelStore({});
     const ledger = getLicenseLedger();
     const running = manager.running();
@@ -7428,13 +7540,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       permissions: r.grantedPermissions,
       models: (r.manifest.models ?? []).map((m: any) => {
         const status = store.status(r.id, m);
+        // Core sometimes ships this exact model and already knows it cannot
+        // run. The extension path never consulted that, so a known-broken
+        // model could own the rerank seam with nothing said anywhere.
+        const known = knownModelSupport(m.repo);
         return {
           key: m.key,
           format: m.format,
           approxBytes: m.approxBytes,
+          repo: m.repo ?? null,
           state: status.state,
           bytes: status.bytes ?? null,
           reason: status.reason ?? null,
+          knownUnsupportedReason: known && !known.supported ? (known.reason ?? null) : null,
           license: {
             spdx: m.license.spdx,
             url: m.license.url,
