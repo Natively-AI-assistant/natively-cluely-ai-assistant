@@ -148,8 +148,9 @@ and `OpenRouterReranker` serves both:
 
 ### Jina exists here for exactly one model
 
-`jina-reranker-v3.5` cannot run locally, for the reason below. Jina's own API
-runs it correctly, and its schema is the same one already implemented:
+`jina-reranker-v3.5` cannot run locally — Jina's own instructions require a
+forked llama.cpp, see below. Their API runs it correctly, and its schema is the
+same one already implemented:
 
 ```
 POST https://api.jina.ai/v1/rerank
@@ -355,7 +356,7 @@ existing runtime already handles; it still applies to anything needing a new one
 | Jina Reranker v2 Multilingual (ONNX) | 297 MB | **yes** — 782 ms, CC-BY-NC |
 | BGE Reranker v2 m3 Q4_K_M (GGUF) | 438 MB | **yes** — llama.cpp `rank`, 71 ms warm |
 | Qwen3 Reranker 0.6B Q4_K_M (GGUF) | 484 MB | **yes** — yes/no scoring, ~87 ms per passage |
-| Jina v3.5 Q4_K_M (GGUF) | 397 MB | no — needs a patched llama.cpp, see below |
+| Jina v3.5 (GGUF + projector) | 410 MB | downloadable; not runnable here — see below |
 
 Every entry marked runnable had its ONNX graph opened and checked for a `logits`
 output before it was listed.
@@ -414,7 +415,7 @@ because llama.cpp is a native addon that can abort the thread it runs on.
 | --- | --- | --- |
 | bge-reranker-v2-m3 Q4_K_M | `bert` | **works** via `rank` — 1708 ms cold, **71 ms warm** |
 | qwen3-reranker-0.6b Q4_K_M | `qwen3` | refused by `rank`; **works** via yes/no scoring — ~87 ms per passage |
-| jina-reranker-v3.5 Q4_K_M | `qwen3` | refused, and out of reach — see below |
+| jina-reranker-v3.5 Q4_K_M | `qwen3` | out of reach — see below |
 
 ### Two scorings, declared per model
 
@@ -469,8 +470,21 @@ workaround: the architecture is standard and the ONNX graph is already traced,
 so the custom code (flash attention) was never going to run anyway. A
 `configPatch` is refused for any file carrying a declared sha256.
 
-**Jina v3.5 remains out of reach**, and this is observable rather than inferred.
-Load its GGUF with the bundled llama.cpp and it prints:
+**Jina v3.5 remains out of reach**, and the strongest evidence is Jina's own.
+Their GGUF README does not describe a model you can run with stock llama.cpp; it
+tells you to build a fork:
+
+> This model requires a non-causal encoder mode and a custom `--output-token-ids`
+> flag that are not yet in the official llama.cpp release. […] build
+> `llama-embedding` from the fork: `github.com/littlewine/llama.cpp`
+
+`rerank.py:6` lists the same three requirements together — "upstream llama.cpp
+with `--output-token-ids` **and SWA fix**". So three separate patches, of which
+the open PR (**ggml-org/llama.cpp#26286**, opened 2026-07-29, untouched since
+07-31) covers only the third.
+
+That third one is also directly observable here. Load the GGUF with the bundled
+llama.cpp and it prints:
 
 ```
 llama_model_loader: kv 73: qwen3.attention.sliding_window         u32          = 1024
@@ -479,29 +493,42 @@ print_info:  n_swa      = 0
 print_info:  is_swa_any = 0
 ```
 
-The loader **reads both keys and then discards them**. `n_swa = 0` /
-`is_swa_any = 0` means every one of the 28 layers runs with full attention,
-including the 17 the model marks for a 1024-token sliding window. Support for
-that key is llama.cpp PR **#26286**, opened 2026-07-29 and still open — but the
-two lines above are the direct evidence, and they say the numbers this build
-produces for this model are wrong before any question of API access arises.
+The loader **reads both keys and then discards them**. The base repo's
+`config.json` marks **16 of the 28 layers** `sliding_attention` (the rest
+`full_attention`) with `sliding_window: 1024`; `n_swa = 0` / `is_swa_any = 0`
+means all 28 run full attention instead.
 
-On top of that, the protocol is listwise: one pass over the query and every
-passage, scored from the hidden state at N+2 specific token positions.
-`ControlledEvaluateIndexOutput` exposes only `token`, `confidence` and
-`probabilities` — vocabulary space — and `pooling` appears in node-llama-cpp
-solely as GGUF metadata being *read*, never as a settable option. `getEmbeddingFor`
-returns one pooled vector; probing it (`cos(T, T+T) = 0.977`, appended 0.928,
-prepended 0.952) shows mean-like pooling, not the last-token state the protocol
-needs.
+The other two patches are the larger problem, because nothing in this build
+could use the model even with the SWA fix. The protocol is listwise: query and
+every passage go through in one pass, and the score is
+`cos(projector(doc_hidden), projector(query_hidden))` taken from the hidden
+state at N+2 specific token positions — that is what `--output-token-ids` emits.
+node-llama-cpp exposes no such thing: `ControlledEvaluateIndexOutput` gives
+`token`, `confidence` and `probabilities` (vocabulary space), `pooling` appears
+only as GGUF metadata being *read*, and `getEmbeddingFor` returns one pooled
+vector — probing it (`cos(T, T+T) = 0.977`, appended 0.928, prepended 0.952)
+shows mean-like pooling, not the per-position states the protocol needs.
 
-There is also **no ONNX build of v3.5 anywhere** — only GGUF and MLX.
+**The scoring head is not in the GGUF at all.** It is `projector.safetensors`,
+1.5 MB, two BF16 matrices — `projector.0.weight` [512, 1024] and
+`projector.2.weight` [512, 512], Linear → ReLU → Linear. Verified by
+downloading it. The catalogue entry therefore fetches the weights, the
+projector *and* `tokenizer.json` (which `rerank.py` needs for its 125-doc block
+splitting): 410 MB total. Offering the `.gguf` alone would be an incomplete
+artifact wearing the model's name — it could never score anything, with any
+runtime.
 
-So both routes are blocked, and the order matters: even if the binding exposed
-per-token hidden states tomorrow, #26286 would still have to land first for the
-numbers to mean anything.
+There is also **no ONNX build of v3.5 anywhere**. The base repo
+(`jinaai/jina-reranker-v3.5`) is safetensors + `custom_code`
+(`JinaForRanking` in `modeling.py`), so transformers.js cannot load it and
+there is nothing to export from without Python at install time. The Hugging
+Face `base_model` index lists exactly one derivative: the official GGUF. Two
+community MLX quants exist, but MLX is Apple-Silicon-only and needs a Python
+runtime, which the cross-platform contract rules out.
 
-Its entry says this, and the installer refuses it before spending 397 MB.
+The download is offered anyway — `supported` gates activation, not the bytes —
+and the entry says plainly what is missing. Using v3.5 today means the hosted
+Jina provider.
 
 Packaging note: the two `node-llama-cpp` trees are in `asarUnpack`. The existing
 `**/*.node` and `**/*.dylib` patterns do **not** cover the backend libraries it
@@ -605,8 +632,9 @@ rejects an incomplete ranking wholesale.
 **Verified for direct install**
 - Jina Reranker v2 Multilingual installed clean through the installer (297 MB)
   and ranked correctly in English (782 ms) and German (504 ms). This is the
-  answer to "make Jina work": v3.5 cannot run here, but Jina's own v2 is a
-  proper cross-encoder and does.
+  answer to "make Jina work" LOCALLY: v3.5 cannot run here, but Jina's own v2
+  is a proper cross-encoder and does. v3.5 itself is reachable through the
+  hosted Jina provider.
 - Qwen3 Reranker 0.6B (GGUF, 484 MB) scored through llama.cpp with its own
   yes/no protocol and checked against the fp32 reference: same relevant/
   irrelevant separation, every document within quantisation noise.
