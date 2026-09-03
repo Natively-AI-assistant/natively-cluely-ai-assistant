@@ -89,6 +89,21 @@ export interface LocalRerankerModel {
    */
   modelId?: string;
   /**
+   * Fields to write into the downloaded `config.json`.
+   *
+   * Some repositories omit `model_type` and rely on `auto_map` pointing at
+   * custom Python modelling code. transformers.js cannot execute that and fails
+   * with "Unsupported model type: null" — jina-reranker-v2 is exactly this. The
+   * architecture is standard (XLMRobertaForSequenceClassification) and the ONNX
+   * graph is already traced, so naming the type is accurate rather than a
+   * workaround; the custom code only ever covered flash attention, which a
+   * traced graph does not use.
+   *
+   * Only applied to files the catalogue declares with `sha256: null`, so this
+   * can never contradict a verified hash.
+   */
+  configPatch?: Record<string, unknown>;
+  /**
    * transformers.js variant selector. Ettin publishes `onnx/model.onnx` (fp32)
    * and architecture-specific int8 exports (`model_qint8_arm64`,
    * `model_qint8_avx512`) — which cannot be ONE cross-platform entry, so this
@@ -279,6 +294,35 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-150m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '150M',
     note: 'The strongest Ettin. Largest download of the three.',
+  },
+
+  {
+    id: 'jina-reranker-v2-multilingual',
+    name: 'Jina Reranker v2 Multilingual',
+    runtime: 'onnx',
+    repo: 'jinaai/jina-reranker-v2-base-multilingual',
+    modelId: 'jinaai/jina-reranker-v2-base-multilingual',
+    dtype: 'q8',
+    revision: '9cfeff2df7d40d1b78e75e5e9cebec92a99813c9',
+    supported: true,
+    files: [
+      { repoPath: 'onnx/model_quantized.onnx', bytes: 279577152, sha256: 'c5220cf8fe023f8aa0ed2a3eb787d4451a7f17cf53f6b787e35718dd4b8815c3' },
+      { repoPath: 'tokenizer.json', bytes: 17082734, sha256: '3a56def25aa40facc030ea8b0b87f3688e4b3c39eb8b45d5702b3a1300fe2a20' },
+      { repoPath: 'tokenizer_config.json', bytes: 1148, sha256: null },
+      { repoPath: 'special_tokens_map.json', bytes: 964, sha256: null },
+      { repoPath: 'config.json', bytes: 1102, sha256: null },
+    ],
+    bytes: 296663100,
+    license: {
+      spdx: 'CC-BY-NC-4.0',
+      url: 'https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual',
+      commercialUseRestricted: true,
+      requiresAcknowledgement: true,
+    },
+    // Its config.json has no model_type and points auto_map at custom Python.
+    configPatch: { model_type: 'xlm-roberta' },
+    params: '278M · int8',
+    note: 'Jina, multilingual, and a real cross-encoder — so unlike v3.5 it runs here today. Non-commercial licence.',
   },
 
   // ── GGUF, run by llama.cpp in-process (node-llama-cpp) ──────────────────

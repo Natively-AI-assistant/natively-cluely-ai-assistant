@@ -233,7 +233,39 @@ export async function installCatalogModel(
     onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
   }
 
+  const patched = applyConfigPatch(model, opts.rootOverride);
+  if (patched) digests['config.json'] = 'patched';
+
   return { ok: true, modelId: id, digests };
+}
+
+/**
+ * Write the catalogue's `configPatch` into the downloaded `config.json`.
+ *
+ * Refuses if that file carries a declared sha256 — patching a verified file
+ * would leave bytes on disk that no longer match what was checked, and the next
+ * install would look corrupt. In practice config.json is never an LFS object,
+ * so it never has one.
+ */
+function applyConfigPatch(model: LocalRerankerModel, rootOverride?: string): boolean {
+  if (!model.configPatch) return false;
+
+  const declared = model.files.find((f) => f.repoPath === 'config.json');
+  if (!declared) return false;
+  if (declared.sha256) {
+    console.warn(`[localModelInstaller] refusing to patch a verified config.json for ${model.id}`);
+    return false;
+  }
+
+  const file = path.join(modelDirectory(model, rootOverride), 'config.json');
+  try {
+    const config = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify({ ...config, ...model.configPatch }, null, 2));
+    return true;
+  } catch (e) {
+    console.warn(`[localModelInstaller] could not patch config.json for ${model.id}:`, e);
+    return false;
+  }
 }
 
 /** Delete an installed ONNX model's directory. */
