@@ -99,6 +99,15 @@ export interface LocalRerankerModel {
   dtype?: 'fp32' | 'q8';
 
   // ── GGUF only ──────────────────────────────────────────────────────────
+  /**
+   * How llama.cpp should score this model.
+   *
+   * 'rank' needs a ranking head (bge-reranker-v2-m3 has one). 'yes-no' is for a
+   * causal LM with no such head, scored by the probability it puts on "yes"
+   * against "no" — Qwen3-Reranker's own protocol. Getting this wrong is not a
+   * degraded score, it is a refusal or a meaningless one.
+   */
+  scoring?: 'rank' | 'yes-no';
   /** The extension that can actually execute this file. */
   extensionId?: string;
   /** Named so the UI can say what is missing rather than just failing. */
@@ -286,6 +295,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     ],
     bytes: 438376864,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
+    scoring: 'rank',
     params: '568M · Q4_K_M',
     note: 'Multilingual, and the strongest local reranker measured here. Runs on llama.cpp.',
   },
@@ -321,16 +331,18 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     runtime: 'gguf',
     repo: 'QuantFactory/Qwen3-Reranker-0.6B-GGUF',
     revision: '9bdee8f1ad01d7896a20823d5affd66c494eee8b',
-    supported: false,
-    unsupportedReason:
-      'Its GGUF is a qwen3-architecture generative model with no ranking head, so llama.cpp refuses to score it. It would need yes/no token-logit scoring, which Natively does not implement yet.',
+    supported: true,
+    // No ranking head — llama.cpp's rank API refuses it. Scored instead by the
+    // probability it puts on "yes" against "no", which is Qwen's own protocol.
+    // See rag/qwenRerankPrompt.ts.
+    scoring: 'yes-no',
     files: [
       { repoPath: 'Qwen3-Reranker-0.6B.Q4_K_M.gguf', bytes: 483835680, sha256: '783d816e7541ba78a5105f949a010217fecf31795c267d69ffa5a96403dff4a7' },
     ],
     bytes: 483835680,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/QuantFactory/Qwen3-Reranker-0.6B-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '0.6B · Q4_K_M',
-    note: 'Not usable yet — see below.',
+    note: 'Multilingual, 100+ languages. Noticeably slower than the others: it runs a full language model per passage.',
     extensionId: 'qwen3-reranker',
     requiresBinary: 'llama-server',
   },

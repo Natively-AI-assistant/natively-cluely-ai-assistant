@@ -53,7 +53,15 @@ export class GgufReranker implements RerankSeamPort {
   private loadFailed = false;
   private loadFailureReason: string | null = null;
 
-  constructor(private readonly modelPath: string) {}
+  /**
+   * @param scoring 'rank' for a model with a ranking head (llama.cpp scores it
+   *   directly); 'yes-no' for a causal LM like Qwen3-Reranker, which has no
+   *   such head and is scored by the probability it puts on "yes" vs "no".
+   */
+  constructor(
+    private readonly modelPath: string,
+    private readonly scoring: 'rank' | 'yes-no' = 'rank',
+  ) {}
 
   /** Why the last load failed, for the UI. Null while healthy. */
   get failureReason(): string | null {
@@ -111,7 +119,7 @@ export class GgufReranker implements RerankSeamPort {
         reject(new Error(`gguf reranker timed out after ${timeoutMs}ms`));
       }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
-      worker.postMessage({ ...message, requestId, modelPath: this.modelPath });
+      worker.postMessage({ ...message, requestId, modelPath: this.modelPath, scoring: this.scoring });
     });
   }
 

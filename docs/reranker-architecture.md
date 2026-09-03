@@ -320,8 +320,9 @@ existing runtime already handles; it still applies to anything needing a new one
 | mxbai Rerank XSmall (`mixedbread-ai/mxbai-rerank-xsmall-v1`) | 96 MB | **yes** — measured 524 ms |
 | BGE Reranker Large (`Xenova/bge-reranker-large`) | 580 MB | yes — slowest to load |
 | Ettin Reranker 32M / 68M / 150M | 132–603 MB | **yes** — head applied outside the graph |
-| BGE Reranker v2 m3 Q4_K_M (GGUF) | 438 MB | **yes** — llama.cpp, 71 ms warm |
-| Jina v3.5 Q4_K_M, Qwen3 0.6B Q4_K_M (GGUF) | 397 / 484 MB | no — no ranking head, see below |
+| BGE Reranker v2 m3 Q4_K_M (GGUF) | 438 MB | **yes** — llama.cpp `rank`, 71 ms warm |
+| Qwen3 Reranker 0.6B Q4_K_M (GGUF) | 484 MB | **yes** — yes/no scoring, ~87 ms per passage |
+| Jina v3.5 Q4_K_M (GGUF) | 397 MB | no — needs a patched llama.cpp, see below |
 
 Every entry marked runnable had its ONNX graph opened and checked for a `logits`
 output before it was listed.
@@ -378,18 +379,59 @@ because llama.cpp is a native addon that can abort the thread it runs on.
 
 | GGUF | arch | result |
 | --- | --- | --- |
-| bge-reranker-v2-m3 Q4_K_M | `bert` | **works** — 1708 ms cold, **71 ms warm** |
-| jina-reranker-v3.5 Q4_K_M | `qwen3` | refused: no ranking head |
-| qwen3-reranker-0.6b Q4_K_M | `qwen3` | refused: no ranking head |
+| bge-reranker-v2-m3 Q4_K_M | `bert` | **works** via `rank` — 1708 ms cold, **71 ms warm** |
+| qwen3-reranker-0.6b Q4_K_M | `qwen3` | refused by `rank`; **works** via yes/no scoring — ~87 ms per passage |
+| jina-reranker-v3.5 Q4_K_M | `qwen3` | refused, and out of reach — see below |
 
-The two refusals are not a bug to fix here. Both are generative models scored a
-completely different way — the reference `rerank.py` in Jina's own GGUF repo
-needs a **patched** llama.cpp (sliding-window fix), the `llama-embedding` binary
-with `--output-token-ids` to extract per-token hidden states, and a separate
-`projector.safetensors` applied by cosine similarity. No JS binding exposes
-that. Qwen3-Reranker would need yes/no token-logit scoring, which is not
-implemented. Both are listed with that reason, and the installer refuses them
-before spending several hundred megabytes.
+### Two scorings, declared per model
+
+A GGUF entry carries `scoring: 'rank' | 'yes-no'`, because the two are not
+interchangeable and neither degrades: handing a causal LM to the ranking API is
+a refusal, and handing a ranking model the yes/no prompt is a meaningless
+number.
+
+**`yes-no`** (`electron/rag/qwenRerankPrompt.ts`) is Qwen3-Reranker's own
+protocol: a system turn fixing the answer to yes/no, a user turn with
+instruction + query + document, an assistant turn with an *empty* `<think>`
+block, then read how much probability sits on `yes` versus `no` at the next
+token. `controlledEvaluate` reads that distribution without generating anything.
+
+The normalisation looks wrong and is not. The reference takes a softmax over the
+two *logits*; this takes `p_yes / (p_yes + p_no)` from full-vocabulary
+*probabilities*. Those are the same number — the vocabulary-wide `Z` cancels in
+the ratio — which is what lets it run on a runtime that exposes probabilities
+rather than logits.
+
+Validated against transformers 5.12 / torch 2.12, fp32, one pair at a time:
+
+| document | reference (fp32) | Natively (Q4_K_M) |
+| --- | --- | --- |
+| Photosynthesis… | 0.000043 | 0.000040 |
+| Kubernetes clusters… | 0.984219 | 0.906807 |
+| The Rhine… | 0.000024 | 0.000041 |
+| Skills: …Kubernetes… | 0.119824 | 0.076290 |
+
+Relevant/irrelevant separation is preserved with four orders of magnitude to
+spare. The two irrelevant documents swap places between fp32 and 4-bit — they
+are tied far below quantisation resolution, so a total-order assertion would be
+demanding agreement the arithmetic cannot carry.
+
+A trap for anyone extending this: the model card's **batched** recipe (pad, then
+read `[:, -1, :]`) produced nonsense in my hands — the Rhine ranked first.
+Scoring one pair at a time matches. Re-derive that before batching.
+
+**Latency.** Qwen runs a full language model per passage, so cost is linear and
+the pool size is the whole story: 5 → 437 ms, 10 → 882 ms, 20 → 1831 ms,
+30 → 2374 ms. Ten candidates fits inside `RERANK_BUDGET_MS`; the default thirty
+does not. "Candidates to rerank" in Settings is the control for this.
+
+Jina remains out of reach, and specifically so. The reference `rerank.py` in its
+own GGUF repo needs a **patched** llama.cpp (sliding-window fix), the
+`llama-embedding` binary with `--output-token-ids` to extract per-token hidden
+states, and a separate `projector.safetensors` applied by cosine similarity. No
+JS binding exposes per-token hidden states, and the prebuilt llama.cpp here is
+stock. Its entry carries that reason and the installer refuses it before
+spending 397 MB on bytes nothing can score.
 
 Packaging note: the two `node-llama-cpp` trees are in `asarUnpack`. The existing
 `**/*.node` and `**/*.dylib` patterns do **not** cover the backend libraries it
@@ -491,6 +533,9 @@ rejects an incomplete ranking wholesale.
   across the process boundary in 1 ms with correct ordering → `unloadAll()`.
 
 **Verified for direct install**
+- Qwen3 Reranker 0.6B (GGUF, 484 MB) scored through llama.cpp with its own
+  yes/no protocol and checked against the fp32 reference: same relevant/
+  irrelevant separation, every document within quantisation noise.
 - BGE Reranker v2 m3 (GGUF, 438 MB) installed through the app's own installer,
   sha256 verified, then reranked through the worker-backed seam port: 1708 ms
   cold, 71 ms warm, correct ordering. `rankAll` confirmed to return scores in
