@@ -161,11 +161,13 @@ export async function installCatalogModel(
 ): Promise<InstallResult> {
   const model = findCatalogModel(id);
   if (!model) return { ok: false, modelId: id, error: `unknown model "${id}"` };
-  if (!model.supported) {
-    // Refuse the download rather than spending hundreds of megabytes on bytes
-    // this build cannot score. See the catalogue header for what was measured.
-    return { ok: false, modelId: id, error: model.unsupportedReason ?? `${model.name} is not supported by this build` };
-  }
+  // `supported` is deliberately NOT checked here. It answers "can Natively score
+  // this yet", which is a different question from "may the user have the file".
+  // Downloading is always an explicit act, the card states plainly that the
+  // model is not usable, and activation still refuses it — so refusing the
+  // download too was substituting my judgement for the user's about their own
+  // disk. The bytes are useful on their own: for a future runtime, or for
+  // another tool entirely.
 
   const downloader = opts.downloader ?? new HuggingFaceModelDownloader({ logger: console });
   const total = model.files.reduce((n, f) => n + f.bytes, 0) || 1;

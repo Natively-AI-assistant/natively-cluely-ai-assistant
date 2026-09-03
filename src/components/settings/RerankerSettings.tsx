@@ -617,11 +617,20 @@ export const RerankerSettings: React.FC = () => {
                         <span className="text-xs font-semibold text-white truncate">{m.name}</span>
                         {m.recommended && m.supported && <AipBadge tone="info" label={t('Recommended')} />}
                         {m.selected && <AipBadge tone="ok" label={t('In use')} />}
-                        {installed && !m.selected && <AipBadge tone="neutral" label={t('Downloaded')} />}
+                        {installed && !m.selected && (
+                            <AipBadge
+                                tone={m.supported ? 'neutral' : 'warn'}
+                                label={m.supported ? t('Downloaded') : t('Downloaded · not usable yet')}
+                            />
+                        )}
                     </div>
 
                     <div className="shrink-0 flex items-center gap-1.5">
-                        {!installed && m.supported && (
+                        {/* Downloading is not the same decision as using. An entry
+                            Natively cannot score yet can still be fetched — the bytes
+                            are useful on their own, and `activatable` (not `supported`)
+                            is what gates the Use button below. */}
+                        {!installed && (
                             busy ? (
                                 <button
                                     type="button"

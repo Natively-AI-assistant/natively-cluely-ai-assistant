@@ -279,8 +279,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Pick the replacement through modelAvailable() rather than raw key checks,
       // so a provider the user switched off (or a model they filtered out) is never
       // installed as the fallback.
+      // Gemini candidates in preference order rather than a single hardcoded id.
+      // A user who curated their Gemini allow-list before a model bump has the NEW
+      // default filtered out by modelAvailable (the allow-list gate runs before the
+      // credential check), so a lone `gemini-3.8-flash` candidate is dead for them
+      // and the ladder falls through to a DIFFERENT PROVIDER — even though they hold
+      // a Gemini key and an allow-listed Gemini model. Walking the tier keeps them on
+      // Gemini and makes the next bump a one-line prepend instead of a silent
+      // provider switch for everyone who ever ticked a box here.
+      const geminiNext = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite']
+        .find(id => modelAvailable(id));
+
       const next = modelAvailable('natively') ? 'natively'
-        : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
+        : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('qwen/qwen3.6-27b') ? 'qwen/qwen3.6-27b'
@@ -7267,12 +7278,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     const controller = new AbortController();
     localModelDownloads.set(id, controller);
     try {
-      if (model.runtime === 'gguf' && !model.supported) {
-        // Downloading it would be several hundred megabytes llama.cpp refuses
-        // to score. The catalogue carries the reason; surface it.
-        return { success: false, error: 'not_supported', message: model.unsupportedReason };
-      }
-
       const { installCatalogModel } = require('./services/reranking/localModelInstaller');
       const result = await installCatalogModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
       if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
@@ -10078,7 +10083,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let response;
 
         if (provider === 'gemini') {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`;
           response = await axios.post(
             url,
             {
@@ -10561,7 +10566,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.7-flash' };
+      return { model: 'gemini-3.8-flash' };
     }
   });
 
