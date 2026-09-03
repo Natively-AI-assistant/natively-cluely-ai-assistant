@@ -688,15 +688,38 @@ export class WindowHelper {
 
     const launcherUrl = `${startUrl}?window=launcher${noOrchSuffix}${isolationSuffix}${reviewOffSuffix}`;
 
-    this.launcherWindow
-      .loadURL(launcherUrl)
-      .then(() => console.log('[WindowHelper] loadURL success'))
-      .catch((e) => {
-        console.error('[WindowHelper] Failed to load URL:', e);
-      });
-
     let launcherLoadRetries = 0;
     const MAX_LAUNCHER_LOAD_RETRIES = 10;
+
+    // Reset the retry budget only when a load ACTUALLY succeeds, so a LATER
+    // transient failure (e.g. an HMR blip mid-session) gets its own fresh
+    // budget instead of being starved by earlier retries.
+    //
+    // This MUST NOT hang off `did-finish-load` (2026-09-03): when a load fails,
+    // Chromium commits its own error page, and that error page fires
+    // `did-finish-load` too. Resetting there made every failure go
+    // 0 -> 1 -> (error page finishes) -> 0, so the counter never passed 1 and
+    // MAX_LAUNCHER_LOAD_RETRIES was unreachable — an unbounded 1 Hz navigation
+    // loop for as long as the dev server stayed down (measured 2026-09-03:
+    // 39 retries in 40s, and 1447 over 29min in a prior session log, every one
+    // of them logged "1/10"). `loadURL()`'s promise rejects on a failed load,
+    // so its resolution is the only trustworthy success signal here.
+    const loadLauncher = (): void => {
+      const win = this.launcherWindow;
+      if (!win || win.isDestroyed()) return;
+      win
+        .loadURL(launcherUrl)
+        .then(() => {
+          launcherLoadRetries = 0;
+          console.log('[WindowHelper] loadURL success');
+        })
+        .catch((e) => {
+          console.error('[WindowHelper] Failed to load URL:', e);
+        });
+    };
+
+    loadLauncher();
+
     this.launcherWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
       console.error(`[WindowHelper] did-fail-load: ${errorCode} ${errorDescription}`);
       // DEV SELF-HEAL (2026-07-10): in dev, the renderer loads from the Vite
@@ -713,18 +736,14 @@ export class WindowHelper {
         launcherLoadRetries += 1;
         console.warn(`[WindowHelper] dev: retrying launcher load (${launcherLoadRetries}/${MAX_LAUNCHER_LOAD_RETRIES}) in 1s…`);
         setTimeout(() => {
-          if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
-            this.launcherWindow.loadURL(launcherUrl).catch(() => { /* next did-fail-load retries */ });
-          }
+          // Retries route through loadLauncher() so a successful retry resets
+          // the budget; a failed one falls back into this handler.
+          loadLauncher();
         }, 1000);
       }
     });
 
-    // Reset the retry counter once a load actually succeeds, so a LATER
-    // transient failure (e.g. an HMR blip mid-session) gets its own fresh
-    // retry budget instead of being starved by earlier retries.
     this.launcherWindow.webContents.on('did-finish-load', () => {
-      launcherLoadRetries = 0;
       const launcher = this.launcherWindow;
       if (!launcher || launcher.isDestroyed()) return;
       const rendererPid = launcher.webContents.getOSProcessId();

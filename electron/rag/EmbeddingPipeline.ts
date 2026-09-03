@@ -151,12 +151,40 @@ export class EmbeddingPipeline {
         return embeddingConfigChanged(prev, next);
     }
 
+    /**
+     * Tear down any local provider this pipeline currently holds.
+     *
+     * `provider` and `fallbackProvider` are deliberately the SAME object in
+     * local-only mode (see _doInitialize), so dedupe by identity — disposing
+     * twice is harmless but rejecting the same pending set twice is noise.
+     */
+    private async disposeLocalProviders(): Promise<void> {
+        const seen = new Set<unknown>();
+        for (const candidate of [this.provider, this.fallbackProvider]) {
+            if (!(candidate instanceof LocalEmbeddingProvider)) continue;
+            if (seen.has(candidate)) continue;
+            seen.add(candidate);
+            try {
+                await candidate.dispose('replaced by a new embedding configuration');
+            } catch {
+                /* a failed teardown must not block re-initialization */
+            }
+        }
+    }
+
     private async _doInitialize(config: AppAPIConfig): Promise<void> {
         // Construct the local fallback up front, but do NOT call isAvailable() here.
         // LocalEmbeddingProvider construction is cheap (paths + static dimensions/space);
         // isAvailable() loads the MiniLM ONNX model via transformers.js and can stall
         // the Electron main process during first paint. The provider loads lazily on
         // first real fallback/query use through embed()/embedQuery().
+        // Release whatever the previous initialization left behind BEFORE
+        // replacing it. _doInitialize runs again on every embedding config
+        // change, and the outgoing instances may each be holding a worker with
+        // the MiniLM ONNX model resident; overwriting the field alone left them
+        // running, unreachable, for the rest of the session.
+        await this.disposeLocalProviders();
+
         this.fallbackProvider = new LocalEmbeddingProvider();
         console.log(`[EmbeddingPipeline] Local fallback provider registered for lazy load (${this.fallbackProvider.dimensions}d)`);
 
