@@ -384,8 +384,23 @@ class UtilityProcessExtensionHost implements ExtensionHost {
 
     const id = this.nextId++;
     return new Promise<ExtensionReplyBody>((resolve, reject) => {
+      // Tell the CHILD to stop too. Failing the call here only frees the host;
+      // without this the extension keeps working past the deadline — an
+      // in-flight llama-server request, or an ONNX batch loop — and the next
+      // rerank starts alongside it.
+      const cancelChild = (): void => {
+        try {
+          child.postMessage({
+            direction: 'host-to-extension',
+            id: -id,                    // negative: cannot collide with a real request id
+            body: { kind: 'cancel', cancelId: id },
+          });
+        } catch { /* the child is gone; there is nothing left to cancel */ }
+      };
+
       const timer = setTimeout(() => {
         this.pending.delete(id);
+        cancelChild();
         reject(new ExtensionTimeoutError(this.extensionId, operation, timeoutMs));
       }, timeoutMs);
 
@@ -394,6 +409,7 @@ class UtilityProcessExtensionHost implements ExtensionHost {
         if (!entry) return;
         this.pending.delete(id);
         clearTimeout(entry.timer);
+        cancelChild();
         reject(new Error(`${operation} aborted`));
       };
       if (signal) signal.addEventListener('abort', onAbort, { once: true });

@@ -158,16 +158,31 @@ function assertReranker(value: unknown): asserts value is Reranker {
   }
 }
 
+/** In-flight reranks, so a `cancel` from the host can actually reach them. */
+const inFlight = new Map<number, AbortController>();
+
 async function handleRerank(
+  id: number,
   query: string,
   candidates: RerankCandidate[],
   topK: number,
 ): Promise<RankedCandidate[]> {
   if (!reranker) throw new Error('[natively] rerank() called before init()');
-  // The host owns the real deadline and will fail the call regardless; this
-  // signal only gives a cooperative extension the chance to stop early.
+  // The host owns the real deadline and fails the call regardless; this signal
+  // is what lets a cooperative extension stop early. It used to be a controller
+  // nothing ever aborted, so every extension's `opts.signal.aborted` check was
+  // permanently false and work continued past the host's deadline.
   const controller = new AbortController();
-  return reranker.rerank(query, candidates, { topK, signal: controller.signal });
+  inFlight.set(id, controller);
+  try {
+    return await reranker.rerank(query, candidates, { topK, signal: controller.signal });
+  } finally {
+    inFlight.delete(id);
+  }
+}
+
+function handleCancel(cancelId: number): void {
+  inFlight.get(cancelId)?.abort();
 }
 
 // ---------------------------------------------------------------------------
@@ -200,8 +215,14 @@ async function handleMessage(message: HostToExtensionMessage): Promise<void> {
         send({ direction: 'extension-to-host', id: request.id, body: { kind: 'init', ok: true } });
         return;
 
+      case 'cancel':
+        // Fire-and-forget from the host: no reply, and an unknown id is a
+        // no-op (the call already finished).
+        handleCancel(request.body.cancelId);
+        return;
+
       case 'rerank': {
-        const ranked = await handleRerank(request.body.query, request.body.candidates, request.body.topK);
+        const ranked = await handleRerank(request.id, request.body.query, request.body.candidates, request.body.topK);
         send({ direction: 'extension-to-host', id: request.id, body: { kind: 'rerank', ok: true, ranked } });
         return;
       }
