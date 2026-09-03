@@ -41,18 +41,21 @@ const flush = () => new Promise((r) => setImmediate(r));
  * given the stream waits on it before its last chunk, so a test can hold a
  * prefetch open and dispatch INTO it.
  */
-async function makeEngine({ chunks = [ANSWER], gate = null } = {}) {
+async function makeEngine({ chunks = [ANSWER], gate = null, truncated = false } = {}) {
     const { IntelligenceEngine } = await import(pathToFileURL(enginePath).href);
     const { SessionTracker } = require(sessionPath);
     const session = new SessionTracker();
     const engine = new IntelligenceEngine({ setNegotiationCoachingHandler() {} }, session);
     engine.lastTriggerTime = 0;
     engine.whatToAnswerLLM = {
-        async *generateStream() {
+        async *generateStream(...args) {
             for (let i = 0; i < chunks.length; i++) {
                 if (gate && i === chunks.length - 1) await gate;
                 yield chunks[i];
             }
+            // The provider reports a cut-short stream through the trailing
+            // `wtaTruncation` box (same seam the live path reads).
+            if (truncated) args[13].truncated = true;
         },
     };
     // The planner classifies intent through the ONNX worker in production; the
@@ -123,6 +126,17 @@ test('13-q6: the engine accepts a dispatch while its OWN prefetch is streaming, 
     await flush();
     assert.equal(finals.length, 1, 'the adopted stream is revealed at completion');
     assert.equal(finals[0].answer, ANSWER);
+    engine.reset();
+});
+
+test('a TRUNCATED prefetch is shown on adoption but never stored as session evidence', async () => {
+    const { engine, session, finals } = await makeEngine({ truncated: true });
+    engine.prefetchAutoAnswer('q8', QUESTION);
+    await untilIdle(engine);
+    await dispatch(engine, 'q8');
+    assert.equal(finals.length, 1, 'the user still sees the partial text, as with a truncated live answer');
+    assert.equal(session.getFullUsage().length, 0, 'but an incomplete answer must not become prior_assistant_responses evidence');
+    assert.equal(session.getFullTranscript().some((seg) => seg.text === ANSWER), false, 'nor session transcript history');
     engine.reset();
 });
 
