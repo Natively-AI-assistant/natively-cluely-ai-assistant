@@ -175,6 +175,18 @@ describe('scoring', () => {
     assert.ok(Math.abs(got - expected) < 1e-5, `got ${got}, expected ${expected}`);
   });
 
+  test('a backbone width that does not match the head is refused', () => {
+    // applyDense indexes input[i] for i < inFeatures, so a mismatched width
+    // reads past the CLS vector into the NEXT token's floats and returns a
+    // finite, plausible, WRONG score — the exact failure this module refuses
+    // everywhere else (unknown pooling, non-F32 tensors, unknown activations).
+    const head = loadSentenceTransformerHead(makeModelDir());   // width 2
+    assert.throws(
+      () => scoreWithHead(head, Float32Array.from([1, -1, 0.5, 0.5, 9, 9]), 3),
+      /does not match the head/,
+    );
+  });
+
   test('cls pooling ignores every token after the first', () => {
     const head = loadSentenceTransformerHead(makeModelDir());
     const a = scoreWithHead(head, Float32Array.from([1, -1, 0, 0]), 2);

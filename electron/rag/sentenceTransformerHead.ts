@@ -288,6 +288,19 @@ function applyLayerNorm(input: Float32Array, m: LayerNormModule): Float32Array {
  * row-major — the shape transformers.js hands back.
  */
 export function scoreWithHead(head: SentenceTransformerHead, hidden: Float32Array, width: number): number {
+  // The backbone's width must be the width the head was trained on. Without
+  // this, applyDense indexes input[i] for i < inFeatures and simply reads past
+  // the CLS vector into the NEXT token's floats — returning a finite, plausible,
+  // WRONG score. That is the one outcome this module refuses everywhere else
+  // (unknown pooling, non-F32 tensors, unknown activations); the same rule has
+  // to apply to the shape actually being fed in.
+  const expected = head.modules.find((m) => m.kind === 'dense')?.inFeatures ?? head.inputDimension;
+  if (expected && width !== expected) {
+    throw new Error(
+      `backbone width ${width} does not match the head's input dimension ${expected}`,
+    );
+  }
+
   // CLS pooling: the first token's vector, and nothing else.
   let x = hidden.subarray(0, width) as Float32Array;
   for (const m of head.modules) {

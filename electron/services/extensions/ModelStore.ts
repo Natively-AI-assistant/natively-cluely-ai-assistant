@@ -49,6 +49,13 @@ export interface ModelDownloader {
     destination: string,
     onProgress: (fraction: number) => void,
     signal: AbortSignal,
+    /**
+     * Optional gate run against the completed temporary file BEFORE it is moved
+     * into place. Rejecting here means bad bytes never occupy the real path, so
+     * nothing can observe a corrupt model as installed — not a status check, not
+     * a concurrent load, and not the next launch after a crash.
+     */
+    verify?: (partPath: string) => Promise<{ ok: boolean; reason?: string }>,
   ): Promise<void>;
 }
 

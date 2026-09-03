@@ -118,6 +118,8 @@ export interface RerankerRegistryOptions {
    * selection is ONNX (the built-in handles those) or nothing is selected.
    */
   localGgufPort?: () => RerankSeamPort | null;
+  /** Drop a cached local GGUF worker when something else takes the seam. */
+  releaseLocalGguf?: () => void;
   timeoutMs?: number;
   onOutcome?: (outcome: RerankOutcome) => void;
   logger?: { warn(message: string, ...args: unknown[]): void };
@@ -181,7 +183,18 @@ export class RerankerRegistry {
 
     const extensionId = this.activeExtensionId();
     if (extensionId) {
-      return { rerank: (query, passages) => this.rerankVia(extensionId, query, passages) };
+      return {
+        // An extension rerank is an RPC into a utilityProcess — a round trip,
+        // not a forward pass — so it takes the whole pool in one call, exactly
+        // as OpenRouterReranker and GgufReranker do. Omitting this fell back to
+        // the seam's RERANK_BATCH_SIZE of 6, which split a 30-candidate pool
+        // into 5 sequential round trips, each with its own full timeout budget:
+        // a 10s ceiling became a 50s worst case. It also multiplied the number
+        // of `running()`/`load()` checks per query, which is what let one query
+        // race itself into starting the same extension twice.
+        batchSize: Number.MAX_SAFE_INTEGER,
+        rerank: (query, passages) => this.rerankVia(extensionId, query, passages),
+      };
     }
 
     // A locally selected GGUF model. ONNX selections need nothing here — the
@@ -441,6 +454,13 @@ function defaultOptions(): RerankerRegistryOptions {
         // to a third party. Fall through to the local path.
         return null;
       }
+    },
+    releaseLocalGguf: () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { resetLocalGgufPort } = require('./rerankerConfig') as typeof import('./rerankerConfig');
+        resetLocalGgufPort();
+      } catch { /* nothing cached */ }
     },
     localGgufPort: () => {
       try {

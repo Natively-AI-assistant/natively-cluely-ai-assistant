@@ -319,14 +319,28 @@ let ggufPort: { id: string; port: RerankSeamPort } | null = null;
  * express that way. Returning null lets the chain fall through to the built-in.
  */
 export function buildLocalGgufPort(): RerankSeamPort | null {
-  const id = readRerankerSettings().localModelId;
-  if (!id) return null;
+  const settings = readRerankerSettings();
+  const id = settings.localModelId;
+
+  // Anything that means "a local GGUF is no longer what runs" must release the
+  // worker. Switching to OpenRouter or to an extension goes through
+  // setRerankerConfig / setExtensionEnabled, never useLocalRerankerModel, so
+  // resetLocalGgufPort() is not called on those paths — without this a loaded
+  // 438MB llama.cpp context stayed resident for the life of the process even
+  // though resolvePort() would never reach it again.
+  if (!id || settings.provider === 'openrouter') {
+    if (ggufPort) resetLocalGgufPort();
+    return null;
+  }
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { findCatalogModel } = require('../../rag/rerankerModelCatalog') as typeof import('../../rag/rerankerModelCatalog');
     const model = findCatalogModel(id);
-    if (!model || model.runtime !== 'gguf' || !model.supported) return null;
+    if (!model || model.runtime !== 'gguf' || !model.supported) {
+      if (ggufPort) resetLocalGgufPort();
+      return null;
+    }
 
     const cached = ggufPort;
     if (cached?.id === id) return cached.port;
