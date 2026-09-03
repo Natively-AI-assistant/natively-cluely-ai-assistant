@@ -68,7 +68,7 @@ import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
-import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone } from './llm/groqModels';
+import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
 const execAsync = promisify(exec);
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 
@@ -132,6 +132,7 @@ const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 // vision chain is meant to fall through to another provider.
 const GROQ_MODEL = GROQ_PRIMARY_MODEL
 import { GROQ_VISION_MODEL } from './llm/groqModels'
+import { stripLeadingReasoningBlock } from './llm/reasoningTagFilter'
 // Groq rejects a request carrying more than 5 images. Every other vision
 // provider here takes as many as we send, so the cap lives on the Groq path.
 const GROQ_VISION_MAX_IMAGES = 5
@@ -3714,15 +3715,25 @@ let isMultimodal = !!(imagePaths?.length);
     // used to pay a doomed full-payload round trip to the dead model before
     // laddering — callers keep passing the module const. Skip straight to the
     // fallback rung when this process has already seen the model die.
-    const { markGroqModelGone, isGroqModelKnownGone } = require('./llm/groqModels') as typeof import('./llm/groqModels');
+    const { markGroqModelGone, isGroqModelKnownGone, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
     if (isGroqModelKnownGone(request?.model)) {
       const memoFallback = groqFallbackFor(request?.model);
       if (memoFallback) {
         return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
       }
     }
+    // REASONING CONTROL, recomputed PER ATTEMPT (2026-09-03). Bound to the model
+    // actually being sent, never to what the caller asked for: both fallback
+    // rungs below swap `model`, and `reasoning_effort:'none'` is valid on the
+    // qwen3 primary but a hard 400 on the gpt-oss production rung. Any inherited
+    // value is dropped first so a re-entrant call can't carry a stale param down
+    // the ladder. See groqReasoningParams for the live probe that measured this.
+    const withReasoning = (r: any) => {
+      const { reasoning_effort: _drop, ...rest } = r || {};
+      return { ...rest, ...groqReasoningParams(r?.model) };
+    };
     try {
-      return await this.groqClient.chat.completions.create(request, opts as any);
+      return await this.groqClient.chat.completions.create(withReasoning(request), opts as any);
     } catch (err: any) {
       const gone = !opts?.signal?.aborted && isGroqModelGone(err);
       // NOTIFY DISCOVERY BEFORE the exhausted-ladder throw (code-review
@@ -3738,7 +3749,7 @@ let isMultimodal = !!(imagePaths?.length);
       const fallback = gone ? groqFallbackFor(request?.model) : null;
       if (!fallback) throw err;
       console.warn(`[LLMHelper] Groq model ${request?.model} is gone — retrying on ${fallback}`);
-      return await this.groqClient.chat.completions.create({ ...request, model: fallback }, opts as any);
+      return await this.groqClient.chat.completions.create(withReasoning({ ...request, model: fallback }), opts as any);
     }
   }
 
@@ -3764,7 +3775,12 @@ let isMultimodal = !!(imagePaths?.length);
       stream: false
     });
 
-    return response.choices[0]?.message?.content || "";
+    // Non-streaming: no stream filter can cover this read, so apply the one-shot
+    // form. createGroqCompletion already sends reasoning_effort:'none' for a
+    // qwen3 model, making this belt-and-braces — but a user-picked or
+    // discovery-promoted Groq id that thinks and takes no such param would
+    // otherwise return its <think> block as the answer.
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
   /**
@@ -4017,7 +4033,7 @@ let isMultimodal = !!(imagePaths?.length);
       `OpenAI (${model})`
     );
 
-    return response.choices[0]?.message?.content || "";
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
   /**
@@ -4049,7 +4065,7 @@ let isMultimodal = !!(imagePaths?.length);
       `DeepSeek (${model})`
     );
 
-    return response.choices[0]?.message?.content || "";
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
   /**
@@ -4093,7 +4109,7 @@ let isMultimodal = !!(imagePaths?.length);
       `LiteLLM (${litellmModel})`
     );
 
-    return response.choices[0]?.message?.content || "";
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
   private async generateWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[]): Promise<string> {
@@ -4110,7 +4126,7 @@ let isMultimodal = !!(imagePaths?.length);
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
     const response = await this.withTimeout(this.withRetry(() => this.createNvidiaNimCompletion({ model, messages })), 60000, `NVIDIA NIM (${model})`);
-    return response.choices[0]?.message?.content || '';
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
   // The handler for cURL requests
@@ -4531,14 +4547,20 @@ let isMultimodal = !!(imagePaths?.length);
       max_completion_tokens: 16384,
       top_p: 1,
       stream: false as const,
-      stop: null as string[] | null
+      stop: null as string[] | null,
+      // GROQ_VISION_MODEL is qwen3.6-27b — a THINKING model. Without this the
+      // <think> block is returned as message.content and handed straight to the
+      // caller (2026-09-03). Note this call deliberately does NOT go through
+      // createGroqCompletion: that ladder falls back to a TEXT-ONLY model, which
+      // is wrong for an image request. So the param is applied here instead.
+      ...groqReasoningParams(GROQ_VISION_MODEL),
     };
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'groq', classification: 'sdk_request_object_before_serialization', payload: request,
     });
     const response = await this.groqClient.chat.completions.create(request);
 
-    return response.choices[0]?.message?.content || "";
+    return stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
   }
 
   /**
@@ -5509,6 +5531,15 @@ let isMultimodal = !!(imagePaths?.length);
     ...args: Parameters<LLMHelper['_streamChatInner']>
   ): AsyncGenerator<string, void, unknown> {
     const { StreamingDashReducer } = await import('./llm/postProcessor');
+    const { StreamingReasoningFilter } = await import('./llm/reasoningTagFilter');
+    // Per-stream reasoning-tag filter. Runs BEFORE the dash reducer so a think
+    // block can never enter the reducer's fenced-code state machine (a ``` inside
+    // the model's reasoning would otherwise leave it convinced the rest of the
+    // answer is code). Applied HERE for the same reason the output cap is: it is
+    // the one point every provider's chunks pass through, so a future model swap
+    // on ANY provider cannot re-arm the 2026-09-03 leak the way the 2026-08-23
+    // Groq llama→qwen3.6 swap did. See reasoningTagFilter.ts.
+    const reasoningFilter = new StreamingReasoningFilter();
     // Per-stream stateful reducer: tracks fenced-code (```) state ACROSS chunks
     // so a code block streamed over many chunks is never dash-mangled (the old
     // stateless reducer turned `nums[i] - 1` into `nums[i], 1`). It also skips
@@ -5553,10 +5584,20 @@ let isMultimodal = !!(imagePaths?.length);
       if (chunk === LLMHelper.TRUNCATION_SENTINEL) {
         outcome.truncated = true;
         outcome.reason = 'provider_failed_after_first_token';
+        // Release anything the reasoning filter is still holding. A provider
+        // that dies mid-think-block would otherwise end the turn blank.
+        const held = reasoningFilter.finish();
+        if (held) yield dashReducer.reduce(held);
         return;
       }
-      yield dashReducer.reduce(chunk);
-      emittedChars += typeof chunk === 'string' ? chunk.length : 0;
+      // May be empty (the filter is holding a partial tag) — never yield an
+      // empty chunk, or trackCommit's non-empty predicate sees needless churn.
+      const visible = reasoningFilter.feed(chunk);
+      if (visible) yield dashReducer.reduce(visible);
+      // Count what the USER actually receives against the runaway cap. Charging
+      // suppressed reasoning to the ceiling would end long answers early on a
+      // thinking model for output nobody saw.
+      emittedChars += visible.length;
       if (emittedChars > outputCeiling) {
         outcome.truncated = true;
         outcome.reason = 'output_cap_reached';
@@ -5569,6 +5610,10 @@ let isMultimodal = !!(imagePaths?.length);
         return;
       }
     }
+    // Normal completion. Flush a block the model opened and never closed —
+    // showing its reasoning beats showing an empty answer.
+    const tail = reasoningFilter.finish();
+    if (tail) yield dashReducer.reduce(tail);
   }
 
   /**
@@ -7863,7 +7908,12 @@ let isMultimodal = !!(imagePaths?.length);
       max_tokens: 8192,
       temperature: 1,
       top_p: 1,
-      stop: null
+      stop: null,
+      // Same as the non-streaming vision call above: qwen3.6-27b thinks out loud
+      // into delta.content, and this is the LATENCY-CRITICAL path (every
+      // screenshot turn). Applied here rather than via createGroqCompletion
+      // because that ladder's fallback rung is text-only.
+      ...groqReasoningParams(GROQ_VISION_MODEL),
     }, { signal: abortSignal });
 
     try {
@@ -9510,7 +9560,7 @@ let isMultimodal = !!(imagePaths?.length);
           "Groq Summary"
         );
 
-        const text = response.choices[0]?.message?.content || "";
+        const text = stripLeadingReasoningBlock(response.choices[0]?.message?.content || "");
         if (text.trim().length > 0) {
           console.log(`[LLMHelper] ✅ Groq summary generated successfully.`);
           return this.processResponse(text);
