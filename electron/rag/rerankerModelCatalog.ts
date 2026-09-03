@@ -309,7 +309,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     revision: '884f7c67aa3ac24edb89064da8c7bfd03f4a90f5',
     supported: false,
     unsupportedReason:
-      'Its GGUF is a qwen3-architecture generative model with no ranking head, so llama.cpp refuses to score it. The reference rerank.py in its own repo needs a patched llama.cpp, per-token hidden states and a separate projector file.',
+      'It is a listwise reranker: one forward pass over the query and every passage at once, scored from the hidden state at N+2 specific token positions. llama.cpp exposes pooled embeddings and logits, not per-token hidden states, so there is nothing to read those positions from.',
     files: [
       { repoPath: 'jina-reranker-v3.5-Q4_K_M.gguf', bytes: 396709504, sha256: '40ec64a1b8c18a40a79bbd7b516115aec158791e56452e734c36c52a76c245a1' },
     ],
@@ -322,8 +322,6 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     },
     params: '0.6B · Q4_K_M',
     note: 'Not usable yet — see below.',
-    extensionId: 'jina-reranker-v35',
-    requiresBinary: 'llama-server',
   },
   {
     id: 'qwen3-reranker-0.6b-q4km',
@@ -343,8 +341,6 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/QuantFactory/Qwen3-Reranker-0.6B-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '0.6B · Q4_K_M',
     note: 'Multilingual, 100+ languages. Noticeably slower than the others: it runs a full language model per passage.',
-    extensionId: 'qwen3-reranker',
-    requiresBinary: 'llama-server',
   },
 ];
 

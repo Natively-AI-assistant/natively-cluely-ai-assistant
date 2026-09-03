@@ -591,7 +591,10 @@ export const RerankerSettings: React.FC = () => {
         const prog = modelProgress[m.id];
         const busy = busyCatalogId === m.id;
         const installed = m.state === 'installed';
-        const needsExtension = m.runtime === 'gguf' && m.extensionInstalled === false;
+        // Only an entry that actually names an extension needs one. GGUF runs
+        // in Core now; this used to fire on every GGUF model and disable its
+        // Download button while claiming an extension was missing.
+        const needsExtension = m.extensionId != null && m.extensionInstalled === false;
         const isNoteExpanded = expandedNotes[m.id] ?? false;
 
         return (

@@ -425,13 +425,25 @@ the pool size is the whole story: 5 → 437 ms, 10 → 882 ms, 20 → 1831 ms,
 30 → 2374 ms. Ten candidates fits inside `RERANK_BUDGET_MS`; the default thirty
 does not. "Candidates to rerank" in Settings is the control for this.
 
-Jina remains out of reach, and specifically so. The reference `rerank.py` in its
-own GGUF repo needs a **patched** llama.cpp (sliding-window fix), the
-`llama-embedding` binary with `--output-token-ids` to extract per-token hidden
-states, and a separate `projector.safetensors` applied by cosine similarity. No
-JS binding exposes per-token hidden states, and the prebuilt llama.cpp here is
-stock. Its entry carries that reason and the installer refuses it before
-spending 397 MB on bytes nothing can score.
+Jina remains out of reach, and the reason is structural rather than a missing
+flag. v3.5 is a **listwise** reranker: its own `rerank.py` builds ONE prompt
+containing the query and every passage, marks positions with `<|rerank_token|>`
+and `<|embed_token|>`, runs `llama-embedding --output-token-ids` to emit
+**N+2 per-token hidden states** from that single pass, and scores each document
+as `cosine(projector(doc_hidden_i), projector(query_hidden_late))` using a
+separate `projector.safetensors`.
+
+Probed rather than assumed: `createEmbeddingContext()` does load the GGUF and
+returns a 1024-dim vector (the hidden size). But that is ONE pooled vector per
+input, and the protocol needs the hidden state at N+2 chosen positions. Nothing
+in node-llama-cpp exposes per-token hidden states, and scoring each document in
+its own pass would not be the same model — a listwise representation is
+conditioned on the whole list.
+
+The routes are to vendor the `llama-embedding` binary (which their script also
+says needs a patched llama.cpp for the sliding-window pattern) or to wait for
+per-token hidden states in the binding. Its entry says this, and the installer
+refuses it before spending 397 MB.
 
 Packaging note: the two `node-llama-cpp` trees are in `asarUnpack`. The existing
 `**/*.node` and `**/*.dylib` patterns do **not** cover the backend libraries it
