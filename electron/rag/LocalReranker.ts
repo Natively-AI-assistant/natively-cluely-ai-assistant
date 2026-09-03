@@ -335,6 +335,18 @@ class LocalRerankerImpl {
      * model/package is unavailable — the caller treats that as "no rerank" and
      * keeps the current top-K.
      */
+    /**
+     * Whether the model is ALREADY loaded, without loading it.
+     *
+     * `isAvailable()` calls ensureLoaded(), so asking it "is the reranker ready"
+     * is really telling it "load the reranker" — a settings panel that called it
+     * to render a badge would block on a model load, and on a first run on a
+     * download. This is the read-only question.
+     */
+    isLoaded(): boolean {
+        return this.loaded;
+    }
+
     async isAvailable(): Promise<boolean> {
         if (startupPoisoned) return false;
         if (this.loadFailed) return false;

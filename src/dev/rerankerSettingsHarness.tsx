@@ -75,9 +75,13 @@ const EXTENSIONS = [{
 }];
 
 // `?slow=1` delays every stub so the loading state can actually be looked at.
-const SLOW = new URLSearchParams(location.search).has('slow');
+const params = new URLSearchParams(location.search);
+const SLOW = params.has('slow');
+const HANG = params.has('hang');   // never resolves — the stuck-skeleton repro
 const delay = <T,>(v: T): Promise<T> =>
-    SLOW ? new Promise(r => setTimeout(() => r(v), 4000)) : Promise.resolve(v);
+    HANG ? new Promise<T>(() => {})
+        : SLOW ? new Promise(r => setTimeout(() => r(v), 4000))
+            : Promise.resolve(v);
 
 (window as any).electronAPI = {
     getRerankerStatus: async () => delay({
