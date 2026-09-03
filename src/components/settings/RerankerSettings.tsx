@@ -225,6 +225,27 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     );
 };
 
+/**
+ * Placeholder while the panel loads, matching Settings > Embeddings.
+ *
+ * The panel used to replace itself with a "Loading reranker settings…" card,
+ * which no other settings tab does — AI Providers has no loading state at all
+ * and Embeddings renders its real layout with these. Swapping the whole page
+ * for a spinner reads as a different screen rather than as this one arriving.
+ */
+const SkeletonProviderCard: React.FC = () => (
+    <div className="aip-card aip-provider" aria-hidden="true">
+        <div className="aip-provider-head">
+            <span className="aip-skeleton" style={{ width: 26, height: 26, borderRadius: 8 }} />
+            <span className="aip-skeleton" style={{ width: 84, height: 10 }} />
+            <span className="aip-skeleton ml-auto" style={{ width: 62, height: 10 }} />
+        </div>
+        <div className="aip-provider-row">
+            <span className="aip-skeleton" style={{ flex: '1 1 240px', height: 'var(--aip-h-ctl)' }} />
+        </div>
+    </div>
+);
+
 export const RerankerSettings: React.FC = () => {
     const t = useT();
     const aipTheme = useResolvedTheme();
@@ -510,21 +531,21 @@ export const RerankerSettings: React.FC = () => {
         return !catalog.some(m => m.id === id);
     }, [status?.openrouterModel, catalog]);
 
-    if (loading || !status) {
+    // Loading and failure are DIFFERENT states. A failure is actionable and gets
+    // a message plus a retry; loading gets the real layout with placeholders,
+    // the way Settings > Embeddings does. Replacing the page with a spinner
+    // made this the only tab that flashes a different screen on open.
+    if (loadError || (!loading && !status)) {
         return (
             <div className="aip-root space-y-5 pb-10" data-theme={aipTheme}>
+                <header className="space-y-1">
+                    <h3 className="aip-title">{t('Reranker')}</h3>
+                </header>
                 <div className="aip-card p-5 flex items-center gap-2">
-                    {loading && !loadError ? (
-                        <>
-                            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-                            <span className="aip-muted text-xs">{t('Loading reranker settings…')}</span>
-                        </>
-                    ) : (
-                        <>
-                            <AlertCircle size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-                            <span className="aip-muted text-xs flex-1">
-                                {loadError ?? t('Could not read the reranker settings.')}
-                            </span>
+                    <AlertCircle size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                    <span className="aip-muted text-xs flex-1">
+                        {loadError ?? t('Could not read the reranker settings.')}
+                    </span>
                             <button
                                 type="button"
                                 className="aip-btn"
@@ -545,8 +566,29 @@ export const RerankerSettings: React.FC = () => {
                             >
                                 {t('Try again')}
                             </button>
-                        </>
-                    )}
+                </div>
+                <style>{AIP_CSS}</style>
+            </div>
+        );
+    }
+
+    if (!status) {
+        return (
+            <div className="aip-root space-y-5 pb-10" data-theme={aipTheme}>
+                <header className="space-y-1">
+                    <h3 className="aip-title">{t('Reranker')}</h3>
+                    <p className="aip-subtitle">
+                        {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
+                    </p>
+                </header>
+                <div
+                    className="aip-cq space-y-4"
+                    role="status"
+                    aria-label={t('Loading rerankers')}
+                    data-stagger-skip
+                >
+                    <SkeletonProviderCard />
+                    <SkeletonProviderCard />
                 </div>
                 <style>{AIP_CSS}</style>
             </div>
