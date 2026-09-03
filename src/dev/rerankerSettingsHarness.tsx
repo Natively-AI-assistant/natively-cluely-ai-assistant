@@ -74,8 +74,13 @@ const EXTENSIONS = [{
     }],
 }];
 
+// `?slow=1` delays every stub so the loading state can actually be looked at.
+const SLOW = new URLSearchParams(location.search).has('slow');
+const delay = <T,>(v: T): Promise<T> =>
+    SLOW ? new Promise(r => setTimeout(() => r(v), 4000)) : Promise.resolve(v);
+
 (window as any).electronAPI = {
-    getRerankerStatus: async () => ({
+    getRerankerStatus: async () => delay({
         provider: 'local',
         openrouterModel: 'voyageai/rerank-2.5-lite',
         candidateCount: 15, topN: 5, fallbackToLocal: false,
@@ -84,7 +89,7 @@ const EXTENSIONS = [{
         builtIn: { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true, cached: true, available: true },
         effective: { kind: 'local', id: 'ms-marco-minilm-l6' },
         lastTest: { at: '2026-09-01T10:00:00Z', model: 'voyageai/rerank-2.5-lite', latencyMs: 412, ok: true },
-    }),
+    } as any),
     getRerankerCatalog: async () => ({
         stale: false, fetchedAt: Date.now(),
         models: [
