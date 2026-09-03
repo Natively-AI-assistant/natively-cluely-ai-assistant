@@ -47,35 +47,61 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const source = readFileSync(path.join(repoRoot, 'electron/rag/ggufRerankerWorker.ts'), 'utf8');
 
-test('the yes-no scoring context is created with a bounded contextSize', () => {
-    const call = /createContext\(\{[^}]*\}\)/.exec(source)?.[0] ?? '';
-    assert.match(
-        call,
-        /contextSize\s*:/,
-        'model.createContext() must pass a contextSize. Without one llama.cpp allocates the ' +
-        "model's full trained window — 40,960 tokens for Qwen3-Reranker-0.6B, measured at " +
-        '4291 MB — to score a single query/passage pair.',
-    );
+/**
+ * Every `createContext` / `createRankingContext` call in the worker, with its
+ * argument object. Checking ALL of them, not the first: the listwise path was
+ * added after this guard and would otherwise have gone unchecked.
+ */
+function stripComments(text) {
+    // Line 133 of the worker MENTIONS createRankingContext() in prose; without
+    // this the scanner treats that comment as a call with empty arguments.
+    return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+function contextCalls(rawSource) {
+    const source = stripComments(rawSource);
+    const out = [];
+    const re = /(createRankingContext|createContext)\s*\(/g;
+    let m;
+    while ((m = re.exec(source))) {
+        // Balance from the opening paren so a multi-line argument object and a
+        // nested call like boundedContextSize() are both handled.
+        let depth = 0;
+        for (let i = m.index + m[0].length - 1; i < source.length; i++) {
+            if (source[i] === '(') depth++;
+            else if (source[i] === ')') {
+                depth--;
+                if (depth === 0) { out.push({ name: m[1], args: source.slice(m.index, i + 1) }); break; }
+            }
+        }
+    }
+    return out;
+}
+
+test('every context the worker creates is given a bounded contextSize', () => {
+    const calls = contextCalls(source);
+    assert.ok(calls.length >= 2, `expected at least the yes-no and ranking paths, found ${calls.length}`);
+    for (const { name, args } of calls) {
+        assert.match(
+            args,
+            // `contextSize: x` or the ES6 shorthand `contextSize,`
+            /contextSize\s*[:,}]/,
+            `${name}() is created without a contextSize. Without one llama.cpp allocates the ` +
+            "model's full trained window — 40,960 tokens for Qwen3-Reranker-0.6B, measured at " +
+            `4291 MB — for a single query/passage pair.\n\ncall: ${args}`,
+        );
+    }
 });
 
-test('the ranking context is created with a bounded contextSize', () => {
-    // NB: the argument contains a call of its own, so match the braces, not
-    // the first closing paren.
-    const call = /createRankingContext\(\{[^}]*\}\)/.exec(source)?.[0] ?? '';
-    assert.match(
-        call,
-        /contextSize\s*:/,
-        'model.createRankingContext() must pass a contextSize for the same reason as the ' +
-        'yes-no path — a bge-class ranking model defaults to its full trained window too.',
-    );
-});
-
-test('the bound is clamped to the model trained context length', () => {
-    assert.match(
-        source,
-        /Math\.min\(\s*RERANK_CONTEXT_SIZE\s*,\s*trained\s*\)/,
-        'the requested contextSize must be clamped to model.trainContextSize, so a model ' +
-        'trained shorter than RERANK_CONTEXT_SIZE is never asked for a window it lacks.',
+test('every bound is clamped to what the model was actually trained for', () => {
+    // Each path may pick its own size (the listwise path uses its block budget),
+    // but none may ask for more than the model has.
+    const clamps = source.match(/Math\.min\([^)]*trainContextSize[^)]*\)|Math\.min\(\s*RERANK_CONTEXT_SIZE\s*,\s*trained\s*\)/g) ?? [];
+    assert.ok(
+        clamps.length >= 2,
+        'each context path must clamp its requested size to model.trainContextSize; found ' +
+        `${clamps.length} clamp(s). A model trained shorter than the requested window would ` +
+        'otherwise be asked for one it does not have.',
     );
 });
 

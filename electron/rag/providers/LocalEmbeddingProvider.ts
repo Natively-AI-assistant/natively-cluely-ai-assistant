@@ -185,6 +185,29 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     return this.worker;
   }
 
+  /**
+   * Release the worker and the ONNX model it holds.
+   *
+   * EmbeddingPipeline._doInitialize() runs again whenever an embedding-related
+   * setting changes, and it assigns a FRESH LocalEmbeddingProvider over
+   * `fallbackProvider`. Without this, the instance being replaced kept its
+   * worker — and therefore its loaded MiniLM model — alive for the rest of the
+   * session, unreachable by anything. On macOS the Gemini path usually wins so
+   * the model never loads at all; on Windows the Gemini embedding key 403s and
+   * the resolver demotes to this bundled local model, so it is exactly the
+   * platform where the abandoned copy is real.
+   *
+   * Safe to call more than once, and safe on an instance that never loaded.
+   */
+  async dispose(reason = 'embedding provider disposed'): Promise<void> {
+    const worker = this.worker;
+    this.worker = null;
+    this.loadingPromise = null;
+    this.rejectAllPending(new Error(reason));
+    if (!worker) return;
+    try { await worker.terminate(); } catch { /* already gone */ }
+  }
+
   private rejectAllPending(err: Error): void {
     for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timer);

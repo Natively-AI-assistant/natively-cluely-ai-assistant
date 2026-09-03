@@ -108,9 +108,23 @@ export function readSafetensors(filePath: string): Record<string, { shape: numbe
     }
     // Copy rather than view: the slice must not alias a Buffer whose byteOffset
     // is unaligned for Float32Array, which throws on some inputs.
+    //
+    // The copy is ONE native memcpy, not a per-element JS loop. This used to be
+    // `for (i...) data[i] = bytes.readFloatLE(i * 4)`, which is one bounds-
+    // checked call per float: a single 768x768 dense layer is 589,824 of them,
+    // and a head with a couple of dense modules plus layer norms runs into the
+    // millions — all on the worker's load path. `Uint8Array.prototype.slice`
+    // yields a fresh, correctly-aligned ArrayBuffer, so the alignment concern
+    // the original comment describes is still handled.
+    //
+    // ENDIANNESS: readFloatLE was explicit; Float32Array uses the platform's
+    // native order. safetensors is little-endian by specification, and every
+    // architecture this app ships on (macOS arm64/x64, Windows x64/arm64) is
+    // little-endian, so the two agree. A big-endian port would need a DataView
+    // pass here.
     const bytes = buf.subarray(dataStart + start, dataStart + end);
-    const data = new Float32Array(entry.shape.reduce((a, b) => a * b, 1));
-    for (let i = 0; i < data.length; i++) data[i] = bytes.readFloatLE(i * 4);
+    const aligned = Uint8Array.prototype.slice.call(bytes);
+    const data = new Float32Array(aligned.buffer, aligned.byteOffset, entry.shape.reduce((a, b) => a * b, 1));
     out[name] = { shape: entry.shape, data };
   }
 
