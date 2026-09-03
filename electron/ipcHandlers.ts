@@ -5966,8 +5966,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
-    appState.setVerboseLogging(enabled);
-    return { success: true };
+    // The runtime flag always takes effect; `success` reports whether the
+    // choice reached disk, so the UI never claims a setting stuck when a
+    // degraded store refused it (RefusedSettingWriteReported2026_08_21).
+    const persisted = appState.setVerboseLogging(enabled);
+    return persisted ? { success: true } : { success: false, error: 'settings_write_refused' };
   });
 
   safeHandle('get-stealth-shortcut-guard', async () => {

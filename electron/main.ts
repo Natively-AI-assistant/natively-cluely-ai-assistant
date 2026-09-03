@@ -1445,6 +1445,12 @@ export class AppState {
   private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  // NOTE: what contextDebugLevel was before verbose logging raised it lives in
+  // SettingsManager ('contextDebugLevelBeforeVerbose'), NOT in a field here.
+  // An in-memory field is null again after a restart, so
+  // ON -> quit -> relaunch -> OFF would skip the restore branch and pin
+  // contextDebugLevel at 'verbose' forever — exactly the flattening of the
+  // user's Intelligence-settings choice this exists to prevent.
   private _ambientChatEnabled: boolean = false;
   private _autoAnswerEnabled: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
@@ -1499,7 +1505,11 @@ export class AppState {
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
-    this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
+    // Default OFF: ON means full content capture (transcripts, questions,
+    // answers in plaintext), which must be opt-in. Crash breadcrumbs do not
+    // depend on this flag — the console patch and logToFile() are
+    // unconditional. See verboseLog.ts.
+    this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
     this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
@@ -7826,13 +7836,43 @@ export class AppState {
     return this._verboseLogging;
   }
 
-  public setVerboseLogging(enabled: boolean): void {
+  public setVerboseLogging(enabled: boolean): boolean {
     this._verboseLogging = enabled;
     setVerboseLoggingFlag(enabled);
-    SettingsManager.getInstance().set('verboseLogging', enabled);
-    console.log(`[AppState] verboseLogging set to ${enabled}`);
+
+    // A degraded store REFUSES writes. Returning the result rather than
+    // dropping it is what stops the UI reporting success on a setting that
+    // reverts at restart — see RefusedSettingWriteReported2026_08_21.
+    const settings = SettingsManager.getInstance();
+    const persisted = settings.set('verboseLogging', enabled);
+
+    // Structured per-turn JSONL follows the switch, but contextDebugLevel is
+    // an INDEPENDENT three-value setting with its own selector in Intelligence
+    // settings (context-debug:set-level). Writing it unconditionally here
+    // would wipe whatever the user chose there. Raise it only when turning
+    // logging ON, and on the way out restore exactly what we displaced.
+    try {
+      if (enabled) {
+        const current = settings.getContextDebugLevel();
+        if (current !== 'verbose') {
+          settings.set('contextDebugLevelBeforeVerbose', current);
+          settings.setContextDebugLevel('verbose');
+        }
+      } else {
+        const displaced = settings.get('contextDebugLevelBeforeVerbose');
+        if (displaced) {
+          settings.setContextDebugLevel(displaced);
+          settings.set('contextDebugLevelBeforeVerbose', undefined);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[AppState] contextDebugLevel sync failed: ${e?.message || e}`);
+    }
+
+    console.log(`[AppState] verboseLogging set to ${enabled} (persisted=${persisted})`);
     // Notify all renderer windows so they can start/stop forwarding their console output
     this.broadcast('verbose-logging-changed', enabled);
+    return persisted;
   }
 
   public getAmbientChatEnabled(): boolean {
