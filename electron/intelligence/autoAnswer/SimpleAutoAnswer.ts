@@ -21,10 +21,14 @@
  *    while it is in flight — the next stoppage re-judges with more context;
  *  - the judge prompt's static prefix enables implicit provider caching.
  *
- * Mic policy is LENIENT (2026-08-24 decision): only a genuine sustained
- * answer in the user's own words suppresses; echoes, fragments and
- * backchannels are ignored. Judge unavailable → almost-legacy fallback:
- * dispatch only when the stopped speech ends with '?'.
+ * The user channel is INERT (user decision 2026-09-03). The user answers the
+ * moment a question lands — nobody sits in silence waiting for the overlay —
+ * so their own speech never cancels a streaming answer, never clears a
+ * candidate and never drops a parked or deferred verdict. The mic is still
+ * transcribed (the judge sees both sides), it just has no vote here. This
+ * retired the 2026-08-24 "lenient mic" policy and its echo latch with it.
+ * Judge unavailable → almost-legacy fallback: dispatch only when the stopped
+ * speech ends with '?'.
  */
 
 import type { TranscriptSegment } from '../../SessionTracker';
@@ -34,70 +38,13 @@ import { systemClock } from './AutoAnswerClock';
 import {
     JUDGE_DEADLINE_MS, JUDGE_CONTEXT_TURNS, parseJudgeVerdict, routeForVerdict, type JudgeRequest,
 } from './AutoAnswerJudge';
-import { echoContainment, isMidWordCut, joinTranscriptParts, normalizeForCompare } from './AutoAnswerText';
-import { speculativeQuestionSimilarity } from '../../llm/speculativeSimilarity';
+import { isMidWordCut, joinTranscriptParts, normalizeForCompare } from './AutoAnswerText';
 import type { AutoAnswerThresholds } from './AutoAnswerPolicy';
 import { DEFAULT_THRESHOLDS } from './AutoAnswerPolicy';
 import type { AutoAnswerQuestion, AutoAnswerTelemetryEvent } from './AutoAnswerTypes';
 
-// ── Mic echo detection (live-run 2026-08-24, session 3). Unfitted placeholders. ──
-/** A user final matching an interviewer final this recent is the speakers echoing into the mic. */
-export const ECHO_WINDOW_MS = 5000;
-/** Token similarity at or above which a user final is that echo. */
-export const ECHO_SIMILARITY = 0.8;
-/** A user final whose tokens are (near-)contained in recent interviewer speech is a mic-caught fragment of it. */
-export const ECHO_FRAGMENT_CONTAINMENT = 0.85;
-/** Containment needs a few words to mean anything ("Yes." is contained in everything). */
-export const ECHO_FRAGMENT_MIN_WORDS = 2;
-/**
- * Echo mode engages when at least this many of the last ECHO_FLAG_WINDOW user
- * finals were echoes.
- *
- * These two were declared with the rest of the echo policy and then never
- * wired — the latch was specified and never implemented. A real bled session
- * (2026-08-26) shows why it matters: the per-utterance test caught 30 of 58
- * user finals, and the 24 it missed still each cleared the interviewer's
- * pending text as "the user is answering", so seven minutes of interview
- * produced twelve candidates and one answer.
- *
- * The per-utterance test asks "is THIS fragment an echo", which a
- * boundary-straddling fragment can always dodge. The latch asks the question
- * that actually matters — "is this microphone currently carrying the
- * interviewer?" — and while the answer is yes the user channel cannot close a
- * candidate at all. It re-evaluates on every user final, so it releases by
- * itself once the bleed stops (headphones plugged in, speaker volume down).
- */
-export const ECHO_ACTIVATE_COUNT = 2;
-export const ECHO_FLAG_WINDOW = 4;
-/**
- * Once engaged, echo mode is HELD for this long, refreshed by every further
- * echo — it is not a count over the last N finals.
- *
- * A pure count latch is self-defeating, and the bled session shows it exactly:
- * the fragments that dodge the per-utterance test are recorded as non-echoes,
- * so they push the real echoes out of a four-slot window and release the very
- * latch that was meant to catch them (`flags=[0010]`, `[0100]`, `[1000]` at
- * the three consecutive leaks). Holding on time instead means a run of dodged
- * fragments cannot unlatch it; only an actual stretch with no echo at all can,
- * which is what "the user unplugged the speakers" looks like. Two ECHO_WINDOW_MS.
- */
-export const ECHO_MODE_HOLD_MS = 10_000;
-/**
- * User-channel BACKCHANNELS (live run 8168240a, 2026-08-24): short listening
- * signals — affirmations, acknowledgements, laughter — possibly repeated
- * ("yeah, yeah.", "okay, right."). They are not the user answering.
- */
+/** Interviewer-side prefilter: a candidate that is nothing but acknowledgements never costs a judge call. */
 export const USER_BACKCHANNEL = /^(?:(?:yeah|yes|yep|yup|ya|mm-?hm+|mhm+|uh-?huh|ok(?:ay)?|right|sure|cool|got it|i see|nice|great|perfect|exactly|interesting|makes sense|sounds good|true|correct|wow|oh|ah|hm+|haha+|alright|of course|fair enough|no problem|totally|absolutely|definitely|indeed|good|fine)[\s,.!?-]*){1,4}$/i;
-/**
- * LENIENT MIC (user decision 2026-08-24, after live rounds 3/5/6 all showed
- * FALSE mic suppression): a user final counts as the user ANSWERING — closing
- * the candidate — only on strong evidence: non-echo, non-backchannel AND at
- * least this many words of their own. Blips below the floor never kill a
- * question (the old engine's mic-blindness is what made it feel reliable);
- * the trade-off is that a bare "Three years." answer no longer suppresses.
- */
-export const GENUINE_ANSWER_MIN_WORDS = 4;
-
 /** The interviewer must be quiet this long before the judge is consulted. Unfitted placeholder. */
 export const STABILITY_MS = 900;
 /**
@@ -247,7 +194,6 @@ export class SimpleAutoAnswerEngine {
     private lastInterviewerInterim = '';
     /** speakerId per interviewer final, when the STT diarizes. Keyed by normalized text. */
     private speakerByTurn = new Map<string, string>();
-    private recentInterviewerFinals: Array<{ text: string; at: number }> = [];
     private timer: ClockTimer | null = null;
     /** Fires EARLY_JUDGE_MS after the interviewer's last word: asks, never commits. */
     private earlyTimer: ClockTimer | null = null;
@@ -270,10 +216,6 @@ export class SimpleAutoAnswerEngine {
         id: string; key: string; text: string;
         answerability: number; act: AutoAnswerQuestion['dialogueAct']; at: number;
     } | null = null;
-    /** Echo verdicts for the last ECHO_FLAG_WINDOW user finals (the latch). */
-    private recentUserEcho: boolean[] = [];
-    /** Echo mode is engaged until this timestamp; refreshed by every echo. */
-    private echoModeUntil = 0;
     /** Punctuation provenance of the latest interviewer final ('provider' family = a missing '?' means something). */
     private punctuationGuaranteed = false;
     /** What last bumped judgeSeq, so a discarded verdict can say what killed it. */
@@ -338,8 +280,6 @@ export class SimpleAutoAnswerEngine {
                 return;
             }
             if (!text) return;
-            this.recentInterviewerFinals.push({ text, at: now });
-            while (this.recentInterviewerFinals.length > 8) this.recentInterviewerFinals.shift();
             this.punctuationGuaranteed = (segment as { punctuationSource?: string }).punctuationSource === 'provider' ||
                 (segment as { punctuationSource?: string }).punctuationSource === 'provider_final';
             const speaker = (segment as { speakerId?: string }).speakerId;
@@ -361,65 +301,11 @@ export class SimpleAutoAnswerEngine {
             return;
         }
 
-        // ── user channel: LENIENT (2026-08-24) ────────────────────────────
-        if (!text) return;
-        const recent = this.recentInterviewerFinals.filter(f => now - f.at <= ECHO_WINDOW_MS);
-        const words = text.split(/\s+/).filter(Boolean).length;
-        const isEcho = recent.some(f => speculativeQuestionSimilarity(f.text, text) >= ECHO_SIMILARITY)
-            || (words >= ECHO_FRAGMENT_MIN_WORDS && recent.length > 0
-                && echoContainment(text, recent.map(f => f.text).join(' ')) >= ECHO_FRAGMENT_CONTAINMENT);
-        if (segment.final) {
-            this.recentUserEcho.push(isEcho);
-            while (this.recentUserEcho.length > ECHO_FLAG_WINDOW) this.recentUserEcho.shift();
-            // Engage (and refresh) only on an ACTUAL echo that is corroborated
-            // by the recent window. Testing the count alone re-arms the latch
-            // from stale flags — a clean final would find two old `true`s
-            // still in the four slots and push the deadline out again, so the
-            // latch could never release and a genuine answer stayed muted.
-            if (isEcho && this.recentUserEcho.filter(Boolean).length >= ECHO_ACTIVATE_COUNT) {
-                this.echoModeUntil = now + ECHO_MODE_HOLD_MS;
-            }
-        }
-        // The latch: while the mic is demonstrably carrying the interviewer,
-        // nothing on this channel may close a candidate — a fragment that
-        // straddles two interviewer finals can always dodge the per-utterance
-        // test, and every dodge silently threw away a question.
-        const echoMode = now < this.echoModeUntil;
-        const genuine = !isEcho && !echoMode
-            && !USER_BACKCHANNEL.test(text) && words >= GENUINE_ANSWER_MIN_WORDS;
-        if (!segment.final) {
-            // Early barge-in (review 2026-08-25): V3 cancelled at the VAD
-            // edge; here a genuine-looking user INTERIM cancels the streaming
-            // answer seconds before its final would — still text-validated,
-            // so speaker bleed cannot trigger it.
-            if (genuine && this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
-            return;
-        }
-        if (!genuine) {
-            const echoed = isEcho || (echoMode && words >= GENUINE_ANSWER_MIN_WORDS);
-            this.emit({ name: 'auto_answer_ignored', skipReason: echoed ? 'mic_echo' : 'backchannel' });
-            if (echoMode && !isEcho && words >= GENUINE_ANSWER_MIN_WORDS) {
-                this.host.log?.('[AutoAnswer:simple] mic echo mode — the user channel is carrying the interviewer');
-            }
-            return;
-        }
-        // A genuine sustained answer: the user took the floor. This must also
-        // kill anything in flight — the judge verdict being awaited AND a
-        // dispatch parked behind a busy engine both belong to a question the
-        // user is now answering themselves (review 2026-08-25).
-        if (this.host.answerStreamActive?.()) this.host.cancelAutomaticAnswer?.('user_barge_in');
-        this.bumpJudgeSeq('user_answering');
-        this.dropParked();
-        // A held verdict is keyed to a candidate PREFIX, not to judgeSeq, so
-        // the seq guard no longer protects it: drop it explicitly or it fires
-        // into a question the user has just answered themselves.
-        this.held = null;
-        if (this.pending.length > 0 || this.timer !== null) {
-            this.disarm();
-            this.pending = [];
-            this.lastJudgedKey = '';
-            this.emit({ name: 'auto_answer_ignored', skipReason: 'user_answering' });
-        }
+        // ── user channel: INERT (user decision 2026-09-03) ────────────────
+        // The user starts answering as soon as the question lands. Their
+        // speech must not cancel the stream, clear the candidate, or drop a
+        // parked / deferred verdict — the answer is wanted precisely while
+        // they are talking. Nothing to do on this channel.
     }
 
     // ── the stoppage ──────────────────────────────────────────────────────
@@ -659,7 +545,21 @@ export class SimpleAutoAnswerEngine {
         const deadline = this.clock.now() + RETRY_TTL_MS;
         const seqAtDeliver = this.judgeSeq;
         const attempt = () => {
-            if (!this.host.isMeetingActive() || this.judgeSeq !== seqAtDeliver) { this.parkedAttempt = null; return; }
+            if (!this.host.isMeetingActive() || this.judgeSeq !== seqAtDeliver) {
+                // Live session 2026-09-03 (13-q6): a verdict of 1.0 was parked
+                // behind the engine's own prefetch, the next candidate bumped
+                // the sequence, and this branch exited with nothing — no
+                // telemetry, no log, no answer. A park was armed, so its death
+                // is an outcome and must be reported like every other one.
+                const wasParked = this.parkedAttempt !== null;
+                this.parkedAttempt = null;
+                if (wasParked) {
+                    const reason = this.host.isMeetingActive() ? 'superseded_while_parked' : 'meeting_inactive';
+                    this.host.log?.(`[AutoAnswer:simple] parked dispatch for ${id} dropped: ${reason}${reason === 'superseded_while_parked' ? ` (by ${this.judgeSeqCause ?? 'unknown'})` : ''}`);
+                    this.emit({ name: 'auto_answer_ignored', questionId: id, skipReason: reason, answerability });
+                }
+                return;
+            }
             if (!this.host.engineAccepting()) {
                 if (this.clock.now() >= deadline) {
                     this.parkedAttempt = null;
@@ -760,10 +660,7 @@ export class SimpleAutoAnswerEngine {
         this.dropParked();
         this.clearFeedback();
         this.pending = [];
-        this.recentInterviewerFinals = [];
         this.lastInterviewerInterim = '';
-        this.recentUserEcho = [];
-        this.echoModeUntil = 0;
         this.lastInterviewerAt = 0;
         this.speakerByTurn.clear();
         this.lastJudgedKey = '';
