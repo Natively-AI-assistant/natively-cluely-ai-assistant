@@ -110,7 +110,7 @@ interface OllamaResponse {
 }
 
 // Model constants for Gemini (priority: flash-lite → flash → pro)
-const GEMINI_FLASH_MODEL = "gemini-3.7-flash"
+const GEMINI_FLASH_MODEL = "gemini-3.8-flash"
 const GEMINI_FLASH_LITE_MODEL = "gemini-3.1-flash-lite"
 const GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 
@@ -248,6 +248,7 @@ const PRO_MODEL_RE = /(?:^|[-/])pro(?:[-/]|$)/i;
 //   gemini-3.1-flash-lite   minimal → 200    low → 200
 //   gemini-3.6-flash        minimal → 200    low → 200
 //   gemini-3.7-flash        minimal → 400    low → 200
+//   gemini-3.8-flash        minimal → 400    low → 200   (re-probed 2026-09-03)
 //                           ("Thinking level MINIMAL is not supported for this
 //                            model. Please retry with other thinking level.")
 //
@@ -267,7 +268,7 @@ export function buildThinkingConfig(model: string | undefined, budget: number): 
   if (typeof model === 'string' && PRO_MODEL_RE.test(model)) return { thinkingLevel: ThinkingLevel.LOW };
   if (budget <= 0) {
     // Unknown/unlisted model → LOW, the universally accepted floor. Falling
-    // through to MINIMAL here is what 400s gemini-3.7-flash.
+    // through to MINIMAL here is what 400s gemini-3.7-flash and gemini-3.8-flash.
     if (typeof model === 'string' && !MINIMAL_THINKING_MODELS.has(model)) {
       return { thinkingLevel: ThinkingLevel.LOW };
     }
