@@ -66,7 +66,19 @@ export interface HostDisposeRequest {
   kind: 'dispose';
 }
 
-export type HostRequestBody = HostInitRequest | HostRerankRequest | HostDisposeRequest;
+/**
+ * Tells the child to abandon the rerank with this id.
+ *
+ * Fire-and-forget: the host has already failed the call by the time it sends
+ * one, and it expects no reply. Without it the child's AbortSignal could never
+ * fire, so an extension that dutifully polls `opts.signal.aborted` would keep
+ * working on a result nobody will read — an in-flight llama-server request, or
+ * an ONNX batch loop — while the next rerank starts alongside it.
+ */
+export interface HostCancelRequest { kind: 'cancel'; cancelId: number }
+
+export type HostRequestBody =
+  | HostInitRequest | HostRerankRequest | HostDisposeRequest | HostCancelRequest;
 
 export interface HostRequest {
   direction: 'host-to-extension';

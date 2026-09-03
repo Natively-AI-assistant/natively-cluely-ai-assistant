@@ -8,8 +8,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -61,6 +63,52 @@ test('an unauthorised binary is still refused after the sandbox is installed', (
   `;
   const out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 20_000 });
   assert.match(out, /REFUSED/, 'the fix must not open the allowlist');
+});
+
+// ── the sandbox must gate ESM, not only require() ─────────────────────────
+
+test('an ESM import of child_process still goes through the shim', () => {
+  // THE hole this closes. bootstrap.ts loads extensions with dynamic import(),
+  // and all three shipped extensions are `"type": "module"` doing
+  // `import { spawn } from 'child_process'`. An ESM import of a builtin never
+  // passes through Module._load, so before registerHooks() the shim and the
+  // whole BLOCKED_MODULES list were unenforced for the format extensions
+  // actually use — while the install prompt still promised those permissions
+  // were being checked.
+  const sandboxPath = path.join(repoRoot, 'dist-electron/electron/services/extensions/host/sandbox.js');
+  const script = `
+    import { installSandbox } from ${JSON.stringify(pathToFileURL(sandboxPath).href)};
+    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: ['node'], brokerFetch: async () => { throw new Error('unused'); } });
+    const cp = await import('child_process');
+    try { cp.spawn('curl', []); console.log('LEAKED'); }
+    catch (e) { console.log(/allowedBinaries/.test(e.message) ? 'REFUSED' : 'OTHER'); }
+    const child = cp.spawn(process.execPath, ['-e', 'process.exit(0)']);
+    console.log(typeof child.pid === 'number' ? 'AUTHORISED_OK' : 'NO_PID');
+    try { await import('net'); console.log('NET_LEAKED'); }
+    catch (e) { console.log(/not available to extensions/.test(e.message) ? 'NET_BLOCKED' : 'NET_OTHER'); }
+  `;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+    encoding: 'utf8', timeout: 30_000,
+  });
+  assert.match(out, /REFUSED/, 'an unauthorised binary must still be refused over ESM');
+  assert.match(out, /AUTHORISED_OK/, 'an authorised binary must still work over ESM');
+  assert.match(out, /NET_BLOCKED/, 'BLOCKED_MODULES must apply to ESM too');
+});
+
+test('the host tells the child to stop, it does not just give up locally', () => {
+  // The child used to build an AbortController nothing ever aborted, so every
+  // extension's `opts.signal.aborted` check was permanently false and work
+  // continued past the host's deadline.
+  const hostSrc = fs.readFileSync(path.join(repoRoot, 'electron/services/extensions/ExtensionHost.ts'), 'utf8');
+  const bootSrc = fs.readFileSync(path.join(repoRoot, 'electron/services/extensions/host/bootstrap.ts'), 'utf8');
+  assert.match(hostSrc, /kind: 'cancel', cancelId: id/, 'the host must send a cancel');
+  // Both failure paths must cancel, not just one — a timeout and an explicit
+  // abort leave the child in the same state.
+  assert.equal((hostSrc.match(/cancelChild\(\);/g) || []).length, 2,
+    'cancelChild() must be called on BOTH the timeout and the abort path');
+  assert.match(bootSrc, /case 'cancel':/, 'the child must handle it');
+  assert.match(bootSrc, /inFlight\.get\(cancelId\)\?\.abort\(\)/, 'and actually abort that call');
+  assert.match(bootSrc, /inFlight\.set\(id, controller\)/, 'tracking the controller per request id');
 });
 
 // ── the approved host must bind the actual fetch ──────────────────────────

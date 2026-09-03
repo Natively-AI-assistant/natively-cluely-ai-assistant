@@ -88,6 +88,9 @@ function normalizeModuleId(request: string): string {
   return request.startsWith('node:') ? request.slice('node:'.length) : request;
 }
 
+/** Synthetic module URL the ESM hook maps `child_process` onto. */
+const SHIMMED_CHILD_PROCESS_URL = 'natively-sandbox:child_process';
+
 export function installSandbox(options: SandboxOptions): SandboxReport {
   const target = options.target ?? (globalThis as unknown as Record<string, unknown>);
   const granted = new Set<ExtensionPermission>(options.granted);
@@ -107,8 +110,11 @@ export function installSandbox(options: SandboxOptions): SandboxReport {
     }
   }
 
-  // ── Modules ────────────────────────────────────────────────────────────
+    // ── Modules ────────────────────────────────────────────────────────────
   const childProcessShim = createChildProcessShim(granted, options.preauthorizedBinaries);
+  // The ESM hook can only return a URL, so the shim is reachable by the tiny
+  // module that hook synthesises. Same object as the require() path returns.
+  (globalThis as Record<string, unknown>).__nativelyChildProcessShim = childProcessShim;
 
   const handler = (request: string): { handled: true; value: unknown } | { handled: false } => {
     const id = normalizeModuleId(request);
@@ -129,6 +135,14 @@ export function installSandbox(options: SandboxOptions): SandboxReport {
     options.moduleLoader.intercept(handler);
   } else {
     patchRealModuleLoader(handler);
+    // ESM too, or the gate covers nothing that matters: bootstrap.ts loads an
+    // extension with dynamic import(), and every shipped extension is
+    // `"type": "module"` doing `import { spawn } from 'child_process'`. An ESM
+    // import of a builtin never passes through Module._load, so before this the
+    // child_process shim and the whole BLOCKED_MODULES list were unenforced for
+    // exactly the module format extensions actually use — while the install
+    // prompt still told the user those permissions were being checked.
+    patchEsmLoader(handler);
   }
   report.removedModules.push(...BLOCKED_MODULES);
 
@@ -153,6 +167,62 @@ function patchRealModuleLoader(
     if (result.handled) return result.value;
     return original(request, parent, isMain);
   };
+}
+
+/**
+ * Applies the same gate to ESM `import`.
+ *
+ * `module.registerHooks()` (Node 22.15+/24) runs synchronously on this thread,
+ * unlike `module.register()` which needs a worker and a message port. That
+ * matters here: the decision has to be made without a round trip, the same way
+ * the CommonJS patch does it.
+ *
+ * A blocked module throws from `resolve`, which surfaces to the extension as an
+ * import failure — the same loud, attributable error the require() path gives.
+ * `child_process` is redirected to a data: module that re-exports the shim off
+ * a global, because a hook cannot hand back a live object.
+ */
+function patchEsmLoader(
+  handler: (request: string) => { handled: true; value: unknown } | { handled: false },
+): void {
+  let mod: { registerHooks?: (hooks: unknown) => void };
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    mod = require('module');
+  } catch { return; }
+  if (typeof mod.registerHooks !== 'function') return;   // older runtime: CJS gate only
+
+  mod.registerHooks({
+    resolve(specifier: string, context: unknown, nextResolve: (s: string, c: unknown) => unknown) {
+      const bare = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
+      const result = handler(bare);           // throws for a blocked module
+      if (result.handled) {
+        // Route child_process to the shim. The shim itself is published on the
+        // global by installSandbox, since a resolve hook can only return a URL.
+        return { url: SHIMMED_CHILD_PROCESS_URL, shortCircuit: true };
+      }
+      return nextResolve(specifier, context);
+    },
+    load(url: string, context: unknown, nextLoad: (u: string, c: unknown) => unknown) {
+      if (url === SHIMMED_CHILD_PROCESS_URL) {
+        return {
+          format: 'module',
+          shortCircuit: true,
+          source:
+            'const s = globalThis.__nativelyChildProcessShim;\n'
+            + 'export const spawn = s.spawn;\n'
+            + 'export const exec = s.exec;\n'
+            + 'export const execSync = s.execSync;\n'
+            + 'export const execFile = s.execFile;\n'
+            + 'export const execFileSync = s.execFileSync;\n'
+            + 'export const spawnSync = s.spawnSync;\n'
+            + 'export const fork = s.fork;\n'
+            + 'export default s;\n',
+        };
+      }
+      return nextLoad(url, context);
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------

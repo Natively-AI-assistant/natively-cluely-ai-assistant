@@ -20,7 +20,7 @@ import { ExtensionManager, type InstallPrompt } from './ExtensionManager';
 import { getExtensionRegistry } from './ExtensionRegistry';
 import { ModelStore } from './ModelStore';
 import { HuggingFaceModelDownloader } from './HuggingFaceModelDownloader';
-import { processSingleton, resetProcessSingleton } from './singleton';
+import { peekProcessSingleton, processSingleton, resetProcessSingleton } from './singleton';
 
 const SINGLETON_KEY = 'ExtensionManagerApp';
 
@@ -171,7 +171,9 @@ export async function startExtensions(manager: ExtensionManager): Promise<void> 
  */
 export async function disposeExtensions(): Promise<void> {
   try {
-    const manager = processSingleton<ExtensionManager | null>(SINGLETON_KEY, () => null);
+    // peek, not processSingleton — see getExtensionManager(). Caching null here
+    // during teardown would also poison a subsequent wireExtensions().
+    const manager = peekProcessSingleton<ExtensionManager>(SINGLETON_KEY);
     if (manager) await manager.unloadAll();
   } catch (e) {
     console.warn('[extensions] teardown failed:', e);
@@ -180,10 +182,20 @@ export async function disposeExtensions(): Promise<void> {
   }
 }
 
-/** The wired manager, or null when wireExtensions() has not run. */
+/**
+ * The wired manager, or null when wireExtensions() has not run.
+ *
+ * READ-ONLY. It must not use processSingleton: that is
+ * `if (!has(key)) set(key, create())`, so a factory returning null STORES null.
+ * IPC handlers are registered (main.ts, initializeIpcHandlers) before
+ * wireExtensions runs, so a single extension IPC call in that window would have
+ * cached null under this key — and wireExtensions would then return that null
+ * forever, never constructing the manager, never attaching the rerank seam, and
+ * never logging anything. The whole subsystem would be silently absent.
+ */
 export function getExtensionManager(): ExtensionManager | null {
   try {
-    return processSingleton<ExtensionManager | null>(SINGLETON_KEY, () => null);
+    return peekProcessSingleton<ExtensionManager>(SINGLETON_KEY) ?? null;
   } catch {
     return null;
   }

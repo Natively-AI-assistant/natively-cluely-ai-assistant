@@ -35,6 +35,17 @@ export function processSingleton<T>(key: string, create: () => T): T {
 }
 
 /**
+ * Read the process-wide instance for `key` WITHOUT creating or storing one.
+ *
+ * `processSingleton` writes whatever its factory returns — including null — so
+ * using it as a read ("give me the manager, or null") permanently caches that
+ * null and makes every later create a no-op. Reads need to be reads.
+ */
+export function peekProcessSingleton<T>(key: string): T | undefined {
+  return store().get(key) as T | undefined;
+}
+
+/**
  * Replace the process-wide instance for `key` unconditionally.
  *
  * `processSingleton` ignores its factory when the key already exists, so
