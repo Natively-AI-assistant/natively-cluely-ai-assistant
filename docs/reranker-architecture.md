@@ -437,20 +437,22 @@ workaround: the architecture is standard and the ONNX graph is already traced,
 so the custom code (flash attention) was never going to run anyway. A
 `configPatch` is refused for any file carrying a declared sha256.
 
-**Jina v3.5 remains out of reach**, and the reason is now numerical rather than
-architectural. Its GGUF declares
+**Jina v3.5 remains out of reach**, and this is observable rather than inferred.
+Load its GGUF with the bundled llama.cpp and it prints:
 
 ```
-qwen3.attention.sliding_window          = 1024
-qwen3.attention.sliding_window_pattern  = array(28)     one entry per layer
+llama_model_loader: kv 73: qwen3.attention.sliding_window         u32          = 1024
+llama_model_loader: kv 74: qwen3.attention.sliding_window_pattern arr[bool,28] = [true, false, false, true, ...]
+print_info:  n_swa      = 0
+print_info:  is_swa_any = 0
 ```
 
-The bundled llama.cpp does not read that key. Support for it is llama.cpp PR
-**#26286** ("qwen3: add sliding-window attention pattern support"), opened
-2026-07-29 and **still open**. Until it lands, every layer that should be
-windowed is computed with a full mask, so anything read out of this file —
-logits, embeddings, hidden states — is simply wrong. That is not an API gap that
-a better binding would close.
+The loader **reads both keys and then discards them**. `n_swa = 0` /
+`is_swa_any = 0` means every one of the 28 layers runs with full attention,
+including the 17 the model marks for a 1024-token sliding window. Support for
+that key is llama.cpp PR **#26286**, opened 2026-07-29 and still open — but the
+two lines above are the direct evidence, and they say the numbers this build
+produces for this model are wrong before any question of API access arises.
 
 On top of that, the protocol is listwise: one pass over the query and every
 passage, scored from the hidden state at N+2 specific token positions.
