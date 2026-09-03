@@ -32,6 +32,15 @@ const WORKER_INIT_TIMEOUT_MS = 90_000;
 /** One rerank call. Generous relative to the measured 119ms, but bounded. */
 const WORKER_RERANK_TIMEOUT_MS = 20_000;
 
+/**
+ * Passages per call in 'yes-no' mode, where cost is linear in passages.
+ * Ten keeps a call near a second on the measured ~87ms/passage, leaving the
+ * 20s ceiling as a genuine backstop rather than something normal load can hit.
+ */
+const YES_NO_BATCH_SIZE = 10;
+/** Graceful-teardown budget. Short: a quit must not wait on a wedged worker. */
+const WORKER_DISPOSE_TIMEOUT_MS = 2_000;
+
 interface Pending {
   resolve: (value: any) => void;
   reject: (error: Error) => void;
@@ -40,11 +49,22 @@ interface Pending {
 
 export class GgufReranker implements RerankSeamPort {
   /**
-   * llama.cpp handles the whole pool in one call and batches internally, so the
-   * seam's default batch of 6 would just be four extra round trips through the
-   * worker for no benefit. See RerankSeamPort.batchSize.
+   * How many passages to take per call — and it depends on the scoring mode.
+   *
+   * 'rank' hands the whole pool to llama.cpp, which batches internally, so the
+   * seam's default of 6 would be four extra worker round trips for nothing.
+   *
+   * 'yes-no' is the opposite: the worker runs one FULL language-model forward
+   * pass per passage, sequentially. Measured on Qwen3-Reranker 0.6B: ~87ms each,
+   * so 30 passages is ~2.4s of the 20s call budget with short passages — and
+   * real retrieved chunks are far longer than the ones that was measured on.
+   * Chunking keeps any single call well inside the timeout, so a slow machine
+   * or a long pool degrades into more calls rather than one that blows the
+   * deadline and reranks nothing.
    */
-  readonly batchSize = Number.MAX_SAFE_INTEGER;
+  get batchSize(): number {
+    return this.scoring === 'yes-no' ? YES_NO_BATCH_SIZE : Number.MAX_SAFE_INTEGER;
+  }
 
   private worker: Worker | null = null;
   private nextRequestId = 1;
@@ -61,6 +81,12 @@ export class GgufReranker implements RerankSeamPort {
   constructor(
     private readonly modelPath: string,
     private readonly scoring: 'rank' | 'yes-no' = 'rank',
+    /**
+     * Worker factory. Production passes nothing; tests inject a stand-in so the
+     * teardown protocol can be exercised without a real llama.cpp thread.
+     */
+    private readonly spawnWorker: (workerPath: string) => Worker =
+      (workerPath) => new Worker(workerPath),
   ) {}
 
   /** Why the last load failed, for the UI. Null while healthy. */
@@ -85,7 +111,7 @@ export class GgufReranker implements RerankSeamPort {
 
   private getWorker(): Worker {
     if (this.worker) return this.worker;
-    const worker = new Worker(this.workerPath());
+    const worker = this.spawnWorker(this.workerPath());
 
     worker.on('message', (msg: any) => {
       const entry = this.pending.get(msg?.requestId);
@@ -111,7 +137,15 @@ export class GgufReranker implements RerankSeamPort {
   }
 
   private post<T>(message: Record<string, unknown>, timeoutMs: number): Promise<T> {
-    const worker = this.getWorker();
+    return this.postTo<T>(this.getWorker(), message, timeoutMs);
+  }
+
+  /**
+   * Send to an EXPLICIT worker. dispose() needs this: it has already cleared
+   * `this.worker`, and routing through getWorker() would spawn a replacement
+   * thread just to tell it to shut down.
+   */
+  private postTo<T>(worker: Worker, message: Record<string, unknown>, timeoutMs: number): Promise<T> {
     const requestId = this.nextRequestId++;
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -186,12 +220,38 @@ export class GgufReranker implements RerankSeamPort {
     }
   }
 
+  /**
+   * Release the model, then the thread.
+   *
+   * `terminate()` alone was not enough (2026-09-03). The worker owns llama.cpp
+   * handles — context, model, llama — whose own `dispose()` methods it exposes
+   * behind a `dispose` message, and killing the thread skipped every one of
+   * them: the mmap'd GGUF and the KV cache were reclaimed by thread death
+   * rather than through llama.cpp's API. Terminating also unwinds the thread
+   * wherever it stands, including inside a native `context.rankAll()` — the
+   * same shape as this repo's Nemotron teardown SIGABRT — and a rerank really
+   * can be in flight here, because switching models in Settings disposes the
+   * port from the same process that serves retrieval.
+   *
+   * So: ask first, wait briefly, then terminate regardless. The wait is bounded
+   * because a wedged worker must never be able to hold up a quit.
+   */
   async dispose(): Promise<void> {
     const worker = this.worker;
     this.worker = null;
     this.loadingPromise = null;
+    if (!worker) {
+      this.rejectAllPending(new Error('gguf reranker disposed'));
+      return;
+    }
+
+    try {
+      await this.postTo<void>(worker, { type: 'dispose' }, WORKER_DISPOSE_TIMEOUT_MS);
+    } catch {
+      // Timed out or errored — fall through to terminate. Losing the graceful
+      // release is strictly better than leaving the thread alive.
+    }
     this.rejectAllPending(new Error('gguf reranker disposed'));
-    if (!worker) return;
     try { await worker.terminate(); } catch { /* best effort */ }
   }
 }

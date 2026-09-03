@@ -61,10 +61,19 @@ describe('failing closed', () => {
     await port.dispose();
   });
 
-  test('it asks the seam for the whole pool', () => {
-    // llama.cpp batches internally, so the seam's default batch of 6 would be
-    // four extra worker round trips for nothing.
-    assert.ok(new GgufReranker('x').batchSize >= 30);
+  test('batch size follows the scoring mode, because their costs differ', () => {
+    // 'rank' hands the pool to llama.cpp, which batches internally — the seam's
+    // default of 6 would be four extra worker round trips for nothing.
+    assert.ok(new GgufReranker('x', 'rank').batchSize >= 30);
+
+    // 'yes-no' runs a FULL language-model forward pass per passage,
+    // sequentially (~87ms each measured on Qwen3 0.6B, with short passages).
+    // Handing it the whole 30-candidate pool in one call bets the 20s timeout
+    // on every one of them being fast; chunking degrades into more calls
+    // instead of one that blows the deadline and reranks nothing.
+    const yesNo = new GgufReranker('x', 'yes-no').batchSize;
+    assert.ok(yesNo > 0 && yesNo <= 15, `yes-no batch should be modest, got ${yesNo}`);
+    assert.ok(yesNo < new GgufReranker('x', 'rank').batchSize);
   });
 });
 

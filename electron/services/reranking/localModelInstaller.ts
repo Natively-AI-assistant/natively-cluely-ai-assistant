@@ -138,6 +138,8 @@ export interface InstallResult {
   error?: string;
   /** Digests computed during this install, including for files with no published hash. */
   digests?: Record<string, string>;
+  /** True when a `configPatch` rewrote config.json after download. */
+  configPatched?: boolean;
 }
 
 /**
@@ -175,9 +177,13 @@ export async function installCatalogModel(
 
     const destination = fileDestination(model, file, opts.rootOverride);
     // Already present and the right size — skip rather than re-fetch 597MB.
+    // A patched config.json no longer matches its declared size (it was
+    // rewritten), so it is matched on presence instead; otherwise every
+    // reinstall re-downloads and re-patches it forever.
+    const isPatchedConfig = Boolean(model.configPatch) && file.repoPath === 'config.json';
     try {
       const stat = fs.statSync(destination);
-      if (stat.isFile() && stat.size === file.bytes) {
+      if (stat.isFile() && (isPatchedConfig ? stat.size > 0 : stat.size === file.bytes)) {
         completedBytes += file.bytes;
         onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
         continue;
@@ -209,34 +215,34 @@ export async function installCatalogModel(
           onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
         },
         signal,
+        // Verified BEFORE the rename. Checking afterwards leaves the finished
+        // file sitting at its real path, full size, for as long as it takes to
+        // hash 600MB — during which statusOf() reports "installed" and a
+        // concurrent load would happily open it. A crash in that window leaves
+        // a corrupt model that looks fine forever.
+        async (partPath) => {
+          const digest = await sha256File(partPath);
+          digests[file.repoPath] = digest;
+          if (file.sha256 && digest.toLowerCase() !== file.sha256.toLowerCase()) {
+            return { ok: false, reason: `${file.repoPath} failed verification: expected ${file.sha256}, got ${digest}` };
+          }
+          return { ok: true };
+        },
       );
     } catch (e) {
       return { ok: false, modelId: id, error: e instanceof Error ? e.message : String(e) };
-    }
-
-    // Verify HERE rather than trusting the download. The downloader writes the
-    // bytes; deciding whether they are the right bytes stays with the caller,
-    // exactly as ModelStore does it for extensions.
-    const actual = await sha256File(destination);
-    digests[file.repoPath] = actual;
-    if (file.sha256 && actual.toLowerCase() !== file.sha256.toLowerCase()) {
-      // A file that fails its hash must not be left behind looking installed.
-      try { fs.rmSync(destination, { force: true }); } catch { /* best effort */ }
-      return {
-        ok: false,
-        modelId: id,
-        error: `${file.repoPath} failed verification: expected ${file.sha256}, got ${actual}`,
-      };
     }
 
     completedBytes = before + file.bytes;
     onProgress({ modelId: id, fraction: Math.min(1, completedBytes / total), currentFile: file.repoPath });
   }
 
+  // Records that the file was rewritten, WITHOUT destroying its digest: the one
+  // file whose bytes are deliberately mutated is the one whose hash a later
+  // integrity check most needs.
   const patched = applyConfigPatch(model, opts.rootOverride);
-  if (patched) digests['config.json'] = 'patched';
 
-  return { ok: true, modelId: id, digests };
+  return { ok: true, modelId: id, digests, configPatched: patched };
 }
 
 /**

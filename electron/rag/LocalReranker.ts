@@ -71,6 +71,23 @@ let startupPoisoned = false;
  */
 const DEFAULT_RERANKER_MODEL = 'Xenova/bge-reranker-base';
 
+/**
+ * `app.getPath('userData')` rebuilt by hand, for the paths where `app` is not
+ * available. Must stay identical to the installer's own fallback — the reader
+ * and the writer disagreeing is how a downloaded model becomes invisible.
+ */
+function fallbackUserDataDir(): string {
+    const home = process.env.HOME || process.env.USERPROFILE || process.cwd();
+    switch (process.platform) {
+        case 'darwin':
+            return path.join(home, 'Library', 'Application Support', 'natively');
+        case 'win32':
+            return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'natively');
+        default:
+            return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'natively');
+    }
+}
+
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_RERANK_TIMEOUT_MS = 15_000; // a single rerank() call (bounded candidate pool ~30)
 
@@ -95,9 +112,15 @@ class LocalRerankerImpl {
         // The env var stays FIRST so an experiment or a CI pin still wins over
         // stored settings, which is what every other model knob in this repo does.
         const selected = readSelectedLocalReranker();
-        this.modelId = (process.env.NATIVELY_RERANKER_MODEL || '').trim()
-            || selected?.modelId
-            || DEFAULT_RERANKER_MODEL;
+        // An env override replaces the SELECTION, not half of it. Taking modelId
+        // from the env and dtype from the stored selection can name a file that
+        // does not exist — an Ettin selection is fp32 (onnx/model.onnx) while
+        // bge-reranker-base is q8 (onnx/model_quantized.onnx), so mixing them
+        // asks for a variant the repo never shipped and latches loadFailed with
+        // a message that names neither the env var nor the selection.
+        const envModel = (process.env.NATIVELY_RERANKER_MODEL || '').trim();
+        const effective = envModel ? null : selected;
+        this.modelId = envModel || selected?.modelId || DEFAULT_RERANKER_MODEL;
         // Resolve the bundled model dir with the same candidate-search pattern
         // as LocalEmbeddingProvider.resolveModelPath — try packaged
         // resourcesPath/models, then app-relative resources/models (works for
@@ -119,7 +142,7 @@ class LocalRerankerImpl {
         // cannot be one cross-platform choice. Applying the q8 default to an
         // Ettin model asks transformers.js for a file that is not there.
         this.dtype = (process.env.NATIVELY_RERANKER_DTYPE || '').trim()
-            || selected?.dtype
+            || effective?.dtype
             || 'q8';
     }
 
@@ -135,13 +158,17 @@ class LocalRerankerImpl {
         // v2.7.x build.
         try {
             const userDataDir = app?.getPath?.('userData') || '';
-            // Fallback to HOME-based path when app.getPath isn't ready
-            // (e.g. ELECTRON_RUN_AS_NODE test/probe mode).
-            const homeLocalModels = process.env.HOME
-                ? path.join(process.env.HOME, 'Library/Application Support/natively/local-models')
-                : '';
+            // Fallback for when app.getPath isn't ready (ELECTRON_RUN_AS_NODE
+            // probes, tests, early boot). This MUST agree with the writer:
+            // localModelInstaller.fallbackUserDataDir() picks per platform, and
+            // hardcoding the macOS shape here sent Windows and Linux looking in
+            // `<home>/Library/Application Support/...` — a directory nothing
+            // ever writes, so a downloaded model was invisible to the reranker
+            // meant to load it, and resolveModelPath fell through to its
+            // unverified last resort. CLAUDE.md forbids exactly this.
+            const homeLocalModels = path.join(fallbackUserDataDir(), 'local-models');
             if (userDataDir) candidates.push(path.join(userDataDir, 'local-models'));
-            if (homeLocalModels && homeLocalModels !== path.join(userDataDir || '', 'local-models')) {
+            if (homeLocalModels !== path.join(userDataDir || '', 'local-models')) {
                 candidates.push(homeLocalModels);
             }
         } catch { /* app not ready yet */ }

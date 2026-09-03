@@ -14,19 +14,19 @@
  * directory is configuration, not a port — PROVIDED the model is a real
  * sequence-classification cross-encoder.
  *
- * THAT PROVISO IS LOAD-BEARING, and it is why the Ettin entries below are
- * marked unsupported. Their `onnx/model.onnx` was loaded with onnxruntime and
- * its graph output is `last_hidden_state`, not `logits`: the export is the
- * transformer BACKBONE only. The scoring head lives outside the graph, in the
- * repository's Sentence-Transformers module chain (`1_Pooling`, `2_Dense`,
- * `3_LayerNorm`, `4_Dense` as safetensors). transformers.js has no equivalent
- * module pipeline, so the model loads, runs, and returns no score — which is
- * exactly what happened: `output.logits` came back `undefined` and the rerank
- * fell through to "unexpected logits shape". Downloading it would produce a
- * button that cannot work.
+ * THAT PROVISO USED TO EXCLUDE THE ETTIN ENTRIES, and no longer does. Their
+ * `onnx/model.onnx` emits `last_hidden_state`, not `logits`: the export is the
+ * transformer BACKBONE only, and the scoring head lives outside the graph as a
+ * Sentence-Transformers module chain (`1_Pooling`, `2_Dense`, `3_LayerNorm`,
+ * `4_Dense`). `rag/sentenceTransformerHead.ts` applies it, so those entries are
+ * supported — but they are the reason a `logits` output is NOT a precondition
+ * for listing a model.
  *
- * Every model marked `supported: true` had its ONNX graph checked for a
- * `logits` output before it was listed.
+ * The precondition is narrower: every entry marked `supported: true` was
+ * actually RUN before it was listed, and its scoring route is declared —
+ * `logits` straight from the graph, an ST head applied on top, `rank` through
+ * llama.cpp, or `yes-no` token probabilities. An entry whose route is unknown
+ * does not get listed as supported.
  *
  * The GGUF entries run on llama.cpp, in-process, via node-llama-cpp. That
  * runtime only scores models with a ranking head: measured, bge-reranker-v2-m3

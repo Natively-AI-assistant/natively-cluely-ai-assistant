@@ -123,6 +123,7 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
     destination: string,
     onProgress: (fraction: number) => void,
     signal: AbortSignal,
+    verify?: (partPath: string) => Promise<{ ok: boolean; reason?: string }>,
   ): Promise<void> {
     if (model.source !== 'huggingface') {
       throw new Error(`unsupported model source ${JSON.stringify(model.source)}; this downloader handles huggingface only`);
@@ -195,6 +196,15 @@ export class HuggingFaceModelDownloader implements ModelDownloader {
         }, (contentTotal) => {
           if (contentTotal > 0) totalBytes = contentTotal;
         });
+
+        if (verify) {
+          const verdict = await verify(partPath);
+          if (!verdict.ok) {
+            try { fs.rmSync(partPath, { force: true }); } catch { /* best effort */ }
+            try { fs.rmSync(stampPath, { force: true }); } catch { /* best effort */ }
+            throw new Error(verdict.reason ?? 'downloaded file failed verification');
+          }
+        }
 
         // Rename only after the write stream has closed. On Windows an open
         // handle makes this fail with EBUSY/EPERM, and the failure looks like a
