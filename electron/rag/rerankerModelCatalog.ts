@@ -353,7 +353,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     revision: '884f7c67aa3ac24edb89064da8c7bfd03f4a90f5',
     supported: false,
     unsupportedReason:
-      'It is a listwise reranker: one forward pass over the query and every passage at once, scored from the hidden state at N+2 specific token positions. llama.cpp exposes pooled embeddings and logits, not per-token hidden states, so there is nothing to read those positions from.',
+      'Its GGUF needs per-layer sliding-window attention (it declares qwen3.attention.sliding_window_pattern, a 28-entry array) which the bundled llama.cpp does not implement yet — support is still an open pull request upstream. Until that lands, anything computed from this file would use the wrong attention mask. There is also no ONNX build of v3.5. Jina Reranker v2 Multilingual is available here and works today.',
     files: [
       { repoPath: 'jina-reranker-v3.5-Q4_K_M.gguf', bytes: 396709504, sha256: '40ec64a1b8c18a40a79bbd7b516115aec158791e56452e734c36c52a76c245a1' },
     ],

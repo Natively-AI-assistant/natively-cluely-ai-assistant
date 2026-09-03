@@ -437,32 +437,35 @@ workaround: the architecture is standard and the ONNX graph is already traced,
 so the custom code (flash attention) was never going to run anyway. A
 `configPatch` is refused for any file carrying a declared sha256.
 
-**Jina v3.5 remains out of reach**, and the reason is structural rather than a
-missing flag. v3.5 is a **listwise** reranker: its own `rerank.py` builds ONE prompt
-containing the query and every passage, marks positions with `<|rerank_token|>`
-and `<|embed_token|>`, runs `llama-embedding --output-token-ids` to emit
-**N+2 per-token hidden states** from that single pass, and scores each document
-as `cosine(projector(doc_hidden_i), projector(query_hidden_late))` using a
-separate `projector.safetensors`.
+**Jina v3.5 remains out of reach**, and the reason is now numerical rather than
+architectural. Its GGUF declares
 
-Probed rather than assumed: `createEmbeddingContext()` does load the GGUF and
-returns a 1024-dim vector (the hidden size). But that is ONE pooled vector per
-input, and the protocol needs the hidden state at N+2 chosen positions. Nothing
-in node-llama-cpp exposes per-token hidden states, and scoring each document in
-its own pass would not be the same model — a listwise representation is
-conditioned on the whole list.
+```
+qwen3.attention.sliding_window          = 1024
+qwen3.attention.sliding_window_pattern  = array(28)     one entry per layer
+```
 
-Both routes out were checked, and both are blocked upstream:
+The bundled llama.cpp does not read that key. Support for it is llama.cpp PR
+**#26286** ("qwen3: add sliding-window attention pattern support"), opened
+2026-07-29 and **still open**. Until it lands, every layer that should be
+windowed is computed with a full mask, so anything read out of this file —
+logits, embeddings, hidden states — is simply wrong. That is not an API gap that
+a better binding would close.
 
-- **Vendor the `llama-embedding` binary.** Its own script needs `--output-token-ids`
-  *and* a sliding-window fix for qwen3. That fix is llama.cpp PR **#26286**,
-  opened 2026-07-29 and **still open** — so this means maintaining a patched
-  fork, built and signed for every platform, re-done on each llama.cpp bump.
-- **Wait for the binding.** `ControlledEvaluateIndexOutput.next` exposes only
-  `token`, `confidence` and `probabilities` — vocabulary space. `pooling`
-  appears in node-llama-cpp solely as GGUF metadata being *read*, never as a
-  settable option, so llama.cpp cannot even be asked for unpooled per-token
-  output through it.
+On top of that, the protocol is listwise: one pass over the query and every
+passage, scored from the hidden state at N+2 specific token positions.
+`ControlledEvaluateIndexOutput` exposes only `token`, `confidence` and
+`probabilities` — vocabulary space — and `pooling` appears in node-llama-cpp
+solely as GGUF metadata being *read*, never as a settable option. `getEmbeddingFor`
+returns one pooled vector; probing it (`cos(T, T+T) = 0.977`, appended 0.928,
+prepended 0.952) shows mean-like pooling, not the last-token state the protocol
+needs.
+
+There is also **no ONNX build of v3.5 anywhere** — only GGUF and MLX.
+
+So both routes are blocked, and the order matters: even if the binding exposed
+per-token hidden states tomorrow, #26286 would still have to land first for the
+numbers to mean anything.
 
 Its entry says this, and the installer refuses it before spending 397 MB.
 
