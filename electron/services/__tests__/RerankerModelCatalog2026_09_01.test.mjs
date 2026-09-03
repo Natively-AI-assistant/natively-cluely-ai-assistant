@@ -190,24 +190,17 @@ test('a non-commercial model is flagged and requires acknowledgement', () => {
 
 // ── install refusals ──────────────────────────────────────────────────────
 
-test('installing an unsupported model is refused before any download', async () => {
-  // Driven through a synthetic entry rather than a real id: every catalogue
-  // entry is supported today, and pointing this at one would start a real
-  // multi-hundred-megabyte download instead of testing the refusal.
-  const root = tmp();
-  const unsupported = RERANKER_MODEL_CATALOG.find(m => !m.supported);
-  if (!unsupported) return;   // nothing unsupported to refuse
-  const res = await installCatalogModel(unsupported.id, () => {}, new AbortController().signal, { rootOverride: root });
-  assert.equal(res.ok, false);
-  assert.match(res.error, /scoring head|ranking head|hidden state|sliding-window|not supported/i);
-});
-
-test('an unsupported GGUF model is refused before any download', async () => {
-  // jina/qwen3 GGUFs are qwen3-architecture generative models: llama.cpp
-  // refuses to rank them, so downloading ~400MB would buy nothing.
-  const res = await installCatalogModel('jina-reranker-v3.5-q4km', () => {}, new AbortController().signal, { rootOverride: tmp() });
-  assert.equal(res.ok, false);
-  assert.match(res.error, /ranking head|hidden state|sliding-window|not supported/i);
+test('an unsupported model may still be DOWNLOADED — that is the user\'s call', () => {
+  // `supported` answers "can Natively score this yet", which is not the same
+  // question as "may the user have the file". Downloading is an explicit act,
+  // the card says plainly that the model is not usable, and activation still
+  // refuses it. Refusing the download as well was substituting a judgement
+  // about someone else's disk.
+  const unsupported = RERANKER_MODEL_CATALOG.filter(m => !m.supported);
+  for (const m of unsupported) {
+    assert.equal(m.activatable, undefined, 'activation is gated by supported, not by a second flag');
+    assert.ok(m.unsupportedReason, `${m.id} must still explain why it cannot be used`);
+  }
 });
 
 test('an unknown id is refused', async () => {
