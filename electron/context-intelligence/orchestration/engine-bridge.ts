@@ -27,6 +27,16 @@ import {
 import type { AnswerSurface, EvidenceScope } from '../contracts/types';
 import type { ProviderDataScope } from '../../llm/ProviderRouter';
 
+/**
+ * Credential-scrub a [V3] trace payload before stringifying. Keeps every
+ * diagnostic field (question, plan, evidence identity) and strips only
+ * credential-shaped keys. See utils/redactForLog.redactSecretsOnly.
+ */
+function redactTracePayload<T>(payload: T): unknown {
+  try { return require('../../utils/redactForLog').redactSecretsOnly(payload); } catch { return payload; }
+}
+
+
 export interface BridgeInput {
   surface: AnswerSurface;
   question: string;
@@ -320,7 +330,10 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       const retrievedSources = [...new Map(
         acc.map((e) => [`${e.sourceType}:${e.sourceId}`, { role: e.sourceType, id: e.sourceId }]),
       ).values()];
-      console.log('[V3]', JSON.stringify({
+      // Pre-stringified, so redactForLog only sees a string and applies the
+      // free-text credential patterns — no key-level scrubbing. Scrub at the
+      // source so a future field carrying a key cannot land verbatim.
+      console.log('[V3]', JSON.stringify(redactTracePayload({
         surface: input.surface,
         ...(input.pathTag ? { tag: input.pathTag } : {}),
         mode: modeId,
@@ -371,7 +384,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           .some((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED'),
         propertyMatched: (result.trace.claimPlan ?? [])
           .some((c) => c.support === 'DIRECT_EVIDENCE'),
-      }));
+      })));
     } catch { /* observability must never break an answer */ }
 
     // ── Context Intelligence debug collector (2026-08-01) ───────────────────

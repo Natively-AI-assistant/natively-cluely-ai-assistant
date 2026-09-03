@@ -64,6 +64,20 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
 import type { PromptAssemblyResult } from '../premium/electron/knowledge/ContextAssembler';
 
+/**
+ * Credential-scrub a trace payload before it is stringified.
+ *
+ * [TRACE:ANSWER] hands redactForLog a pre-stringified STRING, so the key-level
+ * redactor never sees it — only the free-text credential patterns apply. That
+ * is fine for the fields chosen here, but it means a future field carrying a
+ * key would land in the log verbatim. Scrubbing at the source closes that
+ * without costing the answer fidelity the line exists to provide.
+ */
+function redactSecretsOnlyForTrace<T>(payload: T): unknown {
+    try { return require('./utils/redactForLog').redactSecretsOnly(payload); } catch { return payload; }
+}
+
+
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
 
@@ -5224,8 +5238,15 @@ export class IntelligenceEngine extends EventEmitter {
             // (the shadow-session launcher sets it; default off elsewhere so
             // normal runs never write answer text to disk).
             try {
-                if (process.env.NATIVELY_TRACE_ANSWERS === '1') {
-                    console.log('[TRACE:ANSWER] wta_answer', JSON.stringify({
+                // Env var OR the Settings > General > Advanced level, so this
+                // is reachable without a terminal. require() rather than a
+                // static import: IntelligenceEngine is loaded on paths where
+                // a hard dependency on the flag module would widen the boot
+                // graph, and a missing module must never break answering.
+                let fullDebug = false;
+                try { fullDebug = require('./verboseLog').isVerboseLogging(); } catch { /* optional */ }
+                if (process.env.NATIVELY_TRACE_ANSWERS === '1' || fullDebug) {
+                    console.log('[TRACE:ANSWER] wta_answer', JSON.stringify(redactSecretsOnlyForTrace({
                         question: question || extractedQuestion.latestQuestion || '',
                         questionConfidence: extractedQuestion.confidence,
                         answerType: answerPlan.answerType,
@@ -5237,7 +5258,7 @@ export class IntelligenceEngine extends EventEmitter {
                         candidateProfileChars: (candidateProfile || '').length,
                         answerChars: finalWtaAnswer.length,
                         answer: finalWtaAnswer,
-                    }));
+                    })));
                 }
             } catch { /* logging only */ }
             try {

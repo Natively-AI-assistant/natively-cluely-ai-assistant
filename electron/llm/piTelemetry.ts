@@ -160,7 +160,14 @@ class PiTelemetry {
     if (this.ring.length > RING_MAX) this.ring.shift();
     try { this.sink?.(rec); } catch { /* sink must never break the hot path */ }
     let debug = false;
+    // Env var OR the Settings > General > Advanced level ('full'), so the
+    // buffered ring reaches the log without a terminal. require() keeps this
+    // module free of a static dependency — it is imported from hot paths and
+    // must stay side-effect-free if the flag module is unavailable.
     try { debug = (process.env.NATIVELY_PI_TELEMETRY_DEBUG || '').trim().toLowerCase() === 'true'; } catch { /* ignore */ }
+    if (!debug) {
+      try { debug = require('../verboseLog').isVerboseLogging(); } catch { /* optional */ }
+    }
     if (debug) {
       // eslint-disable-next-line no-console
       console.log(`[piTelemetry] ${event}`, rec.data);

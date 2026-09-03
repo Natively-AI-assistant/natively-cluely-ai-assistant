@@ -21,6 +21,10 @@ export interface AppSettings {
     // context-intelligence/debug/debug-config.ts, which reads this value
     // through the bound reader; this store only persists the UI choice.
     contextDebugLevel?: 'off' | 'standard' | 'verbose';
+    // What contextDebugLevel was before verbose logging raised it to
+    // 'verbose'. Persisted so the restore survives a restart — see
+    // AppState.setVerboseLogging.
+    contextDebugLevelBeforeVerbose?: 'off' | 'standard' | 'verbose';
     // Lets the user summon the overlay as a standalone AI chatbox (no audio
     // capture, no STT, no meeting record) via the toggle-visibility hotkey
     // while idle. Off by default — the hotkey's existing behavior is unchanged
