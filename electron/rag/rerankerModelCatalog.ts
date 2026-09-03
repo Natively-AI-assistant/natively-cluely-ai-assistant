@@ -122,7 +122,7 @@ export interface LocalRerankerModel {
    * against "no" — Qwen3-Reranker's own protocol. Getting this wrong is not a
    * degraded score, it is a refusal or a meaningless one.
    */
-  scoring?: 'rank' | 'yes-no';
+  scoring?: 'rank' | 'yes-no' | 'listwise';
   /** The extension that can actually execute this file. */
   extensionId?: string;
   /** Named so the UI can say what is missing rather than just failing. */
@@ -344,32 +344,24 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     note: 'Multilingual, and the strongest local reranker measured here. Runs on llama.cpp.',
   },
 
-  // ── GGUF: downloadable, but with no runtime in this build ───────────────
-  // Core DOES run GGUF in-process now (see GgufReranker). v3.5 is still out
-  // of reach, and not for a reason Natively can fix — see unsupportedReason.
+  // ── GGUF: listwise, scored by Core itself ───────────────────────────────
   {
     id: 'jina-reranker-v3.5-q4km',
     name: 'Jina Reranker v3.5',
     runtime: 'gguf',
     repo: 'jinaai/jina-reranker-v3.5-GGUF',
     revision: '884f7c67aa3ac24edb89064da8c7bfd03f4a90f5',
-    supported: false,
-    // Not our measurement alone, and not a judgement call: Jina's own GGUF
-    // README requires a FORKED llama-embedding, and rerank.py:6 names the three
-    // patches it needs. Two of them — per-token hidden states and the
-    // non-causal encoder mode — are not even the subject of the open PR.
-    unsupportedReason:
-      'Downloadable, but nothing in this build can score it. Jina\u2019s own instructions require a forked llama-embedding '
-      + '(github.com/littlewine/llama.cpp) carrying three patches upstream llama.cpp does not have: --output-token-ids for '
-      + 'per-token hidden states, a non-causal encoder mode, and a sliding-window fix \u2014 the model marks 16 of its 28 '
-      + 'layers as sliding_attention and the bundled runtime reads that pattern and then discards it (open PR '
-      + 'ggml-org/llama.cpp#26286, untouched since 2026-07-31). The scoring head is not in the GGUF either; it is the '
-      + 'separate projector.safetensors that downloads alongside it. To USE v3.5 today, choose Jina AI as your reranker '
-      + 'provider above and add a Jina API key \u2014 the hosted service runs this exact model.',
-    // The .gguf ALONE cannot score anything with any runtime: the scoring MLP
-    // is deliberately not baked into it, and rerank.py needs the tokenizer for
-    // its block splitting. Shipping only the weights would be an incomplete
-    // artifact wearing the model's name.
+    supported: true,
+    // Listwise, not a cross-encoder: the query and every passage go through in
+    // one pass and the score is a cosine between projected hidden states. See
+    // jinaListwiseRerank.ts for the protocol, and for why the block budget of
+    // 1024 tokens is a correctness boundary rather than a tuning knob.
+    scoring: 'listwise',
+    // Three files, all required. The scoring MLP is deliberately NOT baked
+    // into the GGUF — Jina say so in their README — so the .gguf alone can
+    // never score anything. tokenizer.json comes along because the reference
+    // driver uses it; Core tokenises through llama.cpp's own vocabulary, and
+    // the block planner cross-checks the special-token positions it finds.
     files: [
       { repoPath: 'jina-reranker-v3.5-Q4_K_M.gguf', bytes: 396709504, sha256: '40ec64a1b8c18a40a79bbd7b516115aec158791e56452e734c36c52a76c245a1' },
       { repoPath: 'projector.safetensors', bytes: 1573048, sha256: 'b14c3d97315ca33490e630218c821640f183180fd971c5c3242f5b81aadcedf9' },

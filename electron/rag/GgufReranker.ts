@@ -6,15 +6,17 @@
  *
  * WHAT THIS CAN AND CANNOT RUN — measured, not assumed:
  *
- *   bge-reranker-v2-m3   arch bert    -> works, 119ms for 5 passages
- *   jina-reranker-v3.5   arch qwen3   -> llama.cpp refuses: no ranking head
- *   qwen3-reranker-0.6b  arch qwen3   -> same refusal
+ *   bge-reranker-v2-m3   arch bert    -> llama.cpp's ranking path, 119ms for 5
+ *   qwen3-reranker-0.6b  arch qwen3   -> no ranking head; yes/no token scoring
+ *   jina-reranker-v3.5   arch qwen3   -> no ranking head; LISTWISE, scored from
+ *                                        per-position hidden states through a
+ *                                        projector that is not in the GGUF
  *
- * llama.cpp's ranking path needs a model with a classification head and RANK
- * pooling. The two qwen3-architecture "rerankers" are generative models scored
- * a completely different way (Jina's own rerank.py needs a patched llama.cpp,
- * per-token hidden states and a separate projector). Their catalogue entries
- * say so rather than offering a download that cannot score.
+ * llama.cpp's ranking path needs a classification head and RANK pooling. The
+ * two qwen3-architecture "rerankers" have neither, and are not scored the same
+ * way as each other either — see qwenRerankPrompt.ts and jinaListwiseRerank.ts.
+ * The mode is a property of the model, declared in the catalogue; guessing it
+ * yields a refusal or a meaningless number, never a degraded score.
  *
  * Inference runs in a WORKER, not the main thread. That is the same rule the
  * ONNX reranker follows after the 2026-07-05 SIGTRAP crashes: llama.cpp is a
@@ -63,6 +65,10 @@ export class GgufReranker implements RerankSeamPort {
    * deadline and reranks nothing.
    */
   get batchSize(): number {
+    // 'listwise' is emphatically NOT chunked here: the model compares passages
+    // against each other in one pass, so slicing the pool at this seam would
+    // change the answer. jinaListwiseRerank.planBlocks does its own splitting,
+    // against a budget that is a correctness boundary rather than a batch size.
     return this.scoring === 'yes-no' ? YES_NO_BATCH_SIZE : Number.MAX_SAFE_INTEGER;
   }
 
@@ -76,11 +82,18 @@ export class GgufReranker implements RerankSeamPort {
   /**
    * @param scoring 'rank' for a model with a ranking head (llama.cpp scores it
    *   directly); 'yes-no' for a causal LM like Qwen3-Reranker, which has no
-   *   such head and is scored by the probability it puts on "yes" vs "no".
+   *   such head and is scored by the probability it puts on "yes" vs "no";
+   *   'listwise' for jina-reranker-v3.5, whose score is a cosine between
+   *   projected hidden states — see jinaListwiseRerank.ts.
+   * @param projectorPath required for 'listwise' and meaningless otherwise:
+   *   v3.5's scoring MLP is a separate safetensors file, by Jina's design.
    */
   constructor(
     private readonly modelPath: string,
-    private readonly scoring: 'rank' | 'yes-no' = 'rank',
+    private readonly scoring: 'rank' | 'yes-no' | 'listwise' = 'rank',
+    private readonly projectorPath: string | null = null,
+    /** 'listwise' only: tokens per block. See jinaListwiseRerank.ts. */
+    private readonly blockBudget: number | null = null,
     /**
      * Worker factory. Production passes nothing; tests inject a stand-in so the
      * teardown protocol can be exercised without a real llama.cpp thread.
@@ -153,7 +166,11 @@ export class GgufReranker implements RerankSeamPort {
         reject(new Error(`gguf reranker timed out after ${timeoutMs}ms`));
       }, timeoutMs);
       this.pending.set(requestId, { resolve, reject, timer });
-      worker.postMessage({ ...message, requestId, modelPath: this.modelPath, scoring: this.scoring });
+      worker.postMessage({
+        ...message, requestId,
+        modelPath: this.modelPath, scoring: this.scoring, projectorPath: this.projectorPath,
+        blockBudget: this.blockBudget,
+      });
     });
   }
 
