@@ -225,35 +225,39 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     );
 };
 
+
 /**
- * Placeholder while the panel loads, matching Settings > Embeddings.
+ * What the panel shows before the first IPC reply lands.
  *
- * The panel used to replace itself with a "Loading reranker settings…" card,
- * which no other settings tab does — AI Providers has no loading state at all
- * and Embeddings renders its real layout with these. Swapping the whole page
- * for a spinner reads as a different screen rather than as this one arriving.
+ * AI Providers renders immediately and fills in; this does the same. The
+ * alternative — gating the whole panel on a status call — is what made this tab
+ * sit on skeletons whenever that call was slow, and the call turned out to be
+ * loading a model.
+ *
+ * Every value here is the conservative truth for an unconfigured install, so a
+ * first paint that is replaced a moment later never says anything false.
  */
-const SkeletonProviderCard: React.FC = () => (
-    <div className="aip-card aip-provider" aria-hidden="true">
-        <div className="aip-provider-head">
-            <span className="aip-skeleton" style={{ width: 26, height: 26, borderRadius: 8 }} />
-            <span className="aip-skeleton" style={{ width: 84, height: 10 }} />
-            <span className="aip-skeleton ml-auto" style={{ width: 62, height: 10 }} />
-        </div>
-        <div className="aip-provider-row">
-            <span className="aip-skeleton" style={{ flex: '1 1 240px', height: 'var(--aip-h-ctl)' }} />
-        </div>
-    </div>
-);
+const INITIAL_STATUS: RerankerStatus = {
+    provider: 'local',
+    openrouterModel: null,
+    candidateCount: null,
+    fallbackToLocal: false,
+    hasApiKey: false,
+    eligible: false,
+    ineligibleReason: null,
+    ineligibleMessage: null,
+    builtIn: { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true },
+    effective: { kind: 'local', id: 'bge-reranker-base' },
+    lastTest: null,
+};
 
 export const RerankerSettings: React.FC = () => {
     const t = useT();
     const aipTheme = useResolvedTheme();
 
-    const [status, setStatus] = useState<RerankerStatus | null>(null);
+    const [status, setStatus] = useState<RerankerStatus>(INITIAL_STATUS);
     const [catalog, setCatalog] = useState<CatalogModel[]>([]);
     const [catalogStale, setCatalogStale] = useState(false);
-    const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [keyDraft, setKeyDraft] = useState('');
     const [savingKey, setSavingKey] = useState(false);
@@ -324,9 +328,10 @@ export const RerankerSettings: React.FC = () => {
             try {
                 await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
             } catch (e) {
+                // safeHandle does not wrap handler bodies, so a throwing IPC
+                // handler rejects here. The panel is already on screen; this
+                // only adds the strip that explains why parts of it are empty.
                 if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e));
-            } finally {
-                if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
@@ -531,69 +536,10 @@ export const RerankerSettings: React.FC = () => {
         return !catalog.some(m => m.id === id);
     }, [status?.openrouterModel, catalog]);
 
-    // Loading and failure are DIFFERENT states. A failure is actionable and gets
-    // a message plus a retry; loading gets the real layout with placeholders,
-    // the way Settings > Embeddings does. Replacing the page with a spinner
-    // made this the only tab that flashes a different screen on open.
-    if (loadError || (!loading && !status)) {
-        return (
-            <div className="aip-root space-y-5 pb-10" data-theme={aipTheme}>
-                <header className="space-y-1">
-                    <h3 className="aip-title">{t('Reranker')}</h3>
-                </header>
-                <div className="aip-card p-5 flex items-center gap-2">
-                    <AlertCircle size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-                    <span className="aip-muted text-xs flex-1">
-                        {loadError ?? t('Could not read the reranker settings.')}
-                    </span>
-                            <button
-                                type="button"
-                                className="aip-btn"
-                                data-size="sm"
-                                onClick={() => {
-                                    setLoadError(null);
-                                    setLoading(true);
-                                    void (async () => {
-                                        try {
-                                            await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
-                                        } catch (e) {
-                                            setLoadError(e instanceof Error ? e.message : String(e));
-                                        } finally {
-                                            setLoading(false);
-                                        }
-                                    })();
-                                }}
-                            >
-                                {t('Try again')}
-                            </button>
-                </div>
-                <style>{AIP_CSS}</style>
-            </div>
-        );
-    }
-
-    if (!status) {
-        return (
-            <div className="aip-root space-y-5 pb-10" data-theme={aipTheme}>
-                <header className="space-y-1">
-                    <h3 className="aip-title">{t('Reranker')}</h3>
-                    <p className="aip-subtitle">
-                        {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
-                    </p>
-                </header>
-                <div
-                    className="aip-cq space-y-4"
-                    role="status"
-                    aria-label={t('Loading rerankers')}
-                    data-stagger-skip
-                >
-                    <SkeletonProviderCard />
-                    <SkeletonProviderCard />
-                </div>
-                <style>{AIP_CSS}</style>
-            </div>
-        );
-    }
+    // No loading gate, and no skeleton gate. AI Providers renders immediately
+    // and fills in as its data lands; this now does the same. A failure is the
+    // one thing worth interrupting for, and it is shown as a strip ABOVE the
+    // panel rather than instead of it — the rest of the settings still work.
 
     const saveKey = async () => {
         if (!keyDraft.trim()) return;
@@ -785,6 +731,30 @@ export const RerankerSettings: React.FC = () => {
                     {t('After Natively searches your documents, the reranker decides which passages actually answer the question. It is chosen separately from your embedding model and your AI model.')}
                 </p>
             </header>
+
+            {loadError && (
+                <div className="aip-card p-3 flex items-start gap-2" role="status">
+                    <AlertCircle size={13} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                    <span className="aip-muted text-xs flex-1">{loadError}</span>
+                    <button
+                        type="button"
+                        className="aip-btn"
+                        data-size="sm"
+                        onClick={() => {
+                            setLoadError(null);
+                            void (async () => {
+                                try {
+                                    await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
+                                } catch (e) {
+                                    setLoadError(e instanceof Error ? e.message : String(e));
+                                }
+                            })();
+                        }}
+                    >
+                        {t('Try again')}
+                    </button>
+                </div>
+            )}
 
             {/* Active Reranker Hero Card — matching EmbeddingSettings */}
             <div className="aip-card p-5">

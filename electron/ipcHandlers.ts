@@ -7037,8 +7037,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       const local = getLocalReranker();
       builtIn = {
         ...builtIn,
+        // isCached() is an fs.existsSync check. isAvailable() is NOT a
+        // question — it calls ensureLoaded(), so asking it here made opening
+        // this settings tab load the ONNX model, and on a first run download
+        // it. The panel then sat on its skeletons until that finished.
         cached: local ? await local.isCached?.() : false,
-        available: local ? await local.isAvailable?.() : false,
+        available: local ? Boolean(local.isLoaded?.()) : false,
       };
     } catch { /* leave the defaults; an unreadable local reranker is not an error here */ }
 
