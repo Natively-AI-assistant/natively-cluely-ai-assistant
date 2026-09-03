@@ -159,11 +159,17 @@ describe('the cap covers EVERY public streaming entry point', () => {
   test('the chunk is yielded before the cap is evaluated', () => {
     // Checking BEFORE yielding would drop a chunk the user should have seen;
     // the overshoot is bounded by one chunk, which is the right trade.
+    // Matched by SHAPE, not by the exact argument name. 2026-09-03 added the
+    // StreamingReasoningFilter ahead of the dash reducer, so the yield became
+    // `if (visible) yield dashReducer.reduce(visible);` — the ordering this
+    // test exists to guard was untouched, but a literal `reduce(chunk)` anchor
+    // reported it as a regression. Widened too: the window must clear the
+    // filter's explanatory comment block.
     const start = src.indexOf('for await (const chunk of this._streamChatInner');
-    const body = src.slice(start, start + 900);
-    const yieldIdx = body.indexOf('yield dashReducer.reduce(chunk);');
+    const body = src.slice(start, start + 2000);
+    const yieldIdx = body.search(/yield dashReducer\.reduce\(/);
     const capIdx = body.indexOf('emittedChars > outputCeiling');
-    assert.ok(yieldIdx > 0 && capIdx > 0);
+    assert.ok(yieldIdx > 0 && capIdx > 0, 'could not locate the yield and the cap check');
     assert.ok(yieldIdx < capIdx, 'the chunk must be yielded before the cap check');
   });
 });
