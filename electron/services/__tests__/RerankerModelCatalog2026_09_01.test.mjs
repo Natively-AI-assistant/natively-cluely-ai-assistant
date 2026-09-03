@@ -149,7 +149,7 @@ test('a supported GGUF entry is runnable by Core, not by an extension', () => {
   }
 });
 
-test('an unsupported GGUF entry explains itself instead of naming a workaround', () => {
+test('an unsupported GGUF entry explains itself and points at a route that works', () => {
   // Both jina and qwen3 are qwen3-architecture generative models that llama.cpp
   // refuses to RANK. Qwen3 is now scored the other way (yes/no token
   // probabilities, see qwenRerankPrompt.ts) and is supported; Jina is not,

@@ -35,7 +35,11 @@ test('an authorised spawn works AFTER the sandbox is installed', () => {
   const sandboxPath = path.join(repoRoot, 'dist-electron/electron/services/extensions/host/sandbox.js');
   const script = `
     const { installSandbox } = require(${JSON.stringify(sandboxPath)});
-    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: ['node'], brokerFetch: async () => { throw new Error('unused'); } });
+    // The authorised binary is whatever THIS runner is, not the literal
+    // "node": npm test runs these under ELECTRON_RUN_AS_NODE=1 electron, so
+    // process.execPath is Electron and a hardcoded 'node' would refuse the one
+    // spawn the test needs to succeed. normalizeBinary() takes the basename.
+    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: [${JSON.stringify(path.basename(process.execPath))}], brokerFetch: async () => { throw new Error('unused'); } });
     const cp = require('child_process');
     const child = cp.spawn(process.execPath, ['-e', 'process.exit(0)']);
     if (typeof child.pid !== 'number') { console.log('NO_PID'); process.exit(1); }
@@ -78,7 +82,11 @@ test('an ESM import of child_process still goes through the shim', () => {
   const sandboxPath = path.join(repoRoot, 'dist-electron/electron/services/extensions/host/sandbox.js');
   const script = `
     import { installSandbox } from ${JSON.stringify(pathToFileURL(sandboxPath).href)};
-    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: ['node'], brokerFetch: async () => { throw new Error('unused'); } });
+    // The authorised binary is whatever THIS runner is, not the literal
+    // "node": npm test runs these under ELECTRON_RUN_AS_NODE=1 electron, so
+    // process.execPath is Electron and a hardcoded 'node' would refuse the one
+    // spawn the test needs to succeed. normalizeBinary() takes the basename.
+    installSandbox({ granted: ['process.spawn'], preauthorizedBinaries: [${JSON.stringify(path.basename(process.execPath))}], brokerFetch: async () => { throw new Error('unused'); } });
     const cp = await import('child_process');
     try { cp.spawn('curl', []); console.log('LEAKED'); }
     catch (e) { console.log(/allowedBinaries/.test(e.message) ? 'REFUSED' : 'OTHER'); }

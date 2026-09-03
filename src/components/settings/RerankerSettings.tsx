@@ -42,6 +42,9 @@ interface CatalogModel {
 interface RerankerStatus {
     provider: RerankerProvider;
     openrouterModel: string | null;
+    jinaModel: string | null;
+    /** The model id for whichever hosted provider is selected. */
+    hostedModel: string | null;
     candidateCount: number | null;
     fallbackToLocal: boolean;
     hasApiKey: boolean;
@@ -240,6 +243,8 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
 const INITIAL_STATUS: RerankerStatus = {
     provider: 'local',
     openrouterModel: null,
+    jinaModel: null,
+    hostedModel: null,
     candidateCount: null,
     fallbackToLocal: false,
     hasApiKey: false,
@@ -259,9 +264,12 @@ export const RerankerSettings: React.FC = () => {
     const [catalog, setCatalog] = useState<CatalogModel[]>([]);
     const [catalogStale, setCatalogStale] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [keyDraft, setKeyDraft] = useState('');
-    const [savingKey, setSavingKey] = useState(false);
-    const [savedKey, setSavedKey] = useState(false);
+    // Keyed by provider id, not a single draft: OpenRouter and Jina each have
+    // their own credential, and one shared draft would let a keystroke meant
+    // for one card be saved into the other.
+    const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+    const [savingKeyFor, setSavingKeyFor] = useState<string | null>(null);
+    const [savedKeyFor, setSavedKeyFor] = useState<string | null>(null);
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<TestResult | null>(null);
     const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
@@ -292,9 +300,20 @@ export const RerankerSettings: React.FC = () => {
         if (next) setStatus(next as RerankerStatus);
     }, []);
 
+    // Every hosted card is rendered from this list, so an empty list means no
+    // key field at all — the failure that made Jina v3.5 unreachable. If
+    // discovery fails, fall back to the one provider whose shape this panel
+    // has always known, rather than rendering nothing.
     const loadHostedProviders = useCallback(async () => {
-        const res = await window.electronAPI.getRerankerHostedProviders?.();
-        if (res?.providers) setHostedProviders(res.providers as never);
+        try {
+            const res = await window.electronAPI.getRerankerHostedProviders?.();
+            if (res?.providers?.length) { setHostedProviders(res.providers as never); return; }
+        } catch { /* fall through to the built-in descriptor */ }
+        setHostedProviders(cur => (cur.length ? cur : [{
+            id: 'openrouter', name: 'OpenRouter',
+            keyUrl: 'https://openrouter.ai/keys', keyPlaceholder: 'sk-or-v1-…',
+            staticCatalogue: false, hasApiKey: false, models: [],
+        }]));
     }, []);
 
     const loadCatalogModels = useCallback(async () => {
@@ -564,38 +583,54 @@ export const RerankerSettings: React.FC = () => {
     // one thing worth interrupting for, and it is shown as a strip ABOVE the
     // panel rather than instead of it — the rest of the settings still work.
 
-    const saveKey = async () => {
-        if (!keyDraft.trim()) return;
-        setSavingKey(true);
-        setSavedKey(false);
+    // Both writes go through the provider-generic channel. OpenRouter's own
+    // catalogue is discovered with the key, so it is refetched after a save;
+    // a static catalogue has nothing to refetch.
+    const saveKey = async (providerId: string, staticCatalogue: boolean) => {
+        const draft = (keyDrafts[providerId] ?? '').trim();
+        if (!draft) return;
+        setSavingKeyFor(providerId);
+        setSavedKeyFor(null);
         setInstallError(null);
         try {
-            const res = await window.electronAPI.setRerankerOpenRouterKey?.(keyDraft.trim());
+            const res = await window.electronAPI.setRerankerHostedKey?.(providerId, draft);
             if (res && res.success === false) {
                 setInstallError(res.message || res.error || t('Could not save the key.'));
                 return;
             }
-            setSavedKey(true);
-            setKeyDraft('');
-            setTimeout(() => setSavedKey(false), 3000);
-            await Promise.all([refreshStatus(), loadCatalog(true)]);
+            setSavedKeyFor(providerId);
+            setKeyDrafts(prev => ({ ...prev, [providerId]: '' }));
+            setTimeout(() => setSavedKeyFor(cur => (cur === providerId ? null : cur)), 3000);
+            await Promise.all([
+                refreshStatus(),
+                loadHostedProviders(),
+                ...(staticCatalogue ? [] : [loadCatalog(true)]),
+            ]);
         } finally {
-            setSavingKey(false);
+            setSavingKeyFor(null);
         }
     };
 
-    const removeKey = async () => {
-        setSavingKey(true);
+    const removeKey = async (providerId: string, staticCatalogue: boolean) => {
+        setSavingKeyFor(providerId);
         setInstallError(null);
         try {
-            await window.electronAPI.setRerankerOpenRouterKey?.('');
-            setKeyDraft('');
-            await Promise.all([refreshStatus(), loadCatalog(true)]);
+            await window.electronAPI.setRerankerHostedKey?.(providerId, '');
+            setKeyDrafts(prev => ({ ...prev, [providerId]: '' }));
+            await Promise.all([
+                refreshStatus(),
+                loadHostedProviders(),
+                ...(staticCatalogue ? [] : [loadCatalog(true)]),
+            ]);
         } finally {
-            setSavingKey(false);
+            setSavingKeyFor(null);
         }
     };
 
+    // The main process tests whichever provider is SELECTED — it does not take
+    // one as an argument, and it must not, because probing a provider would
+    // otherwise mean quietly switching to it. So Test is offered only on the
+    // card that is already active.
     const runTest = async () => {
         setTesting(true);
         setTestResult(null);
@@ -607,8 +642,6 @@ export const RerankerSettings: React.FC = () => {
             setTesting(false);
         }
     };
-
-    const isOpenRouterActive = status.effective.kind === 'openrouter';
 
     const renderCatalogModelRow = (m: LocalCatalogModel) => {
         const prog = modelProgress[m.id];
@@ -1010,135 +1043,176 @@ export const RerankerSettings: React.FC = () => {
                 </div>
             </div>
 
-            {/* Provider Card 3: OpenRouter (Cloud Reranker) — exact EmbeddingSettings Provider Card structure */}
-            <div className="aip-card aip-provider">
-                {/* Header */}
-                <div className="aip-provider-head">
-                    <AipProviderMark provider="openrouter" name="OpenRouter" />
-                    <h4 className="aip-card-title truncate min-w-0">{t('OpenRouter')}</h4>
-                    <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            <Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}
-                        </span>
-                        <AipBadge tone={status.hasApiKey ? 'ok' : 'warn'} label={status.hasApiKey ? t('Key set') : t('No key')} />
+            {/* Provider Card 3+: hosted rerankers, one card per provider.
+                OpenRouter discovers its catalogue live; Jina publishes a fixed
+                enum. The only reason Jina is here is jina-reranker-v3.5, which
+                cannot run on this device (see rerankerModelCatalog.ts) — the
+                hosted service is the only correct way to run it. */}
+            {hostedProviders.map(p => {
+                const isActive = status.effective.kind === p.id;
+                const isSelected = status.provider === p.id;
+                // status.hasApiKey is the presence flag for the SELECTED
+                // provider. Preferring the per-provider flag but falling back
+                // to it keeps the badge honest if discovery degraded.
+                const hasKey = p.hasApiKey || (isSelected && status.hasApiKey);
+                const draft = keyDrafts[p.id] ?? '';
+                const saving = savingKeyFor === p.id;
+                const saved = savedKeyFor === p.id;
+                const selectedModel = p.id === 'jina' ? status.jinaModel : status.openrouterModel;
+                // A live catalogue arrives from OpenRouter; a static one ships
+                // with the app and is listed even before a key exists, so the
+                // user can see what a key would buy them.
+                const models = p.staticCatalogue
+                    ? p.models.map(m => ({ id: m.id, label: m.label }))
+                    : catalog.map(m => ({ id: m.id, label: m.vendor ? `${m.label} · ${m.vendor}` : m.label }));
 
-                        <button
-                            type="button"
-                            className="aip-btn"
-                            data-size="sm"
-                            data-variant="ghost"
-                            onClick={() => window.electronAPI.openExternal?.('https://openrouter.ai/keys')}
-                            title="Get OpenRouter API Key"
-                        >
-                            <span className="uppercase tracking-wide">{t('Get Key')}</span>
-                            <ExternalLink size={12} strokeWidth={1.75} />
-                        </button>
-                    </div>
-                </div>
+                return (
+                    <div className="aip-card aip-provider" key={p.id}>
+                        {/* Header */}
+                        <div className="aip-provider-head">
+                            <AipProviderMark provider={p.id} name={p.name} />
+                            <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
+                            <div className="ml-auto flex items-center gap-2 shrink-0">
+                                <span className="aip-meta inline-flex items-center gap-1.5">
+                                    <Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}
+                                </span>
+                                <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
 
-                {/* API Key Credential Row matching EmbeddingSettings */}
-                <div className="aip-provider-row">
-                    <div className="aip-provider-field">
-                        <div className="aip-field">
-                            <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
-                            <input
-                                type="password"
-                                className="aip-input"
-                                value={keyDraft}
-                                placeholder={status.hasApiKey ? '••••••••••••••••' : 'sk-or-v1-…'}
-                                onChange={(e) => {
-                                    setKeyDraft(e.target.value);
-                                    setSavedKey(false);
-                                }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(); }}
-                                autoComplete="off"
-                                spellCheck={false}
-                                aria-label={`OpenRouter ${t('API key')}`}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => void saveKey()}
-                                disabled={savingKey || (!keyDraft.trim() && !status.hasApiKey)}
-                                className="aip-btn-seg aip-field-seg"
-                                data-tone={savedKey ? 'ok' : undefined}
-                            >
-                                {savingKey
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
-                                    : savedKey
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
-                                        : t('Save')}
-                            </button>
+                                <button
+                                    type="button"
+                                    className="aip-btn"
+                                    data-size="sm"
+                                    data-variant="ghost"
+                                    onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
+                                    title={`Get ${p.name} API Key`}
+                                >
+                                    <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                                    <ExternalLink size={12} strokeWidth={1.75} />
+                                </button>
+                            </div>
                         </div>
-                        {status.hasApiKey && (
-                            <button
-                                type="button"
-                                onClick={() => void removeKey()}
-                                className="aip-btn shrink-0"
-                                data-icon="true"
-                                data-variant="danger-ghost"
-                                title={t('Remove API Key')}
-                            >
-                                <Trash2 size={14} strokeWidth={1.75} />
-                            </button>
+
+                        {/* API Key Credential Row matching EmbeddingSettings */}
+                        <div className="aip-provider-row">
+                            <div className="aip-provider-field">
+                                <div className="aip-field">
+                                    <KeyRound size={13} strokeWidth={1.75} className="aip-field-icon" aria-hidden="true" />
+                                    <input
+                                        type="password"
+                                        className="aip-input"
+                                        value={draft}
+                                        placeholder={hasKey ? '••••••••••••••••' : p.keyPlaceholder}
+                                        onChange={(e) => {
+                                            const v = e.target.value;
+                                            setKeyDrafts(prev => ({ ...prev, [p.id]: v }));
+                                            setSavedKeyFor(cur => (cur === p.id ? null : cur));
+                                        }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') void saveKey(p.id, p.staticCatalogue); }}
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                        aria-label={`${p.name} ${t('API key')}`}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => void saveKey(p.id, p.staticCatalogue)}
+                                        disabled={saving || !draft.trim()}
+                                        className="aip-btn-seg aip-field-seg"
+                                        data-tone={saved ? 'ok' : undefined}
+                                    >
+                                        {saving
+                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Saving...')}</>
+                                            : saved
+                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Saved')}</>
+                                                : t('Save')}
+                                    </button>
+                                </div>
+                                {hasKey && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void removeKey(p.id, p.staticCatalogue)}
+                                        className="aip-btn shrink-0"
+                                        data-icon="true"
+                                        data-variant="danger-ghost"
+                                        title={t('Remove API Key')}
+                                    >
+                                        <Trash2 size={14} strokeWidth={1.75} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
+                        {(hasKey || models.length > 0) && (
+                            <div className="aip-provider-row">
+                                {hasKey && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void runTest()}
+                                        disabled={testing || !isSelected || !selectedModel}
+                                        className="aip-btn shrink-0"
+                                        data-tone={isSelected && testResult?.success ? 'ok' : isSelected && testResult ? 'danger' : undefined}
+                                        title={!isSelected
+                                            ? t('Pick a model from this provider first — testing sends a real request through whichever provider is selected.')
+                                            : (testResult?.message || t('Test Connection'))}
+                                    >
+                                        {testing && isSelected
+                                            ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
+                                            : isSelected && testResult?.success
+                                                ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
+                                                : isSelected && testResult
+                                                    ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
+                                                    : <>{t('Test Connection')}</>}
+                                    </button>
+                                )}
+
+                                {/* Provider Model Selector matching EmbeddingSettings */}
+                                {models.length > 0 && (
+                                    <AipModelList
+                                        models={models}
+                                        optIn
+                                        enabled={isActive && selectedModel ? [selectedModel] : []}
+                                        defaultId={isActive ? (selectedModel ?? undefined) : undefined}
+                                        onToggle={(id) => void setConfig(
+                                            p.id === 'jina' ? { provider: 'jina', jinaModel: id } : { provider: 'openrouter', openrouterModel: id })}
+                                        onSetDefault={(id) => void setConfig(
+                                            p.id === 'jina' ? { provider: 'jina', jinaModel: id } : { provider: 'openrouter', openrouterModel: id })}
+                                        onReset={() => {}}
+                                        refreshing={p.staticCatalogue ? false : refreshing}
+                                        onRefresh={p.staticCatalogue
+                                            ? undefined
+                                            : async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Notes carried by a static catalogue are the whole reason it is
+                            static: they say what the model is for, and for v3.5 that it
+                            cannot be run any other way. */}
+                        {p.staticCatalogue && p.models.some(m => m.note) && (
+                            <div className="px-1 space-y-1">
+                                {p.models.filter(m => m.note).map(m => (
+                                    <p key={m.id} className="aip-meta aip-provider-note">
+                                        <span className="font-medium">{m.label}</span>{' — '}{t(m.note as string)}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+
+                        {!p.staticCatalogue && catalogStale && (
+                            <p className="aip-meta aip-provider-note">
+                                {t('Could not reach OpenRouter. Showing the models from the last successful check.')}
+                            </p>
+                        )}
+
+                        {!p.staticCatalogue && selectedMissing && (
+                            <p className="aip-meta aip-provider-note">
+                                {t('The selected reranker is no longer offered by OpenRouter. Your local reranker will be used until you pick another.')}
+                            </p>
                         )}
                     </div>
-                </div>
-
-                {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
-                {(status.hasApiKey || catalog.length > 0) && (
-                    <div className="aip-provider-row">
-                        {status.hasApiKey && (
-                            <button
-                                type="button"
-                                onClick={() => void runTest()}
-                                disabled={testing || !status.hasApiKey || !status.openrouterModel}
-                                className="aip-btn shrink-0"
-                                data-tone={testResult?.success ? 'ok' : testResult ? 'danger' : undefined}
-                                title={testResult?.message || t('Test Connection')}
-                            >
-                                {testing
-                                    ? <><Loader2 size={12} strokeWidth={1.75} className="aip-spinner" /> {t('Testing...')}</>
-                                    : testResult?.success
-                                        ? <><Check size={12} strokeWidth={2} className="aip-check" /> {t('Passed')}</>
-                                        : testResult
-                                            ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
-                                            : <>{t('Test Connection')}</>}
-                            </button>
-                        )}
-
-                        {/* Provider Model Selector matching EmbeddingSettings */}
-                        {catalog.length > 0 && (
-                            <AipModelList
-                                models={catalog.map(m => ({
-                                    id: m.id,
-                                    label: m.vendor ? `${m.label} · ${m.vendor}` : m.label,
-                                }))}
-                                optIn
-                                enabled={isOpenRouterActive && status.openrouterModel ? [status.openrouterModel] : []}
-                                defaultId={isOpenRouterActive ? (status.openrouterModel ?? undefined) : undefined}
-                                onToggle={(id) => void setConfig({ provider: 'openrouter', openrouterModel: id })}
-                                onSetDefault={(id) => void setConfig({ provider: 'openrouter', openrouterModel: id })}
-                                onReset={() => {}}
-                                refreshing={refreshing}
-                                onRefresh={async () => { setRefreshing(true); try { await loadCatalog(true); } finally { setRefreshing(false); } }}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {catalogStale && (
-                    <p className="aip-meta aip-provider-note">
-                        {t('Could not reach OpenRouter. Showing the models from the last successful check.')}
-                    </p>
-                )}
-
-                {selectedMissing && (
-                    <p className="aip-meta aip-provider-note">
-                        {t('The selected reranker is no longer offered by OpenRouter. Your local reranker will be used until you pick another.')}
-                    </p>
-                )}
-            </div>
-
+                );
+            })}
             {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
