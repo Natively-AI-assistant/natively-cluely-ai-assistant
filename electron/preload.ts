@@ -2810,6 +2810,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => ipcRenderer.send('cropper-confirmed', bounds),
   cropperCancelled: () => ipcRenderer.send('cropper-cancelled'),
+  /** Launcher only: the boot reveal animation has fully landed. */
+  notifyLauncherRevealComplete: () => ipcRenderer.send('launcher:reveal-complete'),
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => {
     const subscription = (
       _: Electron.IpcRendererEvent,

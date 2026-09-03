@@ -6549,6 +6549,49 @@ export function initializeIpcHandlers(appState: AppState): void {
   // vector if any consumer ever switched from `setAttribute` to template
   // literals. Hardening the trust boundary at the broadcast point is cheap.
   const VALID_INTERFACE_THEMES = new Set(['default', 'liquid-glass', 'modern']);
+  /**
+   * The launcher's boot reveal has fully landed — restore background throttling.
+   *
+   * WindowHelper creates the launcher with `backgroundThrottling: false` because
+   * Chromium HARD-STOPS requestAnimationFrame for a hidden window (covered by
+   * another app, Cmd+H, or on an inactive Space all count), and the reveal is a
+   * Framer Motion AnimatePresence that only advances on rAF — without the flag
+   * the app can sit on the black startup splash until the user focuses it
+   * (guarded by LauncherBootRevealNotFrameGated2026_09_01).
+   *
+   * But nothing ever turned it back on, so the opt-out outlived the one-shot
+   * animation it was for. MEASURED 2026-09-03, a window shown then hidden for
+   * 10s with 19 elements on an `infinite` CSS animation:
+   *
+   *   throttled (Chromium default) :   0 rAF frames, visibilityState "hidden"
+   *   unthrottled (the launcher)   : 600 rAF frames, visibilityState "visible"
+   *
+   * So a launcher hidden during, say, meeting-notes summary generation — where
+   * MeetingNotesSkeleton mounts ~19 `.mn-skel` bars on an infinite animation —
+   * kept compositing at 60fps with the window off screen. That is the same
+   * never-idle-compositor condition behind this repo's 2026-07-10 raster-tile
+   * leak. Note the second column too: the opt-out makes the Page Visibility API
+   * report "visible" while hidden, so gating the animation on
+   * `visibilitychange` in the renderer could never have worked.
+   *
+   * Re-enabling here rather than on a timer: this fires from the launcher
+   * entrance animation's own completion, so the reveal is provably finished.
+   * Fail-safe direction — if the signal never arrives, throttling simply stays
+   * off and behaviour is exactly what it was before.
+   */
+  safeOn('launcher:reveal-complete', (event) => {
+    const launcher = appState.getWindowHelper().getLauncherWindow();
+    // Sender-validated: only the launcher may relax its own throttling.
+    if (!launcher || launcher.isDestroyed()) return;
+    if (event.sender.id !== launcher.webContents.id) return;
+    try {
+      launcher.webContents.setBackgroundThrottling(true);
+      console.log('[launcher] boot reveal complete — background throttling restored');
+    } catch (err) {
+      console.warn('[launcher] could not restore background throttling:', err);
+    }
+  });
+
   safeOn('interface-theme:set', (_event, theme: string) => {
     if (typeof theme !== 'string' || !VALID_INTERFACE_THEMES.has(theme)) {
       // Truncate + strip control chars before logging — a 64-char payload can

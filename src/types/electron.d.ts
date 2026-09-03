@@ -861,6 +861,9 @@ export interface ElectronAPI {
   // Cropper API
   cropperConfirmed: (bounds: { x: number; y: number; width: number; height: number }) => void;
   cropperCancelled: () => void;
+  /** Launcher only: the boot reveal animation has fully landed, so main can
+   *  restore this window's background throttling. */
+  notifyLauncherRevealComplete: () => void;
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => () => void;
 
   // Platform
