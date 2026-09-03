@@ -143,43 +143,57 @@ test('a supported GGUF entry is runnable by Core, not by an extension', () => {
   for (const m of RERANKER_MODEL_CATALOG.filter(m => m.runtime === 'gguf' && m.supported)) {
     assert.equal(m.modelId, undefined, `${m.id} must never reach the ONNX runtime`);
     assert.equal(m.dtype, undefined, 'dtype is an ONNX concept');
-    assert.equal(m.files.length, 1, 'a GGUF model is one file');
-    assert.match(m.files[0].repoPath, /\.gguf$/);
-    assert.ok(m.files[0].sha256, 'the weights must be verifiable');
+    // EXACTLY ONE .gguf, but not necessarily only one file. This used to assert
+    // files.length === 1, which was true until jina-reranker-v3.5: its scoring
+    // MLP is deliberately not baked into the GGUF, so the entry legitimately
+    // carries companions. Two .gguf files would still be a defect — ggufModelFile
+    // picks the first and the other would silently never load.
+    const weights = m.files.filter(f => f.repoPath.endsWith('.gguf'));
+    assert.equal(weights.length, 1, `${m.id} must declare exactly one .gguf`);
+    assert.ok(weights[0].sha256, 'the weights must be verifiable');
+    for (const f of m.files) {
+      assert.ok(f.sha256, `${m.id}: companion ${f.repoPath} must be verifiable too`);
+    }
   }
 });
 
-test('an unsupported GGUF entry explains itself and points at a route that works', () => {
-  // Both jina and qwen3 are qwen3-architecture generative models that llama.cpp
-  // refuses to RANK. Qwen3 is now scored the other way (yes/no token
-  // probabilities, see qwenRerankPrompt.ts) and is supported; Jina is not,
-  // because its protocol needs a patched llama.cpp and per-token hidden states.
+test('a listwise GGUF entry ships the scoring head, which is not in the weights', () => {
+  // The one way this entry can be wrong without erroring: download 378MB of
+  // weights, load them, and score cosines against a projector that was never
+  // fetched. Core refuses to build the port without it — this pins the
+  // catalogue half of that.
+  for (const m of RERANKER_MODEL_CATALOG.filter(m => m.scoring === 'listwise')) {
+    assert.ok(m.files.some(f => f.repoPath === 'projector.safetensors'),
+      `${m.id} is listwise but declares no projector`);
+  }
+});
+
+test('an unsupported GGUF entry, if there is one, points at a route that works', () => {
+  // There is no longer one: jina-reranker-v3.5 was the last, and Core scores it
+  // now (listwise, see jinaListwiseRerank.ts). The CONTRACT is what this pins —
+  // an entry Core cannot execute must say what it needs and where to go
+  // instead, rather than offering a button that quietly does nothing.
   const unsupported = RERANKER_MODEL_CATALOG.filter(m => m.runtime === 'gguf' && !m.supported);
-  assert.ok(unsupported.some(m => m.id.startsWith('jina')), 'jina is expected to remain unsupported');
   for (const m of unsupported) {
-    // Keyed on the substance, not a phrase: it must name what the model needs
-    // that this build cannot provide. Jina is listwise and needs per-token
-    // hidden states; llama.cpp gives pooled embeddings and logits.
-    // Keyed on substance: it must name the concrete thing this build cannot do.
-    // For Jina v3.5 that is the per-layer sliding-window attention its GGUF
-    // declares and the bundled llama.cpp does not implement.
-    assert.match(m.unsupportedReason, /sliding-window|hidden state|ranking head/i, `${m.id} must say why`);
-    // And it must point somewhere useful rather than dead-ending. For v3.5 the
-    // useful pointer is no longer a different model: Jina's own hosted API runs
-    // this exact model correctly, so the reason names the provider to pick.
+    assert.match(m.unsupportedReason, /sliding-window|hidden state|ranking head|llama\.cpp/i,
+      `${m.id} must name the concrete thing this build cannot do`);
     assert.match(m.unsupportedReason, /Jina AI as your reranker provider|Jina Reranker v2|available here/i,
       `${m.id} should name the route that works`);
   }
 });
 
 test('a GGUF entry declares how it is scored, because guessing is not degradable', () => {
-  // Handing a causal LM to the ranking API is a refusal; handing a ranking
-  // model the yes/no prompt is a meaningless number. Neither degrades.
+  // Three protocols, and none of them degrades into another. Handing a causal
+  // LM to the ranking API is a refusal; handing a ranking model the yes/no
+  // prompt is a meaningless number; handing anything but v3.5 to the listwise
+  // path is a cosine between hidden states that mean nothing.
+  const KNOWN = ['rank', 'yes-no', 'listwise'];
   for (const m of RERANKER_MODEL_CATALOG.filter(m => m.runtime === 'gguf' && m.supported)) {
-    assert.ok(m.scoring === 'rank' || m.scoring === 'yes-no', `${m.id} must declare its scoring`);
+    assert.ok(KNOWN.includes(m.scoring), `${m.id} must declare its scoring, got ${m.scoring}`);
   }
   assert.equal(RERANKER_MODEL_CATALOG.find(m => m.id === 'qwen3-reranker-0.6b-q4km').scoring, 'yes-no');
   assert.equal(RERANKER_MODEL_CATALOG.find(m => m.id === 'bge-reranker-v2-m3-q4km').scoring, 'rank');
+  assert.equal(RERANKER_MODEL_CATALOG.find(m => m.id === 'jina-reranker-v3.5-q4km').scoring, 'listwise');
 });
 
 test('a non-commercial model is flagged and requires acknowledgement', () => {

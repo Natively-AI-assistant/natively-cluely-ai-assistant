@@ -299,7 +299,24 @@ export function removeCatalogModel(id: string, rootOverride?: string): { ok: boo
 export function ggufModelFile(id: string, rootOverride?: string): string | null {
   const model = findCatalogModel(id);
   if (!model || model.runtime !== 'gguf') return null;
-  const file = model.files[0];
+  // The FIRST .gguf, not files[0]: a GGUF entry may legitimately ship
+  // companion files alongside the weights — jina-reranker-v3.5 needs a
+  // separate projector and its own tokenizer — and returning one of those as
+  // "the model" would hand llama.cpp a safetensors blob.
+  const file = model.files.find(f => f.repoPath.endsWith('.gguf')) ?? model.files[0];
   if (!file) return null;
   return path.join(modelDirectory(model, rootOverride), ...file.repoPath.split('/'));
+}
+
+/**
+ * A companion file that was downloaded alongside a model's weights.
+ *
+ * Returns null when the entry does not declare that file, so a caller cannot
+ * build a path into a file the installer never fetched and then fail on open.
+ */
+export function companionModelFile(id: string, repoPath: string, rootOverride?: string): string | null {
+  const model = findCatalogModel(id);
+  if (!model) return null;
+  if (!model.files.some(f => f.repoPath === repoPath)) return null;
+  return path.join(modelDirectory(model, rootOverride), ...repoPath.split('/'));
 }

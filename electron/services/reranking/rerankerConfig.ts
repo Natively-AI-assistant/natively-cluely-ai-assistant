@@ -221,6 +221,7 @@ export function referenceFilesScopeAllowed(): boolean {
 // ---------------------------------------------------------------------------
 
 import type { RerankSeamPort } from './RerankerRegistry';
+import { peekProcessSingleton, setProcessSingleton } from '../extensions/singleton';
 
 /**
  * The hosted port, or null when it may not run.
@@ -342,8 +343,37 @@ async function rerankInSafeBatches(
 // Local GGUF
 // ---------------------------------------------------------------------------
 
-/** Cached per model path: loading a 400MB GGUF per query would be absurd. */
-let ggufPort: { id: string; port: RerankSeamPort } | null = null;
+/**
+ * Cached per model path: loading a 400MB GGUF per query would be absurd.
+ *
+ * Held on the PROCESS, not in a module-local — the same rule RerankerRegistry
+ * follows, and the one this file's own header warns about. esbuild gives every
+ * electron entry its own bundle and INLINES this module into each: a
+ * `require('./rerankerConfig')` from ipcHandlers is rewritten to
+ * `(init_rerankerConfig(), __toCommonJS(rerankerConfig_exports))` — its own
+ * copy, not a runtime load of the shared file. Verified 2026-09-03: 30 built
+ * bundles each define `buildLocalGgufPort`, and both ipcHandlers.js and main.js
+ * carry their own `var ggufPort`.
+ *
+ * A module-local therefore meant TWO live llama.cpp contexts: Settings
+ * (`reranker:use-local-model` in ipcHandlers) loaded one into its copy, and the
+ * retrieval path (RerankerRegistry) then saw its own copy still null and loaded
+ * a second — 452 MB apiece at the bounded context size, more before that. Worse,
+ * `resetLocalGgufPort()` from Settings only ever cleared the Settings copy, so
+ * the retrieval one stayed resident for the life of the process with nothing
+ * able to reach it.
+ */
+const GGUF_PORT_KEY = 'natively.reranker.ggufPort';
+
+type GgufPortEntry = { id: string; port: RerankSeamPort } | null;
+
+function getGgufPort(): GgufPortEntry {
+  return peekProcessSingleton<GgufPortEntry>(GGUF_PORT_KEY) ?? null;
+}
+
+function setGgufPort(entry: GgufPortEntry): void {
+  setProcessSingleton(GGUF_PORT_KEY, entry);
+}
 
 /**
  * The seam port for a selected local GGUF model, or null.
@@ -363,7 +393,7 @@ export function buildLocalGgufPort(): RerankSeamPort | null {
   // 438MB llama.cpp context stayed resident for the life of the process even
   // though resolvePort() would never reach it again.
   if (!id || settings.provider === 'openrouter') {
-    if (ggufPort) resetLocalGgufPort();
+    if (getGgufPort()) resetLocalGgufPort();
     return null;
   }
 
@@ -372,17 +402,28 @@ export function buildLocalGgufPort(): RerankSeamPort | null {
     const { findCatalogModel } = require('../../rag/rerankerModelCatalog') as typeof import('../../rag/rerankerModelCatalog');
     const model = findCatalogModel(id);
     if (!model || model.runtime !== 'gguf' || !model.supported) {
-      if (ggufPort) resetLocalGgufPort();
+      if (getGgufPort()) resetLocalGgufPort();
       return null;
     }
 
-    const cached = ggufPort;
+    const cached = getGgufPort();
     if (cached?.id === id) return cached.port;
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { ggufModelFile } = require('./localModelInstaller') as typeof import('./localModelInstaller');
+    const { ggufModelFile, companionModelFile } =
+      require('./localModelInstaller') as typeof import('./localModelInstaller');
     const file = ggufModelFile(id);
     if (!file) return null;
+
+    // v3.5's scoring MLP ships beside the weights rather than inside them.
+    // Without it the port would load and then score nothing, so refuse here
+    // instead — the catalogue entry declares the file, and the installer
+    // fetched and verified it.
+    let projector: string | null = null;
+    if (model.scoring === 'listwise') {
+      projector = companionModelFile(id, 'projector.safetensors');
+      if (!projector) return null;
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { GgufReranker } = require('../../rag/GgufReranker') as typeof import('../../rag/GgufReranker');
@@ -391,8 +432,9 @@ export function buildLocalGgufPort(): RerankSeamPort | null {
     // 'rank' vs 'yes-no' is a property of the model, not a preference: giving a
     // causal LM to the ranking API is a refusal, and giving a ranking model the
     // yes/no prompt is a meaningless number.
-    ggufPort = { id, port: new GgufReranker(file, model.scoring ?? 'rank') };
-    return ggufPort.port;
+    const created = { id, port: new GgufReranker(file, model.scoring ?? 'rank', projector) };
+    setGgufPort(created);
+    return created.port;
   } catch {
     return null;
   }
@@ -400,6 +442,7 @@ export function buildLocalGgufPort(): RerankSeamPort | null {
 
 /** Drop the cached GGUF port. Called when the selection changes. */
 export function resetLocalGgufPort(): void {
-  void (ggufPort?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
-  ggufPort = null;
+  const current = getGgufPort();
+  void (current?.port as { dispose?: () => Promise<void> } | undefined)?.dispose?.();
+  setGgufPort(null);
 }

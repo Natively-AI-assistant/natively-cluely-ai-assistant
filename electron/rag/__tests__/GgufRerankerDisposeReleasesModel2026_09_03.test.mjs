@@ -48,6 +48,32 @@ const MODEL_PATH = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gguf-dispose
 fs.writeFileSync(MODEL_PATH, '');
 
 /**
+ * Build the port with the fake worker in the RIGHT positional slot.
+ *
+ * `spawnWorker` is the LAST constructor parameter, and parameters have been
+ * inserted before it (projectorPath, blockBudget). Passing the factory in the
+ * wrong slot does not fail — it is silently treated as a projector path, a REAL
+ * llama.cpp worker spawns, and the test hangs instead of failing. That cost 12
+ * minutes of wall clock once; `assertInjected` below turns it into an
+ * immediate, legible failure.
+ */
+function portWith(worker, scoring = 'rank') {
+    let called = 0;
+    const port = new GgufReranker(MODEL_PATH, scoring, null, null, (p) => { called += 1; return worker; });
+    return {
+        port,
+        assertInjected() {
+            assert.ok(
+                called > 0,
+                'the injected worker factory was never called — it is almost certainly in the ' +
+                'wrong constructor slot after a parameter was added before it, which means this ' +
+                'test just spawned a REAL llama.cpp worker.',
+            );
+        },
+    };
+}
+
+/**
  * A stand-in for the worker thread that records the protocol traffic.
  * `silentFor` lists message types it refuses to acknowledge, simulating a
  * worker wedged at exactly that point.
@@ -77,7 +103,7 @@ function fakeWorker({ silentFor = [] } = {}) {
 
 test('dispose() asks the worker to release llama.cpp before terminating the thread', async () => {
   const w = fakeWorker();
-  const port = new GgufReranker(MODEL_PATH, 'rank', () => w);
+  const port = new GgufReranker(MODEL_PATH, 'rank', null, null, () => w);
 
   assert.ok(await port.isAvailable(), 'the fake worker should have acknowledged init');
   await port.dispose();
@@ -100,7 +126,7 @@ test('dispose() still terminates when the worker never acknowledges', async () =
   // Acknowledges init, then goes silent — wedged at exactly the moment of
   // teardown, which is when it matters.
   const w = fakeWorker({ silentFor: ['dispose'] });
-  const port = new GgufReranker(MODEL_PATH, 'rank', () => w);
+  const port = new GgufReranker(MODEL_PATH, 'rank', null, null, () => w);
 
   assert.ok(await port.isAvailable());
   const startedAt = Date.now();
@@ -111,7 +137,7 @@ test('dispose() still terminates when the worker never acknowledges', async () =
 });
 
 test('dispose() is idempotent and safe with no worker ever created', async () => {
-  const port = new GgufReranker(MODEL_PATH, 'rank', () => fakeWorker());
+  const port = new GgufReranker(MODEL_PATH, 'rank', null, null, () => fakeWorker());
   await port.dispose();
   await port.dispose();
 });
