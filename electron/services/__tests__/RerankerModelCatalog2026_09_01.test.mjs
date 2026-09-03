@@ -160,7 +160,13 @@ test('an unsupported GGUF entry explains itself instead of naming a workaround',
     // Keyed on the substance, not a phrase: it must name what the model needs
     // that this build cannot provide. Jina is listwise and needs per-token
     // hidden states; llama.cpp gives pooled embeddings and logits.
-    assert.match(m.unsupportedReason, /hidden state|ranking head/i, `${m.id} must say why`);
+    // Keyed on substance: it must name the concrete thing this build cannot do.
+    // For Jina v3.5 that is the per-layer sliding-window attention its GGUF
+    // declares and the bundled llama.cpp does not implement.
+    assert.match(m.unsupportedReason, /sliding-window|hidden state|ranking head/i, `${m.id} must say why`);
+    // And it must point somewhere useful rather than dead-ending.
+    assert.match(m.unsupportedReason, /Jina Reranker v2|available here/i,
+      `${m.id} should name the alternative that works`);
   }
 });
 
@@ -193,7 +199,7 @@ test('installing an unsupported model is refused before any download', async () 
   if (!unsupported) return;   // nothing unsupported to refuse
   const res = await installCatalogModel(unsupported.id, () => {}, new AbortController().signal, { rootOverride: root });
   assert.equal(res.ok, false);
-  assert.match(res.error, /scoring head|ranking head|hidden state|not supported/i);
+  assert.match(res.error, /scoring head|ranking head|hidden state|sliding-window|not supported/i);
 });
 
 test('an unsupported GGUF model is refused before any download', async () => {
@@ -201,7 +207,7 @@ test('an unsupported GGUF model is refused before any download', async () => {
   // refuses to rank them, so downloading ~400MB would buy nothing.
   const res = await installCatalogModel('jina-reranker-v3.5-q4km', () => {}, new AbortController().signal, { rootOverride: tmp() });
   assert.equal(res.ok, false);
-  assert.match(res.error, /ranking head|hidden state|not supported/i);
+  assert.match(res.error, /ranking head|hidden state|sliding-window|not supported/i);
 });
 
 test('an unknown id is refused', async () => {
