@@ -185,6 +185,39 @@ test('a hanging reranker is bounded and aborted, even though the doc-grounded pa
   assert.match(outcomes[0].reason, /timed out after 30ms/);
 });
 
+test('a failing extension falls back to the BUILT-IN, not to no reranking', async () => {
+  // The extension REPLACES the built-in at the seam. Before this, an extension
+  // that fails every call left the user with cosine order — strictly worse than
+  // the bundled model they displaced by installing it. And that is the normal
+  // case, not an edge one: a published extension can throw on every rerank and
+  // still look installed and enabled.
+  const source = makeSource({ async rerank() { throw new Error('scoreBatch not implemented'); } });
+  source.extensions = [rerankerExt('ettin-reranker')];
+  const outcomes = [];
+  const registry = new RerankerRegistry({
+    isEnabled: () => true,
+    source,
+    builtInPort: () => ({ rerank: async () => [{ index: 1, score: 0.9 }, { index: 0, score: 0.1 }] }),
+    onOutcome: (o) => outcomes.push(o),
+    logger: { warn: () => {} },
+  });
+
+  const order = await registry.resolvePort().rerank('q', ['a', 'b']);
+  assert.deepEqual(order?.map((o) => o.index), [1, 0], 'the built-in must still rank');
+  // The failure is still reported, so it is a visible degradation not a silent one.
+  assert.equal(outcomes.at(-1).fallback, true);
+  assert.match(outcomes.at(-1).reason, /scoreBatch not implemented/);
+});
+
+test('with no built-in available the seam still keeps the existing order', async () => {
+  const source = makeSource({ async rerank() { throw new Error('boom'); } });
+  source.extensions = [rerankerExt('broken')];
+  const registry = new RerankerRegistry({
+    isEnabled: () => true, source, builtInPort: () => null, logger: { warn: () => {} },
+  });
+  assert.equal(await registry.resolvePort().rerank('q', ['a', 'b']), null);
+});
+
 test('a throwing reranker falls back instead of surfacing an error', async () => {
   const source = makeSource({ async rerank() { throw new Error('model not loaded'); } });
   source.extensions = [rerankerExt('jina')];

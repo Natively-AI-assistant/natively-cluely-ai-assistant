@@ -120,6 +120,13 @@ export interface RerankerRegistryOptions {
   localGgufPort?: () => RerankSeamPort | null;
   /** Drop a cached local GGUF worker when something else takes the seam. */
   releaseLocalGguf?: () => void;
+  /**
+   * The bundled reranker, used when an enabled extension fails.
+   *
+   * Without it an extension that cannot score leaves retrieval worse than
+   * before it was installed, because it displaced the built-in at the seam.
+   */
+  builtInPort?: () => RerankSeamPort | null;
   timeoutMs?: number;
   onOutcome?: (outcome: RerankOutcome) => void;
   logger?: { warn(message: string, ...args: unknown[]): void };
@@ -193,7 +200,26 @@ export class RerankerRegistry {
         // of `running()`/`load()` checks per query, which is what let one query
         // race itself into starting the same extension twice.
         batchSize: Number.MAX_SAFE_INTEGER,
-        rerank: (query, passages) => this.rerankVia(extensionId, query, passages),
+        rerank: async (query, passages) => {
+          const ranked = await this.rerankVia(extensionId, query, passages);
+          if (ranked) return ranked;
+
+          // An extension REPLACES the built-in at this seam, so its failure used
+          // to mean no reranking at all — strictly worse than the bundled model
+          // the user displaced by installing it. That is the normal case rather
+          // than an edge one: an extension can throw on every single call and
+          // still look installed, enabled and healthy (the Ettin extension's
+          // scoreBatch() throws unconditionally by design). rerankVia has
+          // already reported the failure with its reason, so this is a visible
+          // degradation, not a silent substitution.
+          const builtIn = this.options.builtInPort?.();
+          if (!builtIn) return null;
+          try {
+            return await builtIn.rerank(query, passages);
+          } catch {
+            return null;
+          }
+        },
       };
     }
 
@@ -452,6 +478,16 @@ function defaultOptions(): RerankerRegistryOptions {
       } catch {
         // An unreadable configuration is not permission to send document text
         // to a third party. Fall through to the local path.
+        return null;
+      }
+    },
+    builtInPort: () => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getLocalReranker } = require('../../rag/LocalReranker');
+        const local = getLocalReranker();
+        return local ? { rerank: (q: string, p: string[]) => local.rerank(q, p) } : null;
+      } catch {
         return null;
       }
     },
