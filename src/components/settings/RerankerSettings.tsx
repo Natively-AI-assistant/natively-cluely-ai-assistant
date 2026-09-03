@@ -24,7 +24,7 @@ const PlatformMark: React.FC = () => (
     </span>
 );
 
-type RerankerProvider = 'local' | 'openrouter';
+type RerankerProvider = 'local' | 'openrouter' | 'jina';
 type ModelGroup = 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other';
 
 interface CatalogModel {
@@ -49,7 +49,7 @@ interface RerankerStatus {
     ineligibleReason: string | null;
     ineligibleMessage: string | null;
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
-    effective: { kind: 'local' | 'extension' | 'openrouter'; id: string | null };
+    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null };
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
 
@@ -276,6 +276,11 @@ export const RerankerSettings: React.FC = () => {
     const [modelProgress, setModelProgress] = useState<Record<string, { fraction: number; file: string }>>({});
     const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
+    const [hostedProviders, setHostedProviders] = useState<Array<{
+        id: 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
+        staticCatalogue: boolean; hasApiKey: boolean;
+        models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>;
+    }>>([]);
 
     // Model Library UI Optimization States
     const [filterTab, setFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
@@ -285,6 +290,11 @@ export const RerankerSettings: React.FC = () => {
     const refreshStatus = useCallback(async () => {
         const next = await window.electronAPI.getRerankerStatus?.();
         if (next) setStatus(next as RerankerStatus);
+    }, []);
+
+    const loadHostedProviders = useCallback(async () => {
+        const res = await window.electronAPI.getRerankerHostedProviders?.();
+        if (res?.providers) setHostedProviders(res.providers as never);
     }, []);
 
     const loadCatalogModels = useCallback(async () => {
@@ -326,7 +336,7 @@ export const RerankerSettings: React.FC = () => {
         let cancelled = false;
         (async () => {
             try {
-                await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
+                await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels(), loadHostedProviders()]);
             } catch (e) {
                 // safeHandle does not wrap handler bodies, so a throwing IPC
                 // handler rejects here. The panel is already on screen; this
@@ -335,7 +345,7 @@ export const RerankerSettings: React.FC = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [refreshStatus, loadCatalog, loadExtensions, loadCatalogModels]);
+    }, [refreshStatus, loadCatalog, loadExtensions, loadCatalogModels, loadHostedProviders]);
 
     const setConfig = useCallback(async (next: Parameters<NonNullable<typeof window.electronAPI.setRerankerConfig>>[0]) => {
         await window.electronAPI.setRerankerConfig?.(next);
@@ -357,17 +367,28 @@ export const RerankerSettings: React.FC = () => {
             options.push({ id: `extension::${ext.id}`, name: `${ext.name} — ${t('Extension')}` });
         }
 
-        if (status?.hasApiKey) {
+        // OpenRouter's catalogue is discovered live; Jina publishes a fixed
+        // enum. Both are offered only once their own key is configured, since
+        // selecting one without a key would activate something that cannot run.
+        const openrouter = hostedProviders.find(p => p.id === 'openrouter');
+        if (openrouter?.hasApiKey ?? status?.hasApiKey) {
             for (const m of catalog) {
                 options.push({ id: `openrouter::${m.id}`, name: `${m.label} — ${t('OpenRouter')}` });
             }
         }
+        for (const provider of hostedProviders.filter(p => p.staticCatalogue && p.hasApiKey)) {
+            for (const m of provider.models) {
+                options.push({ id: `${provider.id}::${m.id}`, name: `${m.label} — ${provider.name}` });
+            }
+        }
 
         return options;
-    }, [status?.builtIn.name, status?.hasApiKey, catalogModels, extensions, catalog, t]);
+    }, [status?.builtIn.name, status?.hasApiKey, catalogModels, extensions, catalog, hostedProviders, t]);
 
     const activeOptionId = useMemo(() => {
-        if (status?.effective.kind === 'openrouter') return `openrouter::${status.effective.id ?? ''}`;
+        if (status?.effective.kind === 'openrouter' || status?.effective.kind === 'jina') {
+            return `${status.effective.kind}::${status.effective.id ?? ''}`;
+        }
         if (status?.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
         const selected = catalogModels.find(m => m.selected);
         return selected ? `local::${selected.id}` : 'local::built-in';
@@ -381,6 +402,8 @@ export const RerankerSettings: React.FC = () => {
         try {
             if (kind === 'openrouter') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
+            } else if (kind === 'jina') {
+                await window.electronAPI.setRerankerConfig?.({ provider: 'jina', jinaModel: id });
             } else if (kind === 'extension') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'local' });
                 for (const ext of extensions.filter(e => e.type === 'reranker' && e.enabled && e.id !== id)) {
@@ -397,11 +420,11 @@ export const RerankerSettings: React.FC = () => {
                     setCatalogError(res.message || res.error || t('Could not activate this reranker.'));
                 }
             }
-            await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions()]);
+            await Promise.all([refreshStatus(), loadCatalogModels(), loadExtensions(), loadHostedProviders()]);
         } finally {
             setBusyCatalogId(null);
         }
-    }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, t]);
+    }, [extensions, refreshStatus, loadCatalogModels, loadExtensions, loadHostedProviders, t]);
 
     const activeDetail = useMemo(() => {
         if (!status) return '';
@@ -756,7 +779,7 @@ export const RerankerSettings: React.FC = () => {
                             setLoadError(null);
                             void (async () => {
                                 try {
-                                    await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels()]);
+                                    await Promise.all([refreshStatus(), loadCatalog(false), loadExtensions(), loadCatalogModels(), loadHostedProviders()]);
                                 } catch (e) {
                                     setLoadError(e instanceof Error ? e.message : String(e));
                                 }

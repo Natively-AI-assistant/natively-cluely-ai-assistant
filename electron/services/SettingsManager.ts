@@ -148,7 +148,7 @@ export interface AppSettings {
      * This file is plaintext on disk.
      */
     reranker?: {
-        provider?: 'local' | 'openrouter';
+        provider?: 'local' | 'openrouter' | 'jina';
         /**
          * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
          * bundled bge-reranker-base. Only ONNX entries are valid here: a GGUF
@@ -156,6 +156,8 @@ export interface AppSettings {
          */
         localModelId?: string;
         openrouterModel?: string;
+        /** Model id for the Jina AI hosted reranker (jina-reranker-v3.5 and friends). */
+        jinaModel?: string;
         candidateCount?: number;
         fallbackToLocal?: boolean;
         lastTest?: {

@@ -164,9 +164,11 @@ test('an unsupported GGUF entry explains itself instead of naming a workaround',
     // For Jina v3.5 that is the per-layer sliding-window attention its GGUF
     // declares and the bundled llama.cpp does not implement.
     assert.match(m.unsupportedReason, /sliding-window|hidden state|ranking head/i, `${m.id} must say why`);
-    // And it must point somewhere useful rather than dead-ending.
-    assert.match(m.unsupportedReason, /Jina Reranker v2|available here/i,
-      `${m.id} should name the alternative that works`);
+    // And it must point somewhere useful rather than dead-ending. For v3.5 the
+    // useful pointer is no longer a different model: Jina's own hosted API runs
+    // this exact model correctly, so the reason names the provider to pick.
+    assert.match(m.unsupportedReason, /Jina AI as your reranker provider|Jina Reranker v2|available here/i,
+      `${m.id} should name the route that works`);
   }
 });
 

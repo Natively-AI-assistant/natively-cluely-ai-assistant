@@ -88,6 +88,8 @@ export interface OpenRouterRerankerOptions {
   getApiKey: () => string | undefined;
   getModel: () => string | undefined;
   baseUrl?: string;
+  /** Which hosted provider this is, for telemetry and error text. */
+  providerId?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -217,6 +219,8 @@ export class OpenRouterReranker implements RerankSeamPort {
             'Content-Type': 'application/json',
             // The key goes in a header and nowhere else. Never a URL, never a log.
             Authorization: `Bearer ${apiKey}`,
+            // OpenRouter attributes traffic with these. Other providers ignore
+            // them, so they are harmless to send unconditionally.
             'HTTP-Referer': 'https://natively.software',
             'X-Title': 'Natively',
           },
@@ -252,7 +256,9 @@ export class OpenRouterReranker implements RerankSeamPort {
         }
         // The body can carry provider detail worth logging, but it is untrusted
         // text — it is never rendered as an instruction and never parsed for control.
-        this.options.logger?.warn(`[reranking] OpenRouter rerank HTTP ${res.status} for model ${model}`);
+        this.options.logger?.warn(
+          `[reranking] ${this.options.providerId ?? 'hosted'} rerank HTTP ${res.status} for model ${model}`,
+        );
         return fail(kind, res.status);
       }
 

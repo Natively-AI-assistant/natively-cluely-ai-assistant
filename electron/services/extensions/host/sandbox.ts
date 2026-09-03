@@ -320,8 +320,63 @@ function serializableInit(init: unknown): Record<string, unknown> | undefined {
  */
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const REAL_CHILD_PROCESS = require('child_process') as {
-  spawn: (c: string, a?: readonly string[], o?: unknown) => unknown;
+  spawn: (c: string, a?: readonly string[], o?: unknown) => any;
 };
+
+/**
+ * Every process this extension has spawned and that has not exited.
+ *
+ * Electron kills its own utilityProcess children when the host goes away, but
+ * NOT their descendants. So a reranker extension that runs `llama-server` with
+ * a multi-gigabyte model resident left that server alive after the extension
+ * crashed, after the user disabled it, and after the app quit — and the next
+ * enable spawned another one beside it. Nothing tracked the pids, so nothing
+ * could clean them up.
+ */
+const spawnedChildren = new Set<any>();
+
+/**
+ * Kill a spawned process AND its descendants.
+ *
+ * Platform-specific by necessity, not by preference:
+ *  - win32 has no POSIX process groups and no signals. `taskkill /T` is the
+ *    only way to take a tree down, and `/F` is required because a console
+ *    application will not answer a polite close request.
+ *  - elsewhere, SIGTERM to let it drain, then SIGKILL if it is still there.
+ *    A helper like llama-server ignores nothing, but a wedged one must not be
+ *    able to outlive us.
+ */
+function killProcessTree(child: any): void {
+  const pid = child?.pid;
+  if (!pid || child.exitCode !== null || child.signalCode) return;
+
+  if (process.platform === 'win32') {
+    try {
+      REAL_CHILD_PROCESS.spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } catch { /* the process may already be gone */ }
+    return;
+  }
+
+  try { child.kill('SIGTERM'); } catch { /* already gone */ }
+  const hard = setTimeout(() => {
+    try { if (child.exitCode === null && !child.signalCode) child.kill('SIGKILL'); } catch { /* gone */ }
+  }, 2000);
+  // Never hold the event loop open just to schedule a kill.
+  (hard as any).unref?.();
+}
+
+/**
+ * Terminate everything this extension spawned. Safe to call more than once.
+ *
+ * Called from the graceful `dispose` request and again from the child's own
+ * exit/signal handlers, because a crash or a hard kill never delivers dispose.
+ */
+export function disposeSpawnedProcesses(): void {
+  for (const child of [...spawnedChildren]) {
+    killProcessTree(child);
+    spawnedChildren.delete(child);
+  }
+}
 
 export function createChildProcessShim(
   granted: ReadonlySet<ExtensionPermission>,
@@ -350,7 +405,17 @@ export function createChildProcessShim(
       // and process lifetime behave exactly as the adapter expects. Routing the
       // streams through the main process would buy nothing — see the header.
       // REAL_CHILD_PROCESS, never require() — see its docstring.
-      return REAL_CHILD_PROCESS.spawn(command, args, options);
+      const child = REAL_CHILD_PROCESS.spawn(command, args, options);
+
+      // Track it so teardown can reach it. The extension still gets the real
+      // ChildProcess back, unchanged — this only adds bookkeeping, so an
+      // adapter that manages its own process lifetime is unaffected.
+      if (child && typeof child.pid === 'number') {
+        spawnedChildren.add(child);
+        const forget = () => spawnedChildren.delete(child);
+        try { child.once?.('exit', forget); child.once?.('error', forget); } catch { forget(); }
+      }
+      return child;
     },
     exec: refuse('exec'),
     execSync: refuse('execSync'),

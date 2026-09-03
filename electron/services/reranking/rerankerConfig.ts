@@ -12,7 +12,7 @@
  * panel would let a user configure two things that cannot both be active.
  */
 
-export type RerankerProvider = 'local' | 'openrouter';
+export type RerankerProvider = 'local' | 'openrouter' | 'jina';
 
 export interface RerankerSettings {
   /**
@@ -22,6 +22,8 @@ export interface RerankerSettings {
   provider?: RerankerProvider;
   /** OpenRouter model id. No default is hard-coded — see defaultRerankModel(). */
   openrouterModel?: string;
+  /** Jina AI model id, e.g. jina-reranker-v3.5. */
+  jinaModel?: string;
   /**
    * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the bundled
    * bge-reranker-base. ONNX entries are read by LocalReranker; GGUF entries are
@@ -92,7 +94,9 @@ export interface EligibilityInputs {
  * than being invited to fix a key that would still not be used.
  */
 export function evaluateHostedEligibility(input: EligibilityInputs): HostedEligibility {
-  if (input.provider !== 'openrouter') return { eligible: false, reason: 'provider-not-selected' };
+  if (input.provider !== 'openrouter' && input.provider !== 'jina') {
+    return { eligible: false, reason: 'provider-not-selected' };
+  }
   if (input.localOnly) return { eligible: false, reason: 'local-only-mode' };
   if (!input.referenceFilesScopeAllowed) return { eligible: false, reason: 'reference-files-scope-denied' };
   if (!input.hasApiKey) return { eligible: false, reason: 'no-api-key' };
@@ -135,6 +139,26 @@ export function readRerankerSettings(): RerankerSettings {
   } catch {
     return {};
   }
+}
+
+/** The key for a hosted provider. One credential per provider, shared app-wide. */
+export function readHostedApiKey(provider: RerankerProvider): string | undefined {
+  if (provider === 'jina') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { CredentialsManager } = require('../CredentialsManager');
+      const stored = CredentialsManager.getInstance().getJinaApiKey?.();
+      if (stored && stored.trim()) return stored.trim();
+    } catch { /* fall through to env */ }
+    const env = (process.env.JINA_API_KEY || '').trim();
+    return env || undefined;
+  }
+  return readOpenRouterApiKey();
+}
+
+/** The model id for whichever hosted provider is selected. */
+export function readHostedModel(settings: RerankerSettings): string | undefined {
+  return settings.provider === 'jina' ? settings.jinaModel : settings.openrouterModel;
 }
 
 export function readOpenRouterApiKey(): string | undefined {
@@ -207,11 +231,12 @@ import type { RerankSeamPort } from './RerankerRegistry';
  */
 export function buildHostedRerankPort(): RerankSeamPort | null {
   const settings = readRerankerSettings();
-  const apiKey = readOpenRouterApiKey();
-  const model = settings.openrouterModel;
+  const provider = settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+  const apiKey = readHostedApiKey(provider);
+  const model = readHostedModel(settings);
 
   const verdict = evaluateHostedEligibility({
-    provider: settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider,
+    provider,
     hasApiKey: Boolean(apiKey),
     model,
     localOnly: isLocalOnlyMode(),
@@ -220,12 +245,21 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
   if (!verdict.eligible) return null;
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { hostedRerankProvider } = require('../../rag/hostedRerankProviders') as typeof import('../../rag/hostedRerankProviders');
+  const descriptor = hostedRerankProvider(provider);
+  if (!descriptor) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { OpenRouterReranker } = require('./OpenRouterReranker') as typeof import('./OpenRouterReranker');
+  // One client for every hosted provider: they all speak the same rerank
+  // request and response. Only the endpoint and the credential differ.
   return new OpenRouterReranker({
+    baseUrl: descriptor.baseUrl,
+    providerId: descriptor.id,
     // Re-read per call rather than closing over the values: a key or model
     // changed in Settings must take effect without a restart.
-    getApiKey: () => readOpenRouterApiKey(),
-    getModel: () => readRerankerSettings().openrouterModel,
+    getApiKey: () => readHostedApiKey(readRerankerSettings().provider ?? 'local'),
+    getModel: () => readHostedModel(readRerankerSettings()),
     onStats: (stats) => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -233,7 +267,7 @@ export function buildHostedRerankPort(): RerankSeamPort | null {
         telemetryService.track({
           name: 'rerank_request',
           properties: {
-            provider: 'openrouter',
+            provider: descriptor.id,
             model: stats.model,
             // Named for what it measures. This includes the network round trip
             // and is NOT model inference time.

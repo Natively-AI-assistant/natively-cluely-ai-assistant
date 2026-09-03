@@ -24,9 +24,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { createHash } from 'crypto';
 import { app } from 'electron';
 import { HuggingFaceModelDownloader } from '../extensions/HuggingFaceModelDownloader';
+import { sha256File } from '../extensions/ModelStore';
 import {
   RERANKER_MODEL_CATALOG, findCatalogModel,
   type CatalogFile, type LocalRerankerModel,
@@ -288,15 +288,7 @@ export function removeCatalogModel(id: string, rootOverride?: string): { ok: boo
   }
 }
 
-function sha256File(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('error', reject);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-  });
-}
+
 
 /**
  * Absolute path to a GGUF entry's weights.

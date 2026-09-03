@@ -264,8 +264,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 before the redesign. Costs 40px against putting Test after the trash on
                 one row, and buys back the left-edge alignment that made Test read as the
                 start of an action row rather than the tail of the credential row. */}
-            <div className="aip-provider-row">
-                {hasStoredKey && (
+            {hasStoredKey && (
+                <div className="aip-provider-row">
                     <button
                         onClick={onTestConnection}
                         disabled={testStatus === 'testing'}
@@ -278,28 +278,28 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                                 testStatus === 'error' ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</> :
                                     <>{t('Test Connection')}</>}
                     </button>
-                )}
 
-                {/* Beside the key field, not under it. >= 1, not > 1: this is the only
-                    discovery entry point, so gating it on "more than one model" left the
-                    three 1-preset providers unable to fetch anything at all. */}
-                {hasStoredKey && !isDisabled && onToggleModel && selectableModels && selectableModels.length >= 1 && (
-                    <AipModelList
-                        models={selectableModels}
-                        enabled={enabledModels || []}
-                        onToggle={onToggleModel}
-                        onReset={onResetModels || (() => {})}
-                        defaultId={selectedModel || preferredModel}
-                        onSetDefault={onSetDefaultModel}
-                        error={modelSaveError ? 'save-failed' : null}
-                        refreshing={isFetching}
-                        onRefresh={handleFetchModels}
-                        onFirstOpen={() => {
-                            if (hasStoredKey && !hasCatalog) handleFetchModels();
-                        }}
-                    />
-                )}
-            </div>
+                    {/* Beside the key field, not under it. >= 1, not > 1: this is the only
+                        discovery entry point, so gating it on "more than one model" left the
+                        three 1-preset providers unable to fetch anything at all. */}
+                    {!isDisabled && onToggleModel && selectableModels && selectableModels.length >= 1 && (
+                        <AipModelList
+                            models={selectableModels}
+                            enabled={enabledModels || []}
+                            onToggle={onToggleModel}
+                            onReset={onResetModels || (() => {})}
+                            defaultId={selectedModel || preferredModel}
+                            onSetDefault={onSetDefaultModel}
+                            error={modelSaveError ? 'save-failed' : null}
+                            refreshing={isFetching}
+                            onRefresh={handleFetchModels}
+                            onFirstOpen={() => {
+                                if (hasStoredKey && !hasCatalog) handleFetchModels();
+                            }}
+                        />
+                    )}
+                </div>
+            )}
 
             {/* One note line, and only when something is actually wrong. */}
             {(testError || fetchError) && (

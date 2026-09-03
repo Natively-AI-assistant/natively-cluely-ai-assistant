@@ -274,11 +274,26 @@ export class ModelStore {
   }
 }
 
-function sha256File(filePath: string): Promise<string> {
+/**
+ * Stream a file through SHA-256.
+ *
+ * THE canonical copy. localModelInstaller re-exports this rather than keeping
+ * its own byte-identical duplicate: the two drifted apart the moment either
+ * needed a fix (a destroy() on error, a highWaterMark for multi-GB weights),
+ * and the one that ships enabled — the reranker catalogue — was the copy that
+ * would silently miss it.
+ */
+export function sha256File(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');
     const stream = fs.createReadStream(filePath);
-    stream.on('error', reject);
+    const fail = (error: Error) => {
+      // Release the fd immediately; a rejected hash of a multi-GB weights file
+      // otherwise held its read stream open until GC.
+      stream.destroy();
+      reject(error);
+    };
+    stream.on('error', fail);
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
   });

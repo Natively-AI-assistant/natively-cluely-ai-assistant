@@ -25,6 +25,40 @@ let context: any = null;
 let loadingPromise: Promise<void> | null = null;
 
 /**
+ * Context window to allocate for scoring, in tokens.
+ *
+ * llama.cpp defaults a context to the model's FULL trained length, and it sizes
+ * the KV cache and compute buffers from that — even though a reranker only ever
+ * sees one query/passage pair at a time. Qwen3-Reranker-0.6B trains at 40,960
+ * tokens, and the default cost that:
+ *
+ *   MEASURED 2026-09-03, Qwen3-Reranker-0.6B Q4_K_M, macOS arm64, clean process
+ *   (RSS delta for createContext alone, after the model was already loaded):
+ *
+ *     contextSize        RSS cost
+ *     40960 (default)    4291 MB
+ *      4096 (this)        452 MB
+ *      2048               227 MB
+ *
+ * ~3.8 GB to hold a window nothing here can fill. A passage IS one chunk, and
+ * the chunker emits 140 words with 30 overlap (ModeContextRetriever
+ * CHUNK_WORDS/CHUNK_OVERLAP; the fine path is 45). At even 2 tokens/word that
+ * is ~280 tokens, plus the Qwen prompt template and the query — comfortably
+ * inside 4096, with better than 10x headroom. Sizing matters: a passage that
+ * did not fit would be truncated, and a truncated passage scores differently
+ * with no error anywhere. Clamped to the model's own trained length so a
+ * smaller model is never asked for a window it does not have.
+ */
+const RERANK_CONTEXT_SIZE = 4096;
+
+function boundedContextSize(): number {
+  const trained = Number(model?.trainContextSize);
+  return Number.isFinite(trained) && trained > 0
+    ? Math.min(RERANK_CONTEXT_SIZE, trained)
+    : RERANK_CONTEXT_SIZE;
+}
+
+/**
  * Set when the model has NO ranking head and must be scored as a causal LM
  * instead — Qwen3-Reranker is the case this exists for. Carries the sequence
  * and the two token ids whose probabilities become the score.
@@ -56,7 +90,7 @@ async function ensureLoaded(msg: any): Promise<void> {
       // createRankingContext() would refuse — see qwenRerankPrompt.ts.
       const yesToken = singleToken(model, 'yes');
       const noToken = singleToken(model, 'no');
-      context = await model.createContext({ sequences: 1 });
+      context = await model.createContext({ sequences: 1, contextSize: boundedContextSize() });
       yesNo = { sequence: context.getSequence(), yesToken, noToken };
       return;
     }
@@ -64,7 +98,7 @@ async function ensureLoaded(msg: any): Promise<void> {
     // Refused for a model with no ranking head. That is a real answer, not a
     // defect: jina-reranker-v3.5 is a qwen3-architecture GGUF with no rank
     // metadata, and llama.cpp cannot score it this way.
-    context = await model.createRankingContext();
+    context = await model.createRankingContext({ contextSize: boundedContextSize() });
   })();
 
   try {
@@ -125,7 +159,27 @@ async function disposeAll(): Promise<void> {
   context = null; model = null; llama = null; yesNo = null;
 }
 
-parentPort.on('message', async (msg: any) => {
+/**
+ * Serial message queue.
+ *
+ * Node delivers worker messages as they arrive; an `async` listener that awaits
+ * does NOT delay the next delivery. So a `dispose` arriving mid-rerank used to
+ * run `disposeAll()` — freeing context, model and llama — while
+ * `context.rankAll()` was still executing inside the native addon. Chaining
+ * every message onto one promise makes teardown wait its turn behind whatever
+ * is already running, which is also what makes the client's graceful
+ * dispose-then-terminate handshake meaningful.
+ *
+ * llama.cpp's context is not safe for concurrent rankAll calls anyway, so
+ * serialising costs nothing the previous shape was legitimately providing.
+ */
+let queue: Promise<void> = Promise.resolve();
+
+parentPort.on('message', (msg: any) => {
+  queue = queue.then(() => handleMessage(msg)).catch(() => { /* handled below */ });
+});
+
+async function handleMessage(msg: any): Promise<void> {
   try {
     if (msg.type === 'init') {
       await ensureLoaded(msg);
@@ -179,4 +233,4 @@ parentPort.on('message', async (msg: any) => {
       type: 'error', requestId: msg?.requestId, error: e?.message || String(e),
     });
   }
-});
+}

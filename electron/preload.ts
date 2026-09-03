@@ -955,6 +955,7 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
   getStealthShortcutGuard: () => Promise<boolean>;
   setStealthShortcutGuard: (enabled: boolean) => Promise<{ success: boolean }>;
   debugDropHotkey: (id: string) => Promise<{ dropped: boolean }>;
@@ -1929,6 +1930,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fallbackToLocal?: boolean;
   }) => ipcRenderer.invoke('reranker:set-config', next),
   setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
+  setRerankerHostedKey: (provider: string, key: string) => ipcRenderer.invoke('reranker:set-hosted-key', provider, key),
+  getRerankerHostedProviders: () => ipcRenderer.invoke('reranker:hosted-providers'),
   testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
 
   // Direct model install: download a reranker without staging an extension.
@@ -2720,6 +2723,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  exportDebugLogs: () => ipcRenderer.invoke('export-debug-logs'),
   getStealthShortcutGuard: () => ipcRenderer.invoke('get-stealth-shortcut-guard'),
   setStealthShortcutGuard: (enabled: boolean) => ipcRenderer.invoke('set-stealth-shortcut-guard', enabled),
   debugDropHotkey: (id: string) => ipcRenderer.invoke('debug:drop-hotkey', id),

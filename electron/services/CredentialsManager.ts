@@ -89,6 +89,7 @@ export interface StoredCredentials {
      * this app only as a cURL/custom chat provider, which has no typed slot.
      */
     openrouterApiKey?: string;
+    jinaApiKey?: string;
     /** Voyage AI key, used for EMBEDDINGS (Voyage is embeddings-only here). */
     voyageApiKey?: string;
     // STT Provider settings
@@ -828,6 +829,17 @@ export class CredentialsManager {
     public setOpenrouterApiKey(key: string): boolean {
         if (this.refuseWriteWhileDegraded('set openrouter api key')) return false;
         this.credentials.openrouterApiKey = key.trim() || undefined;
+        this.saveCredentials();
+        return true;
+    }
+
+    public getJinaApiKey(): string | undefined {
+        return this.credentials.jinaApiKey;
+    }
+
+    public setJinaApiKey(key: string): boolean {
+        if (this.refuseWriteWhileDegraded('set jina api key')) return false;
+        this.credentials.jinaApiKey = key.trim() || undefined;
         this.saveCredentials();
         return true;
     }

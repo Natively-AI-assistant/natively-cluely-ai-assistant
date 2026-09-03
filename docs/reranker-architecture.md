@@ -135,7 +135,39 @@ It is also the weakest option measured — see *Measurements* below.
 
 ---
 
-## Hosted rerankers (OpenRouter)
+## Hosted rerankers
+
+Two providers, one client. Every hosted reranker speaks the same shape — the one
+Cohere introduced and everyone copied — so `hostedRerankProviders.ts` is a table
+and `OpenRouterReranker` serves both:
+
+| Provider | Endpoint | Catalogue |
+| --- | --- | --- |
+| OpenRouter | `https://openrouter.ai/api/v1` | discovered live (`?output_modalities=rerank`) |
+| Jina AI | `https://api.jina.ai/v1` | fixed enum from Jina's OpenAPI spec |
+
+### Jina exists here for exactly one model
+
+`jina-reranker-v3.5` cannot run locally, for the reason below. Jina's own API
+runs it correctly, and its schema is the same one already implemented:
+
+```
+POST https://api.jina.ai/v1/rerank
+Authorization: Bearer $JINA_API_KEY
+{ model: "jina-reranker-v3.5", query, documents, top_n }
+-> { model, object: "list", usage: { total_tokens },
+     results: [{ index, relevance_score, document? }] }
+```
+
+Taken from Jina's published OpenAPI spec (`RerankerV3Request` /
+`RerankingResponse`), not from a blog post. Jina bills per token and reports no
+per-call cost, so `costUsd` stays undefined rather than being invented — a
+fabricated figure is one the user cannot reconcile against their bill.
+
+The privacy gate is identical for both providers: `providerDataScopes.reference_files`
+must permit retrieved document text to leave the machine.
+
+## OpenRouter specifics
 
 `electron/services/reranking/OpenRouterReranker.ts`.
 

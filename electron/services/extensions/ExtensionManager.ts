@@ -29,6 +29,18 @@ import {
 // Consent
 // ---------------------------------------------------------------------------
 
+/**
+ * What Core already knows about a model, when it happens to ship the same one.
+ * Declared structurally so this subsystem never imports the rerank catalogue.
+ */
+export interface KnownModelSupportInfo {
+  catalogId: string;
+  supported: boolean;
+  reason?: string;
+}
+
+export type ModelSupportLookup = (repo: string | null | undefined) => KnownModelSupportInfo | null;
+
 export interface InstallPrompt {
   extensionId: string;
   name: string;
@@ -46,6 +58,14 @@ export interface InstallPrompt {
     licenseUrl: string;
     commercialUseRestricted: boolean;
     requiresAcknowledgement: boolean;
+    /** Source repository, so the reader can see WHICH model this is. */
+    repo: string | null;
+    /**
+     * Set when Core ships this same model and has already determined it cannot
+     * run. Advisory: the extension supplies its own runtime, so it may work
+     * where Core's does not — but the user should decide knowing this.
+     */
+    knownUnsupportedReason?: string;
   }>;
   /** True for every extension installed through this system. */
   communityMaintained: boolean;
@@ -78,6 +98,12 @@ export interface ExtensionManagerOptions {
   createHost?: typeof createExtensionHost;
   /** Injected rather than read from process.platform, per the platform contract. */
   platform?: NodeJS.Platform;
+  /**
+   * Lets the manager ask whether Core already knows a model is unrunnable.
+   * Absent means "Core has no opinion", which is how every test that does not
+   * care about this behaves.
+   */
+  modelSupport?: ModelSupportLookup;
 }
 
 export class ExtensionManager {
@@ -89,8 +115,20 @@ export class ExtensionManager {
   private readonly supervisor: CrashSupervisor;
   private readonly rootOverride?: string;
   private readonly hosts = new Map<string, ExtensionHost>();
+  /**
+   * In-flight `load()` calls, keyed by extension id.
+   *
+   * `hosts` alone cannot deduplicate a load, because an entry only lands there
+   * after `await host.start()` resolves. Two overlapping callers both missed
+   * the `hosts` check, both constructed a host, and the second `hosts.set`
+   * overwrote the first — leaving a live utilityProcess with its model resident
+   * that `unload`/`unloadAll` could never reach and `running()` never listed.
+   * Storing the pending promise here BEFORE the first await closes that window.
+   */
+  private readonly loading = new Map<string, Promise<ExtensionHost | null>>();
   private readonly createHost: typeof createExtensionHost;
   private readonly platform: NodeJS.Platform;
+  private readonly modelSupport: ModelSupportLookup;
 
   constructor(options: ExtensionManagerOptions) {
     this.registry = options.registry;
@@ -102,6 +140,7 @@ export class ExtensionManager {
     this.rootOverride = options.rootOverride;
     this.createHost = options.createHost ?? createExtensionHost;
     this.platform = options.platform ?? process.platform;
+    this.modelSupport = options.modelSupport ?? (() => null);
   }
 
   // ── Load lifecycle ─────────────────────────────────────────────────────
@@ -117,6 +156,20 @@ export class ExtensionManager {
     const existing = this.hosts.get(id);
     if (existing) return existing;
 
+    // Everything from here to `this.loading.set` runs synchronously, so a
+    // concurrent caller entering load() can never slip past the latch.
+    const inFlight = this.loading.get(id);
+    if (inFlight) return inFlight;
+
+    const started = this.startHost(id);
+    // Clear the latch on BOTH outcomes: caching a rejected/null load would
+    // wedge the extension for the rest of the session after one transient
+    // start failure.
+    this.loading.set(id, started.finally(() => { this.loading.delete(id); }));
+    return this.loading.get(id) ?? started;
+  }
+
+  private async startHost(id: string): Promise<ExtensionHost | null> {
     const record = this.registry.get(id);
     if (!record) return null;
     if (!record.enabled) {
@@ -159,6 +212,14 @@ export class ExtensionManager {
   }
 
   async unload(id: string): Promise<void> {
+    // Settle any in-flight load first. Without this, unloading during a cold
+    // start (the user toggling an extension off while it boots) reads an empty
+    // `hosts`, returns, and the load then registers a host nothing will ever
+    // stop — the same orphan the `loading` latch exists to prevent.
+    const inFlight = this.loading.get(id);
+    if (inFlight) {
+      try { await inFlight; } catch { /* a load that failed has nothing to stop */ }
+    }
     const host = this.hosts.get(id);
     if (!host) return;
     this.hosts.delete(id);
@@ -167,7 +228,10 @@ export class ExtensionManager {
 
   /** Stop every running extension. Wire this into the app quit path. */
   async unloadAll(): Promise<void> {
-    await Promise.all([...this.hosts.keys()].map((id) => this.unload(id)));
+    // Union of started and still-starting: a load in flight at quit time would
+    // otherwise complete into an untracked host after the teardown ran.
+    const ids = new Set([...this.hosts.keys(), ...this.loading.keys()]);
+    await Promise.all([...ids].map((id) => this.unload(id)));
   }
 
   running(): string[] {
@@ -337,14 +401,21 @@ export class ExtensionManager {
       homepage: manifest.homepage,
       permissions: [...manifest.permissions],
       highRiskPermissions: manifest.permissions.filter(isHighRiskPermission),
-      models: manifest.models.map((m) => ({
-        key: m.key,
-        approxBytes: m.approxBytes,
-        spdx: m.license.spdx,
-        licenseUrl: m.license.url,
-        commercialUseRestricted: m.license.commercialUseRestricted,
-        requiresAcknowledgement: m.license.requiresAcknowledgement,
-      })),
+      models: manifest.models.map((m) => {
+        const known = this.modelSupport(m.repo);
+        return {
+          key: m.key,
+          approxBytes: m.approxBytes,
+          spdx: m.license.spdx,
+          licenseUrl: m.license.url,
+          commercialUseRestricted: m.license.commercialUseRestricted,
+          requiresAcknowledgement: m.license.requiresAcknowledgement,
+          repo: m.repo ?? null,
+          ...(known && !known.supported && known.reason
+            ? { knownUnsupportedReason: known.reason }
+            : {}),
+        };
+      }),
       communityMaintained: true,
     };
   }

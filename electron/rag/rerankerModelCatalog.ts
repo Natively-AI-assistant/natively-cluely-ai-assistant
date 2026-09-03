@@ -353,7 +353,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     revision: '884f7c67aa3ac24edb89064da8c7bfd03f4a90f5',
     supported: false,
     unsupportedReason:
-      'The bundled llama.cpp reads this model\u2019s sliding-window attention settings and then discards them (it reports n_swa = 0), so 17 of its 28 layers would run with the wrong attention and every score would be wrong. Support for that is still an open pull request upstream, and there is no ONNX build of v3.5 to use instead. Jina Reranker v2 Multilingual is here and works today.',
+      'This file cannot be scored on this device: the bundled llama.cpp reads the model\u2019s sliding-window attention settings and then discards them, so 17 of its 28 layers would run with the wrong attention. To USE v3.5, choose Jina AI as your reranker provider above and add a Jina API key \u2014 the hosted service runs the same model correctly.',
     files: [
       { repoPath: 'jina-reranker-v3.5-Q4_K_M.gguf', bytes: 396709504, sha256: '40ec64a1b8c18a40a79bbd7b516115aec158791e56452e734c36c52a76c245a1' },
     ],
