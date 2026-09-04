@@ -2191,6 +2191,47 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // without leaving Settings.
     const [codexOauthStatus, setCodexOauthStatus] = useState<{ signedIn: boolean; email?: string; expiresAt?: number }>({ signedIn: false });
     const [codexOauthInProgress, setCodexOauthInProgress] = useState(false);
+    const [antigravityStatus, setAntigravityStatus] = useState({ signedIn: false, inProgress: false, expiresAt: undefined as number | undefined });
+    const [antigravityModels, setAntigravityModels] = useState<{ id: string; label: string }[]>([]);
+    const [antigravityError, setAntigravityError] = useState('');
+    const [antigravityBusy, setAntigravityBusy] = useState(false);
+    const antigravityLoad = useRef(0);
+
+    useEffect(() => window.electronAPI.onAntigravityStatusChanged?.((status) => {
+        ++antigravityLoad.current;
+        setAntigravityStatus({ signedIn: status.signedIn, inProgress: status.inProgress, expiresAt: status.expiresAt });
+        if (!status.signedIn) setAntigravityModels([]);
+        setAntigravityError(status.error || '');
+    }), []);
+
+    const loadAntigravity = async (force = false) => {
+        const run = ++antigravityLoad.current;
+        if (!window.electronAPI.antigravityStatus) return;
+        try {
+            const status = await window.electronAPI.antigravityStatus();
+            const result = status.signedIn ? await window.electronAPI.antigravityModels(force) : null;
+            if (run !== antigravityLoad.current) return;
+            setAntigravityStatus({ signedIn: status.signedIn, inProgress: status.inProgress, expiresAt: status.expiresAt });
+            if (!status.signedIn || result?.success) setAntigravityModels(result?.models || []);
+            setAntigravityError(result?.error || status.error || '');
+        } catch {
+            if (run === antigravityLoad.current) setAntigravityError(t('Could not load Antigravity status. Try again.'));
+        }
+    };
+
+    const runAntigravityAction = async (action: 'login' | 'logout' | 'models') => {
+        setAntigravityBusy(true);
+        setAntigravityError('');
+        try {
+            if (action === 'models') { await loadAntigravity(true); return; }
+            const result = await (action === 'login' ? window.electronAPI.antigravityStartLogin()
+                : window.electronAPI.antigravitySignOut());
+            await loadAntigravity();
+            if (!result.success) setAntigravityError(result.error || t('Antigravity request failed. Try again.'));
+        } catch {
+            setAntigravityError(t('Could not reach Antigravity. Try again.'));
+        } finally { setAntigravityBusy(false); }
+    };
 
     // --- Default Model ---
     // UNION, not a pick. 3.8-flash is this branch's bump and main has no
@@ -2376,6 +2417,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 }
 
                 const fastMode = await window.electronAPI?.getGroqFastTextMode();
+                await loadAntigravity();
                 if (fastMode) setFastResponseMode(fastMode.enabled);
 
                 // @ts-ignore
@@ -2513,6 +2555,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 }
             });
         }
+        if (antigravityStatus.signedIn && isProviderEnabled('antigravity')) {
+            antigravityModels.forEach(({ id, label }) => {
+                const selectorId = `antigravity:${id}`;
+                if (isModelEnabled('antigravity', selectorId)) opts.push({ id: selectorId, name: `${label} (Antigravity)` });
+            });
+        }
         if (hasStoredKey.litellm && isProviderEnabled('litellm')) {
             // Same allow-list gate the cloud providers get above. Without it the proxy's
             // full catalogue reaches the picker while modelAvailable() filters it, and
@@ -2538,12 +2586,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // changes instead of waiting for a failing request to discover stale state.
     useEffect(() => {
         if (!credentialsLoaded) return;
+        if (defaultModel.startsWith('antigravity:') && antigravityStatus.signedIn && antigravityError) return;
         const opts = buildAvailableModelOptions();
         if (!defaultModel || opts.some(o => o.id === defaultModel) || opts.length === 0) return;
-        const next = opts[0].id;
+        const next = (defaultModel.startsWith('antigravity:')
+            ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined) || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -3655,6 +3705,41 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     })}
 
                 </div>
+            </div>
+
+            {/* Google Antigravity */}
+            <div className="aip-card p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex gap-3">
+                        <AipProviderMark provider="antigravity" name="Google Antigravity" className="mt-0.5" />
+                        <div>
+                            <h3 className="text-sm font-bold aip-hero mb-1">Google Antigravity</h3>
+                            <p className="text-xs aip-muted">{t('Sign in with Google to use your Antigravity models.')}</p>
+                        </div>
+                    </div>
+                    <button type="button" className="aip-btn" onClick={() => handleToggleProvider('antigravity', disabledProviders.includes('antigravity'))}>
+                        {disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
+                    </button>
+                </div>
+                <p className="text-xs aip-muted" role="status">
+                    {antigravityStatus.inProgress ? t('Waiting for Google sign-in…')
+                        : antigravityStatus.signedIn ? t('Antigravity connected') : t('Not connected')}
+                    {antigravityStatus.signedIn && antigravityStatus.expiresAt && ` · ${t('Refreshes automatically before')} ${new Date(antigravityStatus.expiresAt).toLocaleTimeString()}`}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                    {antigravityStatus.inProgress ? (
+                        <button type="button" className="aip-btn" onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}>{t('Cancel sign-in')}</button>
+                    ) : !antigravityStatus.signedIn ? (
+                        <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('login')}>{t('Sign in with Google')}</button>
+                    ) : <>
+                        <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>{t('Reload models')}</button>
+                        <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
+                    </>}
+                </div>
+                {antigravityStatus.signedIn && <p className="text-xs aip-muted">{antigravityModels.length
+                    ? `${antigravityModels.length} ${t('models available in the model picker.')}`
+                    : t('No Antigravity models currently have quota. Reload models later.')}</p>}
+                {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
 
             {/* Codex — ChatGPT subscription proxy */}

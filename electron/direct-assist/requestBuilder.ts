@@ -171,7 +171,9 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     ?? explicitFormat
     ?? detectLatest(transcriptText, FORMAT_PATTERNS);
   const requestedMax = Number.isFinite(input.maxContextChars) ? Number(input.maxContextChars) : DEFAULT_MAX_CONTEXT_CHARS;
-  const capabilityModel = input.selection.provider === 'litellm'
+  const capabilityModel = input.selection.provider === 'antigravity'
+    ? input.selection.model.replace(/^antigravity:/, '')
+    : input.selection.provider === 'litellm'
     ? input.selection.model.replace(/^litellm\//, '')
     : input.selection.provider === 'nvidia_nim'
       ? input.selection.model.replace(/^nvidia_nim\//, '')
