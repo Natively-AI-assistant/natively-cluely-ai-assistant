@@ -30,6 +30,7 @@ import ollamaMark from '../../assets/provider-logos/ollama.svg?raw';
 import nvidiaMark from '../../assets/provider-logos/nvidia.svg?raw';
 import openrouterMark from '../../assets/provider-logos/openrouter.svg?raw';
 import voyageMark from '../../assets/provider-logos/voyage.svg?raw';
+import jinaMark from '../../assets/provider-logos/jina.svg?raw';
 // LiteLLM ships its mark only as a raster favicon (160x160 PNG), so this one is a
 // URL rather than inlined markup. No currentColor to resolve in a PNG, so <img>
 // loses nothing here. Vendored from BerriAI/litellm — MIT, and outside the
@@ -61,6 +62,12 @@ export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }>
     // monochrome variant — see the README's "Colour vs monochrome".
     openrouter: { mono: 'OR', brand: '#C8FF00' },
     voyage:   { mono: 'VY', brand: '#012E33' },
+    // Jina's teal, taken from their own favicon (dominant non-neutral pixel,
+    // 5758 of them) and confirmed against api.jina.ai's docs theme. NOT
+    // lobehub's published COLOR_PRIMARY for this brand, which is '#000' — a
+    // black wash is invisible on the dark tile, the exact failure the README's
+    // legibility rule describes.
+    jina:     { mono: 'JI', brand: '#009191' },
     natively: { mono: 'NA', brand: '#7C9CF5' },
 };
 
@@ -89,6 +96,7 @@ export const AI_PROVIDER_MARKS: Record<string, string> = {
     nvidia_nim: nvidiaMark,
     openrouter: openrouterMark,
     voyage: voyageMark,
+    jina: jinaMark,
 };
 
 /** True when this provider resolves to a real mark rather than a fallback. */
