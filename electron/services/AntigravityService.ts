@@ -11,6 +11,7 @@ import * as http from 'http';
 import * as crypto from 'crypto';
 import { setTimeout as wait } from 'node:timers/promises';
 import { shell } from 'electron';
+import type { CredentialsManager } from './CredentialsManager';
 
 export const ANTIGRAVITY_CLIENT_ID =
   '1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com';
@@ -225,34 +226,21 @@ export function parseAntigravityModels(value: unknown): AntigravityModel[] {
 }
 
 export function parseAntigravityEvent(data: string): string {
-  let root: unknown;
-  try { root = JSON.parse(data); } catch { throw new AntigravityError('response', 'Google returned malformed streaming data.'); }
-  if (!root || typeof root !== 'object' || Array.isArray(root)) {
-    throw new AntigravityError('response', 'Google returned an invalid streaming response.');
-  }
-  const response = (root as Record<string, unknown>).response;
+  let response: any;
+  try { response = JSON.parse(data)?.response; } catch { throw new AntigravityError('response', 'Google returned malformed streaming data.'); }
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
     throw new AntigravityError('response', 'Google returned an invalid streaming response.');
   }
-  const candidateList = (response as Record<string, unknown>).candidates;
-  if (!Array.isArray(candidateList) || candidateList.length === 0) return '';
-  const candidate = candidateList[0];
+  if (!Array.isArray(response.candidates) || !response.candidates.length) return '';
+  const candidate = response.candidates[0];
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     throw new AntigravityError('response', 'Google returned an invalid candidate.');
   }
-  const content = (candidate as Record<string, unknown>).content;
-  const parts = content && typeof content === 'object' && !Array.isArray(content)
-    ? (content as Record<string, unknown>).parts
-    : undefined;
+  const parts = candidate.content?.parts;
   if (parts !== undefined && !Array.isArray(parts)) {
     throw new AntigravityError('response', 'Google returned invalid response parts.');
   }
-  const text = (parts || []).map((part) => {
-    if (!part || typeof part !== 'object' || Array.isArray(part)) return '';
-    const item = part as Record<string, unknown>;
-    return item.thought === true ? '' : typeof item.text === 'string' ? item.text : '';
-  }).join('');
-  return text;
+  return (parts || []).map((part: any) => part?.thought !== true && typeof part?.text === 'string' ? part.text : '').join('');
 }
 
 function parseAntigravitySse(buffer: string, final = false): { events: string[]; remainder: string } {
@@ -727,13 +715,7 @@ export class AntigravityService extends EventEmitter {
       const response = await this.authenticatedFetch(`${ANTIGRAVITY_DAILY_ENDPOINT}/v1internal:fetchAvailableModels`, {
         method: 'POST', body: JSON.stringify({ project: projectId }), signal: request.signal,
       }, token, 12);
-      let catalog: any;
-      try {
-        catalog = await responseJson(response, 'models');
-      } catch (error) {
-        const normalized = this.normalizeError(error, 'Google model discovery failed.');
-        throw normalized;
-      }
+      const catalog = await responseJson(response, 'models');
       if (generation !== this.generation || this.signedOut) throw new AntigravityError('cancelled', 'Google request cancelled.');
       const models = parseAntigravityModels(catalog);
       this.cachedModels = models;
@@ -863,25 +845,22 @@ export class AntigravityService extends EventEmitter {
     this.emit('status-changed', this.getStatus());
   }
 
-  private getCredentialsManager(): any | null {
-    try { return require('./CredentialsManager').CredentialsManager.getInstance(); } catch { return null; }
+  private getCredentialsManager(): CredentialsManager {
+    // CredentialsManager reads app.getPath at module load; LLMHelper is also
+    // imported outside Electron, so defer that side effect until storage is used.
+    return (require('./CredentialsManager') as typeof import('./CredentialsManager')).CredentialsManager.getInstance();
   }
 
   private loadFromStorage(): AntigravityOAuthTokens | null {
-    try {
-      const raw = this.getCredentialsManager()?.getAntigravityOAuthTokens?.();
-      if (!raw || typeof raw.accessToken !== 'string' || typeof raw.refreshToken !== 'string' ||
-        typeof raw.expiresAt !== 'number' || typeof raw.projectId !== 'string' || !raw.projectId.trim()) return null;
-      return { ...raw, projectId: raw.projectId.trim() };
-    } catch { return null; }
+    return this.getCredentialsManager().getAntigravityOAuthTokens();
   }
 
   private saveToStorage(tokens: AntigravityOAuthTokens): boolean {
-    try { return this.getCredentialsManager()?.setAntigravityOAuthTokens?.({ ...tokens }) === true; } catch { return false; }
+    return this.getCredentialsManager().setAntigravityOAuthTokens(tokens);
   }
 
   private clearStorage(): boolean {
-    try { return this.getCredentialsManager()?.clearAntigravityOAuthTokens?.() === true; } catch { return false; }
+    return this.getCredentialsManager().clearAntigravityOAuthTokens();
   }
 
   private scheduleRefresh(retryDelay?: number): void {
