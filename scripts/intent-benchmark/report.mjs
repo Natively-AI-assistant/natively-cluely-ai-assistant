@@ -15,7 +15,7 @@ export const PRODUCTION_LEGACY_SHARES = {
   behavioral: 0.073, summary_probe: 0.047, example_request: 0.036, follow_up: 0.002,
 };
 
-export function scoreRun({ providerId, results, latencies = [], meta = {} }) {
+export function scoreRun({ providerId, results, latencies = [], meta = {}, rowsById = null }) {
   const out = { providerId, meta, axes: {}, n: results.length };
 
   for (const axis of SCORED_AXES) {
@@ -51,6 +51,59 @@ export function scoreRun({ providerId, results, latencies = [], meta = {} }) {
       eceDegenerate: cal.degenerate,
       eceN: cal.n,
     };
+  }
+
+  // COVERAGE, per axis. A provider that resolves few rows but is right on those
+  // is a different animal from one that guesses everywhere, and accuracy alone
+  // conflates them. The rules control is exactly the first kind: the brief asks
+  // for it specifically as a "control for rules hit rate and false positives",
+  // so hit rate and precision-when-fired are first-class outputs, not a
+  // footnote. Reading its 2.9% accuracy without them would be reading the wrong
+  // number entirely.
+  for (const [axis, a] of Object.entries(out.axes)) {
+    const fired = a.n - a.unresolved;
+    a.coverage = {
+      fired,
+      total: a.n,
+      hitRate: a.n ? fired / a.n : null,
+      // Of the rows where the provider committed to an answer, how often was it
+      // right. This is the number that says whether the rules are trustworthy
+      // when they do fire.
+      precisionWhenFired: fired ? (a.perLabel
+        ? Object.entries(a.perLabel).reduce((acc, [l, s2]) => acc + (l === '<unresolved>' ? 0 : s2.tp), 0) / fired
+        : null) : null,
+    };
+  }
+
+  // mode_intent PER MODE, because that is what the acceptance bar specifies
+  // ("macro F1 >= 0.70 on mode_intent per mode") and because a global figure is
+  // meaningless here: the 78 mode_intent labels are partitioned BY MODE, so a
+  // holdout of a few hundred rows leaves single-digit support per label and the
+  // global macro is mostly sampling noise. Each mode is scored against its own
+  // label set, and modes with too little support to be meaningful are reported
+  // as such rather than given a number.
+  if (rowsById) {
+    const byMode = new Map();
+    for (const r of results) {
+      const row = rowsById.get(r.id);
+      if (!row || r.expected?.mode_intent === undefined) continue;
+      const key = row.custom_mode_key ?? row.mode;
+      if (!byMode.has(key)) byMode.set(key, []);
+      byMode.get(key).push({ actual: r.expected.mode_intent, predicted: r.predicted?.mode_intent ?? '<unresolved>' });
+    }
+    out.modeIntentByMode = {};
+    for (const [mode, pairs] of byMode) {
+      const m = macroF1(pairs);
+      out.modeIntentByMode[mode] = {
+        n: pairs.length,
+        accuracy: accuracy(pairs),
+        macroF1: m.macroF1,
+        labelsScored: m.labelsScored,
+        // Below roughly 10 rows per label the per-label F1 is dominated by
+        // whether a single example happened to land in this split.
+        underpowered: m.labelsScored > 0 && pairs.length / m.labelsScored < 10,
+      };
+    }
   }
 
   out.secondaryTasks = secondaryTaskRecall(
@@ -129,6 +182,24 @@ export function formatReport(scored) {
   for (const [axis, a] of Object.entries(scored.axes)) {
     const ece = a.ece == null ? '  n/a' : a.ece.toFixed(3);
     L.push(`  ${axis.padEnd(16)} ${String(a.n).padStart(4)}  ${pc(a.accuracy)} ${pc(a.macroF1)}   ${String(a.labelsScored).padStart(2)}/${String(a.labelsScored + (a.excludedLabels?.length ?? 0)).padEnd(2)}  ${String(a.unresolved).padStart(6)}  ${ece}${a.eceDegenerate ? ' (degenerate)' : ''}`);
+  }
+
+  const anySparse = Object.values(scored.axes).some((a) => a.coverage?.hitRate != null && a.coverage.hitRate < 0.95);
+  if (anySparse) {
+    L.push(`\ncoverage (a provider that rarely fires is not the same as one that guesses)`);
+    L.push(`axis                fired/total   hit-rate  precision-when-fired`);
+    for (const [axis, a] of Object.entries(scored.axes)) {
+      const c = a.coverage;
+      if (!c) continue;
+      L.push(`  ${axis.padEnd(16)} ${String(c.fired).padStart(4)}/${String(c.total).padEnd(5)}  ${pc(c.hitRate)}  ${pc(c.precisionWhenFired)}`);
+    }
+  }
+
+  if (scored.modeIntentByMode) {
+    L.push(`\nmode_intent per mode (the bar is >= 0.70 per mode, not globally)`);
+    for (const [mode, m] of Object.entries(scored.modeIntentByMode)) {
+      L.push(`  ${mode.padEnd(28)} n=${String(m.n).padStart(3)}  acc ${pc(m.accuracy)}  macroF1 ${pc(m.macroF1)}  over ${m.labelsScored} labels${m.underpowered ? '   UNDERPOWERED (<10 rows/label)' : ''}`);
+    }
   }
 
   if (scored.secondaryTasks?.recall != null) {
