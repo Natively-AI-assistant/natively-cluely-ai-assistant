@@ -9013,9 +9013,15 @@ let isMultimodal = !!(imagePaths?.length);
       TEXT: JSON.stringify(fullPrompt).slice(1, -1),
       IMAGE_BASE64: base64Image,
     };
-    const url = deepVariableReplacer(curlConfig.url, variables);
-    const headers = deepVariableReplacer(curlConfig.header || {}, variables);
-    let data = deepVariableReplacer(curlConfig.data || {}, variables);
+    // applyCurlVariables, not three raw deepVariableReplacer calls. This
+    // function arrived with the main merge still calling the older helper,
+    // which this branch had already replaced — it no longer exists, so TS7
+    // failed the electron typecheck on both platforms. The replacement is also
+    // stricter: it percent-encodes the URL (an unencoded &, # or space in a
+    // substituted value rewrites the request shape) and strips control
+    // characters from header values.
+    const { url, headers, data: substituted } = applyCurlVariables(curlConfig, variables);
+    let data = substituted;
     if (base64Image && imagePath) data = injectImageIntoMessages(data, base64Image, imagePath);
 
     const { validateUrlForSsrf } = require('./utils/curlUtils');
