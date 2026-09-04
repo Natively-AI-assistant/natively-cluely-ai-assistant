@@ -41,6 +41,24 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 
+/**
+ * The model that is actually BUNDLED, read from the source.
+ *
+ * This suite exists to prove the shipped reranker loads and ranks in a packaged
+ * layout. It was pinned to `Xenova/bge-reranker-base`, and when that model was
+ * unbundled on 2026-09-04 the assertion did not fail — it SKIPPED, because the
+ * weights it looked for were legitimately gone. A suite whose entire purpose is
+ * "the bundled model works" silently stopped checking anything.
+ *
+ * Deriving the id means the next swap re-points it instead of muting it.
+ */
+const BUNDLED_MODEL = (() => {
+  const src = fs.readFileSync(path.resolve(repoRoot, 'electron/rag/LocalReranker.ts'), 'utf8');
+  const m = src.match(/const DEFAULT_RERANKER_MODEL = '([^']+)'/);
+  assert.ok(m, 'DEFAULT_RERANKER_MODEL is gone from LocalReranker.ts');
+  return m[1];
+})();
+
 describe('electron-builder config actually bundles the reranker model (source-pinned)', () => {
   const pkg = JSON.parse(fs.readFileSync(path.resolve(repoRoot, 'package.json'), 'utf8'));
 
@@ -108,34 +126,31 @@ describe('resources/models/Xenova/bge-reranker-base — JSONs tracked, weights n
 
 describe('LocalReranker.isCached() resolves true against a SIMULATED packaged-build resourcesPath layout', () => {
   test('with app.isPackaged=true and resourcesPath pointing at a copy mirroring extraResources\' output layout, isCached() is true and rerank() actually runs (not a silent no-op)', async (t) => {
-    // Needs the real weights, which are no longer bundled — the model measured
-    // worse than no reranker (docs/reranker-benchmark-2026-09-04.md). Absent is
-    // the normal state on a clean checkout, so skip rather than fail; run
-    // `node scripts/download-models.js` or select the model in Settings to
-    // exercise this path.
-    const weightsPath = path.resolve(repoRoot, 'resources/models/Xenova/bge-reranker-base/onnx/model_quantized.onnx');
-    if (!fs.existsSync(weightsPath)) {
-      t.skip('bge-reranker-base weights are not present (no longer bundled)');
-      return;
-    }
+    // The BUNDLED model, not a hardcoded one. Its weights must be present —
+    // they are what `npm run build` fetches — so this must RUN, never skip. A
+    // skip here means the thing this file exists to prove is unproven.
+    const srcDir = path.resolve(repoRoot, 'resources/models', ...BUNDLED_MODEL.split('/'));
+    const weightsPath = path.join(srcDir, 'onnx/model_quantized.onnx');
+    assert.ok(fs.existsSync(weightsPath),
+      `${BUNDLED_MODEL} weights are missing from resources/models — run `
+      + '`node scripts/download-models.js`. They are what the installer ships, so '
+      + 'their absence is a build problem rather than a reason to skip this test.');
 
     // Simulate electron-builder's packaged layout: a resourcesPath directory
-    // containing models/Xenova/bge-reranker-base/... — exactly what
+    // containing models/<modelId>/... — exactly what
     // extraResources: [{from: 'resources/models/', to: 'models/'}] produces,
     // and exactly what LocalReranker.resolveModelPath's
     // `path.join(process.resourcesPath, 'models')` candidate checks first
     // when app.isPackaged is true.
+    //
+    // path.join over the SPLIT id, never the raw string: the id carries a
+    // forward slash and Windows needs a backslash on disk.
     const simulatedResourcesPath = fs.mkdtempSync(path.join(os.tmpdir(), 'reranker-packaged-sim-'));
-    const modelsDestDir = path.join(simulatedResourcesPath, 'models', 'Xenova', 'bge-reranker-base');
+    const modelsDestDir = path.join(simulatedResourcesPath, 'models', ...BUNDLED_MODEL.split('/'));
     fs.mkdirSync(path.join(modelsDestDir, 'onnx'), { recursive: true });
-    const srcDir = path.resolve(repoRoot, 'resources/models/Xenova/bge-reranker-base');
-    fs.copyFileSync(path.join(srcDir, 'tokenizer.json'), path.join(modelsDestDir, 'tokenizer.json'));
-    fs.copyFileSync(path.join(srcDir, 'config.json'), path.join(modelsDestDir, 'config.json'));
-    fs.copyFileSync(path.join(srcDir, 'tokenizer_config.json'), path.join(modelsDestDir, 'tokenizer_config.json'));
-    fs.copyFileSync(
-      path.join(srcDir, 'onnx/model_quantized.onnx'),
-      path.join(modelsDestDir, 'onnx/model_quantized.onnx'),
-    );
+    for (const rel of ['tokenizer.json', 'config.json', 'tokenizer_config.json', 'onnx/model_quantized.onnx']) {
+      fs.copyFileSync(path.join(srcDir, ...rel.split('/')), path.join(modelsDestDir, ...rel.split('/')));
+    }
 
     const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'reranker-packaged-userdata-'));
     const origLoad = Module._load;
