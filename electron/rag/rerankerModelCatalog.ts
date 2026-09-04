@@ -205,6 +205,14 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
   {
     id: 'ettin-reranker-32m',
     name: 'Ettin Reranker 32M',
+    // EXPLICITLY not recommended. Measured 2026-09-04 against a no-reranker
+    // baseline over 24 queries on a 40-passage pool with same-topic
+    // distractors: MRR 0.8299 where doing NOTHING scored 0.8368. It moved 3
+    // queries up and 5 down. The only model in this catalogue that is worse
+    // than not reranking at all — kept listed because it is the cheapest way
+    // to exercise the ONNX path, and flagged false so the absence is a
+    // decision rather than an oversight. docs/reranker-benchmark-2026-09-04.md
+    recommended: false,
     runtime: 'onnx',
     repo: 'cross-encoder/ettin-reranker-32m-v1',
     modelId: 'cross-encoder/ettin-reranker-32m-v1',
