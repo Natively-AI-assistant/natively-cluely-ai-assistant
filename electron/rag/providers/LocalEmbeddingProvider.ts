@@ -42,6 +42,13 @@ const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
  *  IntentClassifier's startupPoisoned. */
 let startupPoisoned = false;
 
+/**
+ * How long a disposed worker may keep running to finish work already in flight.
+ * Generous on purpose: it drains in the background and each pending request has
+ * its own timeout, so this is only a backstop against a wedged thread.
+ */
+const DISPOSE_DRAIN_MAX_MS = 120_000;
+
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
   readonly dimensions = 384; // all-MiniLM-L6-v2
@@ -201,10 +208,51 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
    */
   async dispose(reason = 'embedding provider disposed'): Promise<void> {
     const worker = this.worker;
-    this.worker = null;
+    this.worker = null;          // new work resolves against the new config
     this.loadingPromise = null;
-    this.rejectAllPending(new Error(reason));
-    if (!worker) return;
+
+    if (!worker) {
+      this.rejectAllPending(new Error(reason));
+      return;
+    }
+
+    // Nothing owed — terminate now.
+    if (this.pendingRequests.size === 0) {
+      try { await worker.terminate(); } catch { /* already gone */ }
+      return;
+    }
+
+    // DETACH rather than reject (2026-09-04).
+    //
+    // A rejected embed LOSES chunks: LiveRAGIndexer only warns ("Failed to
+    // embed live chunk batch") and moves on, so the batch never reaches the
+    // index. Disposal is triggered by an embedding config change, which a user
+    // can make while a meeting is recording or while reference files are still
+    // ingesting — precisely when losing chunks is least acceptable.
+    //
+    // Letting them finish under the OLD provider is safe: RAGManager filters
+    // retrieval by getActiveSpaceKey(), so vectors written into a superseded
+    // embedding space are never retrieved. They cost disk, not correctness.
+    //
+    // Detached, not awaited, because initializeEmbeddings() is awaited by the
+    // set-config IPC — blocking the drain there would freeze Settings for as
+    // long as a reference-file batch takes.
+    void this.terminateWhenDrained(worker);
+  }
+
+  /**
+   * Wait for the outstanding replies this worker still owes, then stop it.
+   *
+   * Bounded, because a wedged worker must not be kept alive forever — but
+   * generously, since this runs in the background and every pending request
+   * already carries its own per-call timeout, so the map empties on its own
+   * even if the worker never answers.
+   */
+  private async terminateWhenDrained(worker: Worker): Promise<void> {
+    const deadline = Date.now() + DISPOSE_DRAIN_MAX_MS;
+    while (this.pendingRequests.size > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     try { await worker.terminate(); } catch { /* already gone */ }
   }
 

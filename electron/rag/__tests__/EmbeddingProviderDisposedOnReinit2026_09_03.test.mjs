@@ -80,23 +80,23 @@ test('dispose() terminates the worker and clears the handle', async () => {
     assert.equal(provider.loadingPromise, null, 'a stale loadingPromise would short-circuit the next load');
 });
 
-test('dispose() rejects calls that were in flight rather than leaving them hanging', async () => {
+test('dispose() rejects pending work only when there is no worker left to answer it', async () => {
+    // Rejecting is right when nothing can ever reply — otherwise the caller
+    // hangs until some outer timeout notices. It is NOT right while a live
+    // worker still owes a reply; see the in-flight test below, which is the
+    // case that loses meeting/reference chunks.
     const provider = bareProvider();
-    provider.worker = { terminate: async () => {}, on() {}, unref() {} };
+    provider.worker = null;
 
     let rejected;
-    const inFlight = new Promise((resolve, reject) => {
-        provider.pendingRequests.set(1, {
-            resolve,
-            reject,
-            timer: setTimeout(() => {}, 60_000),
-        });
+    const orphaned = new Promise((resolve, reject) => {
+        provider.pendingRequests.set(1, { resolve, reject, timer: setTimeout(() => {}, 60_000) });
     }).catch((e) => { rejected = e; });
 
     await provider.dispose('replaced by a new embedding configuration');
-    await inFlight;
+    await orphaned;
 
-    assert.ok(rejected, 'an embed() awaiting the disposed worker must reject, not hang forever');
+    assert.ok(rejected, 'with no worker, a pending embed must reject rather than hang forever');
     assert.match(String(rejected.message), /replaced by a new embedding configuration/);
     assert.equal(provider.pendingRequests.size, 0, 'pending map must be cleared');
 });
@@ -122,4 +122,62 @@ test('the pipeline disposes local providers before replacing them', () => {
         'the dispose loop must dedupe by identity: provider and fallbackProvider are the same ' +
         'object in local-only mode.',
     );
+});
+
+test('dispose() lets an IN-FLIGHT embed finish instead of failing it', async () => {
+    // THE CONSTRAINT. A rejected embed LOSES chunks — LiveRAGIndexer only warns
+    // ("Failed to embed live chunk batch") and moves on. So a config change made
+    // while a meeting is recording, or while reference files are being ingested,
+    // must never reject work already in flight. The original dispose() called
+    // rejectAllPending() immediately, which did exactly that.
+    //
+    // Completing them under the OLD provider is safe: RAGManager filters
+    // retrieval by getActiveSpaceKey(), so vectors written in a superseded
+    // embedding space are simply never retrieved. They cannot corrupt anything.
+    //
+    // MEASURED 2026-09-04 against the real all-MiniLM-L6-v2 worker, 400 embeds
+    // genuinely in flight (pendingRequests.size === 400) when dispose lands —
+    // the reference-file-ingestion shape:
+    //
+    //     immediate reject (before):   0/400 succeeded, all "replaced by a new
+    //                                  embedding configuration"
+    //     detach-drain    (after) : 400/400 succeeded, 384 dims, dispose
+    //                                  returned in 0ms
+    //
+    // The 0ms matters as much as the 400: initializeEmbeddings() is awaited by
+    // the set-config IPC, so a blocking drain would freeze Settings for as long
+    // as the batch runs.
+    //
+    // Boundary worth knowing: an embed STARTED after dispose (rather than
+    // already posted) can still be rejected by the old worker's exit handler,
+    // because pendingRequests is shared per-instance. Production does not hit
+    // it — _doInitialize replaces the provider, so nothing calls embed() on the
+    // disposed instance — but do not rely on a disposed provider accepting new
+    // work.
+    const provider = bareProvider();
+    let terminated = false;
+    provider.worker = { terminate: async () => { terminated = true; }, on() {}, unref() {} };
+
+    let settled = 'pending';
+    const inFlight = new Promise((resolve, reject) => {
+        provider.pendingRequests.set(1, { resolve, reject, timer: setTimeout(() => {}, 60_000) });
+    }).then(() => { settled = 'resolved'; }, () => { settled = 'rejected'; });
+
+    const disposing = provider.dispose('replaced by a new embedding configuration');
+
+    // dispose() must not block its caller on the drain: initializeEmbeddings is
+    // awaited by the set-config IPC, and blocking there freezes Settings.
+    await disposing;
+    assert.equal(settled, 'pending', 'dispose() must not reject work that is still in flight');
+    assert.equal(terminated, false, 'the worker must stay alive while it still owes a reply');
+
+    // The reply arrives late, the way a real worker's would.
+    provider.pendingRequests.get(1).resolve({ vectors: [[0.1, 0.2]] });
+    provider.pendingRequests.delete(1);
+    await inFlight;
+    assert.equal(settled, 'resolved', 'the in-flight embed must complete normally');
+
+    // Only once nothing is owed does the worker go.
+    for (let i = 0; i < 60 && !terminated; i++) await new Promise((r) => setTimeout(r, 50));
+    assert.ok(terminated, 'the worker must be terminated once it has drained');
 });

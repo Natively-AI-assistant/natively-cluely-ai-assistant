@@ -92,6 +92,9 @@ function fallbackUserDataDir(): string {
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_RERANK_TIMEOUT_MS = 15_000; // a single rerank() call (bounded candidate pool ~30)
 
+/** Backstop for a disposed reranker worker that still owes replies. */
+const RERANK_DISPOSE_DRAIN_MAX_MS = 30_000;
+
 class LocalRerankerImpl {
     private worker: Worker | null = null;
     private requestId = 0;
@@ -495,16 +498,57 @@ class LocalRerankerImpl {
      * silently do nothing until the next launch.
      */
     dispose(reason = 'disposed'): void {
-        if (this.worker) {
-            this.worker.terminate().catch(() => {});
-            this.worker = null;
-        }
-        // Release any held ONNX gate slot so the next load starts clean.
-        if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
-        this.rejectAllPending(new Error(reason));
+        const worker = this.worker;
+        this.worker = null;
         this.loadingPromise = null;
         this.loadFailed = false;
         this.loaded = false;
+
+        // An INTENTIONAL teardown is not a crash — clear the sentinel here
+        // (2026-09-04).
+        //
+        // `terminate()` exits the thread with code 1, and the exit handler only
+        // clears the sentinel on code 0, so every ordinary model switch through
+        // reloadLocalReranker() left a "died hard" record behind. Restarting
+        // within ONNX_LOAD_SENTINEL_TTL_MS (5 min) then made
+        // consumeLocalRerankerSentinel() set startupPoisoned and SKIP local
+        // reranking for that whole launch — a false crash signal produced by a
+        // normal user action, with the usual silent symptom.
+        try { clearOnnxLoadSentinel('reranker', this.modelId); } catch { /* best effort */ }
+
+        if (!worker) {
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            this.rejectAllPending(new Error(reason));
+            return;
+        }
+
+        // Let an in-flight rerank finish rather than killing it mid-call.
+        //
+        // A rerank fails CLOSED — null means "keep the existing order" — so
+        // this does not lose data the way a rejected embed does. But disposal
+        // is triggered by the user switching models, which can land in the
+        // middle of a meeting turn, and silently dropping that turn's ranking
+        // is exactly the "reranker did nothing" symptom. Terminating mid
+        // `session.run()` is also the native-abort shape this worker exists to
+        // contain. The worker's own exit handler releases the ONNX gate slot.
+        if (this.pendingRequests.size === 0) {
+            worker.terminate().catch(() => {});
+            return;
+        }
+        void this.terminateWhenDrained(worker);
+    }
+
+    /**
+     * Wait for replies this worker still owes, then stop it. Bounded: each
+     * pending request carries its own timeout, so the map drains even if the
+     * worker never answers.
+     */
+    private async terminateWhenDrained(worker: Worker): Promise<void> {
+        const deadline = Date.now() + RERANK_DISPOSE_DRAIN_MAX_MS;
+        while (this.pendingRequests.size > 0 && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        try { await worker.terminate(); } catch { /* already gone */ }
     }
 
     /** Test-only alias, kept so existing tests read the same. */
