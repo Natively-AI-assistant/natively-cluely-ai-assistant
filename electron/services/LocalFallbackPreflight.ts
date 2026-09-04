@@ -162,6 +162,23 @@ function checkNativeModuleUnpacked(): { ok: boolean; message: string } {
 }
 
 /**
+ * A human-readable name for the bundled reranker, derived rather than written.
+ *
+ * `Xenova/ms-marco-MiniLM-L-6-v2` -> `ms-marco-MiniLM-L-6-v2`. Two strings in
+ * this file named the model; both went stale when it changed, and one of them
+ * is the line users read in the startup diagnostics.
+ */
+function bundledRerankerName(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');
+    const id = getBundledRerankerModelId?.();
+    if (typeof id === 'string' && id) return id.split('/').pop() as string;
+  } catch { /* fall through */ }
+  return 'local reranker';
+}
+
+/**
  * Like checkUnpackedNativeDir, but satisfied by ANY entry under `dirRel` whose
  * name starts with `prefix`.
  *
@@ -376,9 +393,13 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       'local-reranker',
       'packaged_local',
       rerankerOk ? 'ready' : 'missing_required_asset',
+      // The model's NAME, not a hardcoded one. This said "BGE reranker (q8)"
+      // after the bundled model changed, so the startup diagnostics reported a
+      // model that is no longer in the app — the same drift that made the path
+      // check above look for the wrong file.
       rerankerOk
-        ? 'Packaged BGE reranker (q8) is ready for offline smart-retrieval'
-        : 'Natively packaged BGE reranker model is missing. Please reinstall Natively.',
+        ? `Packaged ${bundledRerankerName()} is ready for offline smart-retrieval`
+        : `Natively's packaged ${bundledRerankerName()} is missing. Please reinstall Natively.`,
       { checks: checks.filter(c => c.id === 'reranker model assets') },
     ));
 
