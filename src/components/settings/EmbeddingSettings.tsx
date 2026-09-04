@@ -122,33 +122,25 @@ const bareModelName = (label: string): string => {
 };
 
 /**
- * `model — Provider` — the form the menu uses so two routes to the same model
- * stay distinguishable (`voyage-4-lite — OpenRouter` vs
- * `voyage-4-lite — Voyage AI`). The model name leads because that is what a
- * reader scans for; the provider is the qualifier, so it trails.
- *
- * The suffix is applied to the BARE name, never to the raw label, and that is
- * the whole trick. An OpenRouter label is already namespaced, so suffixing the
- * raw label is what produced `voyage/voyage-4-lite — OpenRouter` on
- * 2026-09-01 — three names for one model, with the one a user actually
- * recognises buried in the middle. bareModelName strips the route prefix first,
- * which is why this reads as two names and the old version read as three.
- *
- * Display names ("Voyage AI", "OpenRouter") rather than provider ids: this is
- * prose for a human now, not a path segment. It also matches the reranker
- * panel, which labels its hosted rows the same way.
+ * `provider/model` — the form the menu uses so two routes to the same model
+ * stay distinguishable (`openrouter/voyage-4-lite` vs `voyage/voyage-4-lite`).
+ * Provider IDs are the short single tokens the catalogue defines, which is why
+ * they, and not the display names ("Voyage AI", "Custom endpoint"), are what a
+ * path segment is built from.
  */
-const qualifiedModelName = (providerName: string, label: string): string =>
-    `${bareModelName(label)} — ${providerName}`;
+const qualifiedModelName = (providerId: string, label: string): string =>
+    `${providerId}/${bareModelName(label)}`;
 
 /**
  * A model gets TWO names.
  *
  * Closed, the trigger is a statement of fact — the model you are using — and
- * "voyage-4-lite — OpenRouter" buries that fact in routing detail. Open, the
- * list is a comparison, and there the qualifier is the whole point: the same
- * model is reachable through more than one provider and the rows must be told
- * apart. So `triggerName` is the bare model and `name` is `model — Provider`.
+ * "voyage-4-lite — OpenRouter" (or, for an OpenRouter id, the doubly
+ * qualified "voyage/voyage-4-lite — OpenRouter") buries that fact in
+ * routing detail. Open, the list is a comparison, and there the qualifier is
+ * the whole point: the same model is reachable through more than one provider
+ * and the rows must be told apart. So `triggerName` is the bare model and
+ * `name` is `provider/model`.
  */
 interface EmbeddingSelectOption { id: string; name: string; triggerName?: string }
 
@@ -496,7 +488,7 @@ export const EmbeddingSettings: React.FC<{ onNavigate?: (tab: string) => void }>
                 const targetModels = primaryModels.length > 0 ? primaryModels : p.models.slice(0, 1);
                 return targetModels.map(m => ({
                     id: `${p.id}::${m.id}`,
-                    name: qualifiedModelName(p.name, m.label || m.id),
+                    name: qualifiedModelName(p.id, m.label || m.id),
                     triggerName: bareModelName(m.label || m.id),
                 }));
             });
