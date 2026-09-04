@@ -223,3 +223,30 @@ describe('conversationHasContent requires an answered turn, not any prose', () =
       'rendered for continuity, but with no answer it is not something to answer FROM');
   });
 });
+
+// ── 5. the declared context budgets stay proportionate ─────────────────────
+
+describe('a strict document-grounded mode does not weight chat like evidence', () => {
+  // The 2026-08-28 sweep raised conversationTokens 400-800 → 2400 for EVERY
+  // mode at once, with a rationale ("~6-8 completed exchanges") that assumes the
+  // conversation is a place to answer from. In a STRICT_DOC_CAPS mode it is not:
+  // general knowledge is off and document claims require evidence, so the ring
+  // serves referent resolution only. Pinning the invariant rather than the
+  // number, so the next blanket sweep is caught but retuning stays free.
+  test('conversation is budgeted below evidence where claims require evidence', async () => {
+    const mod = await import(
+      pathToFileURL(path.join(base, 'policies/mode-policy-registry.js')).href);
+    const policies = Object.values(mod.MODE_POLICIES).filter(
+      (m) => m && typeof m === 'object' && m.contextBudget && m.capabilityPolicy);
+
+    assert.ok(policies.length > 0, 'expected to find mode policies to check');
+    const strict = policies.filter((m) => m.capabilityPolicy.useGeneralIndustryKnowledge === false);
+    assert.ok(strict.length > 0, 'expected at least one strict document-grounded mode');
+
+    for (const m of strict) {
+      assert.ok(m.contextBudget.conversationTokens < m.contextBudget.evidenceTokens,
+        `${m.id}: conversation (${m.contextBudget.conversationTokens}) must stay below evidence `
+        + `(${m.contextBudget.evidenceTokens}) in a mode where the conversation is not an answer source`);
+    }
+  });
+});
