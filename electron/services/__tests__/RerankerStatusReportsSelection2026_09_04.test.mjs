@@ -80,14 +80,16 @@ test('the bundled model is still what an empty selection reports', () => {
   // The fallback has to survive: most users never pick a catalogue model, and
   // the panel must not go blank for them.
   const block = statusBlock();
-  // Read from the source, not hardcoded: the bundled model changed once
-  // already (bge-reranker-base -> ms-marco-MiniLM-L-6-v2 on 2026-09-04) and a
-  // literal here turns that swap into a failure about the wrong thing.
-  const localReranker = fs.readFileSync(path.join(repoRoot, 'electron/rag/LocalReranker.ts'), 'utf8');
-  const bundled = localReranker.match(/const DEFAULT_RERANKER_MODEL = 'Xenova\/([^']+)'/)?.[1];
-  assert.ok(bundled, 'DEFAULT_RERANKER_MODEL is gone from LocalReranker.ts');
-  assert.match(block, new RegExp(`id: '${bundled}'`),
-    'the status handler and LocalReranker must name the SAME bundled model');
+  // The handler must not carry its own copy of the name at all. It used to,
+  // and that copy is what said "BGE Reranker Base" after the bundled model
+  // changed. Asserting the WIRING rather than a matching literal is what makes
+  // the next swap impossible to get half-right.
+  assert.match(block, /BUILT_IN_RERANKER\.id/,
+    'the handler must read the bundled id from BUILT_IN_RERANKER');
+  assert.match(block, /BUILT_IN_RERANKER\.name/,
+    'and the name too — the name is what the panel renders');
+  assert.doesNotMatch(block, /id: 'ms-marco[^']*'/,
+    'a hardcoded model id is back in the status handler');
   assert.match(block, /selectedLocal: \{ id: string; name: string \} \| null = null/,
     'no selection means null, which the ?? falls through to the bundled id');
 });
@@ -110,6 +112,17 @@ test('every description of the bundled model names the SAME one', () => {
   assert.match(builtIn.slice(0, 400), new RegExp(`id: '${modelId.split('/')[1]}'`),
     'and its id must be the bare model name, matching the status handler');
 
-  assert.match(statusBlock(), new RegExp(`id: '${modelId.split('/')[1]}'`),
-    'the status handler must name it too');
+  // The handler now READS BUILT_IN_RERANKER instead of repeating it, so what is
+  // checked here is that the chain is unbroken end to end: the catalogue's
+  // description matches what LocalReranker loads (above), and the handler takes
+  // its values from that description rather than from a fourth literal.
+  assert.match(statusBlock(), /BUILT_IN_RERANKER\.id/,
+    'the status handler must consume BUILT_IN_RERANKER, not restate it');
+
+  // The preflight's last-resort literal is the remaining copy, and it is only
+  // reachable if requiring LocalReranker throws. It still has to be right.
+  const preflight = fs.readFileSync(path.join(repoRoot, 'electron/services/LocalFallbackPreflight.ts'), 'utf8');
+  const fallback = preflight.match(/const BUILT_IN_RERANKER_MODEL_ID = '([^']+)'/)?.[1];
+  assert.equal(fallback, modelId,
+    'the preflight fallback names a different model than the one that actually loads');
 });

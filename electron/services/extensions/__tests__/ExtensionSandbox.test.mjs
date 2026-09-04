@@ -11,6 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -128,11 +129,29 @@ test('the spawn fixture cannot be a binary that might actually exist', () => {
   // and stays green on CI, which is the worst possible split.
   assert.doesNotMatch(UNSPAWNABLE, /^(llama|node|sh|bash|python|git|curl)/,
     'the fixture must not be a name any machine could resolve');
-  const { execFileSync } = require('node:child_process');
-  let resolved = true;
-  try { execFileSync('which', [UNSPAWNABLE], { stdio: 'ignore' }); }
-  catch { resolved = false; }
+  // Resolved by scanning PATH in Node, NOT by shelling out to `which`.
+  // `which` does not exist on Windows (it is `where`), so execFileSync threw
+  // ENOENT there, the catch set resolved=false, and the assertion passed for
+  // every possible fixture name — the guard was vacuous on half the supported
+  // platforms, which is the same shape as the bug it exists to catch.
+  //
+  // PATHEXT is honoured because the test above deliberately spawns
+  // `${UNSPAWNABLE}.exe`, so the executable forms have to be checked too.
+  const exts = process.platform === 'win32'
+    ? ['', ...(process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)]
+    : [''];
+  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const resolved = dirs.some(d => exts.some(ext => {
+    try { return fs.statSync(path.join(d, UNSPAWNABLE + ext)).isFile(); }
+    catch { return false; }
+  }));
   assert.equal(resolved, false, `${UNSPAWNABLE} resolves on this machine — pick a name that cannot`);
+  // And the scan must be capable of finding something, or it proves nothing.
+  // `node` is running this file, so it is on PATH by construction.
+  const canFindAnything = dirs.some(d => exts.some(ext => {
+    try { return fs.statSync(path.join(d, 'node' + ext)).isFile(); } catch { return false; }
+  }));
+  assert.ok(canFindAnything, 'the PATH scan found no `node` — it cannot resolve anything, so it proves nothing');
 });
 
 // ── fetch ─────────────────────────────────────────────────────────────────

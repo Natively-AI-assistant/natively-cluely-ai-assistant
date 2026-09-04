@@ -92,7 +92,14 @@ const DEFAULT_RERANKER_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
  * reranker missing on every packaged launch.
  */
 export function getBundledRerankerModelId(): string {
-  return (process.env.NATIVELY_RERANKER_MODEL || '').trim() || DEFAULT_RERANKER_MODEL;
+  // Deliberately NOT honouring NATIVELY_RERANKER_MODEL. That variable selects
+  // which model to LOAD; this function answers what the INSTALLER SHIPPED, and
+  // the two are different questions. Reading the env here made the preflight
+  // look in resources/models for a model that was never bundled, fail, and show
+  // the user "Natively's packaged <override> is missing. Please reinstall
+  // Natively." — blaming the install for a deliberate override, and naming a
+  // model the installer has no reason to contain.
+  return DEFAULT_RERANKER_MODEL;
 }
 
 /**

@@ -167,7 +167,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     bytes: 95898326,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/mixedbread-ai/mxbai-rerank-xsmall-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '70M · int8',
-    note: 'A good default: small download, noticeably better than the built-in.',
+    note: 'MRR 0.8394 against a 0.8368 no-reranker baseline — below the bundled ms-marco-MiniLM-L-6-v2 (0.8688). Small and fast, but downloading it makes ranking slightly worse.',
   },
   {
     id: 'bge-reranker-large',
@@ -188,7 +188,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     bytes: 580038433,
     license: { spdx: 'MIT', url: 'https://huggingface.co/Xenova/bge-reranker-large', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '560M · int8',
-    note: 'Highest quality of the local models measured (MRR 0.715 vs the built-in 0.539) — but the slowest to load, and it did not clear the live 1200ms budget in that run.',
+    note: 'MRR 0.8469 — just above the 0.8368 no-reranker baseline and below the bundled ms-marco-MiniLM-L-6-v2 (0.8688), for a 96MB download and the slowest load measured.',
   },
 
   // ── Ettin: downloadable bytes, but Core cannot score them. See the header. ──
@@ -229,7 +229,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     bytes: 131918633,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-32m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '32M',
-    note: 'Ultra-light. Its scoring head runs outside the ONNX graph.',
+    note: 'MRR 0.8299 — the one model measured WORSE than using no reranker at all (0.8368). Ultra-light; its scoring head runs outside the ONNX graph.',
   },
   {
     id: 'ettin-reranker-68m',
@@ -266,7 +266,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     bytes: 277620876,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-68m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '68M',
-    note: 'Close to the 150M in quality at half the download.',
+    note: 'MRR 0.9205 — the strongest model here that is free for commercial use, at half the download of the 150M.',
   },
   {
     id: 'ettin-reranker-150m',
@@ -297,7 +297,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     bytes: 602521081,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/cross-encoder/ettin-reranker-150m-v1', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '150M',
-    note: 'The strongest Ettin. Largest download of the three.',
+    note: 'MRR 0.9125 — the largest Ettin, and slightly behind the 68M despite the bigger download.',
   },
 
   {
@@ -326,7 +326,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     // Its config.json has no model_type and points auto_map at custom Python.
     configPatch: { model_type: 'xlm-roberta' },
     params: '278M · int8',
-    note: 'Jina, multilingual, and a real cross-encoder — so unlike v3.5 it runs here today. Non-commercial licence.',
+    note: 'MRR 0.9167 — a true multilingual cross-encoder. Non-commercial licence.',
   },
 
   // ── GGUF, run by llama.cpp in-process (node-llama-cpp) ──────────────────
@@ -350,7 +350,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
     scoring: 'rank',
     params: '568M · Q4_K_M',
-    note: 'Multilingual, and the strongest local reranker measured here. Runs on llama.cpp.',
+    note: 'MRR 0.8618 — multilingual, but only just ahead of the 0.8368 baseline and behind the bundled ms-marco-MiniLM-L-6-v2 (0.8688). Runs on llama.cpp.',
   },
 
   // ── GGUF: listwise, scored by Core itself ───────────────────────────────
@@ -370,8 +370,10 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     supported: true,
     // Listwise, not a cross-encoder: the query and every passage go through in
     // one pass and the score is a cosine between projected hidden states. See
-    // jinaListwiseRerank.ts for the protocol, and for why the block budget of
-    // 1024 tokens is a correctness boundary rather than a tuning knob.
+    // jinaListwiseRerank.ts for the protocol and the 4096-token block budget.
+    // 1024 was the first value here, on the reasoning that it was the sliding
+    // window and therefore a correctness boundary. Measured, it is not: mean
+    // Kendall tau against the reference was 0.791 at 1024 and 0.939 at 2048+.
     scoring: 'listwise',
     // Three files, all required. The scoring MLP is deliberately NOT baked
     // into the GGUF — Jina say so in their README — so the .gguf alone can
@@ -391,7 +393,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
       requiresAcknowledgement: true,
     },
     params: '0.6B · Q4_K_M',
-    note: 'Listwise reranker built on Qwen3-0.6B. The weights and the scoring projector both download; what is missing is a runtime — see below.',
+    note: 'MRR 0.9514 — the best local reranker measured, and the only one that moved no result down. Listwise, built on Qwen3-0.6B: Natively scores it directly using the projector that downloads alongside the weights. Non-commercial licence.',
   },
   {
     id: 'qwen3-reranker-0.6b-q4km',
@@ -410,7 +412,7 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
     bytes: 483835680,
     license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/QuantFactory/Qwen3-Reranker-0.6B-GGUF', commercialUseRestricted: false, requiresAcknowledgement: false },
     params: '0.6B · Q4_K_M',
-    note: 'Multilingual, 100+ languages. Noticeably slower than the others: it runs a full language model per passage.',
+    note: 'MRR 0.9201 — multilingual, 100+ languages. Noticeably slower than the others: it runs a full language model for every passage.',
   },
 ];
 
