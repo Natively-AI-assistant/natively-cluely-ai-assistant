@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 import { wordsOf } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
+import { resolveRerankBudgetMs, type RerankSurface } from '../reranking/rerankBudget';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -1078,6 +1079,12 @@ export class ModeHybridRetriever {
          * from chunks only.
          */
         forceDocumentGrounding?: boolean;
+        /**
+         * Which deadline this turn is racing, for the rerank budget only.
+         * ABSENT means the tighter live budget — a caller that has not declared
+         * itself must never be handed the manual budget on a live turn.
+         */
+        rerankSurface?: RerankSurface;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1087,6 +1094,7 @@ export class ModeHybridRetriever {
             hasTranscript = false,
             allowRerank = false,
             forceDocumentGrounding = false,
+            rerankSurface,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1421,7 +1429,28 @@ export class ModeHybridRetriever {
                         return isRerankerExplicitlySelected();
                     } catch { return false; }
                 })();
-            const shouldRerank = lowConfidence || explicitlySelected || Boolean(this.rerankerOverride);
+            // Reranking runs when the user CHOSE a reranker. Nothing else.
+            //
+            // This used to also escalate on low confidence, which existed for
+            // the bundled cross-encoder — the one every default install has.
+            // That model was then measured, and it is the worst reranker in the
+            // benchmark: Xenova/bge-reranker-base scores MRR 0.7558 against a
+            // 0.8368 no-reranker baseline, moving 7 of 24 queries DOWN against
+            // 3 up, and on one query taking the answer from rank 2 to rank 17
+            // (docs/reranker-benchmark-2026-09-04.md). It is not broken — it
+            // ranks an obvious probe perfectly — it is a 2022-era cross-encoder
+            // losing to same-vocabulary distractors.
+            //
+            // So the escalation had no beneficiary. It fired precisely when
+            // retrieval was already unsure, which is where a reranker that
+            // regresses does the most damage, and it fired ONLY for the model
+            // that regresses — an explicitly chosen one runs on every query
+            // regardless. Removing it means a default install now keeps its
+            // retrieval order instead of having it shuffled by a model that
+            // measurably makes it worse.
+            const shouldRerank = explicitlySelected || Boolean(this.rerankerOverride);
+            // lowConfidence is still traced: it is no longer a trigger, but it
+            // is the signal anyone re-litigating this decision will want.
             markH4HybridStage('rerank_gate', {
                 lowConfidence, explicitlySelected, shouldRerank,
                 candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride),
@@ -1432,7 +1461,11 @@ export class ModeHybridRetriever {
                 // consume that whole deadline and prevent a lexical/evidence-pack
                 // answer from reaching the provider. Keep its late result isolated
                 // rather than awaiting it on the critical path.
-                const RERANK_BUDGET_MS = 1200;
+                // The budget follows the CHOICE, not just the surface: a reranker
+                // the user selected gets time to finish, while the bundled
+                // default keeps the 1200ms that protects a first-useful token.
+                // See rerankBudget.ts for the measured case this fixes.
+                const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
                 markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
                 const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
                 let rerankTimer: NodeJS.Timeout | undefined;
