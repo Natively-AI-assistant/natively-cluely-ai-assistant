@@ -103,7 +103,17 @@ describe('source guards', () => {
   });
 
   test('the asar path is rewritten for the native addon', () => {
-    assert.match(port, /app\.asar\.unpacked/);
+    // Asserted on BEHAVIOUR now, not on the text of GgufReranker.ts. The
+    // rewrite moved into resolveRagWorker when worker resolution was fixed to
+    // ascend from __dirname (it was only finding the worker from two of the
+    // ~30 bundle depths esbuild inlines this class into), and a source scan
+    // reported that refactor as a missing safety rule.
+    const { resolveRagWorker } = require(path.join(repoRoot, 'dist-electron/electron/rag/resolveRagWorker.js'));
+    const inside = '/Applications/Natively.app/Contents/Resources/app.asar/dist-electron/electron/services/reranking';
+    const resolved = resolveRagWorker(inside, 'ggufRerankerWorker.js', () => true);
+    assert.match(resolved, /app\.asar\.unpacked/);
+    assert.doesNotMatch(resolved, /app\.asar(?!\.unpacked)/,
+      'a worker resolved inside the archive cannot load its native addon');
   });
 
   test('a partial or non-finite ranking is rejected wholesale', () => {
