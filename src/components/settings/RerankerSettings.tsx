@@ -40,6 +40,24 @@ const bareModelName = (label: string): string => {
 };
 
 /**
+ * Drop the acquirer from a vendor's name.
+ *
+ * OpenRouter writes the full corporate attribution into its display label —
+ * "Voyage AI by MongoDB: Rerank 2.5 Lite", "Qwen by Alibaba: ...". Who owns the
+ * lab is not what someone picking a reranker is choosing between, and it pushes
+ * the actual model out of a narrow control.
+ *
+ * Only the VENDOR segment is touched, never the model: the split is on the
+ * first `: `, so a model whose own name contains " by " survives.
+ */
+const trimVendorAttribution = (label: string): string => {
+    const colon = label.indexOf(': ');
+    if (colon <= 0) return label;
+    const vendor = label.slice(0, colon).replace(/ by .+$/, '');
+    return vendor + label.slice(colon);
+};
+
+/**
  * `provider/model`, for the open menu. Provider IDs, not display names, because
  * a path segment is built from the short single tokens the catalogue defines —
  * `local`, `openrouter`, `jina`, `extension`.
@@ -1328,7 +1346,7 @@ export const RerankerSettings: React.FC = () => {
                 // user can see what a key would buy them.
                 const models = p.staticCatalogue
                     ? p.models.map(m => ({ id: m.id, label: m.label }))
-                    : catalog.map(m => ({ id: m.id, label: m.vendor ? `${m.label} · ${m.vendor}` : m.label }));
+                    : catalog.map(m => ({ id: m.id, label: trimVendorAttribution(m.label) }));
 
                 return (
                     <div className="aip-card aip-provider" key={p.id}>
