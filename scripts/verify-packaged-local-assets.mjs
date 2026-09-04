@@ -37,10 +37,15 @@ const REQUIRED_MODEL_FILES = [
   'Xenova/mobilebert-uncased-mnli/tokenizer.json',
   'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
   'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
+  // bge-reranker-base's WEIGHTS are deliberately not shipped any more — it
+  // measured worse than no reranker at all (MRR 0.7558 against a 0.8368
+  // baseline; docs/reranker-benchmark-2026-09-04.md), so 283MB of installer
+  // was buying degraded retrieval. The three small JSONs stay: they are
+  // git-tracked, they cost nothing, and they give rerankerDownloadProvider a
+  // directory to fill for anyone who explicitly selects the model.
   'Xenova/bge-reranker-base/config.json',
   'Xenova/bge-reranker-base/tokenizer.json',
   'Xenova/bge-reranker-base/tokenizer_config.json',
-  'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
   'pipecat-ai/smart-turn-v3/manifest.json',
   'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx',
 ];

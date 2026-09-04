@@ -16,10 +16,10 @@ const REQUIRED_MODEL_FILES = [
     'Xenova/mobilebert-uncased-mnli/tokenizer.json',
     'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
     'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
-    'Xenova/bge-reranker-base/config.json',
-    'Xenova/bge-reranker-base/tokenizer.json',
-    'Xenova/bge-reranker-base/tokenizer_config.json',
-    'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
+    // bge-reranker-base is deliberately absent: it is no longer bundled (see
+    // step 3 below). Its three tracked JSON files stay in resources/models/ so
+    // the lazy downloader has a directory to fill, but requiring them here
+    // would fail a build that never downloads the weights beside them.
 ];
 
 // OPTIONAL assets (review#9): verified with a WARNING, never a failure — the
@@ -133,21 +133,28 @@ async function downloadModels() {
         await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', QUANTIZED);
         console.log('[download-models] mobilebert-uncased-mnli downloaded.');
 
-        // 3. Cross-encoder reranker (smart-retrieval Phase 1/3 — confidence-gated
-        //    rerank escalation). Bundled in resources/models/ so a clean-machine
-        //    install can do offline rerank without a 280MB first-activation
-        //    download. The installer ships the q8 quantized variant (~280MB).
+        // 3. Cross-encoder reranker — NO LONGER BUNDLED.
         //
-        //    The lazy-download provider in electron/rag/rerankerDownloadProvider.ts
-        //    still acts as a no-op fallback if the bundled model is absent
-        //    (e.g. an old installer predating this bundling).
-        console.log('[download-models] Downloading Xenova/bge-reranker-base (q8)...');
-        // Use dtype:'q8' so transformers.js selects the quantized ONNX variant
-        // (~280 MB) instead of the fp32 one (~1.1 GB). NATIVELY_RERANKER_DTYPE
-        // override remains for accuracy experiments.
-        const rerankerDtype = (process.env.NATIVELY_RERANKER_DTYPE || 'q8').trim() || 'q8';
-        await pipeline('text-classification', 'Xenova/bge-reranker-base', { dtype: rerankerDtype });
-        console.log('[download-models] bge-reranker-base downloaded.');
+        //    Xenova/bge-reranker-base shipped here so a clean-machine install
+        //    could rerank offline without a 280MB first-activation download.
+        //    Then it was measured. On a 40-passage pool with same-topic
+        //    distractors it scores MRR 0.7558 against a 0.8368 NO-RERANKER
+        //    baseline — it moved 7 of 24 queries down against 3 up, and on one
+        //    took the answer from rank 2 to rank 17
+        //    (docs/reranker-benchmark-2026-09-04.md). The installer was 283MB
+        //    heavier in order to make retrieval worse.
+        //
+        //    It is not broken; it is a 2022-era cross-encoder losing to
+        //    same-vocabulary distractors. Nothing reaches for it automatically
+        //    any more either — ModeHybridRetriever reranks only when the user
+        //    CHOSE a reranker, so a default install keeps its retrieval order.
+        //
+        //    Still reachable, just not preinstalled: rerankerDownloadProvider.ts
+        //    fetches it on demand for anyone who selects it, which is what that
+        //    provider was written for in the first place (its own header says
+        //    "the model is no longer bundled in resources/models/" — the bundle
+        //    contradicted it). Better options are one click away in the
+        //    catalogue: ms-marco-minilm-l6 is 24MB and actually helps.
 
         // 4. Smart Turn v3.1 (Auto Answer V3 TurnPredictor). Raw ONNX, not a
         //    transformers.js pipeline: fetched by URL and sha256-verified against

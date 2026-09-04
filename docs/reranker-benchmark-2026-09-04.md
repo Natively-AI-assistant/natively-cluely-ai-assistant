@@ -57,16 +57,23 @@ It is not broken. It loads, scores all 24 queries, and ranks an obvious probe
 perfectly (Paris 8.787 / Rhine −3.038 / photosynthesis −10.181). It is simply a
 2022-era cross-encoder meeting same-vocabulary distractors, and losing.
 
-This is why the bundled model kept its low-confidence escalation when an
-explicitly-chosen reranker was made unconditional (`isRerankerExplicitlySelected`
-in rerankerConfig.ts). But the escalation fires precisely when retrieval is
-already unsure — which is where a reranker this weak does the most damage. Two
-options, both product decisions rather than bugs to fix quietly:
+**Acted on.** Both halves:
 
-1. Stop escalating to the bundled model at all, and let retrieval order stand
-   unless the user has chosen something better.
-2. Replace the bundled model. `ms-marco-minilm-l6` is 24 MB, 211 ms and
-   ΔMRR **+0.0320** — smaller, five times faster, and it actually helps.
+1. **It is no longer used automatically.** `ModeHybridRetriever` reranks only
+   when the user CHOSE a reranker. The low-confidence escalation existed for
+   this model and had no beneficiary left — it fired precisely when retrieval
+   was already unsure, which is where a reranker that regresses does the most
+   damage. A default install now keeps its retrieval order.
+2. **It is no longer bundled.** `scripts/download-models.js` stopped fetching
+   the 266 MB of weights and the release gate stopped requiring them, taking
+   **283 MB out of the installer**. The three tracked JSON files stay so
+   `rerankerDownloadProvider` has a directory to fill; it fetches the model on
+   demand for anyone who explicitly selects it, which is what that provider was
+   written for — its own header already said "the model is no longer bundled in
+   `resources/models/`", and the bundle had been contradicting it.
+
+Anyone wanting a local reranker is one click from a better one:
+`ms-marco-minilm-l6` is 24 MB, 211 ms and ΔMRR **+0.0320**.
 
 ### What the numbers say
 
