@@ -123,6 +123,12 @@ async function buildProvider(id) {
       // curve rather than reporting a single arbitrary operating point.
       'hybrid-tight':            () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.10 }),
       'hybrid-wide':             () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.50 }),
+      // The tight end of the curve. The frontier between "cheap primary alone"
+      // and "escalation on everything" is the actual deliverable here; a single
+      // operating point would hide whether the ladder buys anything at all.
+      'hybrid-m001':             () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.01 }),
+      'hybrid-m003':             () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.03 }),
+      'hybrid-m005':             () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.05 }),
     };
     const build = REGISTRY[id];
     if (!build) throw new Error(`unknown hybrid ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
