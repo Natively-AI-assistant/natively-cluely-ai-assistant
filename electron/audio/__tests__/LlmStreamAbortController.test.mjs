@@ -156,9 +156,21 @@ test('streamChat gates each yield with `if (abortSignal?.aborted) return;` BEFOR
     // statement inside the loop body. Match the actual yield statement
     // (yield followed by an identifier/call expression) rather than the
     // substring "yield " which also appears in comments above the loop.
-    const gateIdx = streamChatBody.search(gatePattern);
-    const yieldStmtRe = /(^|\n)\s*yield\s+\w/;
-    const yieldMatch = yieldStmtRe.exec(streamChatBody);
+    // Comment-stripped, and the yield need not start its line.
+    //
+    // The old anchor was /(^|\n)\s*yield\s+\w/ — a yield at the START of a
+    // line. The dash-reducer work made every yield conditional
+    // (`if (held) yield dashReducer.reduce(held);`), so the anchor stopped
+    // matching and this guard began FAILING rather than checking: the abort
+    // gate was present and correctly ordered the whole time.
+    //
+    // Line position was only ever a proxy for "not inside a comment", which is
+    // what the original comment here says it was guarding against. Stripping
+    // comments states that directly and survives the next reformat.
+    const code = streamChatBody.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const gateIdx = code.search(gatePattern);
+    const yieldStmtRe = /\byield\s+\w/;
+    const yieldMatch = yieldStmtRe.exec(code);
     assert.ok(gateIdx >= 0, 'abort gate not found');
     assert.ok(yieldMatch, 'yield statement not found in streamChat body');
     assert.ok(

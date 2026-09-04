@@ -172,7 +172,13 @@
       },
       {
         "from": "resources/models/",
-        "to": "models/"
+        "to": "models/",
+        "filter": [
+          "Xenova/all-MiniLM-L6-v2/**",
+          "Xenova/mobilebert-uncased-mnli/**",
+          "Xenova/ms-marco-MiniLM-L-6-v2/**",
+          "pipecat-ai/**"
+        ]
       }
     ],
     "mac": {
