@@ -19,7 +19,11 @@ import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModel
 
-AXES = ["needs_response", "dialogue_act", "task", "answer_form", "grounding", "mode_intent"]
+# `legacy_intent` is a head like any other so this candidate is directly
+# comparable to the NLI runs on the control taxonomy. Without it the trained
+# model shows 0.0 in the legacy column purely because it was never asked, which
+# reads as a failure rather than an omission.
+AXES = ["needs_response", "dialogue_act", "task", "answer_form", "grounding", "mode_intent", "legacy_intent"]
 
 
 class MultiHead(nn.Module):
@@ -95,7 +99,18 @@ def main():
     dtype = None
     try:
         from onnxruntime.quantization import quantize_dynamic, QuantType
-        quantize_dynamic(str(src), str(q8), weight_type=QuantType.QInt8)
+        from onnxruntime.quantization.shape_inference import quant_pre_process
+        # Pre-process before quantizing. Without it, dynamic quantization of a
+        # MULTI-OUTPUT graph fails with "Inferred shape and existing shape
+        # differ in dimension 0: (384) vs (3)" — the shape inferencer confuses
+        # the encoder's hidden width with a head's class count. The onnxruntime
+        # warning tells you to do this; the failure message does not.
+        prepped = out / "onnx" / "_prepped.onnx"
+        quant_pre_process(str(src), str(prepped), skip_symbolic_shape=False)
+        quantize_dynamic(str(prepped), str(q8), weight_type=QuantType.QInt8)
+        for leftover in (prepped, out / "onnx" / "_prepped.onnx.data"):
+            if leftover.exists():
+                leftover.unlink()
         dtype = "q8"
         # Quantized file is self-contained, so the fp32 pair is now dead weight.
         for stale in (src, data):

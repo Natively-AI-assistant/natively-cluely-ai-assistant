@@ -62,7 +62,7 @@ export class EmbeddingPrototypeProvider extends Provider {
 
   async load() {
     this.host = new WorkerHost(
-      path.join(__dirname, 'embeddingWorker.mjs'),
+      path.join(__dirname, this.opts.staticEmbed ? 'staticEmbedWorker.mjs' : 'embeddingWorker.mjs'),
       {
         modelId: this.opts.modelId,
         dtype: this.opts.dtype,
@@ -193,6 +193,7 @@ export class EmbeddingPrototypeProvider extends Provider {
       params: 0,
       sizeOnDiskMB: 0,
       runtime: 'onnx',
+      ortBinding: this.opts.staticEmbed ? 'onnxruntime-node' : 'transformers.js',
       modelId: this.opts.modelId,
       rule: this.opts.rule,
       k: this.opts.rule === 'topk' ? this.opts.k : undefined,

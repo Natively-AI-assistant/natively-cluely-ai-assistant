@@ -79,6 +79,9 @@ async function buildProvider(id) {
       'proto-minilm-topk':     { modelId: 'Xenova/all-MiniLM-L6-v2', rule: 'topk', k: 15, localOnly: true },
       'proto-bge-small-centroid': { modelId: 'Xenova/bge-small-en-v1.5', rule: 'centroid', localOnly: false },
       'proto-bge-small-topk':     { modelId: 'Xenova/bge-small-en-v1.5', rule: 'topk', k: 15, localOnly: false },
+      // Static embeddings: a table lookup per token, no transformer at all.
+      // The only candidate with a plausible route to sub-millisecond routing.
+      'proto-potion-centroid':   { modelId: 'minishlab/potion-base-8M', rule: 'centroid', localOnly: true, staticEmbed: true, dtype: 'fp32' },
     };
     const cfg = REGISTRY[id];
     if (!cfg) throw new Error(`unknown prototype provider ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
@@ -95,6 +98,35 @@ async function buildProvider(id) {
     const cfg = REGISTRY[id];
     if (!cfg) throw new Error(`unknown head provider ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new MultiHeadProvider({ id, ...cfg });
+  }
+  if (id.startsWith('hybrid-')) {
+    const { HybridProvider } = await import('./providers/hybrid.mjs');
+    const { RulesProvider } = await import('./providers/rules.mjs');
+    const { EmbeddingPrototypeProvider } = await import('./providers/embeddingPrototype.mjs');
+    const { MultiHeadProvider } = await import('./providers/multihead.mjs');
+    const { NliProvider } = await import('./providers/nli.mjs');
+
+    const trainRows = rows.filter((r) => r.split === 'train' && (r.language ?? 'en') === 'en');
+    const potion = () => new EmbeddingPrototypeProvider({
+      id: 'potion', modelId: 'minishlab/potion-base-8M', rule: 'centroid',
+      localOnly: true, staticEmbed: true, dtype: 'fp32', trainRows,
+    });
+    const head = () => new MultiHeadProvider({ id: 'head', dir: 'resources/models/natively/router-minilm-multihead' });
+    const nli = () => new NliProvider({ id: 'nli', modelId: 'Xenova/mobilebert-uncased-mnli', mode: 'frame', localOnly: true, modeIntents: MODE_INTENTS });
+
+    const REGISTRY = {
+      // The brief's four hybrid rows, built from whatever actually won its tier.
+      'hybrid-rules-nli':        () => ({ rules: new RulesProvider(), primary: nli() }),
+      'hybrid-rules-proto-nli':  () => ({ rules: new RulesProvider(), primary: potion(), escalation: nli() }),
+      'hybrid-rules-proto-head': () => ({ rules: new RulesProvider(), primary: potion(), escalation: head() }),
+      // Same as above with a tighter margin, to trace the accuracy/latency
+      // curve rather than reporting a single arbitrary operating point.
+      'hybrid-tight':            () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.10 }),
+      'hybrid-wide':             () => ({ rules: new RulesProvider(), primary: potion(), escalation: head(), marginThreshold: 0.50 }),
+    };
+    const build = REGISTRY[id];
+    if (!build) throw new Error(`unknown hybrid ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    return new HybridProvider({ id, deadlineMs: 150, ...build() });
   }
   throw new Error(`unknown provider ${id}`);
 }

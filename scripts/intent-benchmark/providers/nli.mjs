@@ -176,6 +176,7 @@ export class NliProvider extends Provider {
       params: 0,
       sizeOnDiskMB: 0,
       runtime: 'onnx',
+      ortBinding: 'transformers.js',
       config: this.opts.mode,
       modelId: this.opts.modelId,
       forwardPassesTotal: this.passes,
