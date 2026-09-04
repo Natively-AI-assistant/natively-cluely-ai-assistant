@@ -16,10 +16,15 @@ const REQUIRED_MODEL_FILES = [
     'Xenova/mobilebert-uncased-mnli/tokenizer.json',
     'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
     'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
-    // bge-reranker-base is deliberately absent: it is no longer bundled (see
-    // step 3 below). Its three tracked JSON files stay in resources/models/ so
-    // the lazy downloader has a directory to fill, but requiring them here
-    // would fail a build that never downloads the weights beside them.
+    // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
+    // 2026-09-04 — see step 3 below for the numbers. bge's own weights are
+    // deliberately absent from this list; its three tracked JSON files stay in
+    // resources/models/ so the lazy downloader has a directory to fill, but
+    // requiring them here would fail a build that never fetches the weights.
+    'Xenova/ms-marco-MiniLM-L-6-v2/config.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx',
 ];
 
 // OPTIONAL assets (review#9): verified with a WARNING, never a failure — the
@@ -133,28 +138,26 @@ async function downloadModels() {
         await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', QUANTIZED);
         console.log('[download-models] mobilebert-uncased-mnli downloaded.');
 
-        // 3. Cross-encoder reranker — NO LONGER BUNDLED.
+        // 3. Cross-encoder reranker — ms-marco-MiniLM-L-6-v2 (q8, ~24MB).
         //
-        //    Xenova/bge-reranker-base shipped here so a clean-machine install
-        //    could rerank offline without a 280MB first-activation download.
-        //    Then it was measured. On a 40-passage pool with same-topic
-        //    distractors it scores MRR 0.7558 against a 0.8368 NO-RERANKER
-        //    baseline — it moved 7 of 24 queries down against 3 up, and on one
-        //    took the answer from rank 2 to rank 17
-        //    (docs/reranker-benchmark-2026-09-04.md). The installer was 283MB
-        //    heavier in order to make retrieval worse.
+        //    REPLACED bge-reranker-base on 2026-09-04. Measured against a
+        //    NO-RERANKER baseline on a 40-passage pool with same-topic
+        //    distractors (docs/reranker-benchmark-2026-09-04.md):
         //
-        //    It is not broken; it is a 2022-era cross-encoder losing to
-        //    same-vocabulary distractors. Nothing reaches for it automatically
-        //    any more either — ModeHybridRetriever reranks only when the user
-        //    CHOSE a reranker, so a default install keeps its retrieval order.
+        //      bge-reranker-base    MRR 0.7558   -0.0810   +3/-7   1873ms  283MB
+        //      ms-marco-MiniLM-L-6  MRR 0.8688   +0.0320   +4/-2    211ms   24MB
         //
-        //    Still reachable, just not preinstalled: rerankerDownloadProvider.ts
-        //    fetches it on demand for anyone who selects it, which is what that
-        //    provider was written for in the first place (its own header says
-        //    "the model is no longer bundled in resources/models/" — the bundle
-        //    contradicted it). Better options are one click away in the
-        //    catalogue: ms-marco-minilm-l6 is 24MB and actually helps.
+        //    The old default was the worst reranker in that table: it shipped
+        //    283MB of installer in order to make retrieval measurably worse.
+        //    This one is a twelfth of the size, nine times faster, and actually
+        //    improves the ranking — so the low-confidence escalation in
+        //    ModeHybridRetriever has a beneficiary again.
+        //
+        //    bge is still reachable for anyone who wants it: it stays in the
+        //    catalogue and rerankerDownloadProvider.ts fetches it on demand.
+        console.log('[download-models] Downloading Xenova/ms-marco-MiniLM-L-6-v2 (q8)...');
+        await pipeline('text-classification', 'Xenova/ms-marco-MiniLM-L-6-v2', QUANTIZED);
+        console.log('[download-models] ms-marco-MiniLM-L-6-v2 downloaded.');
 
         // 4. Smart Turn v3.1 (Auto Answer V3 TurnPredictor). Raw ONNX, not a
         //    transformers.js pipeline: fetched by URL and sha256-verified against

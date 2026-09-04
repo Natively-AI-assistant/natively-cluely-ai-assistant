@@ -876,6 +876,7 @@ Return ONLY valid JSON (no markdown code blocks):
             console.error("Error generating meeting metadata", e);
         }
 
+        let meetingSaved = false;
         try {
             const minutes = Math.floor(data.durationMs / 60000);
             const seconds = ((data.durationMs % 60000) / 1000).toFixed(0);
@@ -897,6 +898,11 @@ Return ONLY valid JSON (no markdown code blocks):
             };
 
             DatabaseManager.getInstance().saveMeeting(meetingData, data.startTime, data.durationMs);
+            // The catch below rewrites the title and blanks legacySummary on the
+            // assumption that the save never happened. Everything after this line
+            // is inside the same try, so that assumption has to be recorded, not
+            // inferred — see the guard at the top of the catch.
+            meetingSaved = true;
 
             // HINDSIGHT POST-MEETING RETAIN (Phase 13 wiring, behind
             // hindsight_post_meeting_retain_enabled). After the meeting is persisted
@@ -943,9 +949,15 @@ Return ONLY valid JSON (no markdown code blocks):
 
             // Metadata was already snapshotted before session.reset() — nothing to clear here.
 
-            // Notify Frontend to refresh list
-            const wins = require('electron').BrowserWindow.getAllWindows();
-            wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            // Notify Frontend to refresh list.
+            // Wrapped like its twin on the failure path below: webContents.send
+            // throws on a destroyed window, and an unguarded throw HERE — after
+            // the save succeeded — fell into the catch and marked a saved
+            // meeting as failed.
+            try {
+                const wins = require('electron').BrowserWindow.getAllWindows();
+                wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            } catch { /* a closed window is not a save failure */ }
 
             // ATTRIBUTION: one record proving which post-meeting memory layers ran on save
             // (bug #4: MeetingMemoryService + Hindsight retain not previously evidenced).
@@ -997,7 +1009,41 @@ Return ONLY valid JSON (no markdown code blocks):
 
         } catch (error) {
             console.error('[MeetingPersistence] Failed to save meeting:', error);
-            try { DatabaseManager.getInstance().updateSummaryStatus(meetingId, 'failed'); } catch { /* non-fatal */ }
+            // saveMeeting never ran on this path, so the placeholder row endMeeting
+            // wrote is still carrying title "Processing..." and legacySummary
+            // "Generating summary...". Flipping the status alone (what this used to
+            // do) left the meeting reading as perpetually in-flight — a notes screen
+            // saying the notes could not be generated under a heading that says
+            // "Processing...", and the blurb leaking into exported PDFs, global-search
+            // snippets and the RAG summary field.
+            //
+            // `title` is whatever the pipeline had reached before it threw: the
+            // calendar name when the meeting was matched to an event, the generated
+            // title if it got that far, else this file's "Untitled Session" default —
+            // which isDefaultMeetingTitle recognises, so a later recovery pass is free
+            // to replace it. is_processed stays 0 so recoverUnprocessedMeetings picks
+            // this meeting up at the next app start.
+            // ONLY when the save really did not happen. This try also covers
+            // post-save work (the renderer broadcast, the Hindsight retain, the
+            // attribution record), and markSummaryGenerationFailed is
+            // destructive: it blanks legacySummary and rewrites the title. A
+            // throw from any of that used to destroy the notes of a meeting
+            // that had saved perfectly. The old catch only flipped the status,
+            // which is why this was survivable before and is not now.
+            if (!meetingSaved) {
+                try { DatabaseManager.getInstance().markSummaryGenerationFailed(meetingId, title); } catch { /* non-fatal */ }
+            } else {
+                console.warn('[MeetingPersistence] post-save step failed; the meeting is saved and is left intact', {
+                    meetingId, error: (error as any)?.message,
+                });
+            }
+            // Nothing on this path notified the renderer, so an open meeting kept
+            // showing the in-progress placeholder until something else happened to
+            // refresh it. The happy path below broadcasts; so should the failure.
+            try {
+                const wins = require('electron').BrowserWindow.getAllWindows();
+                wins.forEach((w: any) => w.webContents.send('meetings-updated'));
+            } catch { /* non-fatal */ }
             try {
                 telemetryService.track({
                     name: 'post_call_summary_failed',

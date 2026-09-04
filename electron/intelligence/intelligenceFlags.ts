@@ -664,7 +664,14 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // 0 is shadow-only (divergence logging, zero change to the prompt/pack/return
   // value — see the union member's comment above). Note this is NOT the same
   // flag as contextOsImpossibleStateGateEnforceForbidden (Stage 1, a REAL
-  // behavior change) — that one stays dev/test-only pending its own rollout.
+  // behavior change) — see its own entry below for its current default.
+  //
+  // (This line used to read "that one stays dev/test-only pending its own
+  // rollout". It was promoted to `default: true` on 2026-08-30 by user-directed
+  // override without the shadow period it names, twelve lines below, so the two
+  // comments contradicted each other about one production enforcement gate.
+  // The entry below is the accurate one; this cross-reference no longer asserts
+  // a default it does not own.)
   contextOsImpossibleStateGateShadow: { env: 'NATIVELY_CONTEXT_OS_IMPOSSIBLE_STATE_GATE_SHADOW', setting: 'contextOsImpossibleStateGateShadowEnabled', default: true },
   // Promoted to unconditional `true` (2026-08-30, user-directed override).
   // WARNING: unlike its Stage 0 shadow sibling above, this IS the real

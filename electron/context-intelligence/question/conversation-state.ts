@@ -25,6 +25,23 @@ export interface ConversationTurn {
   timestamp: number;
 }
 
+/** One completed exchange. A turn enters history only once it HAS an answer —
+ *  a question whose stream was abandoned is not history. */
+export interface HistoryTurn {
+  q: string;
+  a: string;
+  /**
+   * What was ON SCREEN for this turn, as text.
+   *
+   * The image itself reaches the provider only on the turn it is attached to,
+   * and is never re-sent (that would reopen the per-turn private_vision /
+   * screenshots gate for a screenshot the user has already cleared from the
+   * composer). Carrying the DESCRIPTION is what lets turn N still answer
+   * "what was in that screenshot?".
+   */
+  screen?: string;
+}
+
 export interface ConversationState {
   scopeId: string;
   activeTopic?: string;
@@ -40,8 +57,30 @@ export interface ConversationState {
   activeEntities: string[];
   previousQuestion?: string;
   /** A SUMMARY of the assistant's last answer, usable only to resolve
-   *  references. Never promoted to evidence. */
+   *  references. Never promoted to evidence.
+   *
+   *  Retained alongside `turns` because several consumers read it directly; it
+   *  is the last ring entry's answer, not a second source of truth. */
   previousAnswerSummary?: string;
+  /**
+   * The rolling multi-turn history of this scope (2026-08-28).
+   *
+   * WHY THIS EXISTS
+   * `previousQuestion` + `previousAnswerSummary` is a sliding window of ONE
+   * turn, and `advance()` resets the summary every turn — so turn 3 could never
+   * see turn 1. Measured live: a screenshot described in turn 1 was gone by
+   * turn 3, and the community reported exactly that ("shared a ss, then the
+   * follow-up acts like it has no idea of that ss", 2026-08-28).
+   *
+   * This is a REGRESSION, not a missing feature: the legacy path retains 100
+   * untruncated turns (ConversationMemoryService) and still does — V3 simply
+   * never read it. The ring restores rough parity while keeping V3's contract
+   * that state is size-bounded and scope-reset.
+   *
+   * Still a REFERENT, never evidence (§12.3). Bounding is by construction:
+   * MAX_HISTORY_TURNS entries, each answer capped at MAX_TURN_ANSWER_CHARS.
+   */
+  turns: HistoryTurn[];
   previousEvidenceIds: string[];
   previousSourceIds: string[];
   /**
@@ -75,6 +114,25 @@ export interface ConversationState {
 
 export const MAX_ENTITIES = 8;
 export const MAX_SUMMARY_CHARS = 280;
+/** Turns retained per scope. Legacy keeps 100; V3 keeps a bounded window
+ *  because its state is also carried into the prompt every turn. */
+export const MAX_HISTORY_TURNS = 10;
+/** Per-answer cap in the ring. Deliberately far above MAX_SUMMARY_CHARS (280),
+ *  which truncated a screenshot description mid-sentence and dropped the
+ *  details every follow-up then asked about. */
+export const MAX_TURN_ANSWER_CHARS = 1200;
+
+/** Append a completed exchange, oldest-evicted. Pure; never mutates `turns`. */
+export function appendTurn(
+  turns: readonly HistoryTurn[], q: string, a: string, screen?: string,
+): HistoryTurn[] {
+  const question = String(q ?? '').slice(0, MAX_SUMMARY_CHARS);
+  const answer = String(a ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
+  if (!question.trim() || !answer.trim()) return [...turns];
+  const shot = String(screen ?? '').trim().slice(0, MAX_TURN_ANSWER_CHARS);
+  return [...turns, { q: question, a: answer, ...(shot ? { screen: shot } : {}) }]
+    .slice(-MAX_HISTORY_TURNS);
+}
 
 const STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'has', 'was',
   'were', 'you', 'your', 'our', 'their', 'about', 'what', 'how', 'why', 'when', 'did', 'does',
@@ -217,6 +275,7 @@ export function emptyState(scope: EvidenceScope): ConversationState {
   return {
     scopeId: scopeKey(scope),
     activeEntities: [],
+    turns: [],
     previousEvidenceIds: [],
     previousSourceIds: [],
     unresolvedReferences: [],
@@ -277,6 +336,15 @@ export function advance(prev: ConversationState | null, input: AdvanceInput): Co
     previousAnswerSummary: input.answerSummary
       ? input.answerSummary.slice(0, MAX_SUMMARY_CHARS)
       : undefined,
+    // The ring is PRESERVED across turns — that preservation is the whole fix.
+    // `base` is already scope-aware (emptyState on a scope change), so a new
+    // session cannot inherit the previous one's history.
+    // An answer is appended here only when the caller already has it; the
+    // manual-chat path does not (the stream has not finished), and completes
+    // the turn via recordAnswerSummary instead.
+    turns: input.answerSummary
+      ? appendTurn(base.turns, input.question, input.answerSummary)
+      : [...base.turns],
     previousEvidenceIds: input.evidenceIds ?? [],
     previousSourceIds: input.sourceIds ?? [],
     previousDecision: input.decision ? boundDecision(input.decision) : base.previousDecision,

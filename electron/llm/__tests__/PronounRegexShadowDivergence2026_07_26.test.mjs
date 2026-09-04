@@ -82,23 +82,23 @@ function makeOrchestrator() {
 }
 
 describe('pronounRegexShadowObservation flag registration', () => {
-  test('resolves to false under this bare node:test harness (dev/test-only default)', () => {
+  test('defaults to true everywhere (promoted 2026-08-30 — shadow-only, zero risk to running in production)', () => {
     __resetIntelligenceFlagsCache();
     delete process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION;
     const { isIntelligenceFlagEnabled } = require(
       path.resolve(repoRoot, 'dist-electron/electron/intelligence/intelligenceFlags.js'),
     );
-    assert.equal(isIntelligenceFlagEnabled('pronounRegexShadowObservation'), false);
+    assert.equal(isIntelligenceFlagEnabled('pronounRegexShadowObservation'), true);
   });
 
-  test('NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION=1 env override enables it', () => {
+  test('NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION=0 env override can still force it off', () => {
     __resetIntelligenceFlagsCache();
-    process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION = '1';
+    process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION = '0';
     try {
       const { isIntelligenceFlagEnabled } = require(
         path.resolve(repoRoot, 'dist-electron/electron/intelligence/intelligenceFlags.js'),
       );
-      assert.equal(isIntelligenceFlagEnabled('pronounRegexShadowObservation'), true);
+      assert.equal(isIntelligenceFlagEnabled('pronounRegexShadowObservation'), false);
     } finally {
       delete process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION;
       __resetIntelligenceFlagsCache();
@@ -109,7 +109,9 @@ describe('pronounRegexShadowObservation flag registration', () => {
 describe('processQuestion shadow-logs a divergence without changing its return value', () => {
   test('flag OFF: no shadow log call, behavior identical to before this change', async () => {
     __resetIntelligenceFlagsCache();
-    delete process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION;
+    // Explicit '0' — the flag now defaults to true (promoted 2026-08-30), so
+    // deleting the env var no longer produces the OFF state.
+    process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION = '0';
     const o = makeOrchestrator();
     const logs = [];
     const origWarn = console.warn;
@@ -121,6 +123,8 @@ describe('processQuestion shadow-logs a divergence without changing its return v
       assert.equal(shadowLogs.length, 0, 'no shadow-divergence log when the flag is off');
     } finally {
       console.warn = origWarn;
+      delete process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION;
+      __resetIntelligenceFlagsCache();
     }
   });
 
@@ -146,7 +150,9 @@ describe('processQuestion shadow-logs a divergence without changing its return v
       assert.ok(shadowLogs.length > 0, 'flag ON must produce exactly one shadow trace line (agreement or divergence) per call');
 
       __resetIntelligenceFlagsCache();
-      delete process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION;
+      // Explicit '0' — the flag now defaults to true (promoted 2026-08-30), so
+      // deleting the env var no longer produces the OFF state.
+      process.env.NATIVELY_PRONOUN_REGEX_SHADOW_OBSERVATION = '0';
       const oShadowOff = makeOrchestrator();
       const resultOff = await oShadowOff.processQuestion(question);
 

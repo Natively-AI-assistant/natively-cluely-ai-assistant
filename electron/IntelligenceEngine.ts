@@ -3027,6 +3027,25 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
+                        // The chat-history rollback must reach THIS surface too.
+                        // ipcHandlers was the only call site passing it, so the
+                        // Settings toggle rolled back typed chat while live
+                        // spoken answers kept the new behaviour with no way to
+                        // revert.
+                        //
+                        // HONEST LIMIT, 2026-08-29: this is currently a NO-OP
+                        // here, and not because of anything on this line. The
+                        // ring is only ever WRITTEN by recordAnswerSummary,
+                        // whose single caller is ipcHandlers.ts (typed chat);
+                        // advanceConversationState never passes answerSummary,
+                        // so `AdvanceTurnInput.answerSummary` is dead and
+                        // `cs.turns` is permanently [] on what-to-answer,
+                        // assist and engine manual-chat. The flag therefore
+                        // skips an already-empty ring. It is passed anyway so
+                        // the rollback is correct the moment a writer exists —
+                        // but do not read this as "multi-turn history works on
+                        // this surface". It does not, yet.
+                        multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
@@ -5613,6 +5632,9 @@ export class IntelligenceEngine extends EventEmitter {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
                 surface: 'assist',
+                // See the what-to-answer call site: the rollback must reach
+                // every surface, not just typed chat.
+                multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                 // AnswerSurface has no clarify/brainstorm members; the tag keeps
                 // their traces separable from real assist turns.
                 pathTag: tag,
@@ -6080,6 +6102,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
+                        // See the what-to-answer call site.
+                        multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         // Shares 'manual-chat' with the IPC surface; the tag keeps
                         // the two call sites' traces separable (they previously
                         // both recorded legacyPath 'v3-manual-chat').

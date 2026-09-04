@@ -22,7 +22,8 @@
 
 import type { EvidenceScope } from '../contracts/types';
 import {
-  advance, resolveReference, type ConversationState, type ResolvedReference,
+  advance, appendTurn, resolveReference, MAX_SUMMARY_CHARS,
+  type ConversationState, type ResolvedReference,
 } from './conversation-state';
 
 const STORE_KEY = '__nativelyV3ConversationStateV1__';
@@ -50,6 +51,16 @@ export interface AdvanceTurnInput {
   decision?: import('../contracts/types').PriorTurnDecision;
   /** This turn's planned source types (T5) — a bare follow-up reuses them. */
   plannedSourceTypes?: readonly import('../contracts/types').SourceType[];
+  /**
+   * This turn's answer, when the caller already has it.
+   *
+   * `AdvanceInput.answerSummary` has existed and been consumed by `advance()`
+   * since the module shipped, but this input never carried it — so every
+   * advance reset `previousAnswerSummary` to undefined and the carry-forward
+   * was designed and never wired. Callers that only know the answer after the
+   * stream (manual chat) still use `recordAnswerSummary`.
+   */
+  answerSummary?: string;
 }
 
 /** Advance after a decided turn. Called by orchestrate(); scope changes reset. */
@@ -62,6 +73,7 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
     sourceIds: input.sourceIds,
     decision: input.decision,
     plannedSourceTypes: input.plannedSourceTypes,
+    answerSummary: input.answerSummary,
     at: 0,
   });
   s.delete(input.sessionId);           // re-insert to refresh LRU position
@@ -80,11 +92,23 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
  * the provider finishes; the referent for the NEXT turn should include what
  * was just answered, not only what was asked.
  */
-export function recordAnswerSummary(sessionId: string, answerText: string): void {
+export function recordAnswerSummary(
+  sessionId: string, answerText: string, screenContext?: string,
+): void {
   const s = store();
   const cur = s.get(sessionId);
   if (!cur) return;
-  s.set(sessionId, { ...cur, previousAnswerSummary: String(answerText ?? '').slice(0, 280) || undefined });
+  const text = String(answerText ?? '');
+  s.set(sessionId, {
+    ...cur,
+    previousAnswerSummary: text.slice(0, MAX_SUMMARY_CHARS) || undefined,
+    // COMPLETES the open turn: `advance()` recorded the question when the turn
+    // started, and this is the first moment its answer exists. Appending here
+    // (rather than only overwriting a single slot) is what lets turn N see
+    // turn N-2. A turn whose stream was truncated never reaches this call, so
+    // it correctly leaves no half-turn behind.
+    turns: appendTurn(cur.turns ?? [], cur.previousQuestion ?? '', text, screenContext),
+  });
 }
 
 /** Resolve a question against the session's state. Pure pass-through when no state. */

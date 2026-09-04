@@ -66,11 +66,23 @@ export interface RerankResult {
 let startupPoisoned = false;
 
 /**
- * Default model: bge-reranker-base, ONNX port that runs in transformers.js.
- * Small cross-encoder (~1.1GB fp32 / ~280MB quantized) — quantized is used.
+ * The bundled default: ms-marco-MiniLM-L-6-v2, q8, ~24MB.
+ *
+ * It replaced bge-reranker-base on 2026-09-04, and the reason is the whole
+ * point. Measured against a NO-RERANKER baseline on a 40-passage pool with
+ * same-topic distractors (docs/reranker-benchmark-2026-09-04.md):
+ *
+ *     bge-reranker-base    MRR 0.7558   -0.0810 vs baseline   +3/-7   1873ms
+ *     ms-marco-MiniLM-L-6  MRR 0.8688   +0.0320 vs baseline   +4/-2    211ms
+ *
+ * The old default was the worst reranker in that table — it made retrieval
+ * measurably worse while costing 283MB of installer and ~1.9s a call. This one
+ * is a twelfth of the size, nine times faster, and actually improves the
+ * ranking. Both are q8, so the dtype default below is unchanged.
+ *
  * Override via NATIVELY_RERANKER_MODEL for experimentation.
  */
-const DEFAULT_RERANKER_MODEL = 'Xenova/bge-reranker-base';
+const DEFAULT_RERANKER_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
 
 /**
  * `app.getPath('userData')` rebuilt by hand, for the paths where `app` is not

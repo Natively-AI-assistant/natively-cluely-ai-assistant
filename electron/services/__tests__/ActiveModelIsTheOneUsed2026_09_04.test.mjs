@@ -50,27 +50,23 @@ function withSettings(reranker, fn) {
 
 // ── the reranker actually runs ────────────────────────────────────────────
 
-test('reranking runs when the user chose a reranker, and only then', () => {
-  // Two corrections, in order.
-  //
-  // It began as `if (lowConfidence)` alone, which meant a chosen reranker ran
-  // on 1 query in 36. That gate was then kept as an escalation for the bundled
-  // default — until the bundled default was measured and turned out to be the
-  // worst reranker in the benchmark (MRR 0.7558 against a 0.8368 no-reranker
-  // baseline). The escalation had no beneficiary left, so it is gone: a
-  // default install keeps its retrieval order rather than having it shuffled
-  // by a model that measurably makes it worse.
-  assert.match(seam, /const shouldRerank = explicitlySelected \|\| Boolean\(this\.rerankerOverride\)/,
-    'reranking must run exactly when the user chose a reranker');
-  assert.doesNotMatch(seam, /const shouldRerank = lowConfidence/,
-    'low confidence must no longer trigger the regressive bundled model');
-  assert.doesNotMatch(seam, /\n\s*if \(lowConfidence\) \{/,
-    'gating on lowConfidence alone was the original defect');
+test('a chosen reranker runs always; the bundled default escalates', () => {
+  // Three states, and the middle one is why this is worth a test rather than a
+  // comment. It began as `if (lowConfidence)` alone, so a CHOSEN reranker ran
+  // on 1 query in 36. The escalation was then kept for the bundled model only
+  // — until that model was measured and turned out to be the worst reranker in
+  // the benchmark, at which point it had no beneficiary and went away. The
+  // bundled model is now ms-marco (+0.0320 against the no-reranker baseline),
+  // so the escalation is back and earns its place.
+  assert.match(seam, /const shouldRerank = explicitlySelected \|\| lowConfidence \|\| Boolean\(this\.rerankerOverride\)/,
+    'a chosen reranker must run unconditionally, and the default on low confidence');
+  assert.doesNotMatch(seam, /const shouldRerank = lowConfidence;/,
+    'gating on lowConfidence ALONE was the original defect — a chosen reranker barely ran');
 });
 
-test('lowConfidence is still computed and traced, just not a trigger', () => {
-  // Anyone re-litigating this needs the signal, and computeConfidence feeds
-  // other decisions besides reranking.
+test('lowConfidence is computed and traced', () => {
+  // It gates the bundled default and is the signal anyone re-litigating this
+  // will want; computeConfidence also feeds decisions besides reranking.
   assert.match(seam, /const lowConfidence = gate\.lowConfidence === true;/);
   assert.match(seam, /markH4HybridStage\('rerank_gate', \{[\s\S]{0,120}lowConfidence/);
 });

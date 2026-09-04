@@ -512,7 +512,7 @@ export const AIP_CSS = `
    label to nothing. */
 .aip-provider-field { display:flex; align-items:center; gap:8px; flex:1 1 280px;
                       min-width:0; }
-.aip-provider-note  { margin-top: var(--aip-gap-row); }
+.aip-provider-note  { margin-top: 0; }
 
 /* The credential shell: one 32px box holding glyph + input + Save. overflow:hidden is
    what clips the Save segment's outer corners to the shell radius — which is also why
@@ -1851,6 +1851,8 @@ interface AIProvidersSettingsProps {
     onToggleAiLangDropdown: () => void;
     onSelectAiLanguage: (code: string) => void;
     aiLangDropdownRef: React.RefObject<HTMLDivElement | null>;
+    /** Deep-link to another settings tab (used by the lightweight-embedding notice). */
+    onNavigate?: (tab: string) => void;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1971,6 +1973,73 @@ const AmbiguousStoresCard: React.FC = () => {
 
 export const AmbiguousCredentialStoresCard = AmbiguousStoresCard;
 
+/**
+ * §5 cross-panel notice: the user has configured a third-party AI provider, but
+ * retrieval is still running on a lightweight embedding model.
+ *
+ * The failure this prevents is silent and easy to misattribute — an excellent
+ * generation model still produces a poor answer when the wrong context was
+ * retrieved, and the user blames the model or Natively. Non-blocking by design,
+ * and "Continue" is permanent: an unstoppable warning becomes something to click
+ * past.
+ *
+ * The predicate lives in the main process (electron/rag/embeddingStatus.ts) so
+ * this component never re-derives "is it lightweight" from a model name — an
+ * Ollama user on nomic-embed-text must not be nagged.
+ */
+const LightweightEmbeddingNotice: React.FC<{ onOpenEmbeddings?: () => void }> = ({ onOpenEmbeddings }) => {
+    const t = useT();
+    const [state, setState] = React.useState<{ show: boolean; model?: string | null }>({ show: false });
+
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const s = await window.electronAPI.getEmbeddingStatus?.();
+                if (!cancelled && s?.shouldWarn) setState({ show: true, model: s.active?.model });
+            } catch { /* best-effort notice */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    if (!state.show) return null;
+
+    return (
+        <div className="aip-card p-5 space-y-3">
+            <div className="flex items-start gap-3">
+                {/* One status primitive, as everywhere else in this panel. */}
+                <AipBadge tone="warn" label={t('Embeddings')} />
+                <div className="min-w-0">
+                    <p className="text-xs aip-hero font-medium">
+                        {t('Your AI provider is configured, but retrieval still uses a lightweight embedding model')}
+                    </p>
+                    <p className="text-[11px] aip-muted mt-1 leading-relaxed">
+                        {t('Natively embeds your files with')} <span className="aip-mono">{state.model || 'MiniLM'}</span>{t('. It may give weaker code and project retrieval than newer embedding models, which can affect answer quality even when your AI provider is excellent.')}
+                    </p>
+                    <p className="text-[11px] aip-muted mt-1 leading-relaxed">
+                        {t('For better results, choose a stronger local embedding model, or use a Natively API key, which includes managed embeddings.')}
+                    </p>
+                </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pl-1">
+                <button type="button" className="aip-btn" onClick={() => onOpenEmbeddings?.()}>
+                    {t('Configure embedding model')}
+                </button>
+                <button
+                    type="button"
+                    className="aip-btn"
+                    onClick={async () => {
+                        await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
+                        setState({ show: false });
+                    }}
+                >
+                    {t('Continue with MiniLM')}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     aiResponseLanguage,
     availableAiLanguages,
@@ -1978,6 +2047,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     onToggleAiLangDropdown,
     onSelectAiLanguage,
     aiLangDropdownRef,
+    onNavigate,
 }) => {
     const t = useT();
     // Mirrors document.documentElement[data-theme] through the shared
@@ -3276,6 +3346,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
+            <LightweightEmbeddingNotice onOpenEmbeddings={onNavigate ? () => onNavigate('embedding') : undefined} />
             <AmbiguousStoresCard />
             {confirmCopy && (
                 <ConfirmDialog

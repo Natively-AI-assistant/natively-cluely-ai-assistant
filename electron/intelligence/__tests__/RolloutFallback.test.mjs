@@ -11,6 +11,9 @@ import {
 import { LongTermMemoryService } from '../../../dist-electron/electron/intelligence/memory/LongTermMemoryService.js';
 
 const DEFAULT_ON_KEYS = new Set([
+  // Multi-turn chat history (2026-08-29). Default ON via a plain literal: it guards
+  // a regression fix, and a dev/test-only default would pin a behaviour users never get.
+  'chatHistoryMultiTurn',
   'meetingSummaryV3',
   'meetingModeAutoDetect',
   'followUpDraftV2',
@@ -47,6 +50,32 @@ const DEFAULT_ON_KEYS = new Set([
   // The doc-grounded validator checks the block that was SENT (2026-08-28) —
   // default ON, literal (never isInternalDevTestContext).
   'docGroundedValidatorUsesSentEvidence',
+  // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
+  // both are pure shadow-observation side channels (divergence logging only,
+  // zero change to any real return value), so there is no risk to running
+  // them in production.
+  'pronounRegexShadowObservation',
+  'contextOsImpossibleStateGateShadow',
+  // Promoted to unconditional `true` (2026-08-30, SEPARATE user-directed
+  // override — no packaged-build/real-traffic validation, unlike the shadow
+  // pair above which are risk-free by construction). See each flag's
+  // intelligenceFlags.ts comment for the specific risk it carries.
+  'ragConfidenceGate',
+  'ragLocalRerank',
+  'ragSpeculativeRerank',
+  'okfKnowledgePacks',
+  'okfHybridRetrieval',
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'atomicJdProfilePackGeneration',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Promoted to unconditional `true` (2026-08-30, third/final batch of the
+  // same user-directed override).
+  'okfMarkdownExport',
+  'okfProfileMarkdownExport',
+  'contextOsMultiFamilyEvidenceEnabled',
 ]);
 
 const expectedDefault = (key) => DEFAULT_ON_KEYS.has(key) ? true : false;
