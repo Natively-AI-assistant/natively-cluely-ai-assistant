@@ -22,8 +22,21 @@ import { isMac, isWindows } from '../../utils/platformUtils';
  * every hosted model to its vendor.
  */
 const bareModelName = (label: string): string => {
-    const segments = label.split('/');
-    return segments[segments.length - 1] || label;
+    // TWO prefix shapes, because the two catalogues store different things.
+    //
+    // openrouterRerankModels.ts sets `label` from OpenRouter's `name`, which is
+    // a DISPLAY name of the form `Vendor: Model` — "Voyage AI by MongoDB:
+    // Rerank 2.5 Lite". openrouterEmbeddingModels.ts sets `label` from the id
+    // instead (`voyage/voyage-4-lite`), which is why the embedding panel only
+    // ever needed the slash case and this one does not.
+    //
+    // Strip the vendor prefix first, then any path namespace. Missing this made
+    // the closed trigger read "Voyage AI by MongoDB: Rerank 2.5 Lite" — the
+    // vendor said twice over, in the one place that should name only the model.
+    const colon = label.indexOf(': ');
+    const afterVendor = colon > 0 ? label.slice(colon + 2) : label;
+    const segments = afterVendor.split('/');
+    return segments[segments.length - 1] || afterVendor;
 };
 
 /**
