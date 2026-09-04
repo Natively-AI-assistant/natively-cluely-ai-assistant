@@ -1124,7 +1124,7 @@ export const RerankerSettings: React.FC = () => {
                             {t('Fall back to the local reranker')}
                         </span>
                         <p className="text-[10px] aip-muted">
-                            {`${t('Off by default. When')} ${hostedFallbackSubject} ${t('is unreachable, out of quota or returning errors, Natively reranks on this device instead. Left off, a failed hosted rerank keeps your results in their original order rather than quietly reordering them with a model you did not choose.')}`}
+                            {`${t('Off by default. If')} ${hostedFallbackSubject} ${t('fails, rerank locally instead of keeping the original order.')}`}
                         </p>
                     </div>
                     <div className="shrink-0">
