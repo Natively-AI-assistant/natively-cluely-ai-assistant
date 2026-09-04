@@ -25,6 +25,34 @@ export function isOllamaVisionModelByName(modelId: string): boolean {
   return !!modelId && OLLAMA_VISION_NAME_RE.test(modelId.toLowerCase());
 }
 
+// A bare `vision` segment. High precision — a model with "vision" in its name
+// is one — and it catches the shapes the family list above cannot, because they
+// carry a parameter count between the family and the marker:
+// `llama-3.2-90b-vision-instruct`, `granite-3.2-2b-vision`.
+const GENERIC_VISION_MARKER_RE = /(?:^|[-_./])vision(?:[-_./]|$)/i;
+
+/**
+ * Best-effort "does this model name describe a vision model" for a provider
+ * whose capabilities we cannot probe — specifically a gateway (LiteLLM, NVIDIA
+ * NIM) fronting an arbitrary upstream.
+ *
+ * WHY (2026-09-03, follow-up): stripping the routing prefix let
+ * `litellm/openai/gpt-4o` be recognised, but only because `gpt-4o` matches a
+ * known cloud family. A gateway-routed OPEN-WEIGHTS vision model
+ * (`litellm/mistral/pixtral-12b`, `nvidia_nim/meta/llama-3.2-90b-vision-instruct`)
+ * matched nothing and still came back `supportsImages: false`, so Code Hint went
+ * on refusing the very models the vision chain and the provider registry had
+ * just been taught to seat. Three subsystems, two answers.
+ *
+ * Built on the Ollama family list rather than beside it: these are the same
+ * open-weights families served through either route, and a second private copy
+ * is exactly how the two drifted the last time.
+ */
+export function modelNameSuggestsVision(modelId: string): boolean {
+  if (!modelId) return false;
+  return isOllamaVisionModelByName(modelId) || GENERIC_VISION_MARKER_RE.test(modelId);
+}
+
 /**
  * Decide vision support from an Ollama /api/show response.
  *   - returns true/false when the response carries a `capabilities` array
@@ -91,7 +119,75 @@ export function customProviderSupportsVision(
   //     can't actually carry the screenshot.
   const hasMessagesArray = /"messages"\s*:\s*\[/.test(curl);
   const hasUserRole = /"role"\s*:\s*"user"/.test(curl);
-  return hasMessagesArray && hasUserRole;
+  if (!hasMessagesArray || !hasUserRole) return false;
+
+  //     A `messages` array is NOT proof the endpoint speaks OpenAI's multimodal
+  //     dialect — only that it has a messages array. Two other APIs share the
+  //     shape and reject what injectImageIntoMessages produces:
+  //
+  //       • Anthropic Messages wants `{type:"image", source:{...}}`; handed an
+  //         `image_url` part it returns 400 invalid_request.
+  //       • Ollama's native /api/chat wants a message-level `images:[b64]`; it
+  //         IGNORES the `image_url` part and answers text-only about a
+  //         screenshot it never saw — the silent drop this whole function
+  //         exists to prevent.
+  //
+  //     So the auto-detect branch requires the absence of those signatures.
+  //     A user on such an endpoint can still force vision on with the explicit
+  //     `multimodal` flag plus an `{{IMAGE_BASE64}}` placeholder they position
+  //     correctly for their API — branch (1) above, which is checked first.
+  //     Failing closed here is the documented intent: skip the provider rather
+  //     than commit to one that cannot carry the image.
+  if (isNonOpenAiMessagesDialect(curl)) return false;
+
+  return true;
+}
+
+/**
+ * True when a `messages`-shaped cURL template targets an API that is NOT
+ * OpenAI-multimodal-compatible. Deliberately narrow — it names only the two
+ * dialects we can identify from a template with confidence, because a false
+ * positive here silently disables vision for a working OpenAI-compatible
+ * gateway.
+ */
+function isNonOpenAiMessagesDialect(curl: string): boolean {
+  // Anthropic Messages API: the version header is mandatory on every request,
+  // so it is a reliable marker; the host is the second.
+  //
+  // Both are matched against the URL and the HEADER FLAGS only, never the whole
+  // template. Scanning everything meant a body that merely mentioned
+  // `anthropic-version:` — a system prompt about the Anthropic API, say — made
+  // a working OpenAI-compatible endpoint read as non-multimodal and silently
+  // lose vision, which is the false positive this function's docblock warns
+  // against. It cut the other way too: any `https://…/v1/…` string inside a
+  // prompt defeated the Ollama-native guard below.
+  if (/(?:^|\s)(?:-H|--header)\s+(?:'|")?\s*anthropic-version\s*:/i.test(curl)) return true;
+  if (/https?:\/\/[^\s'"`]*\bapi\.anthropic\.com\b/i.test(firstUrl(curl))) return true;
+
+  // Ollama's NATIVE endpoints. Its OpenAI-compatible surface lives at
+  // /v1/chat/completions and is deliberately not matched — that one does accept
+  // image_url parts (see callOllamaVision in VisionProviderRegistry).
+  //
+  // The path alone is NOT enough. `/api/chat` is an ordinary route name: a
+  // self-hosted OpenAI-compatible gateway at https://gw.example.com/api/chat
+  // matched it and silently lost vision, which is precisely the false positive
+  // this function's own docblock warns against. So require corroboration —
+  // Ollama's default port, or a host that is actually on this machine/LAN. A
+  // public gateway on 443 no longer matches.
+  const url = firstUrl(curl);
+  const ollamaNativePath = /\/api\/(chat|generate)\b/i.test(url) && !/\/v1\//i.test(url);
+  if (ollamaNativePath && (/:11434\b/.test(url) || customProviderIsLocal({ curlCommand: curl }))) {
+    return true;
+  }
+
+  return false;
+}
+
+/** The first http(s) URL in a cURL template, or '' — so URL-shaped checks never
+ *  read the request BODY, which is user prose and can contain anything. */
+function firstUrl(curl: string): string {
+  const m = curl.match(/https?:\/\/[^\s'"`]+/i);
+  return m ? m[0] : '';
 }
 
 /**
