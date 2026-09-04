@@ -486,8 +486,29 @@ export const RerankerSettings: React.FC = () => {
         return catalogModels.filter(m => m.state === 'installed').reduce((acc, m) => acc + (m.bytesOnDisk || m.bytes), 0);
     }, [catalogModels]);
 
+    /**
+     * The one model named in "Best for this Mac".
+     *
+     * Several entries carry the Recommended badge, so this used to be whichever
+     * one happened to sit earliest in the catalogue array — a headline
+     * recommendation decided by array order.
+     *
+     * The rule, stated: prefer a recommended model the user can actually use
+     * WITHOUT a licence problem. jina-reranker-v3.5 is the strongest local
+     * reranker measured (MRR 0.9514 against a 0.8368 no-reranker baseline, and
+     * it never moved a query down), but it is CC-BY-NC — putting it in a
+     * headline inside a commercial product recommends a licence the user
+     * probably cannot honour. It keeps its badge and its note; the headline
+     * goes to the strongest Apache-licensed model instead.
+     *
+     * The fallback is deliberate rather than defensive: if the catalogue ever
+     * recommends only restricted models, naming one is still better than
+     * naming none.
+     */
     const recommendedModelName = useMemo(() => {
-        return catalogModels.find(m => m.recommended && m.supported)?.name ?? 'mxbai Rerank XSmall';
+        const recommended = catalogModels.filter(m => m.recommended && m.supported);
+        const unrestricted = recommended.find(m => !m.license?.commercialUseRestricted);
+        return (unrestricted ?? recommended[0])?.name ?? 'mxbai Rerank XSmall';
     }, [catalogModels]);
 
     const filteredCatalogModels = useMemo(() => {
