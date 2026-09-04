@@ -58,6 +58,7 @@ export class EmbeddingPrototypeProvider extends Provider {
     this.centroids = {};   // axis -> label -> Float64Array
     this.examples = {};    // axis -> [{vec, label}]  (top-k rule only)
     this.dim = 0;
+    this.temperature = 20;
   }
 
   async load() {
@@ -119,6 +120,49 @@ export class EmbeddingPrototypeProvider extends Provider {
       this.centroids[axis] = cents;
       this.examples[axis] = ex;
     }
+
+    this.temperature = this.#fitTemperature(train, vectors);
+  }
+
+  /**
+   * Pick the softmax temperature that minimises expected calibration error on
+   * the TRAINING split, over `needs_response` — the axis the campaign turns on.
+   *
+   * Fitting on train and not on holdout matters: a temperature tuned against
+   * the held-out rows would be a hyperparameter fitted to the test set, and
+   * every confidence and ECE figure downstream would be optimistic.
+   */
+  #fitTemperature(train, vectors) {
+    const axis = 'needs_response';
+    const cents = this.centroids[axis];
+    if (!cents) return 20;
+    const rows = train
+      .map((row, i) => ({ actual: row.labels?.[axis], v: vectors[i] }))
+      .filter((r) => r.actual != null);
+    if (!rows.length) return 20;
+
+    const ranked = rows.map((r) => ({
+      actual: r.actual,
+      scored: Object.entries(cents).map(([l, c]) => [l, dot(r.v, c)]).sort((a, b) => b[1] - a[1]).slice(0, 5),
+    }));
+
+    let best = { t: 20, ece: Infinity };
+    for (const t of [5, 10, 20, 40, 60, 80, 120, 160, 240, 320]) {
+      const bins = Array.from({ length: 10 }, () => ({ n: 0, correct: 0, conf: 0 }));
+      for (const r of ranked) {
+        const mx = r.scored[0][1];
+        const exps = r.scored.map(([, s]) => Math.exp((s - mx) * t));
+        const z = exps.reduce((a, b) => a + b, 0) || 1;
+        const conf = exps[0] / z;
+        const b = bins[Math.min(9, Math.floor(conf * 10))];
+        b.n++; b.conf += conf;
+        if (r.scored[0][0] === r.actual) b.correct++;
+      }
+      let ece = 0;
+      for (const b of bins) if (b.n) ece += (b.n / ranked.length) * Math.abs(b.correct / b.n - b.conf / b.n);
+      if (ece < best.ece) best = { t, ece };
+    }
+    return best.t;
   }
 
   async #embedAll(texts, batch = 64) {
@@ -147,14 +191,33 @@ export class EmbeddingPrototypeProvider extends Provider {
         : this.#nearestCentroid(axis, v);
       if (!scored.length) continue;
       frame[axis] = scored[0][0];
-      // Softmax over the top similarities, so `confidence` is a distribution
-      // rather than a raw cosine. A raw cosine sits around 0.6-0.9 for
-      // everything and would make the calibration check meaningless.
       const top = scored.slice(0, 5);
-      const exps = top.map(([, s]) => Math.exp(s * 10));
-      const z = exps.reduce((a, b) => a + b, 0);
+
+      // TEMPERATURE IS FITTED, NOT GUESSED.
+      //
+      // The first version used exp(s * 10) on cosine similarities. Cosines
+      // against different centroids cluster tightly — 0.55, 0.54, 0.53 — so
+      // multiplying by 10 leaves 5.5, 5.4, 5.3 and the softmax comes out almost
+      // uniform. Measured on the held-out split, the top-two gap had a MEDIAN
+      // of 0.011 and a p90 of 0.031.
+      //
+      // That is not a cosmetic problem with the confidence number. The hybrid
+      // gates escalation on that gap, so every threshold from 0.10 to 0.50
+      // escalated 100% of rows, and all four hybrid variants collapsed into
+      // "the escalation model, plus overhead" — strictly worse than running the
+      // escalation alone, while looking like a working ladder.
+      //
+      // `#fitTemperature` picks the value that minimises calibration error on
+      // the TRAIN split, so confidence means something and the margin can gate.
+      const t = this.temperature;
+      const mx = Math.max(...top.map(([, s]) => s));
+      const exps = top.map(([, s]) => Math.exp((s - mx) * t));
+      const z = exps.reduce((a, b) => a + b, 0) || 1;
       frame.confidence[axis] = exps[0] / z;
       frame.alternatives[axis] = top.map(([l, s], i) => [l, exps[i] / z]);
+      // The RAW cosine ranking travels alongside, so a caller that wants to gate
+      // on similarity rather than on a squashed probability can.
+      (frame.rawScores ??= {})[axis] = top;
     }
     // The legacy control axis, so this candidate is comparable to the baseline.
     const legacy = this.#nearestCentroid('legacy_intent', v);
@@ -198,6 +261,7 @@ export class EmbeddingPrototypeProvider extends Provider {
       rule: this.opts.rule,
       k: this.opts.rule === 'topk' ? this.opts.k : undefined,
       dim: this.dim,
+      temperature: this.temperature,
       forwardPassesPerRow: 1,
     };
   }

@@ -1,17 +1,18 @@
 {
-  "providerId": "proto-potion-centroid",
+  "providerId": "hybrid-m001",
   "meta": {
-    "family": "embedding-prototype",
+    "family": "hybrid",
     "params": 0,
     "sizeOnDiskMB": 0,
     "runtime": "onnx",
-    "ortBinding": "onnxruntime-node",
-    "modelId": "minishlab/potion-base-8M",
-    "rule": "centroid",
-    "dim": 256,
-    "temperature": 160,
-    "forwardPassesPerRow": 1,
-    "loadMs": 197,
+    "primary": "potion",
+    "escalation": "head",
+    "marginThreshold": 0.01,
+    "deadlineMs": 150,
+    "escalationRate": 0.16976127320954906,
+    "rulesHitRate": 0.07692307692307693,
+    "timedOut": 0,
+    "loadMs": 310,
     "split": "holdout",
     "language": "en",
     "punctuated": false,
@@ -20,18 +21,18 @@
   "axes": {
     "dialogue_act": {
       "n": 377,
-      "accuracy": 0.3713527851458886,
-      "macroF1": 0.33049995300433516,
+      "accuracy": 0.3925729442970822,
+      "macroF1": 0.3445256859107438,
       "labelsScored": 6,
       "excludedLabels": [],
       "perLabel": {
         "answer": {
-          "precision": 0.1643835616438356,
+          "precision": 0.16666666666666666,
           "recall": 0.46153846153846156,
-          "f1": 0.24242424242424243,
+          "f1": 0.2448979591836735,
           "support": 26,
           "tp": 12,
-          "fp": 61,
+          "fp": 60,
           "fn": 14
         },
         "backchannel": {
@@ -49,92 +50,92 @@
           "f1": 0,
           "support": 2,
           "tp": 0,
-          "fp": 33,
+          "fp": 32,
           "fn": 2
         },
         "question": {
-          "precision": 0.4230769230769231,
-          "recall": 0.35106382978723405,
-          "f1": 0.38372093023255816,
+          "precision": 0.4430379746835443,
+          "recall": 0.3723404255319149,
+          "f1": 0.40462427745664736,
           "support": 94,
-          "tp": 33,
-          "fp": 45,
-          "fn": 61
+          "tp": 35,
+          "fp": 44,
+          "fn": 59
         },
         "request": {
-          "precision": 0.35384615384615387,
-          "recall": 0.3898305084745763,
-          "f1": 0.3709677419354839,
+          "precision": 0.3870967741935484,
+          "recall": 0.4067796610169492,
+          "f1": 0.3966942148760331,
           "support": 59,
-          "tp": 23,
-          "fp": 42,
-          "fn": 36
+          "tp": 24,
+          "fp": 38,
+          "fn": 35
         },
         "statement": {
-          "precision": 0.5897435897435898,
-          "recall": 0.2893081761006289,
-          "f1": 0.3881856540084388,
+          "precision": 0.6219512195121951,
+          "recall": 0.32075471698113206,
+          "f1": 0.4232365145228215,
           "support": 159,
-          "tp": 46,
-          "fp": 32,
-          "fn": 113
+          "tp": 51,
+          "fp": 31,
+          "fn": 108
         }
       },
       "unresolved": 0,
-      "ece": 0.06178703401256689,
+      "ece": 0.05187404685565349,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
         "fired": 377,
         "total": 377,
         "hitRate": 1,
-        "precisionWhenFired": 0.3713527851458886
+        "precisionWhenFired": 0.3925729442970822
       }
     },
     "needs_response": {
       "n": 377,
-      "accuracy": 0.5490716180371353,
-      "macroF1": 0.5083530589412942,
+      "accuracy": 0.5623342175066313,
+      "macroF1": 0.5217590912333926,
       "labelsScored": 3,
       "excludedLabels": [],
       "perLabel": {
         "no": {
-          "precision": 0.6462585034013606,
-          "recall": 0.5974842767295597,
-          "f1": 0.6209150326797385,
+          "precision": 0.6530612244897959,
+          "recall": 0.6037735849056604,
+          "f1": 0.6274509803921567,
           "support": 159,
-          "tp": 95,
-          "fp": 52,
-          "fn": 64
+          "tp": 96,
+          "fp": 51,
+          "fn": 63
         },
         "optional": {
-          "precision": 0.22330097087378642,
-          "recall": 0.5111111111111111,
-          "f1": 0.3108108108108108,
+          "precision": 0.23529411764705882,
+          "recall": 0.5333333333333333,
+          "f1": 0.326530612244898,
           "support": 45,
-          "tp": 23,
-          "fp": 80,
-          "fn": 22
+          "tp": 24,
+          "fp": 78,
+          "fn": 21
         },
         "yes": {
-          "precision": 0.7007874015748031,
-          "recall": 0.5144508670520231,
-          "f1": 0.5933333333333333,
+          "precision": 0.71875,
+          "recall": 0.5317919075144508,
+          "f1": 0.6112956810631228,
           "support": 173,
-          "tp": 89,
-          "fp": 38,
-          "fn": 84
+          "tp": 92,
+          "fp": 36,
+          "fn": 81
         }
       },
       "unresolved": 0,
-      "ece": 0.013138050862528158,
+      "ece": 0.013459312013035896,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
         "fired": 377,
         "total": 377,
         "hitRate": 1,
-        "precisionWhenFired": 0.5490716180371353
+        "precisionWhenFired": 0.5623342175066313
       }
     },
     "voice": {
@@ -205,27 +206,27 @@
     },
     "task": {
       "n": 377,
-      "accuracy": 0.3952254641909814,
-      "macroF1": 0.2781286161131739,
+      "accuracy": 0.4005305039787798,
+      "macroF1": 0.2781580595565915,
       "labelsScored": 11,
       "excludedLabels": [],
       "perLabel": {
         "answer": {
-          "precision": 0.0625,
+          "precision": 0.06451612903225806,
           "recall": 0.09523809523809523,
-          "f1": 0.07547169811320754,
+          "f1": 0.07692307692307691,
           "support": 21,
           "tp": 2,
-          "fp": 30,
+          "fp": 29,
           "fn": 19
         },
         "compare": {
-          "precision": 0.13793103448275862,
+          "precision": 0.14814814814814814,
           "recall": 0.36363636363636365,
-          "f1": 0.2,
+          "f1": 0.21052631578947367,
           "support": 11,
           "tp": 4,
-          "fp": 25,
+          "fp": 23,
           "fn": 7
         },
         "create": {
@@ -261,34 +262,34 @@
           "f1": 0,
           "support": 6,
           "tp": 0,
-          "fp": 14,
+          "fp": 13,
           "fn": 6
         },
         "none": {
-          "precision": 0.8108108108108109,
-          "recall": 0.4972375690607735,
-          "f1": 0.6164383561643836,
+          "precision": 0.8070175438596491,
+          "recall": 0.5082872928176796,
+          "f1": 0.6237288135593221,
           "support": 181,
-          "tp": 90,
-          "fp": 21,
-          "fn": 91
+          "tp": 92,
+          "fp": 22,
+          "fn": 89
         },
         "plan": {
-          "precision": 0.20930232558139536,
+          "precision": 0.20454545454545456,
           "recall": 0.4090909090909091,
-          "f1": 0.27692307692307694,
+          "f1": 0.27272727272727276,
           "support": 22,
           "tp": 9,
-          "fp": 34,
+          "fp": 35,
           "fn": 13
         },
         "research": {
-          "precision": 0.16666666666666666,
+          "precision": 0.17647058823529413,
           "recall": 0.25,
-          "f1": 0.2,
+          "f1": 0.20689655172413793,
           "support": 12,
           "tp": 3,
-          "fp": 15,
+          "fp": 14,
           "fn": 9
         },
         "rewrite": {
@@ -301,30 +302,30 @@
           "fn": 5
         },
         "summarize": {
-          "precision": 0.45454545454545453,
+          "precision": 0.4166666666666667,
           "recall": 0.5,
-          "f1": 0.47619047619047616,
+          "f1": 0.45454545454545453,
           "support": 10,
           "tp": 5,
-          "fp": 6,
+          "fp": 7,
           "fn": 5
         }
       },
       "unresolved": 0,
-      "ece": 0.0664002631042431,
+      "ece": 0.06713523267152306,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
         "fired": 377,
         "total": 377,
         "hitRate": 1,
-        "precisionWhenFired": 0.3952254641909814
+        "precisionWhenFired": 0.4005305039787798
       }
     },
     "mode_intent": {
       "n": 377,
-      "accuracy": 0.3925729442970822,
-      "macroF1": 0.35991685866185824,
+      "accuracy": 0.38726790450928383,
+      "macroF1": 0.35603371662809513,
       "labelsScored": 77,
       "excludedLabels": [
         "citation_check"
@@ -394,21 +395,21 @@
           "fn": 2
         },
         "called_on_for_status": {
-          "precision": 0.25,
+          "precision": 0.16666666666666666,
           "recall": 0.25,
-          "f1": 0.25,
+          "f1": 0.2,
           "support": 4,
           "tp": 1,
-          "fp": 3,
+          "fp": 5,
           "fn": 3
         },
         "candidate_answer_to_evaluate": {
-          "precision": 0.4074074074074074,
+          "precision": 0.4230769230769231,
           "recall": 0.7333333333333333,
-          "f1": 0.5238095238095238,
+          "f1": 0.5365853658536585,
           "support": 15,
           "tp": 11,
-          "fp": 16,
+          "fp": 15,
           "fn": 4
         },
         "candidate_question": {
@@ -502,12 +503,12 @@
           "fn": 9
         },
         "critique_challenge": {
-          "precision": 0.625,
+          "precision": 0.5555555555555556,
           "recall": 0.5,
-          "f1": 0.5555555555555556,
+          "f1": 0.5263157894736842,
           "support": 10,
           "tp": 5,
-          "fp": 3,
+          "fp": 4,
           "fn": 5
         },
         "decision": {
@@ -547,12 +548,12 @@
           "fn": 1
         },
         "discussion_noise": {
-          "precision": 0.5,
+          "precision": 0.5714285714285714,
           "recall": 0.2857142857142857,
-          "f1": 0.36363636363636365,
+          "f1": 0.38095238095238093,
           "support": 14,
           "tp": 4,
-          "fp": 4,
+          "fp": 3,
           "fn": 10
         },
         "dsa_problem": {
@@ -646,21 +647,21 @@
           "fn": 0
         },
         "interviewer_speaking": {
-          "precision": 0.625,
-          "recall": 0.35714285714285715,
-          "f1": 0.45454545454545453,
+          "precision": 0.4444444444444444,
+          "recall": 0.2857142857142857,
+          "f1": 0.34782608695652173,
           "support": 14,
-          "tp": 5,
-          "fp": 3,
-          "fn": 9
+          "tp": 4,
+          "fp": 5,
+          "fn": 10
         },
         "interviewer_thinking_aloud": {
-          "precision": 0.25,
+          "precision": 0.2857142857142857,
           "recall": 0.5,
-          "f1": 0.3333333333333333,
+          "f1": 0.36363636363636365,
           "support": 4,
           "tp": 2,
-          "fp": 6,
+          "fp": 5,
           "fn": 2
         },
         "intro_request": {
@@ -700,12 +701,12 @@
           "fn": 4
         },
         "meeting_capture": {
-          "precision": 0.25,
+          "precision": 0.2727272727272727,
           "recall": 0.375,
-          "f1": 0.3,
+          "f1": 0.3157894736842105,
           "support": 8,
           "tp": 3,
-          "fp": 9,
+          "fp": 8,
           "fn": 5
         },
         "metric_question": {
@@ -723,7 +724,7 @@
           "f1": 0,
           "support": 1,
           "tp": 0,
-          "fp": 2,
+          "fp": 1,
           "fn": 1
         },
         "new_concept": {
@@ -808,12 +809,12 @@
           "fn": 0
         },
         "optimization_probe": {
-          "precision": 0.5,
+          "precision": 0.4,
           "recall": 1,
-          "f1": 0.6666666666666666,
+          "f1": 0.5714285714285715,
           "support": 2,
           "tp": 2,
-          "fp": 2,
+          "fp": 3,
           "fn": 0
         },
         "pricing_ask": {
@@ -952,13 +953,13 @@
           "fn": 3
         },
         "small_talk": {
-          "precision": 0.275,
-          "recall": 0.5238095238095238,
-          "f1": 0.36065573770491804,
+          "precision": 0.2564102564102564,
+          "recall": 0.47619047619047616,
+          "f1": 0.3333333333333333,
           "support": 21,
-          "tp": 11,
+          "tp": 10,
           "fp": 29,
-          "fn": 10
+          "fn": 11
         },
         "strategy_challenge": {
           "precision": null,
@@ -1024,30 +1025,30 @@
           "fn": 2
         },
         "your_questions_for_us": {
-          "precision": 0.3333333333333333,
+          "precision": 0.25,
           "recall": 0.5,
-          "f1": 0.4,
+          "f1": 0.3333333333333333,
           "support": 2,
           "tp": 1,
-          "fp": 2,
+          "fp": 3,
           "fn": 1
         }
       },
       "unresolved": 0,
-      "ece": 0.13124502467721297,
+      "ece": 0.1291619665791031,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
         "fired": 377,
         "total": 377,
         "hitRate": 1,
-        "precisionWhenFired": 0.3925729442970822
+        "precisionWhenFired": 0.38726790450928383
       }
     },
     "answer_form": {
       "n": 377,
-      "accuracy": 0.3793103448275862,
-      "macroF1": 0.2739977682608906,
+      "accuracy": 0.38461538461538464,
+      "macroF1": 0.2777142543153906,
       "labelsScored": 10,
       "excludedLabels": [],
       "perLabel": {
@@ -1061,22 +1062,22 @@
           "fn": 5
         },
         "example": {
-          "precision": 0.11538461538461539,
+          "precision": 0.12,
           "recall": 0.6,
-          "f1": 0.1935483870967742,
+          "f1": 0.19999999999999998,
           "support": 5,
           "tp": 3,
-          "fp": 23,
+          "fp": 22,
           "fn": 2
         },
         "explanation": {
-          "precision": 0.27450980392156865,
-          "recall": 0.1728395061728395,
-          "f1": 0.21212121212121213,
+          "precision": 0.3018867924528302,
+          "recall": 0.19753086419753085,
+          "f1": 0.23880597014925373,
           "support": 81,
-          "tp": 14,
+          "tp": 16,
           "fp": 37,
-          "fn": 67
+          "fn": 65
         },
         "fact": {
           "precision": 0.2,
@@ -1097,21 +1098,21 @@
           "fn": 98
         },
         "rebuttal": {
-          "precision": 0.125,
+          "precision": 0.12903225806451613,
           "recall": 0.26666666666666666,
-          "f1": 0.1702127659574468,
+          "f1": 0.17391304347826086,
           "support": 15,
           "tp": 4,
-          "fp": 28,
+          "fp": 27,
           "fn": 11
         },
         "recommendation": {
-          "precision": 0.2,
+          "precision": 0.19444444444444445,
           "recall": 0.3684210526315789,
-          "f1": 0.25925925925925924,
+          "f1": 0.2545454545454545,
           "support": 19,
           "tp": 7,
-          "fp": 28,
+          "fp": 29,
           "fn": 12
         },
         "steps": {
@@ -1124,12 +1125,12 @@
           "fn": 5
         },
         "summary": {
-          "precision": 0.125,
+          "precision": 0.13043478260869565,
           "recall": 0.2727272727272727,
-          "f1": 0.17142857142857143,
+          "f1": 0.1764705882352941,
           "support": 11,
           "tp": 3,
-          "fp": 21,
+          "fp": 20,
           "fn": 8
         },
         "table": {
@@ -1143,30 +1144,30 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.1070704401968608,
+      "ece": 0.10914303184482736,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
         "fired": 377,
         "total": 377,
         "hitRate": 1,
-        "precisionWhenFired": 0.3793103448275862
+        "precisionWhenFired": 0.38461538461538464
       }
     },
     "grounding": {
       "n": 377,
-      "accuracy": 0.4854111405835544,
-      "macroF1": 0.25679553871804156,
+      "accuracy": 0.48010610079575594,
+      "macroF1": 0.2532674993296721,
       "labelsScored": 5,
       "excludedLabels": [],
       "perLabel": {
         "conversation_memory": {
-          "precision": 0.13636363636363635,
+          "precision": 0.13043478260869565,
           "recall": 0.28125,
-          "f1": 0.18367346938775508,
+          "f1": 0.17821782178217818,
           "support": 32,
           "tp": 9,
-          "fp": 57,
+          "fp": 60,
           "fn": 23
         },
         "knowledge_base": {
@@ -1179,22 +1180,22 @@
           "fn": 3
         },
         "mode_files": {
-          "precision": 0.45569620253164556,
-          "recall": 0.36,
-          "f1": 0.4022346368715084,
+          "precision": 0.44871794871794873,
+          "recall": 0.35,
+          "f1": 0.3932584269662921,
           "support": 100,
-          "tp": 36,
+          "tp": 35,
           "fp": 43,
-          "fn": 64
+          "fn": 65
         },
         "none": {
-          "precision": 0.7527472527472527,
-          "recall": 0.5708333333333333,
-          "f1": 0.6492890995260663,
+          "precision": 0.7513812154696132,
+          "recall": 0.5666666666666667,
+          "f1": 0.6460807600950118,
           "support": 240,
-          "tp": 137,
+          "tp": 136,
           "fp": 45,
-          "fn": 103
+          "fn": 104
         },
         "profile": {
           "precision": 0,
@@ -1202,19 +1203,19 @@
           "f1": 0,
           "support": 1,
           "tp": 0,
-          "fp": 13,
+          "fp": 12,
           "fn": 1
         }
       },
       "unresolved": 0,
-      "ece": 0.037541682930340575,
+      "ece": 0.04985266744259174,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
         "fired": 377,
         "total": 377,
         "hitRate": 1,
-        "precisionWhenFired": 0.4854111405835544
+        "precisionWhenFired": 0.48010610079575594
       }
     }
   },
@@ -1230,14 +1231,14 @@
     "technical-interview": {
       "n": 26,
       "accuracy": 0.5,
-      "macroF1": 0.44074074074074077,
+      "macroF1": 0.4441077441077441,
       "labelsScored": 9,
       "underpowered": true
     },
     "looking-for-work": {
       "n": 36,
-      "accuracy": 0.4444444444444444,
-      "macroF1": 0.4549123353044922,
+      "accuracy": 0.4166666666666667,
+      "macroF1": 0.44547152194211015,
       "labelsScored": 9,
       "underpowered": true
     },
@@ -1250,15 +1251,15 @@
     },
     "recruiting": {
       "n": 48,
-      "accuracy": 0.3541666666666667,
-      "macroF1": 0.19605832763727501,
+      "accuracy": 0.3333333333333333,
+      "macroF1": 0.18379281537176273,
       "labelsScored": 6,
       "underpowered": true
     },
     "team-meet": {
       "n": 38,
       "accuracy": 0.2631578947368421,
-      "macroF1": 0.2582251082251082,
+      "macroF1": 0.26111111111111107,
       "labelsScored": 6,
       "underpowered": true
     },
@@ -1313,101 +1314,101 @@
   },
   "latency": {
     "n": 377,
-    "p50": 0.05608399999999847,
-    "p95": 0.07574999999999932,
-    "p99": 0.09458300000000008,
-    "mean": 0.058687326259948845,
-    "max": 0.17229199999999878
+    "p50": 0.07295799999997143,
+    "p95": 24.687749999999824,
+    "p99": 25.390583000000106,
+    "mean": 4.256075594164463,
+    "max": 26.969334000000003
   },
   "legacy": {
     "n": 377,
-    "balancedAccuracy": 0.40583554376657827,
-    "macroF1": 0.30360046778685174,
+    "balancedAccuracy": 0.41909814323607425,
+    "macroF1": 0.2988953993228125,
     "labelsScored": 8,
     "excludedLabels": [],
     "perLabel": {
       "behavioral": {
-        "precision": 0.15254237288135594,
-        "recall": 0.47368421052631576,
-        "f1": 0.23076923076923078,
+        "precision": 0.1702127659574468,
+        "recall": 0.42105263157894735,
+        "f1": 0.24242424242424243,
         "support": 19,
-        "tp": 9,
-        "fp": 50,
-        "fn": 10
+        "tp": 8,
+        "fp": 39,
+        "fn": 11
       },
       "clarification": {
-        "precision": 0.13636363636363635,
-        "recall": 0.07142857142857142,
-        "f1": 0.09374999999999999,
+        "precision": 0.15625,
+        "recall": 0.11904761904761904,
+        "f1": 0.13513513513513511,
         "support": 42,
-        "tp": 3,
-        "fp": 19,
-        "fn": 39
+        "tp": 5,
+        "fp": 27,
+        "fn": 37
       },
       "coding": {
-        "precision": 0.4827586206896552,
-        "recall": 0.56,
-        "f1": 0.5185185185185185,
+        "precision": 0.4383561643835616,
+        "recall": 0.64,
+        "f1": 0.5203252032520325,
         "support": 50,
-        "tp": 28,
-        "fp": 30,
-        "fn": 22
+        "tp": 32,
+        "fp": 41,
+        "fn": 18
       },
       "deep_dive": {
-        "precision": 0.21739130434782608,
+        "precision": 0.2127659574468085,
         "recall": 0.2631578947368421,
-        "f1": 0.23809523809523808,
+        "f1": 0.2352941176470588,
         "support": 38,
         "tp": 10,
-        "fp": 36,
+        "fp": 37,
         "fn": 28
       },
       "example_request": {
-        "precision": 0.03571428571428571,
+        "precision": 0.05263157894736842,
         "recall": 1,
-        "f1": 0.0689655172413793,
+        "f1": 0.1,
         "support": 1,
         "tp": 1,
-        "fp": 27,
+        "fp": 18,
         "fn": 0
       },
       "follow_up": {
-        "precision": 0.23529411764705882,
-        "recall": 0.32,
-        "f1": 0.2711864406779661,
+        "precision": 0.2,
+        "recall": 0.28,
+        "f1": 0.23333333333333334,
         "support": 25,
-        "tp": 8,
-        "fp": 26,
-        "fn": 17
+        "tp": 7,
+        "fp": 28,
+        "fn": 18
       },
       "general": {
-        "precision": 0.7927927927927928,
-        "recall": 0.45595854922279794,
-        "f1": 0.5789473684210527,
+        "precision": 0.8425925925925926,
+        "recall": 0.47150259067357514,
+        "f1": 0.6046511627906977,
         "support": 193,
-        "tp": 88,
-        "fp": 23,
-        "fn": 105
+        "tp": 91,
+        "fp": 17,
+        "fn": 102
       },
       "summary_probe": {
-        "precision": 0.3157894736842105,
-        "recall": 0.6666666666666666,
-        "f1": 0.42857142857142855,
+        "precision": 0.25,
+        "recall": 0.4444444444444444,
+        "f1": 0.32,
         "support": 9,
-        "tp": 6,
-        "fp": 13,
-        "fn": 3
+        "tp": 4,
+        "fp": 12,
+        "fn": 5
       }
     },
     "productionWeighted": {
-      "weightedAccuracy": 0.3842699697430103,
+      "weightedAccuracy": 0.39012862605564,
       "labelsWeighted": 8,
       "missingFromWeights": []
     }
   },
   "roundTrip": {
-    "p50": 0.13,
-    "p95": 0.17
+    "p50": 0.16,
+    "p95": 24.95
   },
   "latencySource": "worker"
 }
