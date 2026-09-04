@@ -3,8 +3,9 @@
 //
 // THE BUG. `ggufRerankerWorker.js` was missing from package.json's
 // `asarUnpack`, while every one of its siblings — whisperWorker,
-// intentClassifierWorker, localEmbeddingWorker, localRerankerWorker,
-// rerankerDownloadWorker — was listed.
+// intentClassifierWorker, localEmbeddingWorker, localRerankerWorker — was
+// listed. (rerankerDownloadWorker was in that list too, until the bge lazy
+// downloader it served was removed on 2026-09-04.)
 //
 // Why that is fatal rather than cosmetic. resolveRagWorker() ends with:
 //
