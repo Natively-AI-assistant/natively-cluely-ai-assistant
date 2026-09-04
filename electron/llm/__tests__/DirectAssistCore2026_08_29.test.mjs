@@ -751,10 +751,29 @@ test('LiteLLM and NVIDIA streaming adapters preserve processed image MIME types'
   const nvidiaNim = source.slice(nimStart, nextAdapter);
 
   assert.ok(liteStart >= 0 && nimStart > liteStart && nextAdapter > nimStart);
+
+  // The encoding may sit inline in each adapter, or in the shared helper they
+  // delegate to. This test arrived on main asserting the inline form, while
+  // feat/extension-system had lifted four copies of that loop into
+  // buildOpenAiImageParts(); merging the two turned a de-duplication into a red
+  // MIME test. Wherever it lives, it is checked — and checking the helper as
+  // well as the adapters is stricter than the original, which could not see it.
+  const helperStart = source.indexOf('private async buildOpenAiImageParts(');
+  const helper = helperStart >= 0
+    ? source.slice(helperStart, source.indexOf('\n  private ', helperStart + 10))
+    : '';
+
   for (const adapter of [liteLlm, nvidiaNim]) {
-    assert.match(adapter, /const \{ mimeType, data \} = await this\.processImage\(p\)/);
-    assert.match(adapter, /`data:\$\{mimeType\};base64,\$\{data\}`/);
+    const inline = /const \{ mimeType, data \} = await this\.processImage\(p\)/.test(adapter);
+    const delegates = /buildOpenAiImageParts\(imagePaths\)/.test(adapter);
+    assert.ok(inline || delegates,
+      'the adapter must either encode images itself or delegate to buildOpenAiImageParts');
+    const body = inline ? adapter : helper;
+    assert.match(body, /const \{ mimeType, data \} = await this\.processImage\(p\)/);
+    assert.match(body, /`data:\$\{mimeType\};base64,\$\{data\}`/);
+    // The property this test exists for: never a hardcoded MIME type.
     assert.doesNotMatch(adapter, /data:image\/png;base64/);
+    assert.doesNotMatch(body, /data:image\/png;base64/);
   }
 });
 
