@@ -1,0 +1,1473 @@
+{
+  "providerId": "rules",
+  "meta": {
+    "family": "regex",
+    "params": 0,
+    "sizeOnDiskMB": 0,
+    "runtime": "rules",
+    "loadMs": 5,
+    "split": "holdout",
+    "language": "en",
+    "punctuated": false,
+    "failed": 0
+  },
+  "axes": {
+    "dialogue_act": {
+      "n": 377,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 6,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 377,
+          "fn": 0
+        },
+        "answer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 26,
+          "tp": 0,
+          "fp": 0,
+          "fn": 26
+        },
+        "backchannel": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 37,
+          "tp": 0,
+          "fp": 0,
+          "fn": 37
+        },
+        "interruption": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 94,
+          "tp": 0,
+          "fp": 0,
+          "fn": 94
+        },
+        "request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 59,
+          "tp": 0,
+          "fp": 0,
+          "fn": 59
+        },
+        "statement": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 159,
+          "tp": 0,
+          "fp": 0,
+          "fn": 159
+        }
+      },
+      "unresolved": 377,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 377,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    },
+    "needs_response": {
+      "n": 377,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 3,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 377,
+          "fn": 0
+        },
+        "no": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 159,
+          "tp": 0,
+          "fp": 0,
+          "fn": 159
+        },
+        "optional": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 45,
+          "tp": 0,
+          "fp": 0,
+          "fn": 45
+        },
+        "yes": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 173,
+          "tp": 0,
+          "fp": 0,
+          "fn": 173
+        }
+      },
+      "unresolved": 377,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 377,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    },
+    "voice": {
+      "n": 377,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 4,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 377,
+          "fn": 0
+        },
+        "advisor": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 70,
+          "tp": 0,
+          "fp": 0,
+          "fn": 70
+        },
+        "capture": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 22,
+          "tp": 0,
+          "fp": 0,
+          "fn": 22
+        },
+        "first_person_script": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 126,
+          "tp": 0,
+          "fp": 0,
+          "fn": 126
+        },
+        "silent": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 159,
+          "tp": 0,
+          "fp": 0,
+          "fn": 159
+        }
+      },
+      "unresolved": 377,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 377,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    },
+    "task": {
+      "n": 377,
+      "accuracy": 0.03713527851458886,
+      "macroF1": 0.031342400946185685,
+      "labelsScored": 11,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 348,
+          "fn": 0
+        },
+        "answer": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 21,
+          "tp": 0,
+          "fp": 2,
+          "fn": 21
+        },
+        "compare": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 0,
+          "fn": 11
+        },
+        "create": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "debug": {
+          "precision": 0.1,
+          "recall": 0.03571428571428571,
+          "f1": 0.05263157894736841,
+          "support": 28,
+          "tp": 1,
+          "fp": 9,
+          "fn": 27
+        },
+        "explain": {
+          "precision": 0.7647058823529411,
+          "recall": 0.18055555555555555,
+          "f1": 0.29213483146067415,
+          "support": 72,
+          "tp": 13,
+          "fp": 4,
+          "fn": 59
+        },
+        "extract": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "none": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 181,
+          "tp": 0,
+          "fp": 0,
+          "fn": 181
+        },
+        "plan": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 22,
+          "tp": 0,
+          "fp": 0,
+          "fn": 22
+        },
+        "research": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 12,
+          "tp": 0,
+          "fp": 0,
+          "fn": 12
+        },
+        "rewrite": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 8,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8
+        },
+        "summarize": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 0,
+          "fn": 10
+        }
+      },
+      "unresolved": 348,
+      "ece": 0.4086206896551723,
+      "eceDegenerate": false,
+      "eceN": 29,
+      "coverage": {
+        "fired": 29,
+        "total": 377,
+        "hitRate": 0.07692307692307693,
+        "precisionWhenFired": 0.4827586206896552
+      }
+    },
+    "mode_intent": {
+      "n": 377,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 77,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 377,
+          "fn": 0
+        },
+        "action_item": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5
+        },
+        "admin": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "admin_announcement": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5
+        },
+        "approval": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 7,
+          "tp": 0,
+          "fp": 0,
+          "fn": 7
+        },
+        "behavioral_in_tech_round": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "behavioral_star": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "buying_signal": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "called_on_for_status": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "candidate_answer_to_evaluate": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 15,
+          "tp": 0,
+          "fp": 0,
+          "fn": 15
+        },
+        "candidate_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "case_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "clarification_request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "clarifying_answer_from_interviewer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "code_review_hint": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "coding_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 0,
+          "fn": 11
+        },
+        "compensation": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "complexity_probe": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "correctness_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 9,
+          "tp": 0,
+          "fp": 0,
+          "fn": 9
+        },
+        "critique_challenge": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 0,
+          "fn": 10
+        },
+        "decision": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "design_challenge": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 0,
+          "fn": 10
+        },
+        "diagnostic_answer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 0,
+          "fn": 11
+        },
+        "discovery_answer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "discussion_noise": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 14,
+          "tp": 0,
+          "fp": 0,
+          "fn": 14
+        },
+        "dsa_problem": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5
+        },
+        "escalation_request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "ethics_check": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "factual_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "feature_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "formula": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5
+        },
+        "frustration_escalation": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "in_file_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "interview_answer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "interviewer_explaining_role": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "interviewer_speaking": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 14,
+          "tp": 0,
+          "fp": 0,
+          "fn": 14
+        },
+        "interviewer_thinking_aloud": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "intro_request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "issue_description": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 9,
+          "tp": 0,
+          "fp": 0,
+          "fn": 9
+        },
+        "jd_gap": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "lecture_concept": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 0,
+          "fn": 6
+        },
+        "meeting_capture": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 8,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8
+        },
+        "metric_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5
+        },
+        "motivation_why_us": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "new_concept": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 0,
+          "fn": 11
+        },
+        "next_step_moment": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "objection_competitor": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "objection_price": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "objection_status_quo": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "objection_timing": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "off_file_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "off_syllabus": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "off_topic": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 0,
+          "fn": 5
+        },
+        "optimization_probe": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "pricing_ask": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "probe_needed": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 0,
+          "fn": 11
+        },
+        "problem_restatement": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "question_to_me": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "question_to_room": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "red_flag": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "refund_or_credit_request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "resolution_request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "risk_blocker": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 7,
+          "tp": 0,
+          "fp": 0,
+          "fn": 7
+        },
+        "role_technical": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 12,
+          "tp": 0,
+          "fp": 0,
+          "fn": 12
+        },
+        "runway_probe": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 9,
+          "tp": 0,
+          "fp": 0,
+          "fn": 9
+        },
+        "sales_objection": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "satisfied_customer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "scope_question": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        },
+        "scorecard_moment": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "small_talk": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 21,
+          "tp": 0,
+          "fp": 0,
+          "fn": 21
+        },
+        "strategy_challenge": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 7,
+          "tp": 0,
+          "fp": 0,
+          "fn": 7
+        },
+        "style_nit": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "system_design": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        },
+        "technique_probe": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 0,
+          "fn": 3
+        },
+        "tell_me_about_yourself": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "transition_or_compliment": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 0,
+          "fn": 10
+        },
+        "worked_example": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "your_questions_for_us": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 2,
+          "tp": 0,
+          "fp": 0,
+          "fn": 2
+        }
+      },
+      "unresolved": 377,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 377,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    },
+    "answer_form": {
+      "n": 377,
+      "accuracy": 0.034482758620689655,
+      "macroF1": 0.03282312925170068,
+      "labelsScored": 10,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 348,
+          "fn": 0
+        },
+        "code": {
+          "precision": 0.1,
+          "recall": 0.07142857142857142,
+          "f1": 0.08333333333333333,
+          "support": 14,
+          "tp": 1,
+          "fp": 9,
+          "fn": 13
+        },
+        "example": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 2,
+          "fn": 5
+        },
+        "explanation": {
+          "precision": 0.7058823529411765,
+          "recall": 0.14814814814814814,
+          "f1": 0.24489795918367346,
+          "support": 81,
+          "tp": 12,
+          "fp": 5,
+          "fn": 69
+        },
+        "fact": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 29,
+          "tp": 0,
+          "fp": 0,
+          "fn": 29
+        },
+        "none": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 187,
+          "tp": 0,
+          "fp": 0,
+          "fn": 187
+        },
+        "rebuttal": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 15,
+          "tp": 0,
+          "fp": 0,
+          "fn": 15
+        },
+        "recommendation": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 19,
+          "tp": 0,
+          "fp": 0,
+          "fn": 19
+        },
+        "steps": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 12,
+          "tp": 0,
+          "fp": 0,
+          "fn": 12
+        },
+        "summary": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 0,
+          "fn": 11
+        },
+        "table": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        }
+      },
+      "unresolved": 348,
+      "ece": 0.44310344827586196,
+      "eceDegenerate": false,
+      "eceN": 29,
+      "coverage": {
+        "fired": 29,
+        "total": 377,
+        "hitRate": 0.07692307692307693,
+        "precisionWhenFired": 0.4482758620689655
+      }
+    },
+    "grounding": {
+      "n": 377,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 5,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 377,
+          "fn": 0
+        },
+        "conversation_memory": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 32,
+          "tp": 0,
+          "fp": 0,
+          "fn": 32
+        },
+        "knowledge_base": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 4
+        },
+        "mode_files": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 100,
+          "tp": 0,
+          "fp": 0,
+          "fn": 100
+        },
+        "none": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 240,
+          "tp": 0,
+          "fp": 0,
+          "fn": 240
+        },
+        "profile": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 1,
+          "tp": 0,
+          "fp": 0,
+          "fn": 1
+        }
+      },
+      "unresolved": 377,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 377,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    }
+  },
+  "n": 377,
+  "modeIntentByMode": {
+    "general": {
+      "n": 37,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 7,
+      "underpowered": true
+    },
+    "technical-interview": {
+      "n": 26,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 9,
+      "underpowered": true
+    },
+    "looking-for-work": {
+      "n": 36,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 9,
+      "underpowered": true
+    },
+    "sales": {
+      "n": 28,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 11,
+      "underpowered": true
+    },
+    "recruiting": {
+      "n": 48,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 6,
+      "underpowered": true
+    },
+    "team-meet": {
+      "n": 38,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 6,
+      "underpowered": true
+    },
+    "lecture": {
+      "n": 30,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 6,
+      "underpowered": true
+    },
+    "seminar": {
+      "n": 30,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 5,
+      "underpowered": true
+    },
+    "call-center": {
+      "n": 36,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 7,
+      "underpowered": true
+    },
+    "custom-therapy-supervision": {
+      "n": 15,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 5,
+      "underpowered": true
+    },
+    "custom-investor-update": {
+      "n": 24,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 5,
+      "underpowered": true
+    },
+    "custom-code-review": {
+      "n": 29,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 5,
+      "underpowered": true
+    }
+  },
+  "secondaryTasks": {
+    "recall": 0,
+    "expected": 42,
+    "found": 0,
+    "rowsWithAny": 42
+  },
+  "latency": {
+    "n": 377,
+    "p50": 0.0017920000000017922,
+    "p95": 0.005000000000002558,
+    "p99": 0.06150000000000233,
+    "mean": 0.005816628647214991,
+    "max": 0.5722500000000039
+  },
+  "legacy": {
+    "n": 377,
+    "balancedAccuracy": 0.029177718832891247,
+    "macroF1": 0.06609268707482993,
+    "labelsScored": 8,
+    "excludedLabels": [
+      "<unresolved>"
+    ],
+    "perLabel": {
+      "<unresolved>": {
+        "precision": 0,
+        "recall": null,
+        "f1": 0,
+        "support": 0,
+        "tp": 0,
+        "fp": 348,
+        "fn": 0
+      },
+      "behavioral": {
+        "precision": 1,
+        "recall": 0.10526315789473684,
+        "f1": 0.1904761904761905,
+        "support": 19,
+        "tp": 2,
+        "fp": 0,
+        "fn": 17
+      },
+      "clarification": {
+        "precision": 0.16666666666666666,
+        "recall": 0.023809523809523808,
+        "f1": 0.041666666666666664,
+        "support": 42,
+        "tp": 1,
+        "fp": 5,
+        "fn": 41
+      },
+      "coding": {
+        "precision": 0.4,
+        "recall": 0.08,
+        "f1": 0.13333333333333333,
+        "support": 50,
+        "tp": 4,
+        "fp": 6,
+        "fn": 46
+      },
+      "deep_dive": {
+        "precision": 0.36363636363636365,
+        "recall": 0.10526315789473684,
+        "f1": 0.16326530612244897,
+        "support": 38,
+        "tp": 4,
+        "fp": 7,
+        "fn": 34
+      },
+      "example_request": {
+        "precision": null,
+        "recall": 0,
+        "f1": 0,
+        "support": 1,
+        "tp": 0,
+        "fp": 0,
+        "fn": 1
+      },
+      "follow_up": {
+        "precision": null,
+        "recall": 0,
+        "f1": 0,
+        "support": 25,
+        "tp": 0,
+        "fp": 0,
+        "fn": 25
+      },
+      "general": {
+        "precision": null,
+        "recall": 0,
+        "f1": 0,
+        "support": 193,
+        "tp": 0,
+        "fp": 0,
+        "fn": 193
+      },
+      "summary_probe": {
+        "precision": null,
+        "recall": 0,
+        "f1": 0,
+        "support": 9,
+        "tp": 0,
+        "fp": 0,
+        "fn": 9
+      }
+    },
+    "productionWeighted": {
+      "weightedAccuracy": 0.04047388471177944,
+      "labelsWeighted": 8,
+      "missingFromWeights": []
+    }
+  },
+  "roundTrip": {
+    "p50": 0,
+    "p95": 0.01
+  },
+  "latencySource": "round-trip"
+}
