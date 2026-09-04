@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const require = createRequire(import.meta.url);
 
-const { RERANKER_MODEL_CATALOG, findCatalogModel } =
+const { RERANKER_MODEL_CATALOG, findCatalogModel, BUILT_IN_RERANKER } =
   require(path.join(repoRoot, 'dist-electron/electron/rag/rerankerModelCatalog.js'));
 const panel = fs.readFileSync(path.join(repoRoot, 'src/components/settings/RerankerSettings.tsx'), 'utf8');
 
@@ -36,7 +36,10 @@ const MEASURED_MRR = {
   'qwen3-reranker-0.6b-q4km': 0.9201,
   'jina-reranker-v2-multilingual': 0.9167,
   'ettin-reranker-150m': 0.9125,
-  'ms-marco-minilm-l6': 0.8688,
+  // Keyed by the BUNDLED model's id, not a catalogue id: ms-marco was removed
+  // from the download catalogue when it became the bundled default, but its
+  // score is still what every recommendation has to beat.
+  'ms-marco-MiniLM-L-6-v2': 0.8688,
   'bge-reranker-v2-m3-q4km': 0.8618,
   'bge-reranker-large': 0.8469,
   'mxbai-rerank-xsmall': 0.8394,
@@ -149,17 +152,29 @@ test('the bundled default is not silently promoted into the catalogue', () => {
   // carrying a Recommended badge.
   assert.ok(MEASURED_MRR['Xenova/bge-reranker-base'] < BASELINE_MRR,
     'the premise of this test changed — re-read the benchmark');
+  assert.ok(MEASURED_MRR['ms-marco-MiniLM-L-6-v2'] > BASELINE_MRR,
+    'the model that REPLACED it must beat the baseline, or the swap was pointless');
   assert.equal(RERANKER_MODEL_CATALOG.some(m => m.modelId === 'Xenova/bge-reranker-base'), false,
-    'the bundled model must not appear in the downloadable catalogue');
+    'the removed model must not appear in the downloadable catalogue');
   for (const m of recommended()) {
     assert.notEqual(m.modelId, 'Xenova/bge-reranker-base');
   }
+
+  // And neither may the CURRENT bundled model. Offering it as a download asks
+  // the user to fetch 24MB they already have — and selecting it would register
+  // as an EXPLICIT choice, flipping reranking from the bundled model's
+  // low-confidence escalation to running on every query, for a model identical
+  // to the default. The panel shows the bundled one on its own "Included" row.
+  assert.equal(RERANKER_MODEL_CATALOG.some(m => m.modelId === BUILT_IN_RERANKER.modelId), false,
+    `${BUILT_IN_RERANKER.modelId} is bundled — it must not also be downloadable`);
+  assert.equal(findCatalogModel(BUILT_IN_RERANKER.id), null,
+    'and it must not be reachable by catalogue id either');
 });
 
 test('a recommended model beats the bundled default it would replace', () => {
   // The point of downloading one at all. A recommendation that does not clear
   // the model already on disk is asking the user to spend megabytes for nothing.
-  const bundled = MEASURED_MRR['Xenova/bge-reranker-base'];
+  const bundled = MEASURED_MRR['ms-marco-MiniLM-L-6-v2'];
   for (const m of recommended()) {
     assert.ok(MEASURED_MRR[m.id] > bundled,
       `${m.id} (MRR ${MEASURED_MRR[m.id]}) does not beat the bundled ${bundled}`);

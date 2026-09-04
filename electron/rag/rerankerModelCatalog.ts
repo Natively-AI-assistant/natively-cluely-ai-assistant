@@ -137,27 +137,17 @@ export function onnxModelSubdir(model: LocalRerankerModel): string {
 export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
   // ── ONNX cross-encoders: verified to expose a `logits` output, so they run
   //    on the reranker Core already ships. dtype q8 => onnx/model_quantized.onnx.
-  {
-    id: 'ms-marco-minilm-l6',
-    name: 'MS MARCO MiniLM L6',
-    runtime: 'onnx',
-    repo: 'Xenova/ms-marco-MiniLM-L-6-v2',
-    modelId: 'Xenova/ms-marco-MiniLM-L-6-v2',
-    dtype: 'q8',
-    revision: 'a09144355adeed5f58c8ed011d209bf8ee5a1fec',
-    supported: true,
-    files: [
-      { repoPath: 'onnx/model_quantized.onnx', bytes: 23143499, sha256: 'e9d8ebf845c413e981c175bfe49a3bfa9b3dcce2a3ba54875ee5df5a58639fbe' },
-      { repoPath: 'tokenizer.json', bytes: 711396, sha256: null },
-      { repoPath: 'tokenizer_config.json', bytes: 1242, sha256: null },
-      { repoPath: 'special_tokens_map.json', bytes: 125, sha256: null },
-      { repoPath: 'config.json', bytes: 824, sha256: null },
-    ],
-    bytes: 23857086,
-    license: { spdx: 'Apache-2.0', url: 'https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2', commercialUseRestricted: false, requiresAcknowledgement: false },
-    params: '22M · int8',
-    note: 'Tiny and quick. The lightest option that actually reranks.',
-  },
+  // NOTE: Xenova/ms-marco-MiniLM-L-6-v2 is deliberately NOT listed here.
+  //
+  // It is the model Natively BUNDLES (see BUILT_IN_RERANKER below and
+  // DEFAULT_RERANKER_MODEL in rag/LocalReranker.ts), so offering it as a
+  // download would ask the user to fetch 24MB they already have — and worse,
+  // selecting it would register as an EXPLICIT choice, which flips reranking
+  // from the bundled model's low-confidence escalation to running on every
+  // query, for a model identical to the default. The panel already shows the
+  // bundled one on its own row, labelled "Included".
+  //
+  // This catalogue is for models the user does not already have.
   {
     id: 'mxbai-rerank-xsmall',
     name: 'mxbai Rerank XSmall',

@@ -16,7 +16,10 @@ import { RerankerSettings } from '../components/settings/RerankerSettings';
 // not being looked at.
 const CATALOG_MODELS = [
     {
-        id: 'ms-marco-minilm-l6', name: 'MS MARCO MiniLM L6', runtime: 'onnx', repo: 'Xenova/ms-marco-MiniLM-L-6-v2',
+        // NOT ms-marco: that is the BUNDLED model and is deliberately absent
+        // from the download catalogue. Using a real catalogue entry here keeps
+        // the harness honest about what the panel actually renders.
+        id: 'mxbai-rerank-xsmall', name: 'mxbai Rerank XSmall', runtime: 'onnx', repo: 'mixedbread-ai/mxbai-rerank-xsmall-v1',
         params: '22M · int8', note: 'Tiny and quick. The lightest option that actually reranks.',
         bytes: 23857086, recommended: false,
         license: { spdx: 'Apache-2.0', url: '#', commercialUseRestricted: false, requiresAcknowledgement: false },
@@ -110,7 +113,7 @@ const delay = <T,>(v: T): Promise<T> =>
         hasApiKey: true, eligible: false, ineligibleReason: 'provider-not-selected',
         ineligibleMessage: 'The reranker provider is set to Local.',
         builtIn: { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true, cached: true, available: true },
-        effective: { kind: 'local', id: 'ms-marco-minilm-l6' },
+        effective: { kind: 'local', id: 'mxbai-rerank-xsmall' },
         lastTest: { at: '2026-09-01T10:00:00Z', model: 'voyageai/rerank-2.5-lite', latencyMs: 412, ok: true },
     } as any),
     getRerankerCatalog: async () => ({
@@ -122,7 +125,7 @@ const delay = <T,>(v: T): Promise<T> =>
             { id: 'nvidia/llama-nemotron-rerank-vl-1b-v2:free', label: 'NVIDIA: Nemotron Rerank VL', vendor: 'nvidia', contextLength: 10240, free: true, multimodal: true, group: 'multimodal', note: '10K context · multimodal · free tier' },
         ],
     }),
-    listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'ms-marco-minilm-l6', builtInSelected: false }),
+    listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'mxbai-rerank-xsmall', builtInSelected: false }),
     listExtensions: async () => ({ available: true, extensions: EXTENSIONS }),
     setRerankerConfig: async () => ({ success: true }),
     useLocalRerankerModel: async () => ({ success: true }),

@@ -230,7 +230,9 @@ test('a half-present model reads as partial, never installed', () => {
   // transformers.js given a tokenizer but no weights fails at LOAD time, long
   // after the UI would have said Ready.
   const root = tmp();
-  const model = findCatalogModel('ms-marco-minilm-l6');
+  // mxbai, not ms-marco: the latter is the BUNDLED model and is deliberately
+  // absent from the catalogue, so it is no longer a valid fixture here.
+  const model = findCatalogModel('mxbai-rerank-xsmall');
   const dir = modelDirectory(model, root);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'tokenizer.json'), 'x');
@@ -249,14 +251,14 @@ test('an empty root reads as not-installed for everything', () => {
 
 test('the install directory is nested per org and name, not one literal segment', () => {
   const root = tmp();
-  const dir = modelDirectory(findCatalogModel('ms-marco-minilm-l6'), root);
-  // A directory literally named "Xenova/ms-marco-..." would be wrong on Windows
+  const dir = modelDirectory(findCatalogModel('mxbai-rerank-xsmall'), root);
+  // A directory literally named "org/name" would be wrong on Windows
   // and would not match resolveModelPath()'s lookup either.
-  assert.equal(dir, path.join(root, 'Xenova', 'ms-marco-MiniLM-L-6-v2'));
+  assert.equal(dir, path.join(root, 'mixedbread-ai', 'mxbai-rerank-xsmall-v1'));
 });
 
 test('removing a model that is not installed is harmless', () => {
-  const res = removeCatalogModel('ms-marco-minilm-l6', tmp());
+  const res = removeCatalogModel('mxbai-rerank-xsmall', tmp());
   assert.equal(res.ok, true);
 });
 

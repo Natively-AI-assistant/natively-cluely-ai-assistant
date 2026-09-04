@@ -264,9 +264,12 @@ const INITIAL_STATUS: RerankerStatus = {
     eligible: false,
     ineligibleReason: null,
     ineligibleMessage: null,
-    builtIn: { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true },
+    // The placeholder shown before reranker:get-status answers. It named
+    // bge-reranker-base, which is no longer bundled — so the built-in row read
+    // as the wrong model for the first frame of every visit to this panel.
+    builtIn: { id: 'ms-marco-MiniLM-L-6-v2', name: 'MS MARCO MiniLM L6', bundled: true },
     selectedLocal: null,
-    effective: { kind: 'local', id: 'bge-reranker-base' },
+    effective: { kind: 'local', id: 'ms-marco-MiniLM-L-6-v2' },
     lastTest: null,
 };
 
@@ -387,7 +390,7 @@ export const RerankerSettings: React.FC = () => {
 
     const activeOptions: AipSelectOption[] = useMemo(() => {
         const options: AipSelectOption[] = [
-            { id: 'local::built-in', name: `${status?.builtIn.name ?? 'BGE Reranker Base'} — ${t('Included')}` },
+            { id: 'local::built-in', name: `${status?.builtIn.name ?? 'MS MARCO MiniLM L6'} — ${t('Included')}` },
         ];
 
         for (const m of catalogModels) {
