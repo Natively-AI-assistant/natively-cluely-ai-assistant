@@ -20,6 +20,17 @@ function seedSettings(localModelId) {
 }
 
 async function buildPort() {
+  // The BUNDLED cross-encoder, which is not a catalogue entry and is therefore
+  // easy to leave out of a sweep over the catalogue — while being the reranker
+  // most users actually run, since it needs no download and is what an empty
+  // selection resolves to. `localModelId: null` is exactly how "use the built-in"
+  // is expressed.
+  if (KIND === 'builtin') {
+    seedSettings(null);
+    const { getLocalReranker, reloadLocalReranker } = require(repoRoot + '/dist-electron/electron/rag/LocalReranker.js');
+    reloadLocalReranker('bench');
+    return getLocalReranker();
+  }
   if (KIND === 'onnx') {
     seedSettings(ID);
     const { getLocalReranker, reloadLocalReranker } = require(repoRoot + '/dist-electron/electron/rag/LocalReranker.js');
@@ -58,7 +69,7 @@ async function buildPort() {
       dispose: () => ext.dispose(),
     };
   }
-  throw new Error(`unknown kind ${KIND}`);
+  throw new Error(`unknown kind ${KIND} (expected builtin|onnx|gguf|openrouter|jina|extension)`);
 }
 
 let port;

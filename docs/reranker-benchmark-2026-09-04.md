@@ -38,11 +38,35 @@ top-1 **18/24**, top-3 22/24, mean rank 0.583, **MRR 0.8368**
 | onnx | `bge-reranker-large` | 18/24 | 0.8469 | +0.0101 | 0.625 | +3/-4 | 6007 |
 | onnx | `mxbai-rerank-xsmall` | 18/24 | 0.8394 | +0.0026 | 0.708 | +3/-4 | 662 |
 | onnx | `ettin-reranker-32m` | 18/24 | 0.8299 | -0.0069 | 1.208 | +3/-5 | 753 |
+| **builtin** | `Xenova/bge-reranker-base` (bundled default) | 15/24 | 0.7558 | **-0.0810** | 1.333 | +3/-7 | 1873 |
 
 Not measured: the four **Jina hosted** models — no `JINA_API_KEY` exists in
 `.env` or in the app's credential store, so they were skipped rather than
 guessed at. The **Ettin extension** refuses at init by design; Core runs all
 three Ettin sizes itself and they appear above.
+
+### The bundled default is the worst thing in this table
+
+`Xenova/bge-reranker-base` ships with the app and is what an empty selection
+resolves to, so it is the reranker most users actually have. It scores **MRR
+0.7558 against a 0.8368 baseline** — ΔMRR **−0.0810**, ten times worse than the
+next-worst model, moving 7 queries down against 3 up, and on one query taking
+the answer from rank 2 to rank **17**.
+
+It is not broken. It loads, scores all 24 queries, and ranks an obvious probe
+perfectly (Paris 8.787 / Rhine −3.038 / photosynthesis −10.181). It is simply a
+2022-era cross-encoder meeting same-vocabulary distractors, and losing.
+
+This is why the bundled model kept its low-confidence escalation when an
+explicitly-chosen reranker was made unconditional (`isRerankerExplicitlySelected`
+in rerankerConfig.ts). But the escalation fires precisely when retrieval is
+already unsure — which is where a reranker this weak does the most damage. Two
+options, both product decisions rather than bugs to fix quietly:
+
+1. Stop escalating to the bundled model at all, and let retrieval order stand
+   unless the user has chosen something better.
+2. Replace the bundled model. `ms-marco-minilm-l6` is 24 MB, 211 ms and
+   ΔMRR **+0.0320** — smaller, five times faster, and it actually helps.
 
 ### What the numbers say
 
