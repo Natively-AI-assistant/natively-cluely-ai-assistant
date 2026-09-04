@@ -70,6 +70,39 @@ The homophone errors are the tell that this is not stripped prose: `cash` for ca
 
 Batches are generated independently and cannot see their siblings, so common short turns recur. Measured at 5% of one smoke run. Duplicates are worthless in a benchmark: identical inputs add no information, and if two copies receive different labels they actively corrupt the score. Dedup is keyed on `(mode, input)` so the same backchannel may appear in a different mode, where its correct labels genuinely differ.
 
+## `voice` is derived, not labelled
+
+Two LLM labelling passes both failed, in opposite directions, which is the tell that this was never a judgement call.
+
+The first collapsed to `advisor`: 103 of 104 responding Sales turns and 102 of 102 Seminar turns, in modes whose entire contract is that the output is what the user says aloud. The cause was the definition, not the model. `voice` was handed over as a bare enum with no statement of which mode implies which value, so the labeller chose the most neutral-sounding option.
+
+The definition was rewritten to name each mode's default, and the second pass over-corrected the other way: 86 of 89 Team Meet turns became `first_person_script` in a mode whose primary job is capture, and 51 Recruiting turns became `first_person_script` in a mode where the user is the interviewer. That second one mattered. Labelling those first person instructs the system to hand the recruiter the candidate's words, which is precisely the channel inversion the whole campaign exists to fix. Shipping a corpus that taught it would have been self-defeating.
+
+So `voice` is now computed by `lib/deriveVoice.mjs` from mode, `mode_intent` and `needs_response`. That is not a shortcut. The Phase 1 audit had already established that voice is fixed per mode by the prompt, with exactly two documented deviations: Team Meet switches to first person when the user is called on, and Lecture switches when the student is answering. The router's per-mode `default_voice` config will compute it the same way in production, so the corpus derives the label the way the product will derive it.
+
+The consequence has to be stated rather than buried. Because `voice` is a deterministic function of two other labelled fields, a candidate scored on it is being measured on whether it can learn that function, not on independent judgement. It must not be counted as an independent axis in the acceptance bar. Scoring it as if it were would inflate any model that already gets `mode_intent` right.
+
+## What v1 actually contains
+
+1,813 rows, generated 2026-09-04, `dataset/v1.jsonl`.
+
+| Property | Value | Requirement |
+|---|---|---|
+| rows | 1,813 | 1,500 for the first benchmark run |
+| held out | 377, 20.8% | 20% |
+| `needs_response = no` | 775, 42.7% | at least 40% |
+| rows per built-in mode | 151 to 200 | at least 150 |
+| custom-mode rows | 277 across three modes | at least 150 |
+| within-mode duplicate inputs | 0.0% | near zero |
+| copies of a generation-prompt example | 0 | zero |
+| `grounding = mode_files` with no files attached | 0 | zero, by contract |
+| punctuation / uppercase in `input` | 0.0% / 0.0% | near zero |
+| fillers / repairs / short turns | 42.4% / 23.8% / 20.0% | plausible speech |
+
+The legacy control labels are present on every row and are balanced by construction: `follow_up` has 95 rows here against 0.2% of production traffic. That is the balanced-versus-weighted decision doing its job. A production-weighted corpus would have given it three rows and a held-out split with none, and its per-label F1 would have been unmeasurable.
+
+`reports/handcheck-v1.tsv` holds the 373-row founder review sample, spread across every mode.
+
 ## Running it
 
 ```bash

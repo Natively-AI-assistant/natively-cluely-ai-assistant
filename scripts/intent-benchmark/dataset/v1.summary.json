@@ -1,0 +1,311 @@
+{
+  "written": 1336,
+  "rejectedCells": [
+    {
+      "modeKey": "general",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "only 25.0% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "technical-interview",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 5%)"
+      ]
+    },
+    {
+      "modeKey": "technical-interview",
+      "category": "trap",
+      "withFiles": true,
+      "problems": [
+        "25.0% duplicate inputs (max 2%)"
+      ]
+    },
+    {
+      "modeKey": "looking-for-work",
+      "category": "trap",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 5%)"
+      ]
+    },
+    {
+      "modeKey": "sales",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "only 25.0% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "team-meet",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "only 16.7% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "lecture",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "only 25.0% of inputs are <=5 words (min 30%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "call-center",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 3%)"
+      ]
+    },
+    {
+      "modeKey": "call-center",
+      "category": "fragment",
+      "withFiles": true,
+      "problems": [
+        "only 50.0% of inputs are <=5 words (min 55%) — real turns are often very short"
+      ]
+    },
+    {
+      "modeKey": "custom-therapy-supervision",
+      "category": "no_response",
+      "withFiles": false,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 3%)"
+      ]
+    },
+    {
+      "modeKey": "custom-therapy-supervision",
+      "category": "ambiguous",
+      "withFiles": true,
+      "problems": [
+        "punctuation in 8.3% of inputs (max 2%) — the local STT models emit none"
+      ]
+    },
+    {
+      "modeKey": "custom-therapy-supervision",
+      "category": "trap",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 5%)"
+      ]
+    },
+    {
+      "modeKey": "custom-investor-update",
+      "category": "no_response",
+      "withFiles": true,
+      "problems": [
+        "repairs/restarts in only 0.0% of inputs (min 3%)"
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "id": "ti-0072",
+      "problems": [
+        "needs_response=no requires voice=silent"
+      ]
+    },
+    {
+      "id": "ti-0098",
+      "problems": [
+        "needs_response=no requires voice=silent"
+      ]
+    },
+    {
+      "id": "rec-0098",
+      "problems": [
+        "needs_response=no requires voice=silent"
+      ]
+    }
+  ],
+  "perMode": {
+    "general": 96,
+    "technical-interview": 103,
+    "looking-for-work": 117,
+    "sales": 121,
+    "recruiting": 137,
+    "team-meet": 117,
+    "lecture": 111,
+    "seminar": 137,
+    "call-center": 100,
+    "custom-therapy-supervision": 65,
+    "custom-investor-update": 115,
+    "custom-code-review": 117
+  },
+  "perCategory": {
+    "no_response": 414,
+    "normal_request": 351,
+    "fragment": 163,
+    "ambiguous": 139,
+    "multi_intent": 138,
+    "trap": 131
+  },
+  "cells": 163,
+  "realismByMode": {
+    "general": {
+      "n": 96,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.5104166666666666,
+      "repairRate": 0.13541666666666666,
+      "shortRate": 0.2604166666666667,
+      "duplicateRate": 0,
+      "medianLength": 10,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "technical-interview": {
+      "n": 103,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3883495145631068,
+      "repairRate": 0.2524271844660194,
+      "shortRate": 0.2621359223300971,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "looking-for-work": {
+      "n": 117,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.4444444444444444,
+      "repairRate": 0.24786324786324787,
+      "shortRate": 0.29914529914529914,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "sales": {
+      "n": 121,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.4297520661157025,
+      "repairRate": 0.2396694214876033,
+      "shortRate": 0.2892561983471074,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "recruiting": {
+      "n": 137,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.44525547445255476,
+      "repairRate": 0.15328467153284672,
+      "shortRate": 0.26277372262773724,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "team-meet": {
+      "n": 117,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3504273504273504,
+      "repairRate": 0.1282051282051282,
+      "shortRate": 0.28205128205128205,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "lecture": {
+      "n": 111,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.36036036036036034,
+      "repairRate": 0.22522522522522523,
+      "shortRate": 0.1981981981981982,
+      "duplicateRate": 0,
+      "medianLength": 9,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "seminar": {
+      "n": 137,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.35036496350364965,
+      "repairRate": 0.19708029197080293,
+      "shortRate": 0.25547445255474455,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "call-center": {
+      "n": 100,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.41,
+      "repairRate": 0.19,
+      "shortRate": 0.23,
+      "duplicateRate": 0,
+      "medianLength": 10,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "custom-therapy-supervision": {
+      "n": 65,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.36923076923076925,
+      "repairRate": 0.26153846153846155,
+      "shortRate": 0.27692307692307694,
+      "duplicateRate": 0,
+      "medianLength": 11,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "custom-investor-update": {
+      "n": 115,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.391304347826087,
+      "repairRate": 0.24347826086956523,
+      "shortRate": 0.20869565217391303,
+      "duplicateRate": 0,
+      "medianLength": 10,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    },
+    "custom-code-review": {
+      "n": 117,
+      "punctuationRate": 0,
+      "uppercaseRate": 0,
+      "fillerRate": 0.3418803418803419,
+      "repairRate": 0.2905982905982906,
+      "shortRate": 0.19658119658119658,
+      "duplicateRate": 0,
+      "medianLength": 8,
+      "ratesEvaluated": true,
+      "category": null,
+      "problems": []
+    }
+  },
+  "deduped": 152
+}

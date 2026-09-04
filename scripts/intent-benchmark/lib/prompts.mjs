@@ -64,6 +64,33 @@ needs_response yes | optional | no
                needs_response=no.
 voice          first_person_script | advisor | capture | silent
                MUST be "silent" whenever needs_response is "no".
+
+               For a responding turn, voice is decided by WHO SPEAKS THE OUTPUT,
+               and it follows the mode. Getting this wrong is the single most
+               common labelling error, because "advisor" sounds like the safe
+               default and it is wrong in most modes.
+
+               first_person_script — the user will SAY the output OUT LOUD, as
+                 themselves, with no editing. The output is their script.
+                 This is the DEFAULT in: technical-interview, looking-for-work,
+                 sales, seminar, call-center. A candidate answering an
+                 interviewer, a seller answering a prospect, a presenter
+                 answering the audience, an agent answering a customer: all
+                 first_person_script.
+               advisor — the output is guidance ABOUT the situation, written to
+                 the user, never spoken aloud. The DEFAULT in: recruiting (the
+                 user is evaluating someone else), lecture (explaining a concept
+                 to the student), general.
+               capture — the output is a RECORD of what was said: an action
+                 item, a decision, a risk. The DEFAULT in team-meet, which
+                 switches to first_person_script only when the user is called on
+                 by name and must reply.
+               silent — needs_response is "no".
+
+               Deviating from the mode default is allowed and sometimes correct,
+               but it must be justified in notes. If you are labelling a sales
+               or interview turn "advisor", stop and check: is the user really
+               being given advice, or are they being given words to say?
 task           answer | explain | create | debug | summarize | compare | rewrite
                | plan | research | extract | none
                MUST be "none" whenever needs_response is "no".
