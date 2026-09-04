@@ -261,16 +261,32 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
         rerankerCandidates.push(pathCheck.default.join(appPath, 'resources', 'models'));
         rerankerCandidates.push(pathCheck.default.join(appPath, '..', 'resources', 'models'));
       }
+      // The model id comes from LocalReranker, never a literal.
+      //
+      // This check hard-required `Xenova/bge-reranker-base`, and on 2026-09-04
+      // that model stopped being bundled — it measured WORSE than no reranker
+      // at all. Every packaged launch would then have reported the bundled
+      // reranker missing, because the check was still looking for the previous
+      // one. Deriving the id means the next swap cannot reintroduce that.
+      let bundledModelId = 'Xenova/ms-marco-MiniLM-L-6-v2';
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');
+        const resolved = getBundledRerankerModelId?.();
+        if (typeof resolved === 'string' && resolved) bundledModelId = resolved;
+      } catch { /* fall back to the literal above rather than failing the preflight */ }
+
+      const segments = bundledModelId.split('/');
       for (const root of rerankerCandidates) {
-        const tok = pathCheck.default.join(root, 'Xenova', 'bge-reranker-base', 'tokenizer.json');
-        const onnx = pathCheck.default.join(root, 'Xenova', 'bge-reranker-base', 'onnx', 'model_quantized.onnx');
+        const tok = pathCheck.default.join(root, ...segments, 'tokenizer.json');
+        const onnx = pathCheck.default.join(root, ...segments, 'onnx', 'model_quantized.onnx');
         try {
           if (fsCheck.existsSync(tok) && fsCheck.existsSync(onnx) && fsCheck.statSync(onnx).size > 0) {
             return { ok: true, message: `Found ${onnx}` };
           }
         } catch { /* keep trying */ }
       }
-      return { ok: false, message: 'Xenova/bge-reranker-base model files missing from packaged resources/models/' };
+      return { ok: false, message: `${bundledModelId} model files missing from packaged resources/models/` };
     }));
 
     // 3. Packaged native binaries (Rust audio module, sqlite-vec, sharp, better-sqlite3, keytar).

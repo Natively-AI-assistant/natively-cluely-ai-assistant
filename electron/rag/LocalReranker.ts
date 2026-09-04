@@ -85,6 +85,17 @@ let startupPoisoned = false;
 const DEFAULT_RERANKER_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
 
 /**
+ * The bundled model's id, for code that needs to look for it on disk without
+ * constructing a reranker — LocalFallbackPreflight, chiefly. Exported so there
+ * is ONE literal: the preflight used to carry its own copy, and when the
+ * bundled model changed it kept looking for the old one and reported the
+ * reranker missing on every packaged launch.
+ */
+export function getBundledRerankerModelId(): string {
+  return (process.env.NATIVELY_RERANKER_MODEL || '').trim() || DEFAULT_RERANKER_MODEL;
+}
+
+/**
  * `app.getPath('userData')` rebuilt by hand, for the paths where `app` is not
  * available. Must stay identical to the installer's own fallback — the reader
  * and the writer disagreeing is how a downloaded model becomes invisible.
