@@ -52,6 +52,7 @@ interface RerankerStatus {
     ineligibleReason: string | null;
     ineligibleMessage: string | null;
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
+    selectedLocal: { id: string; name: string } | null;
     effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null };
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
@@ -252,6 +253,7 @@ const INITIAL_STATUS: RerankerStatus = {
     ineligibleReason: null,
     ineligibleMessage: null,
     builtIn: { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true },
+    selectedLocal: null,
     effective: { kind: 'local', id: 'bge-reranker-base' },
     lastTest: null,
 };
@@ -1216,7 +1218,7 @@ export const RerankerSettings: React.FC = () => {
             {/* Provider Card 4: Community Extensions — High-End Minimalist Design */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
-                    <Puzzle size={16} className="text-[var(--aip-accent)] shrink-0" aria-hidden="true" />
+                    <AipProviderMark provider="natively" name={t('Reranker Extensions')} />
                     <h4 className="aip-card-title truncate min-w-0">{t('Reranker Extensions')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
                         <span className="aip-meta inline-flex items-center gap-1.5">

@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
+import { TEXT_PLACEHOLDER_RE } from '../src/lib/curlPlaceholderPolicy';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -7162,6 +7163,33 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     // The built-in, described honestly: "bundled" is not the same as "loadable".
     let builtIn: any = { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true };
+
+    // Which LOCAL model is actually selected, if any.
+    //
+    // `builtIn` describes the BUNDLED model and nothing else, so reporting it as
+    // the effective local reranker was wrong the moment a catalogue model could
+    // be chosen: selecting Jina v3.5 or ms-marco left this panel saying
+    // "BGE Reranker Base" while the seam ran something else entirely. Verified
+    // against the running app — `effective` stayed `local:bge-reranker-base`
+    // through both an ONNX and a GGUF selection.
+    let selectedLocal: { id: string; name: string } | null = null;
+    try {
+      const selectedId = stored.localModelId;
+      if (typeof selectedId === 'string' && selectedId) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { findCatalogModel } = require('./rag/rerankerModelCatalog') as typeof import('./rag/rerankerModelCatalog');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { statusOf } = require('./services/reranking/localModelInstaller') as typeof import('./services/reranking/localModelInstaller');
+        const entry = findCatalogModel(selectedId);
+        // Installed AND supported, because that is what the seam requires to
+        // actually use it — a half-downloaded model falls back to the bundled
+        // one, and the panel should say so rather than name the selection.
+        if (entry && entry.supported && statusOf(entry).state === 'installed') {
+          selectedLocal = { id: entry.id, name: entry.name };
+        }
+      }
+    } catch { /* an unreadable catalogue means "the bundled one", same as no selection */ }
+
     try {
       const { getLocalReranker } = require('./rag/LocalReranker');
       const local = getLocalReranker();
@@ -7188,7 +7216,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       ? { kind: provider, id: hostedModel }
       : activeExtensionId
         ? { kind: 'extension', id: activeExtensionId }
-        : { kind: 'local', id: builtIn.id };
+        : { kind: 'local', id: selectedLocal?.id ?? builtIn.id };
 
     return {
       provider,
@@ -7202,6 +7230,8 @@ export function initializeIpcHandlers(appState: AppState): void {
       ineligibleReason: eligibility.reason ?? null,
       ineligibleMessage: eligibility.reason ? describeIneligibility(eligibility.reason) : null,
       builtIn,
+      /** The catalogue model in use, when one is selected AND installed. */
+      selectedLocal,
       effective,
       lastTest: stored.lastTest ?? null,
     };
@@ -9039,7 +9069,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { ok: false, error: 'Invalid provider payload' };
     }
 
-    if (!(provider as any).curlCommand.includes('{{TEXT}}')) {
+    // Spacing tolerated, matching deepVariableReplacer and both validateCurl
+    // copies — a template the engine substitutes correctly must not be rejected
+    // at the IPC boundary. Taken from the shared policy rather than re-spelled:
+    // this literal was the third copy, and the drift it caused is what the
+    // module exists to prevent.
+    if (!TEXT_PLACEHOLDER_RE.test((provider as any).curlCommand)) {
       return { ok: false, error: 'curlCommand must contain {{TEXT}} placeholder for the prompt' };
     }
 
