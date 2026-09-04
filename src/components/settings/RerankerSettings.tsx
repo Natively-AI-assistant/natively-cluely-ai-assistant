@@ -314,7 +314,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     placeholder,
     disabled = false,
     className = '',
-    containerClassName = 'relative min-w-[200px] max-w-[320px] w-full sm:w-64',
+    containerClassName = 'relative min-w-[150px] max-w-[240px] w-full sm:w-48',
     ariaLabel,
     title,
     disabledHint,
@@ -358,7 +358,7 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
             {isOpen && (
                 <div
                     role="listbox"
-                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[240px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
+                    className="aip-float aip-scroll-y aip-panel-fade absolute top-full right-0 mt-1.5 w-full min-w-[180px] z-50 max-h-64 p-1 custom-scrollbar shadow-2xl rounded-md border border-white/10 bg-[#161618]"
                 >
                     {options.map((option) => (
                         <button
