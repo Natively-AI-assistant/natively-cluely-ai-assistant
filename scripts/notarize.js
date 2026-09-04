@@ -157,15 +157,22 @@ module.exports = async function notarizeHook(context) {
   // with "Network.NWError error 54 - Connection reset by peer" after the
   // ENTIRE build/sign pipeline had succeeded). One dropped TCP connection
   // must not cost a full rebuild: re-submitting is safe — an aborted upload
-  // never became a submission, it just expires server-side. Bounded and
-  // signature-gated: only network-class failures retry; a genuine
-  // notarization REJECTION or auth failure still fails the build on the
-  // first attempt, loudly, exactly as before.
+  // never became a submission, it just expires server-side.
+  //
+  // The gate FAILS OPEN, and this comment used to say the opposite ("only
+  // network-class failures retry"). shouldRetryNotarizeThrow returns true for any
+  // message it does not recognise, deliberately: wording-matching lost twice, and
+  // `HTTPClientError.connectTimeout` matched no signature on 2026-08-27 so two
+  // builds aborted without a single retry. What still fails on the FIRST attempt
+  // is a message it recognises as decided — a notarization verdict, an auth/usage
+  // failure, or a staple error. Everything else costs up to ~90s of retry before
+  // failing, which is the price of never aborting a release on an unrecognised
+  // blip.
   // The signature list lives in scripts/lib/notary-transient.cjs so this path and the
   // DMG path in scripts/afterAllArtifactBuild.cjs cannot drift apart. The `!/staple/`
   // guard below stays HERE on purpose: @electron/notarize funnels submit AND staple
   // failures through one throw, so only this call site needs to tell them apart.
-  const { isTransientNetworkMessage } = require('./lib/notary-transient.cjs');
+  const { shouldRetryNotarizeThrow } = require('./lib/notary-transient.cjs');
   const MAX_SUBMIT_ATTEMPTS = 3;
 
   let lastErr;
@@ -179,9 +186,10 @@ module.exports = async function notarizeHook(context) {
     } catch (err) {
       lastErr = err;
       const attemptMsg = (err && err.message ? err.message : String(err)) || '';
-      // Staple-race is handled below (it is a SUCCESS of submission) — break
-      // out of the retry loop for it and for any non-transient failure.
-      const isTransient = isTransientNetworkMessage(attemptMsg) && !/staple/i.test(attemptMsg);
+      // Staple-race is handled below (it is a SUCCESS of submission) — break out
+      // of the retry loop for it, and for any failure the classifier RECOGNISES
+      // as decided. An unrecognised message is retried (fail-open); see above.
+      const isTransient = shouldRetryNotarizeThrow(attemptMsg);
       if (isTransient && attempt < MAX_SUBMIT_ATTEMPTS) {
         const delayS = 30 * attempt;
         console.warn(

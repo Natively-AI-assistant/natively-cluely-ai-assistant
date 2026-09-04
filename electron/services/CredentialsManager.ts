@@ -8,6 +8,12 @@ import fs from 'fs';
 import path from 'path';
 import * as crypto from 'crypto';
 import { deriveFallbackKey, encryptCredentialBlob, decryptCredentialBlob } from './credentialFallbackCrypto';
+// Pure, dependency-free predicates — the single source of truth for "can this
+// custom provider carry an image" and "does it stay on this machine". Imported
+// rather than re-implemented: the duplicated `multimodal === true` test that
+// used to live here is exactly how the two answers drifted apart.
+import { customProviderSupportsVision, customProviderIsLocal } from '../llm/visionCapability';
+import { readActiveCustomProvider } from '../llm/activeCustomProvider';
 
 const CREDENTIALS_PATH = path.join(app.getPath('userData'), 'credentials.enc');
 // App-managed AES fallback, used ONLY when the OS keyring (safeStorage) is
@@ -44,6 +50,17 @@ export interface CustomProvider {
     multimodal?: boolean;
     /** True if this provider's endpoint is loopback/local (skips cloud-scope gating). */
     localOnly?: boolean;
+    /**
+     * Dot/bracket path to the answer text in the response, e.g.
+     * "choices[0].message.content". Collected by Settings > AI Providers and
+     * shown on the provider card. Declared here because the field was already
+     * being SAVED (save-custom-provider stores the UI payload verbatim) while
+     * the type omitted it, which is how it stayed unread: the only consumer was
+     * chatWithCurl, and the BUG-05 merge routes every UI-saved provider into
+     * the customProvider lane instead. Optional — absent means "detect the
+     * shape", which is what extractFromCommonFormats does.
+     */
+    responsePath?: string;
 }
 
 export interface CurlProvider {
@@ -937,9 +954,23 @@ export class CredentialsManager {
         if (this.credentials.claudeApiKey) return true;          // Claude vision
         if (this.credentials.geminiApiKey) return true;          // Gemini vision
         if (this.credentials.groqApiKey) return true;            // Groq qwen3.6-27b vision
-        // Custom providers: only count if they have screenshots scope AND multimodal flag
-        const custom = this.credentials.customProviders || [];
-        if (custom.some(p => (p as any)?.multimodal === true)) return true;
+        // Custom providers. TWO fixes over the previous `customProviders.some(
+        // p => p.multimodal === true)`:
+        //   • getAllCustomProviders() — the old read missed the store the
+        //     Settings UI actually writes to, so no UI-saved provider ever
+        //     counted (see that accessor).
+        //   • customProviderSupportsVision() — the shared predicate, so the
+        //     Settings default of "Auto-detect" (which stores NO multimodal
+        //     key) is answered the same way here as in the streaming vision
+        //     chain. `multimodal === true` treated auto-detect as "no vision".
+        // ACTIVE only, not every saved provider. The vision chain and
+        // runVisionRequest both resolve the custom provider from the live
+        // LLMHelper instance, so a saved-but-unselected one cannot serve an
+        // image request — counting it here made vision_only allow a turn that
+        // then died with "No vision-capable provider configured".
+        // getAllCustomProviders() stays the right accessor for questions about
+        // what EXISTS; this is a question about what can run.
+        if (customProviderSupportsVision(readActiveCustomProvider())) return true;
         return this.anyLocalVisionProviderConfigured();
     }
 
@@ -956,6 +987,16 @@ export class CredentialsManager {
         // Codex CLI is local in normal install — capability is verified by ProviderRouter.
         const codexCliPath = (this.credentials as any).codexCliPath as string | undefined;
         if (codexCliPath && codexCliPath.trim().length > 0) return true;
+        // A local-only custom endpoint (LM Studio, llama.cpp, an Ollama gateway
+        // on 127.0.0.1 or the LAN). The docstring above has always promised
+        // this branch; it did not exist, so private_vision refused for a user
+        // whose only vision provider was a local custom one. BOTH predicates
+        // are required: customProviderIsLocal keeps a CLOUD custom endpoint
+        // from satisfying private_vision, which is the whole point of the mode.
+        const activeCustom = readActiveCustomProvider();
+        if (customProviderIsLocal(activeCustom) && customProviderSupportsVision(activeCustom)) {
+            return true;
+        }
         return false;
     }
 
@@ -1374,6 +1415,31 @@ export class CredentialsManager {
 
     public getCurlProviders(): CurlProvider[] {
         return this.credentials.curlProviders || [];
+    }
+
+    /**
+     * EVERY user-configured custom provider, from both stores.
+     *
+     * There are two, for historical reasons: `customProviders` (legacy) and
+     * `curlProviders`. The shipping Settings UI writes exclusively to the
+     * second — `save-custom-provider` calls saveCurlProvider — so on any
+     * install configured with the current app, `customProviders` is EMPTY.
+     *
+     * Consumers that read only one store therefore answer questions about a
+     * list the user's providers are not in. That is not hypothetical: reading
+     * `customProviders` alone made anyVisionProviderConfigured() return false
+     * for a provider explicitly marked multimodal, and vision_only mode then
+     * refused every screenshot with "no vision provider configured". Use this
+     * accessor for any question about what the user has configured.
+     *
+     * (ipcHandlers spreads the two lists inline in several places; those are
+     * correct, just duplicated — they can migrate to this accessor.)
+     */
+    public getAllCustomProviders(): CustomProvider[] {
+        return [
+            ...(this.credentials.curlProviders || []),
+            ...(this.credentials.customProviders || []),
+        ] as CustomProvider[];
     }
 
     public saveCurlProvider(provider: CurlProvider): void {

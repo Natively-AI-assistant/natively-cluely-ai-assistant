@@ -58,7 +58,7 @@ import { resolveVisionPolicy, readScreenUnderstandingMode, isLocalVisionProvider
 import { profileInterceptAllowedByRoute, modeAnswerType, type StreamRouteOptions } from "./llm/streamContextPolicy"
 import type { ActiveModeDocumentGroundingInfo } from "./services/ModesManager"
 import type { TranscriptTurn } from "./llm/transcriptCleaner"
-import { deepVariableReplacer, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer } from './utils/curlUtils';
+import { applyCurlVariables, getByPath, injectImageIntoMessages, flattenStructuredJsonAnswer, blockedInfrastructureHost } from './utils/curlUtils';
 import { getImageOptimizer } from './services/screen/ImageOptimizer';
 import curl2Json from "@bany/curl-to-json";
 import { CustomProvider, CurlProvider } from './services/CredentialsManager';
@@ -812,7 +812,13 @@ export class LLMHelper {
    * promises never happens.
    */
   private assertOutboundImagesAllowed(provider: string, hasImages: boolean): void {
-    if (hasImages && !isLocalVisionProvider(provider)
+    // The custom label alone cannot say whether the pixels stay on the machine —
+    // the same label covers a loopback Ollama gateway and a public OpenRouter
+    // endpoint — so the active provider's own host classification is supplied.
+    // Without it, widening anyLocalVisionProviderConfigured() to count local
+    // custom providers produced the worst of both: the gate promised local
+    // vision, and then THIS boundary threw VisionPolicyError at dispatch.
+    if (hasImages && !isLocalVisionProvider(provider, { customProviderIsLocal: customProviderIsLocal(this.customProvider) })
       && readScreenUnderstandingMode() === 'private_vision') {
       throw new VisionPolicyError(provider, PRIVATE_VISION_NO_LOCAL_MESSAGE);
     }
@@ -1124,6 +1130,11 @@ export class LLMHelper {
     if (Date.now() - this.litellmModelBudgetsFetchedAt < LITELLM_MODEL_INFO_TTL_MS) return;
     if (this.litellmModelBudgetsFetch) return this.litellmModelBudgetsFetch;
 
+    // The proxy this fetch belongs to. `setLitellmConfig` can repoint the app
+    // mid-flight; without this tag the OLD proxy's reply lands in the (already
+    // cleared) cache and stamps fetchedAt, pinning another host's output ceilings
+    // for the whole 5-minute TTL.
+    const issuedForBaseURL = this.litellmBaseURL;
     this.litellmModelBudgetsFetch = (async () => {
       try {
         // /model/info lives at the proxy ROOT (and also under /v1/) — strip a
@@ -1140,6 +1151,10 @@ export class LLMHelper {
           const budget = Number(entry?.model_info?.max_output_tokens ?? entry?.model_info?.max_tokens);
           if (name && Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
         }
+        if (this.litellmBaseURL !== issuedForBaseURL) {
+          console.log('[LLMHelper] LiteLLM /model/info reply discarded — the proxy was repointed while it was in flight.');
+          return;
+        }
         this.litellmModelBudgets = fresh;
         console.log(`[LLMHelper] LiteLLM /model/info: cached output budgets for ${fresh.size} model(s)`);
       } catch {
@@ -1148,7 +1163,11 @@ export class LLMHelper {
       } finally {
         // Stamp on failure too (negative cache): without this, a proxy lacking
         // /model/info would add a fetch attempt — up to 5s — to EVERY request.
-        this.litellmModelBudgetsFetchedAt = Date.now();
+        // Never stamp for a proxy we are no longer pointed at, or the repoint's
+        // deliberate cache reset is undone and the new proxy is never queried.
+        if (this.litellmBaseURL === issuedForBaseURL) {
+          this.litellmModelBudgetsFetchedAt = Date.now();
+        }
         this.litellmModelBudgetsFetch = null;
       }
     })();
@@ -1239,7 +1258,7 @@ export class LLMHelper {
   // these named entry points so the surface stays auditable.
 
   public async runVisionRequest(
-    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom',
+    providerId: 'natively' | 'openai' | 'claude' | 'gemini_flash_lite' | 'gemini_flash' | 'gemini_pro' | 'groq_scout' | 'custom' | 'litellm' | 'nvidia_nim',
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
@@ -1253,14 +1272,25 @@ export class LLMHelper {
         return this.generateWithClaude(userPrompt, systemPrompt, [imagePath]);
       case 'groq_scout':
         return this.generateWithGroqMultimodal(userPrompt, [imagePath], systemPrompt);
+      // OpenAI-compatible gateways. Registered here so ScreenUnderstandingService
+      // has a rung to call when a proxy is the user's only configured provider —
+      // it had none, and reported "no vision provider" instead.
+      case 'litellm':
+        return this.generateWithLiteLLM(userPrompt, systemPrompt, [imagePath]);
+      case 'nvidia_nim':
+        return this.generateWithNvidiaNim(userPrompt, systemPrompt, [imagePath]);
       case 'gemini_flash_lite':
       case 'gemini_flash':
       case 'gemini_pro': {
         const fs = await import('node:fs/promises');
         const b64 = await fs.readFile(imagePath, 'base64');
+        // Derived, not assumed: ImageOptimizer's format is a per-profile setting
+        // (its type already admits webp), so a literal here is a header that can
+        // contradict the bytes — the same defect fixed in buildOpenAiImageParts.
+        const { imageMimeTypeFromPath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
         const contents: any[] = [
           { text: `${systemPrompt}\n\n${userPrompt}` },
-          { inlineData: { mimeType: 'image/jpeg', data: b64 } },
+          { inlineData: { mimeType: imageMimeTypeFromPath(imagePath), data: b64 } },
         ];
         const modelId = providerId === 'gemini_flash_lite'
           ? GEMINI_FLASH_LITE_MODEL
@@ -1280,6 +1310,7 @@ export class LLMHelper {
           userPrompt,
           '',
           imagePath,
+          this.customProvider.responsePath,
         );
       }
       default:
@@ -2314,13 +2345,53 @@ ${IMAGE_TRUST_TRAILER}`;
       };
     } catch (error) {
       console.error("[LLMHelper] Failed to process image with sharp:", error);
-      // Fallback to raw read if sharp fails
+      // Fallback to raw read if sharp fails. The type MUST be derived from the
+      // file, not assumed: on the happy path above the bytes really are JPEG
+      // because we just encoded them, but here they are whatever was on disk.
+      // ScreenshotHelper writes .png, ImageOptimizer writes .jpg, and the
+      // Settings profiles can emit .webp — declaring "image/png" over any of
+      // those hands the upstream a header that contradicts the bytes.
+      const { imageMimeTypeFromPath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
       const data = await fs.promises.readFile(path);
       return {
-        mimeType: "image/png",
+        mimeType: imageMimeTypeFromPath(path),
         data: data.toString("base64")
       };
     }
+  }
+
+  /**
+   * Chat-Completions `image_url` parts for an OpenAI-compatible endpoint.
+   *
+   * The one place LiteLLM / NVIDIA NIM / anything else OpenAI-shaped builds
+   * image parts, so the three rules below cannot drift apart per provider —
+   * which is exactly how they drifted in the first place (2026-09-03 review):
+   *
+   *  1. The declared media type comes from processImage, never a literal.
+   *     Both proxies used to hardcode `data:image/png` over whatever bytes were
+   *     on disk. ImageOptimizer re-encodes screenshots to JPEG, so an optimized
+   *     capture went out as PNG-labelled JPEG — verified on the wire. LiteLLM
+   *     forwards the declared type to Anthropic/Bedrock/Vertex (that is what its
+   *     `format` override exists to correct), and a strict decoder rejects it.
+   *  2. The bytes are downscaled and recompressed. A raw 1470x956 screenshot is
+   *     1491 KB on the wire versus 293 KB through processImage — measured, 5.1x —
+   *     and a turn can carry five of them.
+   *  3. A file that vanished between capture and dispatch is SKIPPED, matching
+   *     streamWithOpenaiMultimodal / streamWithClaudeMultimodal. An unguarded
+   *     readFile threw ENOENT out of the generator and killed the whole turn
+   *     ("I encountered an error: ENOENT…") instead of answering from the text.
+   */
+  private async buildOpenAiImageParts(imagePaths: string[]): Promise<any[]> {
+    const parts: any[] = [];
+    for (const p of imagePaths) {
+      if (!fs.existsSync(p)) {
+        console.warn('[LLMHelper] image no longer on disk, sending the turn without it:', p);
+        continue;
+      }
+      const { mimeType, data } = await this.processImage(p);
+      parts.push({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${data}` } });
+    }
+    return parts;
   }
 
   /**
@@ -3237,7 +3308,8 @@ let isMultimodal = !!(imagePaths?.length);
           customSystemPrompt,
           message,
           shouldOmitContext ? "" : context || "",
-          cloudImagePaths?.[0]
+          cloudImagePaths?.[0],
+          this.customProvider.responsePath
         );
         return this.processResponse(response);
       }
@@ -3596,7 +3668,9 @@ let isMultimodal = !!(imagePaths?.length);
           message,
           '',
           message,
-          ''
+          '',
+          undefined,
+          this.customProvider!.responsePath
         )
       });
     } else if (this.activeCurlProvider && !customProvidersOff) {
@@ -4084,11 +4158,7 @@ let isMultimodal = !!(imagePaths?.length);
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
     if (imagePaths?.length) {
-      const content: any[] = [{ type: "text", text: userMessage }];
-      for (const p of imagePaths) {
-        const b64 = (await fs.promises.readFile(p)).toString("base64");
-        content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } });
-      }
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
       messages.push({ role: "user", content });
     } else {
       messages.push({ role: "user", content: userMessage });
@@ -4121,8 +4191,7 @@ let isMultimodal = !!(imagePaths?.length);
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (imagePaths?.length) {
-      const content: any[] = [{ type: 'text', text: userMessage }];
-      for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
+      const content: any[] = [{ type: 'text', text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
     const response = await this.withTimeout(this.withRetry(() => this.createNvidiaNimCompletion({ model, messages })), 60000, `NVIDIA NIM (${model})`);
@@ -4141,13 +4210,32 @@ let isMultimodal = !!(imagePaths?.length);
     const curlConfig = curl2Json(curlCommand);
 
     // 2. Prepare Image (if any)
+    //
+    // Same optimizer the other two executors use. This lane was left on the raw
+    // read when the 2026-07-19 fix landed, so it still carried the multi-megabyte
+    // PNG that produced HTTP 400s (see CustomProviderScreenshotSize2026_07_19).
+    // imageTypePath tracks the ENCODED file so the declared mime matches the
+    // bytes — the optimizer emits JPEG from a .png screenshot.
     let base64Image = "";
+    let imageTypePath = imagePath;
     if (imagePath) {
       try {
-        const imageData = await fs.promises.readFile(imagePath);
-        base64Image = imageData.toString("base64");
+        const optimized = await getImageOptimizer().optimize(imagePath, {
+          profile: 'balanced',
+          provider: 'custom',
+          cacheKey: imagePath,
+        });
+        base64Image = await getImageOptimizer().getBase64(optimized);
+        imageTypePath = optimized.path;
       } catch (e) {
-        console.warn("[LLMHelper] chatWithCurl: failed to read image:", e);
+        console.warn("[LLMHelper] chatWithCurl: image optimization failed, falling back to raw read:", e);
+        try {
+          const imageData = await fs.promises.readFile(imagePath);
+          base64Image = imageData.toString("base64");
+          imageTypePath = imagePath;
+        } catch (e2) {
+          console.warn("[LLMHelper] chatWithCurl: failed to read image:", e2);
+        }
       }
     }
 
@@ -4156,28 +4244,56 @@ let isMultimodal = !!(imagePaths?.length);
     const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${userMessage}` : userMessage;
 
     const variables = {
-      // JSON-string-encode without the wrapping quotes — handles backslashes,
-      // control chars, and U+2028/U+2029 that the previous regex pair missed.
-      TEXT: JSON.stringify(fullPrompt).slice(1, -1),
+      // Raw, NOT pre-escaped. curl2Json parses `-d` into a JS OBJECT, and axios
+      // JSON-serializes that object on the way out — so escaping here produced
+      // DOUBLE escaping: a prompt containing `"for"` and a newline reached the
+      // model as the literal characters \" and \n. Serialization is the
+      // serializer's job; the value goes in as the user wrote it.
+      TEXT: fullPrompt,
       IMAGE_BASE64: base64Image,
     };
 
     // 4. Inject Variables into URL, Headers, and Body
-    const url = deepVariableReplacer(curlConfig.url, variables);
-    const headers = deepVariableReplacer(curlConfig.header || {}, variables);
-    let data = deepVariableReplacer(curlConfig.data || {}, variables);
+    // One helper for all three executors: the body keeps the raw values it
+    // needs, while the URL is percent-encoded and header values have control
+    // characters stripped. See applyCurlVariables.
+    const { url, headers, data: _sub } = applyCurlVariables(curlConfig, variables);
+    let data = _sub;
 
     // 4a. Auto-upgrade last user message to multimodal content array when an image is present.
-    if (base64Image && imagePath) {
-      data = injectImageIntoMessages(data, base64Image, imagePath);
+    //     imageTypePath — not imagePath — so the declared mime matches the bytes.
+    if (base64Image && imageTypePath) {
+      data = injectImageIntoMessages(data, base64Image, imageTypePath);
     }
 
-    // 4b. SECURITY (P1): Validate URL against SSRF before making the request
-    const { validateUrlForSsrf } = require('./utils/curlUtils');
-    const urlValidation = validateUrlForSsrf(url);
-    if (!urlValidation.isValid) {
-      console.error(`[LLMHelper] SSRF blocked: ${urlValidation.reason}`);
-      return `Error: SSRF protection blocked URL (${urlValidation.reason})`;
+    // 4b. NO validateUrlForSsrf here — deliberately, and this is a behavior
+    //     CHANGE from the previous code.
+    //
+    //     validateUrlForSsrf blocks loopback and RFC-1918. Those are exactly the
+    //     hosts a custom provider is MEANT to reach: Ollama on 127.0.0.1, LM
+    //     Studio on the LAN, llama.cpp on localhost. customProviderIsLocal()
+    //     exists to keep such endpoints working under local-only and
+    //     private_vision modes, so this check contradicted the feature — and it
+    //     `return`ed the refusal as the ANSWER TEXT, putting "Error: SSRF
+    //     protection blocked URL" where the model's reply belongs.
+    //
+    //     The classic SSRF threat model does not apply: the URL is not attacker
+    //     -supplied, it is the local user's own configuration, typed into their
+    //     own Settings, in a desktop app that already runs with their
+    //     privileges. The other two executors (executeCustomProvider,
+    //     streamWithCustom) have never had this check and reach local endpoints
+    //     correctly; this lane is now consistent with them.
+    //
+    //     Guarding renderer-supplied URLs remains right, and validateUrlForSsrf
+    //     is still applied where the URL really is untrusted (STT base URLs).
+
+    // Refuse only cloud/container metadata hosts — see blockedInfrastructureHost
+    // for why the old broad SSRF check is deliberately not used here. Thrown, not
+    // returned as answer text, so the fallback chain classifies it as a provider
+    // failure instead of showing the user an error where the reply belongs.
+    {
+      const blocked = blockedInfrastructureHost(url);
+      if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
     }
 
     // 5. Execute
@@ -4304,7 +4420,8 @@ let isMultimodal = !!(imagePaths?.length);
     systemPrompt: string,
     rawUserMessage: string,
     context: string,
-    imagePath?: string
+    imagePath?: string,
+    responsePath?: string,
   ): Promise<string> {
     this.assertOutboundScopes('custom_provider', combinedMessage, imagePath ? [imagePath] : undefined);
 
@@ -4320,6 +4437,15 @@ let isMultimodal = !!(imagePaths?.length);
     // OpenRouter forwards that rejection as a 400. Falls back to the raw read
     // on optimizer failure so a Sharp crash never blocks a vision request.
     let base64Image = "";
+    // The path whose EXTENSION describes the bytes in `base64Image`. The
+    // optimizer re-encodes a .png screenshot as JPEG, so handing the original
+    // path to injectImageIntoMessages (which derives the mime from it via
+    // imageMimeTypeFromPath) declared `data:image/png` over JPEG bytes.
+    // OpenAI/Anthropic sniff magic bytes and tolerate that; self-hosted vLLM
+    // and llama.cpp decode by the DECLARED type and reject. Track the encoded
+    // file instead, and fall back to the source only when optimization failed
+    // and the raw bytes really are the original .png.
+    let imageTypePath = imagePath;
     if (imagePath) {
       try {
         const optimized = await getImageOptimizer().optimize(imagePath, {
@@ -4328,6 +4454,7 @@ let isMultimodal = !!(imagePaths?.length);
           cacheKey: imagePath,
         });
         base64Image = await getImageOptimizer().getBase64(optimized);
+        imageTypePath = optimized.path;
       } catch (e) {
         console.warn(
           "[LLMHelper] executeCustomProvider: image optimization failed, falling back to raw read:",
@@ -4336,6 +4463,7 @@ let isMultimodal = !!(imagePaths?.length);
         try {
           const imageData = await fs.promises.readFile(imagePath);
           base64Image = imageData.toString("base64");
+          imageTypePath = imagePath;
         } catch (e2) {
           console.warn("Failed to read image for Custom Provider:", e2);
         }
@@ -4353,16 +4481,28 @@ let isMultimodal = !!(imagePaths?.length);
     };
 
     // 4. Inject Variables into URL, Headers, and Body
-    const url = deepVariableReplacer(requestConfig.url, variables);
-    const headers = deepVariableReplacer(requestConfig.header || {}, variables);
-    let body = deepVariableReplacer(requestConfig.data || {}, variables);
+    // One helper for all three executors: the body keeps the raw values it
+    // needs, while the URL is percent-encoded and header values have control
+    // characters stripped. See applyCurlVariables.
+    const { url, headers, data: _sub } = applyCurlVariables(requestConfig, variables);
+    let body = _sub;
 
     // 4a. Auto-upgrade last user message to multimodal content array when an image
     //     is present and the body follows the OpenAI messages format.
     //     This is a no-op for non-OpenAI formats and for templates that already
     //     include a proper image_url part, so it is fully backward-compatible.
-    if (base64Image && imagePath) {
-      body = injectImageIntoMessages(body, base64Image, imagePath);
+    //     imageTypePath — not imagePath — so the declared mime matches the bytes.
+    if (base64Image && imageTypePath) {
+      body = injectImageIntoMessages(body, base64Image, imageTypePath);
+    }
+
+    // Refuse only cloud/container metadata hosts — see blockedInfrastructureHost
+    // for why the old broad SSRF check is deliberately not used here. Thrown, not
+    // returned as answer text, so the fallback chain classifies it as a provider
+    // failure instead of showing the user an error where the reply belongs.
+    {
+      const blocked = blockedInfrastructureHost(url);
+      if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
     }
 
     // 5. Execute Fetch (30s timeout — same as RestSTT uploads)
@@ -4397,8 +4537,9 @@ let isMultimodal = !!(imagePaths?.length);
         throw new Error(`Custom Provider HTTP ${response.status}`);
       }
 
-      // 6. Extract Answer - try common response formats
-      const extracted = this.extractFromCommonFormats(data);
+      // 6. Extract Answer — the user's configured responsePath first, then the
+      //    shape heuristics. See extractCustomAnswer.
+      const extracted = this.extractCustomAnswer(data, responsePath);
       console.log(`[LLMHelper] Custom Provider extracted text length: ${extracted.length}`);
       return extracted;
     } catch (error) {
@@ -4406,6 +4547,58 @@ let isMultimodal = !!(imagePaths?.length);
       console.error("Custom Provider Error:", error);
       throw error;
     }
+  }
+
+  /**
+   * Resolve the answer text from a custom provider's response.
+   *
+   * `responsePath` is what the user typed into Settings > AI Providers (e.g.
+   * "choices[0].message.content"). It was collected, persisted and rendered
+   * back on the provider card, and then never read: the only code that honored
+   * it was chatWithCurl, and the BUG-05 merge (ipcHandlers `switch-to-custom-
+   * provider`) routes every UI-saved provider into the customProvider lane
+   * instead. An endpoint outside the eight shapes below therefore showed the
+   * user raw JSON while the UI confirmed it knew exactly where the text lived.
+   *
+   * The configured path wins when it resolves. A path that MISSES falls through
+   * to shape detection rather than surfacing raw JSON, so a stale path degrades
+   * to the previous behavior instead of breaking a working provider.
+   */
+  private extractCustomAnswer(data: any, responsePath?: string, warnOnMiss = true): string {
+    if (responsePath) {
+      const answer = getByPath(data, responsePath);
+      // A path that resolves to an EMPTY string is treated as a miss, not as an
+      // answer. It resolves that way routinely — a reasoning model that puts
+      // everything in `reasoning_content` leaves `choices[0].message.content`
+      // as "" — and before responsePath was honored at all, such a response
+      // still produced text via shape detection. Returning '' here would make
+      // a working provider start yielding blank answers.
+      if (typeof answer === 'string' && answer.length > 0) {
+        return flattenStructuredJsonAnswer(answer) ?? answer;
+      }
+      // A non-string hit is serialized only on the WHOLE-RESPONSE path. On the
+      // per-line streaming path this same branch emitted raw JSON straight into
+      // the user-visible token stream: a path aimed at the complete body
+      // (`choices[0].message.content`) resolves to an OBJECT on a delta chunk,
+      // and that object was stringified and yielded as if it were the answer.
+      // `warnOnMiss` already marks which lane we are in, and shape detection
+      // below returns '' for a delta chunk it cannot read — which is what the
+      // docblock's "rather than surfacing raw JSON" promises and what
+      // extractFromCommonFormats does deliberately for exactly this case.
+      if (warnOnMiss && answer !== undefined && answer !== null && typeof answer !== 'string') {
+        return JSON.stringify(answer);
+      }
+      // `warnOnMiss` is off for per-line streaming: a path aimed at the whole
+      // response body legitimately misses on every chunk of a JSONL stream, and
+      // a warning per line would bury the log.
+      if (warnOnMiss) {
+        console.warn(
+          `[LLMHelper] Custom Provider responsePath "${responsePath}" did not resolve against the response; `
+          + `falling back to shape detection.`,
+        );
+      }
+    }
+    return this.extractFromCommonFormats(data);
   }
 
   /**
@@ -4771,7 +4964,8 @@ let isMultimodal = !!(imagePaths?.length);
             systemPrompt,
             userPrompt,
             "",
-            imagePaths[0]
+            imagePaths[0],
+            this.customProvider!.responsePath
           )
         });
       } else {
@@ -4782,7 +4976,9 @@ let isMultimodal = !!(imagePaths?.length);
             `${systemPrompt}\n\n${userPrompt}`,
             systemPrompt,
             userPrompt,
-            ""
+            "",
+            undefined,
+            this.customProvider!.responsePath
           )
         });
       }
@@ -5371,6 +5567,28 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'natively', name: 'Natively API', isLocal: false, priority: prio++, ttftTimeoutMs: FLASH_TTFT_MS,
           open: (sig) => this.streamWithNatively(userContent, systemPrompt, imagePaths, sig) });
       }
+      // OpenAI-compatible gateways. Added 2026-09-03: this chain intercepts EVERY
+      // image-bearing request and returns, so a provider missing here can never
+      // receive a screenshot no matter what the routing below says — the
+      // `imagePaths` argument on the LiteLLM/NIM branches in _streamChatInner was
+      // dead code. Verified in a live session: a profile whose only configured
+      // provider was a LiteLLM proxy answered every screen question with "all
+      // vision models are unavailable… check your API keys (OpenAI, Claude,
+      // Gemini, or Groq)" while the proxy recorded zero requests.
+      //
+      // Only seated when the user has actually SELECTED the gateway model. A
+      // gateway fronts arbitrary upstreams and only the user knows whether
+      // theirs takes images, so it must not be auto-recruited as a fallback for
+      // someone else's turn — but when it is the model they picked, it has to be
+      // tried, and the upstream's own error is the honest answer.
+      if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
+        cloud.push({ id: 'litellm', name: `LiteLLM (${this.currentModelId.replace('litellm/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithLiteLLM(userContent, systemPrompt, imagePaths, sig) });
+      }
+      if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
+        cloud.push({ id: 'nvidia_nim', name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithNvidiaNim(userContent, systemPrompt, imagePaths, sig) });
+      }
       // isCodexAvailable() — NOT `codexCliConfig.enabled` — is the gate every
       // other Codex call site uses. It additionally covers the disabled-provider
       // kill switch and "is ChatGPT actually signed in". streamWithCodexCli
@@ -5428,13 +5646,26 @@ let isMultimodal = !!(imagePaths?.length);
       if (this.useOllama) { const o = local.find(p => p.id === 'ollama'); if (o) front.push(o); }
       if (this.customProvider) { const c = local.find(p => p.id === 'custom'); if (c) front.push(c); }
       if (this.isCodexCliModel(this.currentModelId)) { const cdx = cloud.find(p => p.id === 'codex-cli'); if (cdx) front.push(cdx); }
+      // Same rule as Codex above: the model the user picked leads its own turn,
+      // rather than being sorted behind whichever key happens to be fastest.
+      if (this.isLiteLLMModel(this.currentModelId)) { const l = cloud.find(p => p.id === 'litellm'); if (l) front.push(l); }
+      if (this.isNvidiaNimModel(this.currentModelId)) { const n = cloud.find(p => p.id === 'nvidia_nim'); if (n) front.push(n); }
       const backLocal = local.filter(p => !front.includes(p));
       const backCloud = cloud.filter(p => !front.includes(p));
       ordered = [...front, ...orderVisionByHealth(backCloud, this.visionHealth, nowMs), ...backLocal];
     }
 
     if (ordered.length === 0) {
-      throw new Error('No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
+      // Name the gateway when that is what the user actually configured. The
+      // flat "add an OpenAI/Claude/Gemini/Groq key" text was the only thing a
+      // LiteLLM-only user ever saw for a screen question, and it pointed them at
+      // four providers they had deliberately not set up.
+      const gateway = this.isLiteLLMModel(this.currentModelId) ? 'LiteLLM proxy'
+        : this.isNvidiaNimModel(this.currentModelId) ? 'NVIDIA NIM endpoint'
+        : null;
+      throw new Error(gateway
+        ? `No vision-capable provider configured. The selected ${gateway} model is not available for images — check the proxy is reachable and the model is still configured, or add another vision provider in Settings.`
+        : 'No vision-capable provider configured. Add an API key (OpenAI, Claude, Gemini, or Groq) or enable a vision-capable Ollama model in Settings.');
     }
 
     // Delegate the first-token-commit + retry + circuit-breaker state machine.
@@ -6635,6 +6866,14 @@ let isMultimodal = !!(imagePaths?.length);
         const queryMatchedSections = [...new Set(sectionMatches.map((m) => m.replace(/^\[Section /, '')))];
         const retrievedChunkCount = (modeContextBlock.match(/\[Page \d+\]|\[Section [\d.]+/g) || []).length
           || (modeContextBlock ? modeContextBlock.split('\n\n').filter(Boolean).length : 0);
+        // topKUsed/tokenBudgetUsed were hardcoded 12/3600. They happened to be
+        // correct, but nothing tied them to the values actually applied, so any
+        // change to the doc-grounded limits — a rerank stage altering effective
+        // topK included — would have made this event lie silently. Read the
+        // exported constants instead. This event is gated on
+        // forceDocumentGrounding, so the doc-grounded pair is the applicable one.
+        const { DOC_GROUNDED_TOP_K, DOC_GROUNDED_TOKEN_BUDGET } =
+          require('./services/ModeContextRetriever') as typeof import('./services/ModeContextRetriever');
         telemetryService.track({
           name: 'pi_doc_grounded_retrieval_summary',
           properties: {
@@ -6642,8 +6881,8 @@ let isMultimodal = !!(imagePaths?.length);
             forceDocumentGrounding,
             retrievalSourceUsed: usedRerankPath ? 'hybrid' : 'lexical',
             hybridAttempted: forceDocumentGrounding,
-            topKUsed: 12,
-            tokenBudgetUsed: 3600,
+            topKUsed: DOC_GROUNDED_TOP_K,
+            tokenBudgetUsed: DOC_GROUNDED_TOKEN_BUDGET,
             retrievedChunkCount,
             retrievedOkfCardCount: okfCardCountForTelemetry,
             queryMatchedPages,
@@ -7114,7 +7353,8 @@ let isMultimodal = !!(imagePaths?.length);
         finalSystemPrompt,
         message,
         context || "",
-        imagePaths?.[0]
+        imagePaths?.[0],
+        this.activeCurlProvider.responsePath
       );
       yield response;
       return;
@@ -8092,11 +8332,7 @@ let isMultimodal = !!(imagePaths?.length);
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
     if (imagePaths?.length) {
-      const content: any[] = [{ type: "text", text: userMessage }];
-      for (const p of imagePaths) {
-        const b64 = (await fs.promises.readFile(p)).toString("base64");
-        content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${b64}` } });
-      }
+      const content: any[] = [{ type: "text", text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
       messages.push({ role: "user", content });
     } else {
       messages.push({ role: "user", content: userMessage });
@@ -8135,8 +8371,7 @@ let isMultimodal = !!(imagePaths?.length);
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (imagePaths?.length) {
-      const content: any[] = [{ type: 'text', text: userMessage }];
-      for (const p of imagePaths) content.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${(await fs.promises.readFile(p)).toString('base64')}` } });
+      const content: any[] = [{ type: 'text', text: userMessage }, ...await this.buildOpenAiImageParts(imagePaths)];
       messages.push({ role: 'user', content });
     } else messages.push({ role: 'user', content: userMessage });
     const stream = await this.createNvidiaNimCompletion({ model, messages, stream: true }, { signal: abortSignal });
@@ -8638,6 +8873,10 @@ let isMultimodal = !!(imagePaths?.length);
     const requestConfig = curl2Json(curlCommand);
 
     let base64Image = "";
+    // See executeCustomProvider: this must track the ENCODED file, because the
+    // optimizer turns a .png screenshot into JPEG and the declared mime is
+    // derived from this path.
+    let imageTypePath = imagePaths?.[0];
     if (imagePaths?.length) {
       try {
         // 2026-07-19: same image-size fix as executeCustomProvider (see that
@@ -8651,6 +8890,7 @@ let isMultimodal = !!(imagePaths?.length);
           cacheKey: sourcePath,
         });
         base64Image = await getImageOptimizer().getBase64(optimized);
+        imageTypePath = optimized.path;
       } catch (e) {
         console.warn(
           "[LLMHelper] streamWithCustom: image optimization failed, falling back to raw read:",
@@ -8659,6 +8899,7 @@ let isMultimodal = !!(imagePaths?.length);
         try {
           const data = await fs.promises.readFile(imagePaths[0]);
           base64Image = data.toString("base64");
+          imageTypePath = imagePaths[0];
         } catch (e2) { /* keep empty */ }
       }
     }
@@ -8674,14 +8915,26 @@ let isMultimodal = !!(imagePaths?.length);
       IMAGE_BASE64: base64Image,
     };
 
-    const url = deepVariableReplacer(requestConfig.url, variables);
-    const headers = deepVariableReplacer(requestConfig.header || {}, variables);
-    let body = deepVariableReplacer(requestConfig.data || {}, variables);
+    // One helper for all three executors: the body keeps the raw values it
+    // needs, while the URL is percent-encoded and header values have control
+    // characters stripped. See applyCurlVariables.
+    const { url, headers, data: _sub } = applyCurlVariables(requestConfig, variables);
+    let body = _sub;
 
     // Auto-upgrade last user message to multimodal content array when an image is present.
     // No-op for non-OpenAI formats and templates already containing a proper image_url part.
-    if (base64Image && imagePaths?.[0]) {
-      body = injectImageIntoMessages(body, base64Image, imagePaths[0]);
+    // imageTypePath — not imagePaths[0] — so the declared mime matches the bytes.
+    if (base64Image && imageTypePath) {
+      body = injectImageIntoMessages(body, base64Image, imageTypePath);
+    }
+
+    // Refuse only cloud/container metadata hosts — see blockedInfrastructureHost
+    // for why the old broad SSRF check is deliberately not used here. Thrown, not
+    // returned as answer text, so the fallback chain classifies it as a provider
+    // failure instead of showing the user an error where the reply belongs.
+    {
+      const blocked = blockedInfrastructureHost(url);
+      if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
     }
 
     const streamAbort = new AbortController();
@@ -8730,7 +8983,7 @@ let isMultimodal = !!(imagePaths?.length);
         for (const line of lines) {
           if (line.trim().length === 0) continue;
 
-          const items = this.parseStreamLine(line);
+          const items = this.parseStreamLine(line, this.customProvider?.responsePath);
           if (items) {
             yield items;
             yieldedAny = true;
@@ -8744,7 +8997,10 @@ let isMultimodal = !!(imagePaths?.length);
       if (!yieldedAny && fullBody.trim().length > 0 && !fullBody.trim().startsWith("data: ")) {
         try {
           const data = JSON.parse(fullBody);
-          const extracted = this.extractFromCommonFormats(data);
+          // Whole-body branch only. parseStreamLine deliberately keeps using the
+          // shape heuristics: a responsePath aimed at a complete response body
+          // does not resolve against an SSE delta chunk.
+          const extracted = this.extractCustomAnswer(data, this.customProvider?.responsePath);
           if (extracted) yield extracted;
         } catch {
           // Not JSON, yield raw text if it's not looking like garbage
@@ -8763,11 +9019,14 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  private parseStreamLine(line: string): string | null {
+  private parseStreamLine(line: string, responsePath?: string): string | null {
     const trimmed = line.trim();
     if (!trimmed) return null;
 
     // 1. Handle SSE (data: ...)
+    //    NO responsePath here on purpose: an SSE frame is a DELTA, and a path
+    //    written for a complete response body ("data.answer") does not address
+    //    one. Shape detection is the right tool for a delta.
     if (trimmed.startsWith("data: ")) {
       if (trimmed === "data: [DONE]") return null;
       try {
@@ -8778,11 +9037,19 @@ let isMultimodal = !!(imagePaths?.length);
       }
     }
 
-    // 2. Handle raw JSON chunks (Ollama/Generic)
+    // 2. Handle raw JSON chunks (Ollama/Generic).
+    //    This branch also swallows a WHOLE non-streaming JSON body — a custom
+    //    endpoint that ignores `stream` and answers in one shot lands here, not
+    //    in the `!yieldedAny` fallback below, because one complete object
+    //    arrives as one line. That is why the configured responsePath has to be
+    //    honored here too; applying it only to the fallback left every
+    //    non-streaming custom provider still showing raw JSON.
+    //    A miss degrades to shape detection, quietly (a JSONL stream misses on
+    //    every line by design).
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
       try {
         const json = JSON.parse(trimmed);
-        return this.extractFromCommonFormats(json);
+        return this.extractCustomAnswer(json, responsePath, false);
       } catch {
         return null;
       }
