@@ -54,8 +54,11 @@ test('main.tsx does not statically import App', () => {
 test('the light routes mount AuxRoot instead of App', () => {
     assert.match(
         mainSource,
-        /LIGHT_ROUTES\s*=\s*\[[^\]]*'overlay-pill'[^\]]*'overlay-toggle'[^\]]*'cropper'[^\]]*\]/s,
-        'main.tsx must route overlay-pill, overlay-toggle and cropper to the light root',
+        /LIGHT_ROUTES\s*=\s*\[[^\]]*'overlay-pill'[^\]]*'overlay-toggle'[^\]]*'cropper'[^\]]*'settings'[^\]]*'model-selector'[^\]]*\]/s,
+        'main.tsx must route every light window to the light root: the aux pair, the cropper, and ' +
+        'the two panels. settings and model-selector were split on 2026-09-04 after measuring ' +
+        'them at 51MB / 213-219 JS files each to render 57-76 DOM nodes; afterwards 13-15MB and ' +
+        '26-29 files, with katex/markdown/highlighter no longer loaded at all.',
     );
     assert.match(
         mainSource,
@@ -98,4 +101,30 @@ test('the light-route list in main.tsx matches AuxRoot capabilities', () => {
             'would render the fallback branch instead of its real UI.',
         );
     }
+});
+
+test('the split panels keep the provider stack App gave them', () => {
+    // They render inside QueryClientProvider + ToastProvider + ErrorBoundary in
+    // App, and the components rely on that. Splitting them out without the
+    // providers would compile and then fail at runtime.
+    for (const needed of ['QueryClientProvider', 'ToastProvider', 'ToastViewport', 'ErrorBoundary']) {
+        assert.match(
+            auxSource,
+            new RegExp(`\\b${needed}\\b`),
+            `AuxRoot must provide ${needed} — the panel routes were rendered inside it in App`,
+        );
+    }
+});
+
+test('the overlay is deliberately NOT split', () => {
+    // It renders NativelyInterface, whose import graph genuinely needs
+    // react-syntax-highlighter and katex to show meeting answers. Splitting it
+    // would either break rendering or just move the same weight.
+    const mainSrc = readFileSync(path.join(repoRoot, 'src/main.tsx'), 'utf8');
+    const list = /LIGHT_ROUTES\s*=\s*\[([^\]]*)\]/s.exec(mainSrc)?.[1] ?? '';
+    assert.doesNotMatch(
+        list,
+        /'overlay'/,
+        "the 'overlay' route must keep mounting App — it needs the markdown/katex surface",
+    );
 });

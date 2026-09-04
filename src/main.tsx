@@ -76,7 +76,7 @@ try {
     // import here would bundle it into the entry chunk and undo the split.
     const root = ReactDOM.createRoot(rootEl);
     const windowParam = new URLSearchParams(window.location.search).get('window') ?? '';
-    const LIGHT_ROUTES = ['overlay-pill', 'overlay-toggle', 'cropper'];
+    const LIGHT_ROUTES = ['overlay-pill', 'overlay-toggle', 'cropper', 'settings', 'model-selector'];
 
     const mount = LIGHT_ROUTES.includes(windowParam)
       ? import('./AuxRoot').then(({ default: AuxRoot }) => (
