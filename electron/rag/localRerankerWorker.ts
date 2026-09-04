@@ -103,7 +103,35 @@ async function ensureLoaded(msg: any): Promise<void> {
   }
 }
 
-parentPort.on('message', async (msg: any) => {
+/**
+ * Release the ONNX sessions this worker holds.
+ *
+ * `PreTrainedModel.dispose()` returns "an array of promises, one for each ONNX
+ * session that is being disposed" — it is the library's own release path, and
+ * terminating the thread skipped it entirely.
+ */
+async function disposeAll(): Promise<void> {
+  try { await model?.dispose?.(); } catch { /* best effort */ }
+  model = null; tokenizer = null; stHead = null; loadingPromise = null;
+}
+
+/**
+ * Serial message queue.
+ *
+ * Node delivers worker messages as they arrive, and an `async` listener that
+ * awaits does NOT delay the next delivery — so a `dispose` arriving mid-rerank
+ * would release the sessions while `model(inputs)` was still executing inside
+ * the native addon. Chaining every message onto one promise makes teardown wait
+ * its turn, which is also what makes the host's dispose-then-terminate
+ * handshake meaningful. Same shape as ggufRerankerWorker.
+ */
+let queue: Promise<void> = Promise.resolve();
+
+parentPort.on('message', (msg: any) => {
+  queue = queue.then(() => handleMessage(msg)).catch(() => { /* handled below */ });
+});
+
+async function handleMessage(msg: any): Promise<void> {
   try {
     if (msg.type === 'init') {
       await ensureLoaded(msg);
@@ -148,6 +176,12 @@ parentPort.on('message', async (msg: any) => {
       return;
     }
 
+    if (msg.type === 'dispose') {
+      await disposeAll();
+      parentPort!.postMessage({ type: 'ready', requestId: msg.requestId });
+      return;
+    }
+
     parentPort!.postMessage({
       type: 'error',
       requestId: msg.requestId,
@@ -160,4 +194,4 @@ parentPort.on('message', async (msg: any) => {
       error: e?.message || String(e),
     });
   }
-});
+}

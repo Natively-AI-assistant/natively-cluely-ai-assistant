@@ -66,16 +66,42 @@ test('a deliberate dispose clears the crash sentinel', () => {
 
 test('dispose does not kill a worker that still owes a reply', () => {
     const body = disposeBody();
-    assert.match(
-        body,
-        /pendingRequests\.size === 0/,
-        'dispose() must check for outstanding replies before terminating',
-    );
+    // The invariant is that dispose NEVER terminates inline — it always hands
+    // off to the drain, which waits for outstanding replies and only then asks
+    // the worker to release its ONNX sessions and stop. An earlier version had
+    // a `pendingRequests.size === 0` fast path that terminated directly; that
+    // is gone precisely because it raced work that had not registered yet.
     assert.match(
         body,
         /terminateWhenDrained\(/,
-        'when replies are outstanding, dispose() must hand off to the drain rather than ' +
-        'terminating mid-call',
+        'dispose() must hand off to the drain rather than terminating mid-call',
+    );
+    assert.doesNotMatch(
+        body,
+        /worker\.terminate\(/,
+        'dispose() must not terminate the worker inline — anything already in flight, or about ' +
+        'to register, would be killed with it',
+    );
+});
+
+test('the drain releases the ONNX sessions before stopping the thread', () => {
+    // transformers.js exposes PreTrainedModel.dispose() — "one promise for each
+    // ONNX session that is being disposed". Terminating skipped it entirely.
+    //
+    // MEASURED 2026-09-04 on the bundled ms-marco-MiniLM-L-6-v2: this recovers
+    // NO memory (26-27 MB released either way, ~79 MB retained regardless), so
+    // it is kept for teardown correctness and for not unwinding the thread
+    // inside a native model(inputs) call — NOT as a memory fix.
+    assert.match(
+        source,
+        /releaseThenTerminate\(/,
+        'the drain must go through the release path',
+    );
+    assert.match(
+        source,
+        /postTo\(worker, \{ type: 'dispose' \}/,
+        "the release must post {type:'dispose'} to the worker that is going away, not through " +
+        'getWorker() — which would spawn a replacement thread just to shut it down',
     );
 });
 
