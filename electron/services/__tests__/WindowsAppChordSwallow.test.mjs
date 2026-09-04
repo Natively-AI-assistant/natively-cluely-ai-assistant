@@ -84,11 +84,15 @@ test('Ctrl down and up are swallowed while the overlay is visible, without repla
   const rust = read(HOOK);
   assert.match(
     rust,
-    /if is_ctrl_vk\(vk\) \{[\s\S]*ctrl_held\.store\(is_key_down[\s\S]*suppress_ctrl\.load[\s\S]*swallowed_ups[\s\S]*return LRESULT\(1\)[\s\S]*let ctrl = state\.ctrl_held[\s\S]*pub fn set_ctrl_suppressed[\s\S]*suppress_ctrl\.store/,
-    'the native visibility switch must swallow Ctrl while retaining its state for app chords.',
+    /ctrl_bit\(vk,[\s\S]*ctrl_down\.fetch_or\(ctrl_mask[\s\S]*ctrl_down\.fetch_and\(!ctrl_mask[\s\S]*suppress_ctrl\.load[\s\S]*return LRESULT\(1\)[\s\S]*let ctrl = state\.ctrl_down[\s\S]*pub fn set_ctrl_suppressed[\s\S]*suppress_ctrl\.store/,
+    'the native visibility switch must swallow Ctrl while tracking both Ctrl keys for app chords.',
   );
   assert.doesNotMatch(rust, /SendInput|deferred_ctrl_vk|REPLAYED_CTRL_MARKER|replay_ctrl/,
     'suppressed Ctrl must never be replayed into the foreground app.');
+});
+
+test('the generated native declaration exposes Ctrl suppression', () => {
+  assert.match(read('native-module/index.d.ts'), /setCtrlSuppressed\(suppressed: boolean\): void/);
 });
 
 test('an empty chord table leaves the hook fully inert (no behaviour change)', () => {

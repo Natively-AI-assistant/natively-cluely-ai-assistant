@@ -85,9 +85,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, SetWindowsHookExW,
     TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
     EVENT_SYSTEM_FOREGROUND, GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
-    PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_USER, WM_XBUTTONDOWN,
+    LLKHF_EXTENDED, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT,
+    WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN,
+    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WM_XBUTTONDOWN,
 };
 
 // ─── napi objects shared with the macOS module's JS surface ──────────────────
@@ -171,9 +171,9 @@ struct HookState {
     /// VK alone: the modifiers may already be released by the time the up
     /// arrives.
     swallowed_ups: Mutex<HashSet<u32>>,
-    /// Tracks Ctrl independently of GetAsyncKeyState, which can lag inside a
-    /// low-level hook when the Ctrl event itself is swallowed.
-    ctrl_held: AtomicBool,
+    /// Tracks left/right Ctrl independently because swallowed events may not
+    /// appear in GetAsyncKeyState. Bit 0 is left; bit 1 is right.
+    ctrl_down: AtomicU32,
     /// While the actual overlay window is visible, Ctrl down/up never reaches
     /// the foreground app. JS updates this from BrowserWindow show/hide events.
     suppress_ctrl: AtomicBool,
@@ -198,7 +198,7 @@ impl HookState {
             callback: Mutex::new(None),
             app_chords: Mutex::new(Vec::new()),
             swallowed_ups: Mutex::new(HashSet::new()),
-            ctrl_held: AtomicBool::new(false),
+            ctrl_down: AtomicU32::new(0),
             suppress_ctrl: AtomicBool::new(false),
             shortcut_only: AtomicBool::new(false),
         }
@@ -278,8 +278,13 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // A swallowed Ctrl-down is not reflected reliably by GetAsyncKeyState from
     // inside the low-level hook, so track its physical state ourselves. While
     // the overlay is visible, swallow the complete Ctrl down/up sequence.
-    if is_ctrl_vk(vk) {
-        state.ctrl_held.store(is_key_down, Ordering::Release);
+    let ctrl_mask = ctrl_bit(vk, kb.flags.contains(LLKHF_EXTENDED));
+    if ctrl_mask != 0 {
+        if is_key_down {
+            state.ctrl_down.fetch_or(ctrl_mask, Ordering::AcqRel);
+        } else {
+            state.ctrl_down.fetch_and(!ctrl_mask, Ordering::AcqRel);
+        }
         if is_key_down && state.suppress_ctrl.load(Ordering::Acquire) {
             state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner()).insert(vk);
             return LRESULT(1);
@@ -322,9 +327,9 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // resolve the character first and only pass through if it yields none (i.e.
     // it was a genuine Ctrl+Alt shortcut, which produces no text).
     // A swallowed Ctrl-down may not appear in GetAsyncKeyState: low-level hooks
-    // run before Windows updates asynchronous key state. ctrl_held is therefore
+    // run before Windows updates asynchronous key state. ctrl_down is therefore
     // authoritative while suppression is active.
-    let ctrl = state.ctrl_held.load(Ordering::Acquire) || modifier_held(VK_CONTROL);
+    let ctrl = state.ctrl_down.load(Ordering::Acquire) != 0 || modifier_held(VK_CONTROL);
     let alt = modifier_held(VK_MENU);
     // AltGr == Ctrl+Alt. On layouts that define AltGr, Windows injects a
     // synthetic Left-Ctrl alongside right-Alt, so (ctrl && alt) already catches
@@ -681,8 +686,12 @@ fn modifier_held(vk: VIRTUAL_KEY) -> bool {
 }
 
 #[inline]
-fn is_ctrl_vk(vk: u32) -> bool {
-    matches!(vk, 0x11 | 0xA2 | 0xA3) // generic, left, right Ctrl
+fn ctrl_bit(vk: u32, extended: bool) -> u32 {
+    match (vk, extended) {
+        (0xA3, _) | (0x11, true) => 2,  // right or generic-extended Ctrl
+        (0xA2, _) | (0x11, false) => 1, // left or generic Ctrl
+        _ => 0,
+    }
 }
 
 #[inline]
@@ -1139,7 +1148,7 @@ impl StealthKeyboardTap {
         *self.state.app_chords.lock().unwrap_or_else(|p| p.into_inner()) =
             app_chords_from_inputs(app_chords);
         self.state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner()).clear();
-        self.state.ctrl_held.store(false, Ordering::Release);
+        self.state.ctrl_down.store(0, Ordering::Release);
 
         // Join any prior worker still winding down before publishing active,
         // so its cleanup store(false) can't race our store(true).
@@ -1255,8 +1264,7 @@ impl StealthKeyboardTap {
         }
     }
 
-    /// Suppress Ctrl while the actual overlay window is visible. Kept separate
-    /// from tap activation so shortcut-guard mode enforces it too.
+    /// Suppress Ctrl while the overlay is visible on Windows.
     #[napi]
     pub fn set_ctrl_suppressed(&self, suppressed: bool) {
         self.state.suppress_ctrl.store(suppressed, Ordering::Release);
@@ -1271,5 +1279,17 @@ impl StealthKeyboardTap {
 impl Default for StealthKeyboardTap {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ctrl_bit;
+
+    #[test]
+    fn left_and_right_ctrl_use_independent_bits() {
+        assert_eq!(ctrl_bit(0x11, false), ctrl_bit(0xA2, false));
+        assert_eq!(ctrl_bit(0x11, true), ctrl_bit(0xA3, false));
+        assert_ne!(ctrl_bit(0xA2, false), ctrl_bit(0xA3, false));
     }
 }
