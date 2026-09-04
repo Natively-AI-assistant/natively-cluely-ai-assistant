@@ -39,6 +39,9 @@ const MODE_INTENTS = Object.fromEntries(
 );
 MODE_INTENTS.custom = ALL_SPECS['custom-investor-update'].modeIntents;
 
+// Loaded before buildProvider, because prototype candidates need the train split.
+const { rows } = parseJsonl(fs.readFileSync(IN, 'utf8'));
+
 async function buildProvider(id) {
   if (id === 'rules') {
     const { RulesProvider } = await import('./providers/rules.mjs');
@@ -53,15 +56,49 @@ async function buildProvider(id) {
       // The same model asked for the whole frame: 44 forward passes per row
       // instead of 8. Measures the architectural cost, not just the model.
       'nli-mobilebert-frame': { modelId: 'Xenova/mobilebert-uncased-mnli', mode: 'frame', localOnly: true },
+      // Escalation candidates. All downloaded on first use; sizes are reported
+      // by tools/model-sizes.mjs after a sweep.
+      'nli-deberta-xsmall':      { modelId: 'MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33', mode: 'legacy', localOnly: false },
+      'nli-deberta-small':       { modelId: 'Xenova/nli-deberta-v3-small', mode: 'legacy', localOnly: false },
+      'nli-deberta-base':        { modelId: 'Xenova/nli-deberta-v3-base', mode: 'legacy', localOnly: false },
+      'nli-modernbert-base':     { modelId: 'MoritzLaurer/ModernBERT-base-zeroshot-v2.0', mode: 'legacy', localOnly: false },
+      // Frame configs for the best NLI, to measure the per-label cost on a
+      // model that can actually classify.
+      'nli-deberta-xsmall-frame': { modelId: 'MoritzLaurer/deberta-v3-xsmall-zeroshot-v1.1-all-33', mode: 'frame', localOnly: false },
     };
     const cfg = REGISTRY[id];
     if (!cfg) throw new Error(`unknown NLI provider ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new NliProvider({ id, modeIntents: MODE_INTENTS, ...cfg });
   }
+  if (id.startsWith('proto-')) {
+    const { EmbeddingPrototypeProvider } = await import('./providers/embeddingPrototype.mjs');
+    const REGISTRY = {
+      // Already resident in the app for retrieval, so on this variant the
+      // marginal cost of routing is a vector comparison, not a second model.
+      'proto-minilm-centroid': { modelId: 'Xenova/all-MiniLM-L6-v2', rule: 'centroid', localOnly: true },
+      'proto-minilm-topk':     { modelId: 'Xenova/all-MiniLM-L6-v2', rule: 'topk', k: 15, localOnly: true },
+      'proto-bge-small-centroid': { modelId: 'Xenova/bge-small-en-v1.5', rule: 'centroid', localOnly: false },
+      'proto-bge-small-topk':     { modelId: 'Xenova/bge-small-en-v1.5', rule: 'topk', k: 15, localOnly: false },
+    };
+    const cfg = REGISTRY[id];
+    if (!cfg) throw new Error(`unknown prototype provider ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    // Prototypes are built from TRAIN ONLY. The provider re-asserts this and
+    // refuses if a held-out row reaches it.
+    const trainRows = rows.filter((r) => r.split === 'train' && (r.language ?? 'en') === 'en');
+    return new EmbeddingPrototypeProvider({ id, trainRows, ...cfg });
+  }
+  if (id.startsWith('head-')) {
+    const { MultiHeadProvider } = await import('./providers/multihead.mjs');
+    const REGISTRY = {
+      'head-minilm': { dir: 'resources/models/natively/router-minilm-multihead' },
+    };
+    const cfg = REGISTRY[id];
+    if (!cfg) throw new Error(`unknown head provider ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    return new MultiHeadProvider({ id, ...cfg });
+  }
   throw new Error(`unknown provider ${id}`);
 }
 
-const { rows } = parseJsonl(fs.readFileSync(IN, 'utf8'));
 let target = rows.filter((r) => (SPLIT === 'all' ? true : r.split === SPLIT));
 if (LANG !== 'all') target = target.filter((r) => (r.language ?? 'en') === LANG);
 if (LIMIT > 0) target = target.slice(0, LIMIT);
