@@ -51,15 +51,22 @@ test('minimize and close finish a pending opacity shield', () => {
     assert.equal(helper.opacityTimeout, null);
   }
 
-  // The invisible pill and the destroyed toggle are skipped. The overlay also
-  // gets the z-order re-assert its own timer would have done: DWM can demote the
-  // HWND across a hide/show, and that timer is not going to run any more.
+  // The HIDDEN pill still gets its opacity back; only the DESTROYED toggle is
+  // skipped. Skipping hidden windows is what caused the invisible-pill gap:
+  // applyOverlayAuxVisibility() re-shows the pill without touching opacity, so a
+  // pill left at 0 here came back as a hole in the overlay chrome. Confirmed on a
+  // real Windows kernel, then re-run against this fix to confirm it closed.
+  //
+  // The overlay additionally gets the z-order re-assert its own timer would have
+  // done — DWM can demote the HWND across a hide/show and that timer is cancelled.
   assert.deepEqual(calls, [
     ['launcher', 'opacity', 1],
     ['overlay', 'opacity', 1],
+    ['pill', 'opacity', 1],
     ['overlay', 'alwaysOnTop', true, 'screen-saver'],
     ['launcher', 'opacity', 1],
     ['overlay', 'opacity', 1],
+    ['pill', 'opacity', 1],
     ['overlay', 'alwaysOnTop', true, 'screen-saver'],
   ]);
 });
@@ -94,10 +101,11 @@ test('the flush covers every window an arm site can shield', () => {
   ]);
 });
 
-// A hidden overlay is skipped whole — no opacity, and no z-order re-assert
-// either. It was not un-shielded here, and the next switchToOverlay re-asserts
-// on the way in, so touching it now would only reach past what the flush owns.
-test('a hidden overlay is left alone, z-order included', () => {
+// Opacity and z-order are guarded DIFFERENTLY, on purpose. A hidden window still
+// gets its opacity restored, because that value survives the hide and a later
+// show inherits it. Z-order does not: switchToOverlay re-asserts it on the way
+// in, so re-asserting on a hidden window would reach past what the flush owns.
+test('a hidden overlay gets opacity back but not the z-order re-assert', () => {
   const calls = [];
   const helper = new WindowHelper({});
   helper.overlayWindow = {
@@ -117,7 +125,7 @@ test('a hidden overlay is left alone, z-order included', () => {
   helper.opacityTimeout = setTimeout(() => assert.fail('shield timer survived'), 1_000);
   helper.minimizeWindow();
 
-  assert.deepEqual(calls, ['launcher-opacity']);
+  assert.deepEqual(calls, ['launcher-opacity', 'opacity']);
 });
 
 // A flush with nothing pending must stay a no-op. That early return is the whole
