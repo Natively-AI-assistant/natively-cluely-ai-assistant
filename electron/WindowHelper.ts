@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, screen, systemPreferences } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppState } from './main';
+import type { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import {
   LAUNCHER_ASPECT_RATIO,
@@ -2317,6 +2317,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
             this.pillWindow?.setOpacity(1);
@@ -2415,6 +2416,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
             if (!inactive) this.launcherWindow.focus();
@@ -2538,10 +2540,69 @@ export class WindowHelper {
     menu.popup({ window: win, x: point.x, y: point.y });
   }
 
+  /**
+   * Flush the win32 opacity shield instead of discarding it.
+   *
+   * switchToOverlay / switchToLauncher show a window at opacity 0, call
+   * setContentProtection(true), and restore opacity 60ms later once DWM has
+   * applied the capture-exclusion flag. That restore lives in ONE shared
+   * this.opacityTimeout. minimizeWindow() / closeWindow() used to cancel it with
+   * a bare clearTimeout, so a minimize or a close-to-tray landing inside those
+   * 60ms dropped the pending setOpacity(1) and left the window shown-but-fully-
+   * transparent. The overlay chrome is skipTaskbar:true and the launcher joins it
+   * under undetectable mode, so there is no taskbar button to bring it back — the
+   * app is alive and unreachable. That is issue #529, reported on Windows 2.8.8,
+   * where #509 widened the shield from undetectable-only to the default Windows
+   * path.
+   *
+   * The isVisible() guard is what keeps this off the screenshot path — but not
+   * for the reason it looks like. hideMainWindow() zeroes opacity BEFORE hide()
+   * on win32; what saves us is that it is fully synchronous, so at every yield
+   * point (including the 40ms await in withScreenshotCaptureSession) those
+   * windows already read isVisible() === false. The only place a window sits
+   * visible-at-opacity-0 across a yield is the shield itself, which is exactly
+   * what we want to flush.
+   *
+   * NOT for the shield's own arm sites: they call setOpacity(0) and then cancel
+   * the previous timer, so routing them through here would un-zero the shield
+   * they just applied. They keep their bare clearTimeout.
+   */
+  private finishOpacityShield(): void {
+    if (!this.opacityTimeout) return;
+    clearTimeout(this.opacityTimeout);
+    this.opacityTimeout = null;
+
+    for (const win of [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+    ]) {
+      if (win && !win.isDestroyed() && win.isVisible()) win.setOpacity(1);
+    }
+
+    // The overlay's timer re-asserts z-order alongside the opacity restore,
+    // because DWM can silently demote the HWND across a hide/show. That timer
+    // will never run now, so the flush owes the same re-assert — otherwise an
+    // interrupted switch trades "invisible" for "visible but behind everything".
+    //
+    // Guarded on isVisible(), deliberately, and not on the timer's bare
+    // isDestroyed(): this pairs the re-assert with the opacity restore above. A
+    // hidden overlay was not un-shielded here, and the next switchToOverlay
+    // re-asserts its z-order on the way in regardless.
+    //
+    // The timer's focus() is NOT mirrored. We are on the way into a minimize or
+    // a close-to-tray; stealing focus there is the opposite of what was asked.
+    const overlay = this.overlayWindow;
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible()) {
+      overlay.setAlwaysOnTop(true, 'screen-saver');
+    }
+  }
+
   public minimizeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     win.minimize();
   }
 
@@ -2797,7 +2858,7 @@ export class WindowHelper {
   public closeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     // On Windows/Linux the 'close' event listener intercepts this
     // and hides to tray unless the app is actually quitting.
     win.close();
