@@ -1,4 +1,4 @@
-// src/lib/curlPlaceholderPolicy.ts
+// electron/utils/curlPlaceholderPolicy.ts
 //
 // The placeholder rules for a custom cURL provider template: which spellings
 // count, and what to tell the user when a placeholder survives the raw string
@@ -14,13 +14,34 @@
 // tolerance change has to land in one place, not four.
 //
 // Deliberately dependency-free — no node builtins, no Electron — so the renderer
-// bundle and the main bundle can both take it. (curlUtils itself cannot be the
-// home: it imports node:fs for validateImagePath, which would drag fs into the
-// renderer. src/lib already hosts main↔renderer shared policy this way; see
-// micPermissionPolicy.mjs, which ipcHandlers imports.)
+// can take it too. (curlUtils itself cannot be the home: it imports node:fs for
+// validateImagePath, which would drag fs into the renderer bundle.)
+//
+// WHY IT LIVES UNDER electron/ AND NOT src/lib (2026-09-04): this is
+// main-process policy that the renderer happens to consume, and the renderer
+// already reaches the other way for exactly that reason — see
+// NativelyInterface importing '../../electron/utils/rollingTranscriptState.ts'.
+//
+// The first cut put it in src/lib, which broke a test nothing else catches:
+// EvidenceResolverWiringIdentity emits an UNBUNDLED tree with tsc
+// (electron/tsconfig.emit.json, which covers electron/** only) and requires
+// LLMHelper from it. esbuild inlines a cross-tree import so the shipped bundle
+// is fine, but tsc emits a real require() to a file that is not in the emit
+// tree — MODULE_NOT_FOUND. src/lib/micPermissionPolicy.mjs carries the same
+// latent flaw; it survives only because that test never loads ipcHandlers.
+// Keeping main-process policy inside electron/ keeps the emit tree closed.
 //
 // Platform: pure string and object inspection. No paths, no separators, no
 // platform branch — identical on darwin and win32.
+
+/** The parsed shape curl2Json produces, narrowed to what the rules read. */
+export interface ParsedCurlSurface {
+  url?: unknown;
+  header?: unknown;
+  data?: unknown;
+  form?: unknown;
+  params?: unknown;
+}
 
 /** The prompt placeholder, spacing tolerated: `{{TEXT}}`, `{{ TEXT }}`. */
 export const TEXT_PLACEHOLDER_RE = /\{\{\s*TEXT\s*\}\}/;
@@ -49,15 +70,6 @@ export function safeDecodeURIComponent(value: string): string {
   } catch {
     return value;
   }
-}
-
-/** The parsed shape curl2Json produces, narrowed to what the rules read. */
-export interface ParsedCurlSurface {
-  url?: unknown;
-  header?: unknown;
-  data?: unknown;
-  form?: unknown;
-  params?: unknown;
 }
 
 /**
