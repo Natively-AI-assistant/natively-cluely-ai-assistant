@@ -80,3 +80,28 @@ test('the release workflow allows enough time for the notary retry budget', () =
     `timeout-minutes is ${m[1]}; the retry budget needs materially more than the original 90`
   );
 });
+
+test('the release workflow checks out only the required premium submodule', () => {
+  const workflow = fs.readFileSync(
+    path.join(repoRoot, '.github', 'workflows', 'release-macos.yml'),
+    'utf8'
+  );
+  assert.doesNotMatch(
+    workflow,
+    /submodules:\s*(?:recursive|true)/,
+    'release should explicitly authenticate and fetch only its required private submodule'
+  );
+  assert.match(workflow, /submodule update --init --force -- premium/);
+  assert.match(workflow, /SUBMODULE_TOKEN\s*\|\|\s*secrets\.GH_APP_TOKEN/);
+  assert.match(workflow, /test -f premium\/electron\/knowledge\/CompanyResearchEngine\.ts/);
+});
+
+test('renderer builds carry version and commit provenance', () => {
+  const viteConfig = fs.readFileSync(path.join(repoRoot, 'vite.config.mts'), 'utf8');
+  const about = fs.readFileSync(path.join(repoRoot, 'src', 'components', 'AboutSection.tsx'), 'utf8');
+  assert.match(viteConfig, /process\.env\.VITE_APP_VERSION\s*=\s*version/);
+  assert.match(viteConfig, /process\.env\.VITE_BUILD_COMMIT\s*=/);
+  assert.match(viteConfig, /git['"], \['rev-parse', '--verify', 'HEAD'\]/);
+  assert.match(about, /VITE_APP_VERSION/);
+  assert.match(about, /VITE_BUILD_COMMIT/);
+});
