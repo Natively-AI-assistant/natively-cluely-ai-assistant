@@ -15,6 +15,7 @@ export const DIRECT_ASSIST_PROVIDERS = [
   'litellm',
   'ollama',
   'codex-cli',
+  'antigravity',
   'custom',
   'curl',
 ] as const;

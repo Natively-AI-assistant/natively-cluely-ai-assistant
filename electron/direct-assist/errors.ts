@@ -36,6 +36,15 @@ export function normalizeDirectAssistError(error: unknown): DirectAssistError {
   if (error instanceof DirectAssistError) return error;
 
   const candidate = error as any;
+  if (candidate?.name === 'AntigravityError') {
+    if (candidate.code === 'cancelled') return new DirectAssistError('CANCELLED', 'The request was cancelled.');
+    if (candidate.code === 'auth_required' || candidate.code === 'auth_revoked') {
+      return new DirectAssistError('AUTH_FAILED', 'Sign in to Google Antigravity again in Settings → AI Providers.');
+    }
+    if (candidate.code === 'storage') {
+      return new DirectAssistError('PROVIDER_ERROR', 'Google credentials could not be saved. Check credential storage in Settings and try again.');
+    }
+  }
   if (candidate?.name === 'AbortError' || candidate?.code === 'ABORT_ERR') {
     return new DirectAssistError('CANCELLED', 'The request was cancelled.');
   }
