@@ -42,6 +42,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 
 /**
+ * A file's CODE, with comments stripped.
+ *
+ * Every build script here explains at length why bge-reranker-base was removed
+ * — and a scan of the raw text then reports the explanation as the bug. Two
+ * assertions in this file fell for exactly that before the helper existed, and
+ * so did the extension protocol tests. "This string does not appear" only means
+ * "this is not required" once the prose is gone.
+ */
+function codeOf(relPath) {
+  return fs.readFileSync(path.resolve(repoRoot, relPath), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+}
+
+/**
  * The model that is actually BUNDLED, read from the source.
  *
  * This suite exists to prove the shipped reranker loads and ranks in a packaged
@@ -74,7 +89,7 @@ describe('electron-builder config actually bundles the reranker model (source-pi
     // 0.7558 against a 0.8368 NO-RERANKER baseline, moving 7 of 24 queries
     // down. The installer was 283MB heavier in order to make retrieval worse.
     // docs/reranker-benchmark-2026-09-04.md
-    const script = fs.readFileSync(path.resolve(repoRoot, 'scripts/download-models.js'), 'utf8');
+    const script = codeOf('scripts/download-models.js');
     assert.doesNotMatch(script, /'Xenova\/bge-reranker-base\/onnx\/model_quantized\.onnx'/,
       'requiring the weights would fail every build that no longer downloads them');
     assert.doesNotMatch(script, /pipeline\('text-classification', 'Xenova\/bge-reranker-base'/,
@@ -87,40 +102,45 @@ describe('electron-builder config actually bundles the reranker model (source-pi
     assert.match(script, /process\.exit\(1\)/, 'verifyModels must still fail the build on a missing required file');
   });
 
-  test('the release asset gate matches — JSONs required, weights not', () => {
-    // A gate that still demanded the .onnx would fail every signed build.
-    const gate = fs.readFileSync(path.resolve(repoRoot, 'scripts/verify-packaged-local-assets.mjs'), 'utf8');
-    assert.match(gate, /'Xenova\/bge-reranker-base\/config\.json'/,
-      'the tracked JSONs still ship, so the lazy downloader has a directory');
-    assert.doesNotMatch(gate, /'Xenova\/bge-reranker-base\/onnx\/model_quantized\.onnx'/);
+  test('the release asset gate requires the BUNDLED model, and nothing else', () => {
+    // Written when bge's JSONs were still shipped; they are not any more. A
+    // gate naming a model nothing fetches fails every build — which is exactly
+    // how this assertion earned its keep, by going red the moment the JSONs
+    // were removed and the gate was not updated with them.
+    const gate = codeOf('scripts/verify-packaged-local-assets.mjs');
+    for (const rel of ['config.json', 'tokenizer.json', 'onnx/model_quantized.onnx']) {
+      assert.ok(gate.includes(`${BUNDLED_MODEL}/${rel}`),
+        `the gate must require ${BUNDLED_MODEL}/${rel} — it is what the installer ships`);
+    }
+    assert.doesNotMatch(gate, /bge-reranker-base/,
+      'nothing fetches bge any more, so requiring it would fail every build');
   });
 });
 
-describe('resources/models/Xenova/bge-reranker-base — JSONs tracked, weights not', () => {
-  const dir = path.resolve(repoRoot, 'resources/models/Xenova/bge-reranker-base');
-
-  test('the three tracked JSON files exist with non-zero size', () => {
-    // These are in git and still ship: they cost nothing and give
-    // rerankerDownloadProvider a directory to fill for anyone who explicitly
-    // selects the model.
-    for (const rel of ['tokenizer.json', 'config.json', 'tokenizer_config.json']) {
-      const full = path.join(dir, rel);
-      assert.ok(fs.existsSync(full), `expected ${rel} to exist`);
-      assert.ok(fs.statSync(full).size > 0, `expected ${rel} to be non-empty`);
-    }
+describe('bge-reranker-base is gone from the bundle entirely', () => {
+  // It was the bundled default until 2026-09-04, when it measured WORSE than
+  // no reranker at all (MRR 0.7558 against a 0.8368 baseline). First its
+  // weights stopped being fetched, then its tracked JSONs, its lazy download
+  // provider and worker, and its entries in both build gates were removed —
+  // it was never a catalogue entry, so there was nothing left worth keeping a
+  // download path for. docs/reranker-benchmark-2026-09-04.md
+  test('nothing of it remains in resources/models', () => {
+    assert.equal(
+      fs.existsSync(path.resolve(repoRoot, 'resources/models/Xenova/bge-reranker-base')), false,
+      'the directory should be gone, not merely emptied');
   });
 
-  test('the WEIGHTS are not required to be present', () => {
-    // This used to assert onnx/model_quantized.onnx exists. It passed on a
-    // developer machine that had run download-models before the model was
-    // unbundled, and would have failed on a clean checkout — a test whose
-    // result depends on local history rather than on the repository.
+  test('neither build gate asks for it any more', () => {
+    // A gate still naming it would fail every build, since nothing fetches it.
     //
-    // The weights are no longer downloaded at build time (see step 3 of
-    // download-models.js): the model measured WORSE than no reranker at all.
-    // Present or absent, this must pass.
-    const weights = path.join(dir, 'onnx/model_quantized.onnx');
-    assert.equal(typeof fs.existsSync(weights), 'boolean');
+    // CODE only. Both files explain at length why bge was removed, and a scan
+    // of the raw text reports the explanation as the bug — the same trap that
+    // made the extension protocol tests fail on their own comments.
+    for (const rel of ['scripts/download-models.js', 'scripts/verify-packaged-local-assets.mjs']) {
+      const required = codeOf(rel).slice(0, codeOf(rel).indexOf('];'));
+      assert.doesNotMatch(required, /bge-reranker-base/,
+        `${rel} still requires a model that is no longer shipped`);
+    }
   });
 });
 

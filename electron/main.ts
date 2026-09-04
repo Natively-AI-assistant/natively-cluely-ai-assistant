@@ -8399,15 +8399,11 @@ async function initializeApp() {
     const downloadService = LocalModelDownloadService.getInstance();
     downloadService.registerProvider(createWhisperDownloadProvider());
     downloadService.registerProvider(createNemotronDownloadProvider());
-    // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
-    // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
-    // on first document-grounded mode activation via ModesManager.
-    try {
-        const { createRerankerDownloadProvider } = require('./rag/rerankerDownloadProvider');
-        downloadService.registerProvider(createRerankerDownloadProvider());
-    } catch (e: any) {
-        console.warn('[main] Reranker download provider registration failed (non-fatal):', e?.message);
-    }
+    // No reranker download provider. It existed to lazily fetch the 283MB
+    // bge-reranker-base on first mode activation; that model was removed on
+    // 2026-09-04 (it measured WORSE than no reranker at all), and the 24MB
+    // ms-marco that replaced it is BUNDLED, so there is nothing to fetch.
+    // Every other reranker comes through the catalogue installer instead.
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }

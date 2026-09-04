@@ -179,7 +179,7 @@ class LocalRerankerImpl {
             candidates.push(process.env.NATIVELY_LOCAL_MODELS_PATH);
         }
         // 2026-07-06: lazy-download user-data cache is the primary location
-        // (populated by rerankerDownloadProvider on first mode activation).
+        // (populated by the catalogue installer when a model is downloaded).
         // Falls through to bundled resourcesPath candidates for legacy
         // installs that already have the model in the bundle from a prior
         // v2.7.x build.

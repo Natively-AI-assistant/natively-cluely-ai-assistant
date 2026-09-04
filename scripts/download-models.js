@@ -17,10 +17,8 @@ const REQUIRED_MODEL_FILES = [
     'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
     'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
     // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
-    // 2026-09-04 — see step 3 below for the numbers. bge's own weights are
-    // deliberately absent from this list; its three tracked JSON files stay in
-    // resources/models/ so the lazy downloader has a directory to fill, but
-    // requiring them here would fail a build that never fetches the weights.
+    // 2026-09-04 — see step 3 below for the numbers. bge is gone entirely: not
+    // bundled, not lazily downloaded, not in the catalogue.
     'Xenova/ms-marco-MiniLM-L-6-v2/config.json',
     'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json',
     'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json',
@@ -153,8 +151,11 @@ async function downloadModels() {
         //    improves the ranking — so the low-confidence escalation in
         //    ModeHybridRetriever has a beneficiary again.
         //
-        //    bge is still reachable for anyone who wants it: it stays in the
-        //    catalogue and rerankerDownloadProvider.ts fetches it on demand.
+        //    bge is not reachable at all any more, deliberately. It was never a
+        //    catalogue entry — only the bundled default plus a lazy downloader
+        //    written for it — so with the bundle gone there was nothing left
+        //    worth keeping a download path for. Better local rerankers are one
+        //    click away in the catalogue.
         console.log('[download-models] Downloading Xenova/ms-marco-MiniLM-L-6-v2 (q8)...');
         await pipeline('text-classification', 'Xenova/ms-marco-MiniLM-L-6-v2', QUANTIZED);
         console.log('[download-models] ms-marco-MiniLM-L-6-v2 downloaded.');
