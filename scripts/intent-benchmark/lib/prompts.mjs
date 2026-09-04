@@ -113,7 +113,64 @@ legacy_intent  Additionally map the turn onto the OLD eight-label taxonomy so th
                Pick the closest. Most live non-questions map to "general".
 `;
 
-export function buildGenerationPrompt({ modeKey, spec, category, count, withFiles }) {
+/**
+ * Code-switching briefs.
+ *
+ * Both are Latin script, because that is what an English-trained STT model
+ * emits when it hears Hindi or Malayalam: it transliterates rather than
+ * switching alphabet, and it mangles the non-English words in characteristic
+ * ways. Devanagari or Malayalam script in `input` would be wrong for this
+ * pipeline, not more authentic.
+ *
+ * These are generated but NOT verified by a speaker of either language, so the
+ * slices are reported separately and never gated on. A synthetic guess at
+ * code-switching can look plausible to someone who does not speak it and still
+ * be wrong about which words switch and where.
+ */
+export const LANGUAGE_BRIEFS = {
+  hinglish: `LANGUAGE: HINGLISH (Hindi-English code-switching), as an English-trained
+speech model transcribes it.
+
+- Latin script only. Never Devanagari.
+- Switch mid-sentence the way bilingual professionals actually do: English for
+  technical nouns, Hindi for the connective and emotional tissue. "matlab", "toh",
+  "haan", "nahi", "thoda", "abhi", "kya", "bas", "acha", "theek hai", "yaar",
+  "kar diya", "ho gaya", "karna hai", "chahiye", "lagta hai", "pata nahi".
+- Technical terms stay English: "deployment", "latency", "pull request", "sprint".
+- The model mis-transcribes Hindi words it half-knows: "matlab" as "mutlub",
+  "acha" as "archa", "theek" as "teek", "haan" as "han" or "hun". Use this in
+  maybe one line in five.
+- All the English STT rules still apply: no punctuation, no capitals, fillers,
+  repairs, mid-sentence cuts.
+
+Examples of the SHAPE (do not copy these):
+  "toh matlab uh deployment kab hoga"
+  "haan haan wo to ho gaya bas testing baaki hai"
+  "nahi yaar thoda latency issue aa raha hai abhi"`,
+
+  manglish: `LANGUAGE: MANGLISH (Malayalam-English code-switching), as an
+English-trained speech model transcribes it.
+
+- Latin script only. Never Malayalam script.
+- Malayalam carries the grammar and the discourse markers, English carries the
+  technical nouns: "enthaa", "alle", "aanu", "illa", "und", "pinne", "ippo",
+  "sheri", "athu", "ithu", "cheyyam", "venam", "ariyilla", "nokkam", "mathi",
+  "kittiyo", "parayu", "ok aanu".
+- Malayalam agglutinates, so the model runs words together or splits them
+  wrongly: "cheyyanam" as "cheyanam" or "cheyya nam", "ariyilla" as "ari illa",
+  "enthaanu" as "entha anu". Use this in maybe one line in four, since it is
+  more common than the Hindi case.
+- Technical terms stay English: "database", "merge", "standup", "release".
+- All the English STT rules still apply: no punctuation, no capitals, fillers,
+  repairs, mid-sentence cuts.
+
+Examples of the SHAPE (do not copy these):
+  "athu enthaa uh ippo release cheyyan pattille"
+  "sheri sheri njan nokkam pinne parayam"
+  "illa database issue und ippo"`,
+};
+
+export function buildGenerationPrompt({ modeKey, spec, category, count, withFiles, language = 'en' }) {
   const cat = CATEGORY_BRIEFS[category];
   if (!cat) throw new Error(`unknown category ${category}`);
 
@@ -132,6 +189,7 @@ ${cat.brief}
 
 Produce exactly ${count} rows.
 ${STT_RULES}
+${language !== 'en' ? LANGUAGE_BRIEFS[language] ?? '' : ''}
 ${LABEL_RULES}
 
 Also provide for each row:

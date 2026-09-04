@@ -56,7 +56,7 @@ function doExport() {
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
   const header = [
-    'id', 'mode', 'channel', 'has_files', 'input',
+    'id', 'mode', 'lang', 'channel', 'has_files', 'input', 'restored',
     ...REVIEW_AXES,
     'WRONG_AXES', 'CORRECTION', 'COMMENT',
   ];
@@ -75,6 +75,17 @@ function doExport() {
     '# stay silent: backchannels, the other party thinking aloud, your own voice',
     '# on your own mic, admin chatter.',
     '#',
+    '# The `lang` column marks Hinglish and Manglish rows. Those were generated',
+    '# without a speaker of either language checking them, so they need your eye',
+    '# most: is the code-switching where a real speaker would put it, and do the',
+    '# mis-transcriptions look like what a model actually gets wrong? They are',
+    '# reported separately and never gated on, so a verdict of "unnatural" is a',
+    '# useful answer, not a failure.',
+    '#',
+    '# `restored` is candidate P output (punctuation + truecasing). You are NOT',
+    '# reviewing it; it is there because a question mark often makes the correct',
+    '# label obvious.',
+    '# stay silent: backchannels, the other party thinking aloud, your own voice',
     '# Any axis where you disagree on more than 10% of rows means that axis is',
     '# DEFINED wrong, not labelled wrong, and gets rewritten before Phase 4.',
     '#',
@@ -83,8 +94,8 @@ function doExport() {
 
   for (const r of sample) {
     lines.push([
-      r.id, r.mode, r.channel, r.mode_has_reference_files ? 'Y' : 'N',
-      tsvEscape(r.input),
+      r.id, r.mode, r.language ?? 'en', r.channel, r.mode_has_reference_files ? 'Y' : 'N',
+      tsvEscape(r.input), tsvEscape(r.input_punctuated ?? ''),
       ...REVIEW_AXES.map((a) => tsvEscape(r.labels?.[a])),
       '', '', '',
     ].join('\t'));

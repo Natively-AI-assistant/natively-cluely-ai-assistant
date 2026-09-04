@@ -88,7 +88,7 @@ The consequence has to be stated rather than buried. Because `voice` is a determ
 
 | Property | Value | Requirement |
 |---|---|---|
-| rows | 1,813 | 1,500 for the first benchmark run |
+| rows | 2,008 (1,813 English + 195 code-switched) | 1,500 for the first benchmark run |
 | held out | 377, 20.8% | 20% |
 | `needs_response = no` | 775, 42.7% | at least 40% |
 | rows per built-in mode | 151 to 200 | at least 150 |
@@ -102,6 +102,40 @@ The consequence has to be stated rather than buried. Because `voice` is a determ
 The legacy control labels are present on every row and are balanced by construction: `follow_up` has 95 rows here against 0.2% of production traffic. That is the balanced-versus-weighted decision doing its job. A production-weighted corpus would have given it three rows and a held-out split with none, and its per-label F1 would have been unmeasurable.
 
 `reports/handcheck-v1.tsv` holds the 373-row founder review sample, spread across every mode.
+
+## Candidate P: punctuation and truecasing restoration
+
+The brief assumed an off-the-shelf ONNX restoration model existed. None does in a transformers.js layout. `1-800-BAD-CODE/punctuation_fullstop_truecase_english` ships a raw `.onnx` but pairs it with a SentencePiece model and no `tokenizer.json`, which would mean adding a native SentencePiece dependency to an Electron app that already carries a lot of native-module surface.
+
+So the model is exported here instead, which is the path the brief explicitly allows. `tools/export_punctuation_onnx.py` exports `unikei/distilbert-base-re-punctuate`, whose 24 labels fuse a casing decision and a trailing-punctuation decision into one token (`{UPPER|Upper|lower}{_|.|,|!|?|:|;|-}`). That fusion is why one model covers both halves of what the brief calls punctuation and truecasing.
+
+The export writes only `onnx/model_quantized.onnx`, 65MB. It deliberately deletes the fp32 graph, because torch 2.12's exporter puts weights in a sidecar `.data` file and shipping both would add 265MB of dead weight that nothing loads: every ONNX consumer in this repo passes `dtype: 'q8'`.
+
+The model is gitignored, like every other model in `resources/models`. The export script is the reproducible way to obtain it.
+
+The decoder is production code, `electron/llm/punctuationRestoration.ts`, not a harness copy, so the benchmark measures what would ship. It is pure, so the whole subword problem is testable without loading anything. Restoration runs in its own worker, because the worker rule applies here as everywhere else.
+
+### What restoration actually buys, measured
+
+Over all 2,008 rows, restoration ran at p50 3.0ms and p95 5.3ms inside the worker, and zero rows were rejected by the faithfulness guard.
+
+| Language | rows | questions | question mark recovered | false positive |
+|---|---|---|---|---|
+| English | 1,813 | 514 | 42.4% | 13.2% |
+| Hinglish | 88 | 35 | 34.3% | 15.1% |
+| Manglish | 107 | 28 | 10.7% | 10.1% |
+
+The English number is modest and the Manglish number is close to useless, which is expected: the model is English-only, and Malayalam code-switching is outside its training distribution entirely. This is exactly the measurement candidate P exists to produce. Whether restoration helps a given candidate is now an empirical question the harness can answer per provider, rather than an assumption baked into the corpus.
+
+Two caveats on reading the recall figure. Some rows labelled `question` are mid-sentence cuts where the endpointer fired early, so no sentence-final mark is correct for them and a miss is not an error. And the false-positive rate matters as much as recall here, because the downstream scorer treats `restored` as weaker evidence than a provider mark precisely so a wrong question mark cannot do the damage the LocalWhisper mis-stamp once did.
+
+Raw text is never overwritten. `input_punctuated` is a second field, and a restoration that changes any WORD rather than only marks and casing is rejected outright.
+
+## Hinglish and Manglish
+
+88 Hinglish and 107 Manglish rows, across team-meet, technical-interview, sales and call-center. Latin script only, because that is what an English-trained STT model emits when it hears Hindi or Malayalam: it transliterates rather than switching alphabet, and mangles the non-English words characteristically.
+
+These were generated but NOT verified by a speaker of either language. They are in `reports/handcheck-v1.tsv` with a `lang` column so the review can cover them, and they are reported separately and never gated on. A synthetic guess at code-switching can look plausible to someone who does not speak the language and still be wrong about which words switch and where, so a review verdict of "unnatural" is a useful answer rather than a failure.
 
 ## Running it
 
