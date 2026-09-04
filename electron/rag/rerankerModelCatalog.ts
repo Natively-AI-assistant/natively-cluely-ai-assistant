@@ -235,7 +235,13 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
   },
   {
     id: 'ettin-reranker-68m',
+    // The best Apache-2.0 local reranker measured: 21/24 top-1, MRR 0.9205
+    // against a 0.8368 baseline, at 278MB and ~2.3s. Recommended as the
+    // commercially-usable choice, since the stronger jina-reranker-v3.5 is
+    // CC-BY-NC. Note that its bigger sibling ettin-150m scored LOWER (0.9125)
+    // for twice the size and twice the latency, so size is not the axis here.
     name: 'Ettin Reranker 68M',
+    recommended: true,
     runtime: 'onnx',
     repo: 'cross-encoder/ettin-reranker-68m-v1',
     modelId: 'cross-encoder/ettin-reranker-68m-v1',
@@ -328,12 +334,17 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
   // ── GGUF, run by llama.cpp in-process (node-llama-cpp) ──────────────────
   {
     id: 'bge-reranker-v2-m3-q4km',
+    // NOT recommended any more. Measured 2026-09-04 against a no-reranker
+    // baseline on a 40-passage pool with same-topic distractors: MRR 0.8618
+    // against the baseline's 0.8368 — the second-weakest working model in the
+    // catalogue, and it moved 3 queries DOWN. It was the only recommendation
+    // here, chosen before the benchmark existed.
     name: 'BGE Reranker v2 m3',
     runtime: 'gguf',
     repo: 'gpustack/bge-reranker-v2-m3-GGUF',
     revision: '3093af03b1a635e67b084b1d8c03c5f5e020fd05',
     supported: true,
-    recommended: true,
+    recommended: false,
     files: [
       { repoPath: 'bge-reranker-v2-m3-Q4_K_M.gguf', bytes: 438376864, sha256: 'e186a244ed455b4ab66ec64339ce7427a6ae13f5c0b5e544de96e50f0f8b3673' },
     ],
@@ -347,7 +358,14 @@ export const RERANKER_MODEL_CATALOG: LocalRerankerModel[] = [
   // ── GGUF: listwise, scored by Core itself ───────────────────────────────
   {
     id: 'jina-reranker-v3.5-q4km',
+    // The best LOCAL reranker measured: 22/24 top-1, MRR 0.9514 against a
+    // 0.8368 baseline, and it moved nothing down (+5/-0). See
+    // docs/reranker-benchmark-2026-09-04.md. Recommended WITH the licence
+    // caveat below — CC-BY-NC means it cannot be used commercially, which is
+    // why the Apache-licensed ettin-68m is recommended beside it rather than
+    // replaced by it.
     name: 'Jina Reranker v3.5',
+    recommended: true,
     runtime: 'gguf',
     repo: 'jinaai/jina-reranker-v3.5-GGUF',
     revision: '884f7c67aa3ac24edb89064da8c7bfd03f4a90f5',
