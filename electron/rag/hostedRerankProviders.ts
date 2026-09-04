@@ -67,10 +67,15 @@ export const HOSTED_RERANK_PROVIDERS: Record<HostedRerankProviderId, HostedReran
     // v3.5; TextRerankerRequest covers v2 and the v1 family; m0 is multimodal.
     // A fixed enum, so there is nothing to discover.
     models: [
-      { id: 'jina-reranker-v3.5', label: 'Jina Reranker v3.5', recommended: true, note: 'Listwise, multilingual, 131K context. Cannot run locally — this is the only way to use it.' },
-      { id: 'jina-reranker-v3', label: 'Jina Reranker v3', note: 'The previous listwise model.' },
-      { id: 'jina-reranker-m0', label: 'Jina Reranker m0', note: 'Multimodal. Natively sends text only.' },
-      { id: 'jina-reranker-v2-base-multilingual', label: 'Jina Reranker v2 Multilingual', note: 'Also downloadable to run on this device.' },
+      // The notes were removed once because v3.5's had gone stale — it said
+      // "cannot run locally", which stopped being true when Core learned the
+      // listwise protocol. Deleting all four took the card's only explanatory
+      // text with it: RerankerSettings renders these under a static catalogue
+      // and shows nothing when they are absent. Corrected rather than dropped.
+      { id: 'jina-reranker-v3.5', label: 'Jina Reranker v3.5', recommended: true, note: 'Listwise, multilingual, 131K context. Also downloadable to run on this device (410MB); hosted needs no download and no warm-up.' },
+      { id: 'jina-reranker-v3', label: 'Jina Reranker v3', note: 'The previous listwise model. Hosted only.' },
+      { id: 'jina-reranker-m0', label: 'Jina Reranker m0', note: 'Multimodal. Natively sends text only, so its image capability goes unused here.' },
+      { id: 'jina-reranker-v2-base-multilingual', label: 'Jina Reranker v2 Multilingual', note: 'A plain cross-encoder. Also downloadable to run on this device (297MB).' },
     ],
     staticCatalogue: true,
   },
