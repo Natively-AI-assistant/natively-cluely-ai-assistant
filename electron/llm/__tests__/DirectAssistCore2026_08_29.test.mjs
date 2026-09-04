@@ -806,7 +806,11 @@ test('custom provider carries split SSE lines and Direct system instructions saf
   assert.match(custom, /const parseCompleteChunkFrame = \(\): \{ complete: boolean; item: string \| null \}/);
   assert.match(custom, /const chunkFrame = parseCompleteChunkFrame\(\)/);
   assert.match(custom, /const decoderTail = streamDecoder\.decode\(\)/);
-  assert.match(custom, /this\.parseStreamLine\(lineBuffer\)/);
+  // The decoder tail must be flushed THROUGH parseStreamLine — that is the
+  // property. The argument list is not: this branch honours the user's
+  // configured responsePath, so the call carries a second argument, and
+  // pinning the exact signature turned that feature into a red test.
+  assert.match(custom, /this\.parseStreamLine\(lineBuffer[,)]/);
 });
 
 test('custom vision injection follows optimized MIME and restores raw fallback MIME', () => {

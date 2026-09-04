@@ -4561,13 +4561,16 @@ let isMultimodal = !!(imagePaths?.length);
       if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
     }
 
-    // 4b. SECURITY (P1): Validate URL against SSRF before making the request
-    const { validateUrlForSsrf } = require('./utils/curlUtils');
-    const urlValidation = validateUrlForSsrf(url);
-    if (!urlValidation.isValid) {
-      console.error(`[LLMHelper] executeCustomProvider: SSRF blocked: ${urlValidation.reason}`);
-      throw new Error(`SSRF protection blocked URL (${urlValidation.reason})`);
-    }
+    // 4b. NO validateUrlForSsrf here — deliberately. It blocks loopback and
+    //     RFC-1918, which are exactly the hosts a custom provider exists to
+    //     reach: Ollama on 127.0.0.1, LM Studio on the LAN, llama.cpp on
+    //     localhost. SSRF protection is for attacker-influenced URLs; this one
+    //     is typed into a settings field by the person running the app, so the
+    //     metadata-host guard above is the check that still applies.
+    //
+    //     It came back through the main merge on 2026-09-04 and broke every
+    //     local endpoint — 8 CustomProviderWirePayload cases went red with
+    //     "SSRF protection blocked URL (Loopback addresses are not allowed)".
 
     // 5. Execute Fetch (30s timeout — same as RestSTT uploads)
     const customAbort = new AbortController();
@@ -9160,27 +9163,18 @@ let isMultimodal = !!(imagePaths?.length);
       body = injectImageIntoMessages(body, base64Image, preparedImagePath);
     }
 
-    // BOTH checks run. They are complementary, not alternatives:
-    // validateUrlForSsrf rejects file:/data:/javascript:/protocol-relative and
-    // malformed URLs; blockedInfrastructureHost rejects cloud and container
-    // metadata hosts (the whole 169.254/16, metadata.google.internal,
-    // fd00:ec2::254). Neither blocks loopback or private ranges, so running both
-    // costs no legitimate custom provider — a local Ollama endpoint still works.
-    // The branch comment that said the broad SSRF check was "deliberately not
-    // used here" predates this function gaining a strict-error path.
-    const { validateUrlForSsrf } = require('./utils/curlUtils');
-    const urlValidation = validateUrlForSsrf(url);
-    if (!urlValidation.isValid) {
-      if (strictErrors) {
-        throw new DirectAssistError('INVALID_REQUEST', 'The custom provider URL was blocked by network safety policy.');
-      }
-      console.error(`[LLMHelper] streamWithCustom: SSRF blocked: ${urlValidation.reason}`);
-      yield `Error: SSRF protection blocked URL (${urlValidation.reason})`;
-      return;
-    }
-    // The second half of the pair. Thrown rather than yielded, so the fallback
-    // chain classifies it as a provider failure instead of printing an error
-    // where the model's reply belongs.
+    // ONE check, not two. An earlier resolution of this merge ran
+    // validateUrlForSsrf here as well, on the stated reasoning that it "rejects
+    // file:/data:/javascript: and malformed URLs" and that "neither blocks
+    // loopback or private ranges". That was simply wrong: it rejects loopback,
+    // link-local, RFC-1918 and IPv6 ULA too, and a custom provider pointed at
+    // Ollama on 127.0.0.1 is the ordinary case, not an attack.
+    //
+    // blockedInfrastructureHost is the guard that belongs here: cloud and
+    // container metadata hosts (the whole 169.254/16, metadata.google.internal,
+    // fd00:ec2::254) stay refused, and a local endpoint keeps working. Thrown
+    // rather than yielded, so the fallback chain classifies it as a provider
+    // failure instead of printing an error where the model's reply belongs.
     {
       const blocked = blockedInfrastructureHost(url);
       if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
@@ -9231,6 +9225,16 @@ let isMultimodal = !!(imagePaths?.length);
       let yieldedAny = false;
       const streamDecoder = new TextDecoder();
       let lineBuffer = "";
+      // Every parseStreamLine call passes the configured responsePath. This
+      // helper arrived with the main merge and omitted it, which put a whole
+      // non-streaming JSON body back on the raw-JSON path: such a body is ONE
+      // complete object on ONE line, so it lands here rather than in the
+      // !yieldedAny fallback, and without the path the user saw
+      // `{"data":{"answer":"..."}}` instead of the answer.
+      //
+      // Safe to pass unconditionally: parseStreamLine ignores it for `data: `
+      // SSE frames, which are deltas a whole-body path cannot address, and
+      // applies it only to a complete JSON object.
       const parseCompleteChunkFrame = (): { complete: boolean; item: string | null } => {
         const trimmed = lineBuffer.trim();
         if (!trimmed) return { complete: false, item: null };
@@ -9239,7 +9243,7 @@ let isMultimodal = !!(imagePaths?.length);
           if (payload === '[DONE]') return { complete: true, item: null };
           try {
             JSON.parse(payload);
-            return { complete: true, item: this.parseStreamLine(trimmed) };
+            return { complete: true, item: this.parseStreamLine(trimmed, this.customProvider?.responsePath) };
           } catch {
             return { complete: false, item: null };
           }
@@ -9247,7 +9251,7 @@ let isMultimodal = !!(imagePaths?.length);
         if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
           try {
             JSON.parse(trimmed);
-            return { complete: true, item: this.parseStreamLine(trimmed) };
+            return { complete: true, item: this.parseStreamLine(trimmed, this.customProvider?.responsePath) };
           } catch {
             return { complete: false, item: null };
           }
@@ -9294,7 +9298,7 @@ let isMultimodal = !!(imagePaths?.length);
       fullBody += decoderTail;
       lineBuffer += decoderTail;
       if (lineBuffer.trim().length > 0) {
-        const item = this.parseStreamLine(lineBuffer);
+        const item = this.parseStreamLine(lineBuffer, this.customProvider?.responsePath);
         if (item) {
           yield item;
           yieldedAny = true;

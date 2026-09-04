@@ -46,6 +46,17 @@ const root = path.resolve(__dirname, '../../..');
 const require = createRequire(import.meta.url);
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 
+/**
+ * Source with comments stripped.
+ *
+ * Every assertion below that looks for a guard's NAME must use this. The
+ * comment in chatWithCurl explaining that validateUrlForSsrf is deliberately
+ * absent contains the string "validateUrlForSsrf", so a raw scan scored a hit
+ * on the sentence saying the call is not there — the assertion passed while
+ * asserting the opposite of the code.
+ */
+const codeOf = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
 const { blockedInfrastructureHost, validateUrlForSsrf } =
   require(path.join(root, 'dist-electron/electron/utils/curlUtils.js'));
 
@@ -181,12 +192,22 @@ test('custom cURL transports never follow an unvalidated redirect target', () =>
     assert.ok(entry.start >= 0, `${entry.name} should exist`);
     const end = source.indexOf(entry.endMarker, entry.start);
     assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
-    const body = source.slice(entry.start, end);
-    const validationAt = body.indexOf('validateUrlForSsrf');
+    const body = codeOf(source.slice(entry.start, end));
+    // Each transport names the guard that applies to it. chatWithCurl reaches
+    // USER-CONFIGURED endpoints — Ollama on 127.0.0.1, LM Studio on the LAN —
+    // so the full range check would refuse the feature's whole purpose; the
+    // metadata-host guard is what it must have. streamWithDirectCurl is Direct
+    // Assist's own path and keeps validateUrlForSsrf.
+    // `guard(url)`, not the bare identifier: the destructuring `const {
+    // validateUrlForSsrf } = require(...)` also contains the name, so a
+    // presence check stayed green when the CALL was replaced by a constant.
+    // Caught by mutation probe, not by reading.
+    const guard = entry.name.startsWith('legacy') ? 'blockedInfrastructureHost' : 'validateUrlForSsrf';
+    const validationAt = body.indexOf(`${guard}(url)`);
     const axiosAt = body.indexOf('axios({');
     const redirectsAt = body.indexOf('maxRedirects: 0');
 
-    assert.ok(validationAt >= 0, `${entry.name} should validate its destination`);
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination via ${guard}`);
     assert.ok(axiosAt > validationAt, `${entry.name} should validate before dispatch`);
     assert.ok(
       redirectsAt > axiosAt,
@@ -227,7 +248,7 @@ test('fetch-based custom providers refuse redirects instead of replaying sensiti
   }
 });
 
-test('fetch-based custom providers validate their destination against SSRF-protected ranges', () => {
+test('fetch-based custom providers refuse metadata hosts — and stay able to reach localhost', () => {
   const source = read('electron/LLMHelper.ts');
   const cases = [
     {
@@ -247,12 +268,27 @@ test('fetch-based custom providers validate their destination against SSRF-prote
     const end = source.indexOf(entry.endMarker, entry.start);
     assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
 
-    const body = source.slice(entry.start, end);
-    const validationAt = body.indexOf('validateUrlForSsrf');
+    const body = codeOf(source.slice(entry.start, end));
+    const validationAt = body.indexOf('blockedInfrastructureHost(url)');
     const fetchAt = body.indexOf('fetch(url, {');
 
-    assert.ok(validationAt >= 0, `${entry.name} should validate its destination against SSRF-protected ranges`);
-    assert.ok(fetchAt > validationAt, `${entry.name} should validate before dispatch`);
+    // POLICY, and a deliberate departure from what this test asserted when it
+    // arrived from main. It required validateUrlForSsrf here, which rejects
+    // loopback, link-local, RFC-1918 and IPv6 ULA. Those are precisely the
+    // hosts a custom provider exists to reach, and enforcing it broke 8
+    // CustomProviderWirePayload cases with "Loopback addresses are not
+    // allowed". SSRF protection guards attacker-influenced URLs; this endpoint
+    // is typed into a settings field by the person running the app.
+    //
+    // What must still be refused is the metadata plane, and that is
+    // blockedInfrastructureHost: the whole 169.254/16, metadata.google.internal,
+    // fd00:ec2::254. Proven at runtime, not just here — all four are refused
+    // while 127.0.0.1 and 192.168.x reach the network.
+    assert.ok(validationAt >= 0, `${entry.name} must refuse cloud/container metadata hosts`);
+    assert.ok(fetchAt > validationAt, `${entry.name} should check the host before dispatch`);
+    assert.equal(body.includes('validateUrlForSsrf'), false,
+      `${entry.name} must NOT use the full range check — it blocks the localhost and LAN `
+      + 'endpoints a custom provider is configured to reach');
   }
 });
 
