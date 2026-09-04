@@ -126,3 +126,29 @@ test('every description of the bundled model names the SAME one', () => {
   assert.equal(fallback, modelId,
     'the preflight fallback names a different model than the one that actually loads');
 });
+
+test("the renderer's first-paint placeholder names the bundled model too", () => {
+  // INITIAL_STATUS renders before reranker:get-status answers, so its builtIn
+  // is what the panel shows for the first frame of every visit. It named
+  // bge-reranker-base after the swap — briefly telling the user the app bundles
+  // a model it had just removed. It is the one copy of the name that lives in
+  // the renderer, which cannot import the main-process catalogue, so a test is
+  // what keeps it honest.
+  const panel = fs.readFileSync(path.join(repoRoot, 'src/components/settings/RerankerSettings.tsx'), 'utf8');
+  const localReranker = fs.readFileSync(path.join(repoRoot, 'electron/rag/LocalReranker.ts'), 'utf8');
+  const bareId = localReranker.match(/const DEFAULT_RERANKER_MODEL = 'Xenova\/([^']+)'/)?.[1];
+  assert.ok(bareId, 'DEFAULT_RERANKER_MODEL is gone');
+
+  const initial = panel.slice(panel.indexOf('const INITIAL_STATUS'), panel.indexOf('export const RerankerSettings'));
+  assert.ok(initial.length > 0, 'INITIAL_STATUS is gone from the panel');
+  assert.match(initial, new RegExp(`id: '${bareId}'`),
+    `the first-paint placeholder must name ${bareId}, the model that actually ships`);
+
+  // And the dead `??` fallback must not come back. CODE only: the comment that
+  // explains its removal necessarily QUOTES the expression, so a raw scan
+  // reports the explanation as the defect. That trap has now cost four separate
+  // false failures in this codebase.
+  const code = panel.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.doesNotMatch(code, /\?\?\s*'MS MARCO[^']*'/,
+    'an unreachable fallback literal is a copy of the name that nothing keeps in step');
+});
