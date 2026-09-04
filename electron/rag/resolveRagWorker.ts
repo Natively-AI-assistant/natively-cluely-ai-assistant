@@ -67,16 +67,31 @@ const MAX_ASCENT = 6;
 export function resolveBundledScript(
   fromDir: string,
   segments: readonly string[],
-  exists: (p: string) => boolean = fs.existsSync,
+  opts: {
+    exists?: (p: string) => boolean;
+    /**
+     * Rewrite a path landing inside app.asar to the unpacked tree.
+     *
+     * OPT-IN, and it must stay that way. `fs.existsSync` returns true for a
+     * path inside app.asar — Electron patches fs to make the archive look like
+     * a directory — so a resolved candidate always "exists", and rewriting it
+     * to app.asar.unpacked produces a path that exists ONLY if electron-builder
+     * was told to unpack that file. Rewriting unconditionally therefore turns a
+     * working packaged path into a missing one, silently, for any script that
+     * is not in `build.asarUnpack`.
+     *
+     * Every caller passing true must have a matching asarUnpack glob;
+     * AsarUnpackedScriptsExist2026_09_04 pins that pairing.
+     */
+    unpackFromAsar?: boolean;
+  } = {},
 ): string {
+  const exists = opts.exists ?? fs.existsSync;
   const candidates: string[] = [];
 
-  // Alongside us first: true when the caller IS that bundle, and cheapest.
-  candidates.push(path.join(fromDir, ...segments));
-
-  // Then every ancestor, each checked both as an app root
-  // (`electron/<segments>`) and as the electron root (`<segments>`). Ordered
-  // nearest-first so a nested app directory cannot shadow the real one.
+  // Every ancestor, each checked both as an app root (`electron/<segments>`)
+  // and as the electron root (`<segments>`). Starts AT fromDir and is ordered
+  // nearest-first, so a nested app directory cannot be shadowed by an outer one.
   let dir = fromDir;
   for (let i = 0; i < MAX_ASCENT; i++) {
     candidates.push(path.join(dir, ...segments));
@@ -86,13 +101,11 @@ export function resolveBundledScript(
     dir = parent;
   }
 
-  return unpackAsar(candidates.find(p => exists(p)) ?? candidates[0]);
+  const resolved = candidates.find(p => exists(p)) ?? candidates[0];
+  return opts.unpackFromAsar ? unpackAsar(resolved) : resolved;
 }
 
-/**
- * A script that loads a native addon cannot be read from inside an asar
- * archive, so any path landing inside one is rewritten to the unpacked tree.
- */
+/** Rewrite a path inside app.asar to the unpacked tree beside it. */
 function unpackAsar(p: string): string {
   return p.includes('app.asar') && !p.includes('app.asar.unpacked')
     ? p.replace('app.asar', 'app.asar.unpacked')
@@ -115,5 +128,11 @@ export function resolveRagWorker(
   // caught immediately — hence it being spelled out here rather than folded in.
   const beside = path.join(fromDir, fileName);
   if (exists(beside)) return unpackAsar(beside);
-  return resolveBundledScript(fromDir, ['rag', fileName], exists);
+  // The not-found path must still name the CALLER's directory, not a `rag/`
+  // subdirectory of it: the MODULE_NOT_FOUND that worker_threads throws is the
+  // only diagnostic when a worker genuinely cannot be found, and it should
+  // point somewhere the reader recognises.
+  const resolved = resolveBundledScript(fromDir, ['rag', fileName],
+    { exists, unpackFromAsar: true });
+  return exists(resolved) || resolved.includes('app.asar') ? resolved : unpackAsar(beside);
 }
