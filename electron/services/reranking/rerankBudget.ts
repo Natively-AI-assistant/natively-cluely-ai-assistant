@@ -6,11 +6,12 @@
  * a user who never opened the panel would not pay a cold 400MB ONNX load on
  * their first-useful-token path just because reranking exists.
  *
- * As of 57cefce3 the bundled model no longer runs at all — it benchmarked WORSE
- * than no reranker (MRR 0.7558 vs a 0.8368 baseline), so `shouldRerank` is now
- * `explicitlySelected || rerankerOverride`. BUNDLED_RERANK_BUDGET_MS therefore
- * survives for the test-override path and as the floor this resolver degrades
- * to; it is no longer the budget of a shipping default.
+ * That reason still holds. `bge-reranker-base` was removed outright (it
+ * benchmarked WORSE than no reranker at all: MRR 0.7558 against a 0.8368
+ * baseline), but a bundled default remains — `Xenova/ms-marco-MiniLM-L-6-v2` —
+ * and `shouldRerank` is `explicitlySelected || lowConfidence || rerankerOverride`,
+ * so a low-confidence turn still escalates to it. BUNDLED_RERANK_BUDGET_MS is
+ * therefore the budget of a real shipping path, not a vestige.
  *
  * It is the wrong deadline for a reranker the user chose. Measured on a real
  * configuration (2026-09-04): `qwen/qwen3-reranker-8b` via OpenRouter, whose
