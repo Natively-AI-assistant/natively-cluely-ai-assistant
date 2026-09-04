@@ -7,7 +7,7 @@ affiliation.
 
 ## Provenance
 
-Thirteen SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
+Sixteen SVGs are vendored from [`@lobehub/icons-static-svg`][pkg] v1.94.0
 (MIT, © 2023 LobeHub — full text in `LICENSE` beside this file).
 
 ```
@@ -24,6 +24,9 @@ elevenlabs.svg   ← elevenlabs.svg
 apple.svg        ← apple.svg
 microsoft.svg    ← microsoft-color.svg   (title corrected, see below)
 nvidia.svg       ← nvidia-color.svg
+openrouter.svg   ← openrouter.svg       (monochrome, see below)
+voyage.svg       ← voyage.svg           (monochrome, see below)
+jina.svg         ← jina.svg             (monochrome, only variant upstream)
 ```
 
 The last four were added for the speech provider selector, and the variant taken
@@ -41,6 +44,40 @@ identically in both themes. It arrives already `1em`-sized, so unlike
 
 Before this file existed the provider rendered an `NI` monogram, which the
 speech-selector coverage test flagged as an unrecorded fallback.
+
+### Jina
+
+Added for the hosted Jina reranker in Settings → Reranker, which is the only way
+to run `jina-reranker-v3.5` without a 410 MB download. Upstream ships this mark
+in monochrome ONLY — there is no `jina-color.svg` — so the variant choice made
+itself, and `currentColor` adapts to both themes as with `groq` and `openai`.
+
+The `AI_PROVIDER_BRANDS` hex is `#009191`, which is NOT lobehub's published
+`COLOR_PRIMARY` for this brand (`#000`). A black wash is invisible on the dark
+tile — the failure the legibility rule below describes — so the hex is taken
+from Jina's own favicon instead: `#009191` is its dominant non-neutral colour
+(5758 of ~16k pixels), and `api.jina.ai`'s docs theme uses the same value.
+
+### OpenRouter and Voyage — why the monochrome variant
+
+Both were added for the embedding providers in Settings → Embeddings, and both
+ship upstream in `-color` as well. Neither `-color` file is usable here, for
+opposite reasons, and both fail the legibility rule this file already states:
+
+```
+openrouter-color.svg   fill="#C8FF00"   lime — illegible on the LIGHT tile
+voyage-color.svg       fill="#012E33"   near-black teal — vanishes on the DARK tile
+```
+
+`.aip-tile--mark` paints `var(--aip-btn-bg)`, which follows the theme, so a mark
+pinned to either extreme is unreadable in one of them. NVIDIA's `#74B71B` survives
+both because it is mid-tone; lime and near-black do not. The monochrome variants
+paint `currentColor` and adapt for free — the same treatment `groq`, `openai` and
+`ollama` already get, and for the same reason.
+
+The published hexes are still recorded in `AI_PROVIDER_BRANDS` (`#C8FF00`,
+`#012E33`) because that field drives the tile *wash* and the monogram fallback,
+not the mark's own fill.
 
 `deepgram.svg` comes from [simple-icons][si] v16.28.0, which licenses its icons
 under **CC0-1.0** — a different licence from the lobehub set, so its full text

@@ -40,18 +40,20 @@ const REPO_ROOT = resolve(__dirname, '../../..');
 const GUARDED_FILES = [
   'src/components/SettingsOverlay.tsx',
   'src/components/settings/AIProvidersSettings.tsx',
-  'src/components/settings/ProviderCard.tsx',
+  'src/components/settings/EmbeddingSettings.tsx',
   'src/components/settings/HelpSettings.tsx',
   'src/components/settings/HowItWorksRefund.tsx',
   'src/components/settings/IntelligenceSettings.tsx',
+  'src/components/settings/ModesSettings.tsx',
   'src/components/settings/NativelyApiSettings.tsx',
   'src/components/settings/NativelyProSettings.tsx',
   'src/components/settings/PhoneMirrorSettings.tsx',
   'src/components/settings/PlansSettings.tsx',
+  'src/components/settings/ProviderCard.tsx',
+  'src/components/settings/RerankerSettings.tsx',
+  'src/components/settings/SettingsToggle.tsx',
   'src/components/settings/Sidebar.tsx', // dead code (unused, zero imports) — covered in case it's ever revived
   'src/components/settings/SkillsSettings.tsx',
-  'src/components/settings/ModesSettings.tsx',
-  'src/components/settings/VisionModelBenchmark.tsx',
   'src/components/LocalWhisperModelPanel.tsx',
   'src/components/ProfileIntelligenceSettings.tsx',
   'src/components/ui/AccordionSection.tsx', // shared disclosure primitive used by several guarded files above

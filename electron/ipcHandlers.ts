@@ -1,8 +1,10 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
+import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -339,8 +341,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Pick the replacement through modelAvailable() rather than raw key checks,
       // so a provider the user switched off (or a model they filtered out) is never
       // installed as the fallback.
+      // Gemini candidates in preference order rather than a single hardcoded id.
+      // A user who curated their Gemini allow-list before a model bump has the NEW
+      // default filtered out by modelAvailable (the allow-list gate runs before the
+      // credential check), so a lone `gemini-3.8-flash` candidate is dead for them
+      // and the ladder falls through to a DIFFERENT PROVIDER — even though they hold
+      // a Gemini key and an allow-listed Gemini model. Walking the tier keeps them on
+      // Gemini and makes the next bump a one-line prepend instead of a silent
+      // provider switch for everyone who ever ticked a box here.
+      const geminiNext = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite']
+        .find(id => modelAvailable(id));
+
       const next = modelAvailable('natively') ? 'natively'
-        : modelAvailable('gemini-3.7-flash') ? 'gemini-3.7-flash'
+        : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
         : modelAvailable('qwen/qwen3.6-27b') ? 'qwen/qwen3.6-27b'
@@ -1298,8 +1311,86 @@ export function initializeIpcHandlers(appState: AppState): void {
               console.warn('[V3] profile hydration failed — continuing with mode attachments only:', (profErr as Error)?.message ?? profErr);
             }
 
+            // The skill prefix is stripped for V3 too — otherwise the model reads
+            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
+            // Declared here rather than at the buildV3Prompt call below because
+            // screen understanding (next block) needs it as the vision prompt.
+            const v3Question = String((skillStrippedMessage ?? message) || '');
+
+            // ── SCREEN CONTEXT (2026-08-28) ─────────────────────────────
+            // Until now an attached screenshot reached the provider as bytes and
+            // NOTHING else: SCREEN_CONTEXT had no producer, so the turn planned
+            // [SCREEN_CONTEXT], retrieved nothing, and the composer told the
+            // model "no supporting evidence was retrieved" while the image sat
+            // in the same payload. And because no description was ever stored,
+            // the next turn had no idea a screenshot had existed — the reported
+            // community defect.
+            //
+            // Describing it ONCE here fixes both: the description becomes real
+            // SCREEN_CONTEXT evidence for this turn, and rides the conversation
+            // ring so later turns can still answer questions about it without
+            // the image ever being re-sent.
+            //
+            // Additive and non-blocking: any failure leaves the turn exactly as
+            // it was before this block existed (bytes only), because the port is
+            // simply omitted. It must never fail a live answer.
+            let v3ScreenDescription = '';
+            if (imagePaths?.length) {
+              try {
+                const {
+                  getScreenUnderstandingService,
+                } = require('./services/screen/ScreenUnderstandingService');
+                const { CredentialsManager } = require('./services/CredentialsManager');
+                const settings = SettingsManager.getInstance();
+                const credentials = CredentialsManager.getInstance();
+                const providerScopes = settings.get('providerDataScopes') || {};
+                const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
+                const sur = await getScreenUnderstandingService().understand({
+                  modeId: modeId,
+                  transcript: v3Question,
+                  userAction: 'manual_use_screen',
+                  qualityMode: 'balanced',
+                  imagePaths,
+                  // The SAME privacy switches the what-to-say path honours. This
+                  // is a second call site for one policy, not a second policy:
+                  // `private_vision` keeps the description local, and a denied
+                  // `screenshots` scope keeps it off cloud providers.
+                  screenUnderstandingMode: settings.getScreenUnderstandingMode(),
+                  technicalInterviewVisionFirst: settings.getTechnicalInterviewVisionFirst(),
+                  providerPolicy: {
+                    localOnly: settings.getScreenUnderstandingMode() === 'private_vision',
+                    allowScreenshots: providerScopes.screenshots !== false,
+                    visionAvailable: credentials.anyVisionProviderConfigured?.() ?? true,
+                    localVisionAvailable,
+                  },
+                });
+                if (sur?.status === 'available') {
+                  v3ScreenDescription = [
+                    sur.visibleSummary,
+                    sur.extractedText,
+                    ...(sur.codeBlocks ?? []),
+                    ...(sur.tables ?? []).map((t: any) => t.markdown).filter(Boolean),
+                  ].filter((part: unknown) => typeof part === 'string' && part.trim()).join('\n\n');
+                }
+              } catch (screenErr: any) {
+                // NEVER silent (§22.1): degrading to bytes-only is a real
+                // behaviour change for this turn, so it is logged.
+                console.warn('[V3] screen understanding failed — continuing with image bytes only:',
+                  screenErr?.message ?? screenErr);
+              }
+            }
+            const v3ScreenPort = v3ScreenDescription
+              ? require('./context-intelligence/retrieval/screen-retrieval-port')
+                  .createScreenRetrievalPort({
+                    description: v3ScreenDescription,
+                    userId: V3_USER_ID,
+                    sessionId: String(senderId),
+                  })
+              : null;
+
             const v3Ports = [
               modePort,
+              ...(v3ScreenPort ? [v3ScreenPort] : []),
               ...(v3ProfilePort ? [v3ProfilePort] : []),
               ...(wantsMeeting ? [createMeetingRetrievalPort({
                 retriever: ragForV3!.getRetriever(),
@@ -1317,9 +1408,6 @@ export function initializeIpcHandlers(appState: AppState): void {
             // block previously carried its own copy of all of that — two copies
             // of a security-relevant construction is how the tokenizer copies
             // drifted (§2 of the architecture review).
-            // The skill prefix is stripped for V3 too — otherwise the model reads
-            // a literal "/humanize " at the head of the question (PR #429 Bug 003).
-            const v3Question = String((skillStrippedMessage ?? message) || '');
             const composed = await buildV3Prompt({
               surface: 'manual-chat',
               pathTag: 'ipc',
@@ -1330,6 +1418,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               // as authoritative evidence. Manual chat has no periodic-capture OCR
               // object at all, so imagePaths is the only screen signal here.
               hasScreenContext: (imagePaths?.length ?? 0) > 0,
+              // Settings > Intelligence > Memory > "Chat history". Read HERE, not
+              // in the bridge: context-intelligence has no dependency on the flag
+              // registry (see contracts/retrieval-flags.ts for what the first one
+              // would cost), so the value is passed in like every other input.
+              multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
               // Routed coding verdict, same as the WTA path (see
               // BridgeInput.codingTask). Without it the bridge falls back to its
               // keyword regex, which misses ordinary phrasings like "Write a BFS
@@ -1655,7 +1748,10 @@ export function initializeIpcHandlers(appState: AppState): void {
               if (!v3Truncated) {
                 try {
                   const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
-                  recordAnswerSummary(String(senderId), finalText);
+                  // Third argument is what makes a screenshot survive its own
+                  // turn: the description enters the conversation ring, so a
+                  // later "what was in that screenshot?" has something to read.
+                  recordAnswerSummary(String(senderId), finalText, v3ScreenDescription || undefined);
                 } catch { /* continuity only */ }
                 try {
                   // The user/answer PAIR is the antecedent unit for follow-up
@@ -5865,9 +5961,83 @@ export function initializeIpcHandlers(appState: AppState): void {
     return appState.getVerboseLogging();
   });
 
+
+  /**
+   * Export = collect the local diagnostic files into ONE timestamped folder
+   * and reveal it. Nothing is uploaded; sharing is the user's explicit action
+   * from there. Deliberately a folder, not an archive — the repo has no zip
+   * dependency and adding one for this is not worth the packaging surface.
+   *
+   * Cross-platform: every path goes through app.getPath(), and
+   * shell.showItemInFolder reveals in Finder on macOS and Explorer on Windows.
+   */
+  safeHandle('export-debug-logs', async () => {
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const outDir = path.join(app.getPath('documents'), `natively-debug-${stamp}`);
+      fs.mkdirSync(outDir, { recursive: true });
+
+      const copied: string[] = [];
+      const copyIfPresent = (src: string, destName: string) => {
+        try {
+          if (!fs.existsSync(src)) return;
+          fs.copyFileSync(src, path.join(outDir, destName));
+          copied.push(destName);
+        } catch { /* one unreadable file must not abort the export */ }
+      };
+
+      // 1. Main log + the rotated prior session (which is where a crash the
+      //    user is chasing actually lives — see shouldTruncatePriorLog).
+      const docs = app.getPath('documents');
+      copyIfPresent(path.join(docs, 'natively_debug.log'), 'natively_debug.log');
+      copyIfPresent(path.join(docs, 'natively_debug.log.prev'), 'natively_debug.log.prev');
+
+      // 2. Structured per-turn JSONL records.
+      try {
+        const { flushContextDebugWriter } = require('./context-intelligence/debug/jsonl-writer');
+        await flushContextDebugWriter();
+      } catch { /* writer may not be configured */ }
+      try {
+        const cdDir = path.join(app.getPath('logs'), 'context-debug');
+        if (fs.existsSync(cdDir)) {
+          for (const f of fs.readdirSync(cdDir)) {
+            if (f.endsWith('.jsonl')) copyIfPresent(path.join(cdDir, f), f);
+          }
+        }
+      } catch { /* best-effort */ }
+
+      // 3. Environment header, so a log read weeks later is self-describing.
+      const info = {
+        exportedAt: new Date().toISOString(),
+        appVersion: app.getVersion(),
+        electron: process.versions.electron,
+        node: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        osRelease: os.release(),
+        packaged: app.isPackaged,
+        verboseLogging: appState.getVerboseLogging(),
+        contextDebugLevel: SettingsManager.getInstance().getContextDebugLevel(),
+        files: copied,
+        note: 'Credentials are redacted unconditionally at every level. At '
+          + "'full', user content (transcripts, questions, answers) is kept "
+          + 'verbatim — review before sharing.',
+      };
+      fs.writeFileSync(path.join(outDir, 'system-info.json'), JSON.stringify(info, null, 2));
+
+      shell.showItemInFolder(path.join(outDir, 'system-info.json'));
+      return { success: true, path: outDir, files: copied };
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  });
+
   safeHandle('set-verbose-logging', async (_, enabled: boolean) => {
-    appState.setVerboseLogging(enabled);
-    return { success: true };
+    // The runtime flag always takes effect; `success` reports whether the
+    // choice reached disk, so the UI never claims a setting stuck when a
+    // degraded store refused it (RefusedSettingWriteReported2026_08_21).
+    const persisted = appState.setVerboseLogging(enabled);
+    return persisted ? { success: true } : { success: false, error: 'settings_write_refused' };
   });
 
   safeHandle('get-stealth-shortcut-guard', async () => {
@@ -7070,6 +7240,49 @@ export function initializeIpcHandlers(appState: AppState): void {
   // vector if any consumer ever switched from `setAttribute` to template
   // literals. Hardening the trust boundary at the broadcast point is cheap.
   const VALID_INTERFACE_THEMES = new Set(['default', 'liquid-glass', 'modern']);
+  /**
+   * The launcher's boot reveal has fully landed — restore background throttling.
+   *
+   * WindowHelper creates the launcher with `backgroundThrottling: false` because
+   * Chromium HARD-STOPS requestAnimationFrame for a hidden window (covered by
+   * another app, Cmd+H, or on an inactive Space all count), and the reveal is a
+   * Framer Motion AnimatePresence that only advances on rAF — without the flag
+   * the app can sit on the black startup splash until the user focuses it
+   * (guarded by LauncherBootRevealNotFrameGated2026_09_01).
+   *
+   * But nothing ever turned it back on, so the opt-out outlived the one-shot
+   * animation it was for. MEASURED 2026-09-03, a window shown then hidden for
+   * 10s with 19 elements on an `infinite` CSS animation:
+   *
+   *   throttled (Chromium default) :   0 rAF frames, visibilityState "hidden"
+   *   unthrottled (the launcher)   : 600 rAF frames, visibilityState "visible"
+   *
+   * So a launcher hidden during, say, meeting-notes summary generation — where
+   * MeetingNotesSkeleton mounts ~19 `.mn-skel` bars on an infinite animation —
+   * kept compositing at 60fps with the window off screen. That is the same
+   * never-idle-compositor condition behind this repo's 2026-07-10 raster-tile
+   * leak. Note the second column too: the opt-out makes the Page Visibility API
+   * report "visible" while hidden, so gating the animation on
+   * `visibilitychange` in the renderer could never have worked.
+   *
+   * Re-enabling here rather than on a timer: this fires from the launcher
+   * entrance animation's own completion, so the reveal is provably finished.
+   * Fail-safe direction — if the signal never arrives, throttling simply stays
+   * off and behaviour is exactly what it was before.
+   */
+  safeOn('launcher:reveal-complete', (event) => {
+    const launcher = appState.getWindowHelper().getLauncherWindow();
+    // Sender-validated: only the launcher may relax its own throttling.
+    if (!launcher || launcher.isDestroyed()) return;
+    if (event.sender.id !== launcher.webContents.id) return;
+    try {
+      launcher.webContents.setBackgroundThrottling(true);
+      console.log('[launcher] boot reveal complete — background throttling restored');
+    } catch (err) {
+      console.warn('[launcher] could not restore background throttling:', err);
+    }
+  });
+
   safeOn('interface-theme:set', (_event, theme: string) => {
     if (typeof theme !== 'string' || !VALID_INTERFACE_THEMES.has(theme)) {
       // Truncate + strip control chars before logging — a 64-char payload can
@@ -7147,6 +7360,1131 @@ export function initializeIpcHandlers(appState: AppState): void {
       // console.error("Error getting current LLM config:", error);
       throw error;
     }
+  });
+
+  // ── Embedding settings ──────────────────────────────────────────────────────
+  // The embedding model is configured INDEPENDENTLY of the generation model.
+  // Retrieval quality bounds answer quality, so a user must be able to see and
+  // change what embeds their project — see src/components/settings/EmbeddingSettings.tsx.
+
+  safeHandle('embedding:get-status', async () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const pipeline = appState.getRAGManager()?.getEmbeddingPipeline();
+    // The RESOLVED provider, not the configured one: they differ whenever a
+    // choice was unavailable and the chain fell through, which is exactly what
+    // the user needs to see.
+    const active = pipeline?.getActiveProviderDescription?.() ?? { configured: false };
+    // §5: the confused-user case — a strong third-party generation provider is
+    // configured and the user reasonably assumes it handles everything, while
+    // retrieval quietly stays on a lightweight embedder. Computed HERE (not in
+    // the renderer) so the predicate has one tested implementation.
+    const { shouldWarnAboutLightweightEmbeddings } = require('./rag/embeddingStatus');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const configuredProviders = [
+      cm.getOpenaiApiKey() ? 'openai' : null,
+      cm.getGeminiApiKey() ? 'gemini' : null,
+      cm.getClaudeApiKey() ? 'anthropic' : null,
+      cm.getGroqApiKey() ? 'groq' : null,
+      cm.getDeepseekApiKey() ? 'deepseek' : null,
+      // OpenRouter has its OWN credential now (the embeddings panel owns it).
+    // This read the LiteLLM key, so a real OpenRouter key was invisible to the
+    // lightweight-embedding warning while a LiteLLM-only user was reported as
+    // having OpenRouter configured.
+    cm.getOpenrouterApiKey?.() ? 'openrouter' : null,
+    cm.getLitellmApiKey?.() ? 'litellm' : null,
+    ].filter(Boolean);
+
+    const acknowledged = !!settings.get('embeddingLightweightAcknowledged');
+    return {
+      active,
+      configured: settings.get('embedding') || { mode: 'auto' },
+      acknowledged,
+      scopeAllowsCloud: settings.get('providerDataScopes')?.embeddings !== false,
+      shouldWarn: shouldWarnAboutLightweightEmbeddings({
+        embeddingSpace: (active as any)?.space,
+        generationProviders: configuredProviders,
+        acknowledged,
+      }),
+    };
+  });
+
+  // The full per-provider catalogue. Every provider is returned even when it is
+  // unavailable, with the REASON — omitting one leaves the user unable to tell
+  // "Natively doesn't support this" from "you haven't added a key".
+  // Live-discovered embedding models per cloud provider. In memory only: it is a
+  // cache of a remote list, and a stale one on disk would outlive a key change.
+  const fetchedEmbeddingModels: Record<string, any[]> = {};
+
+  safeHandle('embedding:get-catalog', async () => {
+    const { listOllamaEmbeddingModels } = require('./rag/ollamaEmbeddingModels');
+    const { buildEmbeddingCatalog } = require('./rag/embeddingCatalog');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+
+    const url = process.env.OLLAMA_URL || 'http://localhost:11434';
+    const ollamaModels = await listOllamaEmbeddingModels(url);
+    // listOllamaEmbeddingModels returns [] both when the daemon is down and when
+    // it has no embedders pulled; ask the daemon directly so the panel can say
+    // which it is.
+    let ollamaReachable = ollamaModels.length > 0;
+    if (!ollamaReachable) {
+      try {
+        const llmHelper = appState.processingHelper.getLLMHelper();
+        ollamaReachable = await llmHelper.isOllamaReachable();
+      } catch { ollamaReachable = false; }
+    }
+
+    // A user-hosted OpenAI-compatible endpoint (LM Studio, llama.cpp, vLLM…).
+    const customEndpoint = SettingsManager.getInstance().get('customEmbeddingEndpoint') || '';
+    const customModels = customEndpoint
+      ? await require('./rag/customEmbeddingModels').listCustomEmbeddingModels(customEndpoint, cm.getCustomEmbeddingApiKey?.())
+      : [];
+
+    // Public listing: fetched with the key when present, without it otherwise.
+    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+    const openrouterModels = await listOpenRouterEmbeddingModels({ apiKey: cm.getOpenrouterApiKey?.() });
+
+    return {
+      providers: buildEmbeddingCatalog({
+        ollamaReachable,
+        ollamaModels,
+        customEndpoint,
+        customModels,
+        hasOpenrouterKey: !!cm.getOpenrouterApiKey?.(),
+        hasVoyageKey: !!cm.getVoyageApiKey?.(),
+        openrouterModels,
+        hasOpenaiKey: !!cm.getOpenaiApiKey(),
+        hasGeminiKey: !!cm.getGeminiApiKey(),
+        hasNativelyKey: !!cm.getNativelyApiKey(),
+        cloudBlocked: SettingsManager.getInstance().get('providerDataScopes')?.embeddings === false,
+        fetchedModels: fetchedEmbeddingModels,
+      }),
+      // Lets the panel gate first-open discovery, exactly as ProviderCard does.
+      hasCatalog: {
+        openai: Array.isArray(fetchedEmbeddingModels.openai),
+        gemini: Array.isArray(fetchedEmbeddingModels.gemini),
+      },
+    };
+  });
+
+  // Discovery against the provider's own list API — the same endpoints the AI
+  // Providers card uses for chat models, filtered for embedders.
+  safeHandle('embedding:fetch-models', async (_evt, providerId: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const { fetchEmbeddingModels } = require('./rag/embeddingModelFetch');
+    const cm = CredentialsManager.getInstance();
+    const key = providerId === 'openai' ? cm.getOpenaiApiKey()
+      : providerId === 'gemini' ? cm.getGeminiApiKey()
+        : undefined;
+    if (!key) return { success: false, error: 'no_key', models: [] };
+
+    const models = await fetchEmbeddingModels(providerId, key);
+    // Record the attempt even when empty, so first-open discovery does not
+    // re-fire on every expand — the user can still refresh explicitly.
+    fetchedEmbeddingModels[providerId] = models;
+    return { success: true, models, count: models.length };
+  });
+
+  // Verify a model really works BEFORE indexing a whole project with it.
+  // Distinguishes "not installed" from "bad key" from "daemon down" — a single
+  // "failed" would leave the user with nothing to act on.
+  safeHandle('embedding:test', async (_evt, choice?: { provider?: string; model?: string }) => {
+    const started = Date.now();
+    try {
+      const { EmbeddingProviderResolver } = require('./rag/EmbeddingProviderResolver');
+      const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+      const base = buildEmbeddingConfig();
+      // Apply the requested model for EVERY provider, not just Ollama. The panel
+      // sends the row's model id; honouring it for one provider meant Test either
+      // reported "not configured" for a freshly-keyed Voyage/OpenRouter/custom
+      // (no model saved yet, so no candidate is built) or silently tested a
+      // DIFFERENT model than the row the button belongs to.
+      const withChosenModel = (): Record<string, unknown> => {
+        if (!choice?.model) return base;
+        switch (choice.provider) {
+          case 'ollama':     return { ...base, ollamaEmbeddingModel: choice.model, ollamaEmbeddingDims: undefined };
+          case 'voyage':     return { ...base, voyageEmbeddingModel: choice.model, voyageEmbeddingDims: undefined };
+          case 'openrouter': return { ...base, openrouterEmbeddingModel: choice.model, openrouterEmbeddingDims: undefined };
+          case 'openai':     return { ...base, openaiEmbeddingModel: choice.model, openaiEmbeddingDims: undefined };
+          case 'gemini':     return { ...base, geminiEmbeddingModel: choice.model, geminiEmbeddingDims: undefined };
+          case 'custom':     return { ...base, customEmbeddingModel: choice.model, customEmbeddingDims: undefined };
+          default:           return base;
+        }
+      };
+      const config = withChosenModel();
+        // Measure EVERY provider's width, not just Ollama's: resolve() calls all
+        // four helpers, so a test path that calls one reports a reachable
+        // custom/OpenRouter/Voyage model as 'not configured'.
+      const measured = await EmbeddingProviderResolver.withMeasuredVoyageDims(
+        await EmbeddingProviderResolver.withMeasuredOpenRouterDims(
+          await EmbeddingProviderResolver.withMeasuredCustomDims(
+            await EmbeddingProviderResolver.withMeasuredOllamaDims(config),
+          ),
+        ),
+      );
+      const candidates = EmbeddingProviderResolver.buildCandidates(measured);
+      const provider = choice?.provider
+        ? candidates.find((p: any) => p.name === choice.provider)
+        : candidates[0];
+      if (!provider) {
+        return { ok: false, error: 'not_configured', message: `No usable ${choice?.provider || 'embedding'} provider. Check that the model is installed and any required API key is set.` };
+      }
+      const vector = await provider.embedQuery('Natively embedding test');
+      return {
+        ok: true,
+        provider: provider.name,
+        model: provider.model,
+        dimensions: vector.length,
+        space: provider.space,
+        latencyMs: Date.now() - started,
+      };
+    } catch (error: any) {
+      // Never surface a raw error containing a key.
+      const status = error?.status;
+      const message = status === 401 || status === 403
+        ? 'Authentication failed — check the API key for this provider.'
+        : status === 429
+          ? 'Rate limited or out of quota for this provider.'
+          : (error?.message || 'Embedding request failed.');
+      return { ok: false, error: 'request_failed', status, message, latencyMs: Date.now() - started };
+    }
+  });
+
+  safeHandle('embedding:set-config', async (_evt, next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => {
+
+    // Refuse a provider that cannot actually run, BEFORE persisting anything.
+    // The resolver correctly yields no candidate for one with no credentials and
+    // resolve() then falls through to the bundled model — so without this the
+    // user picks Gemini, sees MiniLM, and has no idea why.
+    if (next?.mode === 'manual' && next?.provider) {
+      const { validateEmbeddingSelection } = require('./rag/embeddingSelection');
+      const { buildEmbeddingCatalog } = require('./rag/embeddingCatalog');
+      const { CredentialsManager: CM } = require('./services/CredentialsManager');
+      const { SettingsManager: SM } = require('./services/SettingsManager');
+      const cmGuard = CM.getInstance();
+      let ollamaUp = false;
+      try { ollamaUp = await appState.processingHelper.getLLMHelper().isOllamaReachable(); } catch { ollamaUp = false; }
+      const verdict = validateEmbeddingSelection(next.provider, buildEmbeddingCatalog({
+        ollamaReachable: ollamaUp,
+        hasOpenaiKey: !!cmGuard.getOpenaiApiKey(),
+        hasGeminiKey: !!cmGuard.getGeminiApiKey(),
+        hasNativelyKey: !!cmGuard.getNativelyApiKey(),
+        // Every provider the guard can refuse must be represented here, or it
+        // refuses one that is actually configured. Voyage and OpenRouter were
+        // missing, so selecting either was ALWAYS rejected as "no key" — for a
+        // key the user had just saved.
+        hasVoyageKey: !!cmGuard.getVoyageApiKey?.(),
+        hasOpenrouterKey: !!cmGuard.getOpenrouterApiKey?.(),
+        openrouterModels: [{ id: next.model || 'x', label: next.model || 'x', dimensions: 0, dimensionsVerified: false }],
+        customEndpoint: SM.getInstance().get('customEmbeddingEndpoint') || '',
+        customModels: (SM.getInstance().get('customEmbeddingEndpoint') || '') ? [{ id: next.model || 'x' }] : [],
+        cloudBlocked: SM.getInstance().get('providerDataScopes')?.embeddings === false,
+      }));
+      if (!verdict.ok) return { success: false, error: verdict.error, message: verdict.message };
+    }
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const ragManager = appState.getRAGManager();
+    const pipeline = ragManager?.getEmbeddingPipeline();
+    const previousSpace = pipeline?.getActiveSpaceKey?.();
+
+    // A model chosen without a MEASURED width would stamp a wrong space key over
+    // the vectors, so measure here rather than trusting anything from the UI.
+    let dimensions = next?.dimensions;
+    // Voyage documents a default of 1024, but the width is still MEASURED: the
+    // catalogue is curated (Voyage has no models endpoint) so it can go stale,
+    // and a wrong width stamps a wrong space key over real vectors.
+    if (next?.provider === 'voyage' && next?.model) {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { probeVoyageEmbeddingDimensions } = require('./rag/voyageEmbeddingModels');
+      const requested = dimensions;
+      // Probe through a RAW request, not through the provider: the provider's
+      // validate() throws on any length other than the one it was constructed
+      // with, so probing through it could only ever confirm its own guess.
+      const measured = await probeVoyageEmbeddingDimensions(
+        next.model, CredentialsManager.getInstance().getVoyageApiKey?.() || '', undefined, requested,
+      );
+      if (measured == null) {
+        return {
+          success: false,
+          error: 'dimensions_unmeasurable',
+          message: `Could not get an embedding from "${next.model}" via Voyage. Check your key and that this model is available to your account.`,
+        };
+      }
+      // The domain models (voyage-code-4, voyage-finance-2, voyage-law-2) are
+      // fixed at 1024. Storing a width Voyage did not actually produce would
+      // make every later embed fail its length check as a RETRYABLE error, so
+      // indexing would retry forever and never succeed.
+      if (requested && measured !== requested) {
+        return {
+          success: false,
+          error: 'dimensions_unsupported',
+          message: `"${next.model}" returned ${measured} dimensions when asked for ${requested}. It does not support that width — pick ${measured}, or choose another model.`,
+        };
+      }
+      dimensions = measured;
+    }
+    if (next?.provider === 'openrouter' && next?.model) {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { probeOpenRouterEmbeddingDimensions } = require('./rag/openrouterEmbeddingModels');
+      const requested = dimensions;
+      const measured = await probeOpenRouterEmbeddingDimensions(
+        next.model, CredentialsManager.getInstance().getOpenrouterApiKey?.() || '', undefined, requested,
+      );
+      if (measured == null) {
+        return {
+          success: false,
+          error: 'dimensions_unmeasurable',
+          message: `Could not get an embedding from "${next.model}" via OpenRouter. Check your key has credit and that this model is available to your account.`,
+        };
+      }
+      // OpenRouter FORWARDS `dimensions`; whether the upstream model honours it
+      // is the model's business. Silently storing a width the user did not pick
+      // would mis-describe their own index, so say what happened instead.
+      if (requested && measured !== requested) {
+        return {
+          success: false,
+          error: 'dimensions_unsupported',
+          message: `"${next.model}" returned ${measured} dimensions when asked for ${requested}. It does not support that width — pick ${measured}, or choose another model.`,
+        };
+      }
+      dimensions = measured;
+    }
+    if (next?.provider === 'custom' && next?.model && !dimensions) {
+      const { CredentialsManager } = require('./services/CredentialsManager');
+      const { probeCustomEmbeddingDimensions } = require('./rag/customEmbeddingModels');
+      const endpoint = settings.get('customEmbeddingEndpoint') || '';
+      const measured = await probeCustomEmbeddingDimensions(
+        endpoint, next.model, CredentialsManager.getInstance().getCustomEmbeddingApiKey?.(),
+      );
+      if (measured == null) {
+        return {
+          success: false,
+          error: 'dimensions_unmeasurable',
+          message: `Could not get an embedding from "${next.model}" at ${endpoint || 'the configured endpoint'}. Check the server is running and that this model can embed.`,
+        };
+      }
+      dimensions = measured;
+    }
+    if (next?.provider === 'ollama' && next?.model && !dimensions) {
+      const { probeOllamaEmbeddingDimensions } = require('./rag/ollamaEmbeddingModels');
+      const measured = await probeOllamaEmbeddingDimensions(process.env.OLLAMA_URL || 'http://localhost:11434', next.model);
+      if (measured == null) {
+        return { success: false, error: 'dimensions_unmeasurable', message: `Could not measure the embedding size of "${next.model}". Check that it is installed and supports embeddings.` };
+      }
+      dimensions = measured;
+    }
+
+    // R-24: a refused write (degraded settings store) must NOT report success —
+    // re-initializing the pipeline and telling the user the model changed, on a
+    // value the disk never received, silently reverts on the next launch.
+    if (!settings.set('embedding', {
+      mode: (next?.mode as any) || 'auto',
+      provider: next?.provider as any,
+      model: next?.model,
+      dimensions,
+    })) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the embedding settings. Your settings store is unavailable.' };
+    }
+
+    const { buildEmbeddingConfig } = require('./rag/embeddingConfigIdentity');
+    await ragManager?.initializeEmbeddings(buildEmbeddingConfig());
+    const activeSpace = pipeline?.getActiveSpaceKey?.();
+
+    // A space change means existing vectors are no longer comparable. The
+    // auto-reindex sweep already handles the work; the UI's job is to SAY so
+    // rather than let a silent re-index start.
+    return {
+      success: true,
+      previousSpace,
+      activeSpace,
+      reindexRequired: !!previousSpace && !!activeSpace && previousSpace !== activeSpace,
+    };
+  });
+
+  // Save the user-hosted endpoint (and its optional token). Separate from
+  // set-config because the endpoint must be stored BEFORE its models can be
+  // listed or a model's width measured.
+  // OpenRouter's key. It has no slot in AI Providers (OpenRouter is only reachable
+  // there as a cURL provider), so the embeddings panel owns it.
+  // Voyage's key. Voyage is embeddings-only in this app, so AI Providers has no
+  // slot for it and the embeddings panel owns it.
+  safeHandle('embedding:set-voyage-key', async (_evt, key: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const saved = CredentialsManager.getInstance().setVoyageApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('embedding:set-openrouter-key', async (_evt, key: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const saved = CredentialsManager.getInstance().setOpenrouterApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    const { listOpenRouterEmbeddingModels } = require('./rag/openrouterEmbeddingModels');
+    const models = await listOpenRouterEmbeddingModels({ apiKey: (key || '').trim() || undefined });
+    return { success: true, models, count: models.length };
+  });
+
+  safeHandle('embedding:set-custom-endpoint', async (_evt, input: { url?: string; apiKey?: string }) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const { normalizeCustomBaseUrl } = require('./rag/providers/CustomEmbeddingProvider');
+    const settings = SettingsManager.getInstance();
+
+    const raw = (input?.url || '').trim();
+    // Store the NORMALIZED url so the space key (which includes the host) is
+    // stable whether the user pasted the bare host or the /v1 form.
+    const normalized = raw ? normalizeCustomBaseUrl(raw) : '';
+    if (raw && !normalized) {
+      return { success: false, error: 'invalid_url', message: 'That does not look like a valid URL. Example: http://localhost:1234' };
+    }
+
+    // R-24: a refused write must not report success.
+    if (!settings.set('customEmbeddingEndpoint', normalized || undefined)) {
+      return { success: false, error: 'settings_store_degraded', message: 'Could not save the endpoint. Your settings store is unavailable.' };
+    }
+    if (input?.apiKey !== undefined) {
+      const saved = CredentialsManager.getInstance().setCustomEmbeddingApiKey(input.apiKey || '');
+      if (saved === false) {
+        return { success: false, error: 'credential_store_degraded', message: 'Could not save the token. Your credential store is unavailable.' };
+      }
+    }
+
+    const { listCustomEmbeddingModels } = require('./rag/customEmbeddingModels');
+    const models = normalized
+      ? await listCustomEmbeddingModels(normalized, CredentialsManager.getInstance().getCustomEmbeddingApiKey?.())
+      : [];
+    return {
+      success: true,
+      endpoint: normalized || null,
+      models,
+      // Distinguish "not reachable / not an embeddings server" from "saved fine
+      // but you have not picked a model yet".
+      reachable: models.length > 0,
+    };
+  });
+
+  safeHandle('embedding:acknowledge-lightweight', async (_evt, acknowledged: boolean) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    // R-24: reporting success on a refused write would hide the warning for this
+    // session and bring it back on the next launch, which reads as a bug.
+    if (!SettingsManager.getInstance().set('embeddingLightweightAcknowledged', !!acknowledged)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    return { success: true };
+  });
+
+  // ── Reranker ─────────────────────────────────────────────────────────────
+  //
+  // ONE section in Settings, with the provider as a choice inside it. There is
+  // deliberately no separate "Local Reranker" and "OpenRouter Reranker" pane:
+  // only one reranker can own the seam, so two panes would let a user configure
+  // two things that cannot both be active.
+  //
+  // Embedding retrieval finds the candidate set; reranking decides the order of
+  // those candidates. The two are configured independently on purpose — a local
+  // embedder with a hosted reranker, or the reverse, are both valid.
+
+  // Last known rerank catalogue. In memory: it caches a remote list, and a stale
+  // copy on disk would outlive a key change or a model retirement. When
+  // OpenRouter is unreachable the previous value is served rather than an empty
+  // picker, which is what §16 means by "preserve the last known models".
+  let lastKnownRerankCatalog: any[] = [];
+  let lastKnownRerankCatalogAt = 0;
+
+  safeHandle('reranker:get-catalog', async (_evt, opts?: { refresh?: boolean }) => {
+    const { listOpenRouterRerankModels, CATALOG_TTL_MS } = require('./rag/openrouterRerankModels');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+
+    const fresh = Date.now() - lastKnownRerankCatalogAt < CATALOG_TTL_MS;
+    if (fresh && !opts?.refresh && lastKnownRerankCatalog.length > 0) {
+      return { models: lastKnownRerankCatalog, stale: false, fetchedAt: lastKnownRerankCatalogAt };
+    }
+
+    // Browsing works unauthenticated — the capability filter is server-side — so
+    // the catalogue and its metadata are visible BEFORE a key exists.
+    const apiKey = CredentialsManager.getInstance().getOpenrouterApiKey?.() || undefined;
+    const models = await listOpenRouterRerankModels({ apiKey });
+
+    if (models.length > 0) {
+      lastKnownRerankCatalog = models;
+      lastKnownRerankCatalogAt = Date.now();
+      return { models, stale: false, fetchedAt: lastKnownRerankCatalogAt };
+    }
+    // Discovery failed. Never crash, never empty the picker.
+    return {
+      models: lastKnownRerankCatalog,
+      stale: true,
+      fetchedAt: lastKnownRerankCatalogAt || null,
+      error: 'discovery_unavailable',
+    };
+  });
+
+  safeHandle('reranker:get-status', async () => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const {
+      evaluateHostedEligibility, describeIneligibility, DEFAULT_RERANKER_SETTINGS,
+      isLocalOnlyMode, referenceFilesScopeAllowed,
+    } = require('./services/reranking/rerankerConfig');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    const provider = stored.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+    const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
+    // Presence only. The key itself never crosses this boundary.
+    const hasApiKey = Boolean(readHostedApiKey(provider));
+    const hostedModel = readHostedModel(stored) ?? null;
+
+    const eligibility = evaluateHostedEligibility({
+      provider,
+      hasApiKey,
+      model: hostedModel ?? undefined,
+      localOnly: isLocalOnlyMode(),
+      referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+    });
+
+    // The built-in, described honestly: "bundled" is not the same as "loadable".
+    //
+    // Read from BUILT_IN_RERANKER rather than written out here. The name and id
+    // used to be a literal on this line, and when the bundled model changed on
+    // 2026-09-04 it kept saying "BGE Reranker Base" — one of three copies that
+    // drifted the same day (the preflight carried a fourth). One export, so the
+    // next swap cannot leave a stale name on a panel.
+    const { BUILT_IN_RERANKER } = require('./rag/rerankerModelCatalog') as typeof import('./rag/rerankerModelCatalog');
+    let builtIn: any = { id: BUILT_IN_RERANKER.id, name: BUILT_IN_RERANKER.name, bundled: true };
+
+    // Which LOCAL model is actually selected, if any.
+    //
+    // `builtIn` describes the BUNDLED model and nothing else, so reporting it as
+    // the effective local reranker was wrong the moment a catalogue model could
+    // be chosen: selecting Jina v3.5 or ms-marco left this panel saying
+    // "BGE Reranker Base" while the seam ran something else entirely. Verified
+    // against the running app — `effective` stayed `local:bge-reranker-base`
+    // through both an ONNX and a GGUF selection.
+    let selectedLocal: { id: string; name: string } | null = null;
+    try {
+      const selectedId = stored.localModelId;
+      if (typeof selectedId === 'string' && selectedId) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { findCatalogModel } = require('./rag/rerankerModelCatalog') as typeof import('./rag/rerankerModelCatalog');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { statusOf } = require('./services/reranking/localModelInstaller') as typeof import('./services/reranking/localModelInstaller');
+        const entry = findCatalogModel(selectedId);
+        // Installed AND supported, because that is what the seam requires to
+        // actually use it — a half-downloaded model falls back to the bundled
+        // one, and the panel should say so rather than name the selection.
+        if (entry && entry.supported && statusOf(entry).state === 'installed') {
+          selectedLocal = { id: entry.id, name: entry.name };
+        }
+      }
+    } catch { /* an unreadable catalogue means "the bundled one", same as no selection */ }
+
+    try {
+      const { getLocalReranker } = require('./rag/LocalReranker');
+      const local = getLocalReranker();
+      builtIn = {
+        ...builtIn,
+        // isCached() is an fs.existsSync check. isAvailable() is NOT a
+        // question — it calls ensureLoaded(), so asking it here made opening
+        // this settings tab load the ONNX model, and on a first run download
+        // it. The panel then sat on its skeletons until that finished.
+        cached: local ? await local.isCached?.() : false,
+        available: local ? Boolean(local.isLoaded?.()) : false,
+      };
+    } catch { /* leave the defaults; an unreadable local reranker is not an error here */ }
+
+    // Which reranker would actually run right now, resolved the same way the
+    // retrieval path resolves it — so the panel cannot disagree with reality.
+    let activeExtensionId: string | null = null;
+    try {
+      const { getRerankerRegistry } = require('./services/reranking/RerankerRegistry');
+      activeExtensionId = getRerankerRegistry().activeExtensionId();
+    } catch { /* no registry: the built-in owns the seam */ }
+
+    const effective = eligibility.eligible
+      ? { kind: provider, id: hostedModel }
+      : activeExtensionId
+        ? { kind: 'extension', id: activeExtensionId }
+        : { kind: 'local', id: selectedLocal?.id ?? builtIn.id };
+
+    return {
+      provider,
+      openrouterModel: stored.openrouterModel ?? null,
+      jinaModel: stored.jinaModel ?? null,
+      hostedModel,
+      candidateCount: stored.candidateCount ?? null,
+      fallbackToLocal: stored.fallbackToLocal === true,
+      hasApiKey,
+      eligible: eligibility.eligible,
+      ineligibleReason: eligibility.reason ?? null,
+      ineligibleMessage: eligibility.reason ? describeIneligibility(eligibility.reason) : null,
+      builtIn,
+      /** The catalogue model in use, when one is selected AND installed. */
+      selectedLocal,
+      effective,
+      lastTest: stored.lastTest ?? null,
+    };
+  });
+
+  safeHandle('reranker:set-config', async (_evt, next: {
+    provider?: 'local' | 'openrouter' | 'jina';
+    openrouterModel?: string;
+    jinaModel?: string;
+    candidateCount?: number;
+    fallbackToLocal?: boolean;
+  }) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const current = (settings.get('reranker') as any) || {};
+
+    const merged: any = { ...current };
+    if (next.provider === 'local' || next.provider === 'openrouter' || next.provider === 'jina') {
+      merged.provider = next.provider;
+    }
+    if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
+    if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
+    if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
+    // Clamp rather than reject: a nonsensical depth should not be storable, and
+    // silently keeping the old value is less confusing than an error toast.
+    if (Number.isFinite(next.candidateCount)) {
+      merged.candidateCount = Math.max(1, Math.min(30, Math.floor(next.candidateCount as number)));
+    }
+
+    if (!settings.set('reranker', merged)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    return { success: true, reranker: merged };
+  });
+
+  safeHandle('reranker:set-hosted-key', async (_evt, provider: string, key: string) => {
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const cm = CredentialsManager.getInstance();
+    const saved = provider === 'jina'
+      ? cm.setJinaApiKey(key || '')
+      : cm.setOpenrouterApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('reranker:hosted-providers', async () => {
+    const { HOSTED_RERANK_PROVIDERS } = require('./rag/hostedRerankProviders');
+    const { readHostedApiKey } = require('./services/reranking/rerankerConfig');
+    return {
+      providers: Object.values(HOSTED_RERANK_PROVIDERS).map((p: any) => ({
+        id: p.id, name: p.name, keyUrl: p.keyUrl, keyPlaceholder: p.keyPlaceholder,
+        staticCatalogue: p.staticCatalogue, models: p.models,
+        // Presence only — the key never crosses this boundary.
+        hasApiKey: Boolean(readHostedApiKey(p.id)),
+      })),
+    };
+  });
+
+  safeHandle('reranker:set-openrouter-key', async (_evt, key: string) => {
+    // The SAME credential the embedding and generation paths use. One
+    // OPENROUTER_API_KEY, not a second copy owned by this panel.
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const saved = CredentialsManager.getInstance().setOpenrouterApiKey(key || '');
+    if (saved === false) {
+      return { success: false, error: 'credential_store_degraded', message: 'Could not save the key. Your credential store is unavailable.' };
+    }
+    return { success: true };
+  });
+
+  safeHandle('reranker:test', async (_evt, choice?: { model?: string }) => {
+    // Sends ONE real rerank request through the exact path retrieval uses, so a
+    // green test cannot pass while the real call fails. A cheaper probe (a
+    // /models read, say) would prove only that the key exists.
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { CredentialsManager } = require('./services/CredentialsManager');
+    const {
+      isLocalOnlyMode, referenceFilesScopeAllowed, describeIneligibility,
+    } = require('./services/reranking/rerankerConfig');
+    const { OpenRouterReranker } = require('./services/reranking/OpenRouterReranker');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    const { readHostedApiKey, readHostedModel } = require('./services/reranking/rerankerConfig');
+    const { hostedRerankProvider } = require('./rag/hostedRerankProviders');
+    const provider = stored.provider === 'jina' ? 'jina' : 'openrouter';
+    const descriptor = hostedRerankProvider(provider);
+    const model = (choice?.model || readHostedModel(stored) || '').trim();
+
+    // The privacy gate applies to the test too. A "Test connection" button that
+    // ignores it would be the one request a local-only user never consented to.
+    if (isLocalOnlyMode()) {
+      return { success: false, error: 'local-only-mode', message: describeIneligibility('local-only-mode') };
+    }
+    if (!referenceFilesScopeAllowed()) {
+      return { success: false, error: 'reference-files-scope-denied', message: describeIneligibility('reference-files-scope-denied') };
+    }
+
+    const reranker = new OpenRouterReranker({
+      baseUrl: descriptor?.baseUrl,
+      providerId: provider,
+      getApiKey: () => readHostedApiKey(provider),
+      getModel: () => model,
+    });
+
+    // A deterministic 3-document probe with an obvious right answer, so the
+    // check is "did it rank sensibly", not merely "did it return 200".
+    const query = 'What is the capital city of France?';
+    const documents = [
+      'Paris is the capital and most populous city of France.',
+      'The Rhine is a river in Central and Western Europe.',
+      'Photosynthesis converts light energy into chemical energy.',
+    ];
+
+    try {
+      const { order, stats } = await reranker.rerankOrThrow(query, documents);
+      const scoresFinite = order.every((o: any) => Number.isFinite(o.score));
+      const indicesValid = order.every((o: any) => o.index >= 0 && o.index < documents.length);
+      const rankedFirst = order[0]?.index;
+
+      // "ok, 2052ms" was true and useless: it never said that 2052ms lost to
+      // the rerank budget on every query, so a model that could not affect a
+      // single answer reported success. Report the fit alongside the latency.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { describeRerankLatencyFit } = require('./services/reranking/rerankBudget') as typeof import('./services/reranking/rerankBudget');
+      const budgetFit = describeRerankLatencyFit(stats.requestLatencyMs);
+
+      const result = {
+        success: true,
+        model,
+        latencyMs: stats.requestLatencyMs,
+        costUsd: stats.costUsd ?? null,
+        budgetFit,
+        scoresFinite,
+        indicesValid,
+        // Reported, never enforced: a model that ranks this "wrong" is odd but
+        // is not broken, and refusing to save on it would be overreach.
+        rankedExpectedFirst: rankedFirst === 0,
+      };
+      // The probe result is real whether or not it can be cached. Reporting
+      // `success: false` here would misdescribe a connection that genuinely
+      // worked — but silently claiming the record persisted is the bug
+      // RefusedSettingWriteReported2026_08_21 exists to catch. So the outcome
+      // and the persistence are reported separately.
+      const persisted = settings.set('reranker', {
+        ...stored,
+        lastTest: { at: new Date().toISOString(), model, latencyMs: stats.requestLatencyMs, ok: true },
+      });
+      return persisted ? result : { ...result, persistError: 'settings_store_degraded' };
+    } catch (e: any) {
+      const kind = e?.kind || 'network';
+      // Same reasoning as the success path: a refused cache write must not be
+      // silent, but it also must not overwrite the real reason the test failed.
+      const persisted = settings.set('reranker', {
+        ...stored,
+        lastTest: { at: new Date().toISOString(), model, latencyMs: 0, ok: false, failure: kind },
+      });
+      if (!persisted) {
+        console.warn('[reranking] could not record the last test result: settings_store_degraded');
+      }
+      // e.message is already a describeFailure() sentence and carries no key.
+      return { success: false, error: kind, message: String(e?.message || 'The rerank request failed.') };
+    }
+  });
+
+  // ── Direct reranker model install ────────────────────────────────────────
+  //
+  // Downloading a model without staging an extension folder. Two shapes, and
+  // the difference is not cosmetic:
+  //
+  //   ONNX  — lands in <userData>/local-models/<org>/<name>/, which is the
+  //           directory LocalReranker already searches FIRST. Core runs it with
+  //           the cross-encoder runtime it already ships for bge; there is no
+  //           new adapter and no new dependency.
+  //   GGUF  — Core has no llama.cpp. Downloading one into a Core directory
+  //           would produce hundreds of megabytes nothing can execute, so these
+  //           route through the owning extension's ModelStore, which is also
+  //           what keeps the LicenseLedger gate intact for Jina's CC-BY-NC-4.0.
+
+  const localModelDownloads = new Map<string, AbortController>();
+
+  safeHandle('reranker:list-local-models', async () => {
+    const { listCatalogStatus } = require('./services/reranking/localModelInstaller');
+    const { SettingsManager } = require('./services/SettingsManager');
+    const selectedId = ((SettingsManager.getInstance().get('reranker') as any) || {}).localModelId ?? null;
+
+    // Which GGUF models could actually run: their extension installed AND the
+    // binary present. Reported rather than assumed, so nothing reads "Ready"
+    // for a file that cannot be executed.
+    let installedExtensions: string[] = [];
+    try {
+      const manager = extensionManager();
+      installedExtensions = manager ? manager.list().map((r: any) => r.id) : [];
+    } catch { /* extensions unavailable */ }
+
+    const models = listCatalogStatus().map((m: any) => ({
+      id: m.id,
+      name: m.name,
+      runtime: m.runtime,
+      repo: m.repo,
+      params: m.params,
+      note: m.note,
+      bytes: m.bytes,
+      recommended: m.recommended === true,
+      license: m.license,
+      state: m.status.state,
+      bytesOnDisk: m.status.bytesOnDisk,
+      selected: selectedId === m.id,
+      extensionId: m.extensionId ?? null,
+      extensionInstalled: m.extensionId ? installedExtensions.includes(m.extensionId) : null,
+      requiresBinary: m.requiresBinary ?? null,
+      supported: m.supported,
+      unsupportedReason: m.unsupportedReason ?? null,
+      // Core runs both runtimes now: ONNX through transformers.js, GGUF
+      // through llama.cpp. Only `supported` gates activation.
+      activatable: m.supported,
+    }));
+
+    return { models, selectedId, builtInSelected: !selectedId };
+  });
+
+  safeHandle('reranker:install-local-model', async (event: any, id: string) => {
+    const { findCatalogModel } = require('./rag/rerankerModelCatalog');
+    const model = findCatalogModel(id);
+    if (!model) return { success: false, error: 'unknown_model' };
+    if (localModelDownloads.has(id)) return { success: false, error: 'already_downloading' };
+
+    const sender = event?.sender;
+    let lastSent = 0;
+    const emit = (fraction: number, currentFile: string) => {
+      const now = Date.now();
+      if (now - lastSent < 200 && fraction < 1) return;
+      lastSent = now;
+      try { sender?.send('reranker:model-progress', { id, fraction, currentFile }); } catch { /* window gone */ }
+    };
+
+    const controller = new AbortController();
+    localModelDownloads.set(id, controller);
+    try {
+      const { installCatalogModel } = require('./services/reranking/localModelInstaller');
+      const result = await installCatalogModel(id, (p: any) => emit(p.fraction, p.currentFile), controller.signal);
+      if (!result.ok) return { success: false, error: 'download_failed', message: result.error };
+      return { success: true, digests: result.digests };
+    } catch (e: any) {
+      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+    } finally {
+      localModelDownloads.delete(id);
+    }
+  });
+
+  safeHandle('reranker:cancel-local-model', async (_evt, id: string) => {
+    const controller = localModelDownloads.get(id);
+    if (!controller) return { success: false, error: 'not_downloading' };
+    controller.abort();
+    return { success: true };
+  });
+
+  safeHandle('reranker:remove-local-model', async (_evt, id: string) => {
+    const { SettingsManager } = require('./services/SettingsManager');
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    // Never delete the model that is currently in use — the app would be left
+    // pointing at a directory that no longer exists.
+    if (stored.localModelId === id) {
+      return { success: false, error: 'in_use', message: 'This reranker is in use. Choose another one before removing it.' };
+    }
+    const { removeCatalogModel } = require('./services/reranking/localModelInstaller');
+    const res = removeCatalogModel(id);
+    return { success: res.ok, message: res.error };
+  });
+
+  safeHandle('reranker:use-local-model', async (_evt, id: string | null) => {
+    // Activation VALIDATES before it commits. The previous reranker stays in
+    // place unless the new one has actually loaded and produced a sane ranking,
+    // so a bad model can never leave the app without a working reranker.
+    const { SettingsManager } = require('./services/SettingsManager');
+    const { findCatalogModel } = require('./rag/rerankerModelCatalog');
+    const { statusOf } = require('./services/reranking/localModelInstaller');
+    const { reloadLocalReranker, getLocalReranker } = require('./rag/LocalReranker');
+
+    const settings = SettingsManager.getInstance();
+    const stored = (settings.get('reranker') as any) || {};
+    const previous = stored.localModelId ?? null;
+
+    if (id !== null) {
+      const model = findCatalogModel(id);
+      if (!model) return { success: false, error: 'unknown_model' };
+      if (!model.supported) {
+        return { success: false, error: 'not_supported', message: model.unsupportedReason ?? `${model.name} is not supported by this build.` };
+      }
+      const status = statusOf(model);
+      if (status.state !== 'installed') {
+        return { success: false, error: 'not_installed', message: `${model.name} is not fully downloaded (missing ${status.missing.join(', ')}).` };
+      }
+    }
+
+    if (!settings.set('reranker', { ...stored, localModelId: id })) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    // The constructor reads the setting, so the switch only happens once the
+    // old instance is disposed and dropped. The GGUF port caches by model path,
+    // so it needs the same nudge.
+    reloadLocalReranker('reranker model changed');
+    try {
+      const { resetLocalGgufPort } = require('./services/reranking/rerankerConfig');
+      resetLocalGgufPort();
+    } catch { /* no cached port to drop */ }
+
+    try {
+      // Self-test through whichever runtime will actually serve it, so a green
+      // activation means the real path works rather than a proxy for it.
+      const { findCatalogModel: findModel } = require('./rag/rerankerModelCatalog');
+      const chosen = id ? findModel(id) : null;
+      const reranker = chosen?.runtime === 'gguf'
+        ? (() => {
+            const { buildLocalGgufPort } = require('./services/reranking/rerankerConfig');
+            const port = buildLocalGgufPort();
+            if (!port) throw new Error('the GGUF runtime could not be prepared for this model');
+            return port;
+          })()
+        : getLocalReranker();
+      const ranked = await reranker.rerank(
+        'What is the capital city of France?',
+        ['Paris is the capital and most populous city of France.', 'The Rhine is a river in Central and Western Europe.'],
+      );
+      const ok = Array.isArray(ranked) && ranked.length === 2
+        && ranked.every((r: any) => Number.isFinite(r.score));
+      if (!ok) throw new Error('the model loaded but did not return a usable ranking');
+
+      return { success: true, activeId: id, topIndex: ranked[0].index };
+    } catch (e: any) {
+      // Roll back to whatever was working before — and only CLAIM the rollback
+      // if the write actually landed. The success path a few lines up already
+      // treats a refused `settings.set` as a hard failure
+      // ('settings_store_degraded'); this path discarded the same return value,
+      // so a degraded store left the FAILED model stored while telling the user
+      // their previous reranker was still active.
+      const reverted = settings.set('reranker', { ...stored, localModelId: previous });
+      reloadLocalReranker(
+        reverted ? 'activation failed; reverted' : 'activation failed; revert was refused',
+      );
+      return {
+        success: false,
+        error: 'activation_failed',
+        message: reverted
+          ? `Couldn't activate this reranker: ${String(e?.message || e)}. Your previous reranker is still active.`
+          : `Couldn't activate this reranker: ${String(e?.message || e)}. The previous setting could not be restored either, so reranking may be unavailable until you choose one again.`,
+      };
+    }
+  });
+
+  // ── Extensions ───────────────────────────────────────────────────────────
+  //
+  // Reranker extensions surface INSIDE Settings > Reranker, not in a separate
+  // pane: only one reranker can own the seam, so two places to configure one
+  // would let a user set two things that cannot both be active.
+  //
+  // Nothing here enables an extension implicitly, and nothing downloads without
+  // an explicit call from a user action.
+
+  const extensionManager = () => {
+    const { getExtensionManager } = require('./services/extensions/appWiring');
+    return getExtensionManager();
+  };
+
+  safeHandle('extensions:list', async () => {
+    const manager = extensionManager();
+    if (!manager) return { available: false, extensions: [] };
+
+    const { ModelStore } = require('./services/extensions/ModelStore');
+    const { getLicenseLedger } = require('./services/extensions/LicenseLedger');
+    const { lookupKnownModelSupport: knownModelSupport } =
+      require('./services/reranking/knownModelSupport') as typeof import('./services/reranking/knownModelSupport');
+    const store = new ModelStore({});
+    const ledger = getLicenseLedger();
+    const running = manager.running();
+
+    const extensions = manager.list().map((r: any) => ({
+      id: r.id,
+      name: r.manifest.name,
+      version: r.manifest.version,
+      type: r.manifest.type,
+      author: r.manifest.author,
+      homepage: r.manifest.homepage,
+      source: r.source,
+      enabled: r.enabled,
+      running: running.includes(r.id),
+      disabledReason: r.disabledReason ?? null,
+      permissions: r.grantedPermissions,
+      models: (r.manifest.models ?? []).map((m: any) => {
+        const status = store.status(r.id, m);
+        // Core sometimes ships this exact model and already knows it cannot
+        // run. The extension path never consulted that, so a known-broken
+        // model could own the rerank seam with nothing said anywhere.
+        const known = knownModelSupport(m.repo);
+        return {
+          key: m.key,
+          format: m.format,
+          approxBytes: m.approxBytes,
+          repo: m.repo ?? null,
+          state: status.state,
+          bytes: status.bytes ?? null,
+          reason: status.reason ?? null,
+          knownUnsupportedReason: known && !known.supported ? (known.reason ?? null) : null,
+          license: {
+            spdx: m.license.spdx,
+            url: m.license.url,
+            commercialUseRestricted: m.license.commercialUseRestricted,
+            requiresAcknowledgement: m.license.requiresAcknowledgement,
+            acknowledged: ledger.hasAcknowledged(r.id, m.key, m.license.spdx),
+          },
+        };
+      }),
+    }));
+
+    return { available: true, extensions };
+  });
+
+  safeHandle('extensions:install-from-folder', async () => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+
+    const { dialog, BrowserWindow } = require('electron');
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const picked = await dialog.showOpenDialog(parent, {
+      title: 'Choose an extension folder',
+      properties: ['openDirectory'],
+      message: 'Select the folder containing the extension\'s extension.json',
+    });
+    if (picked.canceled || picked.filePaths.length === 0) return { success: false, error: 'cancelled' };
+
+    const { stageFromDirectory } = require('./services/extensions/ExtensionInstaller');
+    const staged = stageFromDirectory(picked.filePaths[0]);
+    if (!staged.ok) return { success: false, error: 'stage_failed', errors: staged.errors };
+
+    // The trust prompt lives inside install(). A refusal there leaves the staged
+    // payload on disk but no registry record, so nothing can load it.
+    const result = await manager.install({
+      manifestJson: staged.manifestJson,
+      source: `local:${picked.filePaths[0]}`,
+      payloadDir: staged.payloadDir,
+    });
+    if (!result.ok) return { success: false, error: 'install_refused', errors: result.errors };
+
+    return {
+      success: true,
+      id: result.record.id,
+      warnings: [...(staged.warnings ?? []), ...result.warnings],
+    };
+  });
+
+  safeHandle('extensions:set-enabled', async (_evt, id: string, enabled: boolean) => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    const ok = enabled ? manager.enable(id) : manager.disable(id, 'disabled by the user');
+    if (!ok) return { success: false, error: 'not_installed' };
+    if (enabled) { void manager.load(id); } else { void manager.unload(id); }
+    return { success: true };
+  });
+
+  safeHandle('extensions:remove', async (_evt, id: string) => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    // remove() is async now: it must finish unloading before deleting the
+    // model directories, or Windows leaves the weights behind.
+    return { success: await manager.remove(id) };
+  });
+
+  safeHandle('extensions:acknowledge-license', async (_evt, id: string, modelKey: string) => {
+    // Recording consent, so it must come from a real user action and must name
+    // the exact terms agreed to. A licence that later CHANGES invalidates this,
+    // because the user agreed to different terms — that is LicenseLedger's rule,
+    // not something this handler can weaken.
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    const record = manager.get(id);
+    const model = record?.manifest.models?.find((m: any) => m.key === modelKey);
+    if (!model) return { success: false, error: 'unknown_model' };
+
+    const { getLicenseLedger } = require('./services/extensions/LicenseLedger');
+    getLicenseLedger().acknowledge(id, modelKey, model.license.spdx);
+    return { success: true };
+  });
+
+  // One in-flight download per (extension, model). A second request for the same
+  // model returns the existing controller's state rather than starting a race
+  // that would have two writers on one .part file.
+  const extensionDownloads = new Map<string, AbortController>();
+
+  safeHandle('extensions:download-model', async (event: any, id: string, modelKey: string) => {
+    const manager = extensionManager();
+    if (!manager) return { success: false, error: 'extensions_unavailable' };
+    const record = manager.get(id);
+    const model = record?.manifest.models?.find((m: any) => m.key === modelKey);
+    if (!model) return { success: false, error: 'unknown_model' };
+
+    const key = `${id}::${modelKey}`;
+    if (extensionDownloads.has(key)) return { success: false, error: 'already_downloading' };
+
+    const { ModelStore } = require('./services/extensions/ModelStore');
+    const { HuggingFaceModelDownloader } = require('./services/extensions/HuggingFaceModelDownloader');
+    const store = new ModelStore({ downloader: new HuggingFaceModelDownloader({ logger: console }) });
+
+    const controller = new AbortController();
+    extensionDownloads.set(key, controller);
+    const sender = event?.sender;
+    let lastSent = 0;
+    try {
+      const status = await store.download(id, model, (fraction: number) => {
+        // Throttled: a 400MB download emits thousands of chunk callbacks, and a
+        // renderer message per chunk would cost more than the download.
+        const now = Date.now();
+        if (now - lastSent < 200 && fraction < 1) return;
+        lastSent = now;
+        try { sender?.send('extensions:model-progress', { id, modelKey, fraction }); } catch { /* window gone */ }
+      }, controller.signal);
+      return { success: status.state === 'ready', status };
+    } catch (e: any) {
+      return { success: false, error: 'download_failed', message: String(e?.message || e) };
+    } finally {
+      extensionDownloads.delete(key);
+    }
+  });
+
+  safeHandle('extensions:cancel-download', async (_evt, id: string, modelKey: string) => {
+    const controller = extensionDownloads.get(`${id}::${modelKey}`);
+    if (!controller) return { success: false, error: 'not_downloading' };
+    controller.abort();
+    return { success: true };
+  });
+
+  safeHandle('extensions:browse-registry', async (_evt, url?: string) => {
+    // METADATA ONLY. Ids, repositories, versions, licence identifiers. No code
+    // and no weights cross this boundary — obtaining a payload stays an explicit
+    // user act, because an entrypoint is code that runs on their machine and the
+    // sandbox is not a boundary against a hostile extension.
+    const { fetchRemoteRegistry } = require('./services/extensions/ExtensionInstaller');
+    const DEFAULT_REGISTRY = 'https://raw.githubusercontent.com/evinjohnn/natively-extension-registry/main/registry.json';
+    const requested = url || process.env.NATIVELY_EXTENSION_REGISTRY_URL || DEFAULT_REGISTRY;
+
+    // The renderer can pass any string here, and this handler makes the main
+    // process fetch it. Restrict it to https so a compromised or careless
+    // renderer cannot turn this into a general-purpose request proxy —
+    // file://, http:// to a loopback service, and anything else are refused.
+    let target: string;
+    try {
+      const parsed = new URL(requested);
+      if (parsed.protocol !== 'https:') throw new Error('registry must be https');
+      target = parsed.toString();
+    } catch {
+      return { ok: false, entries: [], error: 'invalid_registry_url' };
+    }
+
+    const result = await fetchRemoteRegistry(target);
+    return { ok: result.ok, entries: result.entries };
   });
 
   safeHandle('get-available-ollama-models', async () => {
@@ -7362,13 +8700,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (keyChanged) {
         const ragManager = appState.getRAGManager();
         if (ragManager) {
-          ragManager.initializeEmbeddings({
-            openaiKey: cm.getOpenaiApiKey() || undefined,
+          ragManager.initializeEmbeddings(buildEmbeddingConfig({
             geminiKey: apiKey || undefined,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
             explicitKeyManagement: true,
-          });
+          }));
           appState.scheduleModeReferenceIndexRetry();
         }
       }
@@ -7442,13 +8777,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       if (keyChanged) {
         const ragManager = appState.getRAGManager();
         if (ragManager) {
-          ragManager.initializeEmbeddings({
+          ragManager.initializeEmbeddings(buildEmbeddingConfig({
             openaiKey: apiKey || undefined,
-            geminiKey: cm.getGeminiApiKey() || undefined,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })(),
             explicitKeyManagement: true,
-          });
+          }));
           appState.scheduleModeReferenceIndexRetry();
         }
       }
@@ -8442,7 +9774,12 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { ok: false, error: 'Invalid provider payload' };
     }
 
-    if (!(provider as any).curlCommand.includes('{{TEXT}}')) {
+    // Spacing tolerated, matching deepVariableReplacer and both validateCurl
+    // copies — a template the engine substitutes correctly must not be rejected
+    // at the IPC boundary. Taken from the shared policy rather than re-spelled:
+    // this literal was the third copy, and the drift it caused is what the
+    // module exists to prevent.
+    if (!TEXT_PLACEHOLDER_RE.test((provider as any).curlCommand)) {
       return { ok: false, error: 'curlCommand must contain {{TEXT}} placeholder for the prompt' };
     }
 
@@ -9650,7 +10987,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         let response;
 
         if (provider === 'gemini') {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`;
           response = await axios.post(
             url,
             {
@@ -10133,7 +11470,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { model: cm.getDefaultModel() };
     } catch (error: any) {
       console.error('Error getting default model:', error);
-      return { model: 'gemini-3.7-flash' };
+      return { model: 'gemini-3.8-flash' };
     }
   });
 

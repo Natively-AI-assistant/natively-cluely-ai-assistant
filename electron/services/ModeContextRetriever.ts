@@ -61,6 +61,11 @@ export interface ModeRetrievalOptions {
      */
     forceDocumentGrounding?: boolean;
     /**
+     * Which deadline the calling turn is racing, for the rerank budget only.
+     * Absent means the tighter live budget — see rerankBudget.ts.
+     */
+    rerankSurface?: 'live' | 'manual';
+    /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
      * the subject — the bare query has no referent, so retrieval can't find the
@@ -1799,6 +1804,7 @@ export class ModeContextRetriever {
             // applies the doc-grounded budget/topK upgrade (3600/12) instead of the
             // default 1800/6 — grounded answers were retrieving too small a window.
             forceDocumentGrounding: options.forceDocumentGrounding,
+            rerankSurface: options.rerankSurface,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

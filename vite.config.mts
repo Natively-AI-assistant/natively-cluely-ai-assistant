@@ -86,6 +86,18 @@ export default defineConfig({
                 // re-use story — a settings-page tweak no longer invalidates
                 // the giant React vendor chunk. Entries are matched by
                 // substring against the import path.
+                //
+                // media-vendor was REMOVED as a manual chunk (2026-09-03).
+                // tesseract.js / three / qrcode / jspdf have no static importer
+                // anywhere in src, so forcing them into a named chunk only gave
+                // Rollup somewhere to park Vite's `\0vite/preload-helper` —
+                // which made the ENTRY statically import 382 kB of media
+                // libraries, modulepreloaded by every window. Left unlisted,
+                // they land in whichever dynamic chunk actually pulls them.
+                //
+                // util-vendor is separate for the opposite reason: clsx,
+                // tailwind-merge and cva ARE imported by nearly every
+                // component, so they must not ride along with heavy libs.
                 manualChunks: {
                     'react-vendor': ['react', 'react-dom', 'scheduler'],
                     'animation-vendor': ['framer-motion'],
@@ -103,11 +115,7 @@ export default defineConfig({
                         'react-syntax-highlighter',
                         'marked',
                     ],
-                    'media-vendor': [
-                        'tesseract.js',
-                        'three',
-                        'qrcode',
-                        'jspdf',
+                    'util-vendor': [
                         'tailwind-merge',
                         'clsx',
                         'class-variance-authority',

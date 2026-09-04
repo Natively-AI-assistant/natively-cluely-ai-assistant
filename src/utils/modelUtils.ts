@@ -7,8 +7,10 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
 }> = {
     gemini: {
         hasKeyCheck: (creds) => !!creds?.hasGeminiKey,
-        ids: ['gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'],
-        names: ['Gemini 3.7 Flash', 'Gemini 3.1 Flash Lite', 'Gemini 3.1 Pro'],
+        // ids and names are zipped positionally by the picker — they must be
+        // bumped together or a row shows one model's label and selects another.
+        ids: ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-3.1-pro-preview'],
+        names: ['Gemini 3.8 Flash', 'Gemini 3.1 Flash Lite', 'Gemini 3.1 Pro'],
         descs: ['Fastest • Multimodal', 'Reasoning • High Quality'],
         pmKey: 'geminiPreferredModel'
     },

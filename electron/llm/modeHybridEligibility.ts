@@ -115,7 +115,7 @@ export async function runHybridModeRetrieval(
     /* excludeCustomContext */ true,
     args.pinnedModeId ?? undefined,
     /* allowRerank */ true,
-    { forceDocumentGrounding: args.forceDocumentGrounding, followUpReferentHint: args.followUpReferentHint },
+    { forceDocumentGrounding: args.forceDocumentGrounding, followUpReferentHint: args.followUpReferentHint, rerankSurface: 'manual' as const },
   );
   if (args.budgetMs == null) {
     return { block: await hybridPromise, timedOut: false };

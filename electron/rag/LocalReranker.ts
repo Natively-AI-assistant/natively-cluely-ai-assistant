@@ -39,6 +39,7 @@
 import path from 'path';
 import fs from 'fs';
 import { Worker } from 'worker_threads';
+import { resolveRagWorker } from './resolveRagWorker';
 import { app } from 'electron';
 import {
     acquireOnnxSlot,
@@ -65,14 +66,66 @@ export interface RerankResult {
 let startupPoisoned = false;
 
 /**
- * Default model: bge-reranker-base, ONNX port that runs in transformers.js.
- * Small cross-encoder (~1.1GB fp32 / ~280MB quantized) — quantized is used.
+ * The bundled default: ms-marco-MiniLM-L-6-v2, q8, ~24MB.
+ *
+ * It replaced bge-reranker-base on 2026-09-04, and the reason is the whole
+ * point. Measured against a NO-RERANKER baseline on a 40-passage pool with
+ * same-topic distractors (docs/reranker-benchmark-2026-09-04.md):
+ *
+ *     bge-reranker-base    MRR 0.7558   -0.0810 vs baseline   +3/-7   1873ms
+ *     ms-marco-MiniLM-L-6  MRR 0.8688   +0.0320 vs baseline   +4/-2    211ms
+ *
+ * The old default was the worst reranker in that table — it made retrieval
+ * measurably worse while costing 283MB of installer and ~1.9s a call. This one
+ * is a twelfth of the size, nine times faster, and actually improves the
+ * ranking. Both are q8, so the dtype default below is unchanged.
+ *
  * Override via NATIVELY_RERANKER_MODEL for experimentation.
  */
-const DEFAULT_RERANKER_MODEL = 'Xenova/bge-reranker-base';
+const DEFAULT_RERANKER_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
+
+/**
+ * The bundled model's id, for code that needs to look for it on disk without
+ * constructing a reranker — LocalFallbackPreflight, chiefly. Exported so there
+ * is ONE literal: the preflight used to carry its own copy, and when the
+ * bundled model changed it kept looking for the old one and reported the
+ * reranker missing on every packaged launch.
+ */
+export function getBundledRerankerModelId(): string {
+  // Deliberately NOT honouring NATIVELY_RERANKER_MODEL. That variable selects
+  // which model to LOAD; this function answers what the INSTALLER SHIPPED, and
+  // the two are different questions. Reading the env here made the preflight
+  // look in resources/models for a model that was never bundled, fail, and show
+  // the user "Natively's packaged <override> is missing. Please reinstall
+  // Natively." — blaming the install for a deliberate override, and naming a
+  // model the installer has no reason to contain.
+  return DEFAULT_RERANKER_MODEL;
+}
+
+/**
+ * `app.getPath('userData')` rebuilt by hand, for the paths where `app` is not
+ * available. Must stay identical to the installer's own fallback — the reader
+ * and the writer disagreeing is how a downloaded model becomes invisible.
+ */
+function fallbackUserDataDir(): string {
+    const home = process.env.HOME || process.env.USERPROFILE || process.cwd();
+    switch (process.platform) {
+        case 'darwin':
+            return path.join(home, 'Library', 'Application Support', 'natively');
+        case 'win32':
+            return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'natively');
+        default:
+            return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'natively');
+    }
+}
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_RERANK_TIMEOUT_MS = 15_000; // a single rerank() call (bounded candidate pool ~30)
+
+/** Backstop for a disposed reranker worker that still owes replies. */
+const RERANK_DISPOSE_DRAIN_MAX_MS = 30_000;
+/** Graceful ONNX release budget. Short: a quit must not wait on a wedged worker. */
+const WORKER_DISPOSE_TIMEOUT_MS = 3_000;
 
 class LocalRerankerImpl {
     private worker: Worker | null = null;
@@ -91,7 +144,19 @@ class LocalRerankerImpl {
     private readonly dtype: string;
 
     constructor() {
-        this.modelId = (process.env.NATIVELY_RERANKER_MODEL || '').trim() || DEFAULT_RERANKER_MODEL;
+        // Resolution order: env override > the user's selected model > default.
+        // The env var stays FIRST so an experiment or a CI pin still wins over
+        // stored settings, which is what every other model knob in this repo does.
+        const selected = readSelectedLocalReranker();
+        // An env override replaces the SELECTION, not half of it. Taking modelId
+        // from the env and dtype from the stored selection can name a file that
+        // does not exist — an Ettin selection is fp32 (onnx/model.onnx) while
+        // bge-reranker-base is q8 (onnx/model_quantized.onnx), so mixing them
+        // asks for a variant the repo never shipped and latches loadFailed with
+        // a message that names neither the env var nor the selection.
+        const envModel = (process.env.NATIVELY_RERANKER_MODEL || '').trim();
+        const effective = envModel ? null : selected;
+        this.modelId = envModel || selected?.modelId || DEFAULT_RERANKER_MODEL;
         // Resolve the bundled model dir with the same candidate-search pattern
         // as LocalEmbeddingProvider.resolveModelPath — try packaged
         // resourcesPath/models, then app-relative resources/models (works for
@@ -107,7 +172,14 @@ class LocalRerankerImpl {
         // download fetches the quantized variant, so this keeps both the
         // installer and the loaded footprint small. NATIVELY_RERANKER_DTYPE
         // overrides (e.g. 'fp32') for accuracy experiments.
-        this.dtype = (process.env.NATIVELY_RERANKER_DTYPE || 'q8').trim() || 'q8';
+        // dtype is PER MODEL, not global. bge-reranker-base ships
+        // `onnx/model_quantized.onnx` (q8); the Ettin repositories ship
+        // `onnx/model.onnx` (fp32) plus architecture-specific int8 exports that
+        // cannot be one cross-platform choice. Applying the q8 default to an
+        // Ettin model asks transformers.js for a file that is not there.
+        this.dtype = (process.env.NATIVELY_RERANKER_DTYPE || '').trim()
+            || effective?.dtype
+            || 'q8';
     }
 
     private static resolveModelPath(modelId: string): string {
@@ -116,19 +188,23 @@ class LocalRerankerImpl {
             candidates.push(process.env.NATIVELY_LOCAL_MODELS_PATH);
         }
         // 2026-07-06: lazy-download user-data cache is the primary location
-        // (populated by rerankerDownloadProvider on first mode activation).
+        // (populated by the catalogue installer when a model is downloaded).
         // Falls through to bundled resourcesPath candidates for legacy
         // installs that already have the model in the bundle from a prior
         // v2.7.x build.
         try {
             const userDataDir = app?.getPath?.('userData') || '';
-            // Fallback to HOME-based path when app.getPath isn't ready
-            // (e.g. ELECTRON_RUN_AS_NODE test/probe mode).
-            const homeLocalModels = process.env.HOME
-                ? path.join(process.env.HOME, 'Library/Application Support/natively/local-models')
-                : '';
+            // Fallback for when app.getPath isn't ready (ELECTRON_RUN_AS_NODE
+            // probes, tests, early boot). This MUST agree with the writer:
+            // localModelInstaller.fallbackUserDataDir() picks per platform, and
+            // hardcoding the macOS shape here sent Windows and Linux looking in
+            // `<home>/Library/Application Support/...` — a directory nothing
+            // ever writes, so a downloaded model was invisible to the reranker
+            // meant to load it, and resolveModelPath fell through to its
+            // unverified last resort. CLAUDE.md forbids exactly this.
+            const homeLocalModels = path.join(fallbackUserDataDir(), 'local-models');
             if (userDataDir) candidates.push(path.join(userDataDir, 'local-models'));
-            if (homeLocalModels && homeLocalModels !== path.join(userDataDir || '', 'local-models')) {
+            if (homeLocalModels !== path.join(userDataDir || '', 'local-models')) {
                 candidates.push(homeLocalModels);
             }
         } catch { /* app not ready yet */ }
@@ -142,6 +218,25 @@ class LocalRerankerImpl {
             candidates.push(path.join(appPath, '..', 'resources', 'models'));
             candidates.push(path.join(appPath, '..', '..', 'resources', 'models'));
         }
+        // Every candidate above needs Electron's `app`. Without it — a plain
+        // `node --test`, or any ELECTRON_RUN_AS_NODE probe — none are even
+        // built, so resolution fell straight through to the UNVERIFIED last
+        // resort below: `<cwd>/models`. On a dev machine that directory is a
+        // stale download cache, and a truncated model there loads as
+        // "Protobuf parsing failed", which disables reranking silently.
+        //
+        // These two are cwd-relative and VERIFIED by the same marker, so they
+        // cost nothing in a packaged app (cwd is not the repo, the marker is
+        // absent, they are skipped) and let a test find the bundled model.
+        // `resources/models` comes first deliberately: it is the copy the
+        // repository actually ships, and `<cwd>/models` is the ambiguous cache
+        // that should only win when nothing better exists.
+        try {
+            const cwd = process.cwd();
+            candidates.push(path.join(cwd, 'resources', 'models'));
+            candidates.push(path.join(cwd, 'models'));
+        } catch { /* cwd can throw if the directory was removed */ }
+
         // modelId like 'Xenova/bge-reranker-base' -> 'Xenova/bge-reranker-base/tokenizer.json'
         const marker = path.join(...modelId.split('/'), 'tokenizer.json');
         for (const c of candidates) {
@@ -154,17 +249,12 @@ class LocalRerankerImpl {
     }
 
     private getWorkerPath(): string {
-        const candidates = [
-            path.join(__dirname, 'localRerankerWorker.js'),
-            path.join(__dirname, 'rag', 'localRerankerWorker.js'),
-            path.join(__dirname, 'electron', 'rag', 'localRerankerWorker.js'),
-        ];
-
-        let resolvedPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
-        if (resolvedPath.includes('app.asar') && !resolvedPath.includes('app.asar.unpacked')) {
-            resolvedPath = resolvedPath.replace('app.asar', 'app.asar.unpacked');
-        }
-        return resolvedPath;
+        // Ascends from __dirname rather than guessing the depth — the three
+        // fixed candidates this used to try resolved from `electron/` and
+        // `electron/rag/` only, and this class is inlined into bundles under
+        // `llm/`, `services/` and `services/reranking/` as well. See
+        // resolveRagWorker.ts for the measurement.
+        return resolveRagWorker(__dirname, 'localRerankerWorker.js');
     }
 
     private getWorker(): Worker {
@@ -322,6 +412,18 @@ class LocalRerankerImpl {
      * model/package is unavailable — the caller treats that as "no rerank" and
      * keeps the current top-K.
      */
+    /**
+     * Whether the model is ALREADY loaded, without loading it.
+     *
+     * `isAvailable()` calls ensureLoaded(), so asking it "is the reranker ready"
+     * is really telling it "load the reranker" — a settings panel that called it
+     * to render a badge would block on a model load, and on a first run on a
+     * download. This is the read-only question.
+     */
+    isLoaded(): boolean {
+        return this.loaded;
+    }
+
     async isAvailable(): Promise<boolean> {
         if (startupPoisoned) return false;
         if (this.loadFailed) return false;
@@ -419,18 +521,106 @@ class LocalRerankerImpl {
         }
     }
 
-    /** Test-only: reset cached load state so a test can re-exercise loading. */
-    __resetForTests(): void {
-        if (this.worker) {
-            this.worker.terminate().catch(() => {});
-            this.worker = null;
-        }
-        // Release any held ONNX gate slot so subsequent tests start clean.
-        if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
-        this.rejectAllPending(new Error('reset for tests'));
+    /**
+     * Tear the worker down and forget every cached load decision.
+     *
+     * Public because switching models needs exactly this: the modelId and dtype
+     * are read in the constructor, so a new selection only takes effect once
+     * this instance is disposed and replaced. Without it, "Use this model" would
+     * silently do nothing until the next launch.
+     */
+    dispose(reason = 'disposed'): void {
+        const worker = this.worker;
+        this.worker = null;
         this.loadingPromise = null;
         this.loadFailed = false;
         this.loaded = false;
+
+        // An INTENTIONAL teardown is not a crash — clear the sentinel here
+        // (2026-09-04).
+        //
+        // `terminate()` exits the thread with code 1, and the exit handler only
+        // clears the sentinel on code 0, so every ordinary model switch through
+        // reloadLocalReranker() left a "died hard" record behind. Restarting
+        // within ONNX_LOAD_SENTINEL_TTL_MS (5 min) then made
+        // consumeLocalRerankerSentinel() set startupPoisoned and SKIP local
+        // reranking for that whole launch — a false crash signal produced by a
+        // normal user action, with the usual silent symptom.
+        try { clearOnnxLoadSentinel('reranker', this.modelId); } catch { /* best effort */ }
+
+        if (!worker) {
+            if (this.slotRelease) { this.slotRelease(); this.slotRelease = null; }
+            this.rejectAllPending(new Error(reason));
+            return;
+        }
+
+        // Let an in-flight rerank finish rather than killing it mid-call.
+        //
+        // A rerank fails CLOSED — null means "keep the existing order" — so
+        // this does not lose data the way a rejected embed does. But disposal
+        // is triggered by the user switching models, which can land in the
+        // middle of a meeting turn, and silently dropping that turn's ranking
+        // is exactly the "reranker did nothing" symptom. Terminating mid
+        // `session.run()` is also the native-abort shape this worker exists to
+        // contain. The worker's own exit handler releases the ONNX gate slot.
+        void this.terminateWhenDrained(worker);
+    }
+
+    /**
+     * Wait for replies this worker still owes, then stop it. Bounded: each
+     * pending request carries its own timeout, so the map drains even if the
+     * worker never answers.
+     */
+    private async terminateWhenDrained(worker: Worker): Promise<void> {
+        const deadline = Date.now() + RERANK_DISPOSE_DRAIN_MAX_MS;
+        while (this.pendingRequests.size > 0 && Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        await this.releaseThenTerminate(worker);
+    }
+
+    /**
+     * Ask the worker to release its ONNX sessions, then stop the thread.
+     *
+     * `PreTrainedModel.dispose()` is transformers.js's own release path — "one
+     * promise for each ONNX session that is being disposed" — and terminating
+     * the thread skipped it entirely. The worker serialises its messages, so
+     * this is queued behind anything still running rather than freeing sessions
+     * underneath a live `model(inputs)` call.
+     *
+     * Bounded and best-effort in both directions: a worker that will not answer
+     * must never keep a model switch (or a quit) waiting, and losing the
+     * graceful release is strictly better than leaving the thread alive.
+     */
+    private async releaseThenTerminate(worker: Worker): Promise<void> {
+        try {
+            await this.postTo(worker, { type: 'dispose' }, WORKER_DISPOSE_TIMEOUT_MS);
+        } catch { /* timed out or errored — terminate anyway */ }
+        try { await worker.terminate(); } catch { /* already gone */ }
+    }
+
+    /**
+     * Send to an EXPLICIT worker. Teardown needs this: `this.worker` has
+     * already been cleared, and routing through getWorker() would spawn a
+     * replacement thread purely to tell it to shut down.
+     */
+    private postTo<T>(worker: Worker, message: any, timeoutMs: number): Promise<T> {
+        this.requestId = (this.requestId + 1) % Number.MAX_SAFE_INTEGER;
+        const id = this.requestId;
+        message.requestId = id;
+        return new Promise<T>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingRequests.delete(id);
+                reject(new Error(`[LocalReranker] dispose request ${id} timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+            this.pendingRequests.set(id, { resolve, reject, timer });
+            worker.postMessage(message);
+        });
+    }
+
+    /** Test-only alias, kept so existing tests read the same. */
+    __resetForTests(): void {
+        this.dispose('reset for tests');
     }
 
     /**
@@ -460,6 +650,55 @@ let _instance: LocalRerankerImpl | null = null;
 export function getLocalReranker(): LocalRerankerImpl {
     if (!_instance) _instance = new LocalRerankerImpl();
     return _instance;
+}
+
+/**
+ * The model the user selected, or null for the built-in.
+ *
+ * Read lazily and defensively: this runs on the retrieval path via the
+ * constructor, and a missing or half-initialised SettingsManager must fall back
+ * to the bundled model rather than throw. esbuild bundles every electron file
+ * separately, so a top-level import would inline a second SettingsManager —
+ * see services/extensions/singleton.ts.
+ */
+function readSelectedLocalReranker(): { modelId: string; dtype: string } | null {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SettingsManager } = require('../services/SettingsManager');
+        // `.get(key)` — SettingsManager has no getSettings(). Calling one threw
+        // into the catch below, which returned null, so a selected model was
+        // silently ignored and the bundled one kept running while the UI
+        // reported the switch had succeeded.
+        const id = (SettingsManager.getInstance().get('reranker') as any)?.localModelId;
+        if (!id || typeof id !== 'string') return null;
+
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { findCatalogModel } = require('./rerankerModelCatalog') as typeof import('./rerankerModelCatalog');
+        const entry = findCatalogModel(id);
+        // Only ONNX entries run in THIS runtime. A GGUF selection is executed by
+        // its extension, and honouring it here would point transformers.js at a
+        // directory containing one .gguf file it cannot read.
+        if (!entry || entry.runtime !== 'onnx' || !entry.modelId) return null;
+        return { modelId: entry.modelId, dtype: entry.dtype ?? 'fp32' };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Swap the active local reranker.
+ *
+ * Disposes the running instance and drops the singleton so the next
+ * `getLocalReranker()` rebuilds against the current selection. Callers must
+ * have written the setting FIRST — the constructor is what reads it.
+ *
+ * `ModesManager.prewarmModeReferenceIndex` calls `getLocalReranker()` each time
+ * rather than holding a reference, so a warm instance cannot survive this.
+ */
+export function reloadLocalReranker(reason = 'model changed'): void {
+    const previous = _instance;
+    _instance = null;
+    try { previous?.dispose(reason); } catch { /* a failed teardown must not block the switch */ }
 }
 
 export type { LocalRerankerImpl };

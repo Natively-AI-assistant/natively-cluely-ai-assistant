@@ -15,6 +15,19 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// SCOPE. These three cases are about sanitizeCandidateAnswer()'s fallback, and
+// nothing else. The Context OS clarification short-circuit sits UPSTREAM of it
+// in runWhatShouldISay: when it fires, WTA returns "Which project do you mean?"
+// and the sanitizer never runs, so all three assertions compared a
+// clarification against a repaired answer.
+//
+// It began firing here because contextOsPropertyValidation's default changed
+// from `isInternalDevTestContext` (a thunk, false under `node --test`) to a
+// flat `true` in the 2026-08-30 promotion batch. That is a deliberate product
+// decision; what it must not do is silently delete this file's coverage of the
+// A9 repro. Turned off explicitly so the turn reaches the generator.
+process.env.NATIVELY_CONTEXT_OS_PROPERTY_VALIDATION = '0';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const enginePath = path.resolve(__dirname, '../../../dist-electron/electron/IntelligenceEngine.js');
 const sessionPath = path.resolve(__dirname, '../../../dist-electron/electron/SessionTracker.js');

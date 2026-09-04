@@ -171,10 +171,10 @@ MODELS_TO_DOWNLOAD=(
   "Xenova/mobilebert-uncased-mnli/tokenizer_config.json"
   "Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx"
   
-  "Xenova/bge-reranker-base/config.json"
-  "Xenova/bge-reranker-base/tokenizer.json"
-  "Xenova/bge-reranker-base/tokenizer_config.json"
-  "Xenova/bge-reranker-base/onnx/model_quantized.onnx"
+  "Xenova/ms-marco-MiniLM-L-6-v2/config.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json"
+  "Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx"
 )
 
 download_file() {

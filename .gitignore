@@ -550,3 +550,21 @@ benchmark-results/
 /researc
 
 benchmarks/reranker-eval/results/
+
+# Reranker/embedding evaluation artefacts and non-shipped weights.
+# bge-reranker-large is NOT in scripts/download-models.js's manifest — it is a
+# benchmark-only model (~553MB) and must never enter the repo or a build.
+resources/models/Xenova/bge-reranker-large/
+embedding-benchmark/
+
+# Dev-mode model cache. transformers.js is given `env.cacheDir = <cwd>/models`
+# when the app is unpackaged, so running a local reranker or embedder in dev
+# downloads weights here — 125MB appeared during one benchmark run. The three
+# tracked JSON files under models/Xenova/bge-reranker-base are force-added and
+# stay; everything else is a redownloadable cache that must never be committed.
+models/*
+!models/Xenova/
+models/Xenova/*
+!models/Xenova/bge-reranker-base/
+models/Xenova/bge-reranker-base/*
+!models/Xenova/bge-reranker-base/*.json

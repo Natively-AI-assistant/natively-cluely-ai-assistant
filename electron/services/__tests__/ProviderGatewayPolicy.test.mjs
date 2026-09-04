@@ -87,15 +87,37 @@ test('LLMHelper passes data scopes and policy to routeLLMProviders for fallback 
 test('Embedding provider resolver fails closed when embeddings scope is denied', () => {
   const src = read('electron/rag/EmbeddingProviderResolver.ts');
 
-  assert.match(src, /assertProviderDataScopes\('openai_embeddings', \['embeddings'\], config\.providerDataScopes\)/);
-  assert.match(src, /assertProviderDataScopes\('gemini_embeddings', \['embeddings'\], config\.providerDataScopes\)/);
+  // The three cloud embedding providers are now scope-gated through ONE helper
+  // (pushScoped) instead of three inline assert calls, so the scope name is a
+  // parameter. The guarantee is unchanged and additionally asserted
+  // behaviourally in electron/rag/__tests__/EmbeddingResolverNativelyFirst.test.mjs,
+  // which proves a denying policy leaves ONLY the local-capable provider.
+  assert.match(src, /assertProviderDataScopes\(scopeName, \['embeddings'\], config\.providerDataScopes\)/);
+  for (const scope of ['openai_embeddings', 'gemini_embeddings', 'natively_embeddings']) {
+    assert.match(src, new RegExp(`pushScoped\\('${scope}'`), `${scope} must be scope-gated`);
+  }
 });
 
 test('RAGManager forwards providerDataScopes from config and runtime keys', () => {
+  // 2026-08-30: RAGManager stopped hand-declaring a SUBSET of the embedding
+  // config and now takes AppAPIConfig wholesale. The old assertions anchored on
+  // that hand-written subset (`providerDataScopes?: ProviderDataScopePolicy`
+  // plus a `providerDataScopes: config.providerDataScopes` copy line), both of
+  // which correctly disappeared with it.
+  //
+  // The subset was the BUG, not the contract: every field it forgot to list —
+  // the Ollama, custom-endpoint and cloud embedding settings — was silently
+  // dropped on the way to the resolver. Inheriting the type forwards
+  // providerDataScopes (and everything else) without a list anyone can forget
+  // to update, so this now asserts the inheritance rather than the copy.
   const src = read('electron/rag/RAGManager.ts');
 
-  assert.match(src, /providerDataScopes\?: ProviderDataScopePolicy/);
-  assert.match(src, /providerDataScopes: config\.providerDataScopes/);
+  assert.match(src, /import type \{ AppAPIConfig \} from '\.\/EmbeddingProviderResolver'/);
+  assert.match(src, /interface RAGManagerConfig extends Partial<AppAPIConfig>/);
+  assert.match(src, /initializeEmbeddings\(keys: AppAPIConfig\)/);
+  // And the field must still exist on the inherited type.
+  const resolver = read('electron/rag/EmbeddingProviderResolver.ts');
+  assert.match(resolver, /providerDataScopes\?: ProviderDataScopePolicy/);
 });
 
 test('SettingsManager exposes providerDataScopes setting', () => {
@@ -144,9 +166,32 @@ test('AIProvidersSettings renders cloud provider data scope controls wired to re
 });
 
 test('main and ProcessingHelper hydrate ragManager.initializeEmbeddings with policy', () => {
-  const main = read('electron/main.ts');
   const ph = read('electron/ProcessingHelper.ts');
+  // VACUOUS BEFORE: /providerDataScopes/ matched only the COMMENT at
+  // ProcessingHelper.ts:113, so this passed whether or not the policy reached
+  // the resolver — the one thing it exists to check. ProcessingHelper no longer
+  // names the policy at all; it goes through buildEmbeddingConfig(), which is
+  // what has to be asserted.
+  assert.match(ph, /initializeEmbeddings\(buildEmbeddingConfig\(\)\)/,
+    'ProcessingHelper must hand the resolver the shared builder, not a hand-written object');
+  assert.match(ph, /require\('\.\/rag\/embeddingConfigIdentity'\)/);
+  // The hand-written object is the defect this guards against: it silently
+  // dropped the user's embeddingMode/provider selection.
+  assert.doesNotMatch(ph, /initializeEmbeddings\(\s*\{/,
+    'a literal config object here clobbers the startup config');
 
-  assert.match(main, /providerDataScopes/);
-  assert.match(ph, /providerDataScopes/);
+  // main.ts no longer names the policy directly: it goes through
+  // buildEmbeddingConfig(), the single builder shared by all four embedding
+  // config entry points (they had already drifted once, silently dropping
+  // geminiKeys at three of the four). The policy still reaches the resolver —
+  // assert the chain rather than the old inline mention.
+  const main = read('electron/main.ts');
+  assert.match(main, /initializeEmbeddings\(buildEmbeddingConfig\(/);
+  assert.match(main, /new RAGManager\(\{[\s\S]{0,200}?\.\.\.buildEmbeddingConfig\(\)/);
+  const builder = read('electron/rag/embeddingConfigIdentity.ts');
+  // The builder resolves SettingsManager once into a local, then reads the
+  // policy from it — assert the READ and the hand-off, not the call shape.
+  assert.match(builder, /settings\?\.get\('providerDataScopes'\)/);
+  assert.match(builder, /SettingsManager\.getInstance\(\)/);
+  assert.match(builder, /providerDataScopes: sources\.providerDataScopes/);
 });

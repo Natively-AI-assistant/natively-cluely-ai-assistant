@@ -8,6 +8,7 @@
 // ============================================================================
 import './nativeArchGate';
 
+import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, systemPreferences, screen, desktopCapturer } from "electron"
 import * as crypto from "crypto"
 import path from "path"
@@ -1444,6 +1445,12 @@ export class AppState {
   private _ragProcessingInFlight: Set<string> = new Set();
   private _isQuitting: boolean = false;
   private _verboseLogging: boolean = false;
+  // NOTE: what contextDebugLevel was before verbose logging raised it lives in
+  // SettingsManager ('contextDebugLevelBeforeVerbose'), NOT in a field here.
+  // An in-memory field is null again after a restart, so
+  // ON -> quit -> relaunch -> OFF would skip the restore branch and pin
+  // contextDebugLevel at 'verbose' forever — exactly the flattening of the
+  // user's Intelligence-settings choice this exists to prevent.
   private _ambientChatEnabled: boolean = false;
   private _autoAnswerEnabled: boolean = false;
   // Tracks whether STT sample-rate has been applied for the current capture
@@ -1498,7 +1505,11 @@ export class AppState {
     const settingsManager = SettingsManager.getInstance();
     this.isUndetectable = settingsManager.get('isUndetectable') ?? false;
     this.disguiseMode = normalizeDisguiseMode(settingsManager.get('disguiseMode'));
-    this._verboseLogging = settingsManager.get('verboseLogging') ?? true;
+    // Default OFF: ON means full content capture (transcripts, questions,
+    // answers in plaintext), which must be opt-in. Crash breadcrumbs do not
+    // depend on this flag — the console patch and logToFile() are
+    // unconditional. See verboseLog.ts.
+    this._verboseLogging = settingsManager.get('verboseLogging') ?? false;
     setVerboseLoggingFlag(this._verboseLogging);
     this._ambientChatEnabled = settingsManager.get('ambientChatEnabled') ?? false;
     this._autoAnswerEnabled = settingsManager.get('autoAnswerEnabled') ?? false;
@@ -2472,14 +2483,9 @@ export class AppState {
           // Re-resolve the embedding provider given that Ollama might now be available
           if (this.ragManager) {
              console.log('[AppState] Ollama model ready, re-evaluating RAG pipeline provider');
-             const { CredentialsManager } = require('./services/CredentialsManager');
-             const cm = CredentialsManager.getInstance();
-             this.ragManager.initializeEmbeddings({
-                openaiKey: cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY || undefined,
-                geminiKey: cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || undefined,
-                ollamaUrl: process.env.OLLAMA_URL || "http://localhost:11434",
-                providerDataScopes: (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })()
-             });
+             // One shared builder — this site used to omit geminiKeys (killing key
+             // rotation) and would have omitted the Natively key the same way.
+             this.ragManager.initializeEmbeddings(buildEmbeddingConfig());
              this.scheduleModeReferenceIndexRetry();
           }
         }
@@ -2495,31 +2501,14 @@ export class AppState {
       const sqliteDb = db.getDb();
 
       if (sqliteDb) {
-        const { CredentialsManager } = require('./services/CredentialsManager');
-        const cm = CredentialsManager.getInstance();
-        const openaiKey = cm.getOpenaiApiKey() || process.env.OPENAI_API_KEY;
-        const geminiKey = cm.getGeminiApiKey() || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-        // Gemini embedding key POOL: credential key + all GEMINI_API_KEY(_2.._6)/GOOGLE
-        // env keys, de-duped. Lets the embedding provider rotate off a rate-limited
-        // key (429 → per-key cooldown → next key) instead of failing the index.
-        const geminiKeys = (() => {
-          const pool: string[] = [];
-          const add = (k?: string) => { const v = (k || '').trim(); if (v && !pool.includes(v)) pool.push(v); };
-          add(cm.getGeminiApiKey());
-          for (const n of ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3', 'GEMINI_API_KEY_4', 'GEMINI_API_KEY_5', 'GEMINI_API_KEY_6', 'GOOGLE_API_KEY']) add(process.env[n]);
-          return pool;
-        })();
-
-        const providerDataScopes = (() => { try { const { SettingsManager } = require('./services/SettingsManager'); return SettingsManager.getInstance().get('providerDataScopes'); } catch { return undefined; } })();
+        // Credentials, the Gemini rotation pool and the provider-scope policy are
+        // all assembled by buildEmbeddingConfig() now — see the note there about
+        // the four sites that used to hand-roll this and had already drifted.
         this.ragManager = new RAGManager({
             db: sqliteDb,
             dbPath: db.getDbPath(),
             extPath: db.getExtPath(),
-            openaiKey,
-            geminiKey,
-            geminiKeys,
-            ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-            providerDataScopes
+            ...buildEmbeddingConfig(),
         });
         this.ragManager.setLLMHelper(this.processingHelper.getLLMHelper());
 
@@ -7847,13 +7836,43 @@ export class AppState {
     return this._verboseLogging;
   }
 
-  public setVerboseLogging(enabled: boolean): void {
+  public setVerboseLogging(enabled: boolean): boolean {
     this._verboseLogging = enabled;
     setVerboseLoggingFlag(enabled);
-    SettingsManager.getInstance().set('verboseLogging', enabled);
-    console.log(`[AppState] verboseLogging set to ${enabled}`);
+
+    // A degraded store REFUSES writes. Returning the result rather than
+    // dropping it is what stops the UI reporting success on a setting that
+    // reverts at restart — see RefusedSettingWriteReported2026_08_21.
+    const settings = SettingsManager.getInstance();
+    const persisted = settings.set('verboseLogging', enabled);
+
+    // Structured per-turn JSONL follows the switch, but contextDebugLevel is
+    // an INDEPENDENT three-value setting with its own selector in Intelligence
+    // settings (context-debug:set-level). Writing it unconditionally here
+    // would wipe whatever the user chose there. Raise it only when turning
+    // logging ON, and on the way out restore exactly what we displaced.
+    try {
+      if (enabled) {
+        const current = settings.getContextDebugLevel();
+        if (current !== 'verbose') {
+          settings.set('contextDebugLevelBeforeVerbose', current);
+          settings.setContextDebugLevel('verbose');
+        }
+      } else {
+        const displaced = settings.get('contextDebugLevelBeforeVerbose');
+        if (displaced) {
+          settings.setContextDebugLevel(displaced);
+          settings.set('contextDebugLevelBeforeVerbose', undefined);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[AppState] contextDebugLevel sync failed: ${e?.message || e}`);
+    }
+
+    console.log(`[AppState] verboseLogging set to ${enabled} (persisted=${persisted})`);
     // Notify all renderer windows so they can start/stop forwarding their console output
     this.broadcast('verbose-logging-changed', enabled);
+    return persisted;
   }
 
   public getAmbientChatEnabled(): boolean {
@@ -8380,15 +8399,11 @@ async function initializeApp() {
     const downloadService = LocalModelDownloadService.getInstance();
     downloadService.registerProvider(createWhisperDownloadProvider());
     downloadService.registerProvider(createNemotronDownloadProvider());
-    // 2026-07-06: lazy download for the reranker (smart-retrieval Phase 1).
-    // The 283 MB bge-reranker-base model is no longer bundled — it is fetched
-    // on first document-grounded mode activation via ModesManager.
-    try {
-        const { createRerankerDownloadProvider } = require('./rag/rerankerDownloadProvider');
-        downloadService.registerProvider(createRerankerDownloadProvider());
-    } catch (e: any) {
-        console.warn('[main] Reranker download provider registration failed (non-fatal):', e?.message);
-    }
+    // No reranker download provider. It existed to lazily fetch the 283MB
+    // bge-reranker-base on first mode activation; that model was removed on
+    // 2026-09-04 (it measured WORSE than no reranker at all), and the 24MB
+    // ms-marco that replaced it is BUNDLED, so there is nothing to fetch.
+    // Every other reranker comes through the catalogue installer instead.
   } catch (e: any) {
     console.warn('[main] LocalModelDownloadService init failed (non-fatal):', e?.message);
   }
@@ -8459,6 +8474,28 @@ async function initializeApp() {
     recordAppStarted();
   } catch (err: any) {
     console.warn('[UsageOutbox] startup failed (non-fatal):', err?.message || err);
+  }
+
+  // Extensions. Until this call nothing constructed an ExtensionManager, so no
+  // extension could run in a shipped build regardless of what the on-disk
+  // registry said.
+  //
+  // This does NOT enable anything. `install()` records enabled:false
+  // unconditionally, `loadEnabled()` starts only what the user switched on, and
+  // the rerank seam still requires BOTH the `extensionRerankers` flag (default
+  // off) AND exactly one enabled reranker extension. Wiring the source in is
+  // what makes those gates reachable, not what opens them.
+  //
+  // Deliberately not awaited: an extension that is slow to start must not delay
+  // a usable window, and every failure inside is already isolated per extension.
+  try {
+    const { wireExtensions, startExtensions } = require('./services/extensions/appWiring');
+    const extensionManager = wireExtensions();
+    void startExtensions(extensionManager);
+  } catch (err: any) {
+    // A subsystem that cannot be built leaves the built-in reranker in place,
+    // which is the correct degradation. It must never stop the app starting.
+    console.warn('[extensions] wiring failed (non-fatal):', err?.message || err);
   }
 
   // Load the Google Service Account key for Speech-to-Text: the persisted path
@@ -9028,6 +9065,15 @@ if (process.env.THINKING_MATRIX === '1') {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();
     } catch { /* instrumentation must never block a quit */ }
+    // Extension utilityProcesses are children of this process. One left running
+    // keeps the app alive after every window has closed, which presents as a
+    // hang on quit rather than as an error anyone sees. Fire-and-forget:
+    // will-quit is synchronous, and stop() already hard-kills after asking for
+    // a graceful dispose.
+    try {
+      const { disposeExtensions } = require('./services/extensions/appWiring');
+      void disposeExtensions();
+    } catch { /* teardown must never block a quit */ }
     appState.stopNativeOomTraceSampling();
     nativeOomTrace.stop('will-quit');
     stopAppManagedHindsight('will-quit');

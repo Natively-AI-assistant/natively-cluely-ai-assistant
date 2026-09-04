@@ -20,6 +20,12 @@ import type {
 } from './VisionProviderFallbackChain';
 import { CredentialsManager } from '../CredentialsManager';
 import { GROQ_PRIMARY_MODEL } from '../../llm/groqModels';
+import {
+  customProviderSupportsVision,
+  customProviderIsLocal,
+  isOllamaVisionModelByName,
+} from '../../llm/visionCapability';
+import { readActiveCustomProvider, readActiveModelId } from '../../llm/activeCustomProvider';
 
 export interface VisionProviderBuildInputs {
   mode: VisionMode;
@@ -31,7 +37,7 @@ export interface VisionProviderBuildInputs {
  * Produce the ordered list of vision providers for the given mode. Order is:
  *   vision_first / vision_only: Natively → OpenAI → Gemini Flash-Lite →
  *                                Gemini Flash → Claude → Gemini Pro → Groq Scout
- *                                → Ollama → Codex → Custom
+ *                                → LiteLLM → NVIDIA NIM → Ollama → Codex → Custom
  *   private_vision: Ollama → Codex → local Custom only
  */
 export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionProviderConfig[] {
@@ -49,6 +55,21 @@ export function buildVisionProviders(inputs: VisionProviderBuildInputs): VisionP
     providers.push(claude(credentials, inputs));
     providers.push(geminiPro(credentials, inputs));
     providers.push(groqScout(credentials, inputs));
+    // OpenAI-compatible gateways, last among the cloud rungs. Added 2026-09-03:
+    // they were absent entirely, so a profile whose only configured provider was
+    // a LiteLLM proxy produced an EMPTY chain and ScreenUnderstandingService
+    // reported "no vision-capable provider" for every screenshot — verified live.
+    //
+    // Seated ONLY when the gateway is the SELECTED model, which is what
+    // streamVisionWithFallback enforces — it excludes an unselected gateway
+    // outright rather than ordering it last, and this comment previously
+    // misdescribed that (code review, 2026-09-04). The distinction matters: a
+    // configured base URL is not a standing offer to serve images. Auto-recruiting
+    // one as a fallback would send a screenshot to a proxy the user had not
+    // pointed this turn at, and the streaming chain would never have done so —
+    // two subsystems, two privacy policies.
+    providers.push(litellm(credentials, inputs));
+    providers.push(nvidiaNim(credentials, inputs));
   }
 
   // Local providers — always allowed, including in private_vision.
@@ -111,7 +132,7 @@ function geminiFlash(creds: CredentialsManager, _inputs: VisionProviderBuildInpu
   return {
     id: 'gemini_flash',
     displayName: 'Gemini Flash',
-    modelId: 'gemini-3.7-flash',
+    modelId: 'gemini-3.8-flash',
     isLocal: false,
     isConfigured: !!apiKey,
     supportsVision: !!apiKey,
@@ -223,21 +244,29 @@ function codex(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): V
 
 function custom(creds: CredentialsManager, inputs: VisionProviderBuildInputs): VisionProviderConfig {
   // The active custom provider lives on the live LLMHelper instance (set via
-  // switchToCustom in main.ts). CredentialsManager stores all configured custom
-  // providers; we only show the active one as a vision target so the chain
-  // never silently calls a provider the user didn't pick.
-  const customProviders = creds.getCustomProviders();
-  // Prefer the explicitly-set active provider if any; fall back to the first
-  // configured entry so the registry remains useful when LLMHelper hasn't been
-  // initialized yet (e.g. during unit tests).
-  const fromHelper = readActiveCustomProviderSync();
-  const active = fromHelper || customProviders[0];
+  // switchToCustom in main.ts). That is the ONLY provider this entry may
+  // advertise, because `invoke` resolves the provider from that same instance
+  // (runVisionRequest reads this.customProvider).
+  //
+  // There used to be a `|| customProviders[0]` fallback here, which broke that
+  // correspondence in both directions: with a cloud model selected it seated an
+  // entry whose invoke throws "No custom provider configured", and with two
+  // legacy providers configured it gated on #1's flags while sending to #2 —
+  // directly against the comment above it. If no custom provider is active,
+  // there is no custom vision target, and isConfigured:false skips the rung.
+  const active = readActiveCustomProvider();
 
-  const multimodal = (active as any)?.multimodal === true;
-  // Treat a provider as local-only if explicitly flagged OR if its URL targets
-  // a loopback host. This keeps `private_vision` mode from silently calling a
-  // public custom endpoint.
-  const localOnly = isLocalOnlyCustomProvider(active);
+  // Both answers come from the SHARED predicates rather than a local copy.
+  // `multimodal === true` here disagreed with customProviderSupportsVision in
+  // the streaming chain: it read the Settings default of "Auto-detect" (which
+  // stores no flag at all) as "no vision", so auto-detect was dead on this
+  // path, and it trusted an explicit flag on a template that cannot carry an
+  // image, committing to a provider that then dropped the screenshot.
+  const multimodal = customProviderSupportsVision(active);
+  // Keeps `private_vision` from calling a public custom endpoint. The local
+  // copy this replaces recognized only loopback and .local, so an LM Studio box
+  // at 192.168.1.50 was "local" to the streaming chain and "cloud" here.
+  const localOnly = customProviderIsLocal(active);
 
   return {
     id: 'custom',
@@ -252,42 +281,68 @@ function custom(creds: CredentialsManager, inputs: VisionProviderBuildInputs): V
   };
 }
 
-function readActiveCustomProviderSync(): any | null {
-  try {
-    const g = global as any;
-    if (typeof g.__nativelyGetLLMHelper === 'function') {
-      const helper = g.__nativelyGetLLMHelper();
-      if (helper && typeof helper.getActiveCustomProvider === 'function') {
-        return helper.getActiveCustomProvider() || null;
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return null;
+/**
+ * A LiteLLM proxy as a vision rung.
+ *
+ * `isConfigured` keys off the base URL, matching every other LiteLLM gate in the
+ * app (ipcHandlers' modelAvailable) — the API key is optional because a keyless
+ * local proxy is supported.
+ *
+ * `supportsVision` cannot be answered from here: the proxy fronts arbitrary
+ * upstreams and only its own config knows whether the routed model takes images.
+ * Seating it as vision-capable is the honest choice — the alternative, gating on
+ * a guess, is what produced "no vision provider configured" for users who had
+ * one. It sits last among the cloud rungs, so a wrong guess costs one failed
+ * attempt and the chain moves on; the health tracker deprioritizes it after that.
+ */
+function litellm(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const baseURL = creds.getLitellmBaseURL();
+  // The SELECTED model, not the saved preference: runVisionRequest dispatches
+  // against LLMHelper's live currentModelId, so a rung seated off a stored
+  // preference would advertise one model and execute another.
+  const activeModelId = readActiveModelId();
+  const isSelected = /^litellm\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'litellm',
+    displayName: modelId ? `LiteLLM (${modelId.replace(/^litellm\//, '')})` : 'LiteLLM proxy',
+    modelId,
+    isLocal: false,
+    isConfigured: !!baseURL && isSelected,
+    supportsVision: !!baseURL && isSelected,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('litellm', p),
+  };
 }
 
-function isLocalOnlyCustomProvider(provider: any | undefined | null): boolean {
-  if (!provider) return false;
-  if (provider.localOnly === true) return true;
-  // Inspect the cURL command for a localhost / 127.0.0.1 / 0.0.0.0 / ::1 target.
-  const curl: string | undefined = provider.curlCommand;
-  if (!curl) return false;
-  try {
-    const urlMatch = curl.match(/https?:\/\/([^\s'"`]+)/i);
-    if (!urlMatch) return false;
-    const host = new URL(urlMatch[0]).hostname.toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' || host.endsWith('.local');
-  } catch {
-    return false;
-  }
+/** An NVIDIA NIM endpoint as a vision rung. Same reasoning as litellm() above. */
+function nvidiaNim(creds: CredentialsManager, _inputs: VisionProviderBuildInputs): VisionProviderConfig {
+  const apiKey = creds.getNvidiaNimApiKey?.();
+  const activeModelId = readActiveModelId();
+  const isSelected = /^nvidia_nim\//i.test(activeModelId);
+  const modelId = isSelected ? activeModelId : '';
+  return {
+    id: 'nvidia_nim',
+    displayName: modelId ? `NVIDIA NIM (${modelId.replace(/^nvidia_nim\//, '')})` : 'NVIDIA NIM',
+    modelId,
+    isLocal: false,
+    isConfigured: !!apiKey && isSelected,
+    supportsVision: !!apiKey && isSelected,
+    scopeAllowsScreenshots: true,
+    hint: 'generic',
+    invoke: async (p) => callLLMHelperVision('nvidia_nim', p),
+  };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-const OLLAMA_VISION_MODELS_RE = /(llava|bakllava|moondream|llama3\.2-vision|llama-3\.2-vision|gemma3|minicpm-v|qwen2\.5-vl|qwen2-vl|pixtral)/i;
+// Single definition, re-exported. The local copy this replaces had drifted:
+// it was missing llama-4, granite3.2-vision, mistral-small3.1 and
+// llama-guard3-vision, so a user running one of those got no vision here while
+// the streaming chain happily used it.
 export function isOllamaVisionModel(modelId: string): boolean {
-  return OLLAMA_VISION_MODELS_RE.test(modelId);
+  return isOllamaVisionModelByName(modelId);
 }
 
 /**

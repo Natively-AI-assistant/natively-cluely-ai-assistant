@@ -1271,24 +1271,11 @@ export class ModesManager {
                         // Not cached — kick off a background download. The
                         // download service handles progress + persistence; we
                         // just attach a one-shot prewarm on completion.
-                        try {
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            const { LocalModelDownloadService } = require('./LocalModelDownloadService');
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            const { RERANKER_PROVIDER_NAME } = require('../rag/rerankerDownloadProvider');
-                            // eslint-disable-next-line @typescript-eslint/no-var-requires
-                            const { RERANKER_MODEL_ID, RERANKER_DTYPE } = require('../rag/rerankerDownloadProvider');
-                            void LocalModelDownloadService.getInstance().start(
-                                RERANKER_PROVIDER_NAME,
-                                `${RERANKER_MODEL_ID}#${RERANKER_DTYPE}`,
-                            );
-                        } catch {
-                            // Service unavailable or download failed — fall
-                            // back to the old prewarm path. If the model is
-                            // not on disk, prewarm will fail silently and the
-                            // reranker will return null on first query.
-                            void reranker.prewarm?.();
-                        }
+                        // The bundled reranker needs no download. This used to
+                        // start a lazy fetch of bge-reranker-base, which is gone
+                        // (it measured worse than no reranker); ms-marco ships
+                        // with the app, so prewarming is the whole job now.
+                        void reranker.prewarm?.();
                     } catch { /* prewarm-or-download both non-fatal */ }
                 })();
             }
@@ -1689,6 +1676,7 @@ export class ModesManager {
                         allowRerank,
                         forceDocumentGrounding: true,
                         followUpReferentHint: retrievalOptions?.followUpReferentHint,
+                        rerankSurface: retrievalOptions?.rerankSurface,
                         ...(retrievalOptions?.relaxed ? { topK: retrievalOptions.topK, tokenBudget: tokenBudget ?? 5200 } : {}),
                     },
                 );

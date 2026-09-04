@@ -11,6 +11,21 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Embedder } from './lib/embedder.mjs';
 import { buildCandidatePools } from './lib/candidates.mjs';
 import { runCohereReranker } from './lib/rerankers/cohere.mjs';
+import { runOpenRouterReranker } from './lib/rerankers/openrouter.mjs';
+
+// The 7 models OpenRouter's own catalog returns for output_modalities=rerank
+// (confirmed live against https://openrouter.ai/api/v1/models?output_modalities=rerank,
+// 2026-09-01 — do not hand-guess this list, re-query that endpoint if it
+// needs updating). `name` is the results/raw/<name>.json filename.
+const OPENROUTER_RERANK_MODELS = [
+  { name: 'openrouter-qwen3-reranker-8b', modelId: 'qwen/qwen3-reranker-8b' },
+  { name: 'openrouter-voyage-rerank-2.5-lite', modelId: 'voyageai/rerank-2.5-lite' },
+  { name: 'openrouter-voyage-rerank-2.5', modelId: 'voyageai/rerank-2.5' },
+  { name: 'openrouter-nvidia-nemotron-rerank-vl-1b-v2', modelId: 'nvidia/llama-nemotron-rerank-vl-1b-v2:free' },
+  { name: 'openrouter-cohere-rerank-4-pro', modelId: 'cohere/rerank-4-pro' },
+  { name: 'openrouter-cohere-rerank-4-fast', modelId: 'cohere/rerank-4-fast' },
+  { name: 'openrouter-cohere-rerank-v3.5', modelId: 'cohere/rerank-v3.5' },
+];
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../..');
@@ -124,11 +139,18 @@ async function main() {
     }
   }
 
-  // Cohere — same process is fine, no model-loading state to isolate.
+  // Hosted candidates — same process is fine for all of these, no
+  // model-loading state to isolate (unlike the local ONNX candidates above).
   console.log('[run] running cohere-rerank-v3.5 (skips cleanly if COHERE_API_KEY unset)...');
   const poolEntries = pools.map((p) => ({ queryId: p.queryId, query: p.query, pool: p.pool }));
   const cohereResult = await runCohereReranker(poolEntries);
   writeResult('cohere-rerank-v3-5', { candidate: 'cohere-rerank-v3.5', ...cohereResult });
+
+  for (const { name, modelId } of OPENROUTER_RERANK_MODELS) {
+    console.log(`[run] running ${name} via OpenRouter (skips cleanly if OPENROUTER_API_KEY unset)...`);
+    const result = await runOpenRouterReranker(modelId, poolEntries);
+    writeResult(name, { candidate: name, ...result });
+  }
 
   console.log('[run] done. Run `npm run benchmark:reranker:score` next.');
 }

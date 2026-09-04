@@ -13,11 +13,11 @@
 //   node scripts/verify-packaged-local-assets.mjs --app <path-to-.app|unpacked>
 //     verifies the GENERATED package contents.
 //
-// Exit code 1 on any missing required asset — including the bge reranker:
+// Exit code 1 on any missing required asset — including the bundled reranker:
 // REQUIRED_MODEL_FILES below lists all four of its files, so a package missing
 // the reranker FAILS this gate. (Stale-comment fix 2026-08-13: this header
 // previously claimed the reranker was "OPTIONAL … intentionally NOT checked
-// here", contradicting the list 20 lines down; the rerankerDownloadProvider
+// here", contradicting the list 20 lines down; the reranker download provider
 // lazy-download path exists only as a dev/self-heal fallback.)
 
 import fs from 'node:fs';
@@ -37,10 +37,15 @@ const REQUIRED_MODEL_FILES = [
   'Xenova/mobilebert-uncased-mnli/tokenizer.json',
   'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
   'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
-  'Xenova/bge-reranker-base/config.json',
-  'Xenova/bge-reranker-base/tokenizer.json',
-  'Xenova/bge-reranker-base/tokenizer_config.json',
-  'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
+  // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
+  // 2026-09-04: bge measured WORSE than no reranker at all (MRR 0.7558 against
+  // a 0.8368 baseline) while costing 283MB, where ms-marco is +0.0320 at 24MB
+  // and 211ms. docs/reranker-benchmark-2026-09-04.md
+  'Xenova/ms-marco-MiniLM-L-6-v2/config.json',
+  'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json',
+  'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json',
+  'Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx',
+
   'pipecat-ai/smart-turn-v3/manifest.json',
   'pipecat-ai/smart-turn-v3/smart-turn-v3.1-cpu.onnx',
 ];
@@ -61,7 +66,6 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   '**/intentClassifierWorker.js',
   '**/localEmbeddingWorker.js',
   '**/localRerankerWorker.js',
-  '**/rerankerDownloadWorker.js',
   '**/whisperWorker.js',
   '**/node_modules/better-sqlite3/**',
   '**/node_modules/keytar/**',
@@ -87,7 +91,6 @@ const REQUIRED_WORKER_FILES = [
   'dist-electron/electron/llm/intentClassifierWorker.js',
   'dist-electron/electron/rag/providers/localEmbeddingWorker.js',
   'dist-electron/electron/rag/localRerankerWorker.js',
-  'dist-electron/electron/rag/rerankerDownloadWorker.js',
   'dist-electron/electron/audio/whisper/whisperWorker.js',
 ];
 

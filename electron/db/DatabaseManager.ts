@@ -3015,6 +3015,50 @@ export class DatabaseManager {
         }
     }
 
+    /**
+     * Terminal state for a post-meeting summary that threw before saveMeeting could run.
+     *
+     * On that path the placeholder row endMeeting wrote is never rewritten — saveMeeting
+     * is never reached — so the meeting kept title "Processing..." and legacySummary
+     * "Generating summary..." forever while its status said 'failed'. The stale blurb is
+     * not cosmetic: it is what pdfGenerator prints into an exported PDF, what
+     * searchGlobalMeetings offers as a result snippet, and what RAGManager indexes as the
+     * meeting's summary when no overview exists.
+     *
+     * `is_processed` is deliberately left alone — 0 is exactly what getUnprocessedMeetings
+     * and recoverUnprocessedMeetings key on to retry this meeting at the next app start,
+     * and that retry is the reason a hard failure is not permanent.
+     *
+     * A manual rename still wins, via the same user_titled guard replaceDetailedSummary
+     * uses; and because this is NOT updateMeetingTitle, the fallback name written here is
+     * not stamped as the user's, so a later successful run replaces it freely.
+     */
+    public markSummaryGenerationFailed(id: string, fallbackTitle: string): boolean {
+        if (!this.db) return false;
+        try {
+            const row = this.db.prepare('SELECT summary_json FROM meetings WHERE id = ?').get(id) as any;
+            if (!row) return false;
+            // An unreadable blob is left exactly as it is: the status and title still have
+            // to land, and rewriting JSON we could not parse would destroy more than it fixes.
+            let jsonStr: string | null = null;
+            try {
+                const existingData = JSON.parse(row.summary_json || '{}') || {};
+                if (existingData.legacySummary) jsonStr = JSON.stringify({ ...existingData, legacySummary: '' });
+            } catch { /* leave summary_json untouched */ }
+
+            const titleClause = 'title = CASE WHEN COALESCE(user_titled, 0) = 1 THEN title ELSE ? END';
+            const info = jsonStr === null
+                ? this.db.prepare(`UPDATE meetings SET summary_status = 'failed', ${titleClause} WHERE id = ?`)
+                    .run(fallbackTitle, id)
+                : this.db.prepare(`UPDATE meetings SET summary_json = ?, summary_status = 'failed', ${titleClause} WHERE id = ?`)
+                    .run(jsonStr, fallbackTitle, id);
+            return info.changes > 0;
+        } catch (error) {
+            console.error(`[DatabaseManager] Failed to mark summary generation failed for meeting ${id}:`, error);
+            return false;
+        }
+    }
+
     public getMeetingsWithSummaryStatus(status: SummaryStatus): Array<{ id: string; title: string; summaryStatus: SummaryStatus; date: string }> {
         if (!this.db) return [];
         try {

@@ -53,6 +53,7 @@ const FLAG_META: Record<string, { label: string; desc: string; group: string; ti
   // toggle ADDS on top of what already ships unconditionally, rather than describing the
   // whole subsystem. Three of these previously advertised behavior that runs flag or not.
   meetingMemoryV2: { label: 'Capture key points', desc: 'Extracts each meeting’s topics, decisions, and action items and carries "still open from last time" into the next one. To search them, also turn on "Search past meetings".', group: 'Memory', tier: 'advanced' },
+  chatHistoryMultiTurn: { label: 'Chat history', desc: 'Lets the chat remember earlier turns, so follow-ups work and a screenshot you shared a few messages ago can still be asked about. Off keeps only the single previous turn.', group: 'Memory', tier: 'advanced' },
   conversationMemoryV2: { label: 'Conversation follow-ups', desc: 'Adds short follow-up handling ("make that shorter") to the typed chat panel. Live spoken answers already resolve follow-ups without this.', group: 'Memory', tier: 'advanced' },
   profileTreeV2: { label: 'Extra candidate-voice check', desc: 'Adds one more check that catches assistant-voice slips the standard first-person cleanup misses. Candidate-voice answers are already cleaned without this.', group: 'Answer quality', tier: 'advanced' },
   answerDiversityGuard: { label: 'Repetition guard', desc: 'Stops live answers repeating themselves across different questions in one meeting, and applies the full layout cleanup. Basic cleanup already runs without this.', group: 'Answer quality', tier: 'advanced' },

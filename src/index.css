@@ -132,6 +132,15 @@
   --text-secondary: #A0A0A0;
   --text-tertiary: #606060;
 
+  /* ── Meeting-notes generation placeholder ──
+     Three tones so the skeleton carries the SAME typographic hierarchy as the
+     note it stands in for: the title and section headings read heavier than
+     body lines, and the follow-up draft (12.5px) reads lighter than both. One
+     flat grey for everything is the tell that a skeleton was bolted on. */
+  --mn-skel-strong: rgba(255, 255, 255, 0.13);   /* title, section headings */
+  --mn-skel-base:   rgba(255, 255, 255, 0.085);  /* body and bullet lines   */
+  --mn-skel-soft:   rgba(255, 255, 255, 0.065);  /* follow-up draft prose   */
+
   --border-subtle: transparent;
   --border-muted: #333333;
 
@@ -284,6 +293,11 @@
   --text-primary:      #111827;   /* gray-900 — near-black, warm                  */
   --text-secondary:    #6B7280;   /* gray-500 — comfortable secondary             */
   --text-tertiary:     #9CA3AF;   /* gray-400 — soft hints and labels             */
+
+  /* ── Meeting-notes generation placeholder (see :root for the rationale) ── */
+  --mn-skel-strong:    rgba(0, 0, 0, 0.12);
+  --mn-skel-base:      rgba(0, 0, 0, 0.075);
+  --mn-skel-soft:      rgba(0, 0, 0, 0.055);
 
   /* ── Borders — barely-there structural lines ── */
   --border-subtle:     rgba(0, 0, 0, 0.07);   /* card outlines, dividers          */
@@ -8434,4 +8448,142 @@ html[data-platform="linux"] body {
 
 @media (prefers-reduced-motion: reduce) {
   .t-tabs-pill, .t-tab { transition: none !important; }
+}
+
+/* ── Meeting-notes generation placeholder ─────────────────────────────────────
+   One page, one breath. Every placeholder line shares a single slow, shallow
+   pulse, so the column reads as one surface settling rather than as nineteen
+   rectangles blinking out of step.
+
+   Tailwind's `animate-pulse` swings opacity 1 → 0.5 over 2s; at this density
+   that reads as a blink. 0.62 → 1 over 2.4s is 0.42Hz — calm, and clear of the
+   ~0.2Hz band that provokes motion discomfort. Opacity only: it composites, and
+   it is the one property that can carry this without a repaint. */
+@keyframes mn-skeleton-breathe {
+  0%, 100% { opacity: 0.62; }
+  50%      { opacity: 1; }
+}
+
+.mn-skel {
+  flex-shrink: 0;
+  animation: mn-skeleton-breathe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced motion does not mean invisible — the placeholder keeps its full
+     legibility, it just stops moving. */
+  .mn-skel { animation: none; opacity: 0.85; }
+}
+
+/* Reduced-motion equivalent of the text reveal below: one short cross-fade on
+   the note instead of a per-word cascade. */
+@keyframes mn-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Meeting-notes text reveal ────────────────────────────────────────────────
+   The note materialises the way a generated answer does on the live surface:
+   the same two keyframes and the same two curves as `.reveal-word` above, so a
+   meeting note and a streamed answer read as one piece of software.
+
+   The UNIT here is a visual line, not a word. Every word still carries its own
+   span — that is how the measurement in MeetingDetails.tsx can see where the
+   text wrapped — but words that landed on the same line are handed the same
+   delay, so a line arrives as a line and the sweep travels down the note.
+
+   It cannot reuse `.reveal-word`. That class is `forwards` with an `opacity: 1`
+   guard because the streaming pacer hands it a NEGATIVE animation-delay — the
+   animation is already mid-flight on the first frame the span exists. Give that
+   class a POSITIVE delay and each word paints fully opaque for the length of its
+   delay and then snaps back to `from { opacity: 0 }` to begin fading: a visible
+   flash-and-restart on every word. `both` holds the from-state through the
+   delay, which is what a cascade needs.
+
+   No `display` change, for the reason the streaming class documents: a transform
+   would need inline-block, which alters line-breaking and can shift text by a
+   pixel as each word settles. Opacity and filter only — `filter` applies to
+   inline elements and costs no layout, and neither property affects layout, so
+   the line grouping can be measured while every unit is still invisible.
+
+   Opacity runs 300ms against the 320ms blur — very nearly together, rather than
+   the 0.56 "presence first, sharpness after" split the streaming reveal uses.
+   That split is right for words materialising under a reader who is ALREADY
+   reading them; here the whole note arrives before reading starts, and holding
+   the two legs together is what makes the sweep read as one continuous gradient
+   instead of a two-stage arrival. 3px is the block-unit radius; a line is a
+   block-sized thing.
+
+   The opacity curve is deliberately NOT the strong `cubic-bezier(0.23, 1, 0.32, 1)`
+   ease-out used elsewhere. That curve is ~75% done at 20% of its duration, so it
+   front-loads almost all of the visible change into the first ~60ms: lengthening
+   the duration under it barely changes how fast the text LOOKS like it appears.
+   `cubic-bezier(0.4, 0, 0.2, 1)` is ~29% at the same point, so the 300ms is
+   actually felt. Blur keeps its own curve — it is not the leg being slowed.
+
+   These are longer than the sub-300ms ceiling for UI motion, deliberately. That
+   ceiling governs feedback to an INPUT, where any delay reads as lag; this is a
+   one-shot arrival of content the reader has not started reading yet, so the
+   nearer bracket is a drawer or sheet (200-500ms). The length is also what widens
+   the band — see the STEP comment in MeetingDetails.tsx — so it is buying
+   seamlessness, not just slowness.
+
+   REVEAL_LINE_FADE_MS tracks the LONGER leg, which is still the 320ms blur.
+   That 320ms MUST stay in step with REVEAL_LINE_FADE_MS in MeetingDetails.tsx:
+   the teardown timer is derived from it, and a timer that fires early snaps the
+   un-revealed tail to full opacity mid-sweep. */
+@keyframes mn-line-opacity {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes mn-line-blur {
+  from { filter: blur(3px); }
+  to   { filter: blur(0); }
+}
+
+.mn-line-cascade {
+  animation-name: mn-line-opacity, mn-line-blur;
+  animation-duration: 300ms, 320ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1), cubic-bezier(0.32, 0.72, 0, 1);
+  animation-fill-mode: both, none;
+}
+
+/* Pass one of two. The cadence is measured from real layout, so it cannot exist
+   until the units have been laid out — they are rendered holding this class,
+   measured in a layout effect, then re-rendered with their delays. Both passes
+   happen before the browser paints, so this state is never seen; it exists so
+   that the frame it would have been seen in is blank rather than a fully-opaque
+   note that then restarts as a cascade. */
+.mn-line-hold {
+  opacity: 0;
+}
+
+/* An opacity-only floor under a subtree whose text is wrapped word by word (the
+   markdown overview). Deliberately without blur: it nests over spans that carry
+   their own blur, and two nested filters compound into a much heavier blur than
+   either declares. */
+@keyframes mn-line-guard-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.mn-line-guard {
+  animation: mn-line-guard-in 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+/* Reduced motion: the per-word spans are never rendered (the component returns
+   plain strings) and the measurement effect never runs, mirroring how the
+   streaming path skips its own wrapping — hundreds of neutralised spans is the
+   wrong shape. One short opacity fade on the note replaces the whole cascade.
+   The rules below only guard the case where the OS setting changes while a
+   cascade is already in flight. */
+.mn-reveal-reduced {
+  animation: mn-fade-in 200ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mn-line-cascade,
+  .mn-line-guard { animation: none; }
+  .mn-line-hold { opacity: 1; }
 }

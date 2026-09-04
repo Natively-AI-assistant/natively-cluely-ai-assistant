@@ -5,9 +5,9 @@ import {
     X, Mic, Speaker, Monitor, Keyboard, User, LifeBuoy, LogOut, Upload,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
     Camera, RotateCcw, Eye, Layout, MessageSquare, Crop,
-    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Settings, Activity, ExternalLink, Trash2,
+    ChevronDown, ChevronUp, Check, BadgeCheck, Power, Palette, Calendar, Ghost, Sun, Moon, RefreshCw, Info, Globe, FlaskConical, Terminal, Download, Settings, Activity, ExternalLink, Trash2,
     Sparkles, Pencil, Briefcase, Building2, Search, MapPin, CheckCircle, HelpCircle, Zap, SlidersHorizontal, PointerOff, Folder,
-    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones
+    Star, AlertCircle, Gift, Smartphone, Cpu, Shield, Code2, Headphones, Boxes, ListOrdered
 } from 'lucide-react';
 import { AutoAnswerIcon } from './AutoAnswerIcon';
 import { HiCreditCard } from 'react-icons/hi2';
@@ -17,6 +17,8 @@ import { HelpSettings } from './settings/HelpSettings';
 import { AIProvidersSettings } from './settings/AIProvidersSettings';
 import { PlansSettings } from './settings/PlansSettings';
 import { PhoneMirrorSettings } from './settings/PhoneMirrorSettings';
+import { EmbeddingSettings } from './settings/EmbeddingSettings';
+import { RerankerSettings } from './settings/RerankerSettings';
 import { IntelligenceSettings } from './settings/IntelligenceSettings';
 import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
@@ -409,6 +411,8 @@ const SETTINGS_NAV_ORDER = [
     'general',
     'plans',
     'ai-providers',
+    'embedding',
+    'reranker',
     'skills',
     'calendar',
     'audio',
@@ -577,13 +581,23 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
 
     const [verboseLogging, setVerboseLogging] = useState(false);
+    const [showVerboseToast, setShowVerboseToast] = useState(false);
+    const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [exportingLogs, setExportingLogs] = useState(false);
+    const [exportResult, setExportResult] = useState<string | null>(null);
     const [ambientChatEnabled, setAmbientChatEnabled] = useState(false);
     const [autoAnswerEnabled, setAutoAnswerEnabled] = useState(false);
     const [meetingRetention, setMeetingRetention] = useState<'forever' | '7d' | '30d' | 'never'>('forever');
-    const [showVerboseToast, setShowVerboseToast] = useState(false);
     const [codeVerification, setCodeVerification] = useState(false);
     const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-    const verboseToastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+        if (!showVerboseToast) return;
+        verboseToastTimerRef.current = setTimeout(() => setShowVerboseToast(false), 10000);
+        return () => {
+            if (verboseToastTimerRef.current) clearTimeout(verboseToastTimerRef.current);
+        };
+    }, [showVerboseToast]);
 
     // Close dropdown when clicking outside
     // Sync with global state changes
@@ -602,14 +616,6 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             window.electronAPI?.getMeetingRetention?.().then(setMeetingRetention).catch(() => { });
         }
     }, [isOpen]);
-
-    useEffect(() => {
-        if (!showVerboseToast) return;
-        verboseToastTimerRef.current = setTimeout(() => setShowVerboseToast(false), 5200);
-        return () => {
-            if (verboseToastTimerRef.current) clearTimeout(verboseToastTimerRef.current);
-        };
-    }, [showVerboseToast]);
 
 
 
@@ -1882,12 +1888,27 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         <FlaskConical size={16} /> {t('AI Providers')}
                                     </button>
                                     <button
+                                        onClick={() => setActiveTab('embedding')}
+                                        className={navItemClass(activeTab === 'embedding')}
+                                    >
+                                        {activeTab === 'embedding' && navActivePill}
+                                        <Boxes size={16} /> {t('Embeddings')}
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('reranker')}
+                                        className={navItemClass(activeTab === 'reranker')}
+                                    >
+                                        {activeTab === 'reranker' && navActivePill}
+                                        <ListOrdered size={16} /> {t('Reranker')}
+                                    </button>
+                                    <button
                                         onClick={() => setActiveTab('skills')}
                                         className={navItemClass(activeTab === 'skills')}
                                     >
                                         {activeTab === 'skills' && navActivePill}
                                         <Folder size={16} /> {t('Skills')}
                                     </button>
+                                    {/* Temporarily hidden — TODO: re-enable Calendar settings nav item
                                     <button
                                         onClick={() => setActiveTab('calendar')}
                                         className={navItemClass(activeTab === 'calendar')}
@@ -1895,6 +1916,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                         {activeTab === 'calendar' && navActivePill}
                                         <Calendar size={16} /> {t('Calendar')}
                                     </button>
+                                    */}
                                     <button
                                         onClick={() => setActiveTab('audio')}
                                         className={navItemClass(activeTab === 'audio')}
@@ -2438,7 +2460,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                             </div>
                                                             <div>
                                                                 <h3 className="text-sm font-bold text-text-primary">{t('Verbose debug logging')}</h3>
-                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Print detailed audio, STT, and pipeline diagnostics')}</p>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {t('Record everything: audio, STT, routing, and the questions and answers themselves. API keys are always removed.')}
+                                                                </p>
                                                             </div>
                                                         </div>
                                                         <SettingsToggle
@@ -2448,12 +2472,16 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 const newState = !verboseLogging;
                                                                 setVerboseLogging(newState);
                                                                 window.electronAPI?.setVerboseLogging?.(newState);
+                                                                if (newState) setShowVerboseToast(true);
                                                             }}
                                                             className={verboseLogging ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                         />
                                                     </div>
 
-                                                    {/* Verbose logging toast */}
+
+                                                    {/* Verbose logging notice — the log location AND the
+                                                        full-capture privacy disclosure as ONE card, shown for
+                                                        10s when the user turns logging on. */}
                                                     <AnimatePresence>
                                                         {showVerboseToast && (
                                                             <motion.div
@@ -2464,30 +2492,66 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                                 transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
                                                                 className="mx-4 mb-1 overflow-hidden"
                                                             >
-                                                                <div className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                                                                    <div className="flex items-center gap-2.5 min-w-0">
-                                                                        <Terminal size={14} className="text-amber-400 shrink-0" />
-                                                                        <p className="text-xs text-amber-200/80 leading-snug truncate">
-                                                                            Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
-                                                                        </p>
+                                                                <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                                            <Terminal size={14} className="text-amber-400 shrink-0" />
+                                                                            <p className="text-xs text-amber-200/80 leading-snug truncate">
+                                                                                Logs → <span className="font-mono text-amber-300">~/Documents/natively_debug.log</span>
+                                                                            </p>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => window.electronAPI?.openLogFile?.()}
+                                                                            className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
+                                                                        >
+                                                                            Open
+                                                                        </button>
                                                                     </div>
-                                                                    <button
-                                                                        onClick={() => window.electronAPI?.openLogFile?.()}
-                                                                        className="shrink-0 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors px-2 py-0.5 rounded-md bg-amber-500/15 hover:bg-amber-500/25"
-                                                                    >
-                                                                        Open
-                                                                    </button>
+                                                                    <p className="text-xs text-amber-200/80 leading-snug mt-2">
+                                                                        {t('Full capture records your transcripts, questions, and answers in plaintext on this device. API keys and tokens are always removed. Review a log before sharing it.')}
+                                                                    </p>
                                                                 </div>
-                                                                {/* 5-second drain bar */}
-                                                                <motion.div
-                                                                    className="h-[2px] bg-amber-500/40 rounded-b-xl"
-                                                                    initial={{ scaleX: 1, originX: 0 }}
-                                                                    animate={{ scaleX: 0 }}
-                                                                    transition={{ duration: 5, ease: 'linear', delay: 0.2 }}
-                                                                />
                                                             </motion.div>
                                                         )}
                                                     </AnimatePresence>
+
+                                                    {/* Export debug logs — collects the main log, the previous
+                                                        session, the structured JSONL records and a system-info
+                                                        header into one folder and reveals it. */}
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Download size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Export debug logs')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">
+                                                                    {exportResult ?? t('Collect this session\u2019s logs into one folder to share')}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            disabled={exportingLogs}
+                                                            onClick={async () => {
+                                                                setExportingLogs(true);
+                                                                setExportResult(null);
+                                                                try {
+                                                                    const r = await window.electronAPI?.exportDebugLogs?.();
+                                                                    setExportResult(r?.success
+                                                                        ? t('Exported {{n}} file(s) \u2014 revealed in your file manager').replace('{{n}}', String(r.files?.length ?? 0))
+                                                                        : t('Export failed: {{e}}').replace('{{e}}', r?.error ?? 'unknown'));
+                                                                } catch (e: any) {
+                                                                    setExportResult(t('Export failed: {{e}}').replace('{{e}}', e?.message ?? 'unknown'));
+                                                                } finally {
+                                                                    setExportingLogs(false);
+                                                                }
+                                                            }}
+                                                            className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-bg-item-surface border border-border-subtle text-text-primary hover:bg-bg-item-surface-hover transition-colors disabled:opacity-50"
+                                                        >
+                                                            {exportingLogs ? t('Exporting\u2026') : t('Export')}
+                                                        </button>
+                                                    </div>
 
                                                     {/* Code Verification — runs LLM-generated code against test cases + one-shot correction */}
                                                     <div className="flex items-center justify-between px-4 py-3">
@@ -2665,6 +2729,7 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                             {activeTab === 'ai-providers' && (
                                 <AIProvidersSettings
+                                    onNavigate={setActiveTab}
                                     aiResponseLanguage={aiResponseLanguage}
                                     availableAiLanguages={availableAiLanguages}
                                     isAiLangDropdownOpen={isAiLangDropdownOpen}
@@ -3817,6 +3882,13 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
 
                             {activeTab === 'phone-mirror' && (
                                 <PhoneMirrorSettings />
+                            )}
+
+                            {activeTab === 'reranker' && (
+                                <RerankerSettings />
+                            )}
+                            {activeTab === 'embedding' && (
+                                <EmbeddingSettings onNavigate={setActiveTab} />
                             )}
 
                             {activeTab === 'intelligence' && (
