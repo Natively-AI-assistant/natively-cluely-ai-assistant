@@ -30,7 +30,9 @@ const PANEL = join(REPO_ROOT, 'src/components/settings/RerankerSettings.tsx');
 const PROVIDERS = join(REPO_ROOT, 'electron/rag/hostedRerankProviders.ts');
 const PRELOAD = join(REPO_ROOT, 'electron/preload.ts');
 
+const MARKS = join(REPO_ROOT, 'src/components/ui/aiProviderMarks.ts');
 const panel = readFileSync(PANEL, 'utf8');
+const marks = readFileSync(MARKS, 'utf8');
 const providers = readFileSync(PROVIDERS, 'utf8');
 const preload = readFileSync(PRELOAD, 'utf8');
 
@@ -128,4 +130,28 @@ test('losing provider discovery degrades to a card, never to nothing', () => {
   assert.match(body, /catch/, 'a rejected lookup must not leave the panel card-less');
   assert.match(body, /setHostedProviders\(cur => \(cur\.length \? cur :/,
     'the fallback must not clobber a list that already loaded');
+});
+
+test('every hosted provider has a real brand mark, not a monogram', () => {
+  // AipProviderMark falls back to a two-letter monogram when a provider has no
+  // vendored logo, and the fallback is silent — Jina's card shipped a "JI" tile
+  // that read as a placeholder next to OpenRouter's real mark. A provider added
+  // to the table with no mark should fail here rather than on screen.
+  for (const id of advertisedProviderIds()) {
+    assert.match(marks, new RegExp(`\\b${id}: \\w+Mark,`),
+      `${id} has no entry in AI_PROVIDER_MARKS, so its card renders a monogram`);
+    assert.match(marks, new RegExp(`${id}:\\s*\\{ mono: '[A-Z]{2}', brand: '#[0-9A-Fa-f]{6}' \\}`),
+      `${id} needs an AI_PROVIDER_BRANDS entry — brand drives the tile wash`);
+  }
+});
+
+test('a vendored mark paints currentColor, so it survives both themes', () => {
+  // .aip-tile--mark paints var(--aip-btn-bg), which follows the theme. A mark
+  // with a hardcoded fill at either extreme is unreadable in one of them — the
+  // reason the OpenRouter and Voyage marks take the monochrome variant.
+  const svg = readFileSync(join(REPO_ROOT, 'src/assets/provider-logos/jina.svg'), 'utf8');
+  assert.match(svg, /fill="currentColor"/,
+    'a hardcoded fill would vanish against one of the two tile backgrounds');
+  assert.doesNotMatch(svg, /<script|<foreignObject|xlink:href|href="http/i,
+    'this is inlined with dangerouslySetInnerHTML — vector paths only');
 });
