@@ -1486,7 +1486,12 @@ export const AipModelList: React.FC<AipModelListProps> = ({
     );
 };
 
-export interface AipSelectOption { id: string; name: string }
+/**
+ * `name` is the OPEN menu row; `triggerName`, when present, is what the CLOSED
+ * trigger shows instead. Optional because most selectors (widths, plain
+ * choices) have one name and a required field would blank their triggers.
+ */
+export interface AipSelectOption { id: string; name: string; triggerName?: string }
 
 interface AipSelectProps {
     value: string;
