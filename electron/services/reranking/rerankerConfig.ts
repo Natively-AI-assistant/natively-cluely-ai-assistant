@@ -382,6 +382,72 @@ function setGgufPort(entry: GgufPortEntry): void {
  * and swaps its own modelId), so this covers only the runtime Core cannot
  * express that way. Returning null lets the chain fall through to the built-in.
  */
+/**
+ * Has the user actually CHOSEN a reranker, as opposed to inheriting the default?
+ *
+ * The seam runs reranking as a low-confidence escalation: retrieval computes a
+ * confidence gate and only escalates when it trips. That is right for the
+ * bundled model nobody asked for — it keeps latency off the critical path for
+ * users who never opened the panel.
+ *
+ * It is wrong for a model the user went and picked. MEASURED against the
+ * running app over 36 doc-grounded retrievals across 9 queries, including
+ * deliberately vague ones: the gate tripped ONCE. A configured, downloaded,
+ * tested reranker sat idle on 35 of 36 queries, and nothing anywhere said so.
+ *
+ * So an explicit choice — a hosted provider, an enabled extension, or an
+ * installed catalogue model — makes reranking unconditional on the paths that
+ * permit it. The 1200ms budget still bounds it, and a port that misses the
+ * budget still leaves the existing order untouched.
+ *
+ * "Explicit" deliberately excludes a selection that cannot run: a half-
+ * downloaded or unsupported model falls back to the bundled one at the seam, so
+ * treating it as a choice would spend the escalation on the model the user did
+ * NOT pick.
+ */
+export function isRerankerExplicitlySelected(): boolean {
+  try {
+    const settings = readRerankerSettings();
+
+    // Hosted counts only when it could actually run — key present, model
+    // chosen, privacy scope permitting. evaluateHostedEligibility answers
+    // exactly that, and buildHostedRerankPort() already gates on it.
+    const provider = settings.provider ?? DEFAULT_RERANKER_SETTINGS.provider;
+    if (provider !== 'local') {
+      const eligible = evaluateHostedEligibility({
+        provider,
+        hasApiKey: Boolean(readHostedApiKey(provider)),
+        model: readHostedModel(settings),
+        localOnly: isLocalOnlyMode(),
+        referenceFilesScopeAllowed: referenceFilesScopeAllowed(),
+      }).eligible;
+      if (eligible) return true;
+    }
+
+    // An enabled extension OWNS the seam; installing and enabling one is about
+    // as explicit as a choice gets.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { getRerankerRegistry } = require('./RerankerRegistry') as typeof import('./RerankerRegistry');
+      if (getRerankerRegistry().activeExtensionId()) return true;
+    } catch { /* no registry: fall through to the local check */ }
+
+    const id = (settings as { localModelId?: unknown }).localModelId;
+    if (typeof id !== 'string' || !id) return false;
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { findCatalogModel } = require('../../rag/rerankerModelCatalog') as typeof import('../../rag/rerankerModelCatalog');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { statusOf } = require('./localModelInstaller') as typeof import('./localModelInstaller');
+    const entry = findCatalogModel(id);
+    return Boolean(entry && entry.supported && statusOf(entry).state === 'installed');
+  } catch {
+    // Never let this decide anything by throwing: an unreadable setting means
+    // "no explicit choice", which is the previous behaviour exactly.
+    return false;
+  }
+}
+
 export function buildLocalGgufPort(): RerankSeamPort | null {
   const settings = readRerankerSettings();
   const id = settings.localModelId;

@@ -1398,8 +1398,35 @@ export class ModeHybridRetriever {
             const gate = confidence
                 ?? this.computeConfidence(candidates, queryWords.size, allCandidates.length, usedFallback);
             const lowConfidence = gate.lowConfidence === true;
-            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride) });
-            if (lowConfidence) {
+
+            // A reranker the user CHOSE runs on every permitted query; the
+            // bundled default stays a low-confidence escalation.
+            //
+            // The gate alone was far too narrow for a configured reranker.
+            // MEASURED against the running app over 36 doc-grounded retrievals
+            // across 9 queries, several written to be deliberately vague: it
+            // tripped ONCE. Downloading a 400MB model, selecting it, and
+            // watching its Test Connection pass bought re-ordering on 1 query
+            // in 36 — with nothing anywhere reporting that it had not run.
+            //
+            // The bundled model keeps the old behaviour on purpose: a user who
+            // never opened the panel should not start paying rerank latency
+            // because this changed.
+            const explicitlySelected = this.rerankerOverride
+                ? false
+                : (() => {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const { isRerankerExplicitlySelected } = require('../reranking/rerankerConfig') as typeof import('../reranking/rerankerConfig');
+                        return isRerankerExplicitlySelected();
+                    } catch { return false; }
+                })();
+            const shouldRerank = lowConfidence || explicitlySelected || Boolean(this.rerankerOverride);
+            markH4HybridStage('rerank_gate', {
+                lowConfidence, explicitlySelected, shouldRerank,
+                candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride),
+            });
+            if (shouldRerank) {
                 // A manual-chat answer has a fixed first-useful deadline. The local
                 // cross-encoder is optional ranking refinement, so it must never
                 // consume that whole deadline and prevent a lexical/evidence-pack
