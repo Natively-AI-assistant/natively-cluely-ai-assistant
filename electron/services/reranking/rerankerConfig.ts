@@ -376,13 +376,6 @@ function setGgufPort(entry: GgufPortEntry): void {
 }
 
 /**
- * The seam port for a selected local GGUF model, or null.
- *
- * ONNX selections are handled inside `LocalReranker` (it reads the same setting
- * and swaps its own modelId), so this covers only the runtime Core cannot
- * express that way. Returning null lets the chain fall through to the built-in.
- */
-/**
  * Has the user actually CHOSEN a reranker, as opposed to inheriting the default?
  *
  * The seam runs reranking as a low-confidence escalation: retrieval computes a
@@ -448,6 +441,13 @@ export function isRerankerExplicitlySelected(): boolean {
   }
 }
 
+/**
+ * The seam port for a selected local GGUF model, or null.
+ *
+ * ONNX selections are handled inside `LocalReranker` (it reads the same setting
+ * and swaps its own modelId), so this covers only the runtime Core cannot
+ * express that way. Returning null lets the chain fall through to the built-in.
+ */
 export function buildLocalGgufPort(): RerankSeamPort | null {
   const settings = readRerankerSettings();
   const id = settings.localModelId;
