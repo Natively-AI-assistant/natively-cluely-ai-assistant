@@ -143,9 +143,8 @@ export interface AppSettings {
      * decides the order of those candidates, and a user may reasonably want a
      * local embedder with a hosted reranker, or the reverse.
      *
-     * Absent means provider 'local' — exactly today's behaviour with the
-     * built-in bge-reranker-base — so an upgrading user's reranker cannot change
-     * because a new setting appeared. See electron/services/reranking/rerankerConfig.ts.
+     * Absent means provider 'local' — the bundled cross-encoder — so an
+     * upgrading user's reranker cannot change because a new setting appeared. See electron/services/reranking/rerankerConfig.ts.
      *
      * The OpenRouter API key is NOT here: it lives in CredentialsManager, and it
      * is the SAME `openrouterApiKey` the embedding and generation paths use.
@@ -155,8 +154,9 @@ export interface AppSettings {
         provider?: 'local' | 'openrouter' | 'jina';
         /**
          * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
-         * bundled bge-reranker-base. Only ONNX entries are valid here: a GGUF
-         * model is executed by its extension, not by Core's runtime.
+         * bundled model (ms-marco-MiniLM-L-6-v2 as of 2026-09-04 — see
+         * BUILT_IN_RERANKER, and do not re-hardcode a name here). Only ONNX
+         * entries are valid: a GGUF model is executed by its extension.
          */
         localModelId?: string;
         openrouterModel?: string;
