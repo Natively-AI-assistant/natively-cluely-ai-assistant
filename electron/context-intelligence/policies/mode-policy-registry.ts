@@ -344,7 +344,16 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: STRICT_DOC_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 2400, 800, 200),
+    // conversationTokens is 1000, not the 2400 every other mode got in the
+    // 2026-08-28 sweep. This is the one STRICT_DOC_CAPS mode: general knowledge
+    // is off, document claims require evidence, and the conversation is
+    // explicitly NOT an answer source here. It is still needed for REFERENT
+    // resolution ("what about section 3?"), which is 2-3 exchanges, not 6-8 —
+    // so the sweep's sizing rationale ("~6-8 completed exchanges including a
+    // screenshot description") does not apply to this mode, and matching the
+    // evidence budget exactly gave conversation the same weight as the
+    // documents the mode exists to be grounded in.
+    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 1000, 800, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'VISIBLE',
   },
