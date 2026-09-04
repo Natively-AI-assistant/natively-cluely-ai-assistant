@@ -4663,6 +4663,9 @@ export class IntelligenceEngine extends EventEmitter {
                 }
             }
 
+            // Set by the false-no-content guard below so the Phase 1b silence
+            // instrument can tell a PROMPTED sentinel from a NORMALIZED one.
+            let silenceViaNormalizer = false;
             // FALSE-NO-CONTENT-CLAIM GUARD (campaign2 longsession run-022,
             // 2026-07-18): the model's raw answer spontaneously claims no
             // question/content was captured while `extractedQuestion` proves a
@@ -4694,7 +4697,53 @@ export class IntelligenceEngine extends EventEmitter {
                 // speculative silent-discard path identically to the
                 // intentionally-prompted case.
                 fullAnswer = 'Nothing actionable right now.';
+                silenceViaNormalizer = true;
             }
+
+            // PHASE 1b SILENCE-SHARE INSTRUMENT (interaction-router campaign,
+            // 2026-09-04). This is the ONE post-generation point in
+            // runWhatShouldISay where `fullAnswer` is final: the assistant-voice
+            // guard and the false-no-content normalizer have both run, and the
+            // sentinel branch below has not yet consumed it. Emitting here — for
+            // BOTH outcomes, not just the silent one — is what makes the ring
+            // yield a RATE rather than an unanchored count.
+            //
+            // The routing audit (docs/natively-current-routing-map.md) could not
+            // answer what share of live generations end in a silence string,
+            // because the decision is made by the cloud LLM after a full
+            // generation rather than by a pre-check. That share is the size of
+            // the prize for the router's `needs_response` axis, so it is measured
+            // before the taxonomy is designed, not after.
+            //
+            // Marker-only and observe-only. No branch reads `silenced`, nothing
+            // downstream changes, and piTelemetry.scrubTelemetry drops anything
+            // that is not an allow-listed marker key. Buffered in the bounded
+            // ring; a line is logged only under NATIVELY_PI_TELEMETRY_DEBUG or
+            // the 'full' debug level. Wrapped because instrumentation must never
+            // be able to fail a live turn.
+            try {
+                const _silenced = IntelligenceEngine.isNonAnswerSentinel(fullAnswer);
+                let _modeTemplate = 'unknown';
+                try {
+                    // Local require, matching every other ModesManager use in this
+                    // file: the module is not statically imported here.
+                    const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                    _modeTemplate = ModesManager.getInstance().getActiveMode?.()?.templateType ?? 'none';
+                } catch { /* mode unavailable — the outcome is still worth counting */ }
+                piTelemetry.emit('wta_turn_silence_outcome', {
+                    silenced: _silenced,
+                    surface: isSpeculative ? 'speculative' : 'manual',
+                    mode: _modeTemplate,
+                    answerType: answerPlan?.answerType ?? 'none',
+                    // Which mechanism produced the sentinel. 'prompted' is the
+                    // model taking the escape hatch the mode prompt instructs;
+                    // 'normalized' is the false-no-content guard above rewriting
+                    // a spontaneous non-answer onto the same string. A log line
+                    // alone cannot tell these apart, which is why the audit
+                    // recorded the share as unmeasurable without this split.
+                    reason: _silenced ? (silenceViaNormalizer ? 'normalized' : 'prompted') : 'answered',
+                });
+            } catch { /* instrumentation must never break a live turn */ }
 
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 // [TRACE:LONGCTX] Campaign 2, F-longsession-1 (2026-07-16): the
