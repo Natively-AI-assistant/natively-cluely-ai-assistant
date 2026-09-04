@@ -109,6 +109,89 @@ interface InstalledExtension {
     models: ExtensionModel[];
 }
 
+interface ExtensionVariantGroup {
+    id: string;
+    label: string;
+    files: ExtensionModel[];
+    totalBytes: number;
+    allReady: boolean;
+    anyDownloading: boolean;
+    anyBlocked: boolean;
+    anyFailed: boolean;
+    unacknowledgedLicense: ExtensionModel['license'] | null;
+    format: string;
+    spdx: string;
+    commercialUseRestricted: boolean;
+}
+
+function formatModelKeyLabel(rawKey: string): string {
+    // 1. Strip file suffixes
+    let str = rawKey.replace(/-(model|tokenizer|config|weights|bin|safetensors|vocab|json)$/i, '');
+
+    // 2. Normalize quantization tokens: Q4_K_M, q4_k_m, Q4KM, q4km -> Q4
+    str = str.replace(/[-_]?(q4_k_m|q4km|q4_0|q4_1)/i, ' Q4');
+    str = str.replace(/[-_]?(q8_0|q8km|q8_1)/i, ' Q8');
+    str = str.replace(/[-_]?(q5_k_m|q5km|q5_0)/i, ' Q5');
+
+    // Split by hyphens, underscores, or spaces
+    const parts = str.split(/[-_\s]+/).filter(Boolean);
+
+    return parts.map(p => {
+        const lower = p.toLowerCase();
+        if (/^\d+(\.\d+)?[mbk]$/i.test(p)) return p.toUpperCase();
+        if (/^v\d+(\.\d+)?$/i.test(p)) return lower;
+        if (lower === 'bge') return 'BGE';
+        if (lower === 'qwen3' || lower === 'qwen') return 'Qwen3';
+        if (lower === 'jina') return 'Jina';
+        if (lower === 'ettin') return 'Ettin';
+        if (lower === 'mxbai') return 'mxbai';
+        if (lower === 'reranker' || lower === 'rerank') return 'Reranker';
+        if (lower === 'q4' || lower === 'q8' || lower === 'q5') return lower.toUpperCase();
+        return p.charAt(0).toUpperCase() + p.slice(1);
+    }).join(' ');
+}
+
+function getExtensionVariantGroups(models: ExtensionModel[]): ExtensionVariantGroup[] {
+    const groupMap = new Map<string, ExtensionModel[]>();
+    for (const m of models) {
+        const baseId = m.key.replace(/-(model|tokenizer|config|weights|bin|safetensors|vocab|json)$/i, '');
+        if (!groupMap.has(baseId)) groupMap.set(baseId, []);
+        groupMap.get(baseId)!.push(m);
+    }
+
+    const groups: ExtensionVariantGroup[] = [];
+    groupMap.forEach((files, baseId) => {
+        const totalBytes = files.reduce((acc, f) => acc + (f.bytes ?? f.approxBytes ?? 0), 0);
+        const allReady = files.every(f => f.state === 'ready');
+        const anyDownloading = files.some(f => f.state === 'downloading');
+        const anyBlocked = files.some(f => f.state === 'blocked-unacknowledged');
+        const anyFailed = files.some(f => f.state === 'verification-failed');
+        const unack = files.find(f => f.license.requiresAcknowledgement && !f.license.acknowledged)?.license ?? null;
+        const format = files[0]?.format?.toUpperCase() || 'ONNX';
+        const spdx = files[0]?.license.spdx || 'Apache-2.0';
+        const commercialUseRestricted = files.some(f => f.license.commercialUseRestricted);
+
+        const label = formatModelKeyLabel(files.length === 1 ? files[0].key : baseId);
+
+        groups.push({
+            id: baseId,
+            label,
+            files,
+            totalBytes,
+            allReady,
+            anyDownloading,
+            anyBlocked,
+            anyFailed,
+            unacknowledgedLicense: unack,
+            format,
+            spdx,
+            commercialUseRestricted,
+        });
+    });
+
+    return groups;
+}
+
 interface TestResult {
     success: boolean;
     latencyMs?: number;
@@ -311,6 +394,7 @@ export const RerankerSettings: React.FC = () => {
     const [filterTab, setFilterTab] = useState<'all' | 'installed' | 'recommended'>('all');
     const [modelQuery, setModelQuery] = useState('');
     const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
+    const [expandedFileDrawers, setExpandedFileDrawers] = useState<Record<string, boolean>>({});
 
     const refreshStatus = useCallback(async () => {
         const next = await window.electronAPI.getRerankerStatus?.();
@@ -326,10 +410,19 @@ export const RerankerSettings: React.FC = () => {
             const res = await window.electronAPI.getRerankerHostedProviders?.();
             if (res?.providers?.length) { setHostedProviders(res.providers as never); return; }
         } catch { /* fall through to the built-in descriptor */ }
+        // Mirrors HOSTED_RERANK_PROVIDERS. Listing OpenRouter alone here meant
+        // that when discovery degraded, the Jina card vanished AND the fallback
+        // copy (built from this list) went back to naming one provider for a
+        // switch that governs both. Models stay empty on this path — a name and
+        // a key field is the useful degradation; the catalogue is not.
         setHostedProviders(cur => (cur.length ? cur : [{
             id: 'openrouter', name: 'OpenRouter',
             keyUrl: 'https://openrouter.ai/keys', keyPlaceholder: 'sk-or-v1-…',
             staticCatalogue: false, hasApiKey: false, models: [],
+        }, {
+            id: 'jina', name: 'Jina AI',
+            keyUrl: 'https://jina.ai/api-dashboard/', keyPlaceholder: 'jina_…',
+            staticCatalogue: true, hasApiKey: false, models: [],
         }]));
     }, []);
 
@@ -390,12 +483,15 @@ export const RerankerSettings: React.FC = () => {
 
     const activeOptions: AipSelectOption[] = useMemo(() => {
         const options: AipSelectOption[] = [
-            { id: 'local::built-in', name: `${status?.builtIn.name ?? 'MS MARCO MiniLM L6'} — ${t('Included')}` },
+            // No `?? 'MS MARCO MiniLM L6'` here: `status` is typed non-nullable and
+            // initialised from INITIAL_STATUS, so that branch was unreachable — a
+            // fourth copy of the bundled model's name that could only ever go stale.
+            { id: 'local::built-in', name: `${status.builtIn.name} — ${t('Included')}` },
         ];
 
         for (const m of catalogModels) {
             if (!m.activatable || m.state !== 'installed') continue;
-            options.push({ id: `local::${m.id}`, name: `${m.name} — ${t('On-device')}` });
+            options.push({ id: `local::${m.id}`, name: m.name });
         }
 
         for (const ext of extensions.filter(e => e.type === 'reranker')) {
@@ -610,6 +706,42 @@ export const RerankerSettings: React.FC = () => {
         }
     }, [loadExtensions]);
 
+    const downloadExtensionGroup = useCallback(async (extId: string, files: ExtensionModel[]) => {
+        for (const m of files) {
+            if (m.state !== 'ready') {
+                await downloadModel(extId, m.key);
+            }
+        }
+    }, [downloadModel]);
+
+    const cancelExtensionGroup = useCallback(async (extId: string, files: ExtensionModel[]) => {
+        for (const m of files) {
+            const key = `${extId}::${m.key}`;
+            if (busyModel === key || m.state === 'downloading') {
+                await window.electronAPI.cancelExtensionModelDownload?.(extId, m.key);
+            }
+        }
+    }, [busyModel]);
+
+    const groupProgressFraction = useCallback((extId: string, files: ExtensionModel[]) => {
+        let totalBytes = 0;
+        let downloadedBytes = 0;
+        for (const m of files) {
+            const bytes = m.bytes ?? m.approxBytes ?? 0;
+            totalBytes += bytes;
+            if (m.state === 'ready') {
+                downloadedBytes += bytes;
+            } else {
+                const key = `${extId}::${m.key}`;
+                const pct = progress[key];
+                if (typeof pct === 'number') {
+                    downloadedBytes += pct * bytes;
+                }
+            }
+        }
+        return totalBytes > 0 ? Math.min(1, downloadedBytes / totalBytes) : 0;
+    }, [progress]);
+
     const selectedMissing = useMemo(() => {
         const id = status?.openrouterModel;
         if (!id || catalog.length === 0) return false;
@@ -689,17 +821,16 @@ export const RerankerSettings: React.FC = () => {
         // in Core now; this used to fire on every GGUF model and disable its
         // Download button while claiming an extension was missing.
         const needsExtension = m.extensionId != null && m.extensionInstalled === false;
-        const isNoteExpanded = expandedNotes[m.id] ?? false;
 
         return (
             <div
                 key={m.id}
-                className="aip-card p-2.5 space-y-2 transition-colors hover:bg-white/[0.02]"
+                className="aip-card p-3 space-y-1.5 transition-colors hover:bg-white/[0.03]"
                 data-active={m.selected ? 'true' : undefined}
                 data-off={m.supported ? undefined : 'true'}
             >
                 <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
                         <span
                             aria-hidden="true"
                             className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -720,10 +851,6 @@ export const RerankerSettings: React.FC = () => {
                     </div>
 
                     <div className="shrink-0 flex items-center gap-1.5">
-                        {/* Downloading is not the same decision as using. An entry
-                            Natively cannot score yet can still be fetched — the bytes
-                            are useful on their own, and `activatable` (not `supported`)
-                            is what gates the Use button below. */}
                         {!installed && (
                             busy ? (
                                 <button
@@ -776,32 +903,21 @@ export const RerankerSettings: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] aip-muted pl-3.5">
-                    <span className="truncate">
+                <div className="text-[10.5px] aip-muted pl-3.5 flex items-center gap-2 flex-wrap">
+                    <span>
                         {[m.params, humanBytes(m.bytes), m.license.spdx, m.license.commercialUseRestricted ? t('non-commercial') : null]
                             .filter(Boolean).join(' · ')}
                     </span>
-                    {m.note && (
-                        <button
-                            type="button"
-                            className="aip-btn text-[9.5px] px-1.5 py-0.5 shrink-0 ml-2"
-                            data-size="sm"
-                            data-variant="ghost"
-                            onClick={() => setExpandedNotes(prev => ({ ...prev, [m.id]: !prev[m.id] }))}
-                        >
-                            {isNoteExpanded ? t('Less') : t('Details')}
-                        </button>
-                    )}
                 </div>
 
-                {isNoteExpanded && m.note && (
-                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 pt-1.5 border-t border-white/5">
+                {m.note && (
+                    <p className="text-[10px] aip-muted leading-relaxed pl-3.5 text-white/60">
                         {m.note}
                     </p>
                 )}
 
                 {!m.supported && m.unsupportedReason && (
-                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5" role="status">
+                    <div className="aip-inline-warn flex items-start gap-2 ml-3.5 mt-1" role="status">
                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
                         <span className="min-w-0">{m.unsupportedReason}</span>
                     </div>
@@ -828,6 +944,23 @@ export const RerankerSettings: React.FC = () => {
             </div>
         );
     };
+
+    /**
+     * Who the hosted fallback actually covers.
+     *
+     * The switch is wired to RerankerRegistry.resolveHostedPort, which wraps
+     * WHICHEVER hosted provider is selected — so the old label ("if OpenRouter
+     * is unavailable") was wrong the moment Jina shipped: a failed Jina rerank
+     * took the same branch while the UI said nothing about it. Built from the
+     * live provider list rather than a hardcoded pair, so a third hosted
+     * provider needs no copy change.
+     */
+    const hostedFallbackSubject = useMemo(() => {
+        const names = hostedProviders.map(p => p.name).filter(Boolean);
+        if (names.length === 0) return t('a hosted reranker');
+        if (names.length === 1) return names[0];
+        return `${names.slice(0, -1).join(', ')} ${t('or')} ${names[names.length - 1]}`;
+    }, [hostedProviders, t]);
 
     return (
         <div className="aip-root space-y-5 pb-10" data-theme={aipTheme} data-settings-stagger>
@@ -905,18 +1038,53 @@ export const RerankerSettings: React.FC = () => {
                 )}
             </div>
 
+            {/* Hosted fallback — its own card, directly under Active Reranker.
+                It answers "what happens when the hosted service fails", which is
+                a question about the ACTIVE choice. It used to ride along at the
+                bottom of the candidates card, where it read as a footnote to a
+                setting it has nothing to do with. */}
+            <div className="aip-card p-5">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1 space-y-1">
+                        <span className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                            {t('Fall back to the local reranker')}
+                        </span>
+                        <p className="text-[10px] aip-muted">
+                            {`${t('Off by default. When')} ${hostedFallbackSubject} ${t('is unreachable, out of quota or returning errors, Natively reranks on this device instead. Left off, a failed hosted rerank keeps your results in their original order rather than quietly reordering them with a model you did not choose.')}`}
+                        </p>
+                    </div>
+                    <div className="shrink-0">
+                        <AipSwitch
+                            label={t('Fall back to the local reranker')}
+                            checked={status.fallbackToLocal}
+                            onChange={(next) => void setConfig({ fallbackToLocal: next })}
+                        />
+                    </div>
+                </div>
+
+                {/* Both halves matter. `provider` is what was SELECTED, `effective.kind`
+                    is what actually runs, and they diverge in two states this hint
+                    would otherwise lie in: a selected-but-ineligible hosted provider
+                    (effective falls to local — the hero card already explains that
+                    one), and an enabled reranker EXTENSION (on-device, but "choose a
+                    hosted one" is the wrong instruction for someone who just
+                    installed one). */}
+                {status.provider === 'local' && status.effective.kind === 'local' && (
+                    <p className="text-[10px] aip-muted pt-3">
+                        {t('Your active reranker already runs on this device, so this changes nothing until you choose a hosted one.')}
+                    </p>
+                )}
+            </div>
+
             {/* Provider Card 1: Unified Local Reranker & Model Library Card */}
             <div className="aip-card aip-provider space-y-3">
                 <div className="aip-provider-head">
                     <PlatformMark />
                     <h4 className="aip-card-title truncate min-w-0">{t('Local Reranker')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
-                        </span>
                         <AipBadge
                             tone={status.builtIn.available ? 'ok' : status.builtIn.cached ? 'info' : 'neutral'}
-                            label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('On-device')}
+                            label={status.builtIn.available ? t('Ready') : status.builtIn.cached ? t('Downloaded') : t('Local')}
                         />
                     </div>
                 </div>
@@ -1111,9 +1279,6 @@ export const RerankerSettings: React.FC = () => {
                             <AipProviderMark provider={p.id} name={p.name} />
                             <h4 className="aip-card-title truncate min-w-0">{t(p.name)}</h4>
                             <div className="ml-auto flex items-center gap-2 shrink-0">
-                                <span className="aip-meta inline-flex items-center gap-1.5">
-                                    <Cloud size={12} strokeWidth={1.75} /> {t('Cloud')}
-                                </span>
                                 <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
 
                                 <button
@@ -1264,9 +1429,6 @@ export const RerankerSettings: React.FC = () => {
                     <AipProviderMark provider="natively" name={t('Reranker Extensions')} />
                     <h4 className="aip-card-title truncate min-w-0">{t('Reranker Extensions')}</h4>
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        <span className="aip-meta inline-flex items-center gap-1.5">
-                            <HardDrive size={12} strokeWidth={1.75} /> {t('On-device')}
-                        </span>
                         <button
                             type="button"
                             className="aip-btn"
@@ -1322,6 +1484,7 @@ export const RerankerSettings: React.FC = () => {
                     ) : (
                         rerankerExtensions.map(ext => {
                             const modelsReady = ext.models.every(m => m.state === 'ready');
+                            const groups = getExtensionVariantGroups(ext.models);
                             return (
                                 <div key={ext.id} className="aip-card p-3 space-y-2.5 transition-colors hover:bg-white/[0.02]">
                                     {/* Extension Header Row */}
@@ -1377,37 +1540,57 @@ export const RerankerSettings: React.FC = () => {
                                         <p className="text-[10px] aip-muted pl-3.5">{t('Turned off')}: {ext.disabledReason}</p>
                                     )}
 
-                                    {/* Extension Models */}
-                                    {ext.models.map(m => {
-                                        const key = `${ext.id}::${m.key}`;
-                                        const pct = progress[key];
-                                        const downloading = busyModel === key || m.state === 'downloading';
-                                        const blocked = m.state === 'blocked-unacknowledged';
+                                    {/* Extension Model Variant Groups */}
+                                    {groups.map(group => {
+                                        const drawerKey = `${ext.id}::${group.id}`;
+                                        const isExpanded = expandedFileDrawers[drawerKey] ?? false;
+                                        const isDownloading = group.anyDownloading || group.files.some(f => busyModel === `${ext.id}::${f.key}`);
+                                        const pctFraction = groupProgressFraction(ext.id, group.files);
 
                                         return (
-                                            <div key={m.key} className="space-y-1.5 pl-3.5 pt-1.5 border-t border-white/5">
+                                            <div key={group.id} className="space-y-1.5 pl-3.5 pt-2 border-t border-white/5">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <div className="min-w-0 flex-1">
-                                                        <div className="text-[11px] font-medium text-white truncate">{m.key}</div>
-                                                        <div className="text-[10px] aip-muted truncate">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[11px] font-semibold text-white truncate">{group.label}</span>
+                                                            {group.files.length > 1 && (
+                                                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/70 font-mono shrink-0">
+                                                                    {group.files.length} {t('files')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-[10px] aip-muted truncate mt-0.5">
                                                             {[
-                                                                m.format.toUpperCase(),
-                                                                humanBytes(m.bytes ?? m.approxBytes),
-                                                                m.license.spdx,
-                                                                m.license.commercialUseRestricted ? t('non-commercial') : null,
+                                                                group.format,
+                                                                humanBytes(group.totalBytes),
+                                                                group.spdx,
+                                                                group.commercialUseRestricted ? t('non-commercial') : null,
                                                             ].filter(Boolean).join(' · ')}
                                                         </div>
                                                     </div>
 
-                                                    <div className="shrink-0">
-                                                        {m.state === 'ready' ? (
+                                                    <div className="shrink-0 flex items-center gap-1.5">
+                                                        {group.files.length > 1 && (
+                                                            <button
+                                                                type="button"
+                                                                className="aip-btn text-[9.5px] px-1.5 py-0.5"
+                                                                data-size="sm"
+                                                                data-variant="ghost"
+                                                                onClick={() => setExpandedFileDrawers(prev => ({ ...prev, [drawerKey]: !prev[drawerKey] }))}
+                                                            >
+                                                                <ChevronDown size={11} strokeWidth={1.75} className={`transition-transform duration-150 ${isExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
+                                                                <span>{isExpanded ? t('Less') : t('Files')}</span>
+                                                            </button>
+                                                        )}
+
+                                                        {group.allReady ? (
                                                             <AipBadge tone="ok" label={t('Ready')} />
-                                                        ) : downloading ? (
+                                                        ) : isDownloading ? (
                                                             <button
                                                                 type="button"
                                                                 className="aip-btn"
                                                                 data-size="sm"
-                                                                onClick={() => void window.electronAPI.cancelExtensionModelDownload?.(ext.id, m.key)}
+                                                                onClick={() => void cancelExtensionGroup(ext.id, group.files)}
                                                             >
                                                                 <X size={12} strokeWidth={1.75} aria-hidden="true" />
                                                                 <span>{t('Cancel')}</span>
@@ -1417,9 +1600,9 @@ export const RerankerSettings: React.FC = () => {
                                                                 type="button"
                                                                 className="aip-btn"
                                                                 data-size="sm"
-                                                                disabled={blocked}
-                                                                title={blocked ? (m.reason ?? undefined) : undefined}
-                                                                onClick={() => void downloadModel(ext.id, m.key)}
+                                                                disabled={group.anyBlocked || busyCatalogId !== null || busyModel !== null}
+                                                                title={group.anyBlocked ? (group.files.find(f => f.reason)?.reason ?? undefined) : undefined}
+                                                                onClick={() => void downloadExtensionGroup(ext.id, group.files)}
                                                             >
                                                                 <Download size={12} strokeWidth={1.75} aria-hidden="true" />
                                                                 <span>{t('Download')}</span>
@@ -1428,30 +1611,38 @@ export const RerankerSettings: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                {downloading && (
+                                                {/* Aggregate Download Progress Bar */}
+                                                {isDownloading && (
                                                     <div className="space-y-1 pt-1">
                                                         <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-[var(--aip-accent)] transition-all duration-150" style={{ width: `${Math.round((pct || 0) * 100)}%` }} />
+                                                            <div
+                                                                className="h-full bg-[var(--aip-accent)] transition-all duration-150"
+                                                                style={{ width: `${Math.round(pctFraction * 100)}%` }}
+                                                            />
                                                         </div>
                                                         <div className="text-[10px] aip-muted flex justify-between">
-                                                            <span>{typeof pct === 'number' ? `${Math.round(pct * 100)}%` : t('Starting…')}</span>
-                                                            <span>{typeof pct === 'number' ? `${humanBytes(Math.round(pct * m.approxBytes))} / ${humanBytes(m.approxBytes)}` : ''}</span>
+                                                            <span>{`${Math.round(pctFraction * 100)}%`}</span>
+                                                            <span>{`${humanBytes(Math.round(pctFraction * group.totalBytes))} / ${humanBytes(group.totalBytes)}`}</span>
                                                         </div>
                                                     </div>
                                                 )}
 
-                                                {m.state === 'verification-failed' && (
-                                                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                                {/* Verification Failure Warning */}
+                                                {group.anyFailed && (
+                                                    <div className="aip-inline-warn flex items-start gap-2 mt-1" role="status">
                                                         <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
-                                                        <span className="min-w-0">{m.reason ?? t('The downloaded file did not match its expected checksum.')}</span>
+                                                        <span className="min-w-0">
+                                                            {group.files.find(f => f.reason)?.reason ?? t('The downloaded file did not match its expected checksum.')}
+                                                        </span>
                                                     </div>
                                                 )}
 
-                                                {m.license.requiresAcknowledgement && !m.license.acknowledged && (
+                                                {/* License Acceptance Banner */}
+                                                {group.unacknowledgedLicense && (
                                                     <div className="space-y-1.5 p-2 rounded bg-white/5 border border-white/5 mt-1">
                                                         <p className="text-[10px] aip-muted">
-                                                            {t('This model requires licence acceptance')} ({m.license.spdx})
-                                                            {m.license.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
+                                                            {t('This model requires licence acceptance')} ({group.unacknowledgedLicense.spdx})
+                                                            {group.unacknowledgedLicense.commercialUseRestricted ? ` — ${t('non-commercial use only')}` : ''}.
                                                         </p>
                                                         <div className="flex items-center gap-2">
                                                             <button
@@ -1459,7 +1650,7 @@ export const RerankerSettings: React.FC = () => {
                                                                 className="aip-btn"
                                                                 data-size="sm"
                                                                 data-variant="ghost"
-                                                                onClick={() => window.electronAPI.openExternal?.(m.license.url)}
+                                                                onClick={() => window.electronAPI.openExternal?.(group.unacknowledgedLicense!.url)}
                                                             >
                                                                 <ExternalLink size={12} strokeWidth={1.75} />
                                                                 <span>{t('Read licence')}</span>
@@ -1469,7 +1660,11 @@ export const RerankerSettings: React.FC = () => {
                                                                 className="aip-btn"
                                                                 data-size="sm"
                                                                 onClick={async () => {
-                                                                    await window.electronAPI.acknowledgeExtensionLicense?.(ext.id, m.key);
+                                                                    for (const f of group.files) {
+                                                                        if (f.license.requiresAcknowledgement && !f.license.acknowledged) {
+                                                                            await window.electronAPI.acknowledgeExtensionLicense?.(ext.id, f.key);
+                                                                        }
+                                                                    }
                                                                     await loadExtensions();
                                                                 }}
                                                             >
@@ -1477,6 +1672,45 @@ export const RerankerSettings: React.FC = () => {
                                                                 <span>{t('Accept terms')}</span>
                                                             </button>
                                                         </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Collapsible Individual Files Breakdown */}
+                                                {isExpanded && group.files.length > 1 && (
+                                                    <div className="space-y-1 mt-1 pl-2 border-l-2 border-white/10 py-1 bg-white/[0.01] rounded-r">
+                                                        {group.files.map(m => {
+                                                            const key = `${ext.id}::${m.key}`;
+                                                            const pct = progress[key];
+                                                            const fileDownloading = busyModel === key || m.state === 'downloading';
+
+                                                            return (
+                                                                <div key={m.key} className="flex items-center justify-between text-[10px] py-1 px-1.5 rounded hover:bg-white/5">
+                                                                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                                                                        <span className="font-mono text-white/80 truncate">{m.key}</span>
+                                                                        <span className="aip-muted">{humanBytes(m.bytes ?? m.approxBytes)}</span>
+                                                                    </div>
+                                                                    <div className="shrink-0 flex items-center gap-1.5">
+                                                                        {m.state === 'ready' ? (
+                                                                            <span className="text-[9.5px] text-[var(--aip-accent)] font-medium">{t('Ready')}</span>
+                                                                        ) : fileDownloading ? (
+                                                                            <span className="text-[9.5px] aip-muted">
+                                                                                {typeof pct === 'number' ? `${Math.round(pct * 100)}%` : t('Downloading…')}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="aip-btn text-[9.5px] px-1.5 py-0.5"
+                                                                                data-size="sm"
+                                                                                disabled={busyModel !== null}
+                                                                                onClick={() => void downloadModel(ext.id, m.key)}
+                                                                            >
+                                                                                {t('Download')}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>
@@ -1489,8 +1723,9 @@ export const RerankerSettings: React.FC = () => {
                 </div>
             </div>
 
-            {/* Provider Card 5: Candidates & Fallback Settings Card */}
-            <div className="aip-card p-5 space-y-4">
+            {/* Provider Card 5: Candidates. The hosted fallback used to share this
+                card; it now sits under Active Reranker, where it belongs. */}
+            <div className="aip-card p-5">
                 <div className="space-y-1.5">
                     <label className="block text-xs font-medium uppercase tracking-wide aip-hero">{t('Candidates to rerank')}</label>
                     <div className="flex gap-2 flex-wrap">
@@ -1508,20 +1743,6 @@ export const RerankerSettings: React.FC = () => {
                     </div>
                     <p className="text-[10px] aip-muted">
                         {t('More candidates can improve the answer but cost more and take longer. Leave this alone unless you have a reason.')}
-                    </p>
-                </div>
-
-                <div className="pt-3 border-t border-white/5 space-y-1">
-                    <label className="flex items-center gap-3 text-xs cursor-pointer select-none">
-                        <AipSwitch
-                            label={t('Use the local reranker if OpenRouter is unavailable')}
-                            checked={status.fallbackToLocal}
-                            onChange={(next) => void setConfig({ fallbackToLocal: next })}
-                        />
-                        <span className="font-medium text-white">{t('Use the local reranker if OpenRouter is unavailable')}</span>
-                    </label>
-                    <p className="text-[10px] aip-muted pl-11">
-                        {t('Off by default. When off, a failed hosted rerank leaves the search results in their original order rather than quietly reordering them with a different model.')}
                     </p>
                 </div>
             </div>
