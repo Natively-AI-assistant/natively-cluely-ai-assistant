@@ -1251,9 +1251,11 @@ export const RerankerSettings: React.FC = () => {
 
             {/* Provider Card 3+: hosted rerankers, one card per provider.
                 OpenRouter discovers its catalogue live; Jina publishes a fixed
-                enum. The only reason Jina is here is jina-reranker-v3.5, which
-                cannot run on this device (see rerankerModelCatalog.ts) — the
-                hosted service is the only correct way to run it. */}
+                enum. Jina was added for jina-reranker-v3.5 when that model could
+                only run hosted. It runs locally now — Core implements the
+                listwise protocol and the catalogue entry downloads the projector
+                — so the hosted card is the no-download, no-warm-up route to the
+                same model, not the only one. */}
             {hostedProviders.map(p => {
                 const isActive = status.effective.kind === p.id;
                 const isSelected = status.provider === p.id;
