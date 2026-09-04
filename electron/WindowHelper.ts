@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, screen, systemPreferences } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppState } from './main';
+import type { AppState } from './main';
 import { KeybindManager } from './services/KeybindManager';
 import {
   LAUNCHER_ASPECT_RATIO,
@@ -416,8 +416,21 @@ export class WindowHelper {
   // EDGE CASE: if the grown window would overflow the work area's right edge,
   // the X clamp below shifts the window left — that one case can show a
   // one-frame shift, same as any clamped move always could.
-  public setOverlayDimensionsAnchored(width: number, height: number): void {
-    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+  //
+  // RETURNS the size actually APPLIED after clamping. The renderer needs this:
+  // it mirrors the same floor(workArea * 0.9) clamp locally, but the display it
+  // measures (window.screen.availWidth) and the one this method measures
+  // (the work area of the display the window sits on) can disagree — on a
+  // multi-monitor setup they routinely do. Adopting the echoed value keeps the
+  // renderer's panel width, the toggle anchor and the hover-gate margin locked
+  // to the window that actually exists, instead of the one it asked for.
+  public setOverlayDimensionsAnchored(
+    width: number,
+    height: number,
+  ): { width: number; height: number } {
+    if (!this.overlayWindow || this.overlayWindow.isDestroyed()) {
+      return { width, height };
+    }
 
     const currentBounds = this.overlayWindow.getBounds();
     const currentContentSize = this.overlayWindow.getContentSize();
@@ -456,7 +469,7 @@ export class WindowHelper {
         currentContentSize,
         computed: { x: newX, y: newY, width: newWidth, height: newHeight },
       });
-      return;
+      return { width: currentContentSize[0], height: currentContentSize[1] };
     }
 
     // Atomic frame change: a single setBounds avoids the 1-frame split where
@@ -464,19 +477,25 @@ export class WindowHelper {
     // is what causes the shell to visibly slide and snap during code-expansion.
     this.overlayWindow.setBounds({ x: newX, y: newY, width: newWidth, height: newHeight });
     this.overlayBounds = this.overlayWindow.getBounds();
+    const appliedContentSize = this.overlayWindow.getContentSize();
     traceOverlayResize('setOverlayDimensionsAnchored:applied', {
       requested: { width, height },
       appliedBounds: this.overlayBounds,
-      contentSizeAfter: this.overlayWindow.getContentSize(),
+      contentSizeAfter: appliedContentSize,
     });
+    return { width: appliedContentSize[0], height: appliedContentSize[1] };
   }
 
-  // NOTE: the overlay window is a FIXED WIDTH (OVERLAY_DEFAULT_WIDTH = 732)
-  // for its entire visible lifetime; the renderer always reports that fixed
-  // width, so every report here is height-only (width delta 0) — top-anchored,
-  // X never moves, no width setBounds ever. The expand/contract animation is
-  // CSS-only in the renderer (panel tweens 600↔732 centered inside the fixed
-  // window). See NativelyInterface.startTransition for the renderer side.
+  // NOTE: the overlay window's width is FIXED FOR THE WHOLE LIFETIME OF AN
+  // ANIMATION. It is born at OVERLAY_DEFAULT_WIDTH (732) and only ever changes
+  // when the USER drags a resize handle (or on restore of a previously dragged
+  // size) — never during the expand/contract spring, which stays CSS-only in
+  // the renderer (the panel tweens collapsed↔expanded centered inside the
+  // window). So every report arriving here DURING an animation is still
+  // height-only (width delta 0): top-anchored, X never moves, no width
+  // setBounds. See NativelyInterface.startTransition for the renderer side and
+  // src/lib/overlayCustomSize.mjs for why the invariant is per-animation
+  // rather than per-lifetime.
 
   public createWindow(): void {
     if (this.launcherWindow !== null) return; // Already created
@@ -1432,12 +1451,22 @@ export class WindowHelper {
     this.repositionOverlayPopovers();
   }
 
-  // The panel's live LEFT margin inside the fixed window: (732 - panelW)/2,
-  // derived from the streamed togglePanelRight = (732 + panelW)/2. Popover
+  // The panel's live LEFT margin inside the window: (windowW - panelW)/2,
+  // derived from the streamed togglePanelRight = (windowW + panelW)/2. Popover
   // anchors are stored relative to the panel, not the window, so they follow
   // the symmetric width spring.
+  //
+  // Reads the window's LIVE width rather than OVERLAY_DEFAULT_WIDTH: the user
+  // can now resize the overlay, and the renderer streams togglePanelRight
+  // against whatever width the window actually has. Using the constant here
+  // while the renderer used the live width would offset every popover by
+  // (732 - actualWidth) / 2.
   public getOverlayPanelLeftMargin(): number {
-    return Math.max(0, WindowHelper.OVERLAY_DEFAULT_WIDTH - this.togglePanelRight);
+    const windowWidth =
+      this.overlayWindow && !this.overlayWindow.isDestroyed()
+        ? this.overlayWindow.getContentSize()[0]
+        : WindowHelper.OVERLAY_DEFAULT_WIDTH;
+    return Math.max(0, windowWidth - this.togglePanelRight);
   }
 
   // Re-anchor any open overlay popovers (settings / model-selector) to the
@@ -2328,6 +2357,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
             this.overlayWindow.setOpacity(1);
             this.pillWindow?.setOpacity(1);
@@ -2426,6 +2456,7 @@ export class WindowHelper {
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
         this.opacityTimeout = setTimeout(() => {
+          this.opacityTimeout = null;
           if (this.launcherWindow && !this.launcherWindow.isDestroyed()) {
             this.launcherWindow.setOpacity(1);
             if (!inactive) this.launcherWindow.focus();
@@ -2549,10 +2580,85 @@ export class WindowHelper {
     menu.popup({ window: win, x: point.x, y: point.y });
   }
 
+  /**
+   * Flush the win32 opacity shield instead of discarding it.
+   *
+   * switchToOverlay / switchToLauncher show a window at opacity 0, call
+   * setContentProtection(true), and restore opacity 60ms later once DWM has
+   * applied the capture-exclusion flag. That restore lives in ONE shared
+   * this.opacityTimeout. minimizeWindow() / closeWindow() used to cancel it with
+   * a bare clearTimeout, so a minimize or a close-to-tray landing inside those
+   * 60ms dropped the pending setOpacity(1) and left the window shown-but-fully-
+   * transparent. The overlay chrome is skipTaskbar:true and the launcher joins it
+   * under undetectable mode, so there is no taskbar button to bring it back — the
+   * app is alive and unreachable. That is issue #529, reported on Windows 2.8.8,
+   * where #509 widened the shield from undetectable-only to the default Windows
+   * path.
+   *
+   * Flushing early does NOT narrow the capture guarantee, which was the standing
+   * worry about this method. Measured on windows-latest: after
+   * setContentProtection(true), restoring opacity at t=0ms put 0 pixels of the
+   * window into a live getDisplayMedia capture, against a control that saw 81248
+   * pixels of the same window unprotected. DWM applies the exclusion before an
+   * opacity restore can matter, so the 60ms is not what is buying capture safety.
+   *
+   * The opacity restore is NOT gated on isVisible(), and that is load-bearing.
+   * It used to be, on the theory that skipping hidden windows kept the flush off
+   * the screenshot path. Two measurements on a real Windows kernel killed that:
+   *
+   *  - hideMainWindow() zeroes opacity BEFORE hide() on win32, but it is fully
+   *    synchronous, so at every yield point (including the 40ms await in
+   *    withScreenshotCaptureSession) those windows are already hidden. Setting
+   *    opacity 1 on a hidden window changes nothing anyone can capture, and every
+   *    show path re-sets opacity on the way in — measured, all four of them.
+   *  - The skip actively CAUSED a bug. applyOverlayAuxVisibility() re-shows the
+   *    pill and toggle but never touches their opacity, so a pill hidden inside
+   *    the shield window was skipped here at opacity 0 and then re-shown at
+   *    opacity 0 — an invisible gap in the overlay chrome that nothing repaired
+   *    until the next full switchToOverlay.
+   *
+   * The z-order re-assert below keeps its isVisible() guard: unlike opacity, it
+   * is not repairing state that a later show would otherwise inherit.
+   *
+   * NOT for the shield's own arm sites: they call setOpacity(0) and then cancel
+   * the previous timer, so routing them through here would un-zero the shield
+   * they just applied. They keep their bare clearTimeout.
+   */
+  private finishOpacityShield(): void {
+    if (!this.opacityTimeout) return;
+    clearTimeout(this.opacityTimeout);
+    this.opacityTimeout = null;
+
+    for (const win of [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+    ]) {
+      if (win && !win.isDestroyed()) win.setOpacity(1);
+    }
+
+    // The overlay's timer re-asserts z-order alongside the opacity restore,
+    // because DWM can silently demote the HWND across a hide/show. That timer
+    // will never run now, so the flush owes the same re-assert — otherwise an
+    // interrupted switch trades "invisible" for "visible but behind everything".
+    //
+    // Still guarded on isVisible(), unlike the opacity restore above. Z-order is
+    // not state a later show inherits — switchToOverlay re-asserts it on the way
+    // in — so there is nothing to repair on a hidden window.
+    //
+    // The timer's focus() is NOT mirrored. We are on the way into a minimize or
+    // a close-to-tray; stealing focus there is the opposite of what was asked.
+    const overlay = this.overlayWindow;
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible()) {
+      overlay.setAlwaysOnTop(true, 'screen-saver');
+    }
+  }
+
   public minimizeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     win.minimize();
   }
 
@@ -2808,7 +2914,7 @@ export class WindowHelper {
   public closeWindow(): void {
     const win = this.launcherWindow;
     if (!win || win.isDestroyed()) return;
-    if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
+    this.finishOpacityShield();
     // On Windows/Linux the 'close' event listener intercepts this
     // and hides to tray unless the app is actually quitting.
     win.close();

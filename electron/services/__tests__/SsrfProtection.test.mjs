@@ -161,3 +161,169 @@ describe('validateUrlForSsrf still guards the lane it belongs to', () => {
     assert.equal(validateUrlForSsrf('http://127.1.2.3:8080/').isValid, false);
   });
 });
+
+test('custom cURL transports never follow an unvalidated redirect target', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy chatWithCurl',
+      start: source.indexOf('public async chatWithCurl('),
+      endMarker: '\n  /**\n   * Non-streaming Claude generation',
+    },
+    {
+      name: 'Direct Assist cURL adapter',
+      start: source.indexOf('private async *streamWithDirectCurl('),
+      endMarker: '\n  // --- CUSTOM PROVIDER STREAMING ---',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+    const body = source.slice(entry.start, end);
+    const validationAt = body.indexOf('validateUrlForSsrf');
+    const axiosAt = body.indexOf('axios({');
+    const redirectsAt = body.indexOf('maxRedirects: 0');
+
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination`);
+    assert.ok(axiosAt > validationAt, `${entry.name} should validate before dispatch`);
+    assert.ok(
+      redirectsAt > axiosAt,
+      `${entry.name} must disable redirects so the request body is not replayed to an unchecked URL`,
+    );
+  }
+});
+
+test('fetch-based custom providers refuse redirects instead of replaying sensitive bodies', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = source.slice(entry.start, end);
+    const fetchAt = body.indexOf('fetch(url, {');
+    const manualRedirectAt = body.indexOf("redirect: 'manual'");
+
+    assert.ok(fetchAt >= 0, `${entry.name} should dispatch through fetch`);
+    assert.ok(
+      manualRedirectAt > fetchAt,
+      `${entry.name} must use manual redirects so fetch cannot replay prompt data to another URL`,
+    );
+  }
+});
+
+test('fetch-based custom providers validate their destination against SSRF-protected ranges', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = source.slice(entry.start, end);
+    const validationAt = body.indexOf('validateUrlForSsrf');
+    const fetchAt = body.indexOf('fetch(url, {');
+
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination against SSRF-protected ranges`);
+    assert.ok(fetchAt > validationAt, `${entry.name} should validate before dispatch`);
+  }
+});
+
+test('path traversal is blocked in URL variable substitution', () => {
+  const source = read('electron/LLMHelper.ts');
+
+  const chatWithCurlStart = source.indexOf('public async chatWithCurl(');
+  const nextFunction = source.indexOf('\n  public ', chatWithCurlStart + 10);
+  const functionBody = source.slice(chatWithCurlStart, nextFunction > -1 ? nextFunction : chatWithCurlStart + 3000);
+
+  // Check that URL variable replacement doesn't allow path traversal.
+  //
+  // Matches EITHER replacer, by property rather than by name. This test arrived
+  // on main asserting `deepVariableReplacer(curlConfig.url` specifically, while
+  // feat/extension-system had collapsed the three per-field calls
+  // (.url/.header/.data) into one `applyCurlVariables(curlConfig)`. The security
+  // property — the URL is substituted, then validated, then dispatched — is
+  // unchanged; only the function name moved, so pinning the name turned a
+  // refactor into a red security test.
+  const urlReplacementIndex = Math.max(
+    functionBody.indexOf('deepVariableReplacer(curlConfig.url'),
+    functionBody.indexOf('applyCurlVariables(curlConfig'),
+  );
+  assert.ok(urlReplacementIndex >= 0, 'URL should be processed through variable replacer');
+
+  // After URL replacement, there should be a validation step
+  const afterReplacement = functionBody.slice(urlReplacementIndex);
+  const hasValidationAfterReplacement =
+    /validate|check|isPrivate|isBlocked|isLocal/.test(afterReplacement.slice(0, afterReplacement.indexOf('axios(')));
+
+  assert.ok(hasValidationAfterReplacement, 'URL should be validated after variable replacement');
+});
+
+test('blocked SSRF hosts are explicitly rejected', () => {
+  const source = read('electron/LLMHelper.ts');
+  const curlUtils = read('electron/utils/curlUtils.ts');
+  const combined = source + '\n' + curlUtils;
+
+  // Check for blocked host patterns
+  const blockedPatterns = [
+    'localhost', '127.0.0.1', '0.0.0.0', '::1',
+    '169.254', 'link-local',
+    '10.', '172.16', '192.168'
+  ];
+
+  const hasBlockedHosts = blockedPatterns.some(pattern =>
+    /isBlocked|isPrivate|isLocal|blockList|denyList/.test(combined) &&
+    combined.includes(pattern)
+  );
+
+  // Alternative: check for IP range validation
+  const hasIPRangeValidation =
+    /parseInt|Number\(.*\)\s*[<>]/.test(combined) ||
+    /ip2int|ipToNumber|isInRange/.test(combined);
+
+  assert.ok(hasBlockedHosts || hasIPRangeValidation, 'Should block SSRF targets: localhost, private ranges, link-local');
+});
+
+test('loopback guard covers the full 127.0.0.0/8 range, not just 127.0.0.1', () => {
+  const curlUtils = read('electron/utils/curlUtils.ts');
+
+  // Locate the branch that rejects loopback addresses.
+  const loopbackIdx = curlUtils.indexOf("'Loopback addresses are not allowed'");
+  assert.ok(loopbackIdx >= 0, 'loopback rejection should exist');
+
+  // The guard preceding it must match the whole 127.0.0.0/8 range (e.g. via
+  // hostname.startsWith('127.')). A check limited to the literal '127.0.0.1'
+  // would let 127.0.0.2 and other in-range loopback addresses through.
+  const guard = curlUtils.slice(curlUtils.lastIndexOf('if (', loopbackIdx), loopbackIdx);
+  assert.ok(
+    /startsWith\(\s*['"]127\.['"]\s*\)/.test(guard),
+    'loopback guard should match the entire 127.0.0.0/8 range (e.g. hostname.startsWith("127."))'
+  );
+});
