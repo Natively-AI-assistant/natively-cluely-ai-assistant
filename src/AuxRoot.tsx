@@ -29,14 +29,71 @@
  */
 
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ToastProvider, ToastViewport } from './components/ui/toast';
 import { OverlayPillWindow, OverlayToggleWindow } from './components/OverlayAuxWindows';
+import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from './lib/meetingInterfaceTheme';
 
-/** Cropper is the heaviest of the three and only one window ever shows it. */
 const CropperWindow = React.lazy(() => import('./components/Cropper'));
+const SettingsPopup = React.lazy(() => import('./components/SettingsPopup'));
+const ModelSelectorWindow = React.lazy(() => import('./components/ModelSelectorWindow'));
 
 /** Routes this root can serve. Keep in sync with LIGHT_ROUTES in main.tsx. */
-export type AuxRoute = 'overlay-pill' | 'overlay-toggle' | 'cropper';
+export type AuxRoute =
+  | 'overlay-pill'
+  | 'overlay-toggle'
+  | 'cropper'
+  | 'settings'
+  | 'model-selector';
+
+/** One client for this renderer, mirroring App's module-level instance. */
+const queryClient = new QueryClient();
+
+/**
+ * The panel routes need App's provider stack but none of its state, so it is
+ * reproduced here rather than dragging App along for it.
+ *
+ * VERIFIED before splitting: no effect in App is gated on `isSettingsWindow` or
+ * `isModelSelectorWindow` — those flags appear only in the `isDefault`
+ * exclusion and in the render branches — so these windows ran no App-specific
+ * behaviour to lose. Their own import graphs are 9 and 6 modules with no heavy
+ * dependency, against App's 131.
+ */
+const PanelShell: React.FC<{ context: string; className: string; children: React.ReactNode }> = ({
+  context, className, children,
+}) => {
+  // Mirrors App's handling: the attribute is read at mount and refreshed on the
+  // same two signals App listens to, so a theme change still lands here.
+  const [theme, setTheme] = React.useState<MeetingInterfaceTheme>(getMeetingInterfaceTheme);
+  React.useEffect(() => {
+    const onStorage = () => setTheme(getMeetingInterfaceTheme());
+    window.addEventListener('storage', onStorage);
+    const off = window.electronAPI?.onMeetingInterfaceThemeChanged?.((next) => {
+      const valid: MeetingInterfaceTheme[] = ['default', 'liquid-glass', 'modern'];
+      if (valid.includes(next as MeetingInterfaceTheme)) setTheme(next as MeetingInterfaceTheme);
+    });
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      try { (off as undefined | (() => void))?.(); } catch { /* best effort */ }
+    };
+  }, []);
+
+  return (
+    <ErrorBoundary context={context}>
+      <div className={className} data-interface-theme={theme === 'default' ? undefined : theme}>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <React.Suspense fallback={<div className="h-full w-full" />}>
+              {children}
+            </React.Suspense>
+            <ToastViewport />
+          </ToastProvider>
+        </QueryClientProvider>
+      </div>
+    </ErrorBoundary>
+  );
+};
 
 const AuxRoot: React.FC<{ route: AuxRoute }> = ({ route }) => {
   if (route === 'cropper') {
@@ -46,6 +103,22 @@ const AuxRoot: React.FC<{ route: AuxRoute }> = ({ route }) => {
           <CropperWindow />
         </React.Suspense>
       </ErrorBoundary>
+    );
+  }
+
+  if (route === 'settings') {
+    return (
+      <PanelShell context="SettingsPopup" className="h-full min-h-0 w-full">
+        <SettingsPopup />
+      </PanelShell>
+    );
+  }
+
+  if (route === 'model-selector') {
+    return (
+      <PanelShell context="ModelSelector" className="h-full min-h-0 w-full overflow-hidden">
+        <ModelSelectorWindow />
+      </PanelShell>
     );
   }
 
