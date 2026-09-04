@@ -118,7 +118,11 @@ The result is that a Sales turn containing the word "company", or a Team Meet tu
 
 The same capability is unreachable from the live audio surface entirely, in every mode, because classifier B does not run there.
 
-This is the clearest single argument in the repo for `capabilities` being an explicit, mode aware axis rather than an emergent property of a keyword list. It should be treated as a defect in its own right, not only as a routing observation, and it is worth confirming whether the founder wants it fixed ahead of the campaign or as part of PR 7.
+This is the clearest single argument in the repo for `capabilities` being an explicit, mode aware axis rather than an emergent property of a keyword list.
+
+Status as of commit `fd91a541`, 2026-09-04. The paragraphs above describe the state as audited. The gate has since been narrowed for the five modes where the host provably discards the result, by injecting the same `isPremiumKnowledgeInterceptAllowed` predicate into the orchestrator (premium `743538e`). The keyword list itself and the negotiation arm are unchanged, so the search still fires on a bare token in general, sales, recruiting and looking-for-work, where the dossier is actually consumed. Narrowing those is a product decision the campaign has not made, and it is what the `capabilities` axis is for.
+
+The mechanism is worth carrying forward, because it generalises past this one gate. `isPremiumKnowledgeInterceptAllowed` gates CONSUMPTION, not production. It is applied at `LLMHelper.ts:2979` and `:6282`, and both sit after `await processQuestion(...)` at `:2945` and `:6244`. The orchestrator therefore runs in every mode and every side effect inside it has already happened by the time the mode is consulted. Any other premium side effect should be checked against that ordering before it is assumed to be mode gated.
 
 ## Two surfaces, two classifiers
 
