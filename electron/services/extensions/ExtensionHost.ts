@@ -674,5 +674,10 @@ export function bootstrapPath(): string {
   // ERR_MODULE_NOT_FOUND. Same defect the rag workers had; same fix.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { resolveBundledScript } = require('../../rag/resolveRagWorker') as typeof import('../../rag/resolveRagWorker');
-  return resolveBundledScript(__dirname, ['services', 'extensions', 'host', 'bootstrap.js']);
+  // unpackFromAsar: utilityProcess.fork needs a real file on disk, so the
+  // bootstrap carries a matching `**/host/bootstrap.js` entry in
+  // package.json's asarUnpack. The rewrite and that glob are one decision —
+  // rewriting without unpacking points at a file electron-builder never wrote.
+  return resolveBundledScript(__dirname, ['services', 'extensions', 'host', 'bootstrap.js'],
+    { unpackFromAsar: true });
 }
