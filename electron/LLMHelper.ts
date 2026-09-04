@@ -9027,10 +9027,24 @@ let isMultimodal = !!(imagePaths?.length);
     let data = substituted;
     if (base64Image && imagePath) data = injectImageIntoMessages(data, base64Image, imagePath);
 
-    const { validateUrlForSsrf } = require('./utils/curlUtils');
-    const validation = validateUrlForSsrf(url);
-    if (!validation.isValid) {
-      throw new DirectAssistError('INVALID_REQUEST', 'The custom provider URL was blocked by network safety policy.');
+    // The metadata-host guard, NOT validateUrlForSsrf — the same policy the
+    // other two custom-provider transports use.
+    //
+    // This function already branches on customProviderIsLocal(provider) a few
+    // lines above, so it knows the endpoint can be on this machine. It then ran
+    // the full range check, which rejects loopback and RFC-1918 — so a Direct
+    // Assist provider pointed at Ollama on 127.0.0.1 was refused with "The
+    // custom provider URL was blocked by network safety policy." by the same
+    // function that had just classified it as local. Verified at runtime before
+    // this change, and again after.
+    //
+    // blockedInfrastructureHost keeps the part that matters: cloud and
+    // container metadata hosts stay refused (169.254/16,
+    // metadata.google.internal, fd00:ec2::254 — checked directly against both
+    // guards, they block the identical set).
+    const blockedHost = blockedInfrastructureHost(url);
+    if (blockedHost) {
+      throw new DirectAssistError('INVALID_REQUEST', `The custom provider endpoint was refused: ${blockedHost}`);
     }
 
     const response = await axios({

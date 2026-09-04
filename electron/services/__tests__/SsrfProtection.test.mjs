@@ -202,7 +202,10 @@ test('custom cURL transports never follow an unvalidated redirect target', () =>
     // validateUrlForSsrf } = require(...)` also contains the name, so a
     // presence check stayed green when the CALL was replaced by a constant.
     // Caught by mutation probe, not by reading.
-    const guard = entry.name.startsWith('legacy') ? 'blockedInfrastructureHost' : 'validateUrlForSsrf';
+    // Both transports now use the metadata-host guard. streamWithDirectCurl used
+    // validateUrlForSsrf until 2026-09-04, which blocked the local endpoints its
+    // own customProviderIsLocal() branch exists to support.
+    const guard = 'blockedInfrastructureHost';
     const validationAt = body.indexOf(`${guard}(url)`);
     const axiosAt = body.indexOf('axios({');
     const redirectsAt = body.indexOf('maxRedirects: 0');
