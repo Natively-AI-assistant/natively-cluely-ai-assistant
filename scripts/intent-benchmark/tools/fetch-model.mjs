@@ -32,11 +32,15 @@ const repo = args[0];
 if (!repo) { console.error('usage: fetch-model.mjs <org/model> [--dtype q8|fp32]'); process.exit(2); }
 const dtype = args.includes('--dtype') ? args[args.indexOf('--dtype') + 1] : 'q8';
 
-const ONNX_FOR_DTYPE = { q8: 'onnx/model_quantized.onnx', fp32: 'onnx/model.onnx' };
-const REQUIRED = [
-  'config.json', 'tokenizer.json', 'tokenizer_config.json',
-  ONNX_FOR_DTYPE[dtype] ?? ONNX_FOR_DTYPE.q8,
-];
+// Quantized graphs are not named consistently across the hub. transformers.js
+// repos use onnx/model_quantized.onnx; others ship model-int8-quantized.onnx or
+// model_int8.onnx. Try the variants in order rather than failing on the first
+// 404, which is what dropped GLiClass on its first fetch.
+const ONNX_CANDIDATES = {
+  q8: ['onnx/model_quantized.onnx', 'onnx/model-int8-quantized.onnx', 'onnx/model_int8.onnx', 'onnx/model.onnx'],
+  fp32: ['onnx/model.onnx'],
+};
+const REQUIRED = ['config.json', 'tokenizer.json', 'tokenizer_config.json'];
 const OPTIONAL = ['special_tokens_map.json', 'added_tokens.json', 'vocab.txt', 'spm.model', 'sentencepiece.bpe.model', 'generation_config.json'];
 
 const url = (f) => `https://huggingface.co/${repo}/resolve/main/${f}`;
@@ -86,6 +90,21 @@ for (const f of REQUIRED) {
   total += r.bytes ?? 0;
   console.log(`  ${r.cached ? 'cached ' : 'fetched'} ${f.padEnd(32)} ${((r.bytes ?? 0) / 1e6).toFixed(1)} MB`);
 }
+
+// The graph itself: first candidate name that exists wins, and the resolved
+// name is reported so a provider knows what to open.
+let graphFile = null;
+for (const cand of (ONNX_CANDIDATES[dtype] ?? ONNX_CANDIDATES.q8)) {
+  try {
+    const r = await download(cand, { required: false });
+    if (r.skipped) continue;
+    graphFile = cand;
+    total += r.bytes ?? 0;
+    console.log(`  ${r.cached ? 'cached ' : 'fetched'} ${cand.padEnd(32)} ${((r.bytes ?? 0) / 1e6).toFixed(1)} MB`);
+    break;
+  } catch (e) { console.log(`  SKIP    ${cand}: ${e.message}`); }
+}
+if (!graphFile) { console.error(`  no ONNX graph found for ${repo} at any known filename`); process.exit(1); }
 for (const f of OPTIONAL) {
   try {
     const r = await download(f, { required: false });
@@ -94,4 +113,5 @@ for (const f of OPTIONAL) {
     console.log(`  ${r.cached ? 'cached ' : 'fetched'} ${f.padEnd(32)} ${((r.bytes ?? 0) / 1e6).toFixed(1)} MB`);
   } catch (e) { console.log(`  SKIP    ${f}: ${e.message}`); }
 }
+console.log(`  graph ${graphFile}`);
 console.log(`  total ${(total / 1e6).toFixed(1)} MB, every file size-verified against the hub\n`);

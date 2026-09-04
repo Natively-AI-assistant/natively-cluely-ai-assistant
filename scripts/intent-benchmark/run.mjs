@@ -94,10 +94,34 @@ async function buildProvider(id) {
     const { MultiHeadProvider } = await import('./providers/multihead.mjs');
     const REGISTRY = {
       'head-minilm': { dir: 'resources/models/natively/router-minilm-multihead' },
+      // 3-layer MiniLM: the latency-focused primary row of the matrix.
+      'head-tiny': { dir: 'resources/models/natively/router-tiny-multihead' },
+      'head-deberta': { dir: 'resources/models/natively/router-deberta-multihead' },
+      'head-modernbert': { dir: 'resources/models/natively/router-modernbert-multihead' },
     };
     const cfg = REGISTRY[id];
     if (!cfg) throw new Error(`unknown head provider ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new MultiHeadProvider({ id, ...cfg });
+  }
+  if (id.startsWith('gliclass-')) {
+    const { GliClassProvider } = await import('./providers/gliclass.mjs');
+    const REGISTRY = {
+      'gliclass-small': { modelId: 'knowledgator/gliclass-small-v1.0' },
+      'gliclass-base':  { modelId: 'knowledgator/gliclass-base-v1.0' },
+    };
+    const cfg = REGISTRY[id];
+    if (!cfg) throw new Error(`unknown gliclass ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    return new GliClassProvider({ id, modeIntents: MODE_INTENTS, ...cfg });
+  }
+  if (id.startsWith('slm-')) {
+    const { SlmProvider } = await import('./providers/slm.mjs');
+    const REGISTRY = {
+      'slm-qwen3-06b': { gguf: 'resources/models/gguf/Qwen3-0.6B-Q4_0.gguf', gpuLayers: 0 },
+      'slm-qwen3-06b-gpu': { gguf: 'resources/models/gguf/Qwen3-0.6B-Q4_0.gguf', gpuLayers: 99 },
+    };
+    const cfg = REGISTRY[id];
+    if (!cfg) throw new Error(`unknown slm ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    return new SlmProvider({ id, ...cfg });
   }
   if (id.startsWith('hybrid-')) {
     const { HybridProvider } = await import('./providers/hybrid.mjs');
