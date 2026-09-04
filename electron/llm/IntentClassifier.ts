@@ -505,8 +505,19 @@ class ZeroShotClassifier {
 /**
  * Pattern-based intent detection (fast, no model call)
  * For common patterns this is sufficient
+ *
+ * EXPORTED for the interaction-router benchmark (scripts/intent-benchmark),
+ * which scores the regex fast path ALONE as a control. Nothing else calls it
+ * from outside this module, and its behaviour is unchanged.
+ *
+ * The export exists so the benchmark measures the rules production actually
+ * runs. The alternative was a copy in the harness, and a copy would go stale
+ * the first time one of these ten rules changed — which the history above shows
+ * happens repeatedly (the "stack up" idiom fix, the DSA word-boundary fix, the
+ * demonstrative-stack fix). A control scoring a stale ruleset would understate
+ * the baseline and make every candidate look better than it is.
  */
-function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null {
+export function detectIntentByPattern(lastInterviewerTurn: string): IntentResult | null {
     const text = lastInterviewerTurn.toLowerCase().trim();
 
     // Clarification patterns

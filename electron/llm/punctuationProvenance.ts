@@ -57,3 +57,37 @@ export function punctuationSourceFor(provider: string | undefined | null, isFina
     }
     return 'unavailable';
 }
+
+/**
+ * Provenance after a local restoration pass has run.
+ *
+ * ONE-WAY ONLY, and the direction is load-bearing. A provider that explicitly
+ * requests question-mark-bearing punctuation is better evidence than a local
+ * model's guess, so a `provider_final` segment must NEVER be downgraded to
+ * `restored` just because restoration also ran over it. Only `unavailable` is
+ * upgraded: that is the case where absence of a '?' currently carries no
+ * information at all, and a restored '?' is strictly more than nothing.
+ *
+ * `restored` is deliberately weaker evidence than `provider_final`. The
+ * downstream scorer should treat it as moderate: enough to raise a question
+ * score, not enough to license penalising a missing mark. That distinction is
+ * exactly what went wrong when LocalWhisper was stamped `provider_final` (see
+ * the note above): a stamp stronger than the evidence suppressed the recovery
+ * path built for that case.
+ */
+export function provenanceAfterRestoration(existing: PunctuationSource | undefined | null): PunctuationSource {
+    if (existing === 'provider_final' || existing === 'provider_interim') return existing;
+    return 'restored';
+}
+
+/**
+ * Should a local restoration pass run on this segment at all?
+ *
+ * False when the provider already punctuates: re-punctuating text that already
+ * carries provider marks costs latency on the live path and can only make the
+ * text worse, since the local model would be overwriting better evidence with
+ * its own guess.
+ */
+export function shouldRestorePunctuation(source: PunctuationSource | undefined | null): boolean {
+    return source !== 'provider_final' && source !== 'provider_interim';
+}

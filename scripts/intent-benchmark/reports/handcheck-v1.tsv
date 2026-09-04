@@ -1,5 +1,5 @@
 # Natively interaction-router dataset, hand check
-# 373 rows sampled from 1813 (20%).
+# 399 rows sampled from 2008 (20%).
 #
 # HOW TO FILL THIS IN
 # Read `input` in the context of `mode` and `channel`, then read the label
@@ -12,380 +12,417 @@
 # stay silent: backchannels, the other party thinking aloud, your own voice
 # on your own mic, admin chatter.
 #
+# The `lang` column marks Hinglish and Manglish rows. Those were generated
+# without a speaker of either language checking them, so they need your eye
+# most: is the code-switching where a real speaker would put it, and do the
+# mis-transcriptions look like what a model actually gets wrong? They are
+# reported separately and never gated on, so a verdict of "unnatural" is a
+# useful answer, not a failure.
+#
+# `restored` is candidate P output (punctuation + truecasing). You are NOT
+# reviewing it; it is there because a question mark often makes the correct
+# label obvious.
+# stay silent: backchannels, the other party thinking aloud, your own voice
 # Any axis where you disagree on more than 10% of rows means that axis is
 # DEFINED wrong, not labelled wrong, and gets rewritten before Phase 4.
 #
-id	mode	channel	has_files	input	dialogue_act	needs_response	voice	task	mode_intent	answer_form	grounding	WRONG_AXES	CORRECTION	COMMENT
-gen-0005	general	system	Y	hey john did you get that email	interruption	no	silent	none	meeting_capture	none	none			
-gen-0006	general	mic	Y	so we could uh we could try the	statement	no	silent	none	coding_question	none	none			
-gen-0007	general	system	Y	can everyone hear me ok	question	no	silent	none	meeting_capture	none	none			
-gen-0009	general	mic	Y	and then we just need to make sure	statement	no	silent	none	coding_question	none	none			
-gen-0013	general	mic	Y	can you walk me through the the overall logic for this function	request	yes	advisor	explain	coding_question	explanation	mode_files			
-gen-0015	general	mic	Y	wait i mean how does the the sequel query handle duplicate entries there	question	yes	advisor	explain	coding_question	explanation	mode_files			
-gen-0017	general	mic	Y	um could you just like rephrase that part about the memory	request	yes	advisor	rewrite	lecture_concept	explanation	none			
-gen-0018	general	mic	Y	so we could uh we could try the local cache for	statement	optional	advisor	plan	coding_question	recommendation	mode_files			
-gen-0021	general	mic	Y	i mean its sort of like comparing two different approaches for	statement	optional	advisor	compare	coding_question	explanation	none			
-gen-0023	general	mic	Y	did you no the files were updated	question	yes	advisor	research	factual_question	fact	mode_files			
-gen-0024	general	mic	Y	how does the input vector weight relate to	question	yes	advisor	explain	lecture_concept	explanation	none			
-gen-0025	general	mic	N	can you tell me what the latest headcount is for the marketing team	question	yes	advisor	research	factual_question	fact	knowledge_base			
-gen-0030	general	mic	N	right so uh the sequel query is failing because of the missing join condition	statement	optional	advisor	debug	coding_question	code	none			
-gen-0035	general	mic	N	sort of curious about the timeline for the two thousand twenty four launch	question	yes	advisor	research	lecture_concept	explanation	none			
-gen-0037	general	system	Y	um how does the current architecture scale if we double the throughput	question	yes	advisor	explain	lecture_concept	explanation	mode_files			
-gen-0040	general	system	Y	yeah like the whole implementation of the of the memory cash	statement	yes	advisor	explain	coding_question	explanation	mode_files			
-gen-0051	general	mic	Y	okay move to the next thing	request	yes	capture	plan	meeting_capture	steps	none			
-gen-0067	general	mic	Y	sort of i mean uh	answer	optional	advisor	explain	lecture_concept	rebuttal	none			
-gen-0068	general	mic	Y	and what about the	question	yes	advisor	explain	coding_question	explanation	mode_files			
-gen-0071	general	mic	Y	mhm right okay	backchannel	no	silent	none	meeting_capture	none	none			
-gen-0080	general	mic	Y	so the the thing is we need to sort of aggregate these findings and um tell me what you would push back on regarding the current strategy	request	yes	capture	summarize	meeting_capture	rebuttal	conversation_memory			
-gen-0084	general	system	Y	that is a very interesting point	statement	no	silent	none	small_talk	none	none			
-gen-0086	general	mic	Y	i think i think thats right yeah	backchannel	no	silent	none	meeting_capture	none	none			
-gen-0088	general	mic	Y	so the the primary factor for why we chose this architecture was performance	answer	no	silent	none	interview_answer	none	none			
-gen-0097	general	mic	Y	actually i think that sequel error is just from a missing semicolon	statement	no	silent	none	coding_question	none	none			
-gen-0102	general	mic	N	yeah that makes sense i mean thanks for explaining the whole concept	backchannel	no	silent	none	small_talk	none	none			
-ti-0003	technical-interview	mic	Y	wait let me check the uh connection here	statement	no	silent	none	system_design	none	none			
-ti-0020	technical-interview	system	N	right	backchannel	no	silent	none	complexity_probe	none	none			
-ti-0030	technical-interview	system	Y	is that file on your end	question	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0031	technical-interview	mic	Y	the the the cashing	statement	no	silent	none	system_design	none	none			
-ti-0033	technical-interview	system	Y	well maybe we could	statement	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0041	technical-interview	system	N	right right yeah that makes sense	backchannel	no	silent	none	complexity_probe	none	none			
-ti-0042	technical-interview	system	N	the the thing is if we iterate	statement	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0044	technical-interview	mic	N	is that constant time or or logarithmic	statement	no	silent	none	complexity_probe	none	none			
-ti-0045	technical-interview	system	N	you know we could try searching from the	statement	no	silent	none	optimization_probe	none	none			
-ti-0059	technical-interview	mic	Y	sort of kind of	answer	no	silent	none	dsa_problem	none	none			
-ti-0061	technical-interview	system	Y	so can you explain how the binary tree traversal would work here	question	yes	first_person_script	explain	dsa_problem	explanation	mode_files			
-ti-0063	technical-interview	system	Y	and what about the space complexity if we used a recursion stack	question	yes	first_person_script	explain	complexity_probe	explanation	mode_files			
-ti-0065	technical-interview	mic	Y	the sequel database is not returning the right rows	statement	optional	first_person_script	debug	code_review_hint	none	none			
-ti-0069	technical-interview	mic	Y	what if we used a heap instead of a simple sort	question	yes	first_person_script	compare	optimization_probe	recommendation	none			
-ti-0076	technical-interview	mic	N	is it o of n squared or would it be	question	yes	first_person_script	explain	complexity_probe	explanation	none			
-ti-0080	technical-interview	mic	N	and then i just need to make sure that the	statement	optional	first_person_script	explain	interviewer_thinking_aloud	none	none			
-ti-0104	technical-interview	mic	N	and what about the the second one i mean the recursive approach	question	yes	first_person_script	compare	code_review_hint	explanation	conversation_memory			
-ti-0107	technical-interview	mic	N	i mean are you saying that the the input is always sorted or	question	yes	first_person_script	explain	problem_restatement	fact	conversation_memory			
-ti-0109	technical-interview	mic	Y	i think the time complexity should be o of n squared because of the nested loops	answer	yes	first_person_script	explain	complexity_probe	explanation	mode_files			
-lfw-0004	looking-for-work	mic	Y	so the the thing is we need to fix this	statement	no	silent	none	role_technical	none	none			
-lfw-0006	looking-for-work	mic	Y	uh let me try to	statement	no	silent	none	role_technical	none	none			
-lfw-0009	looking-for-work	system	Y	that sounds about right	backchannel	no	silent	none	small_talk	none	none			
-lfw-0012	looking-for-work	system	Y	yeah ok sure	backchannel	no	silent	none	small_talk	none	none			
-lfw-0015	looking-for-work	mic	N	can everyone see my screen okay	statement	no	silent	none	small_talk	none	none			
-lfw-0021	looking-for-work	mic	N	kinda like a cache miss	statement	no	silent	none	small_talk	none	none			
-lfw-0026	looking-for-work	mic	Y	um let me share my screen	statement	no	silent	none	small_talk	none	none			
-lfw-0032	looking-for-work	mic	Y	i mean i kind of	statement	no	silent	none	behavioral_star	none	none			
-lfw-0035	looking-for-work	mic	Y	the the sequel should be	statement	no	silent	none	role_technical	none	none			
-lfw-0046	looking-for-work	system	N	let me just share my screen	statement	no	silent	none	small_talk	none	none			
-lfw-0054	looking-for-work	mic	Y	i need to find the the right tab for the	statement	no	silent	none	small_talk	none	none			
-lfw-0062	looking-for-work	system	Y	can you walk me through the the star method as it relates to a time you managed conflict	request	yes	first_person_script	explain	behavioral_star	example	none			
-lfw-0064	looking-for-work	system	Y	and what about the the vector for latency if we switch to a serverless architecture	question	yes	first_person_script	compare	role_technical	explanation	mode_files			
-lfw-0077	looking-for-work	system	N	i see you listed ruby on rails but we mainly use python for our back end	statement	optional	first_person_script	none	jd_gap	none	none			
-lfw-0091	looking-for-work	mic	Y	yeah go ahead	statement	no	silent	none	small_talk	none	none			
-lfw-0095	looking-for-work	mic	Y	thats super cool	statement	no	silent	none	small_talk	none	none			
-lfw-0096	looking-for-work	mic	Y	so so you you think the salary range is	question	yes	first_person_script	explain	compensation	fact	none			
-lfw-0101	looking-for-work	mic	Y	uh sounds like a plan	statement	no	silent	none	small_talk	none	none			
-lfw-0103	looking-for-work	mic	N	wait how come they decided to build that in the first place	question	yes	first_person_script	explain	role_technical	explanation	conversation_memory			
-lfw-0107	looking-for-work	mic	N	but and the other one you know the the one regarding the q three budget	question	yes	first_person_script	explain	jd_gap	fact	conversation_memory			
-lfw-0112	looking-for-work	mic	Y	so the the thing is we could uh we could try	answer	no	silent	none	behavioral_star	none	none			
-lfw-0120	looking-for-work	mic	Y	i guess that makes sense	statement	no	silent	none	small_talk	none	none			
-lfw-0125	looking-for-work	mic	Y	i mean like i started in web dev and then i moved into backend engineering primarily focusing on python and and uh distributed systems	answer	no	silent	none	tell_me_about_yourself	none	none			
-lfw-0126	looking-for-work	system	Y	can you explain how you handled conflict in a previous project and uh maybe summarize what you learned	request	yes	first_person_script	explain	behavioral_star	explanation	none			
-lfw-0131	looking-for-work	mic	Y	so the the thing is we wont see the benefits until the scale increases right	statement	optional	first_person_script	explain	role_technical	rebuttal	mode_files			
-sal-0002	sales	mic	Y	ok so let me share my screen	statement	no	silent	none	small_talk	none	none			
-sal-0007	sales	system	Y	kind of hard to tell	statement	no	silent	none	small_talk	none	none			
-sal-0009	sales	mic	Y	so the the thing is we wont need to worry	statement	no	silent	none	small_talk	none	none			
-sal-0016	sales	system	N	right right so	backchannel	no	silent	none	small_talk	none	none			
-sal-0020	sales	system	N	hey john are you still on the line for the	statement	no	silent	none	small_talk	none	none			
-sal-0030	sales	system	Y	uh wait i think i think that there is a	statement	no	silent	none	discovery_answer	none	none			
-sal-0032	sales	system	Y	are you guys looking at the same file	statement	no	silent	none	small_talk	none	none			
-sal-0035	sales	system	Y	kind of like a	statement	no	silent	none	discovery_answer	none	none			
-sal-0037	sales	system	Y	so so i was wondering how does this pricing model look for like a team of twenty	question	yes	first_person_script	answer	pricing_ask	fact	mode_files			
-sal-0038	sales	system	Y	right and uh and does your software integrate with salesforce	question	yes	first_person_script	explain	feature_question	explanation	mode_files			
-sal-0046	sales	system	Y	wait so the the migration tool is that included in the	question	yes	first_person_script	explain	feature_question	explanation	mode_files			
-sal-0048	sales	system	Y	yeah exactly so i i think we are ready to move on to the next step	statement	yes	first_person_script	plan	next_step_moment	steps	none			
-sal-0052	sales	mic	N	i mean we have been doing this for twenty three years now	answer	no	silent	none	discovery_answer	none	none			
-sal-0059	sales	system	N	do we have no idea how much time the setup will take	question	yes	first_person_script	explain	feature_question	explanation	none			
-sal-0068	sales	mic	Y	i mean what about the premium tier	question	yes	first_person_script	compare	pricing_ask	fact	mode_files			
-sal-0072	sales	mic	Y	uh look we we just need	statement	optional	first_person_script	none	objection_status_quo	none	none			
-sal-0076	sales	mic	Y	i mean their price	question	yes	first_person_script	compare	objection_competitor	rebuttal	knowledge_base			
-sal-0077	sales	mic	Y	can we set that up	request	yes	first_person_script	plan	next_step_moment	steps	none			
-sal-0095	sales	mic	Y	i guess that	statement	optional	first_person_script	none	discovery_answer	none	none			
-sal-0099	sales	system	N	that seems off for our q three targets maybe	statement	optional	first_person_script	explain	objection_timing	rebuttal	none			
-sal-0103	sales	mic	Y	what about the security features specifically regarding data residency	question	yes	first_person_script	explain	feature_question	explanation	mode_files			
-sal-0104	sales	system	Y	i think i think thats right we definitely need that	statement	no	silent	none	buying_signal	none	none			
-sal-0106	sales	typed	Y	summarise that and tell me what you would push back on regarding the contract	request	yes	first_person_script	summarize	objection_status_quo	rebuttal	mode_files			
-sal-0117	sales	system	Y	i mean i i see what they do and honestly its similar	statement	optional	first_person_script	none	discovery_answer	none	none			
-rec-0016	recruiting	system	N	uh wait let me check the	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0026	recruiting	mic	Y	uh let me just check my screen sharing	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0027	recruiting	system	Y	the the vector is fine but wait	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0029	recruiting	mic	Y	can everyone hear me clearly now	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0035	recruiting	mic	Y	wait how does the the cashing layer know when to	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0042	recruiting	mic	N	i think i think that should cover it	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0051	recruiting	mic	Y	uh let me just check the screen share	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0053	recruiting	mic	Y	wait does that make sense	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0055	recruiting	system	Y	i mean i think i think thats right	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0060	recruiting	mic	Y	i will just wrap up this section	statement	no	silent	none	interviewer_speaking	none	none			
-rec-0063	recruiting	mic	Y	did the candidate mention anything about the uh database consistency model	question	yes	advisor	extract	scorecard_moment	fact	conversation_memory			
-rec-0070	recruiting	mic	Y	thats great can you tell me more about the the migration from the legacy	question	yes	advisor	explain	probe_needed	explanation	none			
-rec-0073	recruiting	system	N	so can you uh walk me through how you handled the memory leak in the last project	question	yes	advisor	explain	candidate_question	explanation	none			
-rec-0080	recruiting	system	N	okay and then we just need to make sure that the	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0100	recruiting	system	Y	well actually i uh i think there vector is different	answer	optional	advisor	answer	candidate_answer_to_evaluate	explanation	none			
-rec-0106	recruiting	mic	N	okay that that works i guess	backchannel	no	silent	none	scorecard_moment	none	none			
-rec-0108	recruiting	mic	N	and the other one how does that handle the	question	yes	advisor	explain	probe_needed	explanation	conversation_memory			
-rec-0110	recruiting	mic	Y	wait why would you use a vector there	question	yes	advisor	explain	candidate_question	explanation	none			
-rec-0120	recruiting	system	Y	so the cash is updated	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0129	recruiting	mic	Y	whats the query performance for q three specifically	question	yes	advisor	research	probe_needed	fact	mode_files			
-rec-0138	recruiting	mic	Y	so can you tell me what the biggest challenge you faced was	question	no	silent	none	interviewer_speaking	none	none			
-rec-0139	recruiting	system	Y	i was wondering can you tell me what the biggest challenge you faced was	question	yes	advisor	research	candidate_question	explanation	none			
-rec-0140	recruiting	system	Y	um the algorithm uses a binary search so it should be log n	answer	yes	advisor	explain	candidate_answer_to_evaluate	explanation	mode_files			
-rec-0141	recruiting	system	Y	i mean the the algorithm uses a binary search so it should be log n	statement	optional	advisor	debug	scorecard_moment	fact	mode_files			
-rec-0142	recruiting	system	Y	so let me see if i have this right the cache invalidation happens at the worker node level	answer	yes	advisor	answer	candidate_answer_to_evaluate	explanation	none			
-rec-0148	recruiting	system	N	yeah so we decided to shift the entire architecture ourselves and we managed to get the sequel queries running in under a millisecond	answer	yes	advisor	explain	red_flag	explanation	conversation_memory			
-rec-0149	recruiting	system	N	and then we coordinated with the qa team to ensure that the we followed the deployment protocols exactly as we outlined in the spec	answer	yes	advisor	explain	candidate_answer_to_evaluate	explanation	conversation_memory			
-tm-0008	team-meet	mic	Y	i need to see if the cache is actually working	statement	no	silent	none	discussion_noise	none	none			
-tm-0010	team-meet	system	Y	did we send the email	question	no	silent	none	discussion_noise	none	none			
-tm-0023	team-meet	mic	N	um i suppose the next step is	statement	no	silent	none	discussion_noise	none	none			
-tm-0038	team-meet	system	Y	yeah exactly so that should keep the memory usage down	backchannel	no	silent	none	discussion_noise	none	none			
-tm-0041	team-meet	system	Y	im not sure about that	statement	optional	capture	none	discussion_noise	none	none			
-tm-0046	team-meet	system	Y	the the thing is we kind of need to make sure that the	statement	no	silent	none	discussion_noise	none	none			
-tm-0047	team-meet	system	Y	are there any risks in moving the cash now	question	yes	capture	research	risk_blocker	recommendation	mode_files			
-tm-0049	team-meet	system	N	hey can you give us an update on the q three project timeline	question	yes	first_person_script	summarize	called_on_for_status	summary	conversation_memory			
-tm-0053	team-meet	system	N	wait how do we handle the the error state when the	question	yes	first_person_script	debug	question_to_me	code	none			
-tm-0054	team-meet	system	N	the cash is full so i mean we should purge it	statement	yes	capture	plan	action_item	steps	none			
-tm-0061	team-meet	system	Y	hey can you uh send over the latest schema for the q three database migration	request	yes	capture	extract	action_item	fact	mode_files			
-tm-0082	team-meet	mic	N	i mean like is that the the sort of the right way to approach	question	yes	capture	debug	risk_blocker	explanation	conversation_memory			
-tm-0088	team-meet	mic	Y	what about the cash limit	question	yes	capture	debug	risk_blocker	fact	mode_files			
-tm-0092	team-meet	mic	Y	so we have like twenty three nodes	answer	no	silent	none	called_on_for_status	none	none			
-tm-0097	team-meet	mic	N	i mean maybe the logic for the the redirect needs to be reconsidered	statement	optional	capture	debug	risk_blocker	explanation	conversation_memory			
-tm-0100	team-meet	mic	Y	hey can you pull up the q three numbers and explain why they dropped	request	yes	first_person_script	research	question_to_me	explanation	mode_files			
-tm-0101	team-meet	mic	Y	the the thing is we need to check the query performance and see if we can optimize the index	request	yes	capture	debug	action_item	code	mode_files			
-tm-0102	team-meet	mic	Y	mhm yeah totally agree with that	backchannel	no	silent	none	discussion_noise	none	none			
-tm-0107	team-meet	mic	Y	could you like summarize those action items and create a list of them for me	request	yes	capture	summarize	action_item	steps	conversation_memory			
-tm-0122	team-meet	mic	Y	so we we really need to get the status on the audit log from	request	yes	first_person_script	extract	called_on_for_status	fact	mode_files			
-lec-0014	lecture	system	N	let me just share my screen really quick	statement	no	silent	none	admin_announcement	none	none			
-lec-0017	lecture	system	N	two plus two is four so i mean	statement	no	silent	none	formula	none	none			
-lec-0025	lecture	mic	Y	wait could you explain that last part about the dynamic programming again	request	yes	advisor	explain	new_concept	explanation	mode_files			
-lec-0028	lecture	mic	Y	does anyone know why the the cache keeps failing	question	yes	first_person_script	debug	question_to_room	explanation	mode_files			
-lec-0030	lecture	mic	Y	is this going to be on the final	question	yes	advisor	answer	off_syllabus	fact	mode_files			
-lec-0032	lecture	mic	Y	wait so the two values are distinct	question	yes	advisor	explain	new_concept	explanation	mode_files			
-lec-0037	lecture	mic	N	so the the thing is how do we define the basis for this vector space	question	yes	advisor	explain	new_concept	explanation	none			
-lec-0043	lecture	mic	N	wait will the final exam cover q three content	question	yes	advisor	research	admin_announcement	fact	none			
-lec-0046	lecture	mic	N	sorry are these two values supposed to be equal	question	yes	advisor	explain	new_concept	fact	none			
-lec-0048	lecture	mic	N	wait if we change the input size to two hundred then	question	yes	advisor	plan	worked_example	explanation	none			
-lec-0051	lecture	mic	Y	can we uh can we see a worked example of this calculation	request	yes	advisor	create	worked_example	example	mode_files			
-lec-0052	lecture	mic	Y	does anyone in the room know if this is on the midterm	question	yes	first_person_script	answer	question_to_room	fact	none			
-lec-0056	lecture	mic	Y	um what about the second one	question	yes	advisor	explain	worked_example	example	mode_files			
-lec-0058	lecture	mic	Y	can you uh make that simpler	request	yes	advisor	explain	new_concept	explanation	conversation_memory			
-lec-0064	lecture	mic	Y	where do we find the	request	yes	advisor	research	admin_announcement	fact	mode_files			
-lec-0068	lecture	mic	N	um what about the second one though	question	yes	advisor	explain	formula	explanation	conversation_memory			
-lec-0072	lecture	mic	N	and the other one sort of behaves like	statement	optional	advisor	compare	new_concept	explanation	conversation_memory			
-lec-0074	lecture	mic	Y	i mean it seems right but could we maybe look at a concrete case	request	optional	advisor	create	worked_example	example	mode_files			
-lec-0081	lecture	mic	Y	wait i i think i have the wrong answer to the	statement	optional	advisor	debug	worked_example	code	mode_files			
-lec-0085	lecture	mic	N	i mean i think that formula looks sort of strange	statement	optional	advisor	explain	formula	explanation	knowledge_base			
-lec-0086	lecture	mic	N	wait could you show me another example of how that works in the wild	request	yes	advisor	explain	worked_example	example	conversation_memory			
-lec-0087	lecture	mic	N	the the professor mentioned something about the q three deadline earlier i guess	statement	optional	advisor	none	admin_announcement	none	none			
-lec-0093	lecture	mic	Y	wait if we if we change the constant to five how does that effect the	question	yes	advisor	explain	formula	explanation	mode_files			
-lec-0095	lecture	mic	Y	anyway back to the the other thing what was the query you mentioned for	question	yes	advisor	research	new_concept	fact	none			
-lec-0096	lecture	mic	Y	could you summarize the last three points and tell me how they connect	request	yes	advisor	summarize	new_concept	summary	none			
-lec-0097	lecture	mic	Y	sorry i didnt quite catch that last bit about the cash	request	yes	advisor	explain	new_concept	explanation	none			
-lec-0105	lecture	system	Y	just a reminder the next lab session is at two pm	statement	no	silent	none	admin_announcement	none	none			
-lec-0107	lecture	mic	Y	you see if we walk through a worked example of the mapping	statement	optional	advisor	explain	worked_example	explanation	mode_files			
-sem-0010	seminar	system	Y	is that the the cashing factor	statement	no	silent	none	in_file_question	none	mode_files			
-sem-0012	seminar	mic	Y	two thousand and twenty three	statement	no	silent	none	transition_or_compliment	none	none			
-sem-0017	seminar	system	N	did you see the email about the	statement	no	silent	none	off_file_question	none	none			
-sem-0019	seminar	system	N	ok sure let me find the	backchannel	no	silent	none	transition_or_compliment	none	none			
-sem-0020	seminar	system	N	hey can you hear the background noise	statement	no	silent	none	clarification_request	none	none			
-sem-0025	seminar	system	Y	yeah exactly that makes a lot of sense	backchannel	no	silent	none	transition_or_compliment	none	none			
-sem-0039	seminar	mic	N	uh wait maybe the the variance is too high	statement	no	silent	none	off_file_question	none	none			
-sem-0044	seminar	system	N	sure ok	backchannel	no	silent	none	transition_or_compliment	none	none			
-sem-0046	seminar	system	N	wait i think i think i want the	statement	no	silent	none	critique_challenge	none	none			
-sem-0059	seminar	mic	Y	um i need to share the the other document	statement	no	silent	none	transition_or_compliment	none	none			
-sem-0068	seminar	system	Y	whats the status of the two thousand twenty three	question	yes	first_person_script	research	off_file_question	fact	knowledge_base			
-sem-0072	seminar	system	Y	kind of wondering if we can pivot to	request	yes	first_person_script	plan	transition_or_compliment	none	none			
-sem-0076	seminar	system	N	what was the exact logic for selecting that vector	question	yes	first_person_script	explain	in_file_question	explanation	none			
-sem-0082	seminar	system	N	could you uh write out the steps for the deployment	request	yes	first_person_script	plan	clarification_request	steps	none			
-sem-0083	seminar	system	N	yeah exactly that seems right to me too	backchannel	no	silent	none	transition_or_compliment	none	none			
-sem-0095	seminar	system	Y	uh how come	question	yes	first_person_script	explain	in_file_question	explanation	mode_files			
-sem-0101	seminar	system	Y	no wait look at their	request	yes	first_person_script	extract	in_file_question	fact	mode_files			
-sem-0102	seminar	system	Y	wont it just scale better	question	yes	first_person_script	explain	critique_challenge	explanation	mode_files			
-sem-0104	seminar	system	N	i mean it sounds like you think the error handling is fine but	statement	yes	first_person_script	debug	critique_challenge	rebuttal	none			
-sem-0109	seminar	system	Y	wait is the budget accurate	question	yes	first_person_script	research	citation_check	fact	mode_files			
-sem-0113	seminar	system	Y	uh could you show me	request	yes	first_person_script	create	clarification_request	code	mode_files			
-sem-0117	seminar	system	Y	hmmm i wonder if that	statement	optional	first_person_script	explain	critique_challenge	explanation	mode_files			
-sem-0144	seminar	system	Y	can you uh can you repeat the steps for the deployment strategy	request	yes	first_person_script	summarize	clarification_request	steps	mode_files			
-sem-0145	seminar	system	Y	can you repair the steps for the deployment strategy for production	request	yes	first_person_script	create	critique_challenge	code	none			
-cc-0009	call-center	mic	Y	just like moving the file to	statement	no	silent	none	diagnostic_answer	none	none			
-cc-0028	call-center	system	Y	right right exactly	backchannel	no	silent	none	off_topic	none	none			
-cc-0031	call-center	system	Y	can you hear me now	statement	no	silent	none	off_topic	none	none			
-cc-0067	call-center	system	Y	yeah go ahead	answer	no	silent	none	diagnostic_answer	none	none			
-cc-0075	call-center	system	Y	its really just not working at all	statement	optional	first_person_script	explain	frustration_escalation	summary	none			
-cc-0076	call-center	mic	Y	i need to see the	request	yes	first_person_script	extract	diagnostic_answer	none	mode_files			
-cc-0078	call-center	system	Y	escalate this please	request	yes	first_person_script	none	escalation_request	none	none			
-cc-0079	call-center	mic	N	i think this account might be linked to the wrong branch but uh i am not really sure	statement	optional	first_person_script	explain	diagnostic_answer	explanation	none			
-cc-0082	call-center	mic	Y	so the customer said their account balance is not updating correctly	statement	yes	first_person_script	explain	issue_description	explanation	mode_files			
-cc-0088	call-center	system	Y	i i just want to speak to your manager right now	request	yes	first_person_script	none	escalation_request	none	none			
-cc-0096	call-center	system	Y	can you tell me how to reset the gateway manually	question	yes	first_person_script	explain	diagnostic_answer	steps	mode_files			
-cc-0103	call-center	system	Y	do you know if the supervisor can help with the query	question	yes	first_person_script	answer	escalation_request	explanation	mode_files			
-cus-ther-0004	custom	system	Y	uh	backchannel	no	silent	none	technique_probe	none	none			
-cus-ther-0014	custom	mic	Y	can you tell me if this response fits the ethical guidelines for dual relationships	request	yes	advisor	research	ethics_check	fact	mode_files			
-cus-ther-0018	custom	mic	Y	could we try a a cognitive reframing technique for this case	request	yes	advisor	explain	technique_probe	recommendation	mode_files			
-cus-ther-0019	custom	mic	Y	the schedule for next week looks like	statement	optional	advisor	none	admin	none	none			
-cus-ther-0022	custom	mic	Y	is it safe to share the the records with the family	question	yes	advisor	explain	ethics_check	fact	mode_files			
-cus-ther-0023	custom	mic	Y	okay well how about we shift to the the quarry about the billing	request	yes	advisor	plan	admin	none	none			
-cus-ther-0024	custom	mic	Y	anyway the session went pretty well considering the	statement	optional	advisor	summarize	small_talk	summary	none			
-cus-ther-0026	custom	mic	N	wait if i use the cbt technique um does it imply i ignore their family history	question	yes	advisor	explain	technique_probe	explanation	conversation_memory			
-cus-ther-0027	custom	mic	N	i feel like i think i think i missed a boundary issue there	statement	optional	advisor	none	ethics_check	none	conversation_memory			
-cus-ther-0032	custom	mic	N	do you know if the the clinic vector for suicide risk has changed recently	question	yes	advisor	answer	admin	fact	none			
-cus-ther-0033	custom	mic	N	sort of i mean it feels like we are losing ground there	statement	optional	advisor	none	case_question	none	conversation_memory			
-cus-ther-0042	custom	mic	Y	so we we could uh we could try the the grounding exercise or perhaps wait until the client is more open	statement	yes	advisor	plan	technique_probe	recommendation	none			
-cus-ther-0063	custom	mic	Y	could you explain the exposure hierarchy again and maybe summarize why we started at that level	request	yes	advisor	explain	technique_probe	explanation	mode_files			
-cus-ther-0068	custom	mic	Y	are there any other techniques i should like consider for trauma work in this age bracket	question	yes	advisor	explain	technique_probe	recommendation	mode_files			
-cus-inv-0002	custom	mic	Y	wait let me pull up the screen	statement	no	silent	none	small_talk	none	none			
-cus-inv-0008	custom	system	Y	okay	backchannel	no	silent	none	runway_probe	none	none			
-cus-inv-0014	custom	mic	N	wait let me check the other screen	statement	no	silent	none	metric_question	none	none			
-cus-inv-0026	custom	mic	Y	wait let me pull up the other slide	statement	no	silent	none	metric_question	none	none			
-cus-inv-0031	custom	system	Y	did you see the email from their	statement	no	silent	none	small_talk	none	none			
-cus-inv-0039	custom	system	N	i mean it it might be two percent higher	statement	no	silent	none	metric_question	none	none			
-cus-inv-0042	custom	system	N	uh so we should look at the	statement	no	silent	none	runway_probe	none	none			
-cus-inv-0043	custom	mic	N	so the cash is clearly	statement	no	silent	none	runway_probe	none	none			
-cus-inv-0044	custom	system	N	could you send me that link	request	no	silent	none	small_talk	none	none			
-cus-inv-0053	custom	mic	Y	wait how does the the cashing layer know when to	question	yes	first_person_script	debug	strategy_challenge	explanation	mode_files			
-cus-inv-0062	custom	mic	N	i think we are sitting at about twelve months at the current burn	answer	optional	first_person_script	none	runway_probe	none	none			
-cus-inv-0063	custom	mic	N	does the growth in q three impact the hiring plan	question	yes	first_person_script	explain	strategy_challenge	explanation	conversation_memory			
-cus-inv-0067	custom	mic	N	could you maybe introduce us to the the series a guys at	request	yes	first_person_script	none	intro_request	none	none			
-cus-inv-0071	custom	mic	N	i mean we want to grow fast but not too fast	statement	optional	first_person_script	none	strategy_challenge	none	none			
-cus-inv-0072	custom	mic	N	and what about the headcount targets for q four	question	yes	first_person_script	answer	metric_question	fact	none			
-cus-inv-0076	custom	mic	Y	could you maybe introduce us to that series a lead you mentioned last week	request	yes	first_person_script	none	intro_request	none	conversation_memory			
-cus-inv-0100	custom	mic	Y	how do we how do we get more	question	yes	first_person_script	plan	strategy_challenge	recommendation	mode_files			
-cus-inv-0107	custom	mic	Y	mhmm	backchannel	no	silent	none	small_talk	none	none			
-cus-inv-0113	custom	mic	Y	yeah exactly that makes sense	backchannel	no	silent	none	small_talk	none	none			
-cus-inv-0130	custom	mic	Y	who should we introduce from the the board to the team	request	yes	first_person_script	plan	intro_request	recommendation	mode_files			
-cus-inv-0136	custom	mic	N	so tell me how our burn rate is currently impacting the runway	question	yes	first_person_script	explain	runway_probe	explanation	conversation_memory			
-cus-inv-0138	custom	mic	N	could you just verify our current monthly active user count for the metric report	request	yes	first_person_script	answer	metric_question	fact	none			
-cus-cr-0008	custom	system	Y	and then the and then we could	statement	no	silent	none	design_challenge	none	none			
-cus-cr-0041	custom	mic	N	uh where did i put the	statement	no	silent	none	design_challenge	none	none			
-cus-cr-0043	custom	system	N	getting some background noise	statement	no	silent	none	approval	none	none			
-cus-cr-0055	custom	system	Y	i think we should uh	statement	no	silent	none	correctness_question	none	none			
-cus-cr-0068	custom	system	Y	did you see the ticket for the the migration requirement in q three	question	yes	first_person_script	research	scope_question	fact	knowledge_base			
-cus-cr-0072	custom	mic	Y	is it okay if we keep the existing structure and just tweak the the	request	yes	first_person_script	rewrite	design_challenge	recommendation	mode_files			
-cus-cr-0079	custom	mic	N	if we change that we we could uh we could try	statement	optional	first_person_script	create	design_challenge	explanation	none			
-cus-cr-0089	custom	system	Y	the naming convention here seems a bit off could we change it	request	yes	first_person_script	rewrite	style_nit	recommendation	mode_files			
-cus-cr-0098	custom	mic	Y	uh wait should we change the the input type to string	question	yes	first_person_script	debug	correctness_question	recommendation	mode_files			
-cus-cr-0099	custom	mic	Y	do you think this is within the scope of the current task	question	yes	first_person_script	explain	scope_question	explanation	conversation_memory			
-cus-cr-0101	custom	mic	Y	kind of like the way the the vector works here	statement	optional	first_person_script	explain	design_challenge	explanation	mode_files			
-cus-cr-0102	custom	mic	Y	so we should probably update the the	statement	yes	first_person_script	debug	correctness_question	code	mode_files			
-cus-cr-0109	custom	mic	Y	i mean the the loop here is running twice for no reason	statement	optional	first_person_script	debug	correctness_question	explanation	mode_files			
-cus-cr-0114	custom	mic	Y	that seems off to me	statement	optional	first_person_script	debug	correctness_question	explanation	mode_files			
-cus-cr-0117	custom	mic	Y	is this gonna work on the q three release	question	yes	first_person_script	answer	scope_question	fact	none			
-cus-cr-0126	custom	mic	Y	i mean it seems like the the query performance is fine	statement	optional	first_person_script	none	design_challenge	none	conversation_memory			
-cus-cr-0132	custom	mic	Y	that sounds like the right approach for the model update	statement	optional	first_person_script	none	style_nit	none	conversation_memory			
-cus-cr-0136	custom	mic	Y	yeah the the approach makes sense to me	statement	no	silent	none	approval	none	none			
-cus-cr-0139	custom	mic	Y	its not strictly necessary for the production	statement	no	silent	none	approval	none	none			
-cus-cr-0142	custom	mic	Y	i think we could uh we could use a list	answer	optional	first_person_script	create	design_challenge	code	mode_files			
-gen-0105	general	system	Y	so we we need to	statement	no	silent	none	lecture_concept	none	none			
-gen-0106	general	system	Y	okay let me just share my screen	statement	no	silent	none	meeting_capture	none	none			
-gen-0114	general	system	Y	the cash is empty	statement	no	silent	none	coding_question	none	none			
-gen-0126	general	mic	Y	what is the current price of our stock right now	question	yes	advisor	research	factual_question	fact	none			
-gen-0129	general	mic	N	i mean sure we could we could try to push the release to friday but that might	statement	optional	capture	plan	meeting_capture	recommendation	none			
-gen-0139	general	mic	Y	you know i mean like what if we	statement	yes	advisor	plan	coding_question	explanation	none			
-gen-0141	general	mic	Y	so the the thing is we could uh we could try	statement	yes	advisor	create	coding_question	code	mode_files			
-gen-0145	general	mic	Y	i mean the the architecture looks	statement	optional	advisor	explain	coding_question	explanation	mode_files			
-gen-0147	general	mic	Y	mhm right	backchannel	no	silent	none	meeting_capture	none	none			
-gen-0151	general	mic	Y	thats kind of the point actually	statement	optional	first_person_script	none	interview_answer	rebuttal	none			
-gen-0158	general	typed	Y	how does the market reacting to the new legislation impact our pricing tiers in the region	question	yes	advisor	research	factual_question	fact	none			
-gen-0160	general	mic	Y	i mean the the main reason we moved to the cloud was to reduce our operational overhead	answer	no	silent	none	interview_answer	none	none			
-gen-0165	general	mic	Y	wait how does the the recursive query handle base case termination uh i think i think thats right	answer	no	silent	none	coding_question	none	none			
-gen-0168	general	mic	Y	yeah the the weather is pretty nice out there today right	statement	optional	advisor	none	small_talk	none	none			
-ti-0129	technical-interview	system	Y	if we use the the cashing layer then the	statement	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0144	technical-interview	mic	N	i think i think that fits the memory constraint	statement	no	silent	none	complexity_probe	none	none			
-ti-0149	technical-interview	system	Y	okay can everyone see the white board	statement	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0154	technical-interview	mic	Y	wait does the the input array	statement	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0155	technical-interview	mic	Y	uh sorry just just sorting my thoughts here	statement	no	silent	none	interviewer_thinking_aloud	none	none			
-ti-0157	technical-interview	system	Y	so can you uh walk me through the time complexity of that solution	question	yes	first_person_script	explain	complexity_probe	explanation	mode_files			
-ti-0159	technical-interview	system	Y	suppose we wanted to scale this for a two million users what would you change	question	yes	first_person_script	plan	system_design	recommendation	mode_files			
-ti-0177	technical-interview	mic	Y	uhm regarding the cashing strategy in the first part of the system design i think i think we should move that to the edge	statement	yes	first_person_script	plan	system_design	recommendation	mode_files			
-lfw-0150	looking-for-work	system	N	can everyone hear me clearly	statement	no	silent	none	small_talk	none	none			
-lfw-0167	looking-for-work	system	Y	wait did you send the calendar invite to sarah no i think	statement	no	silent	none	small_talk	none	none			
-lfw-0171	looking-for-work	system	Y	did we get the transcript for the two hundred applicants	question	no	silent	none	small_talk	none	none			
-lfw-0175	looking-for-work	mic	Y	i think i think we should probably look at the tech stack in the job description	statement	yes	first_person_script	compare	jd_gap	fact	mode_files			
-lfw-0176	looking-for-work	mic	Y	so you mentioned your salary requirement is sixty k but i i i think i meant to say sixty five	statement	yes	first_person_script	answer	compensation	fact	none			
-lfw-0177	looking-for-work	system	Y	we we we really look for people who are are passionate about our mission to fix the the climate	statement	optional	first_person_script	explain	motivation_why_us	explanation	mode_files			
-lfw-0182	looking-for-work	system	Y	the role involves managing the product road map across q three and	statement	no	silent	none	interviewer_explaining_role	none	mode_files			
-lfw-0196	looking-for-work	mic	Y	so you know are there any like specific compensation tiers or bonuses that i should be aware of as i look at my total offer	question	yes	first_person_script	explain	compensation	fact	none			
-lfw-0198	looking-for-work	mic	Y	well tell me more about why you chose this role specifically	request	yes	first_person_script	explain	your_questions_for_us	explanation	none			
-lfw-0200	looking-for-work	mic	Y	i could clarify the the responsibilities for this team if needed	statement	optional	first_person_script	explain	role_technical	explanation	mode_files			
-lfw-0201	looking-for-work	mic	Y	the compensation package looks like it needs some review	statement	yes	first_person_script	compare	compensation	rebuttal	none			
-lfw-0205	looking-for-work	mic	Y	i can tell you about yourself and your background	statement	no	silent	none	small_talk	none	none			
-sal-0128	sales	system	Y	uh so wait what happens if we decide to change the vendor in q two	question	yes	first_person_script	explain	objection_status_quo	explanation	mode_files			
-sal-0137	sales	system	Y	i like what i have seen so far you know this is much better than	statement	optional	first_person_script	none	satisfied_customer	none	none			
-sal-0147	sales	system	Y	makes sense i guess	statement	optional	first_person_script	none	objection_timing	none	none			
-sal-0150	sales	mic	Y	i think i think so	answer	no	silent	none	discovery_answer	none	none			
-sal-0167	sales	system	Y	i think i think we would like to see a proposal next week	request	yes	first_person_script	create	buying_signal	recommendation	conversation_memory			
-rec-0151	recruiting	system	Y	yeah right	backchannel	no	silent	none	interviewer_speaking	none	none			
-rec-0153	recruiting	system	Y	i mean it kind of depends on the	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0156	recruiting	system	Y	the the sequel query is just running too slow	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0173	recruiting	system	N	twenty three or maybe two	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0183	recruiting	system	Y	just need to change that line	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0195	recruiting	system	Y	uhm okay i see i think i see	backchannel	no	silent	none	candidate_answer_to_evaluate	none	none			
-rec-0201	recruiting	system	N	uh wait should i be using the standard library for this or	question	yes	advisor	debug	candidate_question	fact	none			
-rec-0206	recruiting	mic	Y	yeah go on	backchannel	no	silent	none	interviewer_speaking	none	none			
-rec-0207	recruiting	mic	Y	wait why the the array	question	yes	advisor	explain	probe_needed	explanation	none			
-tm-0131	team-meet	system	Y	did you see that email from dave about the cashing	statement	no	silent	none	discussion_noise	none	none			
-tm-0134	team-meet	system	Y	no wait that that should be like two two	statement	no	silent	none	discussion_noise	none	none			
-tm-0140	team-meet	mic	N	let me try to share my screen real quick	statement	no	silent	none	discussion_noise	none	none			
-tm-0141	team-meet	system	N	wait so the the logic inside the loop is	statement	no	silent	none	discussion_noise	none	none			
-tm-0149	team-meet	system	N	hey sarah are you free to	request	no	silent	none	discussion_noise	none	none			
-tm-0150	team-meet	mic	N	total mess i	statement	no	silent	none	risk_blocker	none	none			
-tm-0151	team-meet	system	Y	hey can you pull up the q three numbers for me	request	yes	first_person_script	extract	called_on_for_status	table	mode_files			
-tm-0157	team-meet	system	Y	you should probably update the documentation regarding the two phase commit	request	yes	capture	create	action_item	steps	mode_files			
-tm-0161	team-meet	system	Y	can you send me a list of all current internal links for the portal	request	yes	capture	extract	action_item	table	mode_files			
-tm-0172	team-meet	mic	Y	is that a risk	question	yes	capture	explain	risk_blocker	explanation	conversation_memory			
-tm-0178	team-meet	mic	Y	wait i want to check the cashing	statement	optional	capture	debug	risk_blocker	none	mode_files			
-tm-0190	team-meet	mic	Y	i mean we could just add an abstraction layer or just redo the whole schema	statement	optional	capture	plan	decision	recommendation	mode_files			
-tm-0192	team-meet	mic	Y	can you summarize those changes and draft a list of action items for the pr	request	yes	capture	summarize	action_item	steps	mode_files			
-tm-0203	team-meet	mic	Y	can you check the the logs for error code forty four	request	yes	capture	debug	action_item	fact	mode_files			
-lec-0116	lecture	mic	Y	could we see a worked example of this matrix operation	request	yes	advisor	create	worked_example	example	mode_files			
-lec-0136	lecture	mic	Y	yeah exactly that makes sense	backchannel	no	silent	none	new_concept	none	none			
-lec-0137	lecture	mic	Y	is this formula standard or is it like a specific variant for the the q three project	question	yes	advisor	answer	formula	fact	mode_files			
-lec-0142	lecture	system	Y	the next step involves uh i mean implementing the recursive loop	statement	no	silent	none	new_concept	none	none			
-lec-0144	lecture	system	Y	and so the the base formula for the sequence is q sub one	statement	no	silent	none	formula	none	none			
-lec-0147	lecture	mic	Y	and what about the and the the lab session on tuesday	question	yes	advisor	research	admin_announcement	fact	mode_files			
-sem-0154	seminar	system	Y	maybe we should check the vector	statement	no	silent	none	clarification_request	none	mode_files			
-sem-0158	seminar	system	Y	so the the thing is we need	statement	no	silent	none	critique_challenge	none	none			
-sem-0166	seminar	system	N	i mean i think that the the vector should be higher	statement	no	silent	none	critique_challenge	none	none			
-sem-0170	seminar	system	N	um i suppose that the sequel query could	statement	no	silent	none	off_file_question	none	none			
-sem-0177	seminar	mic	Y	can everyone see my screen	statement	no	silent	none	transition_or_compliment	none	none			
-sem-0179	seminar	mic	Y	wait let me check the	statement	no	silent	none	transition_or_compliment	none	none			
-sem-0181	seminar	system	Y	um how how does that even	statement	no	silent	none	clarification_request	none	none			
-sem-0188	seminar	system	Y	im not sure i buy your analysis of the scaling factor here	statement	yes	first_person_script	compare	critique_challenge	rebuttal	mode_files			
-sem-0214	seminar	system	Y	um i think the logic in the first section of the document is a bit flawed could you explain it and then rewrite that paragraph for me	request	yes	first_person_script	explain	critique_challenge	explanation	mode_files			
-sem-0218	seminar	system	Y	wait i didnt quite catch that last part about	request	yes	first_person_script	explain	clarification_request	explanation	none			
-sem-0222	seminar	system	Y	can you like clarify that point about the budget allocation in general	question	yes	first_person_script	explain	off_file_question	explanation	knowledge_base			
-sem-0223	seminar	system	Y	the model you used here seems slightly outdated compared to the current q three report	statement	yes	first_person_script	compare	critique_challenge	rebuttal	mode_files			
-sem-0225	seminar	system	Y	i am just wondering where in the doc does it say that specifically	question	yes	first_person_script	extract	citation_check	fact	mode_files			
-cc-0111	call-center	system	Y	wait why is the the system not	statement	no	silent	none	issue_description	none	none			
-cc-0113	call-center	system	Y	hey janice did you finish the	statement	no	silent	none	off_topic	none	none			
-cc-0117	call-center	system	Y	the the issue is really	statement	no	silent	none	issue_description	none	none			
-cc-0119	call-center	system	Y	i mean it kind of depends	statement	no	silent	none	refund_or_credit_request	none	none			
-cc-0127	call-center	mic	N	no wait i think its the	statement	no	silent	none	issue_description	none	none			
-cc-0129	call-center	system	N	where did i put the paper	statement	no	silent	none	issue_description	none	none			
-cc-0134	call-center	mic	Y	wait let me check the other cable	statement	no	silent	none	diagnostic_answer	none	none			
-cc-0141	call-center	system	Y	so we we just need to to	statement	no	silent	none	off_topic	none	none			
-cc-0147	call-center	system	Y	can you verify my account balance	request	yes	first_person_script	extract	resolution_request	fact	mode_files			
-cc-0154	call-center	mic	Y	hold on let me look at the screen	statement	no	silent	none	diagnostic_answer	none	none			
-cc-0155	call-center	system	Y	i think i think thats right the the cache is empty	answer	yes	first_person_script	explain	diagnostic_answer	explanation	mode_files			
-cc-0156	call-center	system	Y	anyway do you know if the store in downtown is open	question	yes	first_person_script	research	off_topic	fact	none			
-cc-0169	call-center	mic	Y	can we sort of uh can we	request	yes	first_person_script	plan	escalation_request	steps	none			
-cc-0173	call-center	mic	Y	im kind of getting	statement	yes	first_person_script	explain	issue_description	explanation	none			
-cc-0183	call-center	mic	Y	so can you uh debug this login loop and write me a script to fix it	request	yes	first_person_script	debug	issue_description	code	mode_files			
-cc-0186	call-center	mic	Y	and what about the the retry logic if it fails again in q four	question	yes	first_person_script	explain	diagnostic_answer	explanation	mode_files			
-cc-0187	call-center	system	Y	i just dont understand why my bill is so high i want my money back	request	yes	first_person_script	none	refund_or_credit_request	none	none			
-gen-0171	general	system	Y	can everyone hear me okay	request	no	silent	none	meeting_capture	none	none			
-gen-0173	general	system	Y	so we we really need to figure out the cash	statement	no	silent	none	coding_question	none	none			
-gen-0179	general	system	Y	did you see the email for twenty three	statement	no	silent	none	meeting_capture	none	none			
-gen-0181	general	system	N	yeah exactly i think the the plan is solid we can proceed with that	backchannel	no	silent	none	meeting_capture	none	none			
-gen-0183	general	system	N	so we have the the vector of improvement and then wait what was the third point	statement	no	silent	none	lecture_concept	none	none			
-gen-0189	general	mic	Y	um i mean thats kind of a hard question because we dont know if the	answer	yes	first_person_script	answer	sales_objection	explanation	none			
-gen-0193	general	mic	Y	i think we should uh look at the first strategy again	request	yes	advisor	explain	lecture_concept	explanation	mode_files			
-gen-0199	general	mic	Y	uh yeah thats totally fine i think i think we can proceed with that	answer	no	silent	none	small_talk	none	conversation_memory			
-gen-0201	general	mic	Y	so the the total number of users logged in at q three was like eight thousand	statement	optional	capture	summarize	meeting_capture	summary	none			
-lec-0161	lecture	mic	N	um i think the the professor is probably going to cover that in the next section anyway	statement	no	silent	none	new_concept	none	none			
-lec-0176	lecture	mic	Y	wait does that apply to the non linear cases too or just the	question	yes	first_person_script	explain	question_to_room	explanation	mode_files			
-lec-0179	lecture	mic	Y	that seems off because the the two values dont match in the proof	statement	optional	advisor	debug	formula	rebuttal	mode_files			
-lec-0180	lecture	mic	Y	i mean i think i think thats right but the quarry is a bit	statement	no	silent	none	off_syllabus	none	none			
-lec-0187	lecture	system	Y	the the formula for calculating the derivative is just like the standard one you have seen in calc two	statement	no	silent	none	formula	none	none			
+id	mode	lang	channel	has_files	input	restored	dialogue_act	needs_response	voice	task	mode_intent	answer_form	grounding	WRONG_AXES	CORRECTION	COMMENT
+gen-0005	general	en	system	Y	hey john did you get that email	Hey, John, did you get that email?	interruption	no	silent	none	meeting_capture	none	none			
+gen-0006	general	en	mic	Y	so we could uh we could try the	So we could, uh, we could try the	statement	no	silent	none	coding_question	none	none			
+gen-0007	general	en	system	Y	can everyone hear me ok	Can everyone hear me? OK,	question	no	silent	none	meeting_capture	none	none			
+gen-0009	general	en	mic	Y	and then we just need to make sure	And then we just need to make sure	statement	no	silent	none	coding_question	none	none			
+gen-0013	general	en	mic	Y	can you walk me through the the overall logic for this function	can you walk me through the, the overall logic for this function,	request	yes	advisor	explain	coding_question	explanation	mode_files			
+gen-0015	general	en	mic	Y	wait i mean how does the the sequel query handle duplicate entries there	Wait, I mean, how does the, the sequel query handle duplicate entries there?	question	yes	advisor	explain	coding_question	explanation	mode_files			
+gen-0017	general	en	mic	Y	um could you just like rephrase that part about the memory	um, could you just like rephrase that part about the memory	request	yes	advisor	rewrite	lecture_concept	explanation	none			
+gen-0018	general	en	mic	Y	so we could uh we could try the local cache for	So, we could, uh, we could try the local cache for	statement	optional	advisor	plan	coding_question	recommendation	mode_files			
+gen-0021	general	en	mic	Y	i mean its sort of like comparing two different approaches for	I mean, its sort of like, comparing two different approaches for	statement	optional	advisor	compare	coding_question	explanation	none			
+gen-0023	general	en	mic	Y	did you no the files were updated	Did you? No, the files were updated.	question	yes	advisor	research	factual_question	fact	mode_files			
+gen-0024	general	en	mic	Y	how does the input vector weight relate to	How does the input vector weight relate to	question	yes	advisor	explain	lecture_concept	explanation	none			
+gen-0025	general	en	mic	N	can you tell me what the latest headcount is for the marketing team	Can you tell me what the latest headcount is for the marketing team?	question	yes	advisor	research	factual_question	fact	knowledge_base			
+gen-0030	general	en	mic	N	right so uh the sequel query is failing because of the missing join condition	right? So, uh, the sequel query is failing because of the missing join condition,	statement	optional	advisor	debug	coding_question	code	none			
+gen-0035	general	en	mic	N	sort of curious about the timeline for the two thousand twenty four launch	sort of curious about the timeline for the two thousand, twenty- four launch	question	yes	advisor	research	lecture_concept	explanation	none			
+gen-0037	general	en	system	Y	um how does the current architecture scale if we double the throughput	um, how does the current architecture scale, if we double the throughput,	question	yes	advisor	explain	lecture_concept	explanation	mode_files			
+gen-0040	general	en	system	Y	yeah like the whole implementation of the of the memory cash	Yeah. like the whole implementation of the, of the memory cash,	statement	yes	advisor	explain	coding_question	explanation	mode_files			
+gen-0051	general	en	mic	Y	okay move to the next thing	Okay, move to the next thing.	request	yes	capture	plan	meeting_capture	steps	none			
+gen-0067	general	en	mic	Y	sort of i mean uh	sort of, I mean, uh,	answer	optional	advisor	explain	lecture_concept	rebuttal	none			
+gen-0068	general	en	mic	Y	and what about the	And what about the	question	yes	advisor	explain	coding_question	explanation	mode_files			
+gen-0071	general	en	mic	Y	mhm right okay	Mhm, right? Okay.	backchannel	no	silent	none	meeting_capture	none	none			
+gen-0080	general	en	mic	Y	so the the thing is we need to sort of aggregate these findings and um tell me what you would push back on regarding the current strategy	So, the, the thing is, we need to sort of aggregate these findings. And, um, tell me what you would push back on regarding the current strategy.	request	yes	capture	summarize	meeting_capture	rebuttal	conversation_memory			
+gen-0084	general	en	system	Y	that is a very interesting point	That is a very interesting point.	statement	no	silent	none	small_talk	none	none			
+gen-0086	general	en	mic	Y	i think i think thats right yeah	I think I think thats right? Yeah.	backchannel	no	silent	none	meeting_capture	none	none			
+gen-0088	general	en	mic	Y	so the the primary factor for why we chose this architecture was performance	So, the, the primary factor for why we chose this architecture was performance,	answer	no	silent	none	interview_answer	none	none			
+gen-0097	general	en	mic	Y	actually i think that sequel error is just from a missing semicolon	Actually, I think that sequel error is just from a missing semicolon.	statement	no	silent	none	coding_question	none	none			
+gen-0102	general	en	mic	N	yeah that makes sense i mean thanks for explaining the whole concept	Yeah, that makes sense. I mean, thanks for explaining the whole concept.	backchannel	no	silent	none	small_talk	none	none			
+ti-0003	technical-interview	en	mic	Y	wait let me check the uh connection here	Wait, let me check the, uh, connection here.	statement	no	silent	none	system_design	none	none			
+ti-0020	technical-interview	en	system	N	right	Right,	backchannel	no	silent	none	complexity_probe	none	none			
+ti-0030	technical-interview	en	system	Y	is that file on your end	is that file on your end,	question	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0031	technical-interview	en	mic	Y	the the the cashing	the, the, the cashing	statement	no	silent	none	system_design	none	none			
+ti-0033	technical-interview	en	system	Y	well maybe we could	Well, maybe we could.	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0041	technical-interview	en	system	N	right right yeah that makes sense	right? right? Yeah, that makes sense.	backchannel	no	silent	none	complexity_probe	none	none			
+ti-0042	technical-interview	en	system	N	the the thing is if we iterate	The, the thing is, if we iterate	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0044	technical-interview	en	mic	N	is that constant time or or logarithmic	is that constant time, or, or logarithmic,	statement	no	silent	none	complexity_probe	none	none			
+ti-0045	technical-interview	en	system	N	you know we could try searching from the	you know, we could try searching from the	statement	no	silent	none	optimization_probe	none	none			
+ti-0059	technical-interview	en	mic	Y	sort of kind of	sort of kind of	answer	no	silent	none	dsa_problem	none	none			
+ti-0061	technical-interview	en	system	Y	so can you explain how the binary tree traversal would work here	So, can you explain how the binary tree traversal would work here?	question	yes	first_person_script	explain	dsa_problem	explanation	mode_files			
+ti-0063	technical-interview	en	system	Y	and what about the space complexity if we used a recursion stack	And what about the space complexity, If we used a recursion stack,	question	yes	first_person_script	explain	complexity_probe	explanation	mode_files			
+ti-0065	technical-interview	en	mic	Y	the sequel database is not returning the right rows	the sequel database is not returning the right rows	statement	optional	first_person_script	debug	code_review_hint	none	none			
+ti-0069	technical-interview	en	mic	Y	what if we used a heap instead of a simple sort	What if we used a heap instead of a simple sort,	question	yes	first_person_script	compare	optimization_probe	recommendation	none			
+ti-0076	technical-interview	en	mic	N	is it o of n squared or would it be	is it O of n squared? Or would it be,	question	yes	first_person_script	explain	complexity_probe	explanation	none			
+ti-0080	technical-interview	en	mic	N	and then i just need to make sure that the	And then I just need to make sure that the	statement	optional	first_person_script	explain	interviewer_thinking_aloud	none	none			
+ti-0104	technical-interview	en	mic	N	and what about the the second one i mean the recursive approach	And what about the, the second one? I mean, the recursive approach.	question	yes	first_person_script	compare	code_review_hint	explanation	conversation_memory			
+ti-0107	technical-interview	en	mic	N	i mean are you saying that the the input is always sorted or	I mean, are you saying that the, the input is always sorted, Or,	question	yes	first_person_script	explain	problem_restatement	fact	conversation_memory			
+ti-0109	technical-interview	en	mic	Y	i think the time complexity should be o of n squared because of the nested loops	I think the time complexity should be O of n squared, because of the nested loops,	answer	yes	first_person_script	explain	complexity_probe	explanation	mode_files			
+lfw-0004	looking-for-work	en	mic	Y	so the the thing is we need to fix this	So, the, the thing is, we need to fix this	statement	no	silent	none	role_technical	none	none			
+lfw-0006	looking-for-work	en	mic	Y	uh let me try to	Uh, let me try to	statement	no	silent	none	role_technical	none	none			
+lfw-0009	looking-for-work	en	system	Y	that sounds about right	that sounds about right.	backchannel	no	silent	none	small_talk	none	none			
+lfw-0012	looking-for-work	en	system	Y	yeah ok sure	Yeah, OK. sure.	backchannel	no	silent	none	small_talk	none	none			
+lfw-0015	looking-for-work	en	mic	N	can everyone see my screen okay	Can everyone see my screen. Okay,	statement	no	silent	none	small_talk	none	none			
+lfw-0021	looking-for-work	en	mic	N	kinda like a cache miss	kinda like a cache. miss	statement	no	silent	none	small_talk	none	none			
+lfw-0026	looking-for-work	en	mic	Y	um let me share my screen	um, let me share my screen,	statement	no	silent	none	small_talk	none	none			
+lfw-0032	looking-for-work	en	mic	Y	i mean i kind of	I mean, I kind of	statement	no	silent	none	behavioral_star	none	none			
+lfw-0035	looking-for-work	en	mic	Y	the the sequel should be	the, the sequel should be	statement	no	silent	none	role_technical	none	none			
+lfw-0046	looking-for-work	en	system	N	let me just share my screen	Let me just share my screen,	statement	no	silent	none	small_talk	none	none			
+lfw-0054	looking-for-work	en	mic	Y	i need to find the the right tab for the	I need to find the, the right tab for the	statement	no	silent	none	small_talk	none	none			
+lfw-0062	looking-for-work	en	system	Y	can you walk me through the the star method as it relates to a time you managed conflict	Can you walk me through the the star method, as it relates to a time you managed conflict,	request	yes	first_person_script	explain	behavioral_star	example	none			
+lfw-0064	looking-for-work	en	system	Y	and what about the the vector for latency if we switch to a serverless architecture	and what about the, the vector for latency. If we switch to a serverless architecture,	question	yes	first_person_script	compare	role_technical	explanation	mode_files			
+lfw-0077	looking-for-work	en	system	N	i see you listed ruby on rails but we mainly use python for our back end	I see you listed. Ruby on rails, but we mainly use Python for our back end.	statement	optional	first_person_script	none	jd_gap	none	none			
+lfw-0091	looking-for-work	en	mic	Y	yeah go ahead	Yeah, go ahead.	statement	no	silent	none	small_talk	none	none			
+lfw-0095	looking-for-work	en	mic	Y	thats super cool	Thats super cool.	statement	no	silent	none	small_talk	none	none			
+lfw-0096	looking-for-work	en	mic	Y	so so you you think the salary range is	So, so you, you think the salary range is	question	yes	first_person_script	explain	compensation	fact	none			
+lfw-0101	looking-for-work	en	mic	Y	uh sounds like a plan	uh, sounds like a plan.	statement	no	silent	none	small_talk	none	none			
+lfw-0103	looking-for-work	en	mic	N	wait how come they decided to build that in the first place	Wait, how come? They decided to build that in the first place.	question	yes	first_person_script	explain	role_technical	explanation	conversation_memory			
+lfw-0107	looking-for-work	en	mic	N	but and the other one you know the the one regarding the q three budget	But, and the other one, you know, the, the one regarding the Q three budget,	question	yes	first_person_script	explain	jd_gap	fact	conversation_memory			
+lfw-0112	looking-for-work	en	mic	Y	so the the thing is we could uh we could try	So, the, the thing is, we could, uh, we could try	answer	no	silent	none	behavioral_star	none	none			
+lfw-0120	looking-for-work	en	mic	Y	i guess that makes sense	I guess that makes sense.	statement	no	silent	none	small_talk	none	none			
+lfw-0125	looking-for-work	en	mic	Y	i mean like i started in web dev and then i moved into backend engineering primarily focusing on python and and uh distributed systems	I mean, like, I started in web dev, and then I moved into backend engineering, primarily focusing on Python, and, and, uh, distributed systems.	answer	no	silent	none	tell_me_about_yourself	none	none			
+lfw-0126	looking-for-work	en	system	Y	can you explain how you handled conflict in a previous project and uh maybe summarize what you learned	Can you explain how you handled conflict in a previous project? And, uh, maybe summarize what you learned	request	yes	first_person_script	explain	behavioral_star	explanation	none			
+lfw-0131	looking-for-work	en	mic	Y	so the the thing is we wont see the benefits until the scale increases right	So, the, the thing is, we wont, see the benefits until the scale increases, right,	statement	optional	first_person_script	explain	role_technical	rebuttal	mode_files			
+sal-0002	sales	en	mic	Y	ok so let me share my screen	OK, so let me share my screen.	statement	no	silent	none	small_talk	none	none			
+sal-0007	sales	en	system	Y	kind of hard to tell	Kind of hard to tell	statement	no	silent	none	small_talk	none	none			
+sal-0009	sales	en	mic	Y	so the the thing is we wont need to worry	So, the, the thing is, we wont need to worry.	statement	no	silent	none	small_talk	none	none			
+sal-0016	sales	en	system	N	right right so	right? right. So,	backchannel	no	silent	none	small_talk	none	none			
+sal-0020	sales	en	system	N	hey john are you still on the line for the	Hey, john. are you still on the line for the	statement	no	silent	none	small_talk	none	none			
+sal-0030	sales	en	system	Y	uh wait i think i think that there is a	uh, wait, I think, I think that there is a	statement	no	silent	none	discovery_answer	none	none			
+sal-0032	sales	en	system	Y	are you guys looking at the same file	Are you guys? looking at the same file,	statement	no	silent	none	small_talk	none	none			
+sal-0035	sales	en	system	Y	kind of like a	kind of like a	statement	no	silent	none	discovery_answer	none	none			
+sal-0037	sales	en	system	Y	so so i was wondering how does this pricing model look for like a team of twenty	So, so I was wondering, how does this pricing model look for? like a team of twenty,	question	yes	first_person_script	answer	pricing_ask	fact	mode_files			
+sal-0038	sales	en	system	Y	right and uh and does your software integrate with salesforce	right? And, uh, and does your software integrate with Salesforce,	question	yes	first_person_script	explain	feature_question	explanation	mode_files			
+sal-0046	sales	en	system	Y	wait so the the migration tool is that included in the	Wait, so the, the migration tool is that included in the	question	yes	first_person_script	explain	feature_question	explanation	mode_files			
+sal-0048	sales	en	system	Y	yeah exactly so i i think we are ready to move on to the next step	Yeah, exactly. So, I, I think we are ready to move on to the next step.	statement	yes	first_person_script	plan	next_step_moment	steps	none			
+sal-0052	sales	en	mic	N	i mean we have been doing this for twenty three years now	I mean, we have been doing this for twenty- three years now.	answer	no	silent	none	discovery_answer	none	none			
+sal-0059	sales	en	system	N	do we have no idea how much time the setup will take	Do we have no idea how much time the setup will take.	question	yes	first_person_script	explain	feature_question	explanation	none			
+sal-0068	sales	en	mic	Y	i mean what about the premium tier	I mean, what about the premium tier	question	yes	first_person_script	compare	pricing_ask	fact	mode_files			
+sal-0072	sales	en	mic	Y	uh look we we just need	Uh, look, we. we just need,	statement	optional	first_person_script	none	objection_status_quo	none	none			
+sal-0076	sales	en	mic	Y	i mean their price	I mean their price,	question	yes	first_person_script	compare	objection_competitor	rebuttal	knowledge_base			
+sal-0077	sales	en	mic	Y	can we set that up	Can we set that up?	request	yes	first_person_script	plan	next_step_moment	steps	none			
+sal-0095	sales	en	mic	Y	i guess that	I guess that	statement	optional	first_person_script	none	discovery_answer	none	none			
+sal-0099	sales	en	system	N	that seems off for our q three targets maybe	that seems off for our Q- three targets. maybe.	statement	optional	first_person_script	explain	objection_timing	rebuttal	none			
+sal-0103	sales	en	mic	Y	what about the security features specifically regarding data residency	What about the security features, specifically regarding data, residency	question	yes	first_person_script	explain	feature_question	explanation	mode_files			
+sal-0104	sales	en	system	Y	i think i think thats right we definitely need that	I think, I think thats right? We definitely need that.	statement	no	silent	none	buying_signal	none	none			
+sal-0106	sales	en	typed	Y	summarise that and tell me what you would push back on regarding the contract	summarise that, and tell me what you would push back on regarding the contract.	request	yes	first_person_script	summarize	objection_status_quo	rebuttal	mode_files			
+sal-0117	sales	en	system	Y	i mean i i see what they do and honestly its similar	I mean, I, I see what they do. And, honestly, its similar,	statement	optional	first_person_script	none	discovery_answer	none	none			
+rec-0016	recruiting	en	system	N	uh wait let me check the	uh, wait, let me check the	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0026	recruiting	en	mic	Y	uh let me just check my screen sharing	uh, let me just check my screen. sharing	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0027	recruiting	en	system	Y	the the vector is fine but wait	the, the vector is fine, but wait,	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0029	recruiting	en	mic	Y	can everyone hear me clearly now	Can everyone hear me clearly Now,	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0035	recruiting	en	mic	Y	wait how does the the cashing layer know when to	Wait, how does the the cashing layer know when to	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0042	recruiting	en	mic	N	i think i think that should cover it	I think, I think that should cover it.	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0051	recruiting	en	mic	Y	uh let me just check the screen share	uh, let me just check the screen. share	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0053	recruiting	en	mic	Y	wait does that make sense	Wait, does that make sense?	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0055	recruiting	en	system	Y	i mean i think i think thats right	I mean, I think I think thats right?	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0060	recruiting	en	mic	Y	i will just wrap up this section	I will just wrap up this section,	statement	no	silent	none	interviewer_speaking	none	none			
+rec-0063	recruiting	en	mic	Y	did the candidate mention anything about the uh database consistency model	Did the candidate mention anything about the, uh- database consistency model	question	yes	advisor	extract	scorecard_moment	fact	conversation_memory			
+rec-0070	recruiting	en	mic	Y	thats great can you tell me more about the the migration from the legacy	thats great. Can you tell me more about the, the migration from the legacy?	question	yes	advisor	explain	probe_needed	explanation	none			
+rec-0073	recruiting	en	system	N	so can you uh walk me through how you handled the memory leak in the last project	So, can you, uh, walk me through, how you handled the memory leak in the last project	question	yes	advisor	explain	candidate_question	explanation	none			
+rec-0080	recruiting	en	system	N	okay and then we just need to make sure that the	Okay. and then we just need to make sure that the	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0100	recruiting	en	system	Y	well actually i uh i think there vector is different	Well, actually, I, uh, I think there vector is different	answer	optional	advisor	answer	candidate_answer_to_evaluate	explanation	none			
+rec-0106	recruiting	en	mic	N	okay that that works i guess	okay, that that works. I guess,	backchannel	no	silent	none	scorecard_moment	none	none			
+rec-0108	recruiting	en	mic	N	and the other one how does that handle the	and the other one, how does that handle? The,	question	yes	advisor	explain	probe_needed	explanation	conversation_memory			
+rec-0110	recruiting	en	mic	Y	wait why would you use a vector there	Wait, why would you use a vector? there?	question	yes	advisor	explain	candidate_question	explanation	none			
+rec-0120	recruiting	en	system	Y	so the cash is updated	So, the cash is updated	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0129	recruiting	en	mic	Y	whats the query performance for q three specifically	whats the query performance for q three, specifically	question	yes	advisor	research	probe_needed	fact	mode_files			
+rec-0138	recruiting	en	mic	Y	so can you tell me what the biggest challenge you faced was	So, can you tell me what the biggest challenge you faced was	question	no	silent	none	interviewer_speaking	none	none			
+rec-0139	recruiting	en	system	Y	i was wondering can you tell me what the biggest challenge you faced was	I was wondering, can you tell me what the biggest challenge you faced was	question	yes	advisor	research	candidate_question	explanation	none			
+rec-0140	recruiting	en	system	Y	um the algorithm uses a binary search so it should be log n	Um, the algorithm uses a binary search. So, it should be log n	answer	yes	advisor	explain	candidate_answer_to_evaluate	explanation	mode_files			
+rec-0141	recruiting	en	system	Y	i mean the the algorithm uses a binary search so it should be log n	I mean, the, the algorithm uses a binary search. So, it should be log n	statement	optional	advisor	debug	scorecard_moment	fact	mode_files			
+rec-0142	recruiting	en	system	Y	so let me see if i have this right the cache invalidation happens at the worker node level	So, let me see, if I have this, right? the cache invalidation happens at the worker node level.	answer	yes	advisor	answer	candidate_answer_to_evaluate	explanation	none			
+rec-0148	recruiting	en	system	N	yeah so we decided to shift the entire architecture ourselves and we managed to get the sequel queries running in under a millisecond	Yeah. So, we decided to shift the entire architecture ourselves. And we managed to get the sequel queries running in under a millisecond	answer	yes	advisor	explain	red_flag	explanation	conversation_memory			
+rec-0149	recruiting	en	system	N	and then we coordinated with the qa team to ensure that the we followed the deployment protocols exactly as we outlined in the spec	And then, we coordinated with the Qa team to ensure that the, we followed the deployment protocols exactly as we outlined in the spec	answer	yes	advisor	explain	candidate_answer_to_evaluate	explanation	conversation_memory			
+tm-0008	team-meet	en	mic	Y	i need to see if the cache is actually working	I need to see if the cache is actually working.	statement	no	silent	none	discussion_noise	none	none			
+tm-0010	team-meet	en	system	Y	did we send the email	Did we send the email	question	no	silent	none	discussion_noise	none	none			
+tm-0023	team-meet	en	mic	N	um i suppose the next step is	um, I suppose the next step is,	statement	no	silent	none	discussion_noise	none	none			
+tm-0038	team-meet	en	system	Y	yeah exactly so that should keep the memory usage down	Yeah, exactly. So, that should keep the memory usage down.	backchannel	no	silent	none	discussion_noise	none	none			
+tm-0041	team-meet	en	system	Y	im not sure about that	IM, not sure about that.	statement	optional	capture	none	discussion_noise	none	none			
+tm-0046	team-meet	en	system	Y	the the thing is we kind of need to make sure that the	The, the thing is, we kind of need to make sure that the,	statement	no	silent	none	discussion_noise	none	none			
+tm-0047	team-meet	en	system	Y	are there any risks in moving the cash now	Are there any risks in moving the cash? Now,	question	yes	capture	research	risk_blocker	recommendation	mode_files			
+tm-0049	team-meet	en	system	N	hey can you give us an update on the q three project timeline	Hey, can you give us an update on the Q three project timeline?	question	yes	first_person_script	summarize	called_on_for_status	summary	conversation_memory			
+tm-0053	team-meet	en	system	N	wait how do we handle the the error state when the	Wait, how do we handle the, the error state? When the	question	yes	first_person_script	debug	question_to_me	code	none			
+tm-0054	team-meet	en	system	N	the cash is full so i mean we should purge it	the cash is full. So, I mean, we should purge it.	statement	yes	capture	plan	action_item	steps	none			
+tm-0061	team-meet	en	system	Y	hey can you uh send over the latest schema for the q three database migration	Hey, can you, uh, send over the latest schema for the q- three database migration,	request	yes	capture	extract	action_item	fact	mode_files			
+tm-0082	team-meet	en	mic	N	i mean like is that the the sort of the right way to approach	I mean, like, is that the, the sort of the right way to approach	question	yes	capture	debug	risk_blocker	explanation	conversation_memory			
+tm-0088	team-meet	en	mic	Y	what about the cash limit	What about the cash limit?	question	yes	capture	debug	risk_blocker	fact	mode_files			
+tm-0092	team-meet	en	mic	Y	so we have like twenty three nodes	So, we have like twenty- three nodes	answer	no	silent	none	called_on_for_status	none	none			
+tm-0097	team-meet	en	mic	N	i mean maybe the logic for the the redirect needs to be reconsidered	I mean, maybe the logic for the, the redirect needs to be reconsidered.	statement	optional	capture	debug	risk_blocker	explanation	conversation_memory			
+tm-0100	team-meet	en	mic	Y	hey can you pull up the q three numbers and explain why they dropped	Hey, can you pull up the q three numbers and explain why they dropped	request	yes	first_person_script	research	question_to_me	explanation	mode_files			
+tm-0101	team-meet	en	mic	Y	the the thing is we need to check the query performance and see if we can optimize the index	the, the thing is, we need to check the query performance and see, if we can optimize the index	request	yes	capture	debug	action_item	code	mode_files			
+tm-0102	team-meet	en	mic	Y	mhm yeah totally agree with that	Mhm, Yeah, totally agree with that.	backchannel	no	silent	none	discussion_noise	none	none			
+tm-0107	team-meet	en	mic	Y	could you like summarize those action items and create a list of them for me	Could you like summarize those action items and create a list of them? For me,	request	yes	capture	summarize	action_item	steps	conversation_memory			
+tm-0122	team-meet	en	mic	Y	so we we really need to get the status on the audit log from	So, we, we really need to get the status on the audit log from	request	yes	first_person_script	extract	called_on_for_status	fact	mode_files			
+lec-0014	lecture	en	system	N	let me just share my screen really quick	Let me just share my screen really quick.	statement	no	silent	none	admin_announcement	none	none			
+lec-0017	lecture	en	system	N	two plus two is four so i mean	Two, plus two is four. So, I mean,	statement	no	silent	none	formula	none	none			
+lec-0025	lecture	en	mic	Y	wait could you explain that last part about the dynamic programming again	Wait, could you explain that last part about the dynamic programming? Again,	request	yes	advisor	explain	new_concept	explanation	mode_files			
+lec-0028	lecture	en	mic	Y	does anyone know why the the cache keeps failing	Does anyone know why the, the cache keeps failing	question	yes	first_person_script	debug	question_to_room	explanation	mode_files			
+lec-0030	lecture	en	mic	Y	is this going to be on the final	is this going to be on the final	question	yes	advisor	answer	off_syllabus	fact	mode_files			
+lec-0032	lecture	en	mic	Y	wait so the two values are distinct	Wait, so the two values are distinct.	question	yes	advisor	explain	new_concept	explanation	mode_files			
+lec-0037	lecture	en	mic	N	so the the thing is how do we define the basis for this vector space	So, the, the thing is, how do we define the basis for this vector space,	question	yes	advisor	explain	new_concept	explanation	none			
+lec-0043	lecture	en	mic	N	wait will the final exam cover q three content	Wait, will the final exam cover q three content,	question	yes	advisor	research	admin_announcement	fact	none			
+lec-0046	lecture	en	mic	N	sorry are these two values supposed to be equal	Sorry, are these two values supposed to be equal?	question	yes	advisor	explain	new_concept	fact	none			
+lec-0048	lecture	en	mic	N	wait if we change the input size to two hundred then	Wait, if we change the input size to two hundred, then	question	yes	advisor	plan	worked_example	explanation	none			
+lec-0051	lecture	en	mic	Y	can we uh can we see a worked example of this calculation	Can we, uh, can we see a worked example of this calculation.	request	yes	advisor	create	worked_example	example	mode_files			
+lec-0052	lecture	en	mic	Y	does anyone in the room know if this is on the midterm	Does anyone in the room know if this is on the midterm	question	yes	first_person_script	answer	question_to_room	fact	none			
+lec-0056	lecture	en	mic	Y	um what about the second one	um, what about the second one?	question	yes	advisor	explain	worked_example	example	mode_files			
+lec-0058	lecture	en	mic	Y	can you uh make that simpler	can you uh, make that simpler?	request	yes	advisor	explain	new_concept	explanation	conversation_memory			
+lec-0064	lecture	en	mic	Y	where do we find the	Where do we find the	request	yes	advisor	research	admin_announcement	fact	mode_files			
+lec-0068	lecture	en	mic	N	um what about the second one though	um, what about the second one, though?	question	yes	advisor	explain	formula	explanation	conversation_memory			
+lec-0072	lecture	en	mic	N	and the other one sort of behaves like	and the other one sort of behaves, like,	statement	optional	advisor	compare	new_concept	explanation	conversation_memory			
+lec-0074	lecture	en	mic	Y	i mean it seems right but could we maybe look at a concrete case	I mean, it seems right? But, could we maybe look at a concrete case	request	optional	advisor	create	worked_example	example	mode_files			
+lec-0081	lecture	en	mic	Y	wait i i think i have the wrong answer to the	Wait, I, I think I have the wrong answer to the.	statement	optional	advisor	debug	worked_example	code	mode_files			
+lec-0085	lecture	en	mic	N	i mean i think that formula looks sort of strange	I mean, I think that formula looks sort of strange.	statement	optional	advisor	explain	formula	explanation	knowledge_base			
+lec-0086	lecture	en	mic	N	wait could you show me another example of how that works in the wild	Wait, could you show me? Another example of how that works in the wild	request	yes	advisor	explain	worked_example	example	conversation_memory			
+lec-0087	lecture	en	mic	N	the the professor mentioned something about the q three deadline earlier i guess	The, the professor mentioned something about the Q- three deadline earlier, I guess,	statement	optional	advisor	none	admin_announcement	none	none			
+lec-0093	lecture	en	mic	Y	wait if we if we change the constant to five how does that effect the	Wait, if we, if we change the constant to five, how does that effect? The,	question	yes	advisor	explain	formula	explanation	mode_files			
+lec-0095	lecture	en	mic	Y	anyway back to the the other thing what was the query you mentioned for	Anyway, back to the, the other thing. What was the query you mentioned for	question	yes	advisor	research	new_concept	fact	none			
+lec-0096	lecture	en	mic	Y	could you summarize the last three points and tell me how they connect	Could you summarize the last three points, And tell me how they connect	request	yes	advisor	summarize	new_concept	summary	none			
+lec-0097	lecture	en	mic	Y	sorry i didnt quite catch that last bit about the cash	Sorry, I didnt quite catch that last bit about the cash.	request	yes	advisor	explain	new_concept	explanation	none			
+lec-0105	lecture	en	system	Y	just a reminder the next lab session is at two pm	Just a reminder, the next lab session is at two PM.	statement	no	silent	none	admin_announcement	none	none			
+lec-0107	lecture	en	mic	Y	you see if we walk through a worked example of the mapping	you see, if we walk through a worked example of the mapping,	statement	optional	advisor	explain	worked_example	explanation	mode_files			
+sem-0010	seminar	en	system	Y	is that the the cashing factor	is that the, the cashing factor	statement	no	silent	none	in_file_question	none	mode_files			
+sem-0012	seminar	en	mic	Y	two thousand and twenty three	two thousand and twenty- three	statement	no	silent	none	transition_or_compliment	none	none			
+sem-0017	seminar	en	system	N	did you see the email about the	Did you see the email about the	statement	no	silent	none	off_file_question	none	none			
+sem-0019	seminar	en	system	N	ok sure let me find the	OK, sure. let me find the	backchannel	no	silent	none	transition_or_compliment	none	none			
+sem-0020	seminar	en	system	N	hey can you hear the background noise	Hey, can you hear the background noise?	statement	no	silent	none	clarification_request	none	none			
+sem-0025	seminar	en	system	Y	yeah exactly that makes a lot of sense	Yeah, exactly. That makes a lot of sense.	backchannel	no	silent	none	transition_or_compliment	none	none			
+sem-0039	seminar	en	mic	N	uh wait maybe the the variance is too high	Uh, wait, maybe the, the variance is too high.	statement	no	silent	none	off_file_question	none	none			
+sem-0044	seminar	en	system	N	sure ok	Sure. OK,	backchannel	no	silent	none	transition_or_compliment	none	none			
+sem-0046	seminar	en	system	N	wait i think i think i want the	Wait, I think, I think I want the	statement	no	silent	none	critique_challenge	none	none			
+sem-0059	seminar	en	mic	Y	um i need to share the the other document	um, I need to share the, the other document	statement	no	silent	none	transition_or_compliment	none	none			
+sem-0068	seminar	en	system	Y	whats the status of the two thousand twenty three	Whats the status of the two thousand. twenty- three	question	yes	first_person_script	research	off_file_question	fact	knowledge_base			
+sem-0072	seminar	en	system	Y	kind of wondering if we can pivot to	kind of wondering if we can pivot to	request	yes	first_person_script	plan	transition_or_compliment	none	none			
+sem-0076	seminar	en	system	N	what was the exact logic for selecting that vector	what was the exact logic for selecting that vector?	question	yes	first_person_script	explain	in_file_question	explanation	none			
+sem-0082	seminar	en	system	N	could you uh write out the steps for the deployment	could you, uh, write out the steps for the deployment	request	yes	first_person_script	plan	clarification_request	steps	none			
+sem-0083	seminar	en	system	N	yeah exactly that seems right to me too	Yeah, exactly. that seems right to me too.	backchannel	no	silent	none	transition_or_compliment	none	none			
+sem-0095	seminar	en	system	Y	uh how come	Uh, how come?	question	yes	first_person_script	explain	in_file_question	explanation	mode_files			
+sem-0101	seminar	en	system	Y	no wait look at their	No, wait, look at their.	request	yes	first_person_script	extract	in_file_question	fact	mode_files			
+sem-0102	seminar	en	system	Y	wont it just scale better	wont it. Just scale better.	question	yes	first_person_script	explain	critique_challenge	explanation	mode_files			
+sem-0104	seminar	en	system	N	i mean it sounds like you think the error handling is fine but	I mean, it sounds like you think the error handling is fine, but	statement	yes	first_person_script	debug	critique_challenge	rebuttal	none			
+sem-0109	seminar	en	system	Y	wait is the budget accurate	Wait is the budget accurate	question	yes	first_person_script	research	citation_check	fact	mode_files			
+sem-0113	seminar	en	system	Y	uh could you show me	Uh, could you show me?	request	yes	first_person_script	create	clarification_request	code	mode_files			
+sem-0117	seminar	en	system	Y	hmmm i wonder if that	HMMm I wonder if that	statement	optional	first_person_script	explain	critique_challenge	explanation	mode_files			
+sem-0144	seminar	en	system	Y	can you uh can you repeat the steps for the deployment strategy	can you uh, can you repeat the steps for the deployment strategy.	request	yes	first_person_script	summarize	clarification_request	steps	mode_files			
+sem-0145	seminar	en	system	Y	can you repair the steps for the deployment strategy for production	Can you repair the steps for the deployment strategy for production,	request	yes	first_person_script	create	critique_challenge	code	none			
+cc-0009	call-center	en	mic	Y	just like moving the file to	just like moving the file to	statement	no	silent	none	diagnostic_answer	none	none			
+cc-0028	call-center	en	system	Y	right right exactly	Right? right? Exactly.	backchannel	no	silent	none	off_topic	none	none			
+cc-0031	call-center	en	system	Y	can you hear me now	Can you hear me now?	statement	no	silent	none	off_topic	none	none			
+cc-0067	call-center	en	system	Y	yeah go ahead	Yeah, go ahead.	answer	no	silent	none	diagnostic_answer	none	none			
+cc-0075	call-center	en	system	Y	its really just not working at all	its really, just not working at all.	statement	optional	first_person_script	explain	frustration_escalation	summary	none			
+cc-0076	call-center	en	mic	Y	i need to see the	I need to see the	request	yes	first_person_script	extract	diagnostic_answer	none	mode_files			
+cc-0078	call-center	en	system	Y	escalate this please	escalate this, please,	request	yes	first_person_script	none	escalation_request	none	none			
+cc-0079	call-center	en	mic	N	i think this account might be linked to the wrong branch but uh i am not really sure	I think this account might be linked to the wrong branch. But, uh, I am not really sure.	statement	optional	first_person_script	explain	diagnostic_answer	explanation	none			
+cc-0082	call-center	en	mic	Y	so the customer said their account balance is not updating correctly	So, the customer said, their account balance is not updating correctly,	statement	yes	first_person_script	explain	issue_description	explanation	mode_files			
+cc-0088	call-center	en	system	Y	i i just want to speak to your manager right now	I, I just want to speak to your manager right now.	request	yes	first_person_script	none	escalation_request	none	none			
+cc-0096	call-center	en	system	Y	can you tell me how to reset the gateway manually	Can you tell me how to reset the gateway manually?	question	yes	first_person_script	explain	diagnostic_answer	steps	mode_files			
+cc-0103	call-center	en	system	Y	do you know if the supervisor can help with the query	do you know if the supervisor can help with the query,	question	yes	first_person_script	answer	escalation_request	explanation	mode_files			
+cus-ther-0004	custom	en	system	Y	uh	uh,	backchannel	no	silent	none	technique_probe	none	none			
+cus-ther-0014	custom	en	mic	Y	can you tell me if this response fits the ethical guidelines for dual relationships	Can you tell me if this response fits the ethical guidelines for dual relationships	request	yes	advisor	research	ethics_check	fact	mode_files			
+cus-ther-0018	custom	en	mic	Y	could we try a a cognitive reframing technique for this case	Could we try a a cognitive reframing technique for this case,	request	yes	advisor	explain	technique_probe	recommendation	mode_files			
+cus-ther-0019	custom	en	mic	Y	the schedule for next week looks like	The schedule for next week looks like	statement	optional	advisor	none	admin	none	none			
+cus-ther-0022	custom	en	mic	Y	is it safe to share the the records with the family	Is it safe to share the, the records with the family	question	yes	advisor	explain	ethics_check	fact	mode_files			
+cus-ther-0023	custom	en	mic	Y	okay well how about we shift to the the quarry about the billing	Okay. well, how about we shift to the. the quarry About the billing	request	yes	advisor	plan	admin	none	none			
+cus-ther-0024	custom	en	mic	Y	anyway the session went pretty well considering the	Anyway, the session went pretty well, considering the	statement	optional	advisor	summarize	small_talk	summary	none			
+cus-ther-0026	custom	en	mic	N	wait if i use the cbt technique um does it imply i ignore their family history	Wait, if I use the CBt technique, um, does it imply, I ignore their family history?	question	yes	advisor	explain	technique_probe	explanation	conversation_memory			
+cus-ther-0027	custom	en	mic	N	i feel like i think i think i missed a boundary issue there	I feel like, I think, I think I missed a boundary issue there.	statement	optional	advisor	none	ethics_check	none	conversation_memory			
+cus-ther-0032	custom	en	mic	N	do you know if the the clinic vector for suicide risk has changed recently	Do, you know if the, the clinic vector for suicide risk has changed recently.	question	yes	advisor	answer	admin	fact	none			
+cus-ther-0033	custom	en	mic	N	sort of i mean it feels like we are losing ground there	sort of, I mean, it feels like we are losing ground. there.	statement	optional	advisor	none	case_question	none	conversation_memory			
+cus-ther-0042	custom	en	mic	Y	so we we could uh we could try the the grounding exercise or perhaps wait until the client is more open	So, we, we could, uh, we could try the, the grounding exercise, or perhaps wait until the client is more open	statement	yes	advisor	plan	technique_probe	recommendation	none			
+cus-ther-0063	custom	en	mic	Y	could you explain the exposure hierarchy again and maybe summarize why we started at that level	Could you explain the exposure hierarchy again, and maybe summarize why we started at that level.	request	yes	advisor	explain	technique_probe	explanation	mode_files			
+cus-ther-0068	custom	en	mic	Y	are there any other techniques i should like consider for trauma work in this age bracket	Are there any other techniques I should like, consider, for trauma, work in this age bracket.	question	yes	advisor	explain	technique_probe	recommendation	mode_files			
+cus-inv-0002	custom	en	mic	Y	wait let me pull up the screen	Wait, let me pull up the screen,	statement	no	silent	none	small_talk	none	none			
+cus-inv-0008	custom	en	system	Y	okay	Okay.	backchannel	no	silent	none	runway_probe	none	none			
+cus-inv-0014	custom	en	mic	N	wait let me check the other screen	Wait, let me check the other screen.	statement	no	silent	none	metric_question	none	none			
+cus-inv-0026	custom	en	mic	Y	wait let me pull up the other slide	Wait, let me pull up the other slide,	statement	no	silent	none	metric_question	none	none			
+cus-inv-0031	custom	en	system	Y	did you see the email from their	Did you see the email from their	statement	no	silent	none	small_talk	none	none			
+cus-inv-0039	custom	en	system	N	i mean it it might be two percent higher	I mean, it, it might be two percent higher	statement	no	silent	none	metric_question	none	none			
+cus-inv-0042	custom	en	system	N	uh so we should look at the	Uh, so we should look at the	statement	no	silent	none	runway_probe	none	none			
+cus-inv-0043	custom	en	mic	N	so the cash is clearly	So, the cash is clearly	statement	no	silent	none	runway_probe	none	none			
+cus-inv-0044	custom	en	system	N	could you send me that link	Could you send me that link?	request	no	silent	none	small_talk	none	none			
+cus-inv-0053	custom	en	mic	Y	wait how does the the cashing layer know when to	Wait, how does the the cashing layer know when to	question	yes	first_person_script	debug	strategy_challenge	explanation	mode_files			
+cus-inv-0062	custom	en	mic	N	i think we are sitting at about twelve months at the current burn	I think we are sitting at about twelve months at the current burn.	answer	optional	first_person_script	none	runway_probe	none	none			
+cus-inv-0063	custom	en	mic	N	does the growth in q three impact the hiring plan	does the growth in q three impact the hiring plan.	question	yes	first_person_script	explain	strategy_challenge	explanation	conversation_memory			
+cus-inv-0067	custom	en	mic	N	could you maybe introduce us to the the series a guys at	Could you maybe introduce us to the, the series, a guys at	request	yes	first_person_script	none	intro_request	none	none			
+cus-inv-0071	custom	en	mic	N	i mean we want to grow fast but not too fast	I mean, we want to grow fast, but not too fast.	statement	optional	first_person_script	none	strategy_challenge	none	none			
+cus-inv-0072	custom	en	mic	N	and what about the headcount targets for q four	And what about the headcount targets for q four?	question	yes	first_person_script	answer	metric_question	fact	none			
+cus-inv-0076	custom	en	mic	Y	could you maybe introduce us to that series a lead you mentioned last week	Could you maybe introduce us to that series? A lead, you mentioned last week,	request	yes	first_person_script	none	intro_request	none	conversation_memory			
+cus-inv-0100	custom	en	mic	Y	how do we how do we get more	How do we, how do we get more?	question	yes	first_person_script	plan	strategy_challenge	recommendation	mode_files			
+cus-inv-0107	custom	en	mic	Y	mhmm	Mhmm,	backchannel	no	silent	none	small_talk	none	none			
+cus-inv-0113	custom	en	mic	Y	yeah exactly that makes sense	Yeah, exactly. That makes sense.	backchannel	no	silent	none	small_talk	none	none			
+cus-inv-0130	custom	en	mic	Y	who should we introduce from the the board to the team	Who should we introduce from the, the board to the team?	request	yes	first_person_script	plan	intro_request	recommendation	mode_files			
+cus-inv-0136	custom	en	mic	N	so tell me how our burn rate is currently impacting the runway	So, tell me how our burn rate is currently impacting the runway.	question	yes	first_person_script	explain	runway_probe	explanation	conversation_memory			
+cus-inv-0138	custom	en	mic	N	could you just verify our current monthly active user count for the metric report	Could you just verify our current monthly, active user count for the metric report	request	yes	first_person_script	answer	metric_question	fact	none			
+cus-cr-0008	custom	en	system	Y	and then the and then we could	and then the, and then we could	statement	no	silent	none	design_challenge	none	none			
+cus-cr-0041	custom	en	mic	N	uh where did i put the	Uh, where did I put the	statement	no	silent	none	design_challenge	none	none			
+cus-cr-0043	custom	en	system	N	getting some background noise	getting some background noise,	statement	no	silent	none	approval	none	none			
+cus-cr-0055	custom	en	system	Y	i think we should uh	I think we should, uh,	statement	no	silent	none	correctness_question	none	none			
+cus-cr-0068	custom	en	system	Y	did you see the ticket for the the migration requirement in q three	Did you see the ticket for the, the migration requirement in q three.	question	yes	first_person_script	research	scope_question	fact	knowledge_base			
+cus-cr-0072	custom	en	mic	Y	is it okay if we keep the existing structure and just tweak the the	is it? Okay, if we keep the existing structure and just tweak the the	request	yes	first_person_script	rewrite	design_challenge	recommendation	mode_files			
+cus-cr-0079	custom	en	mic	N	if we change that we we could uh we could try	If we change that we we could, uh, we could try	statement	optional	first_person_script	create	design_challenge	explanation	none			
+cus-cr-0089	custom	en	system	Y	the naming convention here seems a bit off could we change it	the naming convention, here seems a bit off. Could we change it?	request	yes	first_person_script	rewrite	style_nit	recommendation	mode_files			
+cus-cr-0098	custom	en	mic	Y	uh wait should we change the the input type to string	uh, wait, should we change the, the input type to string?	question	yes	first_person_script	debug	correctness_question	recommendation	mode_files			
+cus-cr-0099	custom	en	mic	Y	do you think this is within the scope of the current task	Do you think this is within the scope of the current task,	question	yes	first_person_script	explain	scope_question	explanation	conversation_memory			
+cus-cr-0101	custom	en	mic	Y	kind of like the way the the vector works here	kind of like the way the, the vector works here	statement	optional	first_person_script	explain	design_challenge	explanation	mode_files			
+cus-cr-0102	custom	en	mic	Y	so we should probably update the the	So, we should probably update the the	statement	yes	first_person_script	debug	correctness_question	code	mode_files			
+cus-cr-0109	custom	en	mic	Y	i mean the the loop here is running twice for no reason	I mean, the, the loop here is running twice, for no reason	statement	optional	first_person_script	debug	correctness_question	explanation	mode_files			
+cus-cr-0114	custom	en	mic	Y	that seems off to me	that seems off to me.	statement	optional	first_person_script	debug	correctness_question	explanation	mode_files			
+cus-cr-0117	custom	en	mic	Y	is this gonna work on the q three release	Is this gonna work on the Q- three release	question	yes	first_person_script	answer	scope_question	fact	none			
+cus-cr-0126	custom	en	mic	Y	i mean it seems like the the query performance is fine	I mean, it seems like the, the query performance is fine	statement	optional	first_person_script	none	design_challenge	none	conversation_memory			
+cus-cr-0132	custom	en	mic	Y	that sounds like the right approach for the model update	That sounds like the right approach for the model update	statement	optional	first_person_script	none	style_nit	none	conversation_memory			
+cus-cr-0136	custom	en	mic	Y	yeah the the approach makes sense to me	Yeah, the, THE approach makes sense to me.	statement	no	silent	none	approval	none	none			
+cus-cr-0139	custom	en	mic	Y	its not strictly necessary for the production	its not strictly necessary for the production	statement	no	silent	none	approval	none	none			
+cus-cr-0142	custom	en	mic	Y	i think we could uh we could use a list	I think we could, uh, we could use a list.	answer	optional	first_person_script	create	design_challenge	code	mode_files			
+gen-0105	general	en	system	Y	so we we need to	So, we, we need to	statement	no	silent	none	lecture_concept	none	none			
+gen-0106	general	en	system	Y	okay let me just share my screen	Okay, let me just share my screen.	statement	no	silent	none	meeting_capture	none	none			
+gen-0114	general	en	system	Y	the cash is empty	the cash is empty,	statement	no	silent	none	coding_question	none	none			
+gen-0126	general	en	mic	Y	what is the current price of our stock right now	What is the current price of our stock right now?	question	yes	advisor	research	factual_question	fact	none			
+gen-0129	general	en	mic	N	i mean sure we could we could try to push the release to friday but that might	I mean, sure, we could. We could try to push the release to Friday, but that might	statement	optional	capture	plan	meeting_capture	recommendation	none			
+gen-0139	general	en	mic	Y	you know i mean like what if we	You know, I mean, like, what if we	statement	yes	advisor	plan	coding_question	explanation	none			
+gen-0141	general	en	mic	Y	so the the thing is we could uh we could try	So, the, the thing is, we could, uh, we could try	statement	yes	advisor	create	coding_question	code	mode_files			
+gen-0145	general	en	mic	Y	i mean the the architecture looks	I mean, the, the architecture looks	statement	optional	advisor	explain	coding_question	explanation	mode_files			
+gen-0147	general	en	mic	Y	mhm right	Mhm, right?	backchannel	no	silent	none	meeting_capture	none	none			
+gen-0151	general	en	mic	Y	thats kind of the point actually	thats kind of the point, actually.	statement	optional	first_person_script	none	interview_answer	rebuttal	none			
+gen-0158	general	en	typed	Y	how does the market reacting to the new legislation impact our pricing tiers in the region	How does the market reacting to the new legislation, impact our pricing tiers in the region?	question	yes	advisor	research	factual_question	fact	none			
+gen-0160	general	en	mic	Y	i mean the the main reason we moved to the cloud was to reduce our operational overhead	I mean, the, the main reason we moved to the cloud was to reduce our operational overhead	answer	no	silent	none	interview_answer	none	none			
+gen-0165	general	en	mic	Y	wait how does the the recursive query handle base case termination uh i think i think thats right	Wait, how does the, the recursive query, handle, base case termination. Uh, I think, I think thats, right.	answer	no	silent	none	coding_question	none	none			
+gen-0168	general	en	mic	Y	yeah the the weather is pretty nice out there today right	Yeah, the, the weather is pretty nice out there today, right?	statement	optional	advisor	none	small_talk	none	none			
+ti-0129	technical-interview	en	system	Y	if we use the the cashing layer then the	If we use the, the cashing layer, then the	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0144	technical-interview	en	mic	N	i think i think that fits the memory constraint	I think, I think that fits the memory constraint.	statement	no	silent	none	complexity_probe	none	none			
+ti-0149	technical-interview	en	system	Y	okay can everyone see the white board	Okay, can everyone See the white board?	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0154	technical-interview	en	mic	Y	wait does the the input array	Wait, does the, the input array	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0155	technical-interview	en	mic	Y	uh sorry just just sorting my thoughts here	Uh, sorry. just just sorting my thoughts here.	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ti-0157	technical-interview	en	system	Y	so can you uh walk me through the time complexity of that solution	So, can you, uh, walk me through the time complexity of that solution?	question	yes	first_person_script	explain	complexity_probe	explanation	mode_files			
+ti-0159	technical-interview	en	system	Y	suppose we wanted to scale this for a two million users what would you change	Suppose, we wanted to scale this for a two million users. What would you change?	question	yes	first_person_script	plan	system_design	recommendation	mode_files			
+ti-0177	technical-interview	en	mic	Y	uhm regarding the cashing strategy in the first part of the system design i think i think we should move that to the edge	UHm regarding the cashing strategy in the first part of the system design, I think, I think we should move that to the edge	statement	yes	first_person_script	plan	system_design	recommendation	mode_files			
+lfw-0150	looking-for-work	en	system	N	can everyone hear me clearly	Can everyone hear me clearly?	statement	no	silent	none	small_talk	none	none			
+lfw-0167	looking-for-work	en	system	Y	wait did you send the calendar invite to sarah no i think	Wait, did you send the calendar invite to Sarah? No, I think	statement	no	silent	none	small_talk	none	none			
+lfw-0171	looking-for-work	en	system	Y	did we get the transcript for the two hundred applicants	Did we get the transcript for the two hundred applicants	question	no	silent	none	small_talk	none	none			
+lfw-0175	looking-for-work	en	mic	Y	i think i think we should probably look at the tech stack in the job description	I think, I think we should probably look at the tech stack in the job description.	statement	yes	first_person_script	compare	jd_gap	fact	mode_files			
+lfw-0176	looking-for-work	en	mic	Y	so you mentioned your salary requirement is sixty k but i i i think i meant to say sixty five	So, you mentioned your salary requirement is sixty K. But, I, I, I think I meant to say sixty five.	statement	yes	first_person_script	answer	compensation	fact	none			
+lfw-0177	looking-for-work	en	system	Y	we we we really look for people who are are passionate about our mission to fix the the climate	We, we, we really look for people who are, are passionate about our mission to fix the, the climate	statement	optional	first_person_script	explain	motivation_why_us	explanation	mode_files			
+lfw-0182	looking-for-work	en	system	Y	the role involves managing the product road map across q three and	The role involves managing the product road map across q three, and	statement	no	silent	none	interviewer_explaining_role	none	mode_files			
+lfw-0196	looking-for-work	en	mic	Y	so you know are there any like specific compensation tiers or bonuses that i should be aware of as i look at my total offer	So, you know, are there any, like specific compensation tiers or bonuses that I should be aware of, As I look at my total offer.	question	yes	first_person_script	explain	compensation	fact	none			
+lfw-0198	looking-for-work	en	mic	Y	well tell me more about why you chose this role specifically	Well, tell me more about why you chose this role, specifically.	request	yes	first_person_script	explain	your_questions_for_us	explanation	none			
+lfw-0200	looking-for-work	en	mic	Y	i could clarify the the responsibilities for this team if needed	I could clarify the, the responsibilities for this team, if needed.	statement	optional	first_person_script	explain	role_technical	explanation	mode_files			
+lfw-0201	looking-for-work	en	mic	Y	the compensation package looks like it needs some review	the compensation package looks like it needs some review	statement	yes	first_person_script	compare	compensation	rebuttal	none			
+lfw-0205	looking-for-work	en	mic	Y	i can tell you about yourself and your background	I can tell you about yourself and your background	statement	no	silent	none	small_talk	none	none			
+sal-0128	sales	en	system	Y	uh so wait what happens if we decide to change the vendor in q two	Uh, so wait, what happens if we decide to change the vendor in q two	question	yes	first_person_script	explain	objection_status_quo	explanation	mode_files			
+sal-0137	sales	en	system	Y	i like what i have seen so far you know this is much better than	I like what I have seen so far, you know, this is much better than	statement	optional	first_person_script	none	satisfied_customer	none	none			
+sal-0147	sales	en	system	Y	makes sense i guess	makes sense, I guess.	statement	optional	first_person_script	none	objection_timing	none	none			
+sal-0150	sales	en	mic	Y	i think i think so	I think, I think so.	answer	no	silent	none	discovery_answer	none	none			
+sal-0167	sales	en	system	Y	i think i think we would like to see a proposal next week	I think, I think we would like to see a proposal next week.	request	yes	first_person_script	create	buying_signal	recommendation	conversation_memory			
+rec-0151	recruiting	en	system	Y	yeah right	Yeah, right.	backchannel	no	silent	none	interviewer_speaking	none	none			
+rec-0153	recruiting	en	system	Y	i mean it kind of depends on the	I mean, it kind of depends on the	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0156	recruiting	en	system	Y	the the sequel query is just running too slow	The, the sequel query is just running too slow.	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0173	recruiting	en	system	N	twenty three or maybe two	twenty- three or maybe two,	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0183	recruiting	en	system	Y	just need to change that line	just need to change that line.	statement	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0195	recruiting	en	system	Y	uhm okay i see i think i see	Uhm Okay, I see, I think I see.	backchannel	no	silent	none	candidate_answer_to_evaluate	none	none			
+rec-0201	recruiting	en	system	N	uh wait should i be using the standard library for this or	uh, wait, should I be using the standard library for this? Or,	question	yes	advisor	debug	candidate_question	fact	none			
+rec-0206	recruiting	en	mic	Y	yeah go on	Yeah, go on.	backchannel	no	silent	none	interviewer_speaking	none	none			
+rec-0207	recruiting	en	mic	Y	wait why the the array	Wait, why the. The array?	question	yes	advisor	explain	probe_needed	explanation	none			
+tm-0131	team-meet	en	system	Y	did you see that email from dave about the cashing	Did you see that email from Dave, about the cashing	statement	no	silent	none	discussion_noise	none	none			
+tm-0134	team-meet	en	system	Y	no wait that that should be like two two	No, wait, that. that should be like two. two.	statement	no	silent	none	discussion_noise	none	none			
+tm-0140	team-meet	en	mic	N	let me try to share my screen real quick	Let me try to share my screen real quick.	statement	no	silent	none	discussion_noise	none	none			
+tm-0141	team-meet	en	system	N	wait so the the logic inside the loop is	Wait, so the, the logic inside the loop is	statement	no	silent	none	discussion_noise	none	none			
+tm-0149	team-meet	en	system	N	hey sarah are you free to	Hey, Sarah, are you free to	request	no	silent	none	discussion_noise	none	none			
+tm-0150	team-meet	en	mic	N	total mess i	total mess. i	statement	no	silent	none	risk_blocker	none	none			
+tm-0151	team-meet	en	system	Y	hey can you pull up the q three numbers for me	Hey, can you pull up the q three numbers For me?	request	yes	first_person_script	extract	called_on_for_status	table	mode_files			
+tm-0157	team-meet	en	system	Y	you should probably update the documentation regarding the two phase commit	you should probably update the documentation regarding the two- phase commit	request	yes	capture	create	action_item	steps	mode_files			
+tm-0161	team-meet	en	system	Y	can you send me a list of all current internal links for the portal	Can you send me a list of all current internal links for the portal	request	yes	capture	extract	action_item	table	mode_files			
+tm-0172	team-meet	en	mic	Y	is that a risk	Is that a risk	question	yes	capture	explain	risk_blocker	explanation	conversation_memory			
+tm-0178	team-meet	en	mic	Y	wait i want to check the cashing	Wait, I want to check the cashing	statement	optional	capture	debug	risk_blocker	none	mode_files			
+tm-0190	team-meet	en	mic	Y	i mean we could just add an abstraction layer or just redo the whole schema	I mean, we could just add an abstraction layer, or just redo the whole schema	statement	optional	capture	plan	decision	recommendation	mode_files			
+tm-0192	team-meet	en	mic	Y	can you summarize those changes and draft a list of action items for the pr	Can you summarize those changes and draft a list of action items for the PR	request	yes	capture	summarize	action_item	steps	mode_files			
+tm-0203	team-meet	en	mic	Y	can you check the the logs for error code forty four	Can you check the. the logs for error code. forty four.	request	yes	capture	debug	action_item	fact	mode_files			
+lec-0116	lecture	en	mic	Y	could we see a worked example of this matrix operation	Could we see a worked example of this matrix operation	request	yes	advisor	create	worked_example	example	mode_files			
+lec-0136	lecture	en	mic	Y	yeah exactly that makes sense	Yeah, exactly. That makes sense.	backchannel	no	silent	none	new_concept	none	none			
+lec-0137	lecture	en	mic	Y	is this formula standard or is it like a specific variant for the the q three project	Is this formula Standard. or is it like a specific variant for the the Q three project?	question	yes	advisor	answer	formula	fact	mode_files			
+lec-0142	lecture	en	system	Y	the next step involves uh i mean implementing the recursive loop	The next step involves, uh, I mean, implementing the recursive loop,	statement	no	silent	none	new_concept	none	none			
+lec-0144	lecture	en	system	Y	and so the the base formula for the sequence is q sub one	And, so the, the base formula for the sequence is q sub one.	statement	no	silent	none	formula	none	none			
+lec-0147	lecture	en	mic	Y	and what about the and the the lab session on tuesday	and what about the, and the, the lab session on Tuesday,	question	yes	advisor	research	admin_announcement	fact	mode_files			
+sem-0154	seminar	en	system	Y	maybe we should check the vector	Maybe we should check the vector	statement	no	silent	none	clarification_request	none	mode_files			
+sem-0158	seminar	en	system	Y	so the the thing is we need	So, the, the thing is, we need	statement	no	silent	none	critique_challenge	none	none			
+sem-0166	seminar	en	system	N	i mean i think that the the vector should be higher	I mean, I think that the, the vector should be higher	statement	no	silent	none	critique_challenge	none	none			
+sem-0170	seminar	en	system	N	um i suppose that the sequel query could	um, I suppose that the sequel query could	statement	no	silent	none	off_file_question	none	none			
+sem-0177	seminar	en	mic	Y	can everyone see my screen	Can everyone see my screen,	statement	no	silent	none	transition_or_compliment	none	none			
+sem-0179	seminar	en	mic	Y	wait let me check the	Wait, let me check the	statement	no	silent	none	transition_or_compliment	none	none			
+sem-0181	seminar	en	system	Y	um how how does that even	um, how, how does that even	statement	no	silent	none	clarification_request	none	none			
+sem-0188	seminar	en	system	Y	im not sure i buy your analysis of the scaling factor here	IM, not sure. I buy your analysis of the scaling factor here,	statement	yes	first_person_script	compare	critique_challenge	rebuttal	mode_files			
+sem-0214	seminar	en	system	Y	um i think the logic in the first section of the document is a bit flawed could you explain it and then rewrite that paragraph for me	um, I think the logic in the first section of the document is a bit flawed. Could you explain it and then rewrite that paragraph for me?	request	yes	first_person_script	explain	critique_challenge	explanation	mode_files			
+sem-0218	seminar	en	system	Y	wait i didnt quite catch that last part about	Wait, I didnt quite catch that last part about.	request	yes	first_person_script	explain	clarification_request	explanation	none			
+sem-0222	seminar	en	system	Y	can you like clarify that point about the budget allocation in general	Can you like clarify that point about the budget allocation in general?	question	yes	first_person_script	explain	off_file_question	explanation	knowledge_base			
+sem-0223	seminar	en	system	Y	the model you used here seems slightly outdated compared to the current q three report	The model you used here seems slightly outdated compared to the current Q- three. report	statement	yes	first_person_script	compare	critique_challenge	rebuttal	mode_files			
+sem-0225	seminar	en	system	Y	i am just wondering where in the doc does it say that specifically	I am just wondering, where in the doc, does it say that specifically	question	yes	first_person_script	extract	citation_check	fact	mode_files			
+cc-0111	call-center	en	system	Y	wait why is the the system not	Wait, why is the the system not	statement	no	silent	none	issue_description	none	none			
+cc-0113	call-center	en	system	Y	hey janice did you finish the	Hey, Janice, did you finish the	statement	no	silent	none	off_topic	none	none			
+cc-0117	call-center	en	system	Y	the the issue is really	the, the issue is really	statement	no	silent	none	issue_description	none	none			
+cc-0119	call-center	en	system	Y	i mean it kind of depends	I mean, it kind of depends	statement	no	silent	none	refund_or_credit_request	none	none			
+cc-0127	call-center	en	mic	N	no wait i think its the	No, wait, I think its the	statement	no	silent	none	issue_description	none	none			
+cc-0129	call-center	en	system	N	where did i put the paper	Where did I put the paper?	statement	no	silent	none	issue_description	none	none			
+cc-0134	call-center	en	mic	Y	wait let me check the other cable	Wait, let me check the other cable.	statement	no	silent	none	diagnostic_answer	none	none			
+cc-0141	call-center	en	system	Y	so we we just need to to	So, we, we just need to, to	statement	no	silent	none	off_topic	none	none			
+cc-0147	call-center	en	system	Y	can you verify my account balance	Can you verify my account balance	request	yes	first_person_script	extract	resolution_request	fact	mode_files			
+cc-0154	call-center	en	mic	Y	hold on let me look at the screen	Hold on. Let me look at the screen,	statement	no	silent	none	diagnostic_answer	none	none			
+cc-0155	call-center	en	system	Y	i think i think thats right the the cache is empty	I think, I think thats, right, The, the cache is empty,	answer	yes	first_person_script	explain	diagnostic_answer	explanation	mode_files			
+cc-0156	call-center	en	system	Y	anyway do you know if the store in downtown is open	Anyway, do you know if the store in downtown is open	question	yes	first_person_script	research	off_topic	fact	none			
+cc-0169	call-center	en	mic	Y	can we sort of uh can we	Can we sort of, uh, can we	request	yes	first_person_script	plan	escalation_request	steps	none			
+cc-0173	call-center	en	mic	Y	im kind of getting	IM kind of getting	statement	yes	first_person_script	explain	issue_description	explanation	none			
+cc-0183	call-center	en	mic	Y	so can you uh debug this login loop and write me a script to fix it	So, can you, uh, debug this login loop, and write me a script to fix it.	request	yes	first_person_script	debug	issue_description	code	mode_files			
+cc-0186	call-center	en	mic	Y	and what about the the retry logic if it fails again in q four	And what about the. The retry logic? If it fails again in q four,	question	yes	first_person_script	explain	diagnostic_answer	explanation	mode_files			
+cc-0187	call-center	en	system	Y	i just dont understand why my bill is so high i want my money back	I just dont understand why my bill is so high. I want my money back.	request	yes	first_person_script	none	refund_or_credit_request	none	none			
+gen-0171	general	en	system	Y	can everyone hear me okay	Can everyone hear me? Okay,	request	no	silent	none	meeting_capture	none	none			
+gen-0173	general	en	system	Y	so we we really need to figure out the cash	So, we, we really need to figure out the cash	statement	no	silent	none	coding_question	none	none			
+gen-0179	general	en	system	Y	did you see the email for twenty three	Did you see the email for twenty- three	statement	no	silent	none	meeting_capture	none	none			
+gen-0181	general	en	system	N	yeah exactly i think the the plan is solid we can proceed with that	Yeah, exactly. I think the, the plan is solid. We can proceed with that.	backchannel	no	silent	none	meeting_capture	none	none			
+gen-0183	general	en	system	N	so we have the the vector of improvement and then wait what was the third point	So, we have the, the vector of improvement, and then, wait, what was the third point?	statement	no	silent	none	lecture_concept	none	none			
+gen-0189	general	en	mic	Y	um i mean thats kind of a hard question because we dont know if the	um, I mean, thats kind of a hard question, because we dont know if the,	answer	yes	first_person_script	answer	sales_objection	explanation	none			
+gen-0193	general	en	mic	Y	i think we should uh look at the first strategy again	I think we should, uh, look at the first strategy again.	request	yes	advisor	explain	lecture_concept	explanation	mode_files			
+gen-0199	general	en	mic	Y	uh yeah thats totally fine i think i think we can proceed with that	Uh, yeah, thats totally fine. I think, I think we can proceed with that.	answer	no	silent	none	small_talk	none	conversation_memory			
+gen-0201	general	en	mic	Y	so the the total number of users logged in at q three was like eight thousand	So, the, the total number of users logged in at Q, three was like eight thousand.	statement	optional	capture	summarize	meeting_capture	summary	none			
+lec-0161	lecture	en	mic	N	um i think the the professor is probably going to cover that in the next section anyway	um, I think the, the professor is probably going to cover that in the next section, anyway.	statement	no	silent	none	new_concept	none	none			
+lec-0176	lecture	en	mic	Y	wait does that apply to the non linear cases too or just the	Wait, does that apply to the non- linear cases too? Or just the.	question	yes	first_person_script	explain	question_to_room	explanation	mode_files			
+lec-0179	lecture	en	mic	Y	that seems off because the the two values dont match in the proof	that seems off, because the, the two values dont match in the proof.	statement	optional	advisor	debug	formula	rebuttal	mode_files			
+lec-0180	lecture	en	mic	Y	i mean i think i think thats right but the quarry is a bit	I mean, I think, I think thats right. But, the quarry is a bit	statement	no	silent	none	off_syllabus	none	none			
+lec-0187	lecture	en	system	Y	the the formula for calculating the derivative is just like the standard one you have seen in calc two	The, the formula for calculating the derivative is just like the standard one you have seen in calc two,	statement	no	silent	none	formula	none	none			
+hi-tm-0006	team-meet	hinglish	system	Y	kya tum check kar sakte ho ki main dependency mein koi error to nahi hai	kya tum check. Kar sakte ho, ki. Main Dependency. Mein, Koi error to Nahi hai?	request	yes	capture	debug	risk_blocker	code	mode_files			
+hi-tm-0012	team-meet	hinglish	mic	Y	matlab i mean the the timeline for sprint two might be tight agar dev resources nahi mile	MATlab, I mean, the, the timeline for sprint two might be tight, Agar, dev resources, Nahi mile	statement	optional	capture	plan	risk_blocker	summary	mode_files			
+hi-tm-0018	team-meet	hinglish	system	Y	hows the export feature coming along i mean is it done or are we still wait	Hows the export feature coming along? I mean, is it done? Or are we still? wait	question	no	silent	none	discussion_noise	none	none			
+hi-ti-0005	technical-interview	hinglish	system	Y	that looks like a a pretty weird bug actually	that looks like a, A pretty weird bug, actually.	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+hi-ti-0006	technical-interview	hinglish	mic	Y	yeh ho gaya final output	Yeh, ho, gaya. final output.	statement	no	silent	none	dsa_problem	none	none			
+hi-ti-0013	technical-interview	hinglish	mic	N	haan han teek hai i think uh main array ko sort karke linear scan kar leta hoon	Haan, Han, Teek, hai, I think, uh, main array, KO sort, Karke, linear scan. Kar leta hoon.	statement	no	silent	none	dsa_problem	none	none			
+hi-ti-0020	technical-interview	hinglish	mic	Y	toh matlab uh complexity iska kya hoga if i use a map instead of a list	Toh MATlab, Uh, complexity iska kya, hoga If I use a map instead of a list,	question	yes	first_person_script	compare	complexity_probe	explanation	conversation_memory			
+hi-ti-0023	technical-interview	hinglish	mic	Y	you know i think i think thats the right approach because the edge cases are	You know, I think, I think thats the right approach, because the edge cases are	statement	optional	first_person_script	explain	interviewer_thinking_aloud	explanation	conversation_memory			
+hi-ti-0028	technical-interview	hinglish	mic	Y	acha teek hai toh i think i think thats right par kya hum isse recursion se solve kar sakte hai and can you show me the base case	Acha, teek, hai, toh, I think, I think thats right? Par, kya Hum, Isse recursion. se solve? Kar, sakte hai? And can you show me the base case?	request	yes	first_person_script	create	dsa_problem	code	mode_files			
+hi-ti-0031	technical-interview	hinglish	mic	Y	waise iska worst case complexity kya hoga what is the time complexity actually	Waise ISka worst case complexity. kya hoga, What is the time complexity actually?	question	yes	first_person_script	explain	complexity_probe	fact	mode_files			
+hi-sal-0001	sales	hinglish	system	Y	toh aapka jo recurring revenue model hai uska pricing structure kya hai	Toh AApka Jo, recurring revenue model. Hai, USka Pricing structure. KYa hai?	question	yes	first_person_script	answer	pricing_ask	explanation	mode_files			
+hi-sal-0006	sales	hinglish	system	Y	to phir agla step kya hoga can we just start with the	to phir agla step, kya hoga Can we just start with the	question	yes	first_person_script	plan	next_step_moment	steps	none			
+hi-sal-0008	sales	hinglish	mic	Y	haan lekin wo competitor wala feature toh free hai na	Haan Lekin, wo competitor, wala Feature, toh free. Hai, na	statement	yes	first_person_script	compare	objection_competitor	rebuttal	mode_files			
+hi-cc-0002	call-center	hinglish	system	Y	mera refund nahi mila yaar i mean payment cut ho gaya tha par credit	Mera refund. Nahi, mila yaar, I mean, payment, cut. Ho, gaya, tha, par credit.	request	yes	first_person_script	answer	refund_or_credit_request	fact	mode_files			
+hi-cc-0017	call-center	hinglish	system	Y	toh matlab mera bill amount thoda zyada aa raha hai is mahine ka	Toh, MATlab, mera Bill amount. Thoda, Zyada, aa, raha, hai, is Mahine ka	statement	yes	first_person_script	answer	issue_description	fact	mode_files			
+ma-tm-0014	team-meet	manglish	mic	Y	ithu athu ippo bug fix cheyanam pinne athu egane improve cheyanam ennu onnu parayumo	Ithu, Athu, IPpo, bug, fix, Cheyanam, Pinne, Athu, Egane, improve Cheyanam. ennu, Onnu, Parayumo,	request	yes	capture	debug	risk_blocker	explanation	mode_files			
+ma-tm-0015	team-meet	manglish	mic	Y	sheri appo ee meetingil decision eduthu alle nammal kooti edutha decision summarize cheyyu pinne next steps entha ennu onnu kanikku	Sheri, Appo ee Meetingil decision eduthu, Alle Nammal, Kooti edutha decision summarize Cheyyu Pinne next steps. Entha Ennu, Onnu, Kanikku	request	yes	capture	summarize	decision	summary	conversation_memory			
+ma-ti-0013	technical-interview	manglish	mic	N	njan ee database schema ippo sort of modify cheyyan um uh i think i think i need to look at the relation there	Njan, EE database, schema, IPpo, sort of modify Cheyyan um, uh, I think, I think I need to look at the relation there.	statement	no	silent	none	interviewer_thinking_aloud	none	none			
+ma-ti-0021	technical-interview	manglish	mic	Y	pinne athu uh what about the second one logic	Pinne athu. Uh, what about the second one? Logic,	question	yes	first_person_script	explain	code_review_hint	explanation	mode_files			
+ma-sal-0014	sales	manglish	system	Y	ippo ithu valare costly aanu alle athu mathi oru discount tharan pattumo	IPpo. Ithu, Valare- costly, Aanu, alle Athu, mathi, oru discount. Tharan, Pattumo,	question	yes	first_person_script	answer	pricing_ask	fact	mode_files			
+ma-sal-0016	sales	manglish	system	Y	um njan ithu vechu nokkam pinne njan ninte team athu contact cheyyam	Um, Njan, ithu, Vechu, Nokkam, Pinne, Njan, ninte- team. Athu, contact. Cheyyam.	statement	optional	first_person_script	none	next_step_moment	none	none			
+ma-cc-0001	call-center	manglish	system	Y	sheri sheri ippo entha anu	Sheri, Sheri, IPpo, Entha Anu	backchannel	no	silent	none	off_topic	none	none			
+ma-cc-0004	call-center	manglish	mic	Y	okay let me check the log i mean the logs	Okay, let me check the log. I mean, the logs	statement	no	silent	none	diagnostic_answer	none	none			
+ma-cc-0015	call-center	manglish	mic	Y	um njan ippo ithu check cheyyam wait a second	Um, Njan, IPpo, Ithu, check. Cheyyam, wait a second.	backchannel	no	silent	none	diagnostic_answer	none	none			
+ma-cc-0023	call-center	manglish	mic	Y	njan enthaanu ippo ithu ok aanu	Njan, enthaanu, IPpo, ithu, OK, Aanu,	question	yes	first_person_script	debug	issue_description	explanation	conversation_memory			
+ma-cc-0027	call-center	manglish	mic	Y	i mean athu ippo entha anu issue enn ariyilla koodathe database merge conflict um und so can you uh explain that and provide a fix for it	I mean, athu, IPpo, entha Anu issue, Enn- Ariyilla, Koodathe database merge, conflict, um? und so can you, uh, explain that and provide a fix for it?	request	yes	first_person_script	explain	diagnostic_answer	code	mode_files			

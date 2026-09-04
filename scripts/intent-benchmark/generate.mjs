@@ -41,6 +41,7 @@ const PER_MODE = Number(val('--per-mode', SMOKE ? 24 : 150));
 const OUT = path.resolve(__dirname, val('--out', SMOKE ? 'dataset/smoke.jsonl' : 'dataset/v1.jsonl'));
 const MODEL = val('--model', 'gemini-3.1-flash-lite');
 const BATCH = Number(val('--batch', 12));
+const LANGUAGE = val('--language', 'en');
 // Top-up support. A second pass MUST NOT reuse ids from the first: the
 // held-out split is a hash of the id, so a collision would put two different
 // rows in the same split slot and a renumber would move rows across the split
@@ -119,7 +120,7 @@ rules and produce genuinely disfluent speech this time.
 `;
 
 async function generateCell({ modeKey, spec, category, count, withFiles, seq }) {
-  let prompt = buildGenerationPrompt({ modeKey, spec, category, count, withFiles });
+  let prompt = buildGenerationPrompt({ modeKey, spec, category, count, withFiles, language: LANGUAGE });
   if (category === 'trap' && REQUIRED_TRAPS[modeKey]) {
     prompt += `\n\nTHESE SPECIFIC PAIRS ARE REQUIRED. Cover each at least once:\n${REQUIRED_TRAPS[modeKey].map((t) => `  - ${t}`).join('\n')}`;
   }
@@ -142,7 +143,11 @@ async function generateCell({ modeKey, spec, category, count, withFiles, seq }) 
 
 function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
   const isCustom = CUSTOM_MODE_KEYS.has(modeKey);
-  const id = `${spec.abbrev}-${String(seq).padStart(4, '0')}`;
+  // Language is part of the id so the en / hinglish / manglish corpora can be
+  // generated independently without colliding, and so the split stays stable
+  // when a language slice is regenerated on its own.
+  const langTag = LANGUAGE === 'en' ? '' : `${LANGUAGE.slice(0, 2)}-`;
+  const id = `${langTag}${spec.abbrev}-${String(seq).padStart(4, '0')}`;
   return {
     id,
     mode: isCustom ? 'custom' : modeKey,
@@ -160,7 +165,7 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
     labels: raw.labels,
     legacy_intent: raw.legacy_intent,
     source: 'synthetic',
-    language: 'en',
+    language: LANGUAGE,
     notes: raw.notes ?? '',
     split: splitFor(id),
   };
