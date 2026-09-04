@@ -52,6 +52,7 @@ export class MultiHeadProvider extends Provider {
       params: 0,
       sizeOnDiskMB: 0,
       runtime: 'onnx',
+      ortBinding: 'onnxruntime-node',
       modelId: this.opts.dir,
       forwardPassesPerRow: 1,
     };

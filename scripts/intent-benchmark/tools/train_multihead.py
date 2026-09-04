@@ -36,7 +36,11 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel
 
-AXES = ["needs_response", "dialogue_act", "task", "answer_form", "grounding", "mode_intent"]
+# `legacy_intent` is a head like any other so this candidate is directly
+# comparable to the NLI runs on the control taxonomy. Without it the trained
+# model shows 0.0 in the legacy column purely because it was never asked, which
+# reads as a failure rather than an omission.
+AXES = ["needs_response", "dialogue_act", "task", "answer_form", "grounding", "mode_intent", "legacy_intent"]
 
 
 def build_text(row):
@@ -63,7 +67,7 @@ class Rows(Dataset):
         enc = self.tok(build_text(r), truncation=True, max_length=self.max_len, padding="max_length", return_tensors="pt")
         item = {k: v.squeeze(0) for k, v in enc.items()}
         for axis in AXES:
-            v = r["labels"].get(axis)
+            v = r.get("legacy_intent") if axis == "legacy_intent" else r["labels"].get(axis)
             # -100 is torch's ignore_index: a row missing an axis contributes no
             # gradient to that head rather than being taught a wrong answer.
             item[f"y_{axis}"] = torch.tensor(self.maps[axis].get(v, -100), dtype=torch.long)
@@ -109,7 +113,8 @@ def main():
 
     label_maps, sizes = {}, {}
     for axis in AXES:
-        vals = sorted({r["labels"][axis] for r in train if r["labels"].get(axis) is not None})
+        get = (lambda r: r.get("legacy_intent")) if axis == "legacy_intent" else (lambda r: r["labels"].get(axis))
+        vals = sorted({get(r) for r in train if get(r) is not None})
         label_maps[axis] = {v: i for i, v in enumerate(vals)}
         sizes[axis] = len(vals)
         print(f"[train] {axis:16} {len(vals)} classes")
@@ -127,7 +132,8 @@ def main():
     # majority, which is exactly the failure the LLM labeller made on `voice`.
     losses = {}
     for axis in AXES:
-        counts = Counter(r["labels"][axis] for r in train if r["labels"].get(axis) in label_maps[axis])
+        getc = (lambda r: r.get("legacy_intent")) if axis == "legacy_intent" else (lambda r: r["labels"].get(axis))
+        counts = Counter(getc(r) for r in train if getc(r) in label_maps[axis])
         w = torch.tensor([1.0 / max(1, counts.get(v, 1)) for v in label_maps[axis]], dtype=torch.float)
         w = (w / w.sum() * len(w)).to(device)
         losses[axis] = nn.CrossEntropyLoss(weight=w, ignore_index=-100)
