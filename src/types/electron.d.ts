@@ -427,6 +427,8 @@ export interface ElectronAPI {
     ineligibleReason: 'provider-not-selected' | 'local-only-mode' | 'reference-files-scope-denied' | 'no-api-key' | 'no-model' | null
     ineligibleMessage: string | null
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean }
+    /** The catalogue model in use, when one is selected AND fully installed. */
+    selectedLocal: { id: string; name: string } | null
     /** What would actually run right now, resolved the way retrieval resolves it. */
     effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null }
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
