@@ -91,11 +91,24 @@ test('spawn refuses a binary outside the pre-authorised set', () => {
   assert.throws(() => shim.spawn('/bin/sh'), /not in this extension's "allowedBinaries"/);
 });
 
+// A name no machine can have. NOT a real tool name.
+//
+// This test used to authorise and spawn `llama-server`, on the reasoning that
+// it "does not exist" so Node would report ENOENT and nothing would run. That
+// is true on CI and false on any developer machine with llama.cpp installed —
+// which is precisely the machines that work on the reranker extensions. There,
+// `shim.spawn('llama-server')` launched a REAL server with no arguments, whose
+// stdio pipes then held the test runner open: 11 of 12 assertions passing, zero
+// failures, and the FILE hanging for ~590s until the runner killed it.
+//
+// Measured both ways: with llama-server off PATH the file exits on its own;
+// with it installed it hangs. So the fixture must be a name that cannot resolve
+// anywhere, and it must never be swapped for something plausible.
+const UNSPAWNABLE = 'natively-test-nonexistent-binary';
+
 test('an authorised binary spawns, and the Windows .exe suffix is tolerated', () => {
-  const shim = createChildProcessShim(new Set(['process.spawn']), ['llama-server']);
-  // Deliberately a name that does not exist: Node reports ENOENT asynchronously,
-  // so this exercises the authorisation path without running anything.
-  for (const name of ['llama-server', 'llama-server.exe']) {
+  const shim = createChildProcessShim(new Set(['process.spawn']), [UNSPAWNABLE]);
+  for (const name of [UNSPAWNABLE, `${UNSPAWNABLE}.exe`]) {
     const child = shim.spawn(name);
     assert.ok(child, `${name} should be authorised`);
     // ENOENT arrives asynchronously; swallow it so it is not an unhandled error.
@@ -103,7 +116,23 @@ test('an authorised binary spawns, and the Windows .exe suffix is tolerated', ()
     // Deliberately NOT calling child.kill(): on a child whose spawn failed,
     // `pid` is undefined and Node signals the CURRENT PROCESS GROUP, which
     // takes down the test runner. Adapter authors hit the same trap.
+    //
+    // Nothing else is needed to release the runner — proven by the off-PATH
+    // run above — because a spawn that never started owns no live handles.
   }
+});
+
+test('the spawn fixture cannot be a binary that might actually exist', () => {
+  // The guard for the bug above. A future edit that "tidies" the fixture back
+  // to a real tool name reintroduces a silent 590s hang on developer machines
+  // and stays green on CI, which is the worst possible split.
+  assert.doesNotMatch(UNSPAWNABLE, /^(llama|node|sh|bash|python|git|curl)/,
+    'the fixture must not be a name any machine could resolve');
+  const { execFileSync } = require('node:child_process');
+  let resolved = true;
+  try { execFileSync('which', [UNSPAWNABLE], { stdio: 'ignore' }); }
+  catch { resolved = false; }
+  assert.equal(resolved, false, `${UNSPAWNABLE} resolves on this machine — pick a name that cannot`);
 });
 
 // ── fetch ─────────────────────────────────────────────────────────────────
