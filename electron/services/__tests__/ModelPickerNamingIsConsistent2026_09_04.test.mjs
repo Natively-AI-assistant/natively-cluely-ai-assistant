@@ -115,3 +115,28 @@ test("the reranker strips OpenRouter's `Vendor: Model` prefix, not just a slash"
   assert.equal(bare('MS MARCO MiniLM L6'), 'MS MARCO MiniLM L6');
   assert.equal(bare('jina-reranker-v3.5'), 'jina-reranker-v3.5');
 });
+
+test('the hosted picker drops the acquirer, keeping the vendor', () => {
+  // "Voyage AI by MongoDB: Rerank 2.5 Lite" — who owns the lab is not what
+  // someone picking a reranker is choosing between, and it pushes the model
+  // itself out of a narrow control.
+  const code = codeOf(read(RERANKER));
+  assert.match(code, /const trimVendorAttribution/,
+    'the hosted picker must trim the corporate attribution');
+  assert.match(code, /label: trimVendorAttribution\(m\.label\)/,
+    'the live OpenRouter catalogue rows must go through it');
+
+  const trim = (label) => {
+    const colon = label.indexOf(': ');
+    if (colon <= 0) return label;
+    return label.slice(0, colon).replace(/ by .+$/, '') + label.slice(colon);
+  };
+  assert.equal(trim('Voyage AI by MongoDB: Rerank 2.5 Lite'), 'Voyage AI: Rerank 2.5 Lite');
+  assert.equal(trim('Qwen by Alibaba: Reranker 0.6B'), 'Qwen: Reranker 0.6B');
+  // Untouched: no attribution to remove.
+  assert.equal(trim('Cohere: Rerank 4 Fast'), 'Cohere: Rerank 4 Fast');
+  assert.equal(trim('jina-reranker-v3.5'), 'jina-reranker-v3.5');
+  // Only the VENDOR segment is rewritten — a model whose own name contains
+  // " by " must survive, which a naive global replace would destroy.
+  assert.equal(trim('Some Lab: Learn by Doing v2'), 'Some Lab: Learn by Doing v2');
+});
