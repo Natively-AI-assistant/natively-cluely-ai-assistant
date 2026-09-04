@@ -2590,6 +2590,36 @@ export class AppState {
           this.knowledgeOrchestrator.setSearchProviderResolver(resolveCompanySearchProvider);
         }
 
+        // Is company research appropriate in the active mode? (Routing audit,
+        // 2026-09-04.) The orchestrator's dossier gate was mode-blind, so a
+        // Team Meet or Lecture turn containing a bare token like "reviews" or
+        // "funding" could put a query on the wire to an external search
+        // provider whenever a JD was still loaded from an earlier session.
+        //
+        // In exactly those modes the result is discarded: the intercept gate in
+        // LLMHelper runs AFTER processQuestion returns, so the research had
+        // already happened and its output was thrown away. The call could never
+        // change the answer, only leak the query and spend the budget.
+        //
+        // Reuses the SAME predicate as that gate, so the two cannot drift: the
+        // modes that discard the result are exactly the modes that no longer
+        // request it. Resolved per call because the user switches modes
+        // mid-session. Optional-capability guard matches the sibling wiring
+        // above, so an older premium build without the setter is unaffected.
+        if (typeof this.knowledgeOrchestrator.setCompanyResearchAllowedFn === 'function') {
+          this.knowledgeOrchestrator.setCompanyResearchAllowedFn(() => {
+            try {
+              // Local require, matching every other ModesManager use in this
+              // file: the module is not statically imported here.
+              const { ModesManager } = require('./services/ModesManager');
+              return ModesManager.getInstance().isPremiumKnowledgeInterceptAllowed();
+            } catch {
+              // Never let a mode-lookup failure disable a paid capability.
+              return true;
+            }
+          });
+        }
+
         // Embedding function — lazily delegate to the cascaded EmbeddingPipeline
         // (OpenAI → Gemini → Ollama → Local bundled model).
         // We await waitForReady() so uploads during boot wait for the pipeline
