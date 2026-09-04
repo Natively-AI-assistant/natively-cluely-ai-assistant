@@ -117,6 +117,8 @@ const WORKER_RERANK_TIMEOUT_MS = 15_000; // a single rerank() call (bounded cand
 
 /** Backstop for a disposed reranker worker that still owes replies. */
 const RERANK_DISPOSE_DRAIN_MAX_MS = 30_000;
+/** Graceful ONNX release budget. Short: a quit must not wait on a wedged worker. */
+const WORKER_DISPOSE_TIMEOUT_MS = 3_000;
 
 class LocalRerankerImpl {
     private worker: Worker | null = null;
@@ -554,10 +556,6 @@ class LocalRerankerImpl {
         // is exactly the "reranker did nothing" symptom. Terminating mid
         // `session.run()` is also the native-abort shape this worker exists to
         // contain. The worker's own exit handler releases the ONNX gate slot.
-        if (this.pendingRequests.size === 0) {
-            worker.terminate().catch(() => {});
-            return;
-        }
         void this.terminateWhenDrained(worker);
     }
 
@@ -571,7 +569,46 @@ class LocalRerankerImpl {
         while (this.pendingRequests.size > 0 && Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
+        await this.releaseThenTerminate(worker);
+    }
+
+    /**
+     * Ask the worker to release its ONNX sessions, then stop the thread.
+     *
+     * `PreTrainedModel.dispose()` is transformers.js's own release path — "one
+     * promise for each ONNX session that is being disposed" — and terminating
+     * the thread skipped it entirely. The worker serialises its messages, so
+     * this is queued behind anything still running rather than freeing sessions
+     * underneath a live `model(inputs)` call.
+     *
+     * Bounded and best-effort in both directions: a worker that will not answer
+     * must never keep a model switch (or a quit) waiting, and losing the
+     * graceful release is strictly better than leaving the thread alive.
+     */
+    private async releaseThenTerminate(worker: Worker): Promise<void> {
+        try {
+            await this.postTo(worker, { type: 'dispose' }, WORKER_DISPOSE_TIMEOUT_MS);
+        } catch { /* timed out or errored — terminate anyway */ }
         try { await worker.terminate(); } catch { /* already gone */ }
+    }
+
+    /**
+     * Send to an EXPLICIT worker. Teardown needs this: `this.worker` has
+     * already been cleared, and routing through getWorker() would spawn a
+     * replacement thread purely to tell it to shut down.
+     */
+    private postTo<T>(worker: Worker, message: any, timeoutMs: number): Promise<T> {
+        this.requestId = (this.requestId + 1) % Number.MAX_SAFE_INTEGER;
+        const id = this.requestId;
+        message.requestId = id;
+        return new Promise<T>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingRequests.delete(id);
+                reject(new Error(`[LocalReranker] dispose request ${id} timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+            this.pendingRequests.set(id, { resolve, reject, timer });
+            worker.postMessage(message);
+        });
     }
 
     /** Test-only alias, kept so existing tests read the same. */
