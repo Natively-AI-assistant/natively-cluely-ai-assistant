@@ -28,6 +28,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import type { RerankSeamPort } from '../services/reranking/RerankerRegistry';
+import { resolveRagWorker } from './resolveRagWorker';
 
 /** Model load: a 400MB GGUF off cold disk, plus llama.cpp init. */
 const WORKER_INIT_TIMEOUT_MS = 90_000;
@@ -108,18 +109,11 @@ export class GgufReranker implements RerankSeamPort {
   }
 
   private workerPath(): string {
-    const candidates = [
-      path.join(__dirname, 'ggufRerankerWorker.js'),
-      path.join(__dirname, 'rag', 'ggufRerankerWorker.js'),
-      path.join(__dirname, 'electron', 'rag', 'ggufRerankerWorker.js'),
-    ];
-    let resolved = candidates.find((p) => fs.existsSync(p)) ?? candidates[0];
-    // The worker loads a native addon, which cannot be read from inside an
-    // asar archive — the same rewrite LocalReranker does.
-    if (resolved.includes('app.asar') && !resolved.includes('app.asar.unpacked')) {
-      resolved = resolved.replace('app.asar', 'app.asar.unpacked');
-    }
-    return resolved;
+    // Ascends from __dirname rather than guessing the depth. esbuild inlines
+    // this class into ~30 bundles at four different depths, and the three fixed
+    // candidates this used to try covered only two of them — the rerank seam
+    // lives under services/, which was NOT one. See resolveRagWorker.ts.
+    return resolveRagWorker(__dirname, 'ggufRerankerWorker.js');
   }
 
   private getWorker(): Worker {

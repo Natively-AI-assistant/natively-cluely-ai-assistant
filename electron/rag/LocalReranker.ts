@@ -39,6 +39,7 @@
 import path from 'path';
 import fs from 'fs';
 import { Worker } from 'worker_threads';
+import { resolveRagWorker } from './resolveRagWorker';
 import { app } from 'electron';
 import {
     acquireOnnxSlot,
@@ -182,6 +183,25 @@ class LocalRerankerImpl {
             candidates.push(path.join(appPath, '..', 'resources', 'models'));
             candidates.push(path.join(appPath, '..', '..', 'resources', 'models'));
         }
+        // Every candidate above needs Electron's `app`. Without it — a plain
+        // `node --test`, or any ELECTRON_RUN_AS_NODE probe — none are even
+        // built, so resolution fell straight through to the UNVERIFIED last
+        // resort below: `<cwd>/models`. On a dev machine that directory is a
+        // stale download cache, and a truncated model there loads as
+        // "Protobuf parsing failed", which disables reranking silently.
+        //
+        // These two are cwd-relative and VERIFIED by the same marker, so they
+        // cost nothing in a packaged app (cwd is not the repo, the marker is
+        // absent, they are skipped) and let a test find the bundled model.
+        // `resources/models` comes first deliberately: it is the copy the
+        // repository actually ships, and `<cwd>/models` is the ambiguous cache
+        // that should only win when nothing better exists.
+        try {
+            const cwd = process.cwd();
+            candidates.push(path.join(cwd, 'resources', 'models'));
+            candidates.push(path.join(cwd, 'models'));
+        } catch { /* cwd can throw if the directory was removed */ }
+
         // modelId like 'Xenova/bge-reranker-base' -> 'Xenova/bge-reranker-base/tokenizer.json'
         const marker = path.join(...modelId.split('/'), 'tokenizer.json');
         for (const c of candidates) {
@@ -194,17 +214,12 @@ class LocalRerankerImpl {
     }
 
     private getWorkerPath(): string {
-        const candidates = [
-            path.join(__dirname, 'localRerankerWorker.js'),
-            path.join(__dirname, 'rag', 'localRerankerWorker.js'),
-            path.join(__dirname, 'electron', 'rag', 'localRerankerWorker.js'),
-        ];
-
-        let resolvedPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
-        if (resolvedPath.includes('app.asar') && !resolvedPath.includes('app.asar.unpacked')) {
-            resolvedPath = resolvedPath.replace('app.asar', 'app.asar.unpacked');
-        }
-        return resolvedPath;
+        // Ascends from __dirname rather than guessing the depth — the three
+        // fixed candidates this used to try resolved from `electron/` and
+        // `electron/rag/` only, and this class is inlined into bundles under
+        // `llm/`, `services/` and `services/reranking/` as well. See
+        // resolveRagWorker.ts for the measurement.
+        return resolveRagWorker(__dirname, 'localRerankerWorker.js');
     }
 
     private getWorker(): Worker {
