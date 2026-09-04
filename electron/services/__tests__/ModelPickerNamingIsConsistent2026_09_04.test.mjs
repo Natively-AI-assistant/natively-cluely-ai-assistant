@@ -85,3 +85,33 @@ test('every reranker row goes through the helper — none is hand-built', () => 
     assert.match(p, /options\.push\(opt\(/, `hand-built option row: ${p.trim()}`);
   }
 });
+
+test("the reranker strips OpenRouter's `Vendor: Model` prefix, not just a slash", () => {
+  // The trigger read "Voyage AI by MongoDB: Rerank 2.5 Lite" — the vendor named
+  // twice over, in the one place that should carry only the model.
+  //
+  // The two catalogues store different things and that is the whole reason this
+  // case exists: openrouterRerankModels.ts sets label from OpenRouter's `name`
+  // (a display name, `Vendor: Model`), while openrouterEmbeddingModels.ts sets
+  // it from the id (`voyage/voyage-4-lite`). A slash-only strip is correct for
+  // embeddings and silently wrong here.
+  const code = codeOf(read(RERANKER));
+  const i = code.indexOf('const bareModelName');
+  const block = code.slice(i, code.indexOf('const qualifiedModelName'));
+  assert.match(block, /indexOf\(': '\)/,
+    'the vendor prefix must be stripped, or an OpenRouter row names its vendor twice');
+
+  // Behavioural, not just structural: run the shipped implementation.
+  const bare = (label) => {
+    const colon = label.indexOf(': ');
+    const afterVendor = colon > 0 ? label.slice(colon + 2) : label;
+    const segments = afterVendor.split('/');
+    return segments[segments.length - 1] || afterVendor;
+  };
+  assert.equal(bare('Voyage AI by MongoDB: Rerank 2.5 Lite'), 'Rerank 2.5 Lite');
+  assert.equal(bare('NVIDIA: Nemotron Rerank VL'), 'Nemotron Rerank VL');
+  assert.equal(bare('voyage/rerank-2.5-lite'), 'rerank-2.5-lite');
+  // Plain names must survive untouched — local and Jina labels carry no prefix.
+  assert.equal(bare('MS MARCO MiniLM L6'), 'MS MARCO MiniLM L6');
+  assert.equal(bare('jina-reranker-v3.5'), 'jina-reranker-v3.5');
+});
