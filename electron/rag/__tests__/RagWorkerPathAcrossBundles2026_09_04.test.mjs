@@ -38,7 +38,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '../../..');
 const require = createRequire(import.meta.url);
 
-const { resolveRagWorker } = require(path.join(repoRoot, 'dist-electron/electron/rag/resolveRagWorker.js'));
+const { resolveRagWorker, resolveBundledScript } = require(path.join(repoRoot, 'dist-electron/electron/rag/resolveRagWorker.js'));
 
 const WORKERS = ['localRerankerWorker.js', 'ggufRerankerWorker.js'];
 
@@ -145,4 +145,47 @@ test('ascent is bounded, so a deep path cannot walk to the filesystem root forev
   // the contract; that it is bounded and small is.
   assert.ok(tried.length <= 32, `tried ${tried.length} paths — the ascent is not bounded`);
   assert.ok(tried.length >= 5, `tried only ${tried.length} paths — it is not ascending at all`);
+});
+
+// ── the extension host had the identical bug ──────────────────────────────
+
+test('every bundle that inlines ExtensionHost can find the host bootstrap', () => {
+  // Found from a startup log on 2026-09-04, not from reading the code:
+  //
+  //   Error [ERR_MODULE_NOT_FOUND]: Cannot find module
+  //   '.../dist-electron/electron/host/bootstrap.js'
+  //   imported from /Users/…/.natively/extensions/jina-reranker-v35/
+  //
+  // `bootstrapPath()` was `path.join(__dirname, 'host', 'bootstrap.js')`, which
+  // is only correct executing from `electron/services/extensions/`. esbuild
+  // inlines ExtensionHost into main.js, ipcHandlers.js, WindowHelper.js and
+  // three more — every one of them at `electron/` depth — so EVERY extension
+  // died at startup. The one depth that would have worked is not one any bundle
+  // runs at, so this never worked at all.
+  const BOOTSTRAP = ['services', 'extensions', 'host', 'bootstrap.js'];
+  const dirs = bundleDirsInlining('// electron/services/extensions/ExtensionHost.ts');
+  assert.ok(dirs.length > 1, `expected ExtensionHost in several bundles, found ${dirs.length}`);
+  const broken = dirs.filter(d => !fs.existsSync(resolveBundledScript(d, BOOTSTRAP)));
+  assert.deepEqual(broken.map(d => path.relative(DIST, d)), [],
+    'these bundle depths cannot reach the extension host bootstrap');
+
+  // Named explicitly, because that listing coming back empty would also pass.
+  for (const dir of ['electron', 'electron/services/extensions', 'electron/llm']) {
+    assert.ok(fs.existsSync(resolveBundledScript(path.join(DIST, dir), BOOTSTRAP)),
+      `${dir} cannot reach the host bootstrap`);
+  }
+});
+
+test('bootstrapPath does not assume its own source depth', () => {
+  // CODE only: the function's comment QUOTES the defective expression to
+  // explain it, so a raw scan reports the explanation as the bug. Third time
+  // this trap has bitten in one day.
+  const src = fs.readFileSync(path.join(repoRoot, 'electron/services/extensions/ExtensionHost.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const fn = src.slice(src.indexOf('export function bootstrapPath'));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  assert.doesNotMatch(body, /path\.join\(__dirname, 'host'/,
+    'joining a relative path onto __dirname is the defect — the depth is not knowable');
+  assert.match(body, /resolveBundledScript/,
+    'it must ascend to find the bootstrap, like the rag workers do');
 });

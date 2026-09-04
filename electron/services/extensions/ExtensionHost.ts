@@ -664,5 +664,15 @@ class UtilityProcessExtensionHost implements ExtensionHost {
  * `dist-electron/electron/services/extensions/`.
  */
 export function bootstrapPath(): string {
-  return path.join(__dirname, 'host', 'bootstrap.js');
+  // Ascends from __dirname rather than assuming this file's own depth.
+  //
+  // `path.join(__dirname, 'host', 'bootstrap.js')` is only correct if the code
+  // executes from `electron/services/extensions/`. esbuild inlines this class
+  // into main.js, ipcHandlers.js, WindowHelper.js and three more — all at
+  // `electron/` depth — so it resolved to `electron/host/bootstrap.js`, which
+  // does not exist, and EVERY extension died at startup with
+  // ERR_MODULE_NOT_FOUND. Same defect the rag workers had; same fix.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { resolveBundledScript } = require('../../rag/resolveRagWorker') as typeof import('../../rag/resolveRagWorker');
+  return resolveBundledScript(__dirname, ['services', 'extensions', 'host', 'bootstrap.js']);
 }
