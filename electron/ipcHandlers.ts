@@ -7162,11 +7162,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
 
     // The built-in, described honestly: "bundled" is not the same as "loadable".
-    // Must stay in step with DEFAULT_RERANKER_MODEL in LocalReranker.ts. The
-    // bundled model changed on 2026-09-04 — bge-reranker-base measured worse
-    // than no reranker at all, ms-marco-MiniLM-L-6-v2 is +0.0320 at a twelfth
-    // of the size (docs/reranker-benchmark-2026-09-04.md).
-    let builtIn: any = { id: 'ms-marco-MiniLM-L-6-v2', name: 'MS MARCO MiniLM L6', bundled: true };
+    //
+    // Read from BUILT_IN_RERANKER rather than written out here. The name and id
+    // used to be a literal on this line, and when the bundled model changed on
+    // 2026-09-04 it kept saying "BGE Reranker Base" — one of three copies that
+    // drifted the same day (the preflight carried a fourth). One export, so the
+    // next swap cannot leave a stale name on a panel.
+    const { BUILT_IN_RERANKER } = require('./rag/rerankerModelCatalog') as typeof import('./rag/rerankerModelCatalog');
+    let builtIn: any = { id: BUILT_IN_RERANKER.id, name: BUILT_IN_RERANKER.name, bundled: true };
 
     // Which LOCAL model is actually selected, if any.
     //
