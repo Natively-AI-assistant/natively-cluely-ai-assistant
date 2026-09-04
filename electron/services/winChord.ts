@@ -12,12 +12,11 @@
  * To do that the hook needs each chord as {vk, mods}. This module produces that
  * table from the Electron accelerator strings KeybindManager already holds.
  *
- * Scope is deliberately narrow — the "printable-leak" subset only:
- *   - modifiers: Ctrl present, Alt and Win/Super ABSENT (Shift allowed)
- *   - completing key: A-Z, 0-9, Enter, Space
- * Any accelerator outside that subset returns null and is left entirely to
- * RegisterHotKey (unchanged behaviour). This keeps the hook away from the
- * delicate Alt/AltGr, Win-combo and navigation-key paths it already handles.
+ * Scope is deliberately narrow — Natively's default Windows chord set:
+ *   - modifiers: Ctrl present, Win/Super absent (Shift allowed)
+ *   - completing key: A-Z, 0-9, Enter, Space, or an arrow
+ * Ctrl+Alt is accepted only for arrows (the horizontal-scroll defaults), so
+ * AltGr text remains outside the hook.
  */
 
 /** Modifier bitmask bits — CONTRACT shared with native-module/src/app_chord.rs (MOD_*). */
@@ -36,9 +35,7 @@ export interface Win32Chord {
 }
 
 /**
- * Win32 VK for an Electron key token, or null if it is not a printable-leak key.
- * Only A-Z, 0-9, Enter/Return and Space are mapped — everything else (arrows,
- * F-keys, punctuation, media) is intentionally excluded from hook swallowing.
+ * Win32 VK for an Electron key token supported by Natively's default binds.
  */
 function keyTokenToVk(token: string): number | null {
     const t = token.trim();
@@ -54,6 +51,14 @@ function keyTokenToVk(token: string): number | null {
             return 0x0d;
         case 'space':
             return 0x20;
+        case 'left':
+            return 0x25;
+        case 'up':
+            return 0x26;
+        case 'right':
+            return 0x27;
+        case 'down':
+            return 0x28;
         default:
             return null;
     }
@@ -61,7 +66,7 @@ function keyTokenToVk(token: string): number | null {
 
 /**
  * Parse one Electron accelerator (as stored in KeybindManager) into a Win32
- * chord for the printable-leak subset, or null if it falls outside that subset.
+ * chord for the supported hook subset, or null if it falls outside that subset.
  *
  * `CommandOrControl` resolves to Control on Windows (this table is Windows-only;
  * the hook it feeds does not exist on macOS). `Command`/`Cmd`/`Super`/`Meta`
@@ -111,10 +116,11 @@ export function acceleratorToWin32Chord(accelerator: string, id: string): Win32C
 
     if (!sawKey || keyVk === null) return null;
 
-    // Safe subset: Ctrl present, Alt and Win absent.
+    // Ctrl is required and Win is excluded. Alt is safe only with arrows,
+    // covering horizontal scrolling without intercepting AltGr text.
     if ((mods & MOD_CTRL) === 0) return null;
-    if ((mods & MOD_ALT) !== 0) return null;
     if ((mods & MOD_WIN) !== 0) return null;
+    if ((mods & MOD_ALT) !== 0 && (keyVk < 0x25 || keyVk > 0x28)) return null;
 
     return { vk: keyVk, mods, id };
 }

@@ -45,7 +45,7 @@ export class StealthKeyboardManager {
     private active = false;
     // Shortcut-guard: an always-on shortcut-only use of the SAME native hook
     // that swallows the app's own chords even when full stealth typing is off.
-    // Opt-in (default off) — see setShortcutGuardEnabled. Windows only.
+    // Default on (explicit false opts out) — see setShortcutGuardEnabled. Windows only.
     private shortcutGuardEnabled = false;
     private guardRunning = false;
     private nativeAvailable = false;
@@ -159,6 +159,7 @@ export class StealthKeyboardManager {
         if (!win) {
             this.overlayWebContents = null;
             this.overlayWindow = null;
+            this.syncOverlayCtrlSuppression();
             return;
         }
         this.overlayWindow = !win.isDestroyed() ? win : null;
@@ -168,6 +169,12 @@ export class StealthKeyboardManager {
         // on WebContents was brittle (WebContents can be reused after
         // reload, leading to false equality and spurious nulling).
         this.overlayWebContents = !win.isDestroyed() ? win.webContents : null;
+        this.syncOverlayCtrlSuppression();
+        const syncCtrlSuppression = () => {
+            if (this.overlayRegistrationToken === myToken) this.syncOverlayCtrlSuppression();
+        };
+        win.on('show', syncCtrlSuppression);
+        win.on('hide', syncCtrlSuppression);
         win.once('closed', () => {
             // Only clear if THIS registration is still the active one.
             // A later setOverlayWindow() bumped the token; in that case
@@ -175,6 +182,7 @@ export class StealthKeyboardManager {
             if (this.overlayRegistrationToken === myToken) {
                 this.overlayWebContents = null;
                 this.overlayWindow = null;
+                this.syncOverlayCtrlSuppression();
                 // The sink is gone — stop capturing. Without this, a hook
                 // engaged when the overlay window is destroyed would keep
                 // swallowing keystrokes system-wide with nowhere to deliver
@@ -182,6 +190,18 @@ export class StealthKeyboardManager {
                 if (this.active) this.stop();
             }
         });
+    }
+
+    private syncOverlayCtrlSuppression(): void {
+        if (process.platform !== 'win32' || typeof this.tap?.setCtrlSuppressed !== 'function') return;
+        const suppress = !!this.overlayWindow
+            && !this.overlayWindow.isDestroyed()
+            && this.overlayWindow.isVisible();
+        try {
+            this.tap.setCtrlSuppressed(suppress);
+        } catch (e) {
+            console.error('[StealthKeyboardManager] setCtrlSuppressed threw:', e);
+        }
     }
 
     /**
@@ -422,7 +442,7 @@ export class StealthKeyboardManager {
         this.maybeStartGuard();
     }
 
-    // ─── Shortcut-guard (opt-in, Windows only) ───────────────────────────
+    // ─── Shortcut-guard (Windows only) ───────────────────────────────────
 
     /**
      * Enable/disable the always-on shortcut-guard. Persisted by the caller

@@ -7886,11 +7886,11 @@ export class AppState {
   }
 
   public getStealthShortcutGuardEnabled(): boolean {
-    try { return SettingsManager.getInstance().get('stealthShortcutGuard') === true; } catch { return false; }
+    try { return SettingsManager.getInstance().get('stealthShortcutGuard') !== false; } catch { return true; }
   }
 
   /**
-   * Toggle the Windows opt-in shortcut-guard (always-on hook that swallows the
+   * Toggle the Windows shortcut-guard (always-on hook that swallows the
    * app's own chords so they can't leak while stealth typing is off). Persists
    * the setting and applies it live. No-op effect off Windows (the runtime side
    * short-circuits), but the preference still persists.
@@ -8743,16 +8743,14 @@ if (process.env.THINKING_MATRIX === '1') {
   // Register global shortcuts using KeybindManager
   KeybindManager.getInstance().registerGlobalShortcuts()
 
-  // Opt-in shortcut-guard (Windows only, default off): an always-on hook that
+  // Shortcut-guard (Windows only, default on): an always-on hook that
   // swallows + self-dispatches the app's own chords so a dropped RegisterHotKey
   // registration can't leak a shortcut character into the foreground app even
   // when stealth typing is off. Enabled AFTER shortcuts register so the chord
-  // table is populated. Off by default — an always-present low-level keyboard
-  // hook is more visible to EDR/AV than one that exists only during sessions.
+  // table is populated. An explicit false remains the opt-out.
   if (process.platform === 'win32') {
     try {
-      const enabled = SettingsManager.getInstance().get('stealthShortcutGuard') === true;
-      if (enabled) {
+      if (appState.getStealthShortcutGuardEnabled()) {
         const { StealthKeyboardManager } = require('./services/StealthKeyboardManager');
         StealthKeyboardManager.getInstance().setShortcutGuardEnabled(true);
       }
