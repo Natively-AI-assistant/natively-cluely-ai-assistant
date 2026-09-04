@@ -338,7 +338,7 @@ interface CallbackServer {
   close(reason?: Error): void;
 }
 
-function startCallbackServer(): CallbackServer {
+function startCallbackServer(expectedState: string): CallbackServer {
   let resolveCallback!: (value: { code?: string; state?: string; error?: string }) => void;
   let rejectCallback!: (error: Error) => void;
   let settled = false;
@@ -377,6 +377,11 @@ function startCallbackServer(): CallbackServer {
     if (url.pathname !== ANTIGRAVITY_CALLBACK_PATH) {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('Not Found');
+      return;
+    }
+    if (url.searchParams.get('state') !== expectedState) {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end('Invalid callback state');
       return;
     }
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -520,7 +525,8 @@ export class AntigravityService extends EventEmitter {
     if (this.activeLogin) throw new AntigravityError('callback', 'Google sign-in is already in progress.');
     const generation = ++this.generation;
     this.signedOut = false;
-    const server = startCallbackServer();
+    const pkce = generateAntigravityPkce();
+    const server = startCallbackServer(pkce.state);
     const controller = new AbortController();
     const active = { generation, server, controller };
     this.activeLogin = active;
@@ -537,7 +543,6 @@ export class AntigravityService extends EventEmitter {
         throw error;
       }
       this.assertGeneration(generation);
-      const pkce = generateAntigravityPkce();
       await shell.openExternal(buildAntigravityAuthorizationUrl(pkce)).catch(() => {
         throw new AntigravityError('browser', 'Could not open the Google sign-in page.');
       });
@@ -579,6 +584,13 @@ export class AntigravityService extends EventEmitter {
   }
 
   public signOut(): { success: boolean; error?: string } {
+    // Commit the durable change first. A failed disconnect must not appear to
+    // succeed in memory and then silently reconnect from retained tokens on restart.
+    if (!this.clearStorage()) {
+      this.lastError = 'Disconnect failed: Google credentials could not be cleared. Try disconnecting again.';
+      this.emit('status-changed', this.getStatus());
+      return { success: false, error: this.lastError };
+    }
     this.generation += 1;
     this.signedOut = true;
     this.stopRefreshTimer();
@@ -591,11 +603,10 @@ export class AntigravityService extends EventEmitter {
     this.requestControllers.clear();
     this.cachedTokens = null;
     this.cachedModels = null;
-    const persisted = this.clearStorage();
-    this.lastError = persisted ? undefined : 'Google credentials could not be cleared from secure storage.';
+    this.lastError = undefined;
     this.emit('models-changed', []);
     this.emit('status-changed', this.getStatus());
-    return persisted ? { success: true } : { success: false, error: this.lastError };
+    return { success: true };
   }
 
   public async getAccessToken(): Promise<string | null> {
@@ -920,4 +931,21 @@ export class AntigravityService extends EventEmitter {
       expiresAt: Date.now() + expiresIn * 1000,
     };
   }
+}
+
+let cleanupAntigravityLifecycle: (() => void) | undefined;
+
+export function initializeAntigravityLifecycle(app: EventEmitter, onStatus: (status: AntigravityStatus) => void, onModels: () => void): void {
+  const service = AntigravityService.getInstance();
+  cleanupAntigravityLifecycle?.();
+  service.initialize();
+  const onQuit = () => service.dispose();
+  app.once('before-quit', onQuit);
+  service.on('status-changed', onStatus);
+  service.on('models-changed', onModels);
+  cleanupAntigravityLifecycle = () => {
+    app.off('before-quit', onQuit);
+    service.off('status-changed', onStatus);
+    service.off('models-changed', onModels);
+  };
 }

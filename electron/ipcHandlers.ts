@@ -1,7 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
-import { AntigravityService } from './services/AntigravityService';
+import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
@@ -11348,16 +11348,13 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   // Google Antigravity OAuth uses the existing encrypted store and model settings.
   const antigravity = AntigravityService.getInstance();
-  antigravity.initialize();
-  app.once('before-quit', () => antigravity.dispose());
-  antigravity.on('status-changed', (status) => {
+  initializeAntigravityLifecycle(app, (status) => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send('antigravity:status-changed', status);
     }
     broadcastCredentialsChanged();
     void refreshRuntimeDefaultIfUnavailable();
-  });
-  antigravity.on('models-changed', () => broadcastCredentialsChanged());
+  }, broadcastCredentialsChanged);
   safeHandle('antigravity:status', () => antigravity.getStatus());
   safeHandle('antigravity:start-login', async () => {
     try { await antigravity.startLogin(); return { success: true }; }
