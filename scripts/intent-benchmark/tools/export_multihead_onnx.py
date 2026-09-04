@@ -98,17 +98,36 @@ def main():
     # download — a plausible-looking artifact that fails obscurely much later.
     dtype = None
     try:
+        import onnx
         from onnxruntime.quantization import quantize_dynamic, QuantType
-        from onnxruntime.quantization.shape_inference import quant_pre_process
-        # Pre-process before quantizing. Without it, dynamic quantization of a
-        # MULTI-OUTPUT graph fails with "Inferred shape and existing shape
-        # differ in dimension 0: (384) vs (3)" — the shape inferencer confuses
-        # the encoder's hidden width with a head's class count. The onnxruntime
-        # warning tells you to do this; the failure message does not.
-        prepped = out / "onnx" / "_prepped.onnx"
-        quant_pre_process(str(src), str(prepped), skip_symbolic_shape=False)
-        quantize_dynamic(str(prepped), str(q8), weight_type=QuantType.QInt8)
-        for leftover in (prepped, out / "onnx" / "_prepped.onnx.data"):
+
+        # STRIP value_info BEFORE QUANTIZING.
+        #
+        # torch 2.12's exporter writes value_info for every intermediate tensor:
+        # 461 entries on this graph. onnxruntime's quantizer runs its OWN
+        # symbolic shape inference, which disagrees with some of them and aborts
+        # with "Inferred shape and existing shape differ in dimension 0:
+        # (384) vs (3)" — the encoder's hidden width against a head's class
+        # count.
+        #
+        # The graph itself is fine. onnx.checker passes, and
+        # onnx.shape_inference.infer_shapes passes in BOTH strict and non-strict
+        # mode. Only ORT's separate implementation objects, and it objects at
+        # LOAD time, which is why extra_options={'DisableShapeInference': True}
+        # does not help and neither does quant_pre_process.
+        #
+        # Dropping value_info costs nothing: it is a hint, the shapes are
+        # recomputed downstream, and the inputs and outputs keep their
+        # declarations. Without this the export silently falls back to fp32 and
+        # ships a 90.5MB model where 22.8MB would do — four times the size on a
+        # 25ms latency budget.
+        stripped = out / "onnx" / "_stripped.onnx"
+        graph = onnx.load(str(src))
+        del graph.graph.value_info[:]
+        onnx.save(graph, str(stripped), save_as_external_data=True,
+                  location="_stripped.onnx.data", all_tensors_to_one_file=True, size_threshold=1024)
+        quantize_dynamic(str(stripped), str(q8), weight_type=QuantType.QInt8)
+        for leftover in (stripped, out / "onnx" / "_stripped.onnx.data"):
             if leftover.exists():
                 leftover.unlink()
         dtype = "q8"
