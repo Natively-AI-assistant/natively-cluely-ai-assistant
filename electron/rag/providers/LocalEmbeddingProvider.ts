@@ -42,6 +42,13 @@ const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
  *  IntentClassifier's startupPoisoned. */
 let startupPoisoned = false;
 
+/**
+ * How long a disposed worker may keep running to finish work already in flight.
+ * Generous on purpose: it drains in the background and each pending request has
+ * its own timeout, so this is only a backstop against a wedged thread.
+ */
+const DISPOSE_DRAIN_MAX_MS = 120_000;
+
 export class LocalEmbeddingProvider implements IEmbeddingProvider {
   readonly name = 'local';
   readonly dimensions = 384; // all-MiniLM-L6-v2
@@ -114,7 +121,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // ORT abort that kills the process before the JS `ready` arrives
       // leaves a recoverable breadcrumb for the next launch's consume.
       writeOnnxLoadSentinel('embeddings', this.model);
-      this.worker = new Worker(this.getWorkerPath());
+      const spawned = new Worker(this.getWorkerPath());
+      this.worker = spawned;
 
       this.worker.on('message', (msg: { type: string; requestId?: number; vectors?: number[][]; error?: string; status?: LocalWorkerStatus }) => {
         if (msg.type === 'status' && msg.status) {
@@ -138,6 +146,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       });
 
       this.worker.on('error', (err) => {
+        // Only act for the worker that is still ours. A disposed worker drains
+        // in the background, and its late error must not reject requests that
+        // belong to a replacement worker on this instance.
+        if (this.worker !== spawned) return;
         console.error('[LocalEmbeddingProvider] Worker error:', err);
         this.loaded = false;
         this.loadingPromise = null;
@@ -151,6 +163,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       });
 
       this.worker.on('exit', (code) => {
+        // Same scoping as 'error': a disposed worker's exit must not clear
+        // state, or reject pending work, that now belongs to its replacement.
+        if (this.worker !== spawned) return;
         if (code !== 0) {
           console.warn(`[LocalEmbeddingProvider] Worker exited with code ${code}`);
         }
@@ -183,6 +198,79 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       this.worker.unref?.();
     }
     return this.worker;
+  }
+
+  /**
+   * Release the worker and the ONNX model it holds.
+   *
+   * EmbeddingPipeline._doInitialize() runs again whenever an embedding-related
+   * setting changes, and it assigns a FRESH LocalEmbeddingProvider over
+   * `fallbackProvider`. Without this, the instance being replaced kept its
+   * worker — and therefore its loaded MiniLM model — alive for the rest of the
+   * session, unreachable by anything. On macOS the Gemini path usually wins so
+   * the model never loads at all; on Windows the Gemini embedding key 403s and
+   * the resolver demotes to this bundled local model, so it is exactly the
+   * platform where the abandoned copy is real.
+   *
+   * Safe to call more than once, and safe on an instance that never loaded.
+   */
+  async dispose(reason = 'embedding provider disposed'): Promise<void> {
+    const worker = this.worker;
+    this.worker = null;          // new work resolves against the new config
+    this.loadingPromise = null;
+
+    // An intentional teardown is not a crash. terminate() exits the thread with
+    // code 1 and the exit handler only clears the sentinel on code 0, so
+    // without this every embedding config change left a "died hard" record —
+    // and a restart inside ONNX_LOAD_SENTINEL_TTL_MS would set startupPoisoned
+    // and SKIP local embedding for that launch. This path only became reachable
+    // when dispose() was introduced; before that the old worker was orphaned
+    // and never exited, so it never wrote one.
+    try { clearOnnxLoadSentinel('embeddings', this.model); } catch { /* best effort */ }
+
+    if (!worker) {
+      this.rejectAllPending(new Error(reason));
+      return;
+    }
+
+    // Nothing owed — terminate now.
+    if (this.pendingRequests.size === 0) {
+      try { await worker.terminate(); } catch { /* already gone */ }
+      return;
+    }
+
+    // DETACH rather than reject (2026-09-04).
+    //
+    // A rejected embed LOSES chunks: LiveRAGIndexer only warns ("Failed to
+    // embed live chunk batch") and moves on, so the batch never reaches the
+    // index. Disposal is triggered by an embedding config change, which a user
+    // can make while a meeting is recording or while reference files are still
+    // ingesting — precisely when losing chunks is least acceptable.
+    //
+    // Letting them finish under the OLD provider is safe: RAGManager filters
+    // retrieval by getActiveSpaceKey(), so vectors written into a superseded
+    // embedding space are never retrieved. They cost disk, not correctness.
+    //
+    // Detached, not awaited, because initializeEmbeddings() is awaited by the
+    // set-config IPC — blocking the drain there would freeze Settings for as
+    // long as a reference-file batch takes.
+    void this.terminateWhenDrained(worker);
+  }
+
+  /**
+   * Wait for the outstanding replies this worker still owes, then stop it.
+   *
+   * Bounded, because a wedged worker must not be kept alive forever — but
+   * generously, since this runs in the background and every pending request
+   * already carries its own per-call timeout, so the map empties on its own
+   * even if the worker never answers.
+   */
+  private async terminateWhenDrained(worker: Worker): Promise<void> {
+    const deadline = Date.now() + DISPOSE_DRAIN_MAX_MS;
+    while (this.pendingRequests.size > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    try { await worker.terminate(); } catch { /* already gone */ }
   }
 
   private rejectAllPending(err: Error): void {

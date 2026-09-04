@@ -420,6 +420,174 @@ export interface ElectronAPI {
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>
+  // ── Embedding settings (configured independently of the generation model) ──
+  getEmbeddingStatus: () => Promise<{
+    active: { configured: boolean; provider?: string | null; model?: string | null; dimensions?: number | null; space?: string | null; location?: 'on-device' | 'cloud' | 'unknown'; lightweight?: boolean }
+    configured: { mode?: 'auto' | 'manual'; provider?: string; model?: string; dimensions?: number }
+    acknowledged: boolean
+    scopeAllowsCloud: boolean
+    /** §5: a third-party AI provider is configured while embeddings stay lightweight. */
+    shouldWarn: boolean
+  }>
+  getEmbeddingCatalog: () => Promise<{
+    providers: Array<{
+      id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local'
+      name: string
+      cloud: boolean
+      managed?: boolean
+      available: boolean
+      unavailableReason?: 'no_key' | 'not_running' | 'blocked_by_policy' | 'not_configured'
+      endpoint?: string
+      capabilityUnknown?: boolean
+      models: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[]; lightweight?: boolean; recommended?: boolean; note?: string }>
+    }>
+    hasCatalog?: { openai?: boolean; gemini?: boolean }
+  }>
+  testEmbeddingModel: (choice?: { provider?: string; model?: string }) => Promise<{
+    ok: boolean; provider?: string; model?: string; dimensions?: number; space?: string; latencyMs?: number; error?: string; status?: number; message?: string
+  }>
+  setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => Promise<{
+    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; error?: string; message?: string
+  }>
+  fetchEmbeddingModels: (providerId: string) => Promise<{
+    success: boolean; models?: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[] }>; count?: number; error?: string
+  }>
+  setEmbeddingVoyageKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setEmbeddingOpenRouterKey: (key: string) => Promise<{ success: boolean; models?: unknown[]; count?: number; error?: string; message?: string }>
+  setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
+  }>
+  acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>
+
+  // ── Reranker ───────────────────────────────────────────────────────────
+  // Embedding retrieval finds the candidate set; reranking decides the order of
+  // those candidates. Configured independently of the embedding provider.
+  getRerankerStatus: () => Promise<{
+    provider: 'local' | 'openrouter' | 'jina'
+    openrouterModel: string | null
+    jinaModel: string | null
+    /** The model id for whichever hosted provider is selected. */
+    hostedModel: string | null
+    candidateCount: number | null
+    fallbackToLocal: boolean
+    /** Presence only. The key itself never crosses the IPC boundary. */
+    hasApiKey: boolean
+    eligible: boolean
+    ineligibleReason: 'provider-not-selected' | 'local-only-mode' | 'reference-files-scope-denied' | 'no-api-key' | 'no-model' | null
+    ineligibleMessage: string | null
+    builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean }
+    /** The catalogue model in use, when one is selected AND fully installed. */
+    selectedLocal: { id: string; name: string } | null
+    /** What would actually run right now, resolved the way retrieval resolves it. */
+    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null }
+    lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null
+  }>
+  getRerankerCatalog: (opts?: { refresh?: boolean }) => Promise<{
+    models: Array<{
+      id: string; label: string; vendor: string; contextLength?: number
+      free: boolean; multimodal: boolean
+      group: 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other'
+      note?: string; description?: string
+    }>
+    /** True when discovery failed and these are the last known models. */
+    stale: boolean
+    fetchedAt: number | null
+    error?: string
+  }>
+  setRerankerConfig: (next: {
+    provider?: 'local' | 'openrouter' | 'jina'
+    openrouterModel?: string
+    jinaModel?: string
+    candidateCount?: number
+    fallbackToLocal?: boolean
+  }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>
+  setRerankerOpenRouterKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  setRerankerHostedKey: (provider: string, key: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  getRerankerHostedProviders: () => Promise<{
+    providers: Array<{
+      id: 'openrouter' | 'jina'
+      name: string
+      keyUrl: string
+      keyPlaceholder: string
+      staticCatalogue: boolean
+      models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>
+      /** Presence only — the key never crosses this boundary. */
+      hasApiKey: boolean
+    }>
+  }>
+  listLocalRerankerModels: () => Promise<{
+    models: Array<{
+      id: string; name: string; runtime: 'onnx' | 'gguf'; repo: string
+      params: string; note: string; bytes: number; recommended: boolean
+      license: { spdx: string; url: string; commercialUseRestricted: boolean; requiresAcknowledgement: boolean }
+      state: 'not-installed' | 'partial' | 'installed'
+      bytesOnDisk: number
+      selected: boolean
+      /** GGUF only: the extension that can execute it. */
+      extensionId: string | null
+      extensionInstalled: boolean | null
+      /** GGUF only: a binary that must be on PATH, e.g. llama-server. */
+      requiresBinary: string | null
+      /** False when Core cannot execute it even once downloaded. */
+      supported: boolean
+      unsupportedReason: string | null
+      /** Only supported ONNX models run in Core's own runtime and can be activated here. */
+      activatable: boolean
+    }>
+    selectedId: string | null
+    builtInSelected: boolean
+  }>
+  installLocalRerankerModel: (id: string) => Promise<{
+    success: boolean; error?: string; message?: string; extensionId?: string; digests?: Record<string, string>
+  }>
+  cancelLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string }>
+  removeLocalRerankerModel: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>
+  useLocalRerankerModel: (id: string | null) => Promise<{
+    success: boolean; activeId?: string | null; topIndex?: number; error?: string; message?: string
+  }>
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => () => void
+
+  listExtensions: () => Promise<{
+    available: boolean
+    extensions: Array<{
+      id: string; name: string; version: string; type: string
+      author: string; homepage: string; source: string
+      enabled: boolean; running: boolean; disabledReason: string | null
+      permissions: string[]
+      models: Array<{
+        key: string; format: string; approxBytes: number
+        state: 'not-downloaded' | 'downloading' | 'ready' | 'verification-failed' | 'blocked-unacknowledged'
+        bytes: number | null; reason: string | null
+        license: {
+          spdx: string; url: string
+          commercialUseRestricted: boolean; requiresAcknowledgement: boolean; acknowledged: boolean
+        }
+      }>
+    }>
+  }>
+  installExtensionFromFolder: () => Promise<{ success: boolean; id?: string; error?: string; errors?: string[]; warnings?: string[] }>
+  setExtensionEnabled: (id: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  removeExtension: (id: string) => Promise<{ success: boolean; error?: string }>
+  acknowledgeExtensionLicense: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
+  downloadExtensionModel: (id: string, modelKey: string) => Promise<{ success: boolean; status?: unknown; error?: string; message?: string }>
+  cancelExtensionModelDownload: (id: string, modelKey: string) => Promise<{ success: boolean; error?: string }>
+  browseExtensionRegistry: (url?: string) => Promise<{ ok: boolean; entries: Array<{ id: string; repo: string; latestVersion: string; apiVersion: string; category: string; modelLicenses?: string[] }> }>
+  onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => () => void
+
+  testReranker: (choice?: { model?: string }) => Promise<{
+    success: boolean
+    model?: string
+    /** Round trip INCLUDING network. Not model inference time. */
+    latencyMs?: number
+    costUsd?: number | null
+    scoresFinite?: boolean
+    indicesValid?: boolean
+    rankedExpectedFirst?: boolean
+    /** The probe ran, but its result could not be cached to settings. */
+    persistError?: string
+    error?: string
+    message?: string
+  }>
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>
   getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>
@@ -694,6 +862,7 @@ export interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
 
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
@@ -746,6 +915,9 @@ export interface ElectronAPI {
   // Cropper API
   cropperConfirmed: (bounds: { x: number; y: number; width: number; height: number }) => void;
   cropperCancelled: () => void;
+  /** Launcher only: the boot reveal animation has fully landed, so main can
+   *  restore this window's background throttling. */
+  notifyLauncherRevealComplete: () => void;
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => () => void;
 
   // Platform

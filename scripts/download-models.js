@@ -16,10 +16,13 @@ const REQUIRED_MODEL_FILES = [
     'Xenova/mobilebert-uncased-mnli/tokenizer.json',
     'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
     'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
-    'Xenova/bge-reranker-base/config.json',
-    'Xenova/bge-reranker-base/tokenizer.json',
-    'Xenova/bge-reranker-base/tokenizer_config.json',
-    'Xenova/bge-reranker-base/onnx/model_quantized.onnx',
+    // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
+    // 2026-09-04 — see step 3 below for the numbers. bge is gone entirely: not
+    // bundled, not lazily downloaded, not in the catalogue.
+    'Xenova/ms-marco-MiniLM-L-6-v2/config.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json',
+    'Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx',
 ];
 
 // OPTIONAL assets (review#9): verified with a WARNING, never a failure — the
@@ -133,21 +136,29 @@ async function downloadModels() {
         await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', QUANTIZED);
         console.log('[download-models] mobilebert-uncased-mnli downloaded.');
 
-        // 3. Cross-encoder reranker (smart-retrieval Phase 1/3 — confidence-gated
-        //    rerank escalation). Bundled in resources/models/ so a clean-machine
-        //    install can do offline rerank without a 280MB first-activation
-        //    download. The installer ships the q8 quantized variant (~280MB).
+        // 3. Cross-encoder reranker — ms-marco-MiniLM-L-6-v2 (q8, ~24MB).
         //
-        //    The lazy-download provider in electron/rag/rerankerDownloadProvider.ts
-        //    still acts as a no-op fallback if the bundled model is absent
-        //    (e.g. an old installer predating this bundling).
-        console.log('[download-models] Downloading Xenova/bge-reranker-base (q8)...');
-        // Use dtype:'q8' so transformers.js selects the quantized ONNX variant
-        // (~280 MB) instead of the fp32 one (~1.1 GB). NATIVELY_RERANKER_DTYPE
-        // override remains for accuracy experiments.
-        const rerankerDtype = (process.env.NATIVELY_RERANKER_DTYPE || 'q8').trim() || 'q8';
-        await pipeline('text-classification', 'Xenova/bge-reranker-base', { dtype: rerankerDtype });
-        console.log('[download-models] bge-reranker-base downloaded.');
+        //    REPLACED bge-reranker-base on 2026-09-04. Measured against a
+        //    NO-RERANKER baseline on a 40-passage pool with same-topic
+        //    distractors (docs/reranker-benchmark-2026-09-04.md):
+        //
+        //      bge-reranker-base    MRR 0.7558   -0.0810   +3/-7   1873ms  283MB
+        //      ms-marco-MiniLM-L-6  MRR 0.8688   +0.0320   +4/-2    211ms   24MB
+        //
+        //    The old default was the worst reranker in that table: it shipped
+        //    283MB of installer in order to make retrieval measurably worse.
+        //    This one is a twelfth of the size, nine times faster, and actually
+        //    improves the ranking — so the low-confidence escalation in
+        //    ModeHybridRetriever has a beneficiary again.
+        //
+        //    bge is not reachable at all any more, deliberately. It was never a
+        //    catalogue entry — only the bundled default plus a lazy downloader
+        //    written for it — so with the bundle gone there was nothing left
+        //    worth keeping a download path for. Better local rerankers are one
+        //    click away in the catalogue.
+        console.log('[download-models] Downloading Xenova/ms-marco-MiniLM-L-6-v2 (q8)...');
+        await pipeline('text-classification', 'Xenova/ms-marco-MiniLM-L-6-v2', QUANTIZED);
+        console.log('[download-models] ms-marco-MiniLM-L-6-v2 downloaded.');
 
         // 4. Smart Turn v3.1 (Auto Answer V3 TurnPredictor). Raw ONNX, not a
         //    transformers.js pipeline: fetched by URL and sha256-verified against

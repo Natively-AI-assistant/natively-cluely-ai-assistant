@@ -19,6 +19,9 @@ const {
   classifyNotarySubmitFailure,
   notarytoolSubmitWithRetry,
   isTransientNetworkMessage,
+  extractSubmissionIds,
+  parseSubmissionStatus,
+  shouldRetryNotarizeThrow,
 } = require('../lib/notary-transient.cjs');
 
 // ---------------------------------------------------------------------------
@@ -201,20 +204,29 @@ test('a rejection that merely CONTAINS a number like 1009 is not mistaken for of
 // notarytoolSubmitWithRetry — injected runner + sleep, so nothing here waits.
 // ---------------------------------------------------------------------------
 
-/** Build a runner that replays a queue of results and records its invocations. */
-function fakeRunner(results) {
+/**
+ * Runner that replays a queue of SUBMIT results and answers `info`/`wait` probes
+ * separately. The two must be distinguishable: since 2026-08-27 a failed submit
+ * asks Apple about the submission it created before re-uploading, so a runner that
+ * lumped them together would mis-count uploads.
+ */
+function fakeRunner(results, probeResults = {}) {
   const calls = [];
+  const submits = [];
   const run = async (cmd, args) => {
     calls.push({ cmd, args });
-    return results[Math.min(calls.length - 1, results.length - 1)];
+    if (args.includes('info')) return probeResults.info ?? { code: 1, output: 'not found' };
+    if (args.includes('wait')) return probeResults.wait ?? { code: 1, output: 'timed out' };
+    submits.push({ cmd, args });
+    return results[Math.min(submits.length - 1, results.length - 1)];
   };
-  return { run, calls };
+  return { run, calls, submits };
 }
 
 const silent = { warn() {}, log() {}, error() {} };
 
 test('a dropped upload retries and succeeds on the next attempt', async () => {
-  const { run, calls } = fakeRunner([
+  const { run, submits } = fakeRunner([
     { code: 1, signal: null, output: ABORTED_UPLOAD },
     { code: 0, signal: null, output: 'status: Accepted' },
   ]);
@@ -228,12 +240,12 @@ test('a dropped upload retries and succeeds on the next attempt', async () => {
   });
 
   assert.equal(res.attempts, 2);
-  assert.equal(calls.length, 2);
+  assert.equal(submits.length, 2, 'two uploads');
   assert.deepEqual(slept, [30_000], 'default backoff is 30s on the first retry');
 });
 
 test('the retry re-submits the SAME file — it never rebuilds the DMG', async () => {
-  const { run, calls } = fakeRunner([
+  const { run, submits } = fakeRunner([
     { code: 1, signal: null, output: ABORTED_UPLOAD },
     { code: 0, signal: null, output: '' },
   ]);
@@ -244,7 +256,7 @@ test('the retry re-submits the SAME file — it never rebuilds the DMG', async (
     sleep: async () => {},
     log: silent,
   });
-  for (const call of calls) {
+  for (const call of submits) {
     assert.equal(call.cmd, 'xcrun');
     assert.deepEqual(call.args, [
       'notarytool', 'submit', '/release/Natively-2.8.7-arm64.dmg',
@@ -275,7 +287,7 @@ test('the failure message reports attempts ACTUALLY made, not the cap', async ()
 });
 
 test('a persistent network failure gives up after maxAttempts with backoff', async () => {
-  const { run, calls } = fakeRunner([{ code: 1, signal: null, output: ABORTED_UPLOAD }]);
+  const { run, submits } = fakeRunner([{ code: 1, signal: null, output: ABORTED_UPLOAD }]);
   const slept = [];
   await assert.rejects(
     () => notarytoolSubmitWithRetry({
@@ -288,7 +300,7 @@ test('a persistent network failure gives up after maxAttempts with backoff', asy
     }),
     /network/
   );
-  assert.equal(calls.length, 3);
+  assert.equal(submits.length, 3, 'three uploads');
   assert.deepEqual(slept, [30_000, 60_000], 'linear backoff, and no sleep after the last attempt');
 });
 
@@ -338,4 +350,123 @@ test('a bounded error message survives the enormous abortedUpload dump', async (
 
 test('a target is required', async () => {
   await assert.rejects(() => notarytoolSubmitWithRetry({}), /target is required/);
+});
+
+
+// ---------------------------------------------------------------------------
+// Recovery via submission id — added 2026-08-27.
+//
+// Three builds died locally while their submission was ALIVE on Apple's side:
+// one came back Accepted, and a single retry round left three ids at "In Progress".
+// Each of those builds re-uploaded ~1 GB, or gave up, for work Apple already had.
+// ---------------------------------------------------------------------------
+
+test('extractSubmissionIds pulls the ids notarytool printed, oldest first', () => {
+  const out = 'Submission ID received\n  id: 11111111-2222-3333-4444-555555555555\n' +
+              'Submission ID received\n  id: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  assert.deepEqual(extractSubmissionIds(out), [
+    '11111111-2222-3333-4444-555555555555',
+    'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+  ]);
+  assert.deepEqual(extractSubmissionIds('no ids here'), []);
+});
+
+test('parseSubmissionStatus reads every terminal and pending state', () => {
+  assert.equal(parseSubmissionStatus('  status: Accepted'), 'Accepted');
+  assert.equal(parseSubmissionStatus('Current status: In Progress....'), 'In Progress');
+  assert.equal(parseSubmissionStatus('  status: Invalid'), 'Invalid');
+  assert.equal(parseSubmissionStatus('nothing'), null);
+});
+
+test('an already-Accepted submission short-circuits the re-upload entirely', async () => {
+  const { run, submits } = fakeRunner(
+    [{ code: 1, signal: null, output: ABORTED_UPLOAD }],
+    { info: { code: 0, output: '  status: Accepted' } }
+  );
+  const res = await notarytoolSubmitWithRetry({
+    target: '/release/Natively.dmg', run, sleep: async () => {}, log: silent,
+  });
+  assert.equal(res.code, 0);
+  assert.equal(res.recoveredSubmissionId, '1fc52d33-8223-4f10-bd9b-d3e57041caeb');
+  assert.equal(submits.length, 1, 'must NOT upload again — Apple already accepted it');
+});
+
+test('"In Progress" is NOT treated as recoverable — it carries no information', async () => {
+  // MEASURED 2026-08-27, correcting an earlier wrong assumption: a submission record
+  // is created when Apple accepts the REQUEST, not when the upload completes, so an
+  // aborted upload sits In Progress indefinitely (five did, for over an hour; a
+  // `notarytool wait` on one was still blocked after 60+ minutes). It looks identical
+  // to a live submission, so waiting on it would block for the full timeout and then
+  // need the re-upload anyway.
+  const { run, submits, calls } = fakeRunner(
+    [{ code: 1, signal: null, output: ABORTED_UPLOAD }, { code: 0, signal: null, output: '' }],
+    { info: { code: 0, output: '  status: In Progress' } }
+  );
+  const res = await notarytoolSubmitWithRetry({
+    target: '/release/Natively.dmg', run, sleep: async () => {}, log: silent,
+  });
+  assert.equal(res.code, 0);
+  assert.equal(submits.length, 2, 'must re-submit rather than wait');
+  assert.ok(!calls.some((c) => c.args.includes('wait')), 'must never block on `notarytool wait`');
+});
+
+// ---------------------------------------------------------------------------
+// shouldRetryNotarizeThrow — the @electron/notarize (.app) path, which gets only a
+// thrown message. Gating on WORDING lost twice: HTTPClientError.connectTimeout
+// matched nothing on 2026-08-27 and two builds aborted without a single retry.
+// It now asks "was a verdict reached?" and fails OPEN on anything unrecognised.
+// ---------------------------------------------------------------------------
+
+test('THE REGRESSION: connectTimeout is retried (it aborted two builds silently)', () => {
+  assert.equal(
+    shouldRetryNotarizeThrow('Failed with unexpected result: \n\nError: HTTPClientError.connectTimeout'),
+    true
+  );
+});
+
+test('an empty "unexpected result" is retried rather than swallowed', () => {
+  assert.equal(shouldRetryNotarizeThrow('Failed to notarize via notarytool.  Failed with unexpected result: '), true);
+});
+
+test('an unrecognised error fails OPEN — a missed signature costs a whole rebuild', () => {
+  assert.equal(shouldRetryNotarizeThrow('Some brand new Apple error nobody has seen'), true);
+});
+
+test('a decided verdict is never retried', () => {
+  assert.equal(shouldRetryNotarizeThrow('  status: Invalid'), false);
+  assert.equal(shouldRetryNotarizeThrow('  status: Accepted'), false);
+});
+
+test('auth failures and staple races are not retried by this gate', () => {
+  assert.equal(shouldRetryNotarizeThrow('Error: No Keychain password item found for profile: x'), false);
+  // Staple is the submission having SUCCEEDED — notarize.js recovers it separately.
+  assert.equal(shouldRetryNotarizeThrow('The staple and validate action failed! Error 65.'), false);
+});
+
+test('a submission Apple already REJECTED stops immediately — no further uploads', async () => {
+  const { run, submits } = fakeRunner(
+    [{ code: 1, signal: null, output: ABORTED_UPLOAD }],
+    { info: { code: 0, output: '  status: Invalid' } }
+  );
+  await assert.rejects(
+    () => notarytoolSubmitWithRetry({
+      target: '/release/Natively.dmg', maxAttempts: 3, run, sleep: async () => {}, log: silent,
+    }),
+    /verdict:Invalid/
+  );
+  assert.equal(submits.length, 1);
+});
+
+test('when the id is unknown to Apple, the normal re-upload still happens', async () => {
+  // An upload that aborted before the bytes landed leaves an id that never reaches a
+  // verdict — waiting on it would hang, so re-submitting is correct there.
+  const { run, submits } = fakeRunner(
+    [{ code: 1, signal: null, output: ABORTED_UPLOAD }, { code: 0, signal: null, output: '' }],
+    { info: { code: 1, output: 'Error: submission does not exist' } }
+  );
+  const res = await notarytoolSubmitWithRetry({
+    target: '/release/Natively.dmg', run, sleep: async () => {}, log: silent,
+  });
+  assert.equal(res.code, 0);
+  assert.equal(submits.length, 2, 'falls back to a real re-submit');
 });

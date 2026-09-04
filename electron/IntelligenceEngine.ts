@@ -64,6 +64,20 @@ import { recordAttribution } from './intelligence/IntelligenceAttribution';
 // Follow-up: type getKnowledgeOrchestrator() properly and drop this import.
 import type { PromptAssemblyResult } from './premium/contracts';
 
+/**
+ * Credential-scrub a trace payload before it is stringified.
+ *
+ * [TRACE:ANSWER] hands redactForLog a pre-stringified STRING, so the key-level
+ * redactor never sees it — only the free-text credential patterns apply. That
+ * is fine for the fields chosen here, but it means a future field carrying a
+ * key would land in the log verbatim. Scrubbing at the source closes that
+ * without costing the answer fidelity the line exists to provide.
+ */
+function redactSecretsOnlyForTrace<T>(payload: T): unknown {
+    try { return require('./utils/redactForLog').redactSecretsOnly(payload); } catch { return payload; }
+}
+
+
 // Mode types
 export type IntelligenceMode = 'idle' | 'assist' | 'what_to_say' | 'follow_up' | 'recap' | 'clarify' | 'manual' | 'follow_up_questions' | 'code_hint' | 'brainstorm';
 
@@ -3013,6 +3027,25 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return undefined;
                     const _v3 = await buildV3Prompt({
                         surface: 'what-to-answer',
+                        // The chat-history rollback must reach THIS surface too.
+                        // ipcHandlers was the only call site passing it, so the
+                        // Settings toggle rolled back typed chat while live
+                        // spoken answers kept the new behaviour with no way to
+                        // revert.
+                        //
+                        // HONEST LIMIT, 2026-08-29: this is currently a NO-OP
+                        // here, and not because of anything on this line. The
+                        // ring is only ever WRITTEN by recordAnswerSummary,
+                        // whose single caller is ipcHandlers.ts (typed chat);
+                        // advanceConversationState never passes answerSummary,
+                        // so `AdvanceTurnInput.answerSummary` is dead and
+                        // `cs.turns` is permanently [] on what-to-answer,
+                        // assist and engine manual-chat. The flag therefore
+                        // skips an already-empty ring. It is passed anyway so
+                        // the rollback is correct the moment a writer exists —
+                        // but do not read this as "multi-turn history works on
+                        // this surface". It does not, yet.
+                        multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         question: String(wtaTurnQuestion || ''),
                         modeTemplateType: _ctx.raw,
                         modeUniqueId: _ctx.modeUniqueId,
@@ -5228,8 +5261,15 @@ export class IntelligenceEngine extends EventEmitter {
             // (the shadow-session launcher sets it; default off elsewhere so
             // normal runs never write answer text to disk).
             try {
-                if (process.env.NATIVELY_TRACE_ANSWERS === '1') {
-                    console.log('[TRACE:ANSWER] wta_answer', JSON.stringify({
+                // Env var OR the Settings > General > Advanced level, so this
+                // is reachable without a terminal. require() rather than a
+                // static import: IntelligenceEngine is loaded on paths where
+                // a hard dependency on the flag module would widen the boot
+                // graph, and a missing module must never break answering.
+                let fullDebug = false;
+                try { fullDebug = require('./verboseLog').isVerboseLogging(); } catch { /* optional */ }
+                if (process.env.NATIVELY_TRACE_ANSWERS === '1' || fullDebug) {
+                    console.log('[TRACE:ANSWER] wta_answer', JSON.stringify(redactSecretsOnlyForTrace({
                         question: question || extractedQuestion.latestQuestion || '',
                         questionConfidence: extractedQuestion.confidence,
                         answerType: answerPlan.answerType,
@@ -5241,7 +5281,7 @@ export class IntelligenceEngine extends EventEmitter {
                         candidateProfileChars: (candidateProfile || '').length,
                         answerChars: finalWtaAnswer.length,
                         answer: finalWtaAnswer,
-                    }));
+                    })));
                 }
             } catch { /* logging only */ }
             try {
@@ -5596,6 +5636,9 @@ export class IntelligenceEngine extends EventEmitter {
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
                 surface: 'assist',
+                // See the what-to-answer call site: the rollback must reach
+                // every surface, not just typed chat.
+                multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                 // AnswerSurface has no clarify/brainstorm members; the tag keeps
                 // their traces separable from real assist turns.
                 pathTag: tag,
@@ -6063,6 +6106,8 @@ export class IntelligenceEngine extends EventEmitter {
                     if (!_ctx) return null;
                     return await buildV3Prompt({
                         surface: 'manual-chat',
+                        // See the what-to-answer call site.
+                        multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
                         // Shares 'manual-chat' with the IPC surface; the tag keeps
                         // the two call sites' traces separable (they previously
                         // both recorded legacyPath 'v3-manual-chat').

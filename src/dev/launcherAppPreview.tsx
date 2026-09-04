@@ -56,6 +56,135 @@ const MEETINGS = [
     usage: [],
 }));
 
+// The state the app is in for the ~30-60s after a meeting ends: the placeholder
+// row is saved, the notes are still being written. Held at 'chunking' so the
+// skeleton stays up for as long as you look at it.
+MEETINGS.unshift({
+    id: 'm0',
+    title: 'Processing...',
+    date: iso(1),
+    duration: '32:14',
+    summary: 'Generating summary...',
+    detailedSummary: { actionItems: [], keyPoints: [] },
+    transcript: Array.from({ length: 6 }, (_, k) => ({
+        speaker: k % 2 === 0 ? 'You' : 'Priya',
+        text: 'Transcript line ' + (k + 1) + ' — saved before the summary is generated.',
+        timestamp: k * 31,
+    })),
+    usage: [],
+    summaryStatus: 'chunking',
+} as unknown as (typeof MEETINGS)[number]);
+
+// Generation failed with nothing to fall back on — the terminal state the
+// skeleton must NOT shimmer into forever.
+MEETINGS.splice(1, 0, {
+    id: 'm0f',
+    title: 'Vendor call — Contoso',
+    date: iso(140),
+    duration: '12:40',
+    summary: '',
+    detailedSummary: { actionItems: [], keyPoints: [] },
+    transcript: Array.from({ length: 5 }, (_, k) => ({
+        speaker: k % 2 === 0 ? 'You' : 'Sam',
+        text: 'Transcript line ' + (k + 1) + ' — kept even though the summary failed.',
+        timestamp: k * 24,
+    })),
+    usage: [],
+    summaryStatus: 'failed',
+} as unknown as (typeof MEETINGS)[number]);
+
+// Starts generating, then FAILS 8s in — the live generating → failed handoff,
+// which is the transition the status allow-list exists for.
+MEETINGS.splice(2, 0, {
+    id: 'm0x',
+    title: 'Processing...',
+    date: iso(200),
+    duration: '08:02',
+    summary: 'Generating summary...',
+    detailedSummary: { actionItems: [], keyPoints: [] },
+    transcript: Array.from({ length: 5 }, (_, k) => ({
+        speaker: k % 2 === 0 ? 'You' : 'Ana',
+        text: 'Transcript line ' + (k + 1) + ' — kept when generation dies.',
+        timestamp: k * 19,
+    })),
+    usage: [],
+    summaryStatus: 'reducing',
+} as unknown as (typeof MEETINGS)[number]);
+
+// A LEGACY (schema v2) note: no tldr, no sectionsV3, no follow-up. Only the title
+// and overview take the cascade; actionItems/keyPoints render through
+// EditableTextBlock and must stay untouched — wrapping words inside an editable
+// field would break caret, selection and save.
+MEETINGS.splice(3, 0, {
+    id: 'm0legacy',
+    title: 'Budget review — legacy note',
+    date: iso(600),
+    duration: '24:10',
+    summary: 'A pre-V3 meeting note.',
+    detailedSummary: {
+        overview: 'A legacy note stored before the V3 schema existed: an overview blob plus two flat lists, with no sections and no follow-up draft.',
+        actionItems: ['Send the revised figures to Ana.', 'Book the follow-up for Thursday.'],
+        keyPoints: ['Q4 spend is tracking 8% under plan.', 'Headcount stays flat until the ledger migration lands.'],
+    },
+    transcript: Array.from({ length: 4 }, (_, k) => ({
+        speaker: k % 2 === 0 ? 'You' : 'Ana',
+        text: 'Legacy transcript line ' + (k + 1) + '.',
+        timestamp: k * 22,
+    })),
+    usage: [],
+    summaryStatus: 'completed',
+} as unknown as (typeof MEETINGS)[number]);
+
+const BOOT_MS = Date.now();
+
+// What m0 becomes once generation lands.
+const FINISHED_M0 = {
+    title: 'Standup — payments squad',
+    summary: 'See detailed summary',
+    summaryStatus: 'completed',
+    detailedSummary: {
+        schemaVersion: 3,
+        overview:
+            'The squad walked the reconciliation backlog, agreed the retry window is the ' +
+            'actual cause of the duplicate-charge reports, and moved the ledger migration ' +
+            'behind a flag so it can ship without blocking the release train.',
+        tldr: [
+            'Duplicate charges trace to the 90s retry window, not the gateway.',
+            'The ledger migration ships behind a flag this week.',
+            'Reconciliation backlog is down to 400 rows from 12k.',
+        ],
+        sectionsV3: [
+            {
+                id: 's1',
+                title: 'Decisions',
+                bullets: [
+                    { id: 'b1', text: 'Shorten the retry window to 20s and re-measure over a full day.' },
+                    { id: 'b2', text: 'Ship the ledger migration behind payments_ledger_v2, default off.' },
+                    { id: 'b3', text: 'Hold the gateway upgrade until reconciliation is at zero.' },
+                ],
+            },
+            {
+                id: 's2',
+                title: 'Open questions',
+                bullets: [
+                    { id: 'b4', text: 'Who owns the backfill once the flag flips on?' },
+                    { id: 'b5', text: 'Does the 20s window break the partner SLA?' },
+                ],
+            },
+        ],
+        actionItems: [],
+        keyPoints: [],
+        followUpDraft: {
+            subject: 'Payments standup — retry window + ledger flag',
+            body: 'Quick recap from this morning:\n\n' +
+                '- The duplicate charges come from the 90s retry window; we are cutting it to 20s and re-measuring.\n' +
+                '- The ledger migration ships behind payments_ledger_v2 (default off) so it does not block the release.\n' +
+                '- Reconciliation is down to ~400 rows.\n\nOpen: backfill ownership, and whether 20s breaks the partner SLA.',
+            tone: 'professional',
+        },
+    },
+};
+
 const noop = async () => undefined;
 
 // A plain object, deliberately not a Proxy: the components read non-function
@@ -66,7 +195,28 @@ const noop = async () => undefined;
 const stub = {
     platform: 'darwin',
     getRecentMeetings: async () => MEETINGS,
-    getMeetingDetails: async (id: string) => MEETINGS.find(m => m.id === id) ?? null,
+    getMeetingDetails: async (id: string) => {
+        // m0 finishes generating 8s after load, so opening it shows the whole arc:
+        // skeleton → live status → the notes swapping in. MeetingDetails polls
+        // getMeetingDetails while the status is in-progress, which is what picks
+        // this up; nothing here has to push.
+        if (id === 'm0' && Date.now() - BOOT_MS > 8_000) {
+            return { ...MEETINGS[0], ...FINISHED_M0 };
+        }
+        // m0x dies instead of finishing: status flips to 'failed' with the
+        // placeholder summary still empty, exactly as the hard-failure catch in
+        // MeetingPersistence leaves it (and with no broadcast, so only the poll
+        // sees it).
+        if (id === 'm0x' && Date.now() - BOOT_MS > 8_000) {
+            const m = MEETINGS.find(x => x.id === 'm0x');
+            // Mirrors DatabaseManager.markSummaryGenerationFailed: the placeholder
+            // title and blurb are cleared alongside the failed status, so the notes
+            // screen is not left saying "Notes couldn't be generated" underneath a
+            // heading that reads "Processing...".
+            return { ...m, title: 'Untitled Session', summary: '', summaryStatus: 'failed' };
+        }
+        return MEETINGS.find(m => m.id === id) ?? null;
+    },
     getUpcomingEvents: async () => [],
     onboardingGetFlags: async () => ({}),
     onboardingSetFlag: noop,

@@ -161,6 +161,26 @@ function checkNativeModuleUnpacked(): { ok: boolean; message: string } {
   return { ok: false, message: `Native module binary missing under resources/app.asar.unpacked/native-module/` };
 }
 
+/** Fallback only — the real value comes from LocalReranker. See its use below. */
+const BUILT_IN_RERANKER_MODEL_ID = 'Xenova/ms-marco-MiniLM-L-6-v2';
+
+/**
+ * A human-readable name for the bundled reranker, derived rather than written.
+ *
+ * `Xenova/ms-marco-MiniLM-L-6-v2` -> `ms-marco-MiniLM-L-6-v2`. Two strings in
+ * this file named the model; both went stale when it changed, and one of them
+ * is the line users read in the startup diagnostics.
+ */
+function bundledRerankerName(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');
+    const id = getBundledRerankerModelId?.();
+    if (typeof id === 'string' && id) return id.split('/').pop() as string;
+  } catch { /* fall through */ }
+  return 'local reranker';
+}
+
 /**
  * Like checkUnpackedNativeDir, but satisfied by ANY entry under `dirRel` whose
  * name starts with `prefix`.
@@ -261,16 +281,37 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
         rerankerCandidates.push(pathCheck.default.join(appPath, 'resources', 'models'));
         rerankerCandidates.push(pathCheck.default.join(appPath, '..', 'resources', 'models'));
       }
+      // The model id comes from LocalReranker, never a literal.
+      //
+      // This check hard-required `Xenova/bge-reranker-base`, and on 2026-09-04
+      // that model stopped being bundled — it measured WORSE than no reranker
+      // at all. Every packaged launch would then have reported the bundled
+      // reranker missing, because the check was still looking for the previous
+      // one. Deriving the id means the next swap cannot reintroduce that.
+      // Last-resort literal, used only if the require below throws. Kept in
+      // step by BundledRerankerFirstRunCrossPlatform, which pins it against
+      // DEFAULT_RERANKER_MODEL — a stale value here would look for the wrong
+      // file and report the bundled reranker missing on every packaged launch,
+      // which is exactly what happened when the model changed.
+      let bundledModelId = BUILT_IN_RERANKER_MODEL_ID;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');
+        const resolved = getBundledRerankerModelId?.();
+        if (typeof resolved === 'string' && resolved) bundledModelId = resolved;
+      } catch { /* fall back to the literal above rather than failing the preflight */ }
+
+      const segments = bundledModelId.split('/');
       for (const root of rerankerCandidates) {
-        const tok = pathCheck.default.join(root, 'Xenova', 'bge-reranker-base', 'tokenizer.json');
-        const onnx = pathCheck.default.join(root, 'Xenova', 'bge-reranker-base', 'onnx', 'model_quantized.onnx');
+        const tok = pathCheck.default.join(root, ...segments, 'tokenizer.json');
+        const onnx = pathCheck.default.join(root, ...segments, 'onnx', 'model_quantized.onnx');
         try {
           if (fsCheck.existsSync(tok) && fsCheck.existsSync(onnx) && fsCheck.statSync(onnx).size > 0) {
             return { ok: true, message: `Found ${onnx}` };
           }
         } catch { /* keep trying */ }
       }
-      return { ok: false, message: 'Xenova/bge-reranker-base model files missing from packaged resources/models/' };
+      return { ok: false, message: `${bundledModelId} model files missing from packaged resources/models/` };
     }));
 
     // 3. Packaged native binaries (Rust audio module, sqlite-vec, sharp, better-sqlite3, keytar).
@@ -360,9 +401,13 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       'local-reranker',
       'packaged_local',
       rerankerOk ? 'ready' : 'missing_required_asset',
+      // The model's NAME, not a hardcoded one. This said "BGE reranker (q8)"
+      // after the bundled model changed, so the startup diagnostics reported a
+      // model that is no longer in the app — the same drift that made the path
+      // check above look for the wrong file.
       rerankerOk
-        ? 'Packaged BGE reranker (q8) is ready for offline smart-retrieval'
-        : 'Natively packaged BGE reranker model is missing. Please reinstall Natively.',
+        ? `Packaged ${bundledRerankerName()} is ready for offline smart-retrieval`
+        : `Natively's packaged ${bundledRerankerName()} is missing. Please reinstall Natively.`,
       { checks: checks.filter(c => c.id === 'reranker model assets') },
     ));
 

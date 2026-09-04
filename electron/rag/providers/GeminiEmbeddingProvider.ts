@@ -11,9 +11,16 @@ import { embeddingSpaceKey } from '../embeddingSpace';
 //    parts inside ONE Content aggregate into a single vector (wrong for us).
 //  - v2 auto-normalizes truncated (non-3072) dimensions, so no manual L2 needed.
 const DEFAULT_MODEL = 'gemini-embedding-2';
-// 768 keeps us on the existing vec_chunks_768 table (already in KNOWN_DIMS) —
-// lowest-risk dimension choice for the migration.
-const DEFAULT_DIMS = 768;
+// 3072 is the model's OWN default — omitting outputDimensionality returns 3072 —
+// and the widest Gemini offers. It was pinned to 768 through the
+// gemini-embedding-001 -> -2 migration purely to stay on the already-provisioned
+// vec_chunks_768 table and keep that change to one variable. That migration is
+// done, and 3072 is also in KNOWN_DIMS, so the training wheel comes off.
+//
+// COST: float32 storage is 4x (12KB/chunk vs 3KB) and distance work scales with
+// width. Selectable per model in Settings; NATIVELY_GEMINI_EMBED_DIMS still pins
+// it without a rebuild.
+const DEFAULT_DIMS = 3072;
 // Gemini rejects batchEmbedContents requests with >100 items. Chunk locally so a
 // large PDF doesn't fall back to hundreds of serial embedContent calls and blow
 // through per-minute quota.

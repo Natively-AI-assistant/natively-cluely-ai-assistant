@@ -112,12 +112,18 @@ describe('Context OS — production-default flag contract (2026-07-18)', () => {
     'contextOsRecapFollowupEnabled',
     'contextOsEvidencePackEnabled',
     'contextOsMemorySafetyEnabled',
-  ];
-  const PRODUCTION_DEFAULT_OFF = [
+    // Promoted 2026-08-30 (user-directed override, no packaged-build/
+    // real-traffic false-refusal-rate validation) — see intelligenceFlags.ts's
+    // FLAGS registry comment for each. contextOsMultiFamilyEvidenceEnabled
+    // was promoted in a later, separate batch the same day.
     'contextOsEnforceSourceCapabilities',
     'contextOsPropertyValidation',
     'contextOsMultiFamilyEvidenceEnabled',
   ];
+  // As of 2026-08-30 every Context OS flag this file tracks is
+  // production-default-on; nothing remains in the dev/test-only bucket this
+  // suite originally distinguished.
+  const PRODUCTION_DEFAULT_OFF = [];
 
   beforeEach(() => {
     for (const k of CLEAR_ENV_KEYS) delete process.env[k];
@@ -160,33 +166,28 @@ describe('Context OS — production-default flag contract (2026-07-18)', () => {
       `phantom flag keys referenced at literal call sites: ${[...offenders.entries()].map(([k, files]) => `${k} (in ${files.join(', ')})`).join('; ')}`);
   });
 
-  test('under production-like defaults, the six core flags resolve ON and the three strict gates OFF', () => {
+  test('under production-like defaults, all tracked Context OS flags resolve ON (as of the 2026-08-30 promotion, none remain dev/test-only)', () => {
     for (const key of PRODUCTION_DEFAULT_ON) {
       assert.equal(mod.isIntelligenceFlagEnabled(key), true, `${key} must be production-default-on`);
     }
-    for (const key of PRODUCTION_DEFAULT_OFF) {
-      assert.equal(mod.isIntelligenceFlagEnabled(key), false, `${key} must be production-default-off (dev/test-only)`);
-    }
+    assert.equal(PRODUCTION_DEFAULT_OFF.length, 0);
   });
 
-  test('under NODE_ENV=test, every strict gate resolves ON without disturbing the core six', () => {
+  test('under NODE_ENV=test, the core flags remain ON (dev/test context changes nothing further)', () => {
     process.env.NODE_ENV = 'test';
-    for (const key of PRODUCTION_DEFAULT_OFF) {
-      assert.equal(mod.isIntelligenceFlagEnabled(key), true, `${key} flips on in dev/test contexts`);
-    }
     for (const key of PRODUCTION_DEFAULT_ON) {
       assert.equal(mod.isIntelligenceFlagEnabled(key), true, `${key} must remain on in dev/test contexts`);
     }
   });
 
-  test('an explicit NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE=1 toggles the gate ON without affecting siblings', () => {
-    process.env.NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE = '1';
-    assert.equal(mod.isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled'), true);
-    // Strict siblings stay off (their env var is unset).
-    assert.equal(mod.isIntelligenceFlagEnabled('contextOsEnforceSourceCapabilities'), false);
-    assert.equal(mod.isIntelligenceFlagEnabled('contextOsPropertyValidation'), false);
-    // Core six unaffected by the multi-family override.
+  test('an explicit NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE=0 forces the gate OFF without affecting siblings', () => {
+    // contextOsMultiFamilyEvidenceEnabled defaults true (2026-08-30 promotion)
+    // now, so the meaningful complementary case is verifying the OFF override
+    // still works and doesn't drag its siblings down with it.
+    process.env.NATIVELY_CONTEXT_OS_MULTI_FAMILY_EVIDENCE = '0';
+    assert.equal(mod.isIntelligenceFlagEnabled('contextOsMultiFamilyEvidenceEnabled'), false);
     for (const key of PRODUCTION_DEFAULT_ON) {
+      if (key === 'contextOsMultiFamilyEvidenceEnabled') continue;
       assert.equal(mod.isIntelligenceFlagEnabled(key), true, `${key} must remain production-default-on`);
     }
   });

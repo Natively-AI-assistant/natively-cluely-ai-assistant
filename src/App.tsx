@@ -183,6 +183,34 @@ const App: React.FC = () => {
   // Memoizing to [] makes the splash timers arm exactly once.
   const dismissStartup = useCallback(() => setShowStartup(false), []);
 
+  /**
+   * Tell main the boot reveal has landed, so it can restore background
+   * throttling on this window.
+   *
+   * WindowHelper creates the launcher with `backgroundThrottling: false`
+   * because Chromium stops rAF for a hidden window and this reveal is a Framer
+   * Motion transition — but nothing turned it back on, so the opt-out outlived
+   * the one-shot animation. Measured 2026-09-03: a hidden window with the
+   * opt-out ran 600 rAF frames in 10s where a throttled one ran 0, which means
+   * a launcher hidden during summary generation kept compositing ~19 infinite
+   * `.mn-skel` animations off screen.
+   *
+   * Hung off the entrance animation's own completion rather than a timer, so
+   * the reveal is provably finished before throttling returns. Once only —
+   * AnimatePresence can re-run this branch.
+   */
+  const revealReported = useRef(false);
+  const reportRevealComplete = useCallback(() => {
+    if (revealReported.current) return;
+    if (!(isLauncherWindow || isDefault)) return;
+    revealReported.current = true;
+    try {
+      window.electronAPI?.notifyLauncherRevealComplete?.();
+    } catch {
+      /* a missing bridge just means throttling stays as it was */
+    }
+  }, [isLauncherWindow, isDefault]);
+
   // Bug 1 + Bug 2: only mount the launcher-side floating card AFTER the
   // startup animation has finished AND a 3s settle window has elapsed.
   // Triggers `false → true` 3s after `showStartup` flips false; tracked via
@@ -1066,6 +1094,7 @@ const App: React.FC = () => {
               duration: 0.6,
               ease: [0.19, 1, 0.22, 1], // Expo-out: snappy start, smooth landing
             }}
+            onAnimationComplete={reportRevealComplete}
           >
             <QueryClientProvider client={queryClient}>
               <ToastProvider>

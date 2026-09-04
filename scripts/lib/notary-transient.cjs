@@ -130,6 +130,97 @@ function classifyNotarySubmitFailure(result) {
   };
 }
 
+/**
+ * notarytool prints "Submission ID received\n  id: <uuid>" as soon as the server
+ * accepts the request — BEFORE the upload finishes. So an id proves a submission
+ * was created, never that the bytes arrived. Newest last, matching print order.
+ */
+function extractSubmissionIds(output) {
+  const ids = [];
+  const re = /\bid:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
+  let m;
+  while ((m = re.exec(String(output || ''))) !== null) {
+    if (!ids.includes(m[1])) ids.push(m[1]);
+  }
+  return ids;
+}
+
+/** Parse the status out of `notarytool info` / `wait` output. */
+function parseSubmissionStatus(output) {
+  const m = /\bstatus:\s*(Accepted|In Progress|Invalid|Rejected)\b/i.exec(String(output || ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * RECOVERY: after a submit that reached no verdict, ask Apple what happened to the
+ * submission instead of re-uploading a gigabyte.
+ *
+ * WHY (2026-08-27): three separate builds died on a local network failure while the
+ * submission was ALIVE on Apple's side — one came back Accepted, and a later retry
+ * round produced three ids all sitting at "In Progress". Every one of those builds
+ * was thrown away for work Apple had already taken. `notarytool info` is a small,
+ * fast request that survives a link too weak for a 1 GB upload.
+ *
+ * The distinction that matters: an id whose upload ABORTED never reaches a verdict,
+ * so waiting on it would hang. `info` separates the two cheaply —
+ *   Accepted            → done, no re-upload
+ *   In Progress         → the bytes landed; wait (bounded) for the verdict
+ *   Invalid / Rejected  → decided; stop, do not retry
+ *   anything else       → fall through to a normal re-submit
+ *
+ * @returns {Promise<{recovered: boolean, status: ?string, id: ?string}>}
+ */
+async function recoverViaSubmissionId(opts) {
+  const { ids = [], credArgs = [], run, log = console } = opts || {};
+  for (const id of [...ids].reverse()) {
+    const info = await run('xcrun', ['notarytool', 'info', id, ...credArgs]);
+    const status = parseSubmissionStatus(info && info.output);
+    if (status === 'Accepted') {
+      log.warn(`[notary-retry] submission ${id} was already Accepted by Apple — no re-upload needed.`);
+      return { recovered: true, status, id };
+    }
+    if (status === 'Invalid' || status === 'Rejected') {
+      log.warn(`[notary-retry] submission ${id} is ${status} — a decided verdict, not retrying.`);
+      return { recovered: false, status, id };
+    }
+    // DELIBERATELY NOT RECOVERED: "In Progress".
+    //
+    // The first cut of this treated In Progress as "the bytes landed, just wait".
+    // That was wrong, and measured so on 2026-08-27: a submission record is created
+    // when Apple ACCEPTS THE REQUEST, not when the upload completes, so an aborted
+    // upload leaves a record stuck In Progress indefinitely — five of them sat there
+    // for over an hour, and an `xcrun notarytool wait` on one was still blocked after
+    // 60+ minutes. Submissions that genuinely complete reach Accepted in ~25 minutes.
+    //
+    // So In Progress carries no information: it looks identical for a live submission
+    // and a dead one. Waiting on it would block for the whole timeout and then need
+    // the re-upload anyway. Fall through to a normal re-submit instead.
+  }
+  return { recovered: false, status: null, id: null };
+}
+
+/**
+ * Should a THROWN notarization error (the @electron/notarize path, which gives us a
+ * message and nothing else) be retried?
+ *
+ * Same philosophy as classifyNotarySubmitFailure: ask "was a verdict reached?", not
+ * "does this text look network-y". Wording-matching lost twice —
+ * `HTTPClientError.connectTimeout` matched no signature on 2026-08-27 and two builds
+ * aborted without a single retry — and every miss costs a full rebuild, so the gate
+ * must fail OPEN on unrecognised errors rather than closed.
+ *
+ * Not retried: a decided verdict (re-uploading cannot change it), an auth/usage
+ * failure (a credential will not fix itself), and staple failures (the submission
+ * already succeeded — scripts/notarize.js recovers those via staple-with-retry).
+ */
+function shouldRetryNotarizeThrow(message) {
+  const msg = String(message || '');
+  if (/staple/i.test(msg)) return false;
+  if (VERDICT_RE.test(msg)) return false;
+  if (AUTH_OR_USAGE_RE.test(msg)) return false;
+  return true;
+}
+
 /** Default runner: stream the child's output live AND capture it for classification. */
 function runCapture(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -216,6 +307,25 @@ async function notarytoolSubmitWithRetry(opts) {
     last = result;
     const verdict = classifyNotarySubmitFailure(result);
     reason = verdict.reason;
+
+    // BEFORE spending another ~1 GB upload: ask Apple what became of the
+    // submission this attempt created. Three builds on 2026-08-27 died locally
+    // while their submission was alive server-side (one already Accepted, three
+    // more In Progress) — every one of them re-uploaded or gave up for nothing.
+    if (verdict.retriable) {
+      const ids = extractSubmissionIds(result.output);
+      if (ids.length > 0) {
+        const recovery = await recoverViaSubmissionId({ ids, credArgs, run, log });
+        if (recovery.recovered) {
+          return { ...result, code: 0, recoveredSubmissionId: recovery.id, attempts: attempt };
+        }
+        if (recovery.status === 'Invalid' || recovery.status === 'Rejected') {
+          reason = `verdict:${recovery.status}`;
+          break; // decided — re-uploading cannot change it
+        }
+      }
+    }
+
     if (!verdict.retriable || attempt >= maxAttempts) break;
 
     const delayMs = baseDelayMs * attempt;
@@ -236,6 +346,10 @@ async function notarytoolSubmitWithRetry(opts) {
 }
 
 module.exports = {
+  shouldRetryNotarizeThrow,
+  extractSubmissionIds,
+  parseSubmissionStatus,
+  recoverViaSubmissionId,
   CREDENTIAL_FLAGS,
   EX_USAGE,
   VERDICT_RE,

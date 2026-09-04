@@ -140,10 +140,18 @@ export function scopeAdmits(turn: EvidenceScope, source: EvidenceScope): boolean
  * legacy path does the opposite — it passes text through and lets the prompt
  * sort it out, which is how a superseded resume reaches the model.
  */
+// MUST list every member of the EvidenceProvenance union in contracts/types.ts.
+// A member missing here is not rejected — it is SILENTLY STRIPPED below, so the
+// evidence still reaches the model with no `provenance=` attribute at all.
+// SCREEN_CAPTURE was added to the union with a docblock explaining why it must
+// be distinguishable from PRIOR_ASSISTANT_MESSAGE (an observation, not a
+// model-generated claim), and was missing from this list — so the attribute the
+// packer emits never appeared and the distinction did not exist in practice.
+// LegacyAdapterProvenance.test.mjs now fails if the two drift again.
 const KNOWN_PROVENANCE = new Set<string>([
   'PROFILE_RESUME', 'PROFILE_JOB_DESCRIPTION', 'PROFILE_FACT', 'MODE_REFERENCE_FILE',
   'LIVE_STT', 'IMPORTED_TRANSCRIPT', 'TEST_TRANSCRIPT', 'MEETING_NOTE',
-  'MANUAL_CHAT', 'PRIOR_ASSISTANT_MESSAGE',
+  'MANUAL_CHAT', 'PRIOR_ASSISTANT_MESSAGE', 'SCREEN_CAPTURE',
 ]);
 
 export function adaptLegacyChunks(chunks: LegacyChunk[], opts: AdaptOptions): AdaptResult {

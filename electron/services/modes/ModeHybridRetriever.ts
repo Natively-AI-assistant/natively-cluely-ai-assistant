@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 import { wordsOf } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
+import { resolveRerankBudgetMs, type RerankSurface } from '../reranking/rerankBudget';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -188,6 +189,26 @@ const RERANK_CANDIDATE_POOL = 30;
 // on a quantized cross-encoder, so the rerank step takes ~50–100ms longer
 // total, well inside the retrieval budget.
 const RERANK_BATCH_SIZE = 6;
+
+/**
+ * How many candidates to rerank, from Settings > Reranker.
+ *
+ * Clamped to RERANK_CANDIDATE_POOL: a larger pool is not the user's to raise
+ * here, because the ceiling exists for the ONNX arena and the latency budget,
+ * not as a preference. Absent or unreadable settings keep the existing default,
+ * so this cannot change behaviour for anyone who has not touched the control.
+ */
+function resolveRerankPoolSize(): number {
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SettingsManager } = require('../SettingsManager');
+        const chosen = (SettingsManager.getInstance().get('reranker') as any)?.candidateCount;
+        if (Number.isFinite(chosen) && chosen > 0) {
+            return Math.min(RERANK_CANDIDATE_POOL, Math.floor(chosen));
+        }
+    } catch { /* settings unavailable: keep the default */ }
+    return RERANK_CANDIDATE_POOL;
+}
 
 function keylessManualRetrievalUsesLexical(): boolean {
     const raw = String(process.env.NATIVELY_KEYLESS_LEXICAL_MANUAL_RETRIEVAL || '').trim().toLowerCase();
@@ -1058,6 +1079,12 @@ export class ModeHybridRetriever {
          * from chunks only.
          */
         forceDocumentGrounding?: boolean;
+        /**
+         * Which deadline this turn is racing, for the rerank budget only.
+         * ABSENT means the tighter live budget — a caller that has not declared
+         * itself must never be handed the manual budget on a live turn.
+         */
+        rerankSurface?: RerankSurface;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1067,6 +1094,7 @@ export class ModeHybridRetriever {
             hasTranscript = false,
             allowRerank = false,
             forceDocumentGrounding = false,
+            rerankSurface,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1378,14 +1406,65 @@ export class ModeHybridRetriever {
             const gate = confidence
                 ?? this.computeConfidence(candidates, queryWords.size, allCandidates.length, usedFallback);
             const lowConfidence = gate.lowConfidence === true;
-            markH4HybridStage('rerank_gate', { lowConfidence, candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride) });
-            if (lowConfidence) {
+
+            // A reranker the user CHOSE runs on every permitted query; the
+            // bundled default stays a low-confidence escalation.
+            //
+            // The gate alone was far too narrow for a configured reranker.
+            // MEASURED against the running app over 36 doc-grounded retrievals
+            // across 9 queries, several written to be deliberately vague: it
+            // tripped ONCE. Downloading a 400MB model, selecting it, and
+            // watching its Test Connection pass bought re-ordering on 1 query
+            // in 36 — with nothing anywhere reporting that it had not run.
+            //
+            // The bundled model keeps the old behaviour on purpose: a user who
+            // never opened the panel should not start paying rerank latency
+            // because this changed.
+            const explicitlySelected = this.rerankerOverride
+                ? false
+                : (() => {
+                    try {
+                        // eslint-disable-next-line @typescript-eslint/no-var-requires
+                        const { isRerankerExplicitlySelected } = require('../reranking/rerankerConfig') as typeof import('../reranking/rerankerConfig');
+                        return isRerankerExplicitlySelected();
+                    } catch { return false; }
+                })();
+            // A reranker the user CHOSE runs on every permitted query. The
+            // bundled default runs only when retrieval is unsure.
+            //
+            // That split has been through three states, and the middle one is
+            // why the comment is this long. It began as `if (lowConfidence)`
+            // alone, so a chosen reranker ran on 1 query in 36. The escalation
+            // was then kept for the bundled model only — until the bundled
+            // model was measured and turned out to be the WORST reranker in the
+            // benchmark (bge-reranker-base: MRR 0.7558 against a 0.8368
+            // no-reranker baseline), at which point the escalation had no
+            // beneficiary and was removed entirely.
+            //
+            // The bundled model is now ms-marco-MiniLM-L-6-v2, which is +0.0320
+            // against that baseline at 211ms and 24MB. The escalation has a
+            // beneficiary again, so it is back — and it is still an escalation
+            // rather than unconditional, because +0.0320 is a real but modest
+            // gain and a default install should not pay for it on every query.
+            // docs/reranker-benchmark-2026-09-04.md
+            const shouldRerank = explicitlySelected || lowConfidence || Boolean(this.rerankerOverride);
+            // lowConfidence is still traced: it is no longer a trigger, but it
+            // is the signal anyone re-litigating this decision will want.
+            markH4HybridStage('rerank_gate', {
+                lowConfidence, explicitlySelected, shouldRerank,
+                candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride),
+            });
+            if (shouldRerank) {
                 // A manual-chat answer has a fixed first-useful deadline. The local
                 // cross-encoder is optional ranking refinement, so it must never
                 // consume that whole deadline and prevent a lexical/evidence-pack
                 // answer from reaching the provider. Keep its late result isolated
                 // rather than awaiting it on the critical path.
-                const RERANK_BUDGET_MS = 1200;
+                // The budget follows the CHOICE, not just the surface: a reranker
+                // the user selected gets time to finish, while the bundled
+                // default keeps the 1200ms that protects a first-useful token.
+                // See rerankBudget.ts for the measured case this fixes.
+                const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
                 markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
                 const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
                 let rerankTimer: NodeJS.Timeout | undefined;
@@ -1532,9 +1611,27 @@ export class ModeHybridRetriever {
 
         try {
             let reranker = this.rerankerOverride;
+
+            // An enabled reranker EXTENSION takes over this seam — it never runs
+            // BESIDE the built-in. That keeps one rerank stage, one budget and
+            // one fallback, and it is what ModeSpeculativeRerank.test.mjs's
+            // source guards require ("no new unbounded await"). Resolution is
+            // synchronous; with no extension owning the seam it returns null and
+            // everything below behaves exactly as before.
+            const extensionPort = this.rerankerOverride ? null : (() => {
+                try {
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    return require('../reranking/RerankerRegistry').getRerankerRegistry().resolvePort();
+                } catch { return null; }
+            })();
+            if (!reranker && extensionPort) {
+                reranker = extensionPort;
+            }
+
             // Only run telemetry when the production singleton is in use —
-            // the test override lacks isAvailable/isCached.
-            const productionReranker = this.rerankerOverride ? null : (() => {
+            // the test override lacks isAvailable/isCached, and so does the
+            // extension port.
+            const productionReranker = (this.rerankerOverride || extensionPort) ? null : (() => {
                 try {
                     // eslint-disable-next-line @typescript-eslint/no-var-requires
                     return require('../../rag/LocalReranker').getLocalReranker();
@@ -1570,7 +1667,11 @@ export class ModeHybridRetriever {
                 }
             }
 
-            const pool = sorted.slice(0, RERANK_CANDIDATE_POOL);
+            // How many candidates the user chose to rerank. Until now this
+            // setting was written by Settings > Reranker and read by nothing,
+            // so the control looked live and did nothing.
+            const poolSize = resolveRerankPoolSize();
+            const pool = sorted.slice(0, poolSize);
             const poolTexts = pool.map((c: ChunkCandidate) => c.text);
             // Chunked inference — see RERANK_BATCH_SIZE for the crash-forensics
             // rationale. Each batch returns results with INDEXES RELATIVE TO THE
@@ -1594,11 +1695,43 @@ export class ModeHybridRetriever {
                 return null;
             }
 
+            // RERANK_BATCH_SIZE exists to bound the ONNX arena (see its comment).
+            // That reasoning is specific to an in-process forward pass. A port
+            // whose cost is a network round trip, or an out-of-process call,
+            // pays that batching five times over for no benefit — ~5x the
+            // latency and, for a hosted reranker, ~5x the spend, which is enough
+            // to push a model that clears RERANK_BUDGET_MS past it. So a port
+            // may declare the batch size it wants; the built-in declares none
+            // and keeps the existing value exactly.
+            const declaredBatch = (reranker as { batchSize?: number }).batchSize;
+            const rerankBatchSize = Number.isFinite(declaredBatch) && (declaredBatch as number) > 0
+                ? Math.min(poolTexts.length, Math.floor(declaredBatch as number))
+                : RERANK_BATCH_SIZE;
+
             const allResults: Array<{ index: number; score: number; originalIndex: number }> = [];
-            for (let i = 0; i < poolTexts.length; i += RERANK_BATCH_SIZE) {
-                const batchTexts = poolTexts.slice(i, i + RERANK_BATCH_SIZE);
+            for (let i = 0; i < poolTexts.length; i += rerankBatchSize) {
+                const batchTexts = poolTexts.slice(i, i + rerankBatchSize);
                 const batchResults = await reranker.rerank(queryText, batchTexts);
-                if (!batchResults || batchResults.length === 0) continue;
+                // A PARTIAL ranking is worse than none. rankScore(c, true)
+                // returns -Infinity for a candidate with no rerankScore, so
+                // survivors of a failed batch sink below every chunk the
+                // reranker never even looked at — silently burying whichever
+                // candidates the failed batch happened to contain.
+                //
+                // This is REACHABLE ON THE BUILT-IN, not only on a hosted port:
+                // LocalReranker.rerank returns null per call on a worker
+                // timeout, on a thrown error, and on a short `scores` array. So
+                // one transient timeout on batch 3 of 5 abandons all five, and
+                // the answer falls back to cosine order. That is the intended
+                // trade — a wholly correct cosine ordering beats a rerank
+                // ordering with a third of the pool pinned at -Infinity — but
+                // it is a real cost on the default local path, not a
+                // theoretical one, so do not "optimise" it back to `continue`.
+                // Abandon the whole rerank and keep the pre-rerank order.
+                if (!batchResults || batchResults.length !== batchTexts.length) {
+                    console.warn('[ModeHybridRetriever] rerank batch incomplete (keeping cosine order)');
+                    return null;
+                }
                 for (const r of batchResults) {
                     allResults.push({ ...r, originalIndex: i + r.index });
                 }
@@ -1623,9 +1756,9 @@ export class ModeHybridRetriever {
             for (let i = 0; i < pool.length; i++) {
                 if (!used.has(i)) reordered.push({ ...pool[i] });
             }
-            // Append the un-pooled tail (beyond RERANK_CANDIDATE_POOL) unchanged
-            // so we never DROP candidates the budget step might still want.
-            for (let i = RERANK_CANDIDATE_POOL; i < sorted.length; i++) {
+            // Append the un-pooled tail unchanged so we never DROP candidates
+            // the budget step might still want.
+            for (let i = poolSize; i < sorted.length; i++) {
                 reordered.push(sorted[i]);
             }
             return reordered;

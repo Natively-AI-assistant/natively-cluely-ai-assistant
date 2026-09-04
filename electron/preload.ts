@@ -502,6 +502,44 @@ interface ElectronAPI {
   searchInMeeting: (query: string) => Promise<{ enabled: boolean; results: any[] }>;
   generateLectureNotes: (opts?: { title?: string; course?: string }) => Promise<{ enabled: boolean; notes: any }>;
   generateDiagram: (text?: string) => Promise<{ enabled: boolean; diagram: any }>;
+  // ── Embedding settings (configured independently of the generation model) ──
+  getEmbeddingStatus: () => Promise<{
+    active: { configured: boolean; provider?: string | null; model?: string | null; dimensions?: number | null; space?: string | null; location?: 'on-device' | 'cloud' | 'unknown'; lightweight?: boolean };
+    configured: { mode?: 'auto' | 'manual'; provider?: string; model?: string; dimensions?: number };
+    acknowledged: boolean;
+    scopeAllowsCloud: boolean;
+    /** §5: a third-party AI provider is configured while embeddings stay lightweight. */
+    shouldWarn: boolean;
+  }>;
+  getEmbeddingCatalog: () => Promise<{
+    providers: Array<{
+      id: 'natively' | 'ollama' | 'custom' | 'openrouter' | 'voyage' | 'openai' | 'gemini' | 'local'
+      name: string
+      cloud: boolean
+      managed?: boolean
+      available: boolean
+      unavailableReason?: 'no_key' | 'not_running' | 'blocked_by_policy' | 'not_configured'
+      endpoint?: string
+      capabilityUnknown?: boolean
+      models: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[]; lightweight?: boolean; recommended?: boolean; note?: string }>
+    }>
+    hasCatalog?: { openai?: boolean; gemini?: boolean }
+  }>;
+  testEmbeddingModel: (choice?: { provider?: string; model?: string }) => Promise<{
+    ok: boolean; provider?: string; model?: string; dimensions?: number; space?: string; latencyMs?: number; error?: string; status?: number; message?: string;
+  }>;
+  setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => Promise<{
+    success: boolean; previousSpace?: string; activeSpace?: string; reindexRequired?: boolean; error?: string; message?: string;
+  }>;
+  fetchEmbeddingModels: (providerId: string) => Promise<{
+    success: boolean; models?: Array<{ id: string; label: string; dimensions: number; dimensionsVerified: boolean; supportedDimensions?: number[] }>; count?: number; error?: string
+  }>;
+  setEmbeddingVoyageKey: (key: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  setEmbeddingOpenRouterKey: (key: string) => Promise<{ success: boolean; models?: unknown[]; count?: number; error?: string; message?: string }>;
+  setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => Promise<{
+    success: boolean; endpoint?: string | null; models?: Array<{ id: string; capabilityKnown: boolean }>; reachable?: boolean; error?: string; message?: string
+  }>;
+  acknowledgeLightweightEmbeddings: (acknowledged: boolean) => Promise<{ success: boolean }>;
   getIntelligenceFlags: () => Promise<Array<{ key: string; enabled: boolean; setting: string; env: string; default: boolean }>>;
   setIntelligenceFlag: (key: string, value: boolean | null) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
   getContextDebugConfig: () => Promise<{ level: 'off' | 'standard' | 'verbose'; levelSource: 'environment' | 'setting' | 'default'; contentInclusion: boolean; storedLevel?: 'off' | 'standard' | 'verbose'; logDirectory?: string | null; currentFile?: string | null; error?: string }>;
@@ -959,6 +997,7 @@ interface ElectronAPI {
   // Verbose / Debug Logging
   getVerboseLogging: () => Promise<boolean>;
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
+  exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
   getStealthShortcutGuard: () => Promise<boolean>;
   setStealthShortcutGuard: (enabled: boolean) => Promise<{ success: boolean }>;
   debugDropHotkey: (id: string) => Promise<{ dropped: boolean }>;
@@ -1925,6 +1964,58 @@ contextBridge.exposeInMainWorld('electronAPI', {
   searchInMeeting: (query: string) => ipcRenderer.invoke('search:in-meeting', { query }),
   generateLectureNotes: (opts?: { title?: string; course?: string }) => ipcRenderer.invoke('lecture:generate-notes', opts),
   generateDiagram: (text?: string) => ipcRenderer.invoke('diagram:generate', { text }),
+  getEmbeddingStatus: () => ipcRenderer.invoke('embedding:get-status'),
+  getEmbeddingCatalog: () => ipcRenderer.invoke('embedding:get-catalog'),
+  testEmbeddingModel: (choice?: { provider?: string; model?: string }) => ipcRenderer.invoke('embedding:test', choice),
+  setEmbeddingConfig: (next: { mode?: string; provider?: string; model?: string; dimensions?: number }) => ipcRenderer.invoke('embedding:set-config', next),
+  fetchEmbeddingModels: (providerId: string) => ipcRenderer.invoke('embedding:fetch-models', providerId),
+  setEmbeddingVoyageKey: (key: string) => ipcRenderer.invoke('embedding:set-voyage-key', key),
+  setEmbeddingOpenRouterKey: (key: string) => ipcRenderer.invoke('embedding:set-openrouter-key', key),
+  setEmbeddingCustomEndpoint: (input: { url?: string; apiKey?: string }) => ipcRenderer.invoke('embedding:set-custom-endpoint', input),
+  acknowledgeLightweightEmbeddings: (acknowledged: boolean) => ipcRenderer.invoke('embedding:acknowledge-lightweight', acknowledged),
+
+  // Reranker. One surface, provider as a choice inside it. The OpenRouter key is
+  // the SAME credential the embedding and generation paths use — this never
+  // reads it back, only reports whether one is configured.
+  getRerankerStatus: () => ipcRenderer.invoke('reranker:get-status'),
+  getRerankerCatalog: (opts?: { refresh?: boolean }) => ipcRenderer.invoke('reranker:get-catalog', opts),
+  setRerankerConfig: (next: {
+    provider?: 'local' | 'openrouter';
+    openrouterModel?: string;
+    candidateCount?: number;
+    fallbackToLocal?: boolean;
+  }) => ipcRenderer.invoke('reranker:set-config', next),
+  setRerankerOpenRouterKey: (key: string) => ipcRenderer.invoke('reranker:set-openrouter-key', key),
+  setRerankerHostedKey: (provider: string, key: string) => ipcRenderer.invoke('reranker:set-hosted-key', provider, key),
+  getRerankerHostedProviders: () => ipcRenderer.invoke('reranker:hosted-providers'),
+  testReranker: (choice?: { model?: string }) => ipcRenderer.invoke('reranker:test', choice),
+
+  // Direct model install: download a reranker without staging an extension.
+  listLocalRerankerModels: () => ipcRenderer.invoke('reranker:list-local-models'),
+  installLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:install-local-model', id),
+  cancelLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:cancel-local-model', id),
+  removeLocalRerankerModel: (id: string) => ipcRenderer.invoke('reranker:remove-local-model', id),
+  useLocalRerankerModel: (id: string | null) => ipcRenderer.invoke('reranker:use-local-model', id),
+  onLocalRerankerModelProgress: (callback: (p: { id: string; fraction: number; currentFile: string }) => void) => {
+    const subscription = (_e: any, payload: any) => callback(payload);
+    ipcRenderer.on('reranker:model-progress', subscription);
+    return () => { ipcRenderer.removeListener('reranker:model-progress', subscription); };
+  },
+
+  // Extensions. Reranker extensions surface inside Settings > Reranker.
+  listExtensions: () => ipcRenderer.invoke('extensions:list'),
+  installExtensionFromFolder: () => ipcRenderer.invoke('extensions:install-from-folder'),
+  setExtensionEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('extensions:set-enabled', id, enabled),
+  removeExtension: (id: string) => ipcRenderer.invoke('extensions:remove', id),
+  acknowledgeExtensionLicense: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:acknowledge-license', id, modelKey),
+  downloadExtensionModel: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:download-model', id, modelKey),
+  cancelExtensionModelDownload: (id: string, modelKey: string) => ipcRenderer.invoke('extensions:cancel-download', id, modelKey),
+  browseExtensionRegistry: (url?: string) => ipcRenderer.invoke('extensions:browse-registry', url),
+  onExtensionModelProgress: (callback: (p: { id: string; modelKey: string; fraction: number }) => void) => {
+    const subscription = (_e: any, payload: any) => callback(payload);
+    ipcRenderer.on('extensions:model-progress', subscription);
+    return () => { ipcRenderer.removeListener('extensions:model-progress', subscription); };
+  },
   getIntelligenceFlags: () => ipcRenderer.invoke('intelligence-flags:get'),
   setIntelligenceFlag: (key: string, value: boolean | null) => ipcRenderer.invoke('intelligence-flags:set', { key, value }),
   getContextDebugConfig: () => ipcRenderer.invoke('context-debug:get-config'),
@@ -2688,6 +2779,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Verbose / Debug Logging
   getVerboseLogging: () => ipcRenderer.invoke('get-verbose-logging'),
   setVerboseLogging: (enabled: boolean) => ipcRenderer.invoke('set-verbose-logging', enabled),
+  exportDebugLogs: () => ipcRenderer.invoke('export-debug-logs'),
   getStealthShortcutGuard: () => ipcRenderer.invoke('get-stealth-shortcut-guard'),
   setStealthShortcutGuard: (enabled: boolean) => ipcRenderer.invoke('set-stealth-shortcut-guard', enabled),
   debugDropHotkey: (id: string) => ipcRenderer.invoke('debug:drop-hotkey', id),
@@ -2783,6 +2875,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cropper API
   cropperConfirmed: (bounds: Electron.Rectangle) => ipcRenderer.send('cropper-confirmed', bounds),
   cropperCancelled: () => ipcRenderer.send('cropper-cancelled'),
+  /** Launcher only: the boot reveal animation has fully landed. */
+  notifyLauncherRevealComplete: () => ipcRenderer.send('launcher:reveal-complete'),
   onResetCropper: (callback: (data: { hudPosition: { x: number; y: number } }) => void) => {
     const subscription = (
       _: Electron.IpcRendererEvent,
