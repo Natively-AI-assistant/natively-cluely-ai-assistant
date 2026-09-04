@@ -41,6 +41,9 @@ const MEASURED_MRR = {
   'bge-reranker-large': 0.8469,
   'mxbai-rerank-xsmall': 0.8394,
   'ettin-reranker-32m': 0.8299,
+  // Not a catalogue entry — the BUNDLED default, which an empty selection
+  // resolves to. Measured through the same sweep (`run-one.mjs builtin`).
+  'Xenova/bge-reranker-base': 0.7558,
 };
 const BASELINE_MRR = 0.8368;
 
@@ -132,4 +135,33 @@ test('the headline never lands on a non-commercial model while an open one is re
   assert.equal(jina.license.commercialUseRestricted, true);
   assert.equal(jina.license.requiresAcknowledgement, true,
     'the licence gate is what makes recommending it acceptable at all');
+});
+
+test('the bundled default is not silently promoted into the catalogue', () => {
+  // `Xenova/bge-reranker-base` is what an empty selection resolves to, so it is
+  // the reranker most users actually run — and it is the WORST thing measured:
+  // MRR 0.7558 against a 0.8368 baseline, moving 7 queries down against 3 up.
+  // It is not broken (it ranks an obvious probe perfectly); it is a 2022-era
+  // cross-encoder losing to same-vocabulary distractors.
+  //
+  // It keeps its place as the fallback, because something has to be there when
+  // nothing is downloaded. What it must never become is a catalogue entry
+  // carrying a Recommended badge.
+  assert.ok(MEASURED_MRR['Xenova/bge-reranker-base'] < BASELINE_MRR,
+    'the premise of this test changed — re-read the benchmark');
+  assert.equal(RERANKER_MODEL_CATALOG.some(m => m.modelId === 'Xenova/bge-reranker-base'), false,
+    'the bundled model must not appear in the downloadable catalogue');
+  for (const m of recommended()) {
+    assert.notEqual(m.modelId, 'Xenova/bge-reranker-base');
+  }
+});
+
+test('a recommended model beats the bundled default it would replace', () => {
+  // The point of downloading one at all. A recommendation that does not clear
+  // the model already on disk is asking the user to spend megabytes for nothing.
+  const bundled = MEASURED_MRR['Xenova/bge-reranker-base'];
+  for (const m of recommended()) {
+    assert.ok(MEASURED_MRR[m.id] > bundled,
+      `${m.id} (MRR ${MEASURED_MRR[m.id]}) does not beat the bundled ${bundled}`);
+  }
 });

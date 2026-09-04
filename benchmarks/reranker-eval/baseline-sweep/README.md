@@ -33,6 +33,7 @@ node benchmarks/reranker-eval/baseline-sweep/baseline.mjs corpus.json baseline.j
 # then one row at a time — a fresh process each, because llama.cpp and ONNX
 # each hold hundreds of MB and one process sweeping ten models measures memory
 # pressure rather than reranking
+node benchmarks/reranker-eval/baseline-sweep/run-one.mjs builtin Xenova/bge-reranker-base baseline.json out/x.json
 node benchmarks/reranker-eval/baseline-sweep/run-one.mjs onnx  ms-marco-minilm-l6      baseline.json out/x.json
 node benchmarks/reranker-eval/baseline-sweep/run-one.mjs gguf  jina-reranker-v3.5-q4km baseline.json out/x.json
 node benchmarks/reranker-eval/baseline-sweep/run-one.mjs openrouter cohere/rerank-4-pro baseline.json out/x.json
@@ -43,6 +44,11 @@ node benchmarks/reranker-eval/baseline-sweep/run-one.mjs extension natively-jina
 `baseline.json` freezes the embedded candidate list, so every reranker sees the
 IDENTICAL pool and a re-run costs no embedding spend. Regenerate it only when
 the corpus changes.
+
+`builtin` is the BUNDLED cross-encoder — not a catalogue entry, needs no
+download, and is what an empty selection resolves to. Sweeping only the
+catalogue leaves out the reranker most users actually run, which is how it went
+unmeasured until someone asked whether every local model had been tried.
 
 Local rows need the model installed (Settings → Reranker, or
 `localModelInstaller.installCatalogModel`). Extension rows load the extension's
