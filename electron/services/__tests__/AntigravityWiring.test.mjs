@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +11,34 @@ const { LLMHelper } = require(path.join(root, 'dist-electron/electron/LLMHelper.
 const { prepareDirectAssistPrompt } = require(path.join(root, 'dist-electron/electron/direct-assist/requestBuilder.js'));
 const { normalizeDirectAssistError } = require(path.join(root, 'dist-electron/electron/direct-assist/errors.js'));
 const collect = async (stream) => { let text = ''; for await (const chunk of stream) text += chunk; return text; };
+
+test('reinitializing Antigravity IPC replaces owned lifecycle listeners and preserves other listeners', () => {
+  const { initializeAntigravityLifecycle } = require(path.join(root, 'dist-electron/electron/services/AntigravityService.js'));
+  const previous = globalThis.__nativelyAntigravityServiceV1__;
+  const app = new EventEmitter();
+  const service = new EventEmitter();
+  let disposed = 0, oldBroadcasts = 0, broadcasts = 0, models = 0, unrelatedQuit = 0;
+  service.initialize = () => service.emit('status-changed', {});
+  service.dispose = () => disposed++;
+  const unrelatedStatus = () => {};
+  service.on('status-changed', unrelatedStatus);
+  app.on('before-quit', () => unrelatedQuit++);
+  globalThis.__nativelyAntigravityServiceV1__ = service;
+  try {
+    initializeAntigravityLifecycle(app, () => oldBroadcasts++, () => oldBroadcasts++);
+    initializeAntigravityLifecycle(app, () => broadcasts++, () => models++);
+    service.emit('status-changed', {});
+    service.emit('models-changed', []);
+    assert.equal(oldBroadcasts, 0);
+    assert.equal(broadcasts, 1);
+    assert.equal(models, 1);
+    assert.equal(service.listenerCount('status-changed'), 2);
+    assert.ok(service.listeners('status-changed').includes(unrelatedStatus));
+    app.emit('before-quit');
+    assert.equal(disposed, 1);
+    assert.equal(unrelatedQuit, 1);
+  } finally { globalThis.__nativelyAntigravityServiceV1__ = previous; }
+});
 
 function helper(policy = {}) {
   const h = Object.create(LLMHelper.prototype);

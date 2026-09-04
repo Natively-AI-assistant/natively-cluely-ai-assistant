@@ -269,6 +269,9 @@ test('Antigravity callback validates host/state and releases the fixed listener'
     assert.ok(state);
     assert.equal(await requestCallback(`/oauth-callback?code=wrong&state=${state}`, { host: 'evil.test' }), 400);
     assert.equal(await requestCallback(`http://evil.test/oauth-callback?code=wrong&state=${state}`, { host: 'localhost:51121' }), 400);
+    assert.equal(await requestCallback('/oauth-callback?code=stale&state=old-attempt'), 400);
+    assert.equal(await requestCallback('/oauth-callback?code=missing-state'), 400);
+    assert.equal(service.getStatus().inProgress, true, 'unrelated callbacks must not consume the active login');
     assert.equal(await requestCallback(`/oauth-callback?code=auth-code&state=${state}`, { host: 'localhost:51121' }), 200);
     const tokens = await login;
     assert.equal(tokens.projectId, 'project-from-google');
@@ -287,6 +290,29 @@ const validTokens = () => ({ accessToken: 'access', refreshToken: 'refresh', exp
 const catalog = { models: { 'gemini-3-flash': { displayName: 'Flash', quotaInfo: { remainingFraction: 1 } } } };
 const answer = JSON.stringify({ response: { candidates: [{ content: { parts: [{ text: 'answer' }] }, finishReason: 'STOP' }] } });
 const collect = async stream => { let text = ''; for await (const chunk of stream) text += chunk; return text; };
+
+test('failed disconnect preserves connected state until credentials are actually cleared', async () => {
+  const mod = await loadService();
+  const stored = storageWith(validTokens());
+  const { service, oldGetter } = prepareService(mod, stored);
+  const clear = stored.clearAntigravityOAuthTokens;
+  stored.clearAntigravityOAuthTokens = () => false;
+  try {
+    assert.equal(service.signOut().success, false);
+    assert.equal(service.getStatus().signedIn, true);
+    assert.match(service.getStatus().error, /Disconnect failed/);
+    assert.equal(await service.getAccessToken(), 'access');
+    service.dispose();
+    service.initialize();
+    assert.equal(service.getStatus().signedIn, true, 'restart must agree with the failed disconnect status');
+    stored.clearAntigravityOAuthTokens = clear;
+    assert.equal(service.signOut().success, true);
+    assert.equal(stored.current(), null);
+    service.dispose();
+    service.initialize();
+    assert.equal(service.getStatus().signedIn, false, 'successful disconnect must survive restart');
+  } finally { stored.clearAntigravityOAuthTokens = clear; cleanupService(service, oldGetter); }
+});
 
 test('only OAuth invalid_grant clears credentials; transient refresh and invalid expiry preserve them', async () => {
   const mod = await loadService();
@@ -424,11 +450,11 @@ test('DNS resolution failures retry, other network and HTTP failures do not', as
   }
 });
 
-test('callback rejects mismatched state, denial, missing code, cancellation and browser failure with cleanup', async () => {
+test('callback handles denial, missing code, cancellation and browser failure with cleanup', async () => {
   const mod = await loadService();
   const oldFetch = globalThis.fetch;
   const oldOpen = fakeElectron.shell.openExternal;
-  for (const scenario of ['state', 'denied', 'missing-code', 'cancel', 'browser']) {
+  for (const scenario of ['denied', 'missing-code', 'cancel', 'browser']) {
     const stored = storageWith(null);
     const { service, oldGetter } = prepareService(mod, stored);
     const opened = {};
@@ -446,7 +472,7 @@ test('callback rejects mismatched state, denial, missing code, cancellation and 
       if (scenario === 'cancel') service.cancelLogin();
       else if (scenario !== 'browser') {
         assert.equal(await requestCallback('/oauth-callback', {}, 'POST'), 405);
-        const query = scenario === 'state' ? 'code=x&state=wrong' : scenario === 'denied' ? `error=access_denied&state=${state}` : `state=${state}`;
+        const query = scenario === 'denied' ? `error=access_denied&state=${state}` : `state=${state}`;
         await requestCallback(`/oauth-callback?${query}`);
       }
       await rejected;
