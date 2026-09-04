@@ -8,6 +8,36 @@ import { isMac, isWindows } from '../../utils/platformUtils';
 /**
  * "Built-in" / Local model tile mark matching EmbeddingSettings design.
  */
+/**
+ * A model gets TWO names — the same rule EmbeddingSettings uses, and the reason
+ * these two panels finally read alike.
+ *
+ * Closed, the trigger is a statement of fact: the model you are using. Open,
+ * the list is a comparison, and there the qualifier is the whole point — the
+ * same reranker is reachable locally, through OpenRouter and through Jina, and
+ * the rows have to be told apart.
+ *
+ * `voyage/rerank-2.5-lite` -> `rerank-2.5-lite`. The LAST path segment: taking
+ * the first type-checks, passes a curated-label case, and silently renames
+ * every hosted model to its vendor.
+ */
+const bareModelName = (label: string): string => {
+    const segments = label.split('/');
+    return segments[segments.length - 1] || label;
+};
+
+/**
+ * `provider/model`, for the open menu. Provider IDs, not display names, because
+ * a path segment is built from the short single tokens the catalogue defines —
+ * `local`, `openrouter`, `jina`, `extension`.
+ *
+ * Qualifying the BARE name matters: a hosted label may already be namespaced
+ * (`voyage/rerank-2.5-lite`), and qualifying that raw would render
+ * `openrouter/voyage/rerank-2.5-lite` — three names for one model.
+ */
+const qualifiedModelName = (providerId: string, label: string): string =>
+    `${providerId}/${bareModelName(label)}`;
+
 const PlatformMark: React.FC = () => (
     <span className="aip-tile aip-tile--mark" aria-hidden="true" title={isMac ? 'macOS' : isWindows ? 'Windows' : 'This device'}>
         {isMac ? (
@@ -224,6 +254,8 @@ function humanBytes(bytes: number): string {
 interface FloatingSelectOption {
     id: string;
     name: string;
+    /** Shown on the CLOSED trigger instead of `name`. See bareModelName. */
+    triggerName?: string;
 }
 
 interface FloatingSelectProps {
@@ -270,8 +302,9 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
     }, []);
 
     const selectedOption = options.find(o => o.id === value);
+    // triggerName first: closed, the control names the model, not the route.
     const resolvedLabel = selectedOption
-        ? selectedOption.name
+        ? (selectedOption.triggerName || selectedOption.name)
         : (placeholder || t('Select reranker'));
 
     return (
@@ -482,21 +515,31 @@ export const RerankerSettings: React.FC = () => {
     }, [refreshStatus]);
 
     const activeOptions: AipSelectOption[] = useMemo(() => {
+        // Every row: `provider/model` open, bare model closed. One helper so a
+        // new provider cannot invent a fourth label format — this panel had
+        // three (` — Included`, ` — Extension`, ` — OpenRouter`) while
+        // EmbeddingSettings used `provider/model` for the same job.
+        const opt = (id: string, providerId: string, label: string): AipSelectOption => ({
+            id,
+            name: qualifiedModelName(providerId, label),
+            triggerName: bareModelName(label),
+        });
+
         const options: AipSelectOption[] = [
             // No `?? 'MS MARCO MiniLM L6'` here: `status` is typed non-nullable and
             // initialised from INITIAL_STATUS, so that branch was unreachable — a
             // fourth copy of the bundled model's name that could only ever go stale.
-            { id: 'local::built-in', name: `${status.builtIn.name} — ${t('Included')}` },
+            opt('local::built-in', 'local', status.builtIn.name),
         ];
 
         for (const m of catalogModels) {
             if (!m.activatable || m.state !== 'installed') continue;
-            options.push({ id: `local::${m.id}`, name: m.name });
+            options.push(opt(`local::${m.id}`, 'local', m.name));
         }
 
         for (const ext of extensions.filter(e => e.type === 'reranker')) {
             if (!ext.models.every(m => m.state === 'ready')) continue;
-            options.push({ id: `extension::${ext.id}`, name: `${ext.name} — ${t('Extension')}` });
+            options.push(opt(`extension::${ext.id}`, 'extension', ext.name));
         }
 
         // OpenRouter's catalogue is discovered live; Jina publishes a fixed
@@ -505,12 +548,12 @@ export const RerankerSettings: React.FC = () => {
         const openrouter = hostedProviders.find(p => p.id === 'openrouter');
         if (openrouter?.hasApiKey ?? status?.hasApiKey) {
             for (const m of catalog) {
-                options.push({ id: `openrouter::${m.id}`, name: `${m.label} — ${t('OpenRouter')}` });
+                options.push(opt(`openrouter::${m.id}`, 'openrouter', m.label));
             }
         }
         for (const provider of hostedProviders.filter(p => p.staticCatalogue && p.hasApiKey)) {
             for (const m of provider.models) {
-                options.push({ id: `${provider.id}::${m.id}`, name: `${m.label} — ${provider.name}` });
+                options.push(opt(`${provider.id}::${m.id}`, provider.id, m.label));
             }
         }
 
