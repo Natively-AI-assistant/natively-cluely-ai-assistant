@@ -481,6 +481,17 @@ export const AIP_CSS = `
 .aip-btn[data-icon='true'] { width:32px; padding:0; }
 .aip-btn[data-variant='accent'] { background: var(--aip-accent-muted); border-color: var(--aip-accent-border); color: var(--aip-accent); }
 .aip-btn[data-variant='accent']:hover:not(:disabled) { background: var(--aip-accent-border); }
+/* Selected state for a button acting as a choice in a group (the candidate
+   counts in Settings > Reranker). React was already setting data-active there
+   and NOTHING styled it, so every press persisted the setting and repainted
+   identically -- the control looked dead. Scoped to .aip-btn on purpose:
+   .aip-card also carries data-active (reranker model rows) and shows selection
+   with its own 'In use' badge, which must not gain a second treatment.
+   The hover pair is required, not decorative: .aip-btn:hover:not(:disabled) is
+   specificity (0,3,0) against this rule's (0,2,0), so without it hovering the
+   selected button would drop it back to the unselected background. */
+.aip-btn[data-active='true'] { background: var(--aip-accent-muted); border-color: var(--aip-accent-border); color: var(--aip-accent); font-weight:600; }
+.aip-btn[data-active='true']:hover:not(:disabled) { background: var(--aip-accent-border); }
 .aip-btn[data-variant='ghost']  { background: transparent; border-color: transparent; color: var(--aip-secondary); }
 .aip-btn[data-variant='ghost']:hover:not(:disabled) { background: var(--aip-item-hover); color: var(--aip-primary); }
 .aip-btn[data-variant='danger-ghost'] { background: transparent; border-color: transparent; color: var(--aip-secondary); }
