@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
-import { TEXT_PLACEHOLDER_RE } from '../src/lib/curlPlaceholderPolicy';
+import { TEXT_PLACEHOLDER_RE } from './utils/curlPlaceholderPolicy';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';

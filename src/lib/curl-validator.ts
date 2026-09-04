@@ -3,7 +3,7 @@ import {
     TEXT_PLACEHOLDER_RE,
     placeholderReachesTheWire,
     explainMissingPlaceholder,
-} from './curlPlaceholderPolicy';
+} from '../../electron/utils/curlPlaceholderPolicy.ts';
 
 export interface CurlValidationResult {
     isValid: boolean;

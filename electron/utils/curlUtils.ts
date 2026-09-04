@@ -14,7 +14,7 @@ import {
     TEXT_PLACEHOLDER_RE,
     placeholderReachesTheWire,
     explainMissingPlaceholder,
-} from '../../src/lib/curlPlaceholderPolicy';
+} from './curlPlaceholderPolicy';
 
 /**
  * Validates if the cURL command is parseable and contains required variables
