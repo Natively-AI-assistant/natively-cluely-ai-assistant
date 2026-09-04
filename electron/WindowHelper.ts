@@ -2555,13 +2555,30 @@ export class WindowHelper {
    * where #509 widened the shield from undetectable-only to the default Windows
    * path.
    *
-   * The isVisible() guard is what keeps this off the screenshot path — but not
-   * for the reason it looks like. hideMainWindow() zeroes opacity BEFORE hide()
-   * on win32; what saves us is that it is fully synchronous, so at every yield
-   * point (including the 40ms await in withScreenshotCaptureSession) those
-   * windows already read isVisible() === false. The only place a window sits
-   * visible-at-opacity-0 across a yield is the shield itself, which is exactly
-   * what we want to flush.
+   * Flushing early does NOT narrow the capture guarantee, which was the standing
+   * worry about this method. Measured on windows-latest: after
+   * setContentProtection(true), restoring opacity at t=0ms put 0 pixels of the
+   * window into a live getDisplayMedia capture, against a control that saw 81248
+   * pixels of the same window unprotected. DWM applies the exclusion before an
+   * opacity restore can matter, so the 60ms is not what is buying capture safety.
+   *
+   * The opacity restore is NOT gated on isVisible(), and that is load-bearing.
+   * It used to be, on the theory that skipping hidden windows kept the flush off
+   * the screenshot path. Two measurements on a real Windows kernel killed that:
+   *
+   *  - hideMainWindow() zeroes opacity BEFORE hide() on win32, but it is fully
+   *    synchronous, so at every yield point (including the 40ms await in
+   *    withScreenshotCaptureSession) those windows are already hidden. Setting
+   *    opacity 1 on a hidden window changes nothing anyone can capture, and every
+   *    show path re-sets opacity on the way in — measured, all four of them.
+   *  - The skip actively CAUSED a bug. applyOverlayAuxVisibility() re-shows the
+   *    pill and toggle but never touches their opacity, so a pill hidden inside
+   *    the shield window was skipped here at opacity 0 and then re-shown at
+   *    opacity 0 — an invisible gap in the overlay chrome that nothing repaired
+   *    until the next full switchToOverlay.
+   *
+   * The z-order re-assert below keeps its isVisible() guard: unlike opacity, it
+   * is not repairing state that a later show would otherwise inherit.
    *
    * NOT for the shield's own arm sites: they call setOpacity(0) and then cancel
    * the previous timer, so routing them through here would un-zero the shield
@@ -2578,7 +2595,7 @@ export class WindowHelper {
       this.pillWindow,
       this.toggleWindow,
     ]) {
-      if (win && !win.isDestroyed() && win.isVisible()) win.setOpacity(1);
+      if (win && !win.isDestroyed()) win.setOpacity(1);
     }
 
     // The overlay's timer re-asserts z-order alongside the opacity restore,
@@ -2586,10 +2603,9 @@ export class WindowHelper {
     // will never run now, so the flush owes the same re-assert — otherwise an
     // interrupted switch trades "invisible" for "visible but behind everything".
     //
-    // Guarded on isVisible(), deliberately, and not on the timer's bare
-    // isDestroyed(): this pairs the re-assert with the opacity restore above. A
-    // hidden overlay was not un-shielded here, and the next switchToOverlay
-    // re-asserts its z-order on the way in regardless.
+    // Still guarded on isVisible(), unlike the opacity restore above. Z-order is
+    // not state a later show inherits — switchToOverlay re-asserts it on the way
+    // in — so there is nothing to repair on a hidden window.
     //
     // The timer's focus() is NOT mirrored. We are on the way into a minimize or
     // a close-to-tray; stealing focus there is the opposite of what was asked.
