@@ -57,23 +57,28 @@ It is not broken. It loads, scores all 24 queries, and ranks an obvious probe
 perfectly (Paris 8.787 / Rhine −3.038 / photosynthesis −10.181). It is simply a
 2022-era cross-encoder meeting same-vocabulary distractors, and losing.
 
-**Acted on.** Both halves:
+**Acted on — it was replaced, not just removed.**
 
-1. **It is no longer used automatically.** `ModeHybridRetriever` reranks only
-   when the user CHOSE a reranker. The low-confidence escalation existed for
-   this model and had no beneficiary left — it fired precisely when retrieval
-   was already unsure, which is where a reranker that regresses does the most
-   damage. A default install now keeps its retrieval order.
-2. **It is no longer bundled.** `scripts/download-models.js` stopped fetching
-   the 266 MB of weights and the release gate stopped requiring them, taking
-   **283 MB out of the installer**. The three tracked JSON files stay so
-   `rerankerDownloadProvider` has a directory to fill; it fetches the model on
-   demand for anyone who explicitly selects it, which is what that provider was
-   written for — its own header already said "the model is no longer bundled in
-   `resources/models/`", and the bundle had been contradicting it.
+`Xenova/ms-marco-MiniLM-L-6-v2` is the bundled default as of 2026-09-04:
 
-Anyone wanting a local reranker is one click from a better one:
-`ms-marco-minilm-l6` is 24 MB, 211 ms and ΔMRR **+0.0320**.
+| | MRR | ΔMRR | +/− | ms | installer |
+| --- | --- | --- | --- | --- | --- |
+| was `bge-reranker-base` | 0.7558 | **−0.0810** | +3/−7 | 1873 | 283 MB |
+| now `ms-marco-MiniLM-L-6-v2` | 0.8688 | **+0.0320** | +4/−2 | 211 | **24 MB** |
+
+A twelfth of the size, nine times faster, and it improves the ranking instead of
+degrading it — verified by re-running the sweep against the bundled copy, which
+scores identically to the catalogue entry (19/24, MRR 0.8688, 222 ms).
+
+Because the default now helps, the low-confidence escalation is back and earns
+its place: a chosen reranker runs on every permitted query, the bundled one only
+when retrieval is unsure. It is still an escalation rather than unconditional —
++0.0320 is real but modest, and a default install should not pay for it on every
+query.
+
+`bge-reranker-base` stays reachable for anyone who wants it: it remains in the
+catalogue and `rerankerDownloadProvider` fetches it on demand. Its weights are
+simply no longer preinstalled.
 
 ### What the numbers say
 
