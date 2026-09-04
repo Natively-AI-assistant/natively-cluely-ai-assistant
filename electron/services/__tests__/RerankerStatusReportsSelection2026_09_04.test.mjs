@@ -91,3 +91,25 @@ test('the bundled model is still what an empty selection reports', () => {
   assert.match(block, /selectedLocal: \{ id: string; name: string \} \| null = null/,
     'no selection means null, which the ?? falls through to the bundled id');
 });
+
+test('every description of the bundled model names the SAME one', () => {
+  // Three places describe it: DEFAULT_RERANKER_MODEL (what actually loads),
+  // BUILT_IN_RERANKER in the catalogue module, and the `builtIn` literal in the
+  // status handler. Nothing consumes BUILT_IN_RERANKER today, so when the
+  // bundled model changed it silently kept naming the old one while every
+  // loaded path moved on — a description that disagrees with the code is worse
+  // than no description.
+  const localReranker = fs.readFileSync(path.join(repoRoot, 'electron/rag/LocalReranker.ts'), 'utf8');
+  const modelId = localReranker.match(/const DEFAULT_RERANKER_MODEL = '([^']+)'/)?.[1];
+  assert.ok(modelId, 'DEFAULT_RERANKER_MODEL is gone');
+
+  const catalogue = fs.readFileSync(path.join(repoRoot, 'electron/rag/rerankerModelCatalog.ts'), 'utf8');
+  const builtIn = catalogue.slice(catalogue.indexOf('export const BUILT_IN_RERANKER'));
+  assert.match(builtIn.slice(0, 400), new RegExp(`modelId: '${modelId.replace('/', '\\/')}'`),
+    'BUILT_IN_RERANKER.modelId must be the model that actually loads');
+  assert.match(builtIn.slice(0, 400), new RegExp(`id: '${modelId.split('/')[1]}'`),
+    'and its id must be the bare model name, matching the status handler');
+
+  assert.match(statusBlock(), new RegExp(`id: '${modelId.split('/')[1]}'`),
+    'the status handler must name it too');
+});

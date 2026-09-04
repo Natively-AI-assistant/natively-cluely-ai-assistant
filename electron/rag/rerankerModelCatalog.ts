@@ -428,10 +428,20 @@ export function findCatalogModel(id: string): LocalRerankerModel | null {
   return RERANKER_MODEL_CATALOG.find((m) => m.id === id) ?? null;
 }
 
-/** The reranker that ships with Natively. Not installable; not removable. */
+/**
+ * The reranker that ships with Natively. Not installable; not removable.
+ *
+ * Named bge-reranker-base until 2026-09-04, when that model was removed from
+ * the app entirely — it measured WORSE than no reranker at all (MRR 0.7558
+ * against a 0.8368 no-reranker baseline; docs/reranker-benchmark-2026-09-04.md).
+ * This constant has no consumers today, which is exactly why it went stale
+ * unnoticed while every loaded path moved on. It stays because it is the one
+ * place that DESCRIBES the bundled model, and it must agree with
+ * DEFAULT_RERANKER_MODEL in LocalReranker.ts — a test pins the pair.
+ */
 export const BUILT_IN_RERANKER = {
-  id: 'bge-reranker-base',
-  name: 'BGE Reranker Base',
-  modelId: 'Xenova/bge-reranker-base',
+  id: 'ms-marco-MiniLM-L-6-v2',
+  name: 'MS MARCO MiniLM L6',
+  modelId: 'Xenova/ms-marco-MiniLM-L-6-v2',
   dtype: 'q8' as const,
 };
