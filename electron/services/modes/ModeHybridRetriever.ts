@@ -1429,26 +1429,25 @@ export class ModeHybridRetriever {
                         return isRerankerExplicitlySelected();
                     } catch { return false; }
                 })();
-            // Reranking runs when the user CHOSE a reranker. Nothing else.
+            // A reranker the user CHOSE runs on every permitted query. The
+            // bundled default runs only when retrieval is unsure.
             //
-            // This used to also escalate on low confidence, which existed for
-            // the bundled cross-encoder — the one every default install has.
-            // That model was then measured, and it is the worst reranker in the
-            // benchmark: Xenova/bge-reranker-base scores MRR 0.7558 against a
-            // 0.8368 no-reranker baseline, moving 7 of 24 queries DOWN against
-            // 3 up, and on one query taking the answer from rank 2 to rank 17
-            // (docs/reranker-benchmark-2026-09-04.md). It is not broken — it
-            // ranks an obvious probe perfectly — it is a 2022-era cross-encoder
-            // losing to same-vocabulary distractors.
+            // That split has been through three states, and the middle one is
+            // why the comment is this long. It began as `if (lowConfidence)`
+            // alone, so a chosen reranker ran on 1 query in 36. The escalation
+            // was then kept for the bundled model only — until the bundled
+            // model was measured and turned out to be the WORST reranker in the
+            // benchmark (bge-reranker-base: MRR 0.7558 against a 0.8368
+            // no-reranker baseline), at which point the escalation had no
+            // beneficiary and was removed entirely.
             //
-            // So the escalation had no beneficiary. It fired precisely when
-            // retrieval was already unsure, which is where a reranker that
-            // regresses does the most damage, and it fired ONLY for the model
-            // that regresses — an explicitly chosen one runs on every query
-            // regardless. Removing it means a default install now keeps its
-            // retrieval order instead of having it shuffled by a model that
-            // measurably makes it worse.
-            const shouldRerank = explicitlySelected || Boolean(this.rerankerOverride);
+            // The bundled model is now ms-marco-MiniLM-L-6-v2, which is +0.0320
+            // against that baseline at 211ms and 24MB. The escalation has a
+            // beneficiary again, so it is back — and it is still an escalation
+            // rather than unconditional, because +0.0320 is a real but modest
+            // gain and a default install should not pay for it on every query.
+            // docs/reranker-benchmark-2026-09-04.md
+            const shouldRerank = explicitlySelected || lowConfidence || Boolean(this.rerankerOverride);
             // lowConfidence is still traced: it is no longer a trigger, but it
             // is the signal anyone re-litigating this decision will want.
             markH4HybridStage('rerank_gate', {

@@ -37,6 +37,14 @@ function redactTracePayload<T>(payload: T): unknown {
 }
 
 
+/**
+ * A rendered COMPLETED exchange — an answer, in one of the two shapes this
+ * module produces. Deliberately not a general "looks like dialogue" test: the
+ * point is to distinguish what WE rendered from a raw transcript window a
+ * caller passed through.
+ */
+const COMPLETED_EXCHANGE_RE = /^(?:Assistant:|Previous answer)/m;
+
 export interface BridgeInput {
   surface: AnswerSurface;
   question: string;
@@ -109,6 +117,21 @@ export interface BridgeInput {
   /** Tone/length only — cannot widen authorization (§19.2). */
   realtimeInstruction?: string;
   conversationSummary?: string;
+  /**
+   * Multi-turn chat history (Settings > Intelligence > Memory > "Chat history").
+   *
+   * Passed IN rather than read here on purpose: this subsystem has no dependency
+   * on the intelligence flag registry, and contracts/retrieval-flags.ts records
+   * what adding the first one would cost (20 of its 62 flags resolve differently
+   * in dev/test, and that split is why composePrompt and assistantClaims shipped
+   * inert). The caller owns the read; this module owns the behaviour.
+   *
+   * `false` is a genuine rollback to the pre-2026-08-29 window: ONE turn, the
+   * answer capped at 280 chars, and the no-evidence notice restored — not a
+   * half-disabled state. Undefined means ON, so every other surface and every
+   * test gets the fixed behaviour by default.
+   */
+  multiTurnHistory?: boolean;
   retrieval?: RetrievalPort;
   /**
    * Surface persona/voice contract factory (2026-08-02). Called AFTER the
@@ -243,11 +266,136 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // as a labelled referent — never evidence). Read BEFORE orchestrate(),
     // which advances the state with THIS turn's question.
     let convoSummary = input.conversationSummary;
+    // A caller-supplied summary (the live-transcript surfaces) is real content
+    // by construction; the session fallback below decides for itself.
+    //
+    // The toggle is applied HERE as well as in the session branch (2026-08-29).
+    // It used to be read only inside `if (!convoSummary)`, and the
+    // live-transcript surfaces always supply their own summary — so they never
+    // entered that branch and `multiTurnHistory === false` had NO effect there.
+    //
+    // TWO HALVES, and the first one alone was not enough. Reading the flag here
+    // only matters if a caller SENDS it, and for a while only ipcHandlers did:
+    // the three IntelligenceEngine call sites (what-to-answer, assist, engine
+    // manual-chat) left it undefined, so `=== false` was never true and the
+    // rollback still could not reach live spoken answers. They pass it now.
+    // If a new buildV3Prompt call site appears, it needs the flag too.
+    //
+    // And a THIRD half is still missing: only ipcHandlers calls
+    // recordAnswerSummary, so the ring is never populated on those surfaces and
+    // the flag there currently skips an empty ring. See IntelligenceEngine's
+    // call site for the full note.
+    //
+    // A caller-supplied summary is only "content" when it actually holds a
+    // COMPLETED EXCHANGE, which is what ComposeInput.conversationHasContent
+    // documents. Mere presence was the old test, and the live spoken surfaces
+    // pass IntelligenceEngine's conversationWindow(90) — SessionTracker's
+    // rolling speech window, "[ME]: …" / "[INTERVIEWER]: …" lines with no
+    // exchange in them. So the FIRST spoken question of any session with a
+    // transcript had "earlier turns may already contain what is being asked"
+    // appended to its absence notice, about turns that do not exist.
+    //
+    // The discriminator is the ANSWER side, in the shapes this file itself
+    // renders: the ring's "Assistant: " lines, or the one-turn fallback's
+    // "Previous answer". A question-only fallback is deliberately excluded —
+    // it is rendered for continuity, but with no answer there is nothing to
+    // answer FROM, which is the same rule the ring branch below applies when it
+    // sets convoHasContent from turns.length.
+    //
+    // Anchored per line so "[ASSISTANT (PREVIOUS SUGGESTION)]: …" from the
+    // transcript formatter cannot satisfy it.
+    let convoHasContent = input.multiTurnHistory === false
+      ? false
+      : Boolean(input.conversationSummary) && COMPLETED_EXCHANGE_RE.test(input.conversationSummary!);
+    // Set when the rendered history actually contains a [screen attached…]
+    // line, so packedDataScopes can declare `screenshots` truthfully rather
+    // than filing screen content under `transcript`.
+    let historyCarriesScreenText = false;
+    /** Screen lines existed but the `screenshots` scope is denied — reported in
+     *  withheldScopes once that set exists, so the [V3] line and the debug
+     *  collector both show the withholding rather than a silent drop. */
+    let historyScreenWithheld = false;
     if (!convoSummary) {
       try {
         const { getConversationState } = require('../question/conversation-state-store');
         const cs = getConversationState(req.sessionId);
-        if (cs?.previousQuestion) {
+        // The RING first (2026-08-28). Rendering only previousQuestion +
+        // previousAnswerSummary was a one-turn sliding window: turn 3 could
+        // never see turn 1, so a screenshot described in turn 1 was gone by the
+        // time the user asked about it. Oldest turn first, so the model reads
+        // the exchange in the order it happened.
+        // The toggle. OFF skips the ring entirely and falls through to the
+        // one-turn block below, which is exactly what shipped before the fix.
+        let turns: Array<{ q: string; a: string; screen?: string }> =
+          input.multiTurnHistory === false ? [] : (cs?.turns ?? []);
+        // Only a COMPLETED exchange counts as something to answer from. The
+        // question-only fallback below is rendered for continuity, but it is
+        // not history, and the composer must not relax its no-evidence notice
+        // on the strength of it.
+        convoHasContent = turns.length > 0;
+        if (turns.length) {
+          // ENFORCE the mode's declared conversation budget, oldest dropped
+          // first. The ring is already bounded by construction, but a full ring
+          // of long answers is ~4k tokens — well past every mode's declared
+          // conversationTokens, a field the packer never read. Honouring it
+          // here keeps the declaration true instead of decorative.
+          const budgetChars = Math.max(0, (policy.contextBudget?.conversationTokens ?? 600) * 4);
+          // Decided BEFORE the budget loop, because the loop must not charge for
+          // text it will not send. Billing a withheld screen line against the
+          // conversation budget evicted older turns to make room for something
+          // that is then dropped — so denying the `screenshots` scope silently
+          // shortened a user's history as well as redacting it.
+          const screensDenied = isScopeDenied('screenshots', readProviderScopePolicy());
+          let spent = 0;
+          const kept: typeof turns = [];
+          for (let i = turns.length - 1; i >= 0; i--) {
+            const t = turns[i];
+            const screenCost = screensDenied ? 0 : (t.screen?.length ?? 0);
+            const cost = t.q.length + t.a.length + screenCost + 32;
+            // Always keep the most recent exchange, even if it alone overruns:
+            // dropping it would leave a follow-up with no antecedent at all.
+            if (kept.length && spent + cost > budgetChars) break;
+            spent += cost;
+            kept.unshift(t);
+          }
+          turns = kept;
+          // SCREEN TEXT IS SCREENSHOT DATA, WHEREVER IT TRAVELS.
+          //
+          // These lines are rendered into convoSummary, which is dropped only
+          // when the TRANSCRIPT scope is denied and tagged only as `transcript`
+          // in packedDataScopes. So a user who denied `screenshots` for their
+          // provider had the SCREEN_CONTEXT evidence correctly withheld by
+          // filterEvidenceByProviderScopes — and the same text delivered anyway
+          // inside this history line, for up to 10 turns. The evidence filter
+          // only sees EvidenceItems; prose walks past it.
+          //
+          // Same class as the transcript drop below ("the one door the filter
+          // does not cover"), which is exactly why it needs the same treatment.
+          //
+          // The policy is read HERE rather than reusing the one below, because
+          // the history is rendered before orchestrate() runs. Reading it twice
+          // is correct by this module's own rule: the policy is read live every
+          // turn and never cached, since esbuild inlines this file into every
+          // entry bundle and a cached copy would go stale outside the bundle
+          // that wrote it.
+          const hadScreen = turns.some((t) => t.screen);
+          const renderedScreen = hadScreen && !screensDenied;
+          historyScreenWithheld = hadScreen && screensDenied;
+          const rendered = turns.map((t) => [
+            `User: ${t.q}`,
+            // The screenshot the user attached on that turn, as text. The image
+            // is long gone from the payload by now; this is all a follow-up has.
+            ...(t.screen && !screensDenied ? [`[screen attached that turn] ${t.screen}`] : []),
+            `Assistant: ${t.a}`,
+          ].join('\n')).join('\n\n');
+          historyCarriesScreenText = renderedScreen;
+          // The CURRENT question is not in the ring yet (its answer does not
+          // exist), so nothing here duplicates it.
+          convoSummary = rendered;
+        } else if (cs?.previousQuestion) {
+          // Fallback for a turn already in flight when the ring was empty —
+          // e.g. the first turn after an upgrade, or a caller that advances
+          // without ever recording an answer.
           convoSummary = `Previous question: ${cs.previousQuestion}`
             + (cs.previousAnswerSummary ? `\nPrevious answer (referent only, NOT evidence): ${cs.previousAnswerSummary}` : '');
         }
@@ -268,16 +416,40 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
     // would go stale outside the bundle that wrote it.
     const scopePolicy = readProviderScopePolicy();
     const scopeFilter = filterEvidenceByProviderScopes(result.evidence, scopePolicy);
+    // EVIDENCE withholding only. Everything downstream reads this set as "this
+    // turn's evidence was filtered": absenceContract() returns '' on any entry,
+    // privacyWithholdingNotice PRE-EMPTS noEvidenceNotice entirely, and the
+    // PARTIAL notice narrates a truncated record. Feeding a CONVERSATION-ring
+    // withholding in here made all three fire for a turn whose own evidence was
+    // untouched — the user asked something unrelated two turns later and was
+    // told to refuse because the Screenshots setting withheld the material.
     const withheldScopes = new Set<ProviderDataScope>(scopeFilter.withheldScopes);
 
     // Conversation continuity is CONVERSATION_STATE data, which maps to the
     // transcript scope. It reaches the prompt as prose rather than as an
     // EvidenceItem, so the evidence filter above cannot see it — drop it here
     // or the scope leaks through the one door the filter does not cover.
+    // The transcript branch DOES belong in the evidence set, and the asymmetry
+    // with the screen line above is deliberate: this one empties convoSummary,
+    // so the turn really is left with nothing and pre-empting the no-evidence
+    // notice is the honest outcome. The screen case removes one line from a
+    // history that otherwise survives intact.
     if (convoSummary && isScopeDenied('transcript', scopePolicy)) {
       convoSummary = undefined;
       withheldScopes.add('transcript');
     }
+
+    // AUDIT set — "what did the privacy settings drop this turn?", which is a
+    // wider question than "was this turn's evidence filtered?". The screen line
+    // belongs here: it really was withheld, and a silent drop is exactly what
+    // HistoryScreenScopeLeak pins against. It just must not reach the composer.
+    //
+    // Guarded on convoSummary like its sibling at packedDataScopes below: if
+    // the transcript denial removed the whole history block, nothing was
+    // rendered for a screen line to be withheld FROM, and `transcript` is
+    // already reporting the real cause.
+    const auditWithheldScopes = new Set<ProviderDataScope>(withheldScopes);
+    if (historyScreenWithheld && convoSummary) auditWithheldScopes.add('screenshots');
 
     // Persona resolution must never break a turn: a throwing factory or a null
     // return simply composes without one (today's behaviour).
@@ -299,6 +471,11 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       withheldScopes: [...withheldScopes],
       realtimeInstruction: input.realtimeInstruction,
       conversationSummary: convoSummary,
+      conversationHasContent: convoHasContent && Boolean(convoSummary),
+      // Only TRUE when a screen line actually survived into the rendered
+      // history — so a withheld `screenshots` scope cannot make the composer
+      // treat an observation as available.
+      conversationHasScreenObservation: historyCarriesScreenText && Boolean(convoSummary),
       attachedSourceCount: input.attachedSourceCount,
       profileSourceCount: input.profileSourceCount,
       // Defect D (2026-08-01): the CLARIFICATION verdict was computed and then
@@ -315,6 +492,18 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       dataScopesForEvidence(scopeFilter.evidence.filter((e) => includedIds.has(e.evidenceId))),
     );
     if (convoSummary) packedDataScopes.add('transcript');
+    // Declared separately from `transcript`: an audit that asks "did screen
+    // content leave the device this turn?" must not have to know that screen
+    // text is smuggled inside the conversation summary.
+    // `&& convoSummary`, matching conversationHasScreenObservation above.
+    // historyCarriesScreenText is computed while RENDERING the history, but the
+    // transcript-scope check further down can still set convoSummary =
+    // undefined and drop the whole block. Without this guard a user who denied
+    // `transcript` had the entire history removed from the prompt and was told
+    // by this very audit line that screen content had left the device. It fails
+    // safe (over-declaring, never under-), but answering "did screen content go
+    // out this turn?" is the line's only job, so a wrong `true` defeats it.
+    if (historyCarriesScreenText && convoSummary) packedDataScopes.add('screenshots');
 
     // ── Per-turn source line ────────────────────────────────────────────────
     // The one thing production could not answer about itself. A cross-mode
@@ -374,7 +563,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
         // answered thinly because the user switched a data scope off was
         // previously indistinguishable in the logs from a retrieval miss.
         privacyWithheldCount: scopeFilter.withheldCount,
-        privacyWithheldScopes: [...withheldScopes],
+        privacyWithheldScopes: [...auditWithheldScopes],
         outboundScopes: [...packedDataScopes],
         // Deep-test D5/D6 (2026-08-01): the two signals that turn a masked
         // failure into a diagnosable one — was this a document-specific
@@ -486,7 +675,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       // model was actually given, not the evidence retrieval found.
       evidenceCount: scopeFilter.evidence.length,
       packedDataScopes: [...packedDataScopes],
-      withheldDataScopes: [...withheldScopes],
+      withheldDataScopes: [...auditWithheldScopes],
       // GROUNDED with nothing to retrieve means the mode authorizes no source
       // for this question. Distinct from FAST, where none was needed.
       unsupportedInMode: result.decision.retrievalPlan.path !== 'FAST'

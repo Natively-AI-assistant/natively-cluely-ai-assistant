@@ -153,6 +153,17 @@ const STRICT_DOC_CAPS: CapabilityPolicy = {
   externalSuggestionDisclosure: 'ALWAYS',
 };
 
+/**
+ * `conversationTokens` was 400-800 across every mode — sized for the era when
+ * conversation state was ONE turn capped at 280 chars. That cap was the
+ * regression behind "the follow-up has no idea of that screenshot"
+ * (2026-08-28), so the number that encoded it had to move with the fix.
+ *
+ * 2400 tokens is ~6-8 completed exchanges including a screenshot description.
+ * It is now ENFORCED (engine-bridge trims oldest-first to fit) rather than
+ * declared and ignored, which is what it was before: only `evidenceTokens` was
+ * ever read by the packer.
+ */
 const budget = (evidence: number, conv: number, tx: number, screen: number) =>
   ({ evidenceTokens: evidence, conversationTokens: conv, transcriptTokens: tx, screenTokens: screen });
 
@@ -188,7 +199,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'OPEN_KNOWLEDGE', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 600, 800, 400),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1500, 2400, 800, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
   },
@@ -208,7 +219,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     // promise what the context does not authorize").
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
   },
@@ -224,7 +235,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     // require evidence and must never be generated.
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 300),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 300),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
   },
@@ -241,7 +252,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 900, 200),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 900, 200),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'OPTIONAL',
   },
@@ -255,7 +266,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'OPEN_KNOWLEDGE', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 800, 1400, 400),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1200, 2400, 1400, 400),
     autoAnswer: AUTO_ANSWER_MEETING,
     citations: 'HIDDEN',
   },
@@ -272,7 +283,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 600, 600, 200),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1800, 2400, 600, 200),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
   },
@@ -302,7 +313,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 700, 700, 800),
+    retrievalPolicy: retrieval(20, 6), contextBudget: budget(1600, 2400, 700, 800),
     autoAnswer: AUTO_ANSWER_INTERVIEW,
     citations: 'HIDDEN',
   },
@@ -316,7 +327,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: OPEN_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 500, 1000, 200),
+    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2000, 2400, 1000, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'OPTIONAL',
   },
@@ -333,7 +344,7 @@ export const MODE_POLICIES: Record<ModeId, ModePolicy> = {
     groundingPolicy: 'SOURCE_FIRST', capabilityPolicy: STRICT_DOC_CAPS,
     personalClaimsRequireEvidence: true, documentClaimsRequireEvidence: true,
     meetingClaimsRequireEvidence: true, jobClaimsRequireJdEvidence: true,
-    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 400, 800, 200),
+    retrievalPolicy: retrieval(24, 8), contextBudget: budget(2400, 2400, 800, 200),
     autoAnswer: AUTO_ANSWER_LISTENING,
     citations: 'VISIBLE',
   },

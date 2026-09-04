@@ -80,7 +80,14 @@ test('the bundled model is still what an empty selection reports', () => {
   // The fallback has to survive: most users never pick a catalogue model, and
   // the panel must not go blank for them.
   const block = statusBlock();
-  assert.match(block, /id: 'bge-reranker-base'/);
+  // Read from the source, not hardcoded: the bundled model changed once
+  // already (bge-reranker-base -> ms-marco-MiniLM-L-6-v2 on 2026-09-04) and a
+  // literal here turns that swap into a failure about the wrong thing.
+  const localReranker = fs.readFileSync(path.join(repoRoot, 'electron/rag/LocalReranker.ts'), 'utf8');
+  const bundled = localReranker.match(/const DEFAULT_RERANKER_MODEL = 'Xenova\/([^']+)'/)?.[1];
+  assert.ok(bundled, 'DEFAULT_RERANKER_MODEL is gone from LocalReranker.ts');
+  assert.match(block, new RegExp(`id: '${bundled}'`),
+    'the status handler and LocalReranker must name the SAME bundled model');
   assert.match(block, /selectedLocal: \{ id: string; name: string \} \| null = null/,
     'no selection means null, which the ?? falls through to the bundled id');
 });

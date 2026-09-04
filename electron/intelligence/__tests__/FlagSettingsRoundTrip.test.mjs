@@ -69,6 +69,7 @@ const EXPECTED_KEYS = [
   'globalSearchV2',
   'inMeetingSearchV2',
   'conversationMemoryV2',
+  'chatHistoryMultiTurn',
   'lectureIntelligenceV2',
   'diagramIntelligence',
   'hindsightMemory',
@@ -78,6 +79,8 @@ const EXPECTED_KEYS = [
   'ragLocalRerank',
   'ragRrfFusion',
   'ragSpeculativeRerank',
+  // Extension-provided rerankers (default OFF; also gated on an enabled extension).
+  'extensionRerankers',
   // OKF document knowledge system flags.
   'okfKnowledgePacks',
   'okfMarkdownExport',
@@ -114,12 +117,15 @@ const EXPECTED_KEYS = [
   // own independent hardcoded key list from IntelligenceFlags.test.mjs's,
   // so the earlier fix there did not cover this one).
   'answerRelevanceGuardLive',
-  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — dev/test-only.
+  // Phase 6 Slice 5 (context-rebuild, 2026-07-25) — promoted to unconditional
+  // `true` (2026-08-30, see DEFAULT_ON_KEYS below).
   'atomicJdProfilePackGeneration',
-  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — dev/test-only.
+  // Phase 6 Slice 4 item 2 follow-up (context-rebuild, 2026-07-26) — promoted to
+  // unconditional `true` (2026-08-30, see DEFAULT_ON_KEYS below).
   'pronounRegexShadowObservation',
-  // EvidencePack impossible-evidence-state gate, Stage 0/1 (answer-pipeline-rebuild,
-  // 2026-07-28) — dev/test-only.
+  // EvidencePack impossible-evidence-state gate, Stage 0 AND Stage 1 (answer-
+  // pipeline-rebuild, 2026-07-28) — both promoted to unconditional `true`
+  // (2026-08-30, two SEPARATE user-directed overrides; see DEFAULT_ON_KEYS below).
   'contextOsImpossibleStateGateShadow',
   'contextOsImpossibleStateGateEnforceForbidden',
   // Prompt System v2 (2026-08-01) — default OFF everywhere.
@@ -137,6 +143,12 @@ const EXPECTED_KEYS = [
 // All NATIVELY_* env vars these flags read — cleared before/after so a leaked env from the
 // host (or another test) can't make an assertion pass/fail spuriously.
 const DEFAULT_ON_KEYS = new Set([
+  // Multi-turn chat history. ON via a plain literal (never isInternalDevTestContext)
+  // because it guards a REGRESSION fix — chat history was one turn / 280 chars from
+  // V3's default-ON flip on 2026-07-30 until 2026-08-29 — and the context-intelligence
+  // suites assert the FIXED behaviour. A dev/test-only default would pin a behaviour
+  // users never receive, which is the exact failure contracts/flag.ts records.
+  'chatHistoryMultiTurn',
   'meetingSummaryV3',
   'meetingModeAutoDetect',
   'followUpDraftV2',
@@ -175,6 +187,32 @@ const DEFAULT_ON_KEYS = new Set([
   // The doc-grounded validator checks the block that was SENT (2026-08-28) —
   // default ON, literal (never isInternalDevTestContext).
   'docGroundedValidatorUsesSentEvidence',
+  // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
+  // both are pure shadow-observation side channels (divergence logging only,
+  // zero change to any real return value), so there is no risk to running
+  // them in production.
+  'pronounRegexShadowObservation',
+  'contextOsImpossibleStateGateShadow',
+  // Promoted to unconditional `true` (2026-08-30, SEPARATE user-directed
+  // override — no packaged-build/real-traffic validation, unlike the shadow
+  // pair above which are risk-free by construction). See each flag's
+  // intelligenceFlags.ts comment for the specific risk it carries.
+  'ragConfidenceGate',
+  'ragLocalRerank',
+  'ragSpeculativeRerank',
+  'okfKnowledgePacks',
+  'okfHybridRetrieval',
+  'okfProfilePacks',
+  'okfProfileHybridRetrieval',
+  'atomicJdProfilePackGeneration',
+  'contextOsEnforceSourceCapabilities',
+  'contextOsPropertyValidation',
+  'contextOsImpossibleStateGateEnforceForbidden',
+  // Promoted to unconditional `true` (2026-08-30, third/final batch of the
+  // same user-directed override).
+  'okfMarkdownExport',
+  'okfProfileMarkdownExport',
+  'contextOsMultiFamilyEvidenceEnabled',
 ]);
 
 const ALL_ENV_VARS = [

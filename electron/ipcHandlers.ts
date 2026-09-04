@@ -7162,7 +7162,11 @@ export function initializeIpcHandlers(appState: AppState): void {
     });
 
     // The built-in, described honestly: "bundled" is not the same as "loadable".
-    let builtIn: any = { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true };
+    // Must stay in step with DEFAULT_RERANKER_MODEL in LocalReranker.ts. The
+    // bundled model changed on 2026-09-04 — bge-reranker-base measured worse
+    // than no reranker at all, ms-marco-MiniLM-L-6-v2 is +0.0320 at a twelfth
+    // of the size (docs/reranker-benchmark-2026-09-04.md).
+    let builtIn: any = { id: 'ms-marco-MiniLM-L-6-v2', name: 'MS MARCO MiniLM L6', bundled: true };
 
     // Which LOCAL model is actually selected, if any.
     //
@@ -7353,11 +7357,19 @@ export function initializeIpcHandlers(appState: AppState): void {
       const indicesValid = order.every((o: any) => o.index >= 0 && o.index < documents.length);
       const rankedFirst = order[0]?.index;
 
+      // "ok, 2052ms" was true and useless: it never said that 2052ms lost to
+      // the rerank budget on every query, so a model that could not affect a
+      // single answer reported success. Report the fit alongside the latency.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { describeRerankLatencyFit } = require('./services/reranking/rerankBudget') as typeof import('./services/reranking/rerankBudget');
+      const budgetFit = describeRerankLatencyFit(stats.requestLatencyMs);
+
       const result = {
         success: true,
         model,
         latencyMs: stats.requestLatencyMs,
         costUsd: stats.costUsd ?? null,
+        budgetFit,
         scoresFinite,
         indicesValid,
         // Reported, never enforced: a model that ranks this "wrong" is odd but

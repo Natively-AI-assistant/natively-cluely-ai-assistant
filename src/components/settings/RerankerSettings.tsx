@@ -115,6 +115,18 @@ interface TestResult {
     costUsd?: number | null;
     message?: string;
     error?: string;
+    /**
+     * Whether the measured latency can actually rerank inside the budget.
+     * A probe that says "ok, 2052ms" without this reported success for a model
+     * that lost its race on every query and changed nothing.
+     */
+    budgetFit?: {
+        liveBudgetMs: number;
+        manualBudgetMs: number;
+        fitsLive: boolean;
+        fitsManual: boolean;
+        warning?: string;
+    };
 }
 
 const CANDIDATE_CHOICES = [5, 10, 15, 20];
@@ -1186,6 +1198,13 @@ export const RerankerSettings: React.FC = () => {
                                                     ? <><AlertCircle size={12} strokeWidth={1.75} /> {t('Error')}</>
                                                     : <>{t('Test Connection')}</>}
                                     </button>
+                                )}
+
+                                {isSelected && testResult?.success && testResult.budgetFit?.warning && (
+                                    <div className="aip-inline-warn flex items-start gap-2" role="status">
+                                        <AlertCircle size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" aria-hidden="true" />
+                                        <span className="min-w-0">{t(testResult.budgetFit.warning)}</span>
+                                    </div>
                                 )}
 
                                 {/* Provider Model Selector matching EmbeddingSettings */}

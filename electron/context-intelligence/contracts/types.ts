@@ -127,7 +127,12 @@ export type EvidenceProvenance =
   | 'TEST_TRANSCRIPT'
   | 'MEETING_NOTE'
   | 'MANUAL_CHAT'
-  | 'PRIOR_ASSISTANT_MESSAGE';
+  | 'PRIOR_ASSISTANT_MESSAGE'
+  /** A vision/OCR reading of the user's own screen (screen-retrieval-port).
+   *  Distinct from PRIOR_ASSISTANT_MESSAGE on purpose: it is an OBSERVATION,
+   *  not a model-generated claim, so it does not carry the self-reinforcing
+   *  fabrication risk that keeps assistant output referent-only (§12.3). */
+  | 'SCREEN_CAPTURE';
 
 export interface RetrievalCandidate {
   evidenceId: string;

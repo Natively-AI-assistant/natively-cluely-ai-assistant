@@ -37,12 +37,17 @@ const REQUIRED_MODEL_FILES = [
   'Xenova/mobilebert-uncased-mnli/tokenizer.json',
   'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
   'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
-  // bge-reranker-base's WEIGHTS are deliberately not shipped any more — it
-  // measured worse than no reranker at all (MRR 0.7558 against a 0.8368
-  // baseline; docs/reranker-benchmark-2026-09-04.md), so 283MB of installer
-  // was buying degraded retrieval. The three small JSONs stay: they are
-  // git-tracked, they cost nothing, and they give rerankerDownloadProvider a
-  // directory to fill for anyone who explicitly selects the model.
+  // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
+  // 2026-09-04: bge measured WORSE than no reranker at all (MRR 0.7558 against
+  // a 0.8368 baseline) while costing 283MB, where ms-marco is +0.0320 at 24MB
+  // and 211ms. docs/reranker-benchmark-2026-09-04.md
+  'Xenova/ms-marco-MiniLM-L-6-v2/config.json',
+  'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer.json',
+  'Xenova/ms-marco-MiniLM-L-6-v2/tokenizer_config.json',
+  'Xenova/ms-marco-MiniLM-L-6-v2/onnx/model_quantized.onnx',
+  // bge's own three JSONs stay tracked and shipped so rerankerDownloadProvider
+  // has a directory to fill for anyone who selects it; its WEIGHTS are not
+  // required, because they are no longer fetched at build time.
   'Xenova/bge-reranker-base/config.json',
   'Xenova/bge-reranker-base/tokenizer.json',
   'Xenova/bge-reranker-base/tokenizer_config.json',

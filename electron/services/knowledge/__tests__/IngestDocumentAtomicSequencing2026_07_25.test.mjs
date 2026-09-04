@@ -15,9 +15,10 @@
 // AFTER aotPipeline.runForJD(...) resolves — a genuinely async, LLM-driven
 // chain (Ingestion Audit §A.6.3's real race). Fully awaiting it before
 // ingestDocument returns has a real user-facing cost (slower upload-ack), so
-// it ships behind the new `atomicJdProfilePackGeneration` flag (dev/test-only
-// default), with the pre-existing fire-and-forget behavior preserved
-// byte-for-byte in the flag-off branch.
+// it ships behind the new `atomicJdProfilePackGeneration` flag (promoted to
+// an unconditional `true` default 2026-08-30, user-directed override), with
+// the pre-existing fire-and-forget behavior preserved byte-for-byte in the
+// flag-off branch (still reachable via an explicit env override).
 //
 // Source-pinned: KnowledgeOrchestrator.ts lives in the premium submodule and
 // touches the real (ABI-mismatched in this dev environment) sqlite stack, so
@@ -91,17 +92,17 @@ describe('JD branch: flag-gated awaited sequence, unchanged default (fire-and-fo
 });
 
 describe('atomicJdProfilePackGeneration flag registration', () => {
-  test('resolves to false under this bare node:test harness (dev/test-only default, matching turnIdentityV2/promptComposerV2/canonicalTurnManualChat precedent)', () => {
+  test('defaults to true everywhere (promoted 2026-08-30, user-directed override — ships the slower-JD-upload-ack tradeoff to every user)', () => {
     __resetIntelligenceFlagsCache();
     delete process.env.NATIVELY_ATOMIC_JD_PROFILE_PACK;
-    assert.equal(isIntelligenceFlagEnabled('atomicJdProfilePackGeneration'), false);
+    assert.equal(isIntelligenceFlagEnabled('atomicJdProfilePackGeneration'), true);
   });
 
-  test('NATIVELY_ATOMIC_JD_PROFILE_PACK=1 env override enables it', () => {
+  test('NATIVELY_ATOMIC_JD_PROFILE_PACK=0 env override can still force it off (back to the fire-and-forget path)', () => {
     __resetIntelligenceFlagsCache();
-    process.env.NATIVELY_ATOMIC_JD_PROFILE_PACK = '1';
+    process.env.NATIVELY_ATOMIC_JD_PROFILE_PACK = '0';
     try {
-      assert.equal(isIntelligenceFlagEnabled('atomicJdProfilePackGeneration'), true);
+      assert.equal(isIntelligenceFlagEnabled('atomicJdProfilePackGeneration'), false);
     } finally {
       delete process.env.NATIVELY_ATOMIC_JD_PROFILE_PACK;
       __resetIntelligenceFlagsCache();

@@ -21,7 +21,7 @@ import { getExtensionRegistry } from './ExtensionRegistry';
 import { ModelStore } from './ModelStore';
 import { HuggingFaceModelDownloader } from './HuggingFaceModelDownloader';
 import { peekProcessSingleton, processSingleton, resetProcessSingleton } from './singleton';
-import { lookupKnownModelSupport } from '../reranking/knownModelSupport';
+import { lookupKnownModelSupport, type ModelSupportLookup } from '../reranking/knownModelSupport';
 
 const SINGLETON_KEY = 'ExtensionManagerApp';
 
@@ -184,7 +184,11 @@ export function wireExtensions(options: WireExtensionsOptions = {}): ExtensionMa
  * wrong scores just look like worse answers — so an already-enabled
  * known-unrunnable model has to announce itself somewhere.
  */
-export function warnAboutKnownUnsupportedModels(manager: ExtensionManager): string[] {
+export function warnAboutKnownUnsupportedModels(
+  manager: ExtensionManager,
+  /** Injected by tests so this is verifiable without a model that happens to be broken today. */
+  lookup: ModelSupportLookup = lookupKnownModelSupport,
+): string[] {
   const warnings: string[] = [];
   let records;
   try {
@@ -196,7 +200,7 @@ export function warnAboutKnownUnsupportedModels(manager: ExtensionManager): stri
   for (const record of records) {
     if (!record.enabled) continue;
     for (const model of record.manifest.models ?? []) {
-      const known = lookupKnownModelSupport(model.repo);
+      const known = lookup(model.repo);
       if (!known || known.supported) continue;
       warnings.push(
         `[extensions] "${record.id}" is enabled and uses ${model.repo}, which Natively ships as ` +

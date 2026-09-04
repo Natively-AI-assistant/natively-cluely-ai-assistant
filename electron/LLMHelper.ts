@@ -1126,6 +1126,11 @@ export class LLMHelper {
    * default budget, never blocking a chat request. Concurrent callers share
    * one in-flight fetch.
    */
+  /** Per-model INPUT ceilings from LiteLLM /model/info, when the proxy reports
+   *  them. Empty is the normal case for proxies that do not expose it, and
+   *  means "no extra cap" — never "cap at zero". */
+  private litellmModelInputCaps = new Map<string, number>();
+
   private async refreshLitellmModelBudgets(): Promise<void> {
     if (Date.now() - this.litellmModelBudgetsFetchedAt < LITELLM_MODEL_INFO_TTL_MS) return;
     if (this.litellmModelBudgetsFetch) return this.litellmModelBudgetsFetch;
@@ -1146,17 +1151,36 @@ export class LLMHelper {
         if (!resp.ok) return;
         const data: any = await resp.json();
         const fresh = new Map<string, number>();
+        const freshInput = new Map<string, number>();
         for (const entry of (data?.data || [])) {
           const name = entry?.model_name;
           const budget = Number(entry?.model_info?.max_output_tokens ?? entry?.model_info?.max_tokens);
           if (name && Number.isFinite(budget) && budget > 0) fresh.set(name, Math.floor(budget));
+          // INPUT ceiling, which this fetch used to discard.
+          //
+          // Nothing in the app capped the prompt for a gateway-routed model: a
+          // proxied id resolves to the full 'cloud' tier (deliberately — the
+          // size in a name says nothing about where the model RUNS), and
+          // fitContextForCurrentModel then returns early for anything at or
+          // above 100k. So `litellm/…/llama-3.1-8b-instant` — a small model
+          // behind a proxy being the common LiteLLM deployment — received a
+          // cloud-sized prompt and either 400d or silently truncated upstream.
+          //
+          // The proxy already answers this question authoritatively, which is
+          // strictly better than either guessing from the name or assuming the
+          // ceiling is enormous. Absent or unparseable leaves today's behaviour
+          // exactly as it was.
+          const inputCap = Number(entry?.model_info?.max_input_tokens);
+          if (name && Number.isFinite(inputCap) && inputCap > 0) freshInput.set(name, Math.floor(inputCap));
         }
         if (this.litellmBaseURL !== issuedForBaseURL) {
           console.log('[LLMHelper] LiteLLM /model/info reply discarded — the proxy was repointed while it was in flight.');
           return;
         }
         this.litellmModelBudgets = fresh;
-        console.log(`[LLMHelper] LiteLLM /model/info: cached output budgets for ${fresh.size} model(s)`);
+        this.litellmModelInputCaps = freshInput;
+        console.log(`[LLMHelper] LiteLLM /model/info: cached budgets for ${fresh.size} model(s) `
+          + `(${freshInput.size} with an input ceiling)`);
       } catch {
         // Proxy may not expose /model/info (older versions, auth) — Auto falls
         // back to the default budget; the user can always set a manual value.
@@ -1742,13 +1766,33 @@ export class LLMHelper {
 
   // Trim a context blob to fit within the active model's prompt budget.
   // Cloud tier always returns text unchanged. Local tiers drop oldest lines first.
+  /**
+   * The proxy-reported input ceiling for a model id, or null when the id is not
+   * gateway-routed or the proxy never reported one.
+   */
+  private litellmInputCapFor(modelId: string): number | null {
+    if (!modelId?.startsWith('litellm/')) return null;
+    return this.litellmModelInputCaps.get(modelId.replace('litellm/', '')) ?? null;
+  }
+
   public fitContextForCurrentModel(text: string, reservedOutputTokens?: number): string {
     if (!text) return text;
     const modelId = this.useOllama ? this.ollamaModel : this.currentModelId;
     const caps = getModelCapabilities(modelId, this.useOllama);
-    if (caps.maxContextTokens >= 100_000) return text;
+    // A gateway-routed model keeps the cloud tier by design, so its declared
+    // maxContextTokens is the tier's, not the upstream's. Where the proxy told
+    // us the real input ceiling, that wins — it is the only authoritative
+    // number available, and without it the early return below skipped trimming
+    // entirely for every proxied model. Read synchronously from the cache the
+    // per-request resolveLitellmMaxTokens call already populates; an empty
+    // cache simply leaves the previous behaviour in place.
+    const maxContextTokens = Math.min(
+      caps.maxContextTokens,
+      this.litellmInputCapFor(modelId) ?? Number.POSITIVE_INFINITY,
+    );
+    if (maxContextTokens >= 100_000) return text;
     const reserved = reservedOutputTokens ?? 2000;
-    const cap = Math.floor(caps.maxContextTokens * 0.8);
+    const cap = Math.floor(maxContextTokens * 0.8);
     const totalFor = (s: string) => caps.promptBudgetTokens + reserved + estimateTokens(s);
     if (totalFor(text) <= cap) return text;
     const lines = text.split('\n');
