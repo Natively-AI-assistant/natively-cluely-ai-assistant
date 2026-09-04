@@ -121,7 +121,8 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       // ORT abort that kills the process before the JS `ready` arrives
       // leaves a recoverable breadcrumb for the next launch's consume.
       writeOnnxLoadSentinel('embeddings', this.model);
-      this.worker = new Worker(this.getWorkerPath());
+      const spawned = new Worker(this.getWorkerPath());
+      this.worker = spawned;
 
       this.worker.on('message', (msg: { type: string; requestId?: number; vectors?: number[][]; error?: string; status?: LocalWorkerStatus }) => {
         if (msg.type === 'status' && msg.status) {
@@ -145,6 +146,10 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       });
 
       this.worker.on('error', (err) => {
+        // Only act for the worker that is still ours. A disposed worker drains
+        // in the background, and its late error must not reject requests that
+        // belong to a replacement worker on this instance.
+        if (this.worker !== spawned) return;
         console.error('[LocalEmbeddingProvider] Worker error:', err);
         this.loaded = false;
         this.loadingPromise = null;
@@ -158,6 +163,9 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       });
 
       this.worker.on('exit', (code) => {
+        // Same scoping as 'error': a disposed worker's exit must not clear
+        // state, or reject pending work, that now belongs to its replacement.
+        if (this.worker !== spawned) return;
         if (code !== 0) {
           console.warn(`[LocalEmbeddingProvider] Worker exited with code ${code}`);
         }
@@ -210,6 +218,15 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     const worker = this.worker;
     this.worker = null;          // new work resolves against the new config
     this.loadingPromise = null;
+
+    // An intentional teardown is not a crash. terminate() exits the thread with
+    // code 1 and the exit handler only clears the sentinel on code 0, so
+    // without this every embedding config change left a "died hard" record —
+    // and a restart inside ONNX_LOAD_SENTINEL_TTL_MS would set startupPoisoned
+    // and SKIP local embedding for that launch. This path only became reachable
+    // when dispose() was introduced; before that the old worker was orphaned
+    // and never exited, so it never wrote one.
+    try { clearOnnxLoadSentinel('embeddings', this.model); } catch { /* best effort */ }
 
     if (!worker) {
       this.rejectAllPending(new Error(reason));
