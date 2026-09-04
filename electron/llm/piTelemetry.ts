@@ -31,6 +31,15 @@ export type PiTelemetryEvent =
   // canonical plan classified one turn differently. MARKER-ONLY: enums.
   | 'wta_plan_divergence'
   | 'wta_context_free_clarification'
+  // Interaction-router campaign Phase 1b (2026-09-04): how often a live WTA
+  // turn ends in the mode's silence string instead of an answer. Emitted ONCE
+  // per completed generation at the single post-generation point in
+  // runWhatShouldISay, carrying both outcomes, so the ring yields a rate and
+  // not just a count. Answers the "silence share" question the routing audit
+  // could not: the decision costs a full generation today, and the proposed
+  // router's `needs_response` axis is meant to make it cost nothing.
+  // MARKER-ONLY: booleans + enums. Never the question, never the answer.
+  | 'wta_turn_silence_outcome'
   | 'session_memory_recall_attempted'
   | 'session_memory_recall_succeeded'
   | 'session_memory_recall_blocked_by_mode'
@@ -106,6 +115,9 @@ const ALLOWED_KEYS = new Set<string>([
   'sanitizerApplied', 'repaired', 'needsFallback', 'markerCount', 'violationCode',
   // speakability markers (coarse class only — never raw answer text)
   'speakabilityClass',
+  // silence-outcome marker (Phase 1b): boolean only. The mechanism travels
+  // on the existing 'reason' key, the surface on 'surface', the mode on 'mode'.
+  'silenced',
   // OKF Profile Intelligence markers (2026-07-02): COUNTS + coarse reasons /
   // states only — never card titles, bodies, quotes, or any profile content.
   'cardCount', 'nodeCount', 'entityCount', 'relationCount', 'rejectedCount',
