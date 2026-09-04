@@ -181,3 +181,45 @@ test('dispose() lets an IN-FLIGHT embed finish instead of failing it', async () 
     for (let i = 0; i < 60 && !terminated; i++) await new Promise((r) => setTimeout(r, 50));
     assert.ok(terminated, 'the worker must be terminated once it has drained');
 });
+
+test('a deliberate dispose clears the embeddings crash sentinel', () => {
+    // Same defect the reranker had, and this path only became reachable when
+    // dispose() was introduced: terminate() exits with code 1, the exit handler
+    // clears the sentinel only on code 0, and LocalEmbeddingProvider DOES
+    // consume a poisoned sentinel at startup (consumePoisonedOnnxLoad
+    // ('embeddings') -> startupPoisoned -> embedding skipped for that launch).
+    // Before dispose() existed the old worker was orphaned and never exited, so
+    // it never wrote one.
+    const src = require('node:fs').readFileSync(
+        path.join(repoRoot, 'electron/rag/providers/LocalEmbeddingProvider.ts'), 'utf8',
+    );
+    const at = src.indexOf('async dispose(reason =');
+    const open = src.indexOf('{', at);
+    let depth = 0, body = '';
+    for (let i = open; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') { depth--; if (depth === 0) { body = src.slice(open, i + 1); break; } }
+    }
+    assert.match(
+        body,
+        /clearOnnxLoadSentinel\(\s*'embeddings'/,
+        'dispose() must clear the embeddings sentinel, or an ordinary config change poisons the ' +
+        'next launch into skipping local embedding entirely.',
+    );
+});
+
+test('a disposed worker cannot reject work belonging to its replacement', () => {
+    // pendingRequests is shared per-instance, so an unscoped exit/error handler
+    // on the OLD worker rejects requests registered against a NEW one. That is
+    // what turned a dispose into "Worker exited with code 1" for embeds that had
+    // nothing to do with the disposed worker.
+    const src = require('node:fs').readFileSync(
+        path.join(repoRoot, 'electron/rag/providers/LocalEmbeddingProvider.ts'), 'utf8',
+    );
+    const guards = src.match(/if \(this\.worker !== spawned\) return;/g) ?? [];
+    assert.ok(
+        guards.length >= 2,
+        `expected the 'error' and 'exit' handlers to be scoped to their own worker; found ` +
+        `${guards.length} identity guard(s)`,
+    );
+});
