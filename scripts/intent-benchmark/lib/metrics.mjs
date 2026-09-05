@@ -78,16 +78,44 @@ export function perLabelScores(pairs, labels = null) {
  * dropped hard labels. The count of excluded labels is returned so the report
  * can say the average is over 7 of 8 classes rather than pretending otherwise.
  */
+/**
+ * Support below which a per-label F1 is not a measurement.
+ *
+ * Macro F1 averages every class equally, so a class with a handful of held-out
+ * rows moves the headline as much as one with four hundred, while its own F1 is
+ * mostly sampling noise. dialogue_act carries `interruption` at 6 held-out rows
+ * against `ask`'s 407: that one class caps the axis near 80 however good the
+ * model is, and a reader comparing the number to a 0.80 bar cannot see why.
+ *
+ * Fifteen is the smallest support at which one misclassification moves F1 by
+ * less than about ten points, so below it the per-class score says more about
+ * which rows landed in the split than about the model.
+ */
+export const MIN_LABEL_SUPPORT = 15;
+
 export function macroF1(pairs, labels = null) {
   const per = perLabelScores(pairs, labels);
   const scored = Object.entries(per).filter(([, s]) => s.support > 0);
   const excluded = Object.entries(per).filter(([, s]) => s.support === 0).map(([l]) => l);
   if (scored.length === 0) return { macroF1: null, labelsScored: 0, excludedLabels: excluded };
   const sum = scored.reduce((a, [, s]) => a + (s.f1 ?? 0), 0);
+
+  // The same average over adequately supported classes only. Reported ALONGSIDE
+  // the headline, never instead of it: dropping a thin class is a way of making
+  // a number look better, so both travel together and the thin ones are named.
+  const wellSupported = scored.filter(([, s]) => s.support >= MIN_LABEL_SUPPORT);
+  const thin = scored.filter(([, s]) => s.support < MIN_LABEL_SUPPORT)
+    .map(([l, s]) => ({ label: l, support: s.support, f1: s.f1 }));
+
   return {
     macroF1: sum / scored.length,
     labelsScored: scored.length,
     excludedLabels: excluded,
+    macroF1WellSupported: wellSupported.length
+      ? wellSupported.reduce((a, [, s]) => a + (s.f1 ?? 0), 0) / wellSupported.length
+      : null,
+    labelsWellSupported: wellSupported.length,
+    thinLabels: thin,
     perLabel: per,
   };
 }
