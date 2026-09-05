@@ -111,7 +111,7 @@ for m in "minilm sentence-transformers/all-MiniLM-L6-v2" "tiny sentence-transfor
   echo "=== 4.$NAME retrain on the NEW train split $(date +%H:%M:%S) ==="
   PYTHONUNBUFFERED=1 python3 $B/tools/train_multihead.py \
     --data $B/dataset/v3.jsonl --encoder "$ENC" \
-    --out $B/trained/$NAME-multihead-v3 --epochs 12 2>&1 | tail -18 || exit 1
+    --out $B/trained/$NAME-multihead-v3 --epochs 20 2>&1 | tail -18 || exit 1
   echo "=== 5.$NAME export int8 ONNX to the path the benchmark reads ==="
   python3 $B/tools/export_multihead_onnx.py \
     --trained $B/trained/$NAME-multihead-v3 \

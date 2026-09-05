@@ -103,6 +103,8 @@ def main():
     ap.add_argument("--max-len", type=int, default=192)
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--seed", type=int, default=17)
+    ap.add_argument("--dev-frac", type=float, default=0.15,
+                    help="fraction of TRAIN groups held out to pick the best epoch; never touches the corpus holdout")
     args = ap.parse_args()
 
     random.seed(args.seed); np.random.seed(args.seed); torch.manual_seed(args.seed)
@@ -112,10 +114,33 @@ def main():
     holdout = [r for r in rows if r.get("split") == "holdout"]
     print(f"[train] {len(train)} train rows, {len(holdout)} held out (never used here)")
 
+    # DEV SLICE, carved out of TRAIN so the epoch count stops being a guess.
+    #
+    # This script used to run a fixed number of epochs and save whatever the
+    # last one produced. The epoch count was therefore an unvalidated
+    # hyperparameter: the saved model might be overfit or undertrained and
+    # nothing in the output said which. Selecting on the holdout would fix that
+    # by leaking it, so the slice comes out of train.
+    #
+    # Grouped by normalised input, for the same reason the corpus split is:
+    # adversarial pairs and repeated backchannels share an input, and splitting
+    # them across the fit/dev boundary leaks the answer.
+    groups = {}
+    for r in train:
+        k = " ".join(str(r.get("input", "")).lower().split())
+        groups.setdefault(k, []).append(r)
+    keys = sorted(groups)
+    random.Random(args.seed).shuffle(keys)
+    n_dev = max(1, int(len(keys) * args.dev_frac))
+    dev_keys = set(keys[:n_dev])
+    dev = [r for k in dev_keys for r in groups[k]]
+    fit = [r for k in keys[n_dev:] for r in groups[k]]
+    print(f"[train] fit {len(fit)} rows, dev {len(dev)} rows (grouped by input, carved from train)")
+
     label_maps, sizes = {}, {}
     for axis in AXES:
         get = (lambda r: r.get("legacy_intent")) if axis == "legacy_intent" else (lambda r: r["labels"].get(axis))
-        vals = sorted({get(r) for r in train if get(r) is not None})
+        vals = sorted({get(r) for r in fit if get(r) is not None})
         label_maps[axis] = {v: i for i, v in enumerate(vals)}
         sizes[axis] = len(vals)
         print(f"[train] {axis:16} {len(vals)} classes")
@@ -126,7 +151,8 @@ def main():
     model.to(device)
     print(f"[train] device {device}")
 
-    dl = DataLoader(Rows(train, tok, label_maps, max_len=args.max_len), batch_size=args.batch, shuffle=True)
+    dl = DataLoader(Rows(fit, tok, label_maps, max_len=args.max_len), batch_size=args.batch, shuffle=True)
+    dev_dl = DataLoader(Rows(dev, tok, label_maps, max_len=args.max_len), batch_size=args.batch)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     # LINEAR WARMUP THEN DECAY.
@@ -156,11 +182,12 @@ def main():
     losses = {}
     for axis in AXES:
         getc = (lambda r: r.get("legacy_intent")) if axis == "legacy_intent" else (lambda r: r["labels"].get(axis))
-        counts = Counter(getc(r) for r in train if getc(r) in label_maps[axis])
+        counts = Counter(getc(r) for r in fit if getc(r) in label_maps[axis])
         w = torch.tensor([1.0 / max(1, counts.get(v, 1)) for v in label_maps[axis]], dtype=torch.float)
         w = (w / w.sum() * len(w)).to(device)
         losses[axis] = nn.CrossEntropyLoss(weight=w, ignore_index=-100)
 
+    best_dev, best_epoch, best_state = -1.0, 0, None
     for epoch in range(args.epochs):
         model.train(); total = 0.0
         for batch in dl:
@@ -174,7 +201,44 @@ def main():
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step(); sched.step()
             total += loss.item()
-        print(f"[train] epoch {epoch+1}/{args.epochs}  loss {total/max(1,len(dl)):.4f}", flush=True)
+        # DEV MACRO F1 on the decision axis, every epoch, and keep the best.
+        #
+        # needs_response is the selection key because it is the axis the router
+        # actually gates behaviour on. Macro rather than accuracy so a model
+        # that learns the majority class and stops does not win.
+        model.eval()
+        correct_by, total_by, pred_by = Counter(), Counter(), Counter()
+        with torch.no_grad():
+            for batch in dev_dl:
+                logits = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
+                y = batch["y_needs_response"]
+                pred = logits["needs_response"].argmax(dim=-1).cpu()
+                for t, p_ in zip(y.tolist(), pred.tolist()):
+                    if t == -100:
+                        continue
+                    total_by[t] += 1
+                    pred_by[p_] += 1
+                    if t == p_:
+                        correct_by[t] += 1
+        f1s = []
+        for cls in set(total_by) | set(pred_by):
+            tp = correct_by.get(cls, 0)
+            prec = tp / pred_by[cls] if pred_by.get(cls) else 0.0
+            rec = tp / total_by[cls] if total_by.get(cls) else 0.0
+            f1s.append(2 * prec * rec / (prec + rec) if (prec + rec) else 0.0)
+        dev_f1 = sum(f1s) / len(f1s) if f1s else 0.0
+        mark = ""
+        if dev_f1 > best_dev:
+            best_dev, best_epoch = dev_f1, epoch + 1
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            mark = "  <- best so far, kept"
+        print(f"[train] epoch {epoch+1}/{args.epochs}  loss {total/max(1,len(dl)):.4f}  dev needs_response macroF1 {dev_f1:.4f}{mark}", flush=True)
+
+    # Restore the best epoch. Without this the saved model is whatever the last
+    # epoch happened to produce, which is the defect this dev slice exists for.
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        print(f"[train] restored epoch {best_epoch}, dev needs_response macroF1 {best_dev:.4f}")
 
     # COLLAPSE CHECK, on the training split, before anything is saved.
     #
@@ -184,7 +248,7 @@ def main():
     # existed. Checking here means the failure is named at training time.
     model.eval()
     with torch.no_grad():
-        check = DataLoader(Rows(train[:256], tok, label_maps, max_len=args.max_len), batch_size=args.batch)
+        check = DataLoader(Rows(fit[:256], tok, label_maps, max_len=args.max_len), batch_size=args.batch)
         seen = {a: Counter() for a in AXES}
         for batch in check:
             logits = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
@@ -199,7 +263,10 @@ def main():
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
     tok.save_pretrained(out)
-    json.dump({"encoder": args.encoder, "axes": AXES, "label_maps": label_maps, "sizes": sizes},
+    json.dump({"encoder": args.encoder, "axes": AXES, "label_maps": label_maps, "sizes": sizes,
+               "selection": {"best_epoch": best_epoch, "epochs_run": args.epochs,
+                             "dev_needs_response_macro_f1": best_dev,
+                             "dev_rows": len(dev), "fit_rows": len(fit)}},
               open(out / "heads.json", "w"), indent=2)
     print(f"[train] saved to {out}")
 
