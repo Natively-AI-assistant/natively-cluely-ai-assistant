@@ -56,7 +56,7 @@ import { app } from 'electron';
  *  from a true native abort, so we never permanently disable a family. */
 export const ONNX_LOAD_SENTINEL_TTL_MS = 5 * 60 * 1000;
 
-export type OnnxFamily = 'whisper' | 'intent' | 'embeddings' | 'reranker';
+export type OnnxFamily = 'whisper' | 'intent' | 'embeddings' | 'reranker' | 'router';
 
 export interface OnnxLoadSentinel {
     family: OnnxFamily;

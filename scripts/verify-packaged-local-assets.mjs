@@ -67,6 +67,11 @@ const REQUIRED_ASARUNPACK_GLOBS = [
   '**/localEmbeddingWorker.js',
   '**/localRerankerWorker.js',
   '**/whisperWorker.js',
+  // 2026-09-05: the interaction router's ONNX worker. RouterModel rewrites
+  // app.asar to app.asar.unpacked when it resolves this path, and without the
+  // glob that rewrite points at a file that was never unpacked. It fails only
+  // in a packaged build, and only when the flag is on.
+  '**/routerWorker.js',
   '**/node_modules/better-sqlite3/**',
   '**/node_modules/keytar/**',
   '**/node_modules/sqlite-vec/**',
@@ -92,6 +97,7 @@ const REQUIRED_WORKER_FILES = [
   'dist-electron/electron/rag/providers/localEmbeddingWorker.js',
   'dist-electron/electron/rag/localRerankerWorker.js',
   'dist-electron/electron/audio/whisper/whisperWorker.js',
+  'dist-electron/electron/llm/routing/routerWorker.js',
 ];
 
 // Required native binaries for the packaged app (the asarUnpack globs must place
