@@ -254,21 +254,6 @@ const outPath = path.resolve(__dirname, OUT);
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(scored, null, 2));
 
-// Per-row predictions, for the Phase 5 error analysis. Kept in a SEPARATE file
-// because the scored report is read by replay.mjs on every merge and should
-// stay small; the row dump is only read when someone is analysing failures.
-const rowsOut = outPath.replace(/\.json$/, '.rows.jsonl');
-fs.writeFileSync(rowsOut, results.map((r) => JSON.stringify({
-  id: r.id,
-  input: target.find((t) => t.id === r.id)?.input,
-  mode: target.find((t) => t.id === r.id)?.mode,
-  channel: target.find((t) => t.id === r.id)?.channel,
-  expected: r.expected,
-  predicted: r.predicted ? Object.fromEntries(SCORED_AXES.map((a) => [a, r.predicted[a] ?? null])) : null,
-  expectedLegacyIntent: r.expectedLegacyIntent,
-  predictedLegacyIntent: r.predictedLegacyIntent,
-})).join('\n') + '\n');
-
 console.log(formatReport(scored));
 console.log(`\nlatency source  ${scored.latencySource}   round-trip p50 ${scored.roundTrip.p50}ms p95 ${scored.roundTrip.p95}ms`);
 if (failed) console.log(`FAILED ROWS     ${failed}`);
