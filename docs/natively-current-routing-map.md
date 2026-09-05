@@ -52,19 +52,23 @@ The classifier returns `{ intent, confidence, answerShape }`. That is the whole 
 
 Post stream, `validateAnswerStructure` can rewrite the answer, `answerPolish` strips fabricated transcript preambles, and the silence sentinel check runs.
 
-## Prompt composition, and a correction
+## Prompt composition, corrected
 
-The brief and several in-repo comments describe the `MODE_*_PROMPT` constants in `electron/llm/prompts.ts` as the live prompt path. That is stale.
+This section was wrong when first written and is corrected here rather than rewritten, because the error is instructive. See `docs/natively-routing-correction-v3-2026-09-05.md` for the full account.
 
-`electron/intelligence/intelligenceFlags.ts:699` reads:
+The original claim was that the live prompt path is `electron/llm/promptSystemV2.ts`, on the strength of `promptSystemV2: { default: true }` in `intelligenceFlags.ts`.
 
-```
-promptSystemV2: { env: 'NATIVELY_PROMPT_SYSTEM_V2', setting: 'promptSystemV2Enabled', default: true },
-```
+The flag default is real. The conclusion is not. **Context Intelligence V3 is the main answer system.** Its flag is in `electron/context-intelligence/contracts/flag.ts` with `DEFAULT_ENABLED = true`, above which the comment reads: "ROLLOUT: flipped to `true` on 2026-07-30 at the owner's direction, V3 is the main answer system, not an opt-in."
 
-The default is `true`. The flag is on. The comment forty lines above it at `intelligenceFlags.ts:344` still says "Default OFF everywhere", and `electron/LLMHelper.ts:6078` still says "flag promptSystemV2, default OFF". Both comments are wrong. The live composer is `electron/llm/promptSystemV2.ts`, which builds core plus mode plus action plus optional custom instructions, in that order, so the cacheable prefix comes first.
+Prompt System v2 is the fallback, and its own flag description says so: it covers "the Context-Intelligence-V3-null fallback plus the surfaces V3 never adopted". The ordering is V3 first, V2 when V3 returns null, legacy constants when the V2 flag is off.
 
-The consequence for this campaign is that the mode contracts to verify are the V2 ones, and the `MODE_*_PROMPT` constants are the fallback path taken only when the flag is explicitly turned off. Both still exist and both still ship.
+The audit missed this because V3's flag deliberately does not live in `intelligenceFlags.ts`. Its module header explains that twenty of the sixty-two flags in that registry resolve differently in development than production, and that split is how `composePrompt` came to be built, tested and never executed for a user. V3 refuses to import the registry so it cannot inherit a development-only default. That is a good decision, and it means searching the registry cannot find the most important flag in the system.
+
+**V3 is a routing system, not just a composer, and it already owns several axes this campaign proposed to build.** `electron/context-intelligence/question/turn-classifier.ts` describes its job as deciding "WHAT a turn is asking and WHETHER retrieval should run at all". It carries `QuestionType` with 17 values, `SourceType` with 10, `GroundingPolicy`, `RetrievalPath` and `Answerability`. It is deterministic on purpose: its header cites architecture rules forbidding a language model for deterministic policy decisions without evidence of improvement.
+
+What V3 does not have is any notion of whether to speak at all. That is deliberate. `buildV3ForTranscriptSurface` returns null when no question resolves, with the comment "the genuinely proactive case ... proactivity is the product feature". Those handed-back turns are the ambient live audio, and they are exactly where the measured silence waste is.
+
+So the axis-to-owner table above needs one correction: `grounding` and `capabilities.retrieval` are owned by V3 first and by `turnSourceDecision` and `modeHybridEligibility` on the fallback path, not by the latter alone.
 
 ## The silence decision, in detail
 
@@ -124,9 +128,13 @@ Status as of commit `fd91a541`, 2026-09-04. The paragraphs above describe the st
 
 The mechanism is worth carrying forward, because it generalises past this one gate. `isPremiumKnowledgeInterceptAllowed` gates CONSUMPTION, not production. It is applied at `LLMHelper.ts:2979` and `:6282`, and both sit after `await processQuestion(...)` at `:2945` and `:6244`. The orchestrator therefore runs in every mode and every side effect inside it has already happened by the time the mode is consulted. Any other premium side effect should be checked against that ordering before it is assumed to be mode gated.
 
-## Two surfaces, two classifiers
+## Three classifiers, not two
 
-The live surface runs through `IntelligenceEngine` and classifier A.
+Correction, 2026-09-05: there are three, and the one that runs first is the one the audit missed.
+
+`electron/context-intelligence/question/turn-classifier.ts` is deterministic, is part of the main answer system, and takes the turn whenever a question resolves confidently. The two below handle what it declines.
+
+The live fallback surface runs through `IntelligenceEngine` and classifier A.
 
 The manual knowledge surface runs through `premium/electron/knowledge/KnowledgeOrchestrator.ts` and classifier B, which is a different taxonomy with conversational stickiness and its own web search gate.
 
