@@ -160,6 +160,13 @@ async function buildProvider(id) {
     if (!cfg) throw new Error(`unknown composite ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new CompositeProvider({ id, ...cfg });
   }
+  if (id === 'none-always-answer' || id === 'none-always-general') {
+    const { NoClassifierProvider } = await import('./providers/noClassifier.mjs');
+    return new NoClassifierProvider({
+      id,
+      variant: id === 'none-always-general' ? 'always_general' : 'always_answer',
+    });
+  }
   if (id === 'production' || id.startsWith('production-amc')) {
     const { ProductionProvider } = await import('./providers/production.mjs');
     // production-amc0 / production-amc2 pin the assistant message count, which
