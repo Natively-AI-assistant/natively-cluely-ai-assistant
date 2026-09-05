@@ -50,12 +50,20 @@ const LANGUAGE = val('--language', 'en');
 // each mode's sequence from its current maximum, and appends.
 const SEQ_FROM = val('--continue-from', null);
 const APPEND = args.includes('--append');
+const ONLY_CATEGORIES = val('--categories', null)
+  ? new Set(val('--categories', '').split(',').map((c) => c.trim()).filter(Boolean))
+  : null;
 
 const requested = has('--all')
   ? Object.keys(ALL_SPECS)
   : (val('--modes', SMOKE ? 'team-meet,recruiting' : Object.keys(ALL_SPECS).join(',')).split(',').map((s) => s.trim()).filter(Boolean));
 
 for (const m of requested) if (!ALL_SPECS[m]) { console.error(`unknown mode: ${m}`); process.exit(2); }
+if (ONLY_CATEGORIES) {
+  for (const c of ONLY_CATEGORIES) {
+    if (!CATEGORY_BRIEFS[c]) { console.error(`unknown category: ${c} (have: ${Object.keys(CATEGORY_BRIEFS).join(', ')})`); process.exit(2); }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // response schema (Gemini enforces this, rather than us asking in prose)
@@ -203,7 +211,18 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
       Object.entries(preSeq).map(([k, v]) => `${k}=${v + 1}`).join(' '));
   }
 
-  const categories = Object.entries(CATEGORY_BRIEFS);
+  // Category filter, for topping up a category the gate previously rejected
+  // without regenerating the whole corpus. The shares are renormalised over the
+  // selection so `--per-mode N` keeps meaning N rows per mode; without that a
+  // three-category top-up would silently produce a third of what was asked.
+  const categories = Object.entries(CATEGORY_BRIEFS)
+    .filter(([name]) => !ONLY_CATEGORIES || ONLY_CATEGORIES.has(name))
+    .map(([name, meta]) => [name, meta]);
+  if (ONLY_CATEGORIES) {
+    const total = categories.reduce((a, [, m]) => a + m.share, 0);
+    for (const entry of categories) entry[1] = { ...entry[1], share: entry[1].share / total };
+    console.log(`categories limited to: ${categories.map(([n, m]) => `${n} (${(m.share * 100).toFixed(0)}%)`).join(', ')}`);
+  }
   const summary = { written: 0, rejectedCells: [], invalid: [], perMode: {}, perCategory: {}, cells: 0, realismByMode: {} };
   const inputsByMode = {};
   const seqByMode = {};
