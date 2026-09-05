@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_SPECS, MODE_SPECS, CUSTOM_MODE_KEYS } from './lib/modeSpecs.mjs';
 import { buildGenerationPrompt, CATEGORY_BRIEFS, REQUIRED_TRAPS, isPromptExample } from './lib/prompts.mjs';
-import { analyzeBatch, formatBatchReport } from './lib/sttRealism.mjs';
+import { analyzeBatch, redundantTrapPairs, formatBatchReport } from './lib/sttRealism.mjs';
 import { codeSwitches } from './lib/codeSwitch.mjs';
 import { validateRow, splitFor, AXES, CAPABILITIES, LEGACY_INTENTS, parseJsonl } from './lib/schema.mjs';
 import { generateJson, readApiKey } from './lib/gemini.mjs';
@@ -134,6 +134,12 @@ async function generateCell({ modeKey, spec, category, count, withFiles, seq }) 
     if (raw.length === 0) { lastReport = { problems: ['model returned no rows'] }; continue; }
 
     const report = analyzeBatch(raw.map((r) => r.input), { category });
+    if (category === 'trap') {
+      const extra = redundantTrapPairs(raw);
+      if (extra > 0) {
+        report.problems.push(`${extra} colliding trap inputs carry the SAME label — a pair must differ in its labels, not only in its wording`);
+      }
+    }
     lastReport = report;
     if (report.problems.length > 0) continue;
 

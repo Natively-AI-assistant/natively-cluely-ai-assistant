@@ -69,7 +69,20 @@ export const CATEGORY_PROFILES = {
   fragment:       { minShortRate: 0.55, minFillerRate: 0.10, minRepairRate: 0.03 },
   ambiguous:      { minShortRate: 0.25, minFillerRate: 0.15, minRepairRate: 0.05 },
   multi_intent:   { minShortRate: null, minFillerRate: 0.20, minRepairRate: 0.08 },
-  trap:           { minShortRate: null, minFillerRate: 0.15, minRepairRate: 0.05 },
+  // The duplicate ceiling is raised for this category alone, because surface
+  // similarity is what the category IS. The brief asks for pairs whose wording
+  // is near-identical and whose labels differ, so the two members of a pair
+  // collide on the normalised input by construction. Measured on the v2 corpus:
+  // of 54 colliding input strings, 13 carried different labels and all 13 were
+  // separable from the mode, channel and history that buildText puts in front
+  // of the model, so they are learnable rather than noise. The remaining 41
+  // were same-label repeats, which is the laziness the default ceiling exists
+  // to catch, so that check moves to a label-aware form in the generator rather
+  // than being dropped. The ceiling is 0.20 rather than the 0.02 default and
+  // not higher: those 13 legitimate collisions were 0.6% of the v2 corpus, so a
+  // cell that comes back a third identical is the model taking a shortcut, and
+  // the retry with the critique attached is the correct response to it.
+  trap:           { minShortRate: null, minFillerRate: 0.15, minRepairRate: 0.05, maxDuplicateRate: 0.20 },
 };
 
 /**
@@ -104,6 +117,7 @@ export function analyzeBatch(inputs, {
     if (prof.minShortRate !== undefined) minShortRate = prof.minShortRate;
     if (prof.minFillerRate !== undefined) minFillerRate = prof.minFillerRate;
     if (prof.minRepairRate !== undefined) minRepairRate = prof.minRepairRate;
+    if (prof.maxDuplicateRate !== undefined) maxDuplicateRate = prof.maxDuplicateRate;
   }
   const n = inputs.length;
   if (n === 0) return { n: 0, problems: ['empty batch'] };
@@ -159,4 +173,35 @@ export function formatBatchReport(r) {
     `  fillers     ${p(r.fillerRate)}   repairs   ${p(r.repairRate)}   short(<=5w) ${p(r.shortRate)}`,
     ...(r.problems.length ? ['  PROBLEMS:', ...r.problems.map((x) => `    - ${x}`)] : ['  looks like STT']),
   ].join('\n');
+}
+
+/**
+ * Same-label collisions inside a trap batch.
+ *
+ * The realism gate raises its duplicate ceiling for `trap`, because the two
+ * members of an adversarial pair are meant to collide on wording. What must
+ * never collide is the LABEL: a pair whose wording and labels both match is a
+ * repeat, not a trap, and it teaches nothing. That distinction needs the labels,
+ * which the text-only realism analyzer does not have, so it is checked here
+ * where the generated rows are still whole.
+ *
+ * Returns the number of rows that are redundant in this sense.
+ */
+export function redundantTrapPairs(rows) {
+  const byInput = new Map();
+  for (const r of rows) {
+    const k = String(r.input ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!byInput.has(k)) byInput.set(k, []);
+    byInput.get(k).push(r);
+  }
+  let redundant = 0;
+  for (const group of byInput.values()) {
+    if (group.length < 2) continue;
+    const signatures = new Set(group.map((r) => JSON.stringify([
+      r.labels?.needs_response, r.labels?.dialogue_act, r.labels?.task,
+    ])));
+    // Every distinct signature earns one row; the rest of the group is repeat.
+    redundant += group.length - signatures.size;
+  }
+  return redundant;
 }

@@ -9,7 +9,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeInput, analyzeBatch, CATEGORY_PROFILES, MIN_SAMPLE_FOR_RATES } from '../lib/sttRealism.mjs';
+import { analyzeInput, analyzeBatch, CATEGORY_PROFILES, MIN_SAMPLE_FOR_RATES, redundantTrapPairs } from '../lib/sttRealism.mjs';
 
 const CLEAN_PROSE = [
   'Could you explain how the caching layer handles invalidation?',
@@ -117,4 +117,61 @@ describe('category profiles', () => {
     assert.ok(CATEGORY_PROFILES.no_response.minShortRate <= 0.35,
       'floor must not exceed what the category brief actually produces');
   });
+});
+
+describe('trap duplicates', () => {
+    // An adversarial pair collides on wording where the disambiguator is the
+    // channel or the history rather than the words, so a trap cell carries more
+    // duplicates than any other. It does not carry a third of them: measured on
+    // the v2 corpus, collisions that genuinely changed the label were 0.6% of
+    // rows. The ceiling is loosened for the category, not removed.
+    const withDupes = (nDupes, nUnique) => [
+        ...Array.from({ length: nDupes }, () => 'so uh is that valid'),
+        ...Array.from({ length: nUnique }, (_, i) => `yeah i mean uh whats the ${i} one i mean the other one`),
+    ];
+
+    test('the default ceiling rejects even a few colliding pairs', () => {
+        const r = analyzeBatch(withDupes(2, 18), { category: 'multi_intent' });
+        assert.ok(r.problems.some((p) => /duplicate/.test(p)));
+    });
+
+    test('the trap profile admits a realistic share of them', () => {
+        const r = analyzeBatch(withDupes(2, 18), { category: 'trap' });
+        assert.ok(!r.problems.some((p) => /duplicate/.test(p)), r.problems.join('; '));
+    });
+
+    test('the trap ceiling is still a ceiling', () => {
+        const r = analyzeBatch(withDupes(8, 12), { category: 'trap' });
+        assert.ok(r.problems.some((p) => /duplicate/.test(p)), 'a third identical must still reject');
+    });
+});
+
+describe('redundantTrapPairs', () => {
+    const row = (input, needs_response, dialogue_act = 'ask') => ({
+        input, labels: { needs_response, dialogue_act, task: 'none' },
+    });
+
+    test('a colliding pair with DIFFERENT labels is the intended trap', () => {
+        assert.equal(redundantTrapPairs([row('is that valid', 'yes'), row('is that valid', 'no')]), 0);
+    });
+
+    test('a colliding pair with the SAME label is a repeat', () => {
+        assert.equal(redundantTrapPairs([row('is that valid', 'yes'), row('is that valid', 'yes')]), 1);
+    });
+
+    test('counts only the rows beyond one per distinct label signature', () => {
+        const rows = [
+            row('is that valid', 'yes'), row('is that valid', 'yes'),
+            row('is that valid', 'no'), row('is that valid', 'no'),
+        ];
+        assert.equal(redundantTrapPairs(rows), 2);
+    });
+
+    test('distinct inputs are never redundant', () => {
+        assert.equal(redundantTrapPairs([row('one thing', 'yes'), row('another thing', 'yes')]), 0);
+    });
+
+    test('normalises case and whitespace before comparing', () => {
+        assert.equal(redundantTrapPairs([row('Is  That Valid', 'yes'), row('is that valid', 'yes')]), 1);
+    });
 });
