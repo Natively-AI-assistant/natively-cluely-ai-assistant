@@ -58,6 +58,33 @@ those two the composite and the plain head are identical to the decimal.
 
 So the extra machinery buys an improvement on an axis the router does not ship.
 
+## Why not head-deberta, now that it has been measured properly
+
+It was previously recorded at 19.8 macro F1 with a note that it collapsed to one
+class, and ruled out on that. The number was wrong. DeBERTa-v3-xsmall ships every
+parameter as float16, the heads are fp32, and on MPS that produces a NaN loss
+from the first step without raising. No gradient was ever applied, so the model
+stayed at its random initialisation and the collapse detector reported exactly
+what it saw. The training curve said `loss nan` on all twelve epochs and a dev
+score frozen at 0.3230, which is what a measurement of nothing looks like.
+
+Forcing fp32 in both the trainer and the exporter, and clearing a stale
+external-data sidecar that was silently defeating quantization, gives it a fair
+run:
+
+    candidate         needs_resp  dialogue   legacy    p95ms   disk
+    head-minilm             78.2      50.5    49.1%     12.2   22.8 MB
+    head-deberta int8       78.1      52.5    47.7%     38.2   82.3 MB
+
+A tie on the deciding axis, better on dialogue_act, worse on legacy intent,
+three times slower and three and a half times larger. It loses on the latency
+budget, which is a real reason.
+
+Worth recording that it was ahead before quantization, 79.7 against 78.2, and
+int8 cost it 1.6 points where it cost MiniLM almost nothing. A larger encoder
+had more to lose. If the latency budget were ever raised past 40ms this is the
+candidate to revisit, and the fp32 number is the one to revisit it with.
+
 ## Why not head-tiny
 
 Half the latency, 6.2 ms against 12.2 ms, and 4.3 points worse on
