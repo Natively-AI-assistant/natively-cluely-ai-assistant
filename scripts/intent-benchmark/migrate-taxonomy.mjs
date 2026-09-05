@@ -64,6 +64,8 @@ const stats = {
   optionalToNo: 0,
   optionalAskToYes: 0,
   voiceFixed: 0,
+  answerFormFixed: 0,
+  groundingFixed: 0,
 };
 
 for (const r of rows) {
@@ -94,6 +96,13 @@ for (const r of rows) {
     if (L.voice !== 'silent') { L.voice = 'silent'; stats.voiceFixed++; }
     L.task = 'none';
     L.secondary_tasks = [];
+    // answer_form and grounding too. The first version of this migration set
+    // only voice and task, so 149 rows folded from `optional` kept an
+    // answer_form and a grounding source describing an answer that would never
+    // be produced. The hand check caught it at 10.3% disagreement on
+    // answer_form, over the bar.
+    if (L.answer_form !== 'none') { L.answer_form = 'none'; stats.answerFormFixed++; }
+    if (L.grounding !== 'none') { L.grounding = 'none'; stats.groundingFixed++; }
   }
 }
 
@@ -105,4 +114,6 @@ console.log(`  optional -> yes (was an ask)   ${stats.optionalAskToYes}`);
 console.log(`  optional -> yes (system chan)  ${stats.optionalToYes}`);
 console.log(`  optional -> no  (own mic)      ${stats.optionalToNo}`);
 console.log(`  voice corrected to silent      ${stats.voiceFixed}`);
+console.log(`  answer_form corrected to none  ${stats.answerFormFixed}`);
+console.log(`  grounding corrected to none    ${stats.groundingFixed}`);
 console.log(`  ids and splits preserved, so v1 and v2 compare row for row\n`);

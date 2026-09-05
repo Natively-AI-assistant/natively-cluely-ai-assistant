@@ -56,7 +56,7 @@ LABELLING
 Label what the utterance IS, not what a good assistant would do about it.
 
 dialogue_act   ask | statement | answer | backchannel | interruption
-               `ask` covers BOTH questions and requests. Do not try to separate
+               "ask" covers BOTH questions and requests. Do not try to separate
                them: "whats the status on the q three report" is a question in
                form and a request in function, and the distinction was measured
                to be unlearnable.

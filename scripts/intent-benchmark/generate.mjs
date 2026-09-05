@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { ALL_SPECS, MODE_SPECS, CUSTOM_MODE_KEYS } from './lib/modeSpecs.mjs';
 import { buildGenerationPrompt, CATEGORY_BRIEFS, REQUIRED_TRAPS, isPromptExample } from './lib/prompts.mjs';
 import { analyzeBatch, formatBatchReport } from './lib/sttRealism.mjs';
+import { codeSwitches } from './lib/codeSwitch.mjs';
 import { validateRow, splitFor, AXES, CAPABILITIES, LEGACY_INTENTS, parseJsonl } from './lib/schema.mjs';
 import { generateJson, readApiKey } from './lib/gemini.mjs';
 
@@ -210,6 +211,7 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
   const seenInputs = new Set(preInputs);
   let deduped = 0;
   let parroted = 0;
+  let monolingual = 0;
 
   console.log(`\ngenerating  modes=${requested.length}  perMode=${PER_MODE}  model=${MODEL}  out=${path.relative(process.cwd(), OUT)}\n`);
 
@@ -247,6 +249,11 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
             const row = toDatasetRow({ raw, modeKey, spec, withFiles, seq: seqByMode[modeKey]++ });
             const problems = validateRow(row);
             if (problems.length) { summary.invalid.push({ id: row.id, problems }); continue; }
+            // A row claiming a language it does not speak. The generator
+            // produced plain English for 19% of hinglish and 27% of manglish
+            // rows, which makes the slice partly a measurement of English while
+            // being reported as multilingual.
+            if (LANGUAGE !== 'en' && !codeSwitches(row.input, LANGUAGE)) { monolingual++; continue; }
             // Leakage filter: a row that copied an example out of the
             // instructions measures the prompt, not the language.
             if (isPromptExample(row.input)) { parroted++; continue; }
@@ -284,6 +291,7 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
   summary.deduped = deduped;
   summary.parroted = parroted;
   if (parroted) console.log(`parroted       ${parroted} rows dropped (verbatim copies of prompt examples)`);
+  if (monolingual) console.log(`monolingual    ${monolingual} rows dropped (claimed ${LANGUAGE} but did not code-switch)`);
   console.log(`written        ${summary.written} rows across ${summary.cells} cells${deduped ? ` (${deduped} cross-batch duplicates dropped)` : ''}`);
   console.log(`per mode       ${Object.entries(summary.perMode).map(([k, v]) => `${k}=${v}`).join('  ')}`);
   console.log(`per category   ${Object.entries(summary.perCategory).map(([k, v]) => `${k}=${v}`).join('  ')}`);
