@@ -74,9 +74,22 @@ ${hist || '(nothing yet)'}
 TURN: ${text}
 
 Decide:
-needs_response - "no" for backchannels ("mhm", "right"), the other party thinking aloud, people talking to each other, admin chatter, and the user's OWN speech on their own mic.
-dialogue_act - what the turn IS.
-task, answer_form, grounding - what answering it would need. Use "none" when needs_response is "no".
+
+needs_response — describe BOTH directions, because the answer is genuinely
+  split roughly evenly in real conversation:
+  "yes"  the other party asked the user something, requested something, or
+         addressed them by name and expects a reply. Most questions arriving on
+         the system channel are "yes".
+  "no"   backchannels ("mhm", "right"), the other party thinking aloud, two
+         other people talking to each other, admin chatter, and the user's OWN
+         speech on their own mic.
+  "optional" the user could reasonably reply or stay quiet.
+
+dialogue_act — what the turn IS: question, request, statement, answer,
+  backchannel, interruption.
+
+task, answer_form, grounding — what answering it would need. Use "none" when
+  needs_response is "no".
 
 Answer with JSON only.`;
 }
