@@ -14901,7 +14901,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             turnSourceDecision: _pTurnSourceDecision,
           });
           if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId) {
-            const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch);
+            const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch, { hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles) });
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
             win?.webContents.send('gemini-stream-token', clarify, { streamId: myStreamId, source: 'phone' });

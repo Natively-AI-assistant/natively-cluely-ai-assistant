@@ -76,11 +76,11 @@ async function ensureLoaded(msg: any): Promise<void> {
     // model_quantized.onnx and nothing else, and a packaged local-only load
     // then fails silently.
     const graph = heads.dtype === 'fp32' ? 'model.onnx' : 'model_quantized.onnx';
+    // The WHOLE bounds object. Copying only the two thread counts dropped
+    // executionMode and the CPU memory-arena setting, which are the part that
+    // exists because of the BFCArena::Extend crashes this file's header cites.
     const bounds = getBoundedOnnxSessionOptions();
-    session = await ort.InferenceSession.create(path.join(msg.modelDir, 'onnx', graph), {
-      intraOpNumThreads: bounds.intraOpNumThreads,
-      interOpNumThreads: bounds.interOpNumThreads,
-    });
+    session = await ort.InferenceSession.create(path.join(msg.modelDir, 'onnx', graph), { ...bounds });
 
     parentPort!.postMessage({
       type: 'status',

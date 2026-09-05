@@ -548,6 +548,14 @@ export class IntelligenceEngine extends EventEmitter {
         this.recapLLM = new RecapLLM(this.llmHelper);
         this.followUpQuestionsLLM = new FollowUpQuestionsLLM(this.llmHelper);
         this.whatToAnswerLLM = new WhatToAnswerLLM(this.llmHelper);
+        // Interaction router warmup (2026-09-05). RouterModel.warmup() existed
+        // but nothing in production called it, so the first speculative turn
+        // paid the 5s load inline. isAvailable() inside warmup() returns false
+        // when the flag is off, so this is a no-op on the shipped default.
+        try {
+            const { RouterModel } = require('./llm/routing/RouterModel') as typeof import('./llm/routing/RouterModel');
+            void RouterModel.getInstance().warmup().catch(() => { /* a router that cannot warm returns null per turn */ });
+        } catch { /* routing module absent: the flag path returns null */ }
         this.codeHintLLM = new CodeHintLLM(this.llmHelper);
         this.brainstormLLM = new BrainstormLLM(this.llmHelper);
 
@@ -2288,10 +2296,20 @@ export class IntelligenceEngine extends EventEmitter {
                     wtaDecisionAllowsCandidateProfile =
                         _wtaTurnSourceDecision.outcome === 'default'
                         || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                    // Same rule as the first assignment (~line 1979): an EMPTY
+                    // allowed list grants nothing. This block re-derives the gate
+                    // from scratch and, until 2026-09-05, silently undid the first
+                    // block's empty-list check on every mode with a persisted
+                    // contract. Both sites now agree; the never-retrieve test asserts
+                    // the rule appears at both.
+                    if (_wtaTurnSourceDecision.allowedEvidenceKinds.length === 0) {
+                        wtaDecisionAllowsCandidateProfile = false;
+                    }
                     if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
                         wtaDecisionAllowsCandidateProfile = wtaDecisionAllowsCandidateProfile
                             && (_wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_resume')
-                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects'));
+                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('projects')
+                                || _wtaTurnSourceDecision.allowedEvidenceKinds.includes('profile_jd'));
                     }
                 }
                 const _wtaContract = buildCustomModeExecutionContract({
@@ -4848,7 +4866,7 @@ export class IntelligenceEngine extends EventEmitter {
                             .filter((i) => i.role !== 'assistant')
                             .slice(-4)
                             .map((i) => `[${i.role === 'user' ? 'USER' : 'SYSTEM'}] ${i.text}`),
-                        modeHasReferenceFiles: false,
+                        modeHasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
                         legacyIntent: answerPlan?.answerType ?? 'none',
                         legacyConfidence: confidence,
                         liveWasSilent: IntelligenceEngine.isNonAnswerSentinel(fullAnswer),
@@ -6628,8 +6646,10 @@ export class IntelligenceEngine extends EventEmitter {
             let hasFiles = false;
             try {
                 const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
-                const active = ModesManager.getInstance().getActiveMode?.();
-                hasFiles = Boolean((active as { hasReferenceFiles?: boolean } | undefined)?.hasReferenceFiles);
+                // getActiveModeInfo() carries hasReferenceFiles; the raw Mode row from
+                // getActiveMode() never did, so the router's [files] feature was
+                // permanently "no" until 2026-09-05.
+                hasFiles = Boolean(ModesManager.getInstance().getActiveModeInfo?.()?.hasReferenceFiles);
             } catch { /* absent ModesManager means no files, which is the safe reading */ }
 
             const pred = await router.classify({

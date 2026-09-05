@@ -5,7 +5,7 @@ import { resolveV2SystemPrompt, v2TierForPromptTier } from "./promptSystemV2";
 import { composeWtaSystemPrompt } from "./wtaSystemPrompt";
 import { estimateTokens } from "./modelCapabilities";
 import { TemporalContext } from "./TemporalContextBuilder";
-import { IntentResult } from "./IntentClassifier";
+import type { IntentResult } from './PlannerDecision';
 import { ScreenContext } from "../services/screen/ScreenContextService";
 import { PromptAssembler, escapeUserContent, INJECTION_REDACTION_MESSAGE, TRUNCATION_SUFFIX } from "../services/context/PromptAssembler";
 import { isIntelligenceFlagEnabled } from "../intelligence/intelligenceFlags";

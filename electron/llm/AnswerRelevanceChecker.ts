@@ -61,7 +61,6 @@ export interface AnswerRelevanceResult {
  * missing one hallucination phrasing that a human would also find only
  * mildly odd ("I'm welcome, ready whenever...") rather than a hard failure.
  */
-const ANSWER_RELEVANCE_THRESHOLD = 0.15;
 
 /**
  * BERT-family models have a ~512-token context window. An uncapped long
@@ -85,7 +84,6 @@ const ANSWER_RELEVANCE_THRESHOLD = 0.15;
  * head+tail max-score handling below — this constant now bounds EACH
  * classified chunk, not the whole answer.
  */
-const MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK = 1000;
 
 /**
  * transformers.js's zero-shot-classification pipeline builds the NLI
@@ -109,7 +107,6 @@ const MAX_ANSWER_CHARS_FOR_RELEVANCE_CHECK = 1000;
  * the actual corpus scores. Do not change this wording without re-running
  * that tuning pass against the same corpus.
  */
-const HYPOTHESIS_TEMPLATE = 'This response directly answers the specific question asked: {}';
 
 /**
  * Check whether `answer` actually addresses `question`, using zero-shot NLI
@@ -119,16 +116,6 @@ const HYPOTHESIS_TEMPLATE = 'This response directly answers the specific questio
  * guard in this codebase (IntentClassifier.classify, etc.) — never as a
  * negative verdict.
  */
-async function scoreChunk(question: string, chunk: string): Promise<number | null> {
-    // Single-label classification: the returned score for this one label IS
-    // the entailment confidence directly (multi_label:false's softmax-over-
-    // one-label degenerates to just the raw entailment probability). The
-    // label itself is the question text, substituted into
-    // HYPOTHESIS_TEMPLATE's `{}` placeholder by the pipeline.
-    const result = await classifyZeroShotRaw(chunk, [question], HYPOTHESIS_TEMPLATE);
-    return result ? result.topScore : null;
-}
-
 export async function checkAnswerRelevance(_question: string, _answer: string): Promise<AnswerRelevanceResult | null> {
     return null;
 }

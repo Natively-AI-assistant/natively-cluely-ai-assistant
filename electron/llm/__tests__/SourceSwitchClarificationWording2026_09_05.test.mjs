@@ -34,6 +34,11 @@ describe('the clarification names the source that was asked for', () => {
     assert.doesNotMatch(t, /only answers from your uploaded material/);
     assert.match(t, /doesn't have your job description enabled/);
   });
+  test('asking for the uploaded material when nothing is uploaded says so, and the remedy is to attach, not switch', () => {
+    const t = buildSourceSwitchClarification('unknown', 'reference_files', { hasReferenceFiles: false });
+    assert.match(t, /Nothing is uploaded to this mode yet/);
+    assert.doesNotMatch(t, /Switch to a mode/);
+  });
   test('a reference-bound mode WITH files keeps the original wording (pinned elsewhere too)', () => {
     const t = buildSourceSwitchClarification('reference_files', 'profile', { hasReferenceFiles: true });
     assert.match(t, /only answers from your uploaded material/);
@@ -78,12 +83,16 @@ describe('wiring: every call site passes the requested source', () => {
     assert.ok(sites >= 3, `expected the two manual sites plus phone mirror, found ${sites}`);
     assert.equal((ipc.match(/manualOwnership\.requestedSource/g) || []).length, 2, 'both manual-chat sites must pass the requested source');
     assert.equal(ipc.includes('buildSourceSwitchClarification(manualOwnership.owner)'), false, 'no bare owner-only manual call may remain');
+    assert.ok(ipc.includes("buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch, { hasReferenceFiles"), 'phone mirror must pass availability too');
   });
 });
 
 describe('WTA never-retrieve gate', () => {
-  test('an empty allowed-evidence list grants nothing', () => {
-    assert.ok(engine.includes("if (_wtaTurnSourceDecision.allowedEvidenceKinds.length === 0) {\n                    wtaDecisionAllowsCandidateProfile = false;"),
-      'the gate must close on an empty list');
+  test('an empty allowed-evidence list grants nothing, at BOTH places the gate is derived', () => {
+    // The gate is assigned twice, ~300 lines apart. The first fix (2026-09-05)
+    // landed only at the first site and the second silently undid it on every
+    // mode with a persisted contract. Count the rule, do not anchor on one.
+    const hits = engine.split(/allowedEvidenceKinds\.length === 0\)\s*\{\s*wtaDecisionAllowsCandidateProfile = false;/).length - 1;
+    assert.equal(hits, 2, `expected the empty-list rule at both assignment sites, found ${hits}`);
   });
 });

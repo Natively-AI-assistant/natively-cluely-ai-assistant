@@ -50,6 +50,7 @@ export class RouterModel {
   private status: LocalWorkerStatus | null = null;
   private disabledUntilRestart = false;
   private loaded = false;
+  private poisonChecked = false;
 
   static getInstance(): RouterModel {
     if (!RouterModel.instance) RouterModel.instance = new RouterModel();
@@ -129,10 +130,20 @@ export class RouterModel {
   isAvailable(persistedFlag: boolean | null = null): boolean {
     if (!isInteractionRouterEnabled(persistedFlag)) return false;
     if (this.disabledUntilRestart) return false;
-    const poisoned = consumePoisonedOnnxLoad('router');
-    if (poisoned && isSentinelWithinTtl(poisoned)) {
-      this.disabledUntilRestart = true;
-      return false;
+    // The poison sentinel is consumed ONCE per process, and never while this
+    // process's own load is in flight. getWorker() writes the sentinel before
+    // starting the worker and clears it on 'ready'; an isAvailable() call
+    // during that 1-5s window used to consume the marker as if it were a
+    // previous launch's crash, latch disabledUntilRestart, and leave a real
+    // crash with no record. Only a marker found BEFORE our first load can be
+    // from an earlier launch.
+    if (!this.poisonChecked && this.worker === null) {
+      this.poisonChecked = true;
+      const poisoned = consumePoisonedOnnxLoad('router');
+      if (poisoned && isSentinelWithinTtl(poisoned)) {
+        this.disabledUntilRestart = true;
+        return false;
+      }
     }
     if (!fs.existsSync(this.modelDir())) return false;
     return true;
@@ -206,7 +217,13 @@ export class RouterModel {
 
     let release: (() => void) | null = null;
     try {
-      release = await acquireOnnxSlot('normal', 1);
+      // The slot wait is INSIDE the budget. acquireOnnxSlot has no deadline for
+      // a normal-weight request, and the embedder and reranker hold their slots
+      // for the session, so with the cap exhausted this awaited forever while
+      // the request timer had not even been armed yet (it lives in post()). A
+      // router that cannot get a slot in time has no opinion; the turn proceeds.
+      release = await RouterModel.acquireSlotWithin(budget);
+      if (!release) return null;
       const r = await this.post({
         type: 'classify',
         input: {
@@ -237,6 +254,21 @@ export class RouterModel {
     }
   }
 
+  /** Acquire an ONNX slot or give up after `ms`. A slot that arrives late is released at once. */
+  private static acquireSlotWithin(ms: number): Promise<(() => void) | null> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => { if (!settled) { settled = true; resolve(null); } }, ms);
+      acquireOnnxSlot('normal', 1).then(
+        (release) => {
+          if (settled) { release(); return; }
+          settled = true; clearTimeout(timer); resolve(release);
+        },
+        () => { if (!settled) { settled = true; clearTimeout(timer); resolve(null); } },
+      );
+    });
+  }
+
   /**
    * Bring the session up before the first turn needs it.
    *
@@ -250,7 +282,8 @@ export class RouterModel {
     if (!hasEnoughMemoryForOnnxSession()) return false;
     let release: (() => void) | null = null;
     try {
-      release = await acquireOnnxSlot('normal', 1);
+      release = await RouterModel.acquireSlotWithin(LOAD_TIMEOUT_MS);
+      if (!release) return false;
       await this.post({ type: 'init' }, LOAD_TIMEOUT_MS);
       this.loaded = true;
       return true;

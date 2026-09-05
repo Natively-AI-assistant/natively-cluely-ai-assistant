@@ -279,6 +279,13 @@ export function buildSourceSwitchClarification(
   // When the caller knows no files are attached, say what is actually true:
   // the source the user named is not enabled for this mode.
   if (opts?.hasReferenceFiles === false && (owner === 'reference_files' || owner === 'unknown')) {
+    // Two different facts. Asking for the UPLOADED MATERIAL in a mode that has
+    // none is "nothing is uploaded yet", and the remedy is to attach a file, not
+    // to switch modes. Asking for the résumé or JD in a mode that does not
+    // enable them is "not enabled here", and the remedy is to switch.
+    if (requestedSource === 'reference_files') {
+      return `Nothing is uploaded to this mode yet, so there's no material to answer from. Attach a file and I'll use it.`;
+    }
     return `This mode doesn't have your ${label} enabled as a source, so I'm not pulling from it here. Switch to a mode that enables that source and I'll use it.`;
   }
   if (owner === 'transcript') {
