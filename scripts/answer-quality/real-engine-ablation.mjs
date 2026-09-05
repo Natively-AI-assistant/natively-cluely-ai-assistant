@@ -106,6 +106,7 @@ for (const line of lines) {
   if (process.env.HARNESS_VERBOSE) origLog(`[harness] returned=${JSON.stringify(String(returned ?? '').slice(0, 160))} emitted=${JSON.stringify(String(emitted ?? '').slice(0, 160))}`);
 
   const d = dispatched.slice(before); const tr = traces.slice(beforeT);
+  if (process.env.HARNESS_DUMP && d[0] && rows.length === 0) fs.writeFileSync(process.env.HARNESS_DUMP, `=== SYSTEM ===\n${d[0].system}\n\n=== USER ===\n${d[0].user}\n`);
   const last = d[d.length - 1];
   const intent = await IC.classifyIntent(text, session.getFormattedContext(120), session.getAssistantResponseHistory().length).catch(() => null);
   // EVERY dispatch this turn made, not only the last. A turn can dispatch more

@@ -75,12 +75,45 @@ refused before. looking-for-work confirmed the same way.
 Wide suite: 8,687 passing, 4 failing, and the four are exactly the known red
 names recorded at the campaign baseline, listed in full with no cutoff.
 
-## Not fixed here
+## A second route, found while checking the baseline
 
-The engine's candidate-profile gate treats `outcome: 'default'` with an empty
-`allowedEvidenceKinds` as "profile allowed", so the résumé orchestrator may still
-run on these turns. It has no résumé to read, so this is a no-op today, and the
-`general_mixed` branch has behaved this way all along. It is a correctness gap
-rather than a leak, and it is recorded rather than changed.
+Three tests recorded as known red at the campaign baseline turned out to be the
+same family. Their seeded interviewer line names "the JD", which parses as an
+explicit job description request. General's persisted allowlist enables only
+reference files, so the resolver returns `explicit_denied` with
+`explicit_switch_not_enabled`, and it does so even when a JD is loaded. That is
+invariant 1 doing what its header says. The tests were written before the
+2026-08-30 flag flip made the short circuit enforcing, and they expect the
+older behaviour of generating first and sanitising after.
+
+Evin chose to keep the refusal and fix the wording. The wording was wrong twice.
+The engine called `buildSourceSwitchClarification(owner)` with no requested
+source, so a user asking about the job description was told "I'm not pulling
+from your résumé here", the default label. And the sentence "This mode only
+answers from your uploaded material" was said by General with nothing attached,
+which is false on both counts. The phone mirror path already passed the
+requested source; WTA and manual chat did not.
+
+`SourceOwnershipDecision` now carries `requestedSource`, all three call sites
+pass it, and when the caller knows no files are attached the message says what
+is true: the source the user named is not enabled for this mode. The three
+baseline tests now receive "This mode doesn't have your job description enabled
+as a source". They still fail on equality, by the decision above, and remain the
+known red set.
+
+## The gate gap, fixed
+
+The engine's candidate-profile gate treated `outcome: 'default'` with an empty
+`allowedEvidenceKinds` as "profile allowed", so the résumé orchestrator could
+run on a turn that granted no evidence. Nothing to read made it a no-op, but the
+manual chat twin asks the contract per kind and would have said no. An empty
+list now grants nothing and the two paths agree.
+
+## Harness note
+
+The real engine harness reads `promptSource` from the `prompt_dispatched`
+trace, which is emitted only under `NATIVELY_TRACE_LONGCTX=1`. Without the flag
+every turn reports untraced and the summary reads "composed by V3: 0", which
+looks exactly like V3 having stopped composing. It had not. Set the flag.
 
 Windows untested. Every run here is macOS.

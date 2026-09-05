@@ -2560,7 +2560,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             // "the project" with no explicit switch at all), which the
             // legacy resolver has no opinion on.
             const clarify = manualOwnership?.shouldClarifyInsteadOfProfile
-              ? require('./llm/sourceOwnership').buildSourceSwitchClarification(manualOwnership.owner)
+              ? require('./llm/sourceOwnership').buildSourceSwitchClarification(
+                  manualOwnership.owner,
+                  manualOwnership.requestedSource ?? null,
+                  { hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles) },
+                )
               : buildSourceClarification({
                 hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles),
                 hasProfileFacts: _hasProfileFactsForTurn,
@@ -2796,7 +2800,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             && !isCodingChat && !imagePaths?.length && !isStealthChat) {
           try {
             const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
-            const clarify = buildSourceSwitchClarification(manualOwnership.owner);
+            const clarify = buildSourceSwitchClarification(
+              manualOwnership.owner,
+              manualOwnership.requestedSource ?? null,
+              { hasReferenceFiles: Boolean((manualActiveMode as any)?.hasReferenceFiles) },
+            );
             if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) return null;
             event.sender.send('gemini-stream-token', clarify, { streamId: myStreamId });
             event.sender.send('gemini-stream-done', { finalText: clarify, streamId: myStreamId });
