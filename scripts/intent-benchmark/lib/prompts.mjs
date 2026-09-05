@@ -55,8 +55,12 @@ LABELLING
 
 Label what the utterance IS, not what a good assistant would do about it.
 
-dialogue_act   question | request | statement | answer | backchannel | interruption
-needs_response yes | optional | no
+dialogue_act   ask | statement | answer | backchannel | interruption
+               `ask` covers BOTH questions and requests. Do not try to separate
+               them: "whats the status on the q three report" is a question in
+               form and a request in function, and the distinction was measured
+               to be unlearnable.
+needs_response yes | no          (binary; there is no "optional")
                "no" is the important one and it is COMMON in a live call.
                Backchannels ("mhm", "right", "yeah exactly"), the other party
                thinking aloud, two other people talking to each other, admin

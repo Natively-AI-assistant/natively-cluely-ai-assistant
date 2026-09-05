@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { splitFor, validateRow, validateCorpus, parseJsonl } from '../lib/schema.mjs';
+import { splitFor, validateRow, validateCorpus, parseJsonl, AXES } from '../lib/schema.mjs';
 
 const baseRow = (over = {}) => ({
   id: 'tm-0412',
@@ -18,7 +18,7 @@ const baseRow = (over = {}) => ({
   input: 'evin hows the export feature coming along',
   mode_has_reference_files: true,
   labels: {
-    dialogue_act: 'question',
+    dialogue_act: 'ask',
     needs_response: 'yes',
     voice: 'first_person_script',
     task: 'answer',
@@ -62,6 +62,24 @@ describe('held-out split', () => {
     const ids = Array.from({ length: 50 }, (_, i) => `lec-${i}`);
     const splits = new Set(ids.map(splitFor));
     assert.equal(splits.size, 2, 'over 50 ids both splits should occur');
+  });
+});
+
+describe('v2 taxonomy', () => {
+  test('question and request are MERGED into ask', () => {
+    // 27 of 54 dialogue_act overlap failures were that one pair. Keeping either
+    // old value would silently accept rows from the pre-merge corpus.
+    assert.deepEqual(AXES.dialogue_act, ['ask', 'statement', 'answer', 'backchannel', 'interruption']);
+    assert.ok(validateRow(baseRow({ labels: { ...baseRow().labels, dialogue_act: 'question' } })).length > 0);
+    assert.ok(validateRow(baseRow({ labels: { ...baseRow().labels, dialogue_act: 'request' } })).length > 0);
+  });
+
+  test('needs_response is BINARY: optional is gone', () => {
+    // 9 of 11 overlaps on this axis were optional-vs-yes, and inspecting those
+    // rows showed optional had become "the user thinking aloud on their own
+    // mic" rather than a genuine middle.
+    assert.deepEqual(AXES.needs_response, ['yes', 'no']);
+    assert.ok(validateRow(baseRow({ labels: { ...baseRow().labels, needs_response: 'optional' } })).length > 0);
   });
 });
 

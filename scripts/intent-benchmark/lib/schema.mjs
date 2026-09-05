@@ -17,8 +17,12 @@ export const MODES = [
 export const CHANNELS = ['system', 'mic', 'typed', 'screen'];
 
 export const AXES = {
-  dialogue_act: ['question', 'request', 'statement', 'answer', 'backchannel', 'interruption'],
-  needs_response: ['yes', 'optional', 'no'],
+  // v2 taxonomy. `question` and `request` merged into `ask` because 27 of 54
+  // dialogue_act overlap failures were that one pair, and `optional` was
+  // removed because 9 of 11 needs_response overlaps were optional-vs-yes.
+  // See migrate-taxonomy.mjs for the evidence and the fold rule.
+  dialogue_act: ['ask', 'statement', 'answer', 'backchannel', 'interruption'],
+  needs_response: ['yes', 'no'],
   voice: ['first_person_script', 'advisor', 'capture', 'silent'],
   task: ['answer', 'explain', 'create', 'debug', 'summarize', 'compare', 'rewrite', 'plan', 'research', 'extract', 'none'],
   answer_form: ['code', 'fact', 'explanation', 'example', 'recommendation', 'summary', 'rebuttal', 'steps', 'table', 'none'],

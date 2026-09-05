@@ -4,6 +4,18 @@ Phase 5 of the interaction-router campaign. All figures are measured on the held
 
 Corpus is `scripts/intent-benchmark/dataset/v1.jsonl`, 2,008 rows, 419 held out, 1,813 English and 195 code-switched. Held-out English rows used for scoring: 377.
 
+## Status: these numbers describe the v1 taxonomy
+
+Every figure in this document was measured against the taxonomy as the campaign brief specified it. Two axes have since changed, on the strength of the error analysis below, and the changes invalidate the two headline numbers rather than adjusting them.
+
+`dialogue_act` merged `question` and `request` into a single `ask`. Half of that axis's overlapping-label failures were that one pair.
+
+`needs_response` dropped `optional` and became binary. Nine of eleven overlaps on that axis were `optional` against `yes`, and inspecting those rows showed `optional` had become a bin for the user thinking aloud on their own microphone.
+
+`scripts/intent-benchmark/dataset/v2.jsonl` carries the migrated corpus, with ids and splits preserved so v1 and v2 compare row for row. The benchmark has NOT been re-run against it. Both changes should raise the two affected numbers, since each removes a distinction no candidate could learn, but by how much is unmeasured and this document does not guess.
+
+The ranking, the latency figures, the architecture conclusion and the error analysis are unaffected: none of them turns on the two merged distinctions.
+
 ## The headline
 
 Nothing clears the acceptance bar. The best candidate reaches 66.3 macro F1 on `needs_response` against a bar of 85.0.
