@@ -1,0 +1,1679 @@
+{
+  "providerId": "head-minilm",
+  "meta": {
+    "family": "fine-tuned-multihead",
+    "params": 0,
+    "sizeOnDiskMB": 0,
+    "runtime": "onnx",
+    "ortBinding": "onnxruntime-node",
+    "modelId": "resources/models/natively/router-minilm-multihead",
+    "forwardPassesPerRow": 1,
+    "dataset": "v3.jsonl",
+    "datasetRows": 7214,
+    "loadMs": 119,
+    "split": "holdout",
+    "language": "en",
+    "punctuated": false,
+    "failed": 0,
+    "machineLoad": 0.19,
+    "latencyTrustworthy": true
+  },
+  "axes": {
+    "dialogue_act": {
+      "n": 1367,
+      "accuracy": 0.7015362106803219,
+      "macroF1": 0.5047219279420813,
+      "labelsScored": 5,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.6309024099276016,
+      "labelsWellSupported": 4,
+      "thinLabels": [
+        {
+          "label": "interruption",
+          "support": 6,
+          "f1": 0
+        }
+      ],
+      "perLabel": {
+        "answer": {
+          "precision": 0.16265060240963855,
+          "recall": 0.35526315789473684,
+          "f1": 0.22314049586776857,
+          "support": 76,
+          "tp": 27,
+          "fp": 139,
+          "fn": 49
+        },
+        "ask": {
+          "precision": 0.9023354564755839,
+          "recall": 0.6978653530377669,
+          "f1": 0.7870370370370372,
+          "support": 609,
+          "tp": 425,
+          "fp": 46,
+          "fn": 184
+        },
+        "backchannel": {
+          "precision": 0.7267080745341615,
+          "recall": 0.8666666666666667,
+          "f1": 0.7905405405405406,
+          "support": 135,
+          "tp": 117,
+          "fp": 44,
+          "fn": 18
+        },
+        "interruption": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 31,
+          "fn": 6
+        },
+        "statement": {
+          "precision": 0.724907063197026,
+          "recall": 0.7208872458410351,
+          "f1": 0.7228915662650602,
+          "support": 541,
+          "tp": 390,
+          "fp": 148,
+          "fn": 151
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.0669574521615119,
+      "eceDegenerate": false,
+      "eceN": 1367,
+      "coverage": {
+        "fired": 1367,
+        "total": 1367,
+        "hitRate": 1,
+        "precisionWhenFired": 0.7015362106803219
+      }
+    },
+    "needs_response": {
+      "n": 1367,
+      "accuracy": 0.7820043891733723,
+      "macroF1": 0.7817884767842986,
+      "labelsScored": 2,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.7817884767842986,
+      "labelsWellSupported": 2,
+      "thinLabels": [],
+      "perLabel": {
+        "no": {
+          "precision": 0.7056396148555708,
+          "recall": 0.8592964824120602,
+          "f1": 0.7749244712990935,
+          "support": 597,
+          "tp": 513,
+          "fp": 214,
+          "fn": 84
+        },
+        "yes": {
+          "precision": 0.86875,
+          "recall": 0.7220779220779221,
+          "f1": 0.7886524822695037,
+          "support": 770,
+          "tp": 556,
+          "fp": 84,
+          "fn": 214
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.06039497502743119,
+      "eceDegenerate": false,
+      "eceN": 1367,
+      "coverage": {
+        "fired": 1367,
+        "total": 1367,
+        "hitRate": 1,
+        "precisionWhenFired": 0.7820043891733723
+      }
+    },
+    "voice": {
+      "n": 1367,
+      "accuracy": 0,
+      "macroF1": 0,
+      "labelsScored": 4,
+      "excludedLabels": [
+        "<unresolved>"
+      ],
+      "macroF1WellSupported": 0,
+      "labelsWellSupported": 4,
+      "thinLabels": [],
+      "perLabel": {
+        "<unresolved>": {
+          "precision": 0,
+          "recall": null,
+          "f1": 0,
+          "support": 0,
+          "tp": 0,
+          "fp": 1367,
+          "fn": 0
+        },
+        "advisor": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 275,
+          "tp": 0,
+          "fp": 0,
+          "fn": 275
+        },
+        "capture": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 59,
+          "tp": 0,
+          "fp": 0,
+          "fn": 59
+        },
+        "first_person_script": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 436,
+          "tp": 0,
+          "fp": 0,
+          "fn": 436
+        },
+        "silent": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 597,
+          "tp": 0,
+          "fp": 0,
+          "fn": 597
+        }
+      },
+      "unresolved": 1367,
+      "ece": null,
+      "eceDegenerate": false,
+      "eceN": 0,
+      "coverage": {
+        "fired": 0,
+        "total": 1367,
+        "hitRate": 0,
+        "precisionWhenFired": null
+      }
+    },
+    "task": {
+      "n": 1367,
+      "accuracy": 0.5113386978785662,
+      "macroF1": 0.36096673324719,
+      "labelsScored": 11,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.38807464252696516,
+      "labelsWellSupported": 10,
+      "thinLabels": [
+        {
+          "label": "create",
+          "support": 14,
+          "f1": 0.0898876404494382
+        }
+      ],
+      "perLabel": {
+        "answer": {
+          "precision": 0.29365079365079366,
+          "recall": 0.3490566037735849,
+          "f1": 0.3189655172413793,
+          "support": 106,
+          "tp": 37,
+          "fp": 89,
+          "fn": 69
+        },
+        "compare": {
+          "precision": 0.25333333333333335,
+          "recall": 0.5588235294117647,
+          "f1": 0.34862385321100914,
+          "support": 34,
+          "tp": 19,
+          "fp": 56,
+          "fn": 15
+        },
+        "create": {
+          "precision": 0.05333333333333334,
+          "recall": 0.2857142857142857,
+          "f1": 0.0898876404494382,
+          "support": 14,
+          "tp": 4,
+          "fp": 71,
+          "fn": 10
+        },
+        "debug": {
+          "precision": 0.3464566929133858,
+          "recall": 0.4731182795698925,
+          "f1": 0.39999999999999997,
+          "support": 93,
+          "tp": 44,
+          "fp": 83,
+          "fn": 49
+        },
+        "explain": {
+          "precision": 0.6475409836065574,
+          "recall": 0.27816901408450706,
+          "f1": 0.38916256157635465,
+          "support": 284,
+          "tp": 79,
+          "fp": 43,
+          "fn": 205
+        },
+        "extract": {
+          "precision": 0.15789473684210525,
+          "recall": 0.5294117647058824,
+          "f1": 0.24324324324324326,
+          "support": 17,
+          "tp": 9,
+          "fp": 48,
+          "fn": 8
+        },
+        "none": {
+          "precision": 0.8014842300556586,
+          "recall": 0.676056338028169,
+          "f1": 0.7334465195246179,
+          "support": 639,
+          "tp": 432,
+          "fp": 107,
+          "fn": 207
+        },
+        "plan": {
+          "precision": 0.30985915492957744,
+          "recall": 0.5641025641025641,
+          "f1": 0.39999999999999997,
+          "support": 78,
+          "tp": 44,
+          "fp": 98,
+          "fn": 34
+        },
+        "research": {
+          "precision": 0.16326530612244897,
+          "recall": 0.15384615384615385,
+          "f1": 0.15841584158415842,
+          "support": 52,
+          "tp": 8,
+          "fp": 41,
+          "fn": 44
+        },
+        "rewrite": {
+          "precision": 0.4583333333333333,
+          "recall": 0.5238095238095238,
+          "f1": 0.4888888888888889,
+          "support": 21,
+          "tp": 11,
+          "fp": 13,
+          "fn": 10
+        },
+        "summarize": {
+          "precision": 0.3870967741935484,
+          "recall": 0.41379310344827586,
+          "f1": 0.39999999999999997,
+          "support": 29,
+          "tp": 12,
+          "fp": 19,
+          "fn": 17
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.048291186996068214,
+      "eceDegenerate": false,
+      "eceN": 1367,
+      "coverage": {
+        "fired": 1367,
+        "total": 1367,
+        "hitRate": 1,
+        "precisionWhenFired": 0.5113386978785662
+      }
+    },
+    "mode_intent": {
+      "n": 1367,
+      "accuracy": 0.24286759326993415,
+      "macroF1": 0.19145855187510685,
+      "labelsScored": 79,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.19681128888391314,
+      "labelsWellSupported": 34,
+      "thinLabels": [
+        {
+          "label": "action_item",
+          "support": 12,
+          "f1": 0.25
+        },
+        {
+          "label": "admin_announcement",
+          "support": 14,
+          "f1": 0.30769230769230765
+        },
+        {
+          "label": "buying_signal",
+          "support": 10,
+          "f1": 0
+        },
+        {
+          "label": "candidate_question",
+          "support": 6,
+          "f1": 0
+        },
+        {
+          "label": "citation_check",
+          "support": 8,
+          "f1": 0.3157894736842105
+        },
+        {
+          "label": "clarification_request",
+          "support": 10,
+          "f1": 0
+        },
+        {
+          "label": "clarifying_answer_from_interviewer",
+          "support": 5,
+          "f1": 0.22222222222222224
+        },
+        {
+          "label": "code_review_hint",
+          "support": 11,
+          "f1": 0
+        },
+        {
+          "label": "compensation",
+          "support": 13,
+          "f1": 0.5454545454545455
+        },
+        {
+          "label": "complexity_probe",
+          "support": 6,
+          "f1": 0.5454545454545454
+        },
+        {
+          "label": "decision",
+          "support": 12,
+          "f1": 0.25
+        },
+        {
+          "label": "escalation_request",
+          "support": 3,
+          "f1": 0.35294117647058826
+        },
+        {
+          "label": "ethics_check",
+          "support": 7,
+          "f1": 0.3333333333333333
+        },
+        {
+          "label": "factual_question",
+          "support": 12,
+          "f1": 0.10256410256410256
+        },
+        {
+          "label": "feature_question",
+          "support": 8,
+          "f1": 0.35294117647058826
+        },
+        {
+          "label": "frustration_escalation",
+          "support": 14,
+          "f1": 0.4705882352941177
+        },
+        {
+          "label": "interview_answer",
+          "support": 6,
+          "f1": 0
+        },
+        {
+          "label": "interviewer_explaining_role",
+          "support": 8,
+          "f1": 0.3333333333333333
+        },
+        {
+          "label": "intro_request",
+          "support": 12,
+          "f1": 0.1818181818181818
+        },
+        {
+          "label": "jd_gap",
+          "support": 8,
+          "f1": 0
+        },
+        {
+          "label": "lecture_concept",
+          "support": 11,
+          "f1": 0
+        },
+        {
+          "label": "motivation_why_us",
+          "support": 6,
+          "f1": 0.2
+        },
+        {
+          "label": "next_step_moment",
+          "support": 9,
+          "f1": 0.17777777777777776
+        },
+        {
+          "label": "objection_competitor",
+          "support": 5,
+          "f1": 0.4
+        },
+        {
+          "label": "objection_price",
+          "support": 6,
+          "f1": 0.4
+        },
+        {
+          "label": "objection_status_quo",
+          "support": 8,
+          "f1": 0
+        },
+        {
+          "label": "objection_timing",
+          "support": 7,
+          "f1": 0.3529411764705882
+        },
+        {
+          "label": "objection_trust",
+          "support": 5,
+          "f1": 0
+        },
+        {
+          "label": "off_file_question",
+          "support": 8,
+          "f1": 0
+        },
+        {
+          "label": "off_syllabus",
+          "support": 8,
+          "f1": 0
+        },
+        {
+          "label": "off_topic",
+          "support": 8,
+          "f1": 0.08
+        },
+        {
+          "label": "optimization_probe",
+          "support": 8,
+          "f1": 0.4
+        },
+        {
+          "label": "pricing_ask",
+          "support": 10,
+          "f1": 0
+        },
+        {
+          "label": "problem_restatement",
+          "support": 5,
+          "f1": 0
+        },
+        {
+          "label": "question_to_room",
+          "support": 3,
+          "f1": 0
+        },
+        {
+          "label": "red_flag",
+          "support": 10,
+          "f1": 0.06451612903225806
+        },
+        {
+          "label": "refund_or_credit_request",
+          "support": 12,
+          "f1": 0.31578947368421056
+        },
+        {
+          "label": "resolution_request",
+          "support": 9,
+          "f1": 0
+        },
+        {
+          "label": "sales_objection",
+          "support": 6,
+          "f1": 0.25
+        },
+        {
+          "label": "satisfied_customer",
+          "support": 7,
+          "f1": 0.24489795918367344
+        },
+        {
+          "label": "scope_question",
+          "support": 14,
+          "f1": 0
+        },
+        {
+          "label": "system_design",
+          "support": 11,
+          "f1": 0
+        },
+        {
+          "label": "technique_probe",
+          "support": 12,
+          "f1": 0.4
+        },
+        {
+          "label": "tell_me_about_yourself",
+          "support": 12,
+          "f1": 0.2978723404255319
+        },
+        {
+          "label": "your_questions_for_us",
+          "support": 6,
+          "f1": 0.28571428571428575
+        }
+      ],
+      "perLabel": {
+        "action_item": {
+          "precision": 0.5,
+          "recall": 0.16666666666666666,
+          "f1": 0.25,
+          "support": 12,
+          "tp": 2,
+          "fp": 2,
+          "fn": 10
+        },
+        "admin": {
+          "precision": 0.4,
+          "recall": 0.07142857142857142,
+          "f1": 0.12121212121212122,
+          "support": 28,
+          "tp": 2,
+          "fp": 3,
+          "fn": 26
+        },
+        "admin_announcement": {
+          "precision": 0.3333333333333333,
+          "recall": 0.2857142857142857,
+          "f1": 0.30769230769230765,
+          "support": 14,
+          "tp": 4,
+          "fp": 8,
+          "fn": 10
+        },
+        "approval": {
+          "precision": 0.1111111111111111,
+          "recall": 0.03571428571428571,
+          "f1": 0.05405405405405406,
+          "support": 28,
+          "tp": 1,
+          "fp": 8,
+          "fn": 27
+        },
+        "behavioral_in_tech_round": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 15,
+          "tp": 0,
+          "fp": 0,
+          "fn": 15
+        },
+        "behavioral_star": {
+          "precision": 0.75,
+          "recall": 0.2,
+          "f1": 0.31578947368421056,
+          "support": 15,
+          "tp": 3,
+          "fp": 1,
+          "fn": 12
+        },
+        "buying_signal": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 2,
+          "fn": 10
+        },
+        "called_on_for_status": {
+          "precision": 0.25925925925925924,
+          "recall": 0.875,
+          "f1": 0.39999999999999997,
+          "support": 16,
+          "tp": 14,
+          "fp": 40,
+          "fn": 2
+        },
+        "candidate_answer_to_evaluate": {
+          "precision": 0.56,
+          "recall": 0.3111111111111111,
+          "f1": 0.4,
+          "support": 45,
+          "tp": 14,
+          "fp": 11,
+          "fn": 31
+        },
+        "candidate_question": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 24,
+          "fn": 6
+        },
+        "case_question": {
+          "precision": 0.3076923076923077,
+          "recall": 0.16,
+          "f1": 0.2105263157894737,
+          "support": 25,
+          "tp": 4,
+          "fp": 9,
+          "fn": 21
+        },
+        "citation_check": {
+          "precision": 0.2727272727272727,
+          "recall": 0.375,
+          "f1": 0.3157894736842105,
+          "support": 8,
+          "tp": 3,
+          "fp": 8,
+          "fn": 5
+        },
+        "clarification_request": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 3,
+          "fn": 10
+        },
+        "clarifying_answer_from_interviewer": {
+          "precision": 0.25,
+          "recall": 0.2,
+          "f1": 0.22222222222222224,
+          "support": 5,
+          "tp": 1,
+          "fp": 3,
+          "fn": 4
+        },
+        "code_review_hint": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 2,
+          "fn": 11
+        },
+        "coding_question": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 29,
+          "tp": 0,
+          "fp": 4,
+          "fn": 29
+        },
+        "compensation": {
+          "precision": 0.6666666666666666,
+          "recall": 0.46153846153846156,
+          "f1": 0.5454545454545455,
+          "support": 13,
+          "tp": 6,
+          "fp": 3,
+          "fn": 7
+        },
+        "complexity_probe": {
+          "precision": 0.6,
+          "recall": 0.5,
+          "f1": 0.5454545454545454,
+          "support": 6,
+          "tp": 3,
+          "fp": 2,
+          "fn": 3
+        },
+        "correctness_question": {
+          "precision": 0.23684210526315788,
+          "recall": 0.2727272727272727,
+          "f1": 0.2535211267605634,
+          "support": 33,
+          "tp": 9,
+          "fp": 29,
+          "fn": 24
+        },
+        "critique_challenge": {
+          "precision": 0.34615384615384615,
+          "recall": 0.2903225806451613,
+          "f1": 0.3157894736842105,
+          "support": 31,
+          "tp": 9,
+          "fp": 17,
+          "fn": 22
+        },
+        "decision": {
+          "precision": 0.2,
+          "recall": 0.3333333333333333,
+          "f1": 0.25,
+          "support": 12,
+          "tp": 4,
+          "fp": 16,
+          "fn": 8
+        },
+        "design_challenge": {
+          "precision": 0.05263157894736842,
+          "recall": 0.043478260869565216,
+          "f1": 0.04761904761904762,
+          "support": 23,
+          "tp": 1,
+          "fp": 18,
+          "fn": 22
+        },
+        "diagnostic_answer": {
+          "precision": 0.6666666666666666,
+          "recall": 0.4864864864864865,
+          "f1": 0.5625,
+          "support": 37,
+          "tp": 18,
+          "fp": 9,
+          "fn": 19
+        },
+        "discovery_answer": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 15,
+          "tp": 0,
+          "fp": 0,
+          "fn": 15
+        },
+        "discussion_noise": {
+          "precision": 0.546875,
+          "recall": 0.5737704918032787,
+          "f1": 0.5599999999999999,
+          "support": 61,
+          "tp": 35,
+          "fp": 29,
+          "fn": 26
+        },
+        "dsa_problem": {
+          "precision": 0.12,
+          "recall": 0.2,
+          "f1": 0.15,
+          "support": 15,
+          "tp": 3,
+          "fp": 22,
+          "fn": 12
+        },
+        "escalation_request": {
+          "precision": 0.21428571428571427,
+          "recall": 1,
+          "f1": 0.35294117647058826,
+          "support": 3,
+          "tp": 3,
+          "fp": 11,
+          "fn": 0
+        },
+        "ethics_check": {
+          "precision": 0.4,
+          "recall": 0.2857142857142857,
+          "f1": 0.3333333333333333,
+          "support": 7,
+          "tp": 2,
+          "fp": 3,
+          "fn": 5
+        },
+        "factual_question": {
+          "precision": 0.07407407407407407,
+          "recall": 0.16666666666666666,
+          "f1": 0.10256410256410256,
+          "support": 12,
+          "tp": 2,
+          "fp": 25,
+          "fn": 10
+        },
+        "feature_question": {
+          "precision": 0.3333333333333333,
+          "recall": 0.375,
+          "f1": 0.35294117647058826,
+          "support": 8,
+          "tp": 3,
+          "fp": 6,
+          "fn": 5
+        },
+        "formula": {
+          "precision": 0.24324324324324326,
+          "recall": 0.5294117647058824,
+          "f1": 0.33333333333333337,
+          "support": 17,
+          "tp": 9,
+          "fp": 28,
+          "fn": 8
+        },
+        "frustration_escalation": {
+          "precision": 0.32432432432432434,
+          "recall": 0.8571428571428571,
+          "f1": 0.4705882352941177,
+          "support": 14,
+          "tp": 12,
+          "fp": 25,
+          "fn": 2
+        },
+        "in_file_question": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 22,
+          "tp": 0,
+          "fp": 3,
+          "fn": 22
+        },
+        "interview_answer": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 6,
+          "tp": 0,
+          "fp": 2,
+          "fn": 6
+        },
+        "interviewer_explaining_role": {
+          "precision": 0.5,
+          "recall": 0.25,
+          "f1": 0.3333333333333333,
+          "support": 8,
+          "tp": 2,
+          "fp": 2,
+          "fn": 6
+        },
+        "interviewer_speaking": {
+          "precision": 0.09090909090909091,
+          "recall": 0.1388888888888889,
+          "f1": 0.1098901098901099,
+          "support": 36,
+          "tp": 5,
+          "fp": 50,
+          "fn": 31
+        },
+        "interviewer_thinking_aloud": {
+          "precision": 0.2857142857142857,
+          "recall": 0.5263157894736842,
+          "f1": 0.37037037037037035,
+          "support": 19,
+          "tp": 10,
+          "fp": 25,
+          "fn": 9
+        },
+        "intro_request": {
+          "precision": 0.2,
+          "recall": 0.16666666666666666,
+          "f1": 0.1818181818181818,
+          "support": 12,
+          "tp": 2,
+          "fp": 8,
+          "fn": 10
+        },
+        "issue_description": {
+          "precision": 0.07692307692307693,
+          "recall": 0.02857142857142857,
+          "f1": 0.041666666666666664,
+          "support": 35,
+          "tp": 1,
+          "fp": 12,
+          "fn": 34
+        },
+        "jd_gap": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 8,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8
+        },
+        "lecture_concept": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 1,
+          "fn": 11
+        },
+        "meeting_capture": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 19,
+          "tp": 0,
+          "fp": 0,
+          "fn": 19
+        },
+        "metric_question": {
+          "precision": 0.4,
+          "recall": 0.09523809523809523,
+          "f1": 0.15384615384615385,
+          "support": 21,
+          "tp": 2,
+          "fp": 3,
+          "fn": 19
+        },
+        "motivation_why_us": {
+          "precision": 0.14285714285714285,
+          "recall": 0.3333333333333333,
+          "f1": 0.2,
+          "support": 6,
+          "tp": 2,
+          "fp": 12,
+          "fn": 4
+        },
+        "new_concept": {
+          "precision": 0.25,
+          "recall": 0.1282051282051282,
+          "f1": 0.1694915254237288,
+          "support": 39,
+          "tp": 5,
+          "fp": 15,
+          "fn": 34
+        },
+        "next_step_moment": {
+          "precision": 0.1111111111111111,
+          "recall": 0.4444444444444444,
+          "f1": 0.17777777777777776,
+          "support": 9,
+          "tp": 4,
+          "fp": 32,
+          "fn": 5
+        },
+        "objection_competitor": {
+          "precision": 0.25,
+          "recall": 1,
+          "f1": 0.4,
+          "support": 5,
+          "tp": 5,
+          "fp": 15,
+          "fn": 0
+        },
+        "objection_price": {
+          "precision": 0.3333333333333333,
+          "recall": 0.5,
+          "f1": 0.4,
+          "support": 6,
+          "tp": 3,
+          "fp": 6,
+          "fn": 3
+        },
+        "objection_status_quo": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 8,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8
+        },
+        "objection_timing": {
+          "precision": 0.3,
+          "recall": 0.42857142857142855,
+          "f1": 0.3529411764705882,
+          "support": 7,
+          "tp": 3,
+          "fp": 7,
+          "fn": 4
+        },
+        "objection_trust": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 3,
+          "fn": 5
+        },
+        "off_file_question": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 8,
+          "tp": 0,
+          "fp": 1,
+          "fn": 8
+        },
+        "off_syllabus": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 8,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8
+        },
+        "off_topic": {
+          "precision": 0.047619047619047616,
+          "recall": 0.25,
+          "f1": 0.08,
+          "support": 8,
+          "tp": 2,
+          "fp": 40,
+          "fn": 6
+        },
+        "optimization_probe": {
+          "precision": 0.29411764705882354,
+          "recall": 0.625,
+          "f1": 0.4,
+          "support": 8,
+          "tp": 5,
+          "fp": 12,
+          "fn": 3
+        },
+        "pricing_ask": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 10,
+          "tp": 0,
+          "fp": 23,
+          "fn": 10
+        },
+        "probe_needed": {
+          "precision": 1,
+          "recall": 0.03125,
+          "f1": 0.06060606060606061,
+          "support": 32,
+          "tp": 1,
+          "fp": 0,
+          "fn": 31
+        },
+        "problem_restatement": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 5,
+          "tp": 0,
+          "fp": 1,
+          "fn": 5
+        },
+        "question_to_me": {
+          "precision": 0.8,
+          "recall": 0.2222222222222222,
+          "f1": 0.3478260869565218,
+          "support": 18,
+          "tp": 4,
+          "fp": 1,
+          "fn": 14
+        },
+        "question_to_room": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 3,
+          "tp": 0,
+          "fp": 4,
+          "fn": 3
+        },
+        "red_flag": {
+          "precision": 0.047619047619047616,
+          "recall": 0.1,
+          "f1": 0.06451612903225806,
+          "support": 10,
+          "tp": 1,
+          "fp": 20,
+          "fn": 9
+        },
+        "refund_or_credit_request": {
+          "precision": 0.2,
+          "recall": 0.75,
+          "f1": 0.31578947368421056,
+          "support": 12,
+          "tp": 9,
+          "fp": 36,
+          "fn": 3
+        },
+        "resolution_request": {
+          "precision": null,
+          "recall": 0,
+          "f1": 0,
+          "support": 9,
+          "tp": 0,
+          "fp": 0,
+          "fn": 9
+        },
+        "risk_blocker": {
+          "precision": 0.42857142857142855,
+          "recall": 0.5,
+          "f1": 0.4615384615384615,
+          "support": 18,
+          "tp": 9,
+          "fp": 12,
+          "fn": 9
+        },
+        "role_technical": {
+          "precision": 0.5,
+          "recall": 0.22857142857142856,
+          "f1": 0.3137254901960784,
+          "support": 35,
+          "tp": 8,
+          "fp": 8,
+          "fn": 27
+        },
+        "runway_probe": {
+          "precision": 0.4,
+          "recall": 0.09523809523809523,
+          "f1": 0.15384615384615385,
+          "support": 21,
+          "tp": 2,
+          "fp": 3,
+          "fn": 19
+        },
+        "sales_objection": {
+          "precision": 0.2,
+          "recall": 0.3333333333333333,
+          "f1": 0.25,
+          "support": 6,
+          "tp": 2,
+          "fp": 8,
+          "fn": 4
+        },
+        "satisfied_customer": {
+          "precision": 0.14285714285714285,
+          "recall": 0.8571428571428571,
+          "f1": 0.24489795918367344,
+          "support": 7,
+          "tp": 6,
+          "fp": 36,
+          "fn": 1
+        },
+        "scope_question": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 14,
+          "tp": 0,
+          "fp": 1,
+          "fn": 14
+        },
+        "scorecard_moment": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 18,
+          "tp": 0,
+          "fp": 5,
+          "fn": 18
+        },
+        "small_talk": {
+          "precision": 0.3958333333333333,
+          "recall": 0.1958762886597938,
+          "f1": 0.2620689655172414,
+          "support": 97,
+          "tp": 19,
+          "fp": 29,
+          "fn": 78
+        },
+        "strategy_challenge": {
+          "precision": 0.037037037037037035,
+          "recall": 0.04,
+          "f1": 0.03846153846153846,
+          "support": 25,
+          "tp": 1,
+          "fp": 26,
+          "fn": 24
+        },
+        "style_nit": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 18,
+          "tp": 0,
+          "fp": 6,
+          "fn": 18
+        },
+        "system_design": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 11,
+          "tp": 0,
+          "fp": 5,
+          "fn": 11
+        },
+        "technique_probe": {
+          "precision": 1,
+          "recall": 0.25,
+          "f1": 0.4,
+          "support": 12,
+          "tp": 3,
+          "fp": 0,
+          "fn": 9
+        },
+        "tell_me_about_yourself": {
+          "precision": 0.2,
+          "recall": 0.5833333333333334,
+          "f1": 0.2978723404255319,
+          "support": 12,
+          "tp": 7,
+          "fp": 28,
+          "fn": 5
+        },
+        "transition_or_compliment": {
+          "precision": 0.20555555555555555,
+          "recall": 0.74,
+          "f1": 0.32173913043478264,
+          "support": 50,
+          "tp": 37,
+          "fp": 143,
+          "fn": 13
+        },
+        "worked_example": {
+          "precision": 0.17647058823529413,
+          "recall": 0.15,
+          "f1": 0.16216216216216214,
+          "support": 20,
+          "tp": 3,
+          "fp": 14,
+          "fn": 17
+        },
+        "your_questions_for_us": {
+          "precision": 0.25,
+          "recall": 0.3333333333333333,
+          "f1": 0.28571428571428575,
+          "support": 6,
+          "tp": 2,
+          "fp": 6,
+          "fn": 4
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.18589672282033207,
+      "eceDegenerate": false,
+      "eceN": 1367,
+      "coverage": {
+        "fired": 1367,
+        "total": 1367,
+        "hitRate": 1,
+        "precisionWhenFired": 0.24286759326993415
+      }
+    },
+    "answer_form": {
+      "n": 1367,
+      "accuracy": 0.5384052670080468,
+      "macroF1": 0.3994480429703714,
+      "labelsScored": 10,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.39621211123692057,
+      "labelsWellSupported": 9,
+      "thinLabels": [
+        {
+          "label": "table",
+          "support": 9,
+          "f1": 0.42857142857142855
+        }
+      ],
+      "perLabel": {
+        "code": {
+          "precision": 0.24271844660194175,
+          "recall": 0.7575757575757576,
+          "f1": 0.3676470588235294,
+          "support": 33,
+          "tp": 25,
+          "fp": 78,
+          "fn": 8
+        },
+        "example": {
+          "precision": 0.2857142857142857,
+          "recall": 0.4827586206896552,
+          "f1": 0.358974358974359,
+          "support": 29,
+          "tp": 14,
+          "fp": 35,
+          "fn": 15
+        },
+        "explanation": {
+          "precision": 0.6544117647058824,
+          "recall": 0.2772585669781931,
+          "f1": 0.3894967177242888,
+          "support": 321,
+          "tp": 89,
+          "fp": 47,
+          "fn": 232
+        },
+        "fact": {
+          "precision": 0.5,
+          "recall": 0.5866666666666667,
+          "f1": 0.5398773006134969,
+          "support": 150,
+          "tp": 88,
+          "fp": 88,
+          "fn": 62
+        },
+        "none": {
+          "precision": 0.7967332123411979,
+          "recall": 0.6733128834355828,
+          "f1": 0.7298420615128846,
+          "support": 652,
+          "tp": 439,
+          "fp": 112,
+          "fn": 213
+        },
+        "rebuttal": {
+          "precision": 0.2072072072072072,
+          "recall": 0.5,
+          "f1": 0.2929936305732484,
+          "support": 46,
+          "tp": 23,
+          "fp": 88,
+          "fn": 23
+        },
+        "recommendation": {
+          "precision": 0.28,
+          "recall": 0.2978723404255319,
+          "f1": 0.288659793814433,
+          "support": 47,
+          "tp": 14,
+          "fp": 36,
+          "fn": 33
+        },
+        "steps": {
+          "precision": 0.2125984251968504,
+          "recall": 0.54,
+          "f1": 0.3050847457627119,
+          "support": 50,
+          "tp": 27,
+          "fp": 100,
+          "fn": 23
+        },
+        "summary": {
+          "precision": 0.24444444444444444,
+          "recall": 0.36666666666666664,
+          "f1": 0.29333333333333333,
+          "support": 30,
+          "tp": 11,
+          "fp": 34,
+          "fn": 19
+        },
+        "table": {
+          "precision": 0.3157894736842105,
+          "recall": 0.6666666666666666,
+          "f1": 0.42857142857142855,
+          "support": 9,
+          "tp": 6,
+          "fp": 13,
+          "fn": 3
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.03378126566112006,
+      "eceDegenerate": false,
+      "eceN": 1367,
+      "coverage": {
+        "fired": 1367,
+        "total": 1367,
+        "hitRate": 1,
+        "precisionWhenFired": 0.5384052670080468
+      }
+    },
+    "grounding": {
+      "n": 1367,
+      "accuracy": 0.6291148500365764,
+      "macroF1": 0.35841962740696465,
+      "labelsScored": 5,
+      "excludedLabels": [],
+      "macroF1WellSupported": 0.5118540631074683,
+      "labelsWellSupported": 3,
+      "thinLabels": [
+        {
+          "label": "knowledge_base",
+          "support": 14,
+          "f1": 0.1388888888888889
+        },
+        {
+          "label": "profile",
+          "support": 4,
+          "f1": 0.11764705882352941
+        }
+      ],
+      "perLabel": {
+        "conversation_memory": {
+          "precision": 0.1890547263681592,
+          "recall": 0.4318181818181818,
+          "f1": 0.26297577854671284,
+          "support": 88,
+          "tp": 38,
+          "fp": 163,
+          "fn": 50
+        },
+        "knowledge_base": {
+          "precision": 0.08620689655172414,
+          "recall": 0.35714285714285715,
+          "f1": 0.1388888888888889,
+          "support": 14,
+          "tp": 5,
+          "fp": 53,
+          "fn": 9
+        },
+        "mode_files": {
+          "precision": 0.4925373134328358,
+          "recall": 0.532258064516129,
+          "f1": 0.5116279069767442,
+          "support": 310,
+          "tp": 165,
+          "fp": 170,
+          "fn": 145
+        },
+        "none": {
+          "precision": 0.8565789473684211,
+          "recall": 0.6845425867507886,
+          "f1": 0.7609585037989479,
+          "support": 951,
+          "tp": 651,
+          "fp": 109,
+          "fn": 300
+        },
+        "profile": {
+          "precision": 0.07692307692307693,
+          "recall": 0.25,
+          "f1": 0.11764705882352941,
+          "support": 4,
+          "tp": 1,
+          "fp": 12,
+          "fn": 3
+        }
+      },
+      "unresolved": 0,
+      "ece": 0.047422577466911,
+      "eceDegenerate": false,
+      "eceN": 1367,
+      "coverage": {
+        "fired": 1367,
+        "total": 1367,
+        "hitRate": 1,
+        "precisionWhenFired": 0.6291148500365764
+      }
+    }
+  },
+  "n": 1367,
+  "modeIntentByMode": {
+    "general": {
+      "n": 98,
+      "accuracy": 0.05102040816326531,
+      "macroF1": 0.11706349206349206,
+      "labelsScored": 7,
+      "underpowered": false
+    },
+    "technical-interview": {
+      "n": 95,
+      "accuracy": 0.23157894736842105,
+      "macroF1": 0.2174195444804764,
+      "labelsScored": 9,
+      "underpowered": false
+    },
+    "looking-for-work": {
+      "n": 127,
+      "accuracy": 0.2755905511811024,
+      "macroF1": 0.3137129999875098,
+      "labelsScored": 9,
+      "underpowered": false
+    },
+    "sales": {
+      "n": 114,
+      "accuracy": 0.2807017543859649,
+      "macroF1": 0.3075036075036075,
+      "labelsScored": 12,
+      "underpowered": true
+    },
+    "recruiting": {
+      "n": 147,
+      "accuracy": 0.14285714285714285,
+      "macroF1": 0.13541707547257964,
+      "labelsScored": 6,
+      "underpowered": false
+    },
+    "team-meet": {
+      "n": 137,
+      "accuracy": 0.49635036496350365,
+      "macroF1": 0.43968963135629807,
+      "labelsScored": 6,
+      "underpowered": false
+    },
+    "lecture": {
+      "n": 101,
+      "accuracy": 0.2079207920792079,
+      "macroF1": 0.19347643097643097,
+      "labelsScored": 6,
+      "underpowered": false
+    },
+    "seminar": {
+      "n": 129,
+      "accuracy": 0.3798449612403101,
+      "macroF1": 0.2630718954248366,
+      "labelsScored": 6,
+      "underpowered": false
+    },
+    "call-center": {
+      "n": 118,
+      "accuracy": 0.3813559322033898,
+      "macroF1": 0.36668582797615057,
+      "labelsScored": 7,
+      "underpowered": false
+    },
+    "custom-therapy-supervision": {
+      "n": 85,
+      "accuracy": 0.16470588235294117,
+      "macroF1": 0.2990285204991087,
+      "labelsScored": 5,
+      "underpowered": false
+    },
+    "custom-investor-update": {
+      "n": 100,
+      "accuracy": 0.09,
+      "macroF1": 0.16230120234000647,
+      "labelsScored": 5,
+      "underpowered": false
+    },
+    "custom-code-review": {
+      "n": 116,
+      "accuracy": 0.09482758620689655,
+      "macroF1": 0.09745454545454545,
+      "labelsScored": 5,
+      "underpowered": false
+    }
+  },
+  "secondaryTasks": {
+    "recall": 0,
+    "expected": 104,
+    "found": 0,
+    "rowsWithAny": 104
+  },
+  "latency": {
+    "n": 1367,
+    "p50": 11.049167000000125,
+    "p95": 11.78662500000064,
+    "p99": 12.4809580000001,
+    "mean": 11.222513991221643,
+    "max": 31.812291000000187
+  },
+  "legacy": {
+    "n": 1367,
+    "balancedAccuracy": 0.5369422092172641,
+    "macroF1": 0.3871601317398327,
+    "labelsScored": 8,
+    "excludedLabels": [],
+    "perLabel": {
+      "behavioral": {
+        "precision": 0.3418803418803419,
+        "recall": 0.5555555555555556,
+        "f1": 0.4232804232804233,
+        "support": 72,
+        "tp": 40,
+        "fp": 77,
+        "fn": 32
+      },
+      "clarification": {
+        "precision": 0.352112676056338,
+        "recall": 0.13157894736842105,
+        "f1": 0.19157088122605365,
+        "support": 190,
+        "tp": 25,
+        "fp": 46,
+        "fn": 165
+      },
+      "coding": {
+        "precision": 0.4230769230769231,
+        "recall": 0.6330935251798561,
+        "f1": 0.5072046109510087,
+        "support": 139,
+        "tp": 88,
+        "fp": 120,
+        "fn": 51
+      },
+      "deep_dive": {
+        "precision": 0.3275862068965517,
+        "recall": 0.31666666666666665,
+        "f1": 0.3220338983050847,
+        "support": 120,
+        "tp": 38,
+        "fp": 78,
+        "fn": 82
+      },
+      "example_request": {
+        "precision": 0.18867924528301888,
+        "recall": 1,
+        "f1": 0.3174603174603175,
+        "support": 10,
+        "tp": 10,
+        "fp": 43,
+        "fn": 0
+      },
+      "follow_up": {
+        "precision": 0.20588235294117646,
+        "recall": 0.3977272727272727,
+        "f1": 0.2713178294573644,
+        "support": 88,
+        "tp": 35,
+        "fp": 135,
+        "fn": 53
+      },
+      "general": {
+        "precision": 0.8476357267950964,
+        "recall": 0.6722222222222223,
+        "f1": 0.7498063516653758,
+        "support": 720,
+        "tp": 484,
+        "fp": 87,
+        "fn": 236
+      },
+      "summary_probe": {
+        "precision": 0.22950819672131148,
+        "recall": 0.5,
+        "f1": 0.3146067415730337,
+        "support": 28,
+        "tp": 14,
+        "fp": 47,
+        "fn": 14
+      }
+    },
+    "productionWeighted": {
+      "weightedAccuracy": 0.49128765026256505,
+      "labelsWeighted": 8,
+      "missingFromWeights": []
+    }
+  },
+  "roundTrip": {
+    "p50": 11.11,
+    "p95": 11.86
+  },
+  "latencySource": "worker"
+}
