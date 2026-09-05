@@ -8,11 +8,13 @@
     "ortBinding": "onnxruntime-node",
     "modelId": "resources/models/natively/router-minilm-multihead",
     "forwardPassesPerRow": 1,
-    "loadMs": 205,
+    "loadMs": 139,
     "split": "holdout",
     "language": "en",
     "punctuated": false,
-    "failed": 0
+    "failed": 0,
+    "machineLoad": 0.14,
+    "latencyTrustworthy": true
   },
   "axes": {
     "dialogue_act": {
@@ -1320,11 +1322,11 @@
   },
   "latency": {
     "n": 377,
-    "p50": 11.225583999999799,
-    "p95": 11.700208000000202,
-    "p99": 11.873042000000169,
-    "mean": 11.292901172413785,
-    "max": 15.107416999999998
+    "p50": 11.0324999999998,
+    "p95": 11.3112500000002,
+    "p99": 11.431624999999713,
+    "mean": 11.0682035729443,
+    "max": 14.326125000000019
   },
   "legacy": {
     "n": 377,
@@ -1413,8 +1415,8 @@
     }
   },
   "roundTrip": {
-    "p50": 11.33,
-    "p95": 11.81
+    "p50": 11.1,
+    "p95": 11.4
   },
   "latencySource": "worker"
 }

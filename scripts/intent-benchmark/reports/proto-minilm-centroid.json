@@ -5,15 +5,19 @@
     "params": 0,
     "sizeOnDiskMB": 0,
     "runtime": "onnx",
+    "ortBinding": "transformers.js",
     "modelId": "Xenova/all-MiniLM-L6-v2",
     "rule": "centroid",
     "dim": 384,
+    "temperature": 40,
     "forwardPassesPerRow": 1,
-    "loadMs": 5671,
+    "loadMs": 4381,
     "split": "holdout",
     "language": "en",
     "punctuated": false,
-    "failed": 0
+    "failed": 0,
+    "machineLoad": 0.2,
+    "latencyTrustworthy": true
   },
   "axes": {
     "dialogue_act": {
@@ -79,7 +83,7 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.0849251072293039,
+      "ece": 0.067827845423924,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
@@ -125,7 +129,7 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.08772100462893807,
+      "ece": 0.10486133090672248,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
@@ -309,7 +313,7 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.102485403782528,
+      "ece": 0.13836671836401823,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
@@ -1032,7 +1036,7 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.09620538423463532,
+      "ece": 0.1911089495709575,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
@@ -1141,7 +1145,7 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.14565334317436274,
+      "ece": 0.14149101265931108,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
@@ -1205,7 +1209,7 @@
         }
       },
       "unresolved": 0,
-      "ece": 0.1748711373424702,
+      "ece": 0.10838008126472862,
       "eceDegenerate": false,
       "eceN": 377,
       "coverage": {
@@ -1311,11 +1315,11 @@
   },
   "latency": {
     "n": 377,
-    "p50": 4.214332999999897,
-    "p95": 5.508208000000195,
-    "p99": 6.230790999999954,
-    "mean": 4.287807015915107,
-    "max": 6.816374999999425
+    "p50": 3.4263339999997697,
+    "p95": 4.6536660000001575,
+    "p99": 5.260167000000365,
+    "mean": 3.4383706419098163,
+    "max": 5.514833000000181
   },
   "legacy": {
     "n": 377,
@@ -1404,8 +1408,8 @@
     }
   },
   "roundTrip": {
-    "p50": 4.5,
-    "p95": 5.91
+    "p50": 3.59,
+    "p95": 4.85
   },
   "latencySource": "worker"
 }

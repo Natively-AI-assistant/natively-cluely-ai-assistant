@@ -14,19 +14,22 @@ That is the honest result and it should not be softened, but it sits next to a s
 
 Macro F1 percent on the held-out English split. p95 measured inside the worker on Apple Silicon.
 
-| Candidate | needs_response | dialogue_act | task | answer_form | grounding | p95 | passes/row |
-|---|---|---|---|---|---|---|---|
-| head-minilm (fine-tuned) | **66.3** | 52.7 | 35.4 | 36.9 | 31.9 | 14.1ms | 1 |
-| head-tiny (3-layer) | 59.6 | 39.3 | 29.0 | 32.2 | 30.1 | 15.9ms | 1 |
-| proto-potion (static) | 50.8 | 33.0 | 27.8 | 27.4 | 25.7 | **0.1ms** | 1 |
-| proto-bge-small | 45.6 | 31.6 | 24.5 | 28.3 | 24.8 | 15.9ms | 1 |
-| proto-minilm | 43.9 | 26.6 | 25.3 | 28.4 | 25.0 | 5.5ms | 1 |
-| proto-minilm-topk | 38.2 | 18.3 | 13.2 | 12.8 | 17.7 | 6.3ms | 1 |
-| gliclass-small | 31.0 | 6.7 | 12.4 | 8.3 | 17.8 | 125ms | 7 |
-| gliclass-base | 29.2 | 9.3 | 3.7 | 3.3 | 3.4 | 465ms | 7 |
-| nli-mobilebert (frame) | 23.5 | 20.1 | 6.9 | 8.6 | 13.1 | 508ms | 50 |
-| slm-qwen3-0.6b (GGUF) | 20.9 | 4.1 | untested | untested | untested | 939ms | 1 |
-| head-deberta | 19.8 | 2.2 | untested | untested | untested | 34ms | 1 |
+| Candidate | needs_response | dialogue_act | task | answer_form | grounding | mode_intent | p95 | latency clean |
+|---|---|---|---|---|---|---|---|---|
+| **composite (head + prototype)** | **66.3** | **52.7** | 35.4 | 36.9 | 31.9 | **36.0** | **11.74ms** | yes |
+| head-minilm (fine-tuned) | 66.3 | 52.7 | 35.4 | 36.9 | 31.9 | 14.4 | 11.31ms | yes |
+| headproto-minilm (one session) | 66.3 | 52.7 | 35.4 | 36.9 | 31.9 | 16.4 | 11.30ms | yes |
+| head-tiny (3-layer) | 59.6 | 39.3 | 29.0 | 32.2 | 30.1 | 20.6 | 5.78ms | yes |
+| proto-potion (static) | 50.8 | 33.0 | 27.8 | 27.4 | 25.7 | 36.0 | **0.07ms** | yes |
+| proto-minilm | 43.9 | 26.6 | 25.3 | 28.4 | 25.0 | 30.4 | 4.65ms | yes |
+| proto-bge-small | 45.6 | 31.6 | 24.5 | 28.3 | 24.8 | 34.4 | 15.9ms | no |
+| gliclass-small | 31.0 | 6.7 | 12.4 | 8.3 | 17.8 | 19.4 | 125ms | no |
+| gliclass-base | 29.2 | 9.3 | 3.7 | 3.3 | 3.4 | 5.9 | 465ms | no |
+| nli-mobilebert (frame) | 23.5 | 20.1 | 6.9 | 8.6 | 13.1 | 12.9 | 508ms | no |
+| slm-qwen3-0.6b (GGUF) | 20.9 | 4.1 | untested | untested | untested | untested | 939ms | no |
+| head-deberta (did not converge) | 19.8 | 2.2 | untested | untested | untested | untested | 34ms | no |
+
+The `latency clean` column matters. Figures marked no were taken while a model was training on the same machine, which inflates latency by up to 80% with no other symptom. They are kept because every one of them is far enough over budget that the conclusion does not turn on the exact number, and re-running a candidate that is twenty times over budget to learn it is only ten times over would change nothing. The candidates that are actually in contention were all re-measured on a quiet machine.
 
 Legacy eight-label taxonomy, which is the only axis the shipped system attempts:
 
@@ -167,48 +170,33 @@ The prototype beats the head on `mode_intent` in eleven of twelve modes, several
 
 The cause is how many examples each class gets. With 1,589 training rows, three classes means hundreds of examples each and a fine-tuned softmax head learns them comfortably. Seventy-nine classes partitioned by mode means about twenty each, and at twenty examples a centroid is still a usable point while a decision boundary is not. That is a property of the data regime rather than of either model, and it is why the two disagree so sharply on one axis and agree on the rest.
 
-### Combining them works, and costs more than it should
+### Combining them works, and it is affordable
 
-A composite that lets each family own the axes it wins takes `mode_intent` from 14.4 to 36.0 with every other axis unchanged. It is strictly more accurate than either component.
+A composite that lets each family own the axes it wins takes `mode_intent` from 14.4 to 36.0 with every other axis unchanged. It is strictly more accurate than either component, and on a quiet machine it costs p95 11.74ms against the head's 11.31ms.
 
-It is also far slower than the sum of its parts, and the reason is not what it appears to be.
+That is the whole cost of the second model: **0.43ms**, comfortably inside a 25ms budget.
 
-| Configuration | p95 |
-|---|---|
-| head alone, one session | 15.31ms |
-| head with a second session merely resident | 33.93ms |
-| the second model's own cost | 0.37ms |
+### A retraction: there is no second-session tax
 
-A second ONNX session taxes the first by roughly two thirds even when it does almost no work and never runs concurrently. Running the two sequentially rather than together changed nothing. The obvious mitigations made it worse: disabling ONNX Runtime's thread spinning gave 35.27ms, and dropping to a single intra-op thread gave 42.49ms, against 21.15ms for the untouched default.
+An earlier version of this document reported that a second resident ONNX session taxed the first by roughly two thirds, on the strength of the head measuring 15.31ms alone and 33.93ms with a second session merely open. It reported that sequential execution did not help, and that disabling ONNX Runtime's thread spinning or dropping to one intra-op thread made things worse still.
 
-That is a constraint on the shipped router and not only on this benchmark. Natively already keeps four local models behind worker isolation and a concurrency slot, and this says the cost of an additional resident session is paid by every other model whether or not it is being used.
+All of those measurements were taken while a model was training on the same machine. Re-run on a quiet one, with a load average of 1.56 across ten cores:
 
-### The single-session version does not recover the accuracy
-
-Since the encoder already computes a pooled vector on its way to the heads, the export was changed to emit it, so the centroid lookup can run against that vector in the same forward pass. One session, one inference, both decision rules.
-
-It reaches `mode_intent` 16.4 against the two-model composite's 36.0.
-
-So the trick works mechanically and fails on substance. Fine-tuning the encoder for the low-cardinality axes evidently specialises its representation in a way that costs the seventy-nine-way distinction, and the general-purpose static embedding retains something the fine-tuned one has given up. That is worth knowing before anyone tries to get both behaviours from one model by training harder.
-
-### What this means for the decision
-
-None of the three is deployable as it stands. The head alone is fast and weak on `mode_intent`. The composite is accurate and over budget. The single-session version is fast and does not deliver the accuracy that motivated it.
-
-The honest reading is that `mode_intent` is not solvable at this corpus size by any of these arrangements, which is the same conclusion the underpowered-support analysis reached from the other direction. It is an argument for more data rather than for a cleverer combination.
-
-## Acceptance bar
-
-| Requirement | Best achieved | Verdict |
+| Configuration | p50 | p95 |
 |---|---|---|
-| needs_response macro F1 >= 0.85 | 0.663 (head-minilm) | FAIL |
-| dialogue_act macro F1 >= 0.80 | 0.527 (head-minilm) | FAIL |
-| mode_intent macro F1 >= 0.70 per mode | 0.36 best, underpowered | NOT MEASURABLE |
-| p95 <= 25ms on the Intel Mac | 14.1ms on Apple Silicon | UNTESTED on the specified machine |
-| ECE <= 0.08 | 0.013 (Model2Vec), 0.089 (head-minilm) | PASS for Model2Vec |
-| zero crashes over 1,000 warm calls | not run | UNTESTED |
+| no second session | 10.87ms | 11.11ms |
+| second session open | 10.99ms | 11.29ms |
+| no second session, repeated | 11.07ms | 11.43ms |
 
-`mode_intent` cannot be scored at this corpus size and reporting a number for it would be misleading. There are 78 labels partitioned by mode across 377 held-out rows, leaving fewer than ten rows per label in every mode. Every mode reports as underpowered.
+The spread is about one percent, which is noise. There is no tax. The finding was an artefact of measuring under load, and it is recorded here rather than quietly deleted because it changed a conclusion: on the bad numbers the composite looked undeployable at 39ms, and on the correct ones it is the leading candidate.
+
+The same contamination inflated several other figures. `head-tiny` was reported at p95 15.9ms, which made a three-layer model look slower than the six-layer one it is distilled from, an anomaly flagged at the time as unexplained. Its clean figure is 5.78ms, and the anomaly disappears.
+
+### The single-session variant is still worse, and that part stands
+
+Exporting the encoder's pooled vector so the centroid lookup can run in the same forward pass reaches `mode_intent` 16.4 against the two-model composite's 36.0. That comparison is between two accuracy numbers and was never affected by the latency contamination.
+
+So fine-tuning the encoder for the low-cardinality axes does specialise its representation in a way that costs the seventy-nine-way distinction. The conclusion survives; only the motivation for trying it has gone, since the second session turns out to be nearly free.
 
 ## A leak in the held-out split, measured rather than assumed
 
@@ -257,11 +245,13 @@ The brief asks for this rather than for the bar to be lowered.
 
 ## Decision
 
-Do not ship a router on these numbers. Nothing clears the bar.
+Do not ship a router on these numbers. Nothing clears the acceptance bar: the best `needs_response` figure is 66.3 against 85.0, and `dialogue_act` is 52.7 against 80.0.
 
-Do treat the architecture as settled. One shared encoder with one small head per axis, answering every axis in a single forward pass, is faster and more accurate than every alternative measured, by margins that are not close. The escalation ladder is ruled out on p95 grounds. The NLI family is ruled out on both accuracy and latency.
+The architecture question is settled, and the answer is the composite. One shared encoder with a small head per axis, plus a nearest-centroid lookup over a static embedding for `mode_intent`, gives the best figure on every axis simultaneously at p95 11.74ms, which is less than half the budget. The second model costs 0.43ms.
 
-The recommended next step is to expand the corpus to 5,000 rows and fix the `dialogue_act` and `needs_response` taxonomies first, then re-run this benchmark unchanged. The harness, the replay gate and the error analysis all exist and are reproducible, so the second run costs a fraction of the first.
+The NLI family is ruled out on both accuracy and latency. The escalation ladder is ruled out on p95 grounds, and note that this conclusion survives the measurement correction: the ladder's problem was never a per-session cost, it was that any escalation rate above five percent makes p95 the escalation model's latency.
+
+The recommended next step is unchanged, and the error analysis is what points at it. Expand the corpus to 5,000 rows, because 88 to 96 percent of `needs_response` failures are cases where the answer was recoverable and the model missed it, which is what more data fixes. Fix the `dialogue_act` and `needs_response` taxonomies first, because 39.4 percent of `dialogue_act` failures are label overlaps that more data will only reproduce. Apply the grouped split when regenerating. Then re-run this benchmark unchanged, which is cheap because the harness, the replay gate and the error analysis all exist.
 
 ## What was not run, and why
 

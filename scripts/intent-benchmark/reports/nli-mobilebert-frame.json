@@ -5,10 +5,11 @@
     "params": 0,
     "sizeOnDiskMB": 0,
     "runtime": "onnx",
+    "ortBinding": "transformers.js",
     "config": "frame",
     "modelId": "Xenova/mobilebert-uncased-mnli",
     "forwardPassesTotal": 18832,
-    "loadMs": 450,
+    "loadMs": 2521,
     "split": "holdout",
     "language": "en",
     "punctuated": false,
@@ -1310,11 +1311,11 @@
   },
   "latency": {
     "n": 377,
-    "p50": 333.64970899999935,
-    "p95": 436.7848759999906,
-    "p99": 466.0607059999893,
-    "mean": 340.47076754111396,
-    "max": 496.6535420000009
+    "p50": 348.31662399999186,
+    "p95": 507.822291999968,
+    "p99": 646.6739990000015,
+    "mean": 364.51019297612675,
+    "max": 964.6340830000263
   },
   "legacy": {
     "n": 377,
@@ -1414,8 +1415,8 @@
     }
   },
   "roundTrip": {
-    "p50": 334.58,
-    "p95": 437.48
+    "p50": 349.76,
+    "p95": 509.27
   },
   "latencySource": "worker"
 }
