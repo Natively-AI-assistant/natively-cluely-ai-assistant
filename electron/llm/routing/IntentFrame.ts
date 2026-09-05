@@ -98,6 +98,64 @@ export type Capability =
 /** Which tier produced the frame. Diagnostic, and load-bearing for the shadow run. */
 export type Provenance = 'rules' | 'primary' | 'escalation' | 'timeout_fallback';
 
+// ---------------------------------------------------------------------------
+// What the router predicts, and what it inherits
+// ---------------------------------------------------------------------------
+
+/**
+ * THE AXES THE ROUTER ACTUALLY OWNS.
+ *
+ * This split exists because the first version of this file declared eleven axes
+ * as if the router decided all of them, and most of them already have an owner.
+ *
+ * Context Intelligence V3 is the main answer system, default on since
+ * 2026-07-30, and `context-intelligence/question/turn-classifier.ts` describes
+ * its own job as deciding "WHAT a turn is asking and WHETHER retrieval should
+ * run at all". It carries QuestionType with 17 values, SourceType with 10,
+ * GroundingPolicy, RetrievalPath and Answerability. So `grounding`,
+ * `capabilities.retrieval` and most of `task` are already decided,
+ * deterministically, in production.
+ *
+ * A router that re-decided them would ship a second opinion on settled
+ * questions, which is the exact criticism the Phase 1 audit made of the system
+ * it set out to replace.
+ *
+ * What V3 has no notion of is whether Natively should speak at all. That is
+ * deliberate: `buildV3ForTranscriptSurface` returns null when no question
+ * resolves, because "proactivity is the product feature". The turns it hands
+ * back are the ambient live audio, and measured production telemetry puts 6.1%
+ * of live generations ending in a silence string, 95.9% of them on a fallthrough
+ * answer type. That is the gap, and it is what this predicts.
+ *
+ * `dialogue_act` rides along because it is cheap from the same forward pass and
+ * is the strongest single feature for `needs_response`, not because anything
+ * downstream consumes it yet.
+ */
+export interface RouterPrediction {
+    needs_response: NeedsResponse;
+    dialogue_act: DialogueAct;
+    confidence: Partial<Record<'needs_response' | 'dialogue_act', number>>;
+    alternatives: Partial<Record<'needs_response' | 'dialogue_act', Array<[string, number]>>>;
+    provenance: Provenance;
+}
+
+/**
+ * Where each field of a full frame comes from. Documentation with a type, so a
+ * consumer can see at a glance whether a value was predicted or inherited.
+ */
+export const AXIS_OWNER = {
+    needs_response: 'router',
+    dialogue_act: 'router',
+    voice: 'derived',          // deriveVoice(mode, mode_intent, needs_response)
+    task: 'v3',                // QuestionType
+    secondary_tasks: 'v3',
+    mode_intent: 'v3',         // QuestionType, narrowed by the active mode
+    answer_form: 'v3',
+    grounding: 'v3',           // SourceType + GroundingPolicy
+    capabilities: 'v3',        // RetrievalPath, plus visionPolicy for screen
+    current_information: 'v3',
+} as const satisfies Record<string, 'router' | 'v3' | 'derived'>;
+
 export interface IntentFrame {
     dialogue_act: DialogueAct;
     needs_response: NeedsResponse;
@@ -359,4 +417,46 @@ export function deriveVoice(
  */
 export function groundingIsLegal(grounding: Grounding, hasReferenceFiles: boolean): boolean {
     return grounding !== 'mode_files' || hasReferenceFiles === true;
+}
+
+/**
+ * Assemble a full frame from what the router predicted and what V3 decided.
+ *
+ * The router NEVER overwrites a V3 decision. When V3 owned the turn its values
+ * win outright; the router contributes the two axes V3 does not model. When V3
+ * returned null — the proactive case, which is most of live audio — the V3
+ * fields are simply absent and the caller gets a frame that says so rather than
+ * one carrying invented values.
+ *
+ * `needs_response = 'no'` collapses the answer-shaped fields, the same
+ * invariant the benchmark corpus enforces: a turn nobody answers has no voice,
+ * no task, no answer form and no grounding source. The founder's hand check
+ * found that missing from the corpus, where it showed up as 10.3% disagreement
+ * on `answer_form`; it is written here so the router cannot reintroduce it.
+ */
+export function assembleIntentFrame(
+    prediction: RouterPrediction,
+    v3: Partial<Pick<IntentFrame,
+        'task' | 'secondary_tasks' | 'mode_intent' | 'answer_form' | 'grounding'
+        | 'capabilities' | 'current_information'>> | null,
+    templateType: string,
+): IntentFrame {
+    const silent = prediction.needs_response === 'no';
+    const modeIntent = v3?.mode_intent ?? 'unknown';
+
+    return {
+        needs_response: prediction.needs_response,
+        dialogue_act: prediction.dialogue_act,
+        voice: deriveVoice(templateType, modeIntent, prediction.needs_response),
+        task: silent ? 'none' : (v3?.task ?? 'none'),
+        secondary_tasks: silent ? [] : (v3?.secondary_tasks ?? []),
+        mode_intent: modeIntent,
+        answer_form: silent ? 'none' : (v3?.answer_form ?? 'none'),
+        grounding: silent ? 'none' : (v3?.grounding ?? 'none'),
+        capabilities: silent ? [] : (v3?.capabilities ?? []),
+        current_information: silent ? false : (v3?.current_information ?? false),
+        confidence: { ...prediction.confidence },
+        alternatives: { ...prediction.alternatives },
+        provenance: prediction.provenance,
+    };
 }
