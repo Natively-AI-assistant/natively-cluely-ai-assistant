@@ -172,6 +172,22 @@ export function validateRow(row, { requireLabels = true } = {}) {
     if (L && L.needs_response === 'no' && L.task !== 'none') {
       bad('needs_response=no requires task=none');
     }
+    // A silent turn has no answer form and no grounding source, for the same
+    // reason it has no voice and no task: there is no answer for them to
+    // describe. The schema enforced the first two from the start and not these,
+    // and the founder's hand check found the gap — `answer_form` came back at
+    // 10.3% disagreement, over the 10% bar, and 35 of the 38 corrections asking
+    // for `none` were needs_response=no rows.
+    //
+    // The v1->v2 migration made it worse: folding `optional` into `no` set
+    // voice and task but left answer_form and grounding carrying values from
+    // when the row was still considered answerable.
+    if (L && L.needs_response === 'no' && L.answer_form !== 'none') {
+      bad('needs_response=no requires answer_form=none');
+    }
+    if (L && L.needs_response === 'no' && L.grounding !== 'none') {
+      bad('needs_response=no requires grounding=none');
+    }
     if (L && L.grounding === 'mode_files' && row.mode_has_reference_files !== true) {
       // The brief's rule: mode_files is only emittable when files actually exist.
       bad('grounding=mode_files requires mode_has_reference_files=true');
