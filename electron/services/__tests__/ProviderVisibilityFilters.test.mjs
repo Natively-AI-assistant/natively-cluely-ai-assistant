@@ -89,8 +89,9 @@ test('providerFamily() resolves custom-provider ids last, by identity', () => {
 
 test('reconciliation installs nothing when every candidate is filtered out', () => {
     const src = read(IPC);
-    const start = src.indexOf("      const next = modelAvailable('natively') ? 'natively'");
+    const start = src.indexOf('      const next =', src.indexOf('const refreshRuntimeDefaultIfUnavailable ='));
     assert.ok(start >= 0, 'the replacement chain should route through modelAvailable()');
+    assert.match(src.slice(src.indexOf('const antigravityFallback ='), start), /\.find\(modelAvailable\)/);
     const body = src.slice(start, src.indexOf('llmHelper.setModel(next, allProviders);', start));
 
     // Every candidate goes through modelAvailable(), so none of them can be a

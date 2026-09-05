@@ -68,6 +68,7 @@ import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
+import { AntigravityService } from './services/AntigravityService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
 import { DirectAssistError } from './direct-assist/errors';
 import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER } from './direct-assist/requestBuilder';
@@ -738,7 +739,7 @@ export class LLMHelper {
   private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
     gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
     claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
-    custom_curl: 'custom', custom_provider: 'custom',
+    antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
   /**
@@ -798,6 +799,7 @@ export class LLMHelper {
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
    *  that would otherwise have been answered. */
   private anyVisionProviderAvailable(): boolean {
+    if (!this.isProviderDisabled('antigravity') && AntigravityService.getInstance().getStatus().signedIn) return true;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1547,6 +1549,26 @@ export class LLMHelper {
 
   private isCodexCliModel(modelId: string): boolean {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
+  }
+
+  private isAntigravityModel(model: string): boolean { return model.startsWith('antigravity:'); }
+
+  private getAntigravityModelId(model: string): string { return model.replace(/^antigravity:/, ''); }
+
+  private async *streamWithAntigravity(userPrompt: string, systemPrompt?: string, imagePaths?: string[], signal?: AbortSignal, model = this.currentModelId, direct = false): AsyncGenerator<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    // Direct Assist has already classified/stripped optional context. Its typed
+    // current question must not be reclassified as meeting transcript here.
+    this.assertOutboundScopes('antigravity', direct ? '' : userPrompt, imagePaths, direct ? this.inferEmbeddedMessageScopes(userPrompt) : []);
+    const images = [];
+    for (const imagePath of imagePaths || []) {
+      signal?.throwIfAborted();
+      images.push(await this.processImage(imagePath));
+    }
+    yield* AntigravityService.getInstance().stream({
+      model: this.getAntigravityModelId(model), userPrompt, systemPrompt, images, signal,
+      maxOutputTokens: getModelCapabilities(this.getAntigravityModelId(model), false).outputBudgetTokens,
+    });
   }
 
   private isCodexAvailable(): boolean {
@@ -3287,6 +3309,12 @@ let isMultimodal = !!(imagePaths?.length);
       // System prompts for OpenAI/Claude/Codex CLI (skipped if skipSystemPrompt)
       const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CLAUDE_SYSTEM_PROMPT);
+
+      if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+        let text = '';
+        for await (const chunk of this.streamWithAntigravity(cloudUserContent, openaiSystemPrompt, cloudImagePaths)) text += chunk;
+        return text;
+      }
 
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
@@ -7288,6 +7316,11 @@ let isMultimodal = !!(imagePaths?.length);
     markH4Stage('provider_dispatch_start', { model: this.currentModelId });
     _stage(`provider dispatch START (sysPrompt=${finalSystemPrompt.length}c, userContent=${userContent.length}c, model=${this.currentModelId})`);
 
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      yield* this.streamWithAntigravity(userContent, finalSystemPrompt, imagePaths, abortSignal);
+      return;
+    }
+
     // ── UNIFIED MULTIMODAL PATH ────────────────────────────────────────────
     // Every image-bearing request goes through the single streaming vision
     // fallback chain (OpenAI → Claude → Gemini → Groq → Natively → local) with
@@ -9659,8 +9692,9 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" {
+  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" | "antigravity" {
     if (this.customProvider) return "custom";
+    if (!this.useOllama && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) return "antigravity";
     if (this.isCodexCliModel(this.currentModelId)) return "codex-cli";
     return this.useOllama ? "ollama" : "gemini";
   }
@@ -9707,6 +9741,7 @@ let isMultimodal = !!(imagePaths?.length);
       // generic vendor predicates or the request escapes through the wrong
       // credential/client boundary.
       if (selected === 'natively') provider = 'natively';
+      else if (this.isAntigravityModel(selected)) provider = 'antigravity';
       else if (this.isCodexCliModel(selected)) {
         provider = 'codex-cli';
         model = this.getSelectedCodexCliModel(false);
@@ -9774,6 +9809,7 @@ let isMultimodal = !!(imagePaths?.length);
     switch (selection.provider) {
       case 'natively':
       case 'codex-cli':
+      case 'antigravity':
         return true;
       case 'custom':
         return customProviderSupportsVision(custom);
@@ -9891,7 +9927,9 @@ let isMultimodal = !!(imagePaths?.length);
     const directUserPrompt = deniedScopes.length
       ? this.stripDeniedScopedBlocksFromMessage(request.userPrompt, deniedScopes)
       : request.userPrompt;
-    const capabilityModel = provider === 'litellm'
+    const capabilityModel = provider === 'antigravity'
+      ? this.getAntigravityModelId(model)
+      : provider === 'litellm'
       ? model.replace(/^litellm\//, '')
       : provider === 'nvidia_nim'
         ? model.replace(/^nvidia_nim\//, '')
@@ -9958,6 +9996,9 @@ let isMultimodal = !!(imagePaths?.length);
         if (!this.isCodexAvailable()) throw new Error('Codex CLI provider not configured');
         yield* this.streamWithCodexCli(directUserPrompt, request.systemPrompt, false, imagePaths, abortSignal, model);
         return;
+      case 'antigravity':
+        yield* this.streamWithAntigravity(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model, true);
+        return;
       case 'custom':
         if (!custom) throw new Error('Custom provider not configured');
         if (this.isLocalOnlyMode && !customProviderIsLocal(custom)) {
@@ -9984,6 +10025,9 @@ let isMultimodal = !!(imagePaths?.length);
    * and never compare the result to option IDs (use {@link getCurrentModelId}).
    */
   public getCurrentModelDisplayName(): string {
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      return `${this.getAntigravityModelId(this.currentModelId)} (Antigravity)`;
+    }
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;
@@ -10034,6 +10078,9 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   public getCapabilities(): ModelCapabilities {
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      return getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false);
+    }
     return getModelCapabilities(this.getCurrentModel(), this.useOllama);
   }
 

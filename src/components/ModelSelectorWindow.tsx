@@ -172,6 +172,13 @@ const ModelSelectorWindow = () => {
                     }
                 }
 
+                try {
+                    const result = await window.electronAPI.antigravityModels();
+                    for (const model of result.models) {
+                        models.push({ id: `antigravity:${model.id}`, name: `${model.label} (Antigravity)`, type: 'cloud', provider: 'antigravity' });
+                    }
+                } catch { /* Offline or signed out; other providers remain available. */ }
+
                 // Custom Providers
                 customProviders.forEach((p: any) => {
                     models.push({ id: p.id, name: p.name, type: 'custom' });
