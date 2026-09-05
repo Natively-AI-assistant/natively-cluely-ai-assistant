@@ -63,6 +63,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--trained", required=True, help="directory from train_multihead.py")
     ap.add_argument("--out", required=True)
+    # ModernBERT's graph contains a Split carrying `num_outputs`, which only
+    # exists from opset 18. Exported at 17 it produces a file onnxruntime
+    # rejects at load with "Unrecognized attribute: num_outputs for operator
+    # Split" — a model-level error that reads like a corrupt export.
+    # MiniLM and its distilled variant are fine at 17, and are left there so
+    # their already-measured numbers stay reproducible.
+    ap.add_argument("--opset", type=int, default=17)
     args = ap.parse_args()
 
     trained = Path(args.trained)
@@ -97,7 +104,7 @@ def main():
             **{f"logits_{a}": {0: "batch"} for a in AXES},
             "pooled": {0: "batch"},
         },
-        opset_version=17,
+        opset_version=args.opset,
         do_constant_folding=True,
     )
 
