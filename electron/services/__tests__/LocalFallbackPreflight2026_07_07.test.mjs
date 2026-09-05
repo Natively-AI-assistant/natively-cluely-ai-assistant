@@ -111,11 +111,8 @@ describe('LocalFallbackPreflight (2026-07-07)', () => {
     // Preflight must NOT publish a status for a provider that no longer exists.
     assert.equal(ProviderStatusRegistry.getInstance().getStatus('intent-classifier'), null, 'no intent-classifier status must be published');
     const le = ProviderStatusRegistry.getInstance().getStatus('local-embedding');
-    assert.ok(ic, 'expected intent-classifier status');
     assert.ok(le, 'expected local-embedding status');
-    assert.equal(ic.kind, 'packaged_local');
     assert.equal(le.kind, 'packaged_local');
-    assert.equal(ic.requiredForCoreFallback, true);
     assert.equal(le.requiredForCoreFallback, true);
   });
 });
