@@ -50,8 +50,32 @@ if (!v.ok) {
 // The split is recomputed from the id and compared to what is stored. A
 // mismatch means someone hand-edited the file, and a hand-edited split is how
 // held-out rows leak into training without anyone noticing.
-const splitMismatch = rows.filter((r) => r.split && r.split !== splitFor(r.id));
-const holdout = rows.filter((r) => splitFor(r.id) === 'holdout');
+// SPLIT INTEGRITY, against the GROUPED rule rather than the bare id hash.
+//
+// This check used to require every row's split to equal splitFor(its own id).
+// That predates assignGroupedSplits, which deliberately overrides the per-id
+// hash: rows sharing a normalised input are one group and the whole group takes
+// the split of its lowest id, so that an adversarial pair or a repeated
+// backchannel cannot straddle the train/holdout boundary and leak the answer.
+//
+// So the old check called the corpus broken for being correct. Measured on
+// v3.jsonl it reported 132 failures, and all 132 were group members following
+// their anchor. The invariant below is the one that actually holds, and it is
+// stronger: it still catches a split that was hand-edited or corrupted, because
+// such a row would match neither its own hash nor its group's.
+const groupsByInput = new Map();
+for (const r of rows) {
+  const k = String(r.input ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!groupsByInput.has(k)) groupsByInput.set(k, []);
+  groupsByInput.get(k).push(r);
+}
+const groupSplit = (r) => {
+  const k = String(r.input ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const g = groupsByInput.get(k) ?? [r];
+  return splitFor(g.map((x) => x.id).sort()[0]);
+};
+const splitMismatch = rows.filter((r) => r.split && r.split !== groupSplit(r));
+const holdout = rows.filter((r) => groupSplit(r) === 'holdout');
 console.log(`split   holdout ${holdout.length}/${rows.length} = ${((holdout.length / (rows.length || 1)) * 100).toFixed(1)}%` +
   (splitMismatch.length ? `   ${splitMismatch.length} STORED SPLITS DISAGREE WITH THE ID HASH` : ''));
 
@@ -134,7 +158,7 @@ console.log(`  prompt-example copies  ${parroted.length} (${((parroted.length / 
 // ── verdict ────────────────────────────────────────────────────────────────
 const failures = [];
 if (!v.ok) failures.push(`${v.errors.length} schema-invalid rows, ${v.dupes.length} duplicate ids`);
-if (splitMismatch.length) failures.push(`${splitMismatch.length} stored splits disagree with the id hash`);
+if (splitMismatch.length) failures.push(`${splitMismatch.length} stored splits disagree with their GROUP's split (grouped by normalised input)`);
 if (noResponseShare < REQUIREMENTS.minNoResponseShare) failures.push(`needs_response=no is ${(noResponseShare * 100).toFixed(1)}%, below the ${REQUIREMENTS.minNoResponseShare * 100}% floor`);
 if (illegalGrounding > 0) failures.push(`${illegalGrounding} rows emit mode_files with no files attached`);
 if (realism.problems.length) failures.push(`realism: ${realism.problems.join('; ')}`);
