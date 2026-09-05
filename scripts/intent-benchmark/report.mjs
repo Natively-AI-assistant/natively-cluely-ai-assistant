@@ -6,7 +6,7 @@
 // the Phase 1 audit's own priors doc showed how easily three different ones get
 // combined by a later reader.
 
-import { macroF1, accuracy, expectedCalibrationError, secondaryTaskRecall, latencyStats, weightedAccuracy, perLabelScores } from './lib/metrics.mjs';
+import { macroF1, MIN_LABEL_SUPPORT, accuracy, expectedCalibrationError, secondaryTaskRecall, latencyStats, weightedAccuracy, perLabelScores } from './lib/metrics.mjs';
 import { SCORED_AXES } from './providers/contract.mjs';
 
 /** Production label shares, measured. See docs/natively-router-production-priors-2026-09.md */
@@ -45,6 +45,11 @@ export function scoreRun({ providerId, results, latencies = [], meta = {}, rowsB
       macroF1: m.macroF1,
       labelsScored: m.labelsScored,
       excludedLabels: m.excludedLabels,
+      // Carried so a low axis score can be read. A class with a handful of
+      // held-out rows moves macro F1 as much as one with four hundred.
+      macroF1WellSupported: m.macroF1WellSupported,
+      labelsWellSupported: m.labelsWellSupported,
+      thinLabels: m.thinLabels,
       perLabel: m.perLabel,
       unresolved: pairs.filter((p) => p.predicted === '<unresolved>').length,
       ece: cal.ece,
@@ -155,6 +160,22 @@ export function checkAcceptance(scored) {
       required: req.macroF1,
       actual: a?.macroF1 ?? null,
       pass: a?.macroF1 != null && a.macroF1 >= req.macroF1,
+      // Named so a reader can tell a weak model from a thin class. Never
+      // replaces `actual`: this is context for the headline, not a second bar.
+      thinNote: a?.thinLabels?.length
+        ? (() => {
+            // Named individually only while a reader can still hold the list.
+            // mode_intent has 77 thin labels and printing them all buries the
+            // one sentence that matters. Beyond four they are counted instead.
+            const t = [...a.thinLabels].sort((x, y) => x.support - y.support);
+            const shown = t.slice(0, 4).map((x) => `${x.label} (${x.support})`).join(', ');
+            const rest = t.length > 4 ? `, and ${t.length - 4} more` : '';
+            return `${t.length} of ${a.labelsScored} labels are under ${MIN_LABEL_SUPPORT} held-out rows `
+              + `[${shown}${rest}] so their F1 is sampling noise; over the ${a.labelsWellSupported} `
+              + `adequately supported labels this axis is `
+              + `${a.macroF1WellSupported != null ? a.macroF1WellSupported.toFixed(3) : 'n/a'}`;
+          })()
+        : '',
       note: a ? `over ${a.labelsScored} labels with support${a.excludedLabels?.length ? `, ${a.excludedLabels.length} excluded for zero support` : ''}` : 'axis not scored',
     });
   }
@@ -223,6 +244,7 @@ export function formatReport(scored) {
   for (const r of checkAcceptance(scored)) {
     const a = typeof r.actual === 'number' ? (r.what.includes('latency') ? `${r.actual}ms` : r.actual.toFixed(3)) : 'n/a';
     L.push(`  ${r.pass ? 'PASS' : 'FAIL'}  ${r.what.padEnd(22)} required ${String(r.required).padEnd(6)} actual ${a}${r.note ? `   ${r.note}` : ''}`);
+    if (r.thinNote) L.push(`          ${r.thinNote}`);
   }
   return L.join('\n');
 }

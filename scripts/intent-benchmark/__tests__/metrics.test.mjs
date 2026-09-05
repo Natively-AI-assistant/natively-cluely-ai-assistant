@@ -170,3 +170,51 @@ describe('confusion matrix', () => {
     assert.equal(m.get('a').get('a'), 1);
   });
 });
+
+describe('thin-label support', () => {
+    // macro F1 averages every class equally, so a class with a handful of
+    // held-out rows moves the headline as much as one with four hundred while
+    // its own F1 is sampling noise. dialogue_act carries `interruption` at 6
+    // held-out rows against `ask`'s 407.
+    const pairs = (spec) => {
+        const out = [];
+        for (const [label, { n, correct }] of Object.entries(spec)) {
+            for (let i = 0; i < n; i++) out.push({ actual: label, predicted: i < correct ? label : 'other' });
+        }
+        return out;
+    };
+
+    test('a thin class drags the headline but is named', () => {
+        const m = macroF1(pairs({ big: { n: 100, correct: 100 }, tiny: { n: 3, correct: 0 } }));
+        assert.equal(m.thinLabels.length, 1);
+        assert.equal(m.thinLabels[0].label, 'tiny');
+        assert.equal(m.thinLabels[0].support, 3);
+        // the headline is dragged down by the thin class
+        assert.ok(m.macroF1 < m.macroF1WellSupported, `${m.macroF1} should be below ${m.macroF1WellSupported}`);
+    });
+
+    test('the well-supported average excludes only the thin classes', () => {
+        const m = macroF1(pairs({ a: { n: 50, correct: 50 }, b: { n: 50, correct: 50 }, tiny: { n: 2, correct: 0 } }));
+        assert.equal(m.labelsWellSupported, 2);
+        assert.equal(m.macroF1WellSupported, 1);
+    });
+
+    test('no thin classes means no note to make', () => {
+        const m = macroF1(pairs({ a: { n: 50, correct: 40 }, b: { n: 50, correct: 30 } }));
+        assert.equal(m.thinLabels.length, 0);
+        assert.equal(m.macroF1, m.macroF1WellSupported);
+    });
+
+    test('the well-supported average is null when every class is thin', () => {
+        const m = macroF1(pairs({ a: { n: 3, correct: 3 }, b: { n: 2, correct: 0 } }));
+        assert.equal(m.macroF1WellSupported, null);
+        assert.equal(m.labelsWellSupported, 0);
+    });
+
+    test('the headline is never replaced by the flattering number', () => {
+        const m = macroF1(pairs({ big: { n: 100, correct: 100 }, tiny: { n: 3, correct: 0 } }));
+        // both travel together; macroF1 stays the honest all-class average
+        assert.ok(m.macroF1 != null && m.macroF1WellSupported != null);
+        assert.notEqual(m.macroF1, m.macroF1WellSupported);
+    });
+});
