@@ -100,6 +100,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", type=int, default=6)
     ap.add_argument("--batch", type=int, default=32)
+    ap.add_argument("--max-len", type=int, default=192)
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--seed", type=int, default=17)
     args = ap.parse_args()
@@ -125,7 +126,7 @@ def main():
     model.to(device)
     print(f"[train] device {device}")
 
-    dl = DataLoader(Rows(train, tok, label_maps), batch_size=args.batch, shuffle=True)
+    dl = DataLoader(Rows(train, tok, label_maps, max_len=args.max_len), batch_size=args.batch, shuffle=True)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     # LINEAR WARMUP THEN DECAY.
@@ -183,7 +184,7 @@ def main():
     # existed. Checking here means the failure is named at training time.
     model.eval()
     with torch.no_grad():
-        check = DataLoader(Rows(train[:256], tok, label_maps), batch_size=args.batch)
+        check = DataLoader(Rows(train[:256], tok, label_maps, max_len=args.max_len), batch_size=args.batch)
         seen = {a: Counter() for a in AXES}
         for batch in check:
             logits = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
