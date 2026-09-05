@@ -93,7 +93,7 @@ function doExport() {
     '# `restored` is candidate P output (punctuation + truecasing). You are NOT',
     '# reviewing it; it is there because a question mark often makes the correct',
     '# label obvious.',
-    '# stay silent: backchannels, the other party thinking aloud, your own voice',
+    '#',
     '# Any axis where you disagree on more than 10% of rows means that axis is',
     '# DEFINED wrong, not labelled wrong, and gets rewritten before Phase 4.',
     '#',
