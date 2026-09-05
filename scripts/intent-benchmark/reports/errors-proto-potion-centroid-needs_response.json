@@ -1,0 +1,1718 @@
+{
+  "provider": "proto-potion-centroid",
+  "axis": "needs_response",
+  "totalRows": 377,
+  "failures": 170,
+  "counts": {
+    "bad_model": 158,
+    "bad_label": 0,
+    "overlapping_labels": 9,
+    "context_missing": 2,
+    "inherently_multi_intent": 0,
+    "deterministic_signal_missing": 0,
+    "should_never_be_classified": 1
+  },
+  "uncategorised": 0,
+  "examples": [
+    {
+      "id": "gen-0035",
+      "mode": "general",
+      "channel": "mic",
+      "input": "sort of curious about the timeline for the two thousand twenty four launch",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a question about the timeline, which requires a response."
+    },
+    {
+      "id": "gen-0051",
+      "mode": "general",
+      "channel": "mic",
+      "input": "okay move to the next thing",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is giving a direct instruction to move to the next topic, which requires a response."
+    },
+    {
+      "id": "gen-0094",
+      "mode": "general",
+      "channel": "mic",
+      "input": "take notes on this entire call because we need to send a summary after",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is giving a clear instruction to perform a task, which requires a response."
+    },
+    {
+      "id": "ti-0019",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "so the the tree structure i mean if we",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is trailing off and not asking a question or providing a complete thought that requires a response."
+    },
+    {
+      "id": "ti-0026",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "so the time complexity would be",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is trailing off and not asking a question or providing a complete thought that requires a response."
+    },
+    {
+      "id": "ti-0059",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "sort of kind of",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is just repeating filler phrases and not asking a question or providing a complete thought that requires a response."
+    },
+    {
+      "id": "ti-0091",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "um i mean how come",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a question ('how come'), which requires a response."
+    },
+    {
+      "id": "ti-0092",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "wait and the other one",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking for clarification on the other array, which requires a response."
+    },
+    {
+      "id": "ti-0100",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "would that kind of act like a",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a question about the functionality of a hash map, which requires a response."
+    },
+    {
+      "id": "ti-0112",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "so we could uh we could try adding a secondary index here and maybe that would improve the query speed",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is proposing a solution and seeking confirmation, which requires a response."
+    },
+    {
+      "id": "ti-0113",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "can you walk me through the the main requirements again",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is explicitly asking for requirements to be repeated, which requires a response."
+    },
+    {
+      "id": "lfw-0063",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "how would you uh how would you go about debugging a distributed memory leak",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a technical question, which requires a response."
+    },
+    {
+      "id": "lfw-0069",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "have you noticed any gaps in the job description that concern you",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question, which requires a response."
+    },
+    {
+      "id": "lfw-0070",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "to be honest i i really want to make sure i know how the",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is trailing off mid-sentence, making it an optional/incomplete turn."
+    },
+    {
+      "id": "lfw-0074",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "that makes sense um could you walk me through a time when you had to manage a conflict within your team",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a behavioral interview question, which requires a response."
+    },
+    {
+      "id": "lfw-0082",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "did you have a good trip or is the traffic kind of bad today",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a clear question requiring a response, but the model incorrectly predicted no."
+    },
+    {
+      "id": "lfw-0085",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "so tell me a bit about your experience with building scalable systems",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for information, which requires a response."
+    },
+    {
+      "id": "lfw-0096",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "so so you you think the salary range is",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking for confirmation or opinion on the salary range, which requires a response."
+    },
+    {
+      "id": "lfw-0103",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "wait how come they decided to build that in the first place",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question about project history, which requires a response."
+    },
+    {
+      "id": "lfw-0123",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "um how how did you arrive at that conclusion about my background",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking for clarification on feedback, which requires a response."
+    },
+    {
+      "id": "lfw-0124",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "so can you tell me a bit about yourself",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a standard interview question requiring a response."
+    },
+    {
+      "id": "lfw-0125",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "i mean like i started in web dev and then i moved into backend engineering primarily focusing on python and and uh distributed systems",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is providing information in response to a previous prompt, which does not require a further response from the system."
+    },
+    {
+      "id": "lfw-0126",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "can you explain how you handled conflict in a previous project and uh maybe summarize what you learned",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for an explanation and summary, which requires a response."
+    },
+    {
+      "id": "lfw-0129",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "yeah like how does the the cashing layer know when to",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a technical question, which requires a response."
+    },
+    {
+      "id": "sal-0027",
+      "mode": "sales",
+      "channel": "system",
+      "input": "so the the the price point is",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is making a statement about price, which does not require a response."
+    },
+    {
+      "id": "sal-0042",
+      "mode": "sales",
+      "channel": "system",
+      "input": "okay cool sounds like we could maybe maybe start the pilot next week",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is proposing a next step, which requires a response."
+    },
+    {
+      "id": "sal-0048",
+      "mode": "sales",
+      "channel": "system",
+      "input": "yeah exactly so i i think we are ready to move on to the next step",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is confirming readiness to proceed, which requires a response."
+    },
+    {
+      "id": "sal-0054",
+      "mode": "sales",
+      "channel": "system",
+      "input": "so we want to start looking at the implementation in the next few weeks",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "overlapping_labels",
+      "reason": "The statement is a declaration of intent that could be interpreted as either requiring acknowledgment or being informational."
+    },
+    {
+      "id": "sal-0065",
+      "mode": "sales",
+      "channel": "system",
+      "input": "it sounds like you have a lot of experience with the retail sector",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "overlapping_labels",
+      "reason": "The statement is an observation that could be interpreted as either requiring acknowledgment or being conversational filler."
+    },
+    {
+      "id": "sal-0072",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "uh look we we just need",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "context_missing",
+      "reason": "The fragment is too incomplete to determine if a response is necessary without knowing the preceding context of the interruption."
+    },
+    {
+      "id": "sal-0073",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "no that is fine",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is clearly stating that the price increase is acceptable, which does not require a response."
+    },
+    {
+      "id": "sal-0077",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "can we set that up",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question about setting up a feature, which requires a response."
+    },
+    {
+      "id": "sal-0085",
+      "mode": "sales",
+      "channel": "mic",
+      "input": "how much",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking for pricing information, which requires a response."
+    },
+    {
+      "id": "sal-0122",
+      "mode": "sales",
+      "channel": "system",
+      "input": "i kind of think we need to wait until the q three",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "overlapping_labels",
+      "reason": "The turn is a statement of opinion that could be interpreted as either requiring a response (to confirm/agree) or being optional."
+    },
+    {
+      "id": "rec-0019",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "how about the database",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is asking a question about the database, which requires a response."
+    },
+    {
+      "id": "rec-0062",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "yeah exactly that makes total sense",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "overlapping_labels",
+      "reason": "The turn is an agreement/acknowledgment which is often borderline between requiring a response and being optional."
+    },
+    {
+      "id": "rec-0070",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "thats great can you tell me more about the the migration from the legacy",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question about a migration, which requires a response."
+    },
+    {
+      "id": "rec-0074",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "i mean it was mostly a configuration issue in the load balancer",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "overlapping_labels",
+      "reason": "The turn is an informative statement that could be seen as optional or requiring a response to acknowledge the explanation."
+    },
+    {
+      "id": "rec-0079",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "uh so we need to see how you would uh structure the sql query for this",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is setting a task/question for the candidate, which requires a response."
+    },
+    {
+      "id": "rec-0090",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "uh considering the candidate has answered four of the five core competencies i think we are at a score of",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "overlapping_labels",
+      "reason": "The turn is an incomplete thought/statement that is ambiguous regarding whether it requires a response."
+    },
+    {
+      "id": "rec-0093",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "the the thing is we sort of use postgress for the",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is providing information about their stack, which does not require a response."
+    },
+    {
+      "id": "rec-0096",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "i think i think thats right for the sql layer",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "overlapping_labels",
+      "reason": "The turn is a confirmation of a previous point, which is often ambiguous in terms of response necessity."
+    },
+    {
+      "id": "rec-0114",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "so the the thing is uh i need to",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is trailing off and not asking a question or making a point that requires a response."
+    },
+    {
+      "id": "rec-0124",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "so can you explain how the cashing layer handles invalidation",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a direct technical question, which requires a response."
+    },
+    {
+      "id": "rec-0132",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "sort of uh how would you refactor this for readability",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question about refactoring, which requires a response."
+    },
+    {
+      "id": "rec-0138",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "so can you tell me what the biggest challenge you faced was",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question, which requires a response."
+    },
+    {
+      "id": "rec-0145",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "the memory leak is caused by the global scope object in the app js file",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact and does not require a response."
+    },
+    {
+      "id": "tm-0018",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "the the the data set is too big",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact and does not require a response."
+    },
+    {
+      "id": "tm-0047",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "are there any risks in moving the cash now",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct question requiring a response."
+    },
+    {
+      "id": "tm-0059",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "so is the sequel database actually ready to go",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct question requiring a response."
+    },
+    {
+      "id": "tm-0082",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i mean like is that the the sort of the right way to approach",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct question requiring a response."
+    },
+    {
+      "id": "tm-0087",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i think we should uh",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete fragment that does not require a response."
+    },
+    {
+      "id": "tm-0096",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i mean we could uh we could try the",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete fragment that does not require a response."
+    },
+    {
+      "id": "tm-0101",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "the the thing is we need to check the query performance and see if we can optimize the index",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of intent/opinion that does not require a response."
+    },
+    {
+      "id": "tm-0104",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "i mean i kind of worry about the scaling factor if we use a flat file there",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion that does not require a response."
+    },
+    {
+      "id": "tm-0123",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "we really need to get the status on the audit log from",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of need that does not require a response."
+    },
+    {
+      "id": "lec-0009",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "my mic is on i hope no one can",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement about the user's own status and does not require a response."
+    },
+    {
+      "id": "lec-0035",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "exactly right thats the point",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is an affirmation and does not require a response."
+    },
+    {
+      "id": "lec-0040",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "the the formula here looks wrong for the derivative",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a statement of observation that requires a response/acknowledgment."
+    },
+    {
+      "id": "lec-0044",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "so we could uh we could try adding a cache layer here",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a suggestion that requires a response."
+    },
+    {
+      "id": "lec-0099",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "is that sort of off topic but have you ever seen this used in",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a question about the usage of the algorithm, which requires a response."
+    },
+    {
+      "id": "lec-0107",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "you see if we walk through a worked example of the mapping",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a suggestion or a statement of intent to walk through an example, not a direct request for a response."
+    },
+    {
+      "id": "sem-0018",
+      "mode": "seminar",
+      "channel": "mic",
+      "input": "so the the thing is we need to",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete thought/fragment that does not require a response."
+    },
+    {
+      "id": "sem-0025",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "yeah exactly that makes a lot of sense",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is an affirmation of the previous statement and does not require a response."
+    },
+    {
+      "id": "sem-0035",
+      "mode": "seminar",
+      "channel": "mic",
+      "input": "the the the logic is actually simpler if we use",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion/fact and does not require a response."
+    },
+    {
+      "id": "sem-0039",
+      "mode": "seminar",
+      "channel": "mic",
+      "input": "uh wait maybe the the variance is too high",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a self-correction/observation and does not require a response."
+    },
+    {
+      "id": "sem-0046",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "wait i think i think i want the",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete thought and does not require a response."
+    },
+    {
+      "id": "sem-0050",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "i mean the the query is fine",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of agreement and does not require a response."
+    },
+    {
+      "id": "sem-0110",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "mhm right i see",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a backchannel acknowledgment and does not require a response."
+    },
+    {
+      "id": "sem-0139",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "so the figures in slide four contradict the appendix i guess",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion and does not require a response."
+    },
+    {
+      "id": "sem-0150",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "wait you you said the results are consistent but i think the results are their",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a challenge to the previous statement and requires a response."
+    },
+    {
+      "id": "cc-0023",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "sort of i guess",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a vague statement of opinion and does not require a response."
+    },
+    {
+      "id": "cc-0038",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "the the thing is i i cant see where the reset button is",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for help locating a button, which requires a response."
+    },
+    {
+      "id": "cc-0047",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "yeah i mean could you kind of tell me why my bill is two hundred dollars",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct question about a bill, which requires a response."
+    },
+    {
+      "id": "cc-0049",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "yeah so the the thing is i i cant log into my dashboard at all",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a statement of a problem that requires a response."
+    },
+    {
+      "id": "cc-0050",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "wait i am super frustrated right now because i have been on hold for like an hour",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is expressing frustration and a need for assistance, which clearly requires a response."
+    },
+    {
+      "id": "cc-0055",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "do you know if the store in downtown is still open until nine",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a direct question about store hours, which requires a response."
+    },
+    {
+      "id": "cc-0065",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "uh look i need to speak to your manager because this is not working for me at all",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is explicitly requesting to speak to a manager, which requires a response."
+    },
+    {
+      "id": "cc-0066",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "and so i think we should maybe uh can you just confirm that the payment went through",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking for confirmation of a payment, which requires a response."
+    },
+    {
+      "id": "cc-0079",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "i think this account might be linked to the wrong branch but uh i am not really sure",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "overlapping_labels",
+      "reason": "The user is expressing uncertainty about an account issue; it is ambiguous whether this requires an immediate system response or is just a conversational filler."
+    },
+    {
+      "id": "cc-0095",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "this is the third time my account settings have been blank and i am just about done with this",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is reporting a recurring technical issue, which requires a response."
+    },
+    {
+      "id": "cc-0097",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "i need you to reset the gateway manually right now",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is giving a direct instruction to reset a gateway, which requires a response."
+    },
+    {
+      "id": "cc-0107",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "i mean seriously the service is down for us again this is like the third time this week",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is reporting a service outage, which requires a response."
+    },
+    {
+      "id": "cus-ther-0004",
+      "mode": "custom-therapy-supervision",
+      "channel": "system",
+      "input": "uh",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "should_never_be_classified",
+      "reason": "The turn is a non-lexical filler and contains no actionable intent."
+    },
+    {
+      "id": "cus-ther-0013",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "i was thinking should we approach the client regarding their anger outburst with a technique probe",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is asking a specific question about clinical approach, which requires a response."
+    },
+    {
+      "id": "cus-ther-0020",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "yeah exactly that makes a lot of sense",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "overlapping_labels",
+      "reason": "The turn is conversational agreement; it is defensible to label as either 'no' (no new action needed) or 'optional' (acknowledgment)."
+    },
+    {
+      "id": "cus-ther-0021",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "i think i think this case fits the criteria for the group therapy referral",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is making a clinical recommendation that requires confirmation or feedback from the supervisor."
+    },
+    {
+      "id": "cus-ther-0029",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "uhm okay so could we schedule our next supervision for two pm on tuesday",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is explicitly requesting to schedule a meeting, which requires a response."
+    },
+    {
+      "id": "cus-ther-0031",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "and then i just need to make sure that the",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "context_missing",
+      "reason": "The turn is an incomplete sentence fragment that cannot be acted upon without further context."
+    },
+    {
+      "id": "cus-ther-0042",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "so we we could uh we could try the the grounding exercise or perhaps wait until the client is more open",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is proposing a clinical strategy and seeking input, which requires a response."
+    },
+    {
+      "id": "cus-ther-0061",
+      "mode": "custom-therapy-supervision",
+      "channel": "mic",
+      "input": "so the patient is presenting with persistent avoidance behaviors i think i need to know if this fits the standard protocol",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is explicitly asking a question about protocol fit, which requires a response."
+    },
+    {
+      "id": "cus-inv-0005",
+      "mode": "custom-investor-update",
+      "channel": "system",
+      "input": "im pretty sure that the vector is right there",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is a declarative opinion not requiring a response."
+    },
+    {
+      "id": "cus-inv-0009",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "i think i think that makes sense",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is an agreement not requiring a response."
+    },
+    {
+      "id": "cus-inv-0018",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "the the thing is we wont have enough cash",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is a declarative observation not requiring a response."
+    },
+    {
+      "id": "cus-inv-0027",
+      "mode": "custom-investor-update",
+      "channel": "system",
+      "input": "um i think i think we should probably focus on",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is an incomplete thought not requiring a response."
+    },
+    {
+      "id": "cus-inv-0034",
+      "mode": "custom-investor-update",
+      "channel": "system",
+      "input": "like kind of a hard problem to solve",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is a declarative observation not requiring a response."
+    },
+    {
+      "id": "cus-inv-0064",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "uh look the the main metric we need to watch is the",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete sentence that does not clearly solicit a response."
+    },
+    {
+      "id": "cus-inv-0075",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "the strategy seems uh sort of thin on the go to market side i mean how do you plan to scale with just two sales reps",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user explicitly asks a question about scaling, which requires a response."
+    },
+    {
+      "id": "cus-inv-0078",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "i think i think the main issue is that our current cash burn is uh",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is an incomplete declarative observation not requiring a response."
+    },
+    {
+      "id": "cus-inv-0080",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "um i mean can we reach ten mil",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user explicitly asks a question, which requires a response."
+    },
+    {
+      "id": "cus-inv-0085",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "uuh so does that mean our",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user explicitly asks a question, which requires a response."
+    },
+    {
+      "id": "cus-inv-0087",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "yeah kind of sort of",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a vague confirmation that is optional to respond to."
+    },
+    {
+      "id": "cus-inv-0104",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "um i suppose so",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The statement is a declarative observation not requiring a response."
+    },
+    {
+      "id": "cus-inv-0110",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "wait does that mean our churn vector is actually higher than the the number we saw last month",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user explicitly asks a question, which requires a response."
+    },
+    {
+      "id": "cus-inv-0126",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "can you walk me through the the runway i mean how much runway is left",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user explicitly asks a question, which requires a response."
+    },
+    {
+      "id": "cus-inv-0135",
+      "mode": "custom-investor-update",
+      "channel": "mic",
+      "input": "i think i think we need to pivot the the cash",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is expressing an opinion/thought rather than requesting a response, so 'no' is correct."
+    },
+    {
+      "id": "cus-cr-0003",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "i mean the the index out of bounds",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is making a statement about the code, not asking for a response."
+    },
+    {
+      "id": "cus-cr-0018",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "so the the the cache logic is",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is trailing off while describing code; this is not a request for a response."
+    },
+    {
+      "id": "cus-cr-0034",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "cashing is weird",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is making a descriptive observation, not a request."
+    },
+    {
+      "id": "cus-cr-0045",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "is that the the cashing layer again",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is making a statement/observation, not asking a question."
+    },
+    {
+      "id": "cus-cr-0065",
+      "mode": "custom-code-review",
+      "channel": "system",
+      "input": "the naming convention for the helper methods is uh not consistent with the rest",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is providing feedback, which is optional for the system to acknowledge."
+    },
+    {
+      "id": "cus-cr-0067",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "sounds good yeah i can live with that approach",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is confirming agreement, which does not require a further response."
+    },
+    {
+      "id": "cus-cr-0071",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i think that covers it so i guess we can wrap this up",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is closing the conversation, which does not require a further response."
+    },
+    {
+      "id": "cus-cr-0083",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i mean look at this line here you know",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is directing attention to a specific line, which is a request for the system to look/respond."
+    },
+    {
+      "id": "cus-cr-0086",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i feel like we should use a custom vector here instead of that array",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is proposing a change, which requires a response from the system."
+    },
+    {
+      "id": "cus-cr-0100",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "is this ready to merge or",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is explicitly asking a question about the status of the merge."
+    },
+    {
+      "id": "cus-cr-0104",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "what about the second one there",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is asking a question about a specific item."
+    },
+    {
+      "id": "cus-cr-0105",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "like could you make that simpler",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is making a request for simplification."
+    },
+    {
+      "id": "cus-cr-0114",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "that seems off to me",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is expressing doubt, which is an optional prompt for the system to clarify."
+    },
+    {
+      "id": "cus-cr-0116",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "could we try to refactor that part i think i think thats",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is making a request to refactor code."
+    },
+    {
+      "id": "cus-cr-0126",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i mean it seems like the the query performance is fine",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion and does not require a response, the model incorrectly identified it as requiring a response."
+    },
+    {
+      "id": "cus-cr-0127",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "mhm sounds good",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a simple acknowledgement and does not require a response, the model incorrectly identified it as optional."
+    },
+    {
+      "id": "cus-cr-0137",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "yeah does the the approach make sense to me",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct question asking for validation, which clearly requires a response."
+    },
+    {
+      "id": "cus-cr-0139",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "its not strictly necessary for the production",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a declarative statement providing information, not a question or prompt requiring a response."
+    },
+    {
+      "id": "cus-cr-0143",
+      "mode": "custom-code-review",
+      "channel": "mic",
+      "input": "i think we could uh we could use a list instead",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a suggestion/statement of opinion, not a request for a response."
+    },
+    {
+      "id": "gen-0125",
+      "mode": "general",
+      "channel": "system",
+      "input": "i mean sort of what i was trying to say is the",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete thought/filler, not a request for a response."
+    },
+    {
+      "id": "gen-0134",
+      "mode": "general",
+      "channel": "mic",
+      "input": "uh why",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct follow-up question asking for clarification."
+    },
+    {
+      "id": "gen-0141",
+      "mode": "general",
+      "channel": "mic",
+      "input": "so the the thing is we could uh we could try",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete thought that functions as a prompt for the system to wait or assist."
+    },
+    {
+      "id": "gen-0159",
+      "mode": "general",
+      "channel": "mic",
+      "input": "so the the thing is we need to we should probably rewrite this module and then extract the configs",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a proposal of action that requires confirmation or feedback."
+    },
+    {
+      "id": "gen-0161",
+      "mode": "general",
+      "channel": "mic",
+      "input": "i mean the the main reason we moved to the cloud was to reduce our operational overhead is that right",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn ends with a direct question 'is that right' which requires a response."
+    },
+    {
+      "id": "gen-0163",
+      "mode": "general",
+      "channel": "mic",
+      "input": "the pricing for this tier is simply way too high for our current startup budget so noted",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact/opinion and does not require a response."
+    },
+    {
+      "id": "ti-0150",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "if we use the the hash map",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a repetition of a previous statement and does not require a response."
+    },
+    {
+      "id": "ti-0169",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "so the the thing is i was thinking could we use a hash map to speed up lookups",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct question asking for validation of an approach."
+    },
+    {
+      "id": "ti-0178",
+      "mode": "technical-interview",
+      "channel": "mic",
+      "input": "wait could you repeat the requirement about the consistency model",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for repetition."
+    },
+    {
+      "id": "lfw-0170",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "well no i mean i should definitely include that part",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of intent and does not require a response."
+    },
+    {
+      "id": "lfw-0177",
+      "mode": "looking-for-work",
+      "channel": "system",
+      "input": "we we we really look for people who are are passionate about our mission to fix the the climate",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of values, not a question or request for information, so it should be optional."
+    },
+    {
+      "id": "lfw-0181",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "wait i think i want to ask two things about the the team structure",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user explicitly states they want to ask questions, making it a clear request for response."
+    },
+    {
+      "id": "lfw-0183",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "uh so i guess the real question is like how how does the team handle the the technical debt",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user asks a direct question about technical debt, which requires a response."
+    },
+    {
+      "id": "lfw-0199",
+      "mode": "looking-for-work",
+      "channel": "mic",
+      "input": "could you clarify the the responsibilities for this team",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user explicitly asks for clarification, which is a request for response."
+    },
+    {
+      "id": "sal-0132",
+      "mode": "sales",
+      "channel": "system",
+      "input": "right yeah exactly that makes sense",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is an acknowledgment of previous information, not a request for further response."
+    },
+    {
+      "id": "sal-0153",
+      "mode": "sales",
+      "channel": "system",
+      "input": "we have a bunch of users",
+      "correct": "optional",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of fact, not a request for response."
+    },
+    {
+      "id": "sal-0161",
+      "mode": "sales",
+      "channel": "system",
+      "input": "yeah we are happy with what we have in place right now",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of satisfaction, not a request for response."
+    },
+    {
+      "id": "rec-0167",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "and then the the data structure is",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete fragment and not a request for response."
+    },
+    {
+      "id": "rec-0185",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "so so we could try using",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is an incomplete fragment and not a request for response."
+    },
+    {
+      "id": "rec-0193",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "right moving on to the sequel query optimization part",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of intent to move on, not a request for response."
+    },
+    {
+      "id": "rec-0200",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "i feel like there might be a better approach than the one we just discussed",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is expressing an opinion that invites a response or discussion."
+    },
+    {
+      "id": "rec-0216",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "yeah",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a simple acknowledgment, not a request for response."
+    },
+    {
+      "id": "rec-0222",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "tell me more about the",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is an explicit request for more information."
+    },
+    {
+      "id": "rec-0227",
+      "mode": "recruiting",
+      "channel": "mic",
+      "input": "yeah exactly that makes a lot of sense i mean",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is an agreement with the previous statement, not a request for response."
+    },
+    {
+      "id": "rec-0233",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "we the the whole team worked on the migration and then i took point on the the load balancer config",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of experience, not a request for response."
+    },
+    {
+      "id": "rec-0240",
+      "mode": "recruiting",
+      "channel": "system",
+      "input": "yeah exactly that seems right to me",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a clear agreement statement and does not require a response, but the model failed to classify it correctly."
+    },
+    {
+      "id": "tm-0144",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "the the cache is stale so we should probably",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion/observation and does not require a response."
+    },
+    {
+      "id": "tm-0151",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "hey can you pull up the q three numbers for me",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for information which requires a response."
+    },
+    {
+      "id": "tm-0155",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "can you confirm that the deployment schedule is fixed or",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct question requiring a response."
+    },
+    {
+      "id": "tm-0163",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "hey can you uh grab the latest numbers from the q three report for me",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for information which requires a response."
+    },
+    {
+      "id": "tm-0167",
+      "mode": "team-meet",
+      "channel": "system",
+      "input": "so the the main issue here is the uh the latency in the cashing layer and",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion/observation and does not require a response."
+    },
+    {
+      "id": "tm-0169",
+      "mode": "team-meet",
+      "channel": "mic",
+      "input": "wait how come",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct question requiring a response."
+    },
+    {
+      "id": "lec-0128",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "wait can you repeat the part about the the quantum state collapse",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for clarification which requires a response."
+    },
+    {
+      "id": "lec-0129",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "professor i think the the calculation you just did on the board has a mistake in the third row",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct challenge/question regarding a calculation which requires a response."
+    },
+    {
+      "id": "lec-0131",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "right mhm i see where you are going with that",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a backchannel/acknowledgment and does not require a response."
+    },
+    {
+      "id": "sem-0166",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "i mean i think that the the vector should be higher",
+      "correct": "no",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a statement of opinion and does not require a response."
+    },
+    {
+      "id": "sem-0197",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "i think i think the math there is wrong",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The turn is a direct assertion requiring a response or acknowledgment."
+    },
+    {
+      "id": "sem-0206",
+      "mode": "seminar",
+      "channel": "system",
+      "input": "mhm right",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The turn is a backchannel/acknowledgment and does not require a response."
+    },
+    {
+      "id": "cc-0152",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "so we could uh we could try the update again i mean",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a suggestion/proposal that requires a response."
+    },
+    {
+      "id": "cc-0161",
+      "mode": "call-center",
+      "channel": "system",
+      "input": "i need to talk to a supervisor about this whole mess",
+      "correct": "yes",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The turn is a direct request for escalation which requires a response."
+    },
+    {
+      "id": "cc-0174",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "um yeah so the the charge",
+      "correct": "optional",
+      "predicted": "no",
+      "category": "bad_model",
+      "reason": "The user is continuing to discuss the charge, which requires a response, but the model incorrectly labeled it as no response needed."
+    },
+    {
+      "id": "cc-0184",
+      "mode": "call-center",
+      "channel": "mic",
+      "input": "yeah exactly that makes sense",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is simply agreeing with the system, which does not require a further response, but the model incorrectly predicted yes."
+    },
+    {
+      "id": "gen-0178",
+      "mode": "general",
+      "channel": "system",
+      "input": "uh kind of like a sequel query i mean",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is clarifying their own thought process without asking for input, so no response is needed, but the model incorrectly predicted yes."
+    },
+    {
+      "id": "gen-0183",
+      "mode": "general",
+      "channel": "system",
+      "input": "so we have the the vector of improvement and then wait what was the third point",
+      "correct": "no",
+      "predicted": "yes",
+      "category": "bad_model",
+      "reason": "The user is asking a question about the third point, which requires a response, but the model incorrectly predicted no."
+    },
+    {
+      "id": "lec-0166",
+      "mode": "lecture",
+      "channel": "mic",
+      "input": "wait i i think the eigenvalue should be negative there",
+      "correct": "yes",
+      "predicted": "optional",
+      "category": "bad_model",
+      "reason": "The user is challenging the system's output, which clearly requires a response, but the model incorrectly predicted optional."
+    }
+  ]
+}
