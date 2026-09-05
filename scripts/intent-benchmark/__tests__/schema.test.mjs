@@ -93,16 +93,34 @@ describe('row validation', () => {
     assert.ok(validateRow(baseRow({ channel: 'bluetooth' })).some((e) => e.includes('channel')));
   });
 
-  test('needs_response=no forces voice=silent and task=none', () => {
-    // This is the invariant a labeller gets wrong most often, and every field
-    // is individually valid when they do.
+  test('needs_response=no forces ALL FOUR of voice, task, answer_form, grounding', () => {
+    // The invariant a labeller gets wrong most often, and every field is
+    // individually valid when they do.
+    //
+    // The founder's hand check found the last two missing: answer_form came
+    // back at 10.3% disagreement, over the brief's bar, and 35 of the 38
+    // corrections asking for `none` were needs_response=no rows. If Natively
+    // says nothing there is no answer form and no grounding source, for the
+    // same reason there is no voice and no task.
     const bad = baseRow({ labels: { ...baseRow().labels, needs_response: 'no' } });
     const errs = validateRow(bad);
     assert.ok(errs.some((e) => e.includes('voice=silent')), 'must require silent voice');
     assert.ok(errs.some((e) => e.includes('task=none')), 'must require task none');
+    assert.ok(errs.some((e) => e.includes('answer_form=none')), 'must require answer_form none');
+    assert.ok(errs.some((e) => e.includes('grounding=none')), 'must require grounding none');
+
+    // Satisfying only the original two is NOT enough — this is exactly the
+    // shape the corpus carried before the review.
+    const half = baseRow({
+      labels: { ...baseRow().labels, needs_response: 'no', voice: 'silent', task: 'none' },
+    });
+    assert.ok(validateRow(half).length > 0, 'voice+task alone must not pass');
 
     const good = baseRow({
-      labels: { ...baseRow().labels, needs_response: 'no', voice: 'silent', task: 'none' },
+      labels: {
+        ...baseRow().labels, needs_response: 'no', voice: 'silent',
+        task: 'none', answer_form: 'none', grounding: 'none',
+      },
     });
     assert.deepEqual(validateRow(good), []);
   });
