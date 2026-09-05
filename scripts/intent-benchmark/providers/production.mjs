@@ -46,7 +46,11 @@ const INTENT_TO_AXES = {
 };
 
 export class ProductionProvider extends Provider {
-  constructor() { super('production'); this.classifyIntent = null; this.mod = null; }
+  constructor({ assistantMessageCount = 0 } = {}) {
+    super('production');
+    this.classifyIntent = null; this.mod = null;
+    this.assistantMessageCount = assistantMessageCount;
+  }
 
   async load() {
     // The zero-shot tier resolves its model directory from
@@ -75,8 +79,24 @@ export class ProductionProvider extends Provider {
     // corpus row carries the first two directly. The third drives tier 3 only,
     // and the corpus has no turn counter, so it is passed as the history length,
     // which is the closest honest reading of "how far into this exchange are we".
-    const recentTranscript = (input.history ?? []).join('\n');
-    const assistantMessageCount = (input.history ?? []).length;
+    // TRANSCRIPT FORMAT. Tier 3 selects interviewer lines with
+    // `l.includes('[INTERVIEWER')`. The corpus marks the other party as
+    // `[SYSTEM]`, so without this translation that filter matches nothing, the
+    // last interviewer line is the empty string, `''.length < 50` is trivially
+    // true, and every tier 3 row comes back `follow_up`. Measured before the
+    // fix: production predicted follow_up for 59% of rows labelled `general`,
+    // on a corpus where follow_up is 0.2% of real traffic. That was the harness
+    // feeding production a format it cannot read, not production being wrong.
+    const recentTranscript = (input.history ?? [])
+      .map((line) => String(line).replace(/^\[SYSTEM\]/, '[INTERVIEWER]'))
+      .join('\n');
+    // ASSISTANT MESSAGE COUNT. This counts how many times the ASSISTANT has
+    // already answered, which the corpus does not model: its history holds the
+    // other party and the user, never the assistant. Passing the history length
+    // was wrong, and it is the second half of the same artifact. There is no
+    // honest value in the row, so it is configurable and reported, rather than
+    // guessed silently.
+    const assistantMessageCount = this.assistantMessageCount;
     const res = await this.classifyIntent(input.input, recentTranscript, assistantMessageCount);
     if (!res || !res.intent) return frame;
 
@@ -112,6 +132,7 @@ export class ProductionProvider extends Provider {
   meta() {
     return {
       family: 'production-3tier', params: '25M (MobileBERT) + 10 regex rules',
+      assistantMessageCount: this.assistantMessageCount,
       sizeOnDiskMB: 121, runtime: 'onnx-worker + regex',
     };
   }
