@@ -274,6 +274,22 @@ The brief asks for this rather than for the bar to be lowered.
 
 **A larger encoder is untried at a converged setting.** The DeBERTa multi-head did not converge and predicted a single class for every row, which is a training failure at the hyperparameters tried rather than a verdict on the encoder. ModernBERT-base is still training. Either could beat MiniLM.
 
+## Scope correction: V3 already owns most of these axes
+
+Discovered after this report was written, and it narrows what the router should be. Full account in `docs/natively-routing-correction-v3-2026-09-05.md`.
+
+Context Intelligence V3 is the main answer system, default on since 2026-07-30. The Phase 1 audit missed it because its flag deliberately lives outside `intelligenceFlags.ts`, and reported Prompt System v2 as the live path when V2 is in fact V3's fallback.
+
+V3 is a routing system, not just a composer. `turn-classifier.ts` decides "WHAT a turn is asking and WHETHER retrieval should run at all", carrying `QuestionType` with 17 values, `SourceType` with 10, plus `GroundingPolicy`, `RetrievalPath` and `Answerability`. That covers `grounding`, `capabilities.retrieval` and much of `task` already, deterministically, in production.
+
+What V3 does not have is any notion of whether to speak at all. It returns null when no question resolves, and its own comment names that case: "the genuinely proactive case ... proactivity is the product feature". Those handed-back turns are the ambient live audio, and they are precisely where the 6.1% silence waste sits, because a turn that resolves to a confident question does not end in "Nothing actionable right now".
+
+So the router's job is narrower and better supported than the brief assumed. It should own the axis V3 deliberately left open, `needs_response`, on the proactive turns V3 declines. It should not re-decide axes that already have a deterministic owner.
+
+This also gives the benchmark a sharper purpose. V3's architecture forbids replacing a deterministic decision with a learned one without evidence of improvement. This report is that evidence, for one axis: the deterministic incumbent on `needs_response` is a regex tier that fires on 7.7% of turns, and the best learned candidate reaches 66.3 macro F1 where zero-shot NLI reaches 23.5.
+
+None of the measurements change. No candidate's score depended on which prompt composer runs.
+
 ## Decision
 
 Do not ship a router on these numbers. Nothing clears the acceptance bar: the best `needs_response` figure is 66.3 against 85.0, and `dialogue_act` is 52.7 against 80.0.
