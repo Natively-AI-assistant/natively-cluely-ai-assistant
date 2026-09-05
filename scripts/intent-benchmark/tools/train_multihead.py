@@ -77,7 +77,24 @@ class Rows(Dataset):
 class MultiHead(nn.Module):
     def __init__(self, encoder_name, sizes, dropout=0.1):
         super().__init__()
-        self.encoder = AutoModel.from_pretrained(encoder_name)
+        # FORCE fp32. Some checkpoints ship float16 weights, and DeBERTa-v3-xsmall
+        # is one: every parameter loads as torch.float16 while the heads created
+        # below are fp32. On MPS that combination is fatal rather than merely
+        # slow. Metal rejects the graph with
+        #
+        #   'mps.add' op requires the same element type for all operands
+        #   %7 = "mps.add"(tensor<2x2xf16>, tensor<2xf32>) -> tensor<*xf32>
+        #
+        # and inside the training loop it does not raise, it degrades to a NaN
+        # loss from the first step. No gradient is ever applied, the model stays
+        # at its random initialisation, and the collapse detector reports it as
+        # a single-class predictor.
+        #
+        # That is what happened. DeBERTa-v3-xsmall was recorded as scoring 19.8
+        # macro F1 and ruled out of the campaign on a number that measured this
+        # bug and not the encoder. Verified after the fix: loss 0.698 and a
+        # finite gradient norm of 2.44, identical on MPS and CPU.
+        self.encoder = AutoModel.from_pretrained(encoder_name).float()
         h = self.encoder.config.hidden_size
         self.drop = nn.Dropout(dropout)
         self.heads = nn.ModuleDict({a: nn.Linear(h, n) for a, n in sizes.items()})
@@ -150,6 +167,11 @@ def main():
     device = "mps" if torch.backends.mps.is_available() else "cpu"
     model.to(device)
     print(f"[train] device {device}")
+    _dtypes = {p.dtype for p in model.parameters()}
+    print(f"[train] param dtypes {sorted(str(d) for d in _dtypes)}")
+    assert _dtypes == {torch.float32}, (
+        f"every parameter must be fp32 before training; found {_dtypes}. "
+        "A mixed fp16/fp32 model produces a NaN loss on MPS without raising.")
 
     dl = DataLoader(Rows(fit, tok, label_maps, max_len=args.max_len), batch_size=args.batch, shuffle=True)
     dev_dl = DataLoader(Rows(dev, tok, label_maps, max_len=args.max_len), batch_size=args.batch)
