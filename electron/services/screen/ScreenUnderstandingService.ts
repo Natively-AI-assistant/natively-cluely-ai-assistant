@@ -119,6 +119,18 @@ export interface ScreenUnderstandingResult {
   source_kind?: 'vision' | 'ocr_legacy';
 }
 
+/**
+ * Wall-clock ceiling on the ENTIRE screen-understanding pre-pass — every rung
+ * the fallback chain walks, not one attempt. See the call site in understand()
+ * for why a best-effort enrichment step on the critical path needs a total
+ * bound rather than a per-provider one.
+ *
+ * 6000, below the chain's 12s per-provider default: the per-attempt timeout is
+ * clamped to whatever is left of this, so this is the number that decides how
+ * long a user waits before their answer starts.
+ */
+export const SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS = 6000;
+
 export class ScreenUnderstandingService {
   private imageHashService: ImageHashService;
   private optimizer: ImageOptimizer;
@@ -245,6 +257,43 @@ export class ScreenUnderstandingService {
       userPrompt,
       optimizer: this.optimizer,
       optimizationProfile: profile,
+      // Screen understanding is BEST-EFFORT ENRICHMENT sitting on the critical
+      // path: `generate-what-to-say` awaits it before the answer stream opens,
+      // and the answer itself already receives the screenshot through
+      // streamVisionWithFallback. Every millisecond spent here is added to
+      // time-to-first-token for a structured extraction the turn can do without.
+      //
+      // It had no total bound at all. In natively_debug (3).log that cost the
+      // user 8.0s on 31 of 33 turns — the Natively rung's inner timeout, which
+      // happened to be the only thing stopping the chain because their build
+      // then skipped every remaining rung. On a build that walks the whole chain
+      // (post-3e29a67f) the same failure would have cost 8s PLUS a real call to
+      // their own provider, so fixing the skip makes the latency worse unless
+      // this bound exists. A provider that cannot describe a screenshot inside
+      // the budget is not worth delaying the answer for; failing fast to "no
+      // screen context" is the cheaper outcome, and the healthy case (a cloud
+      // vision rung returning in 2-4s) never reaches this ceiling.
+      totalDeadlineMs: SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS,
+    });
+
+    // The chain's attempt ledger is otherwise WRITE-ONLY: runVisionFallback
+    // reports through `params.telemetry?.()`, this call site passed no callback,
+    // and `result.attempts` only ever reached the IPC response — never a log.
+    // A user debug log therefore showed a bare "[NativelyAPI] JSON pre-response
+    // failure" and then nothing, with no way to tell a rung that was SKIPPED
+    // (not configured / not vision-capable) from one that was tried and failed.
+    // Diagnosing natively_debug (3).log needed source archaeology and a build-
+    // dating exercise to answer "did it even try the user's own provider?".
+    // One line, every turn, answers it.
+    console.log('[ScreenUnderstanding] vision chain', {
+      ok: result.ok,
+      providerUsed: result.providerUsed,
+      failureReason: result.failureReason,
+      durationMs: result.durationMs,
+      attempts: result.attempts.map(a =>
+        a.skipped
+          ? `${a.provider}:skipped(${a.skipReason})`
+          : `${a.provider}:${a.ok ? 'ok' : (a.errorClass || 'error')}(${a.durationMs}ms)`),
     });
 
     const out = this.assembleResult(result, {

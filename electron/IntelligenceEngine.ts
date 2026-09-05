@@ -16,8 +16,8 @@ import {
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
-    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, LIVE_TOTAL_HARD_TIMEOUT_MS,
-    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
+    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs,
+    LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
     buildProfileJitPrompt, decideSessionWritePolicy,
@@ -3433,9 +3433,22 @@ export class IntelligenceEngine extends EventEmitter {
             const usingLocalLlm = typeof (this.llmHelper as any).isUsingOllama === 'function'
                 ? (this.llmHelper as any).isUsingOllama()
                 : false;
-            const firstUsefulDeadline = usingLocalLlm
-                ? LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS
-                : LIVE_TOTAL_HARD_TIMEOUT_MS;
+            // An image-bearing turn goes through streamVisionWithFallback, whose
+            // per-attempt budget is 20s and up — but only when the outer ceiling
+            // lets it. LIVE_TOTAL_HARD_TIMEOUT_MS is derived from the natively
+            // server's provider cutover, so it is the right ceiling ONLY for a
+            // turn actually routed through that server. `viaServerCascade` is the
+            // vocabulary firstUsefulDeadlineMs() already uses for that question;
+            // reuse it rather than inventing a second way to ask.
+            const viaServerCascade = typeof (this.llmHelper as any).isUsingNativelyServerCascade === 'function'
+                ? (this.llmHelper as any).isUsingNativelyServerCascade() === true
+                : false;
+            const isVisionTurn = (imagePaths?.length ?? 0) > 0;
+            const firstUsefulDeadline = totalHardTimeoutMs({
+                isLocal: usingLocalLlm,
+                isVisionTurn,
+                viaServerCascade,
+            });
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {

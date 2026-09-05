@@ -488,6 +488,22 @@ export async function* runStreamingVisionFallback(
           if (ttftTimer) clearTimeout(ttftTimer);
         }
 
+        // The OUTER deadline may have fired while we were awaiting chunk #1.
+        // When it does, the consumer (raceStreamWithDeadline) has already given
+        // up, painted its fallback line and stopped reading — so whatever
+        // arrives now is not an answer, it is debris from the abort. Measured
+        // in a real session (natively_debug (3).log, 7/33 turns): the outer
+        // ceiling aborted at 13.00s, streamWithCustom's catch yielded a
+        // non-empty string, and this block then ran anyway — booking a turn
+        // that delivered ZERO tokens to the user as
+        //   [Vision] committed to Custom (OpenRouter) (attempt 1/3, ttft=13043ms)
+        // with recordVisionTtft(13043) + markVisionHealthy('custom').
+        // Consequences: the provider-health EWMA learns a fabricated 13s TTFT
+        // from a failure, log-derived TTFT statistics are polluted, and the
+        // failures are invisible to any answer-delivery metric — which is how
+        // this survived unnoticed. Check the signal, not just the chunk.
+        if (abortSignal?.aborted) return;
+
         if (first.done || typeof first.value !== 'string' || first.value.trim().length === 0) {
           throw new Error('empty-stream');
         }

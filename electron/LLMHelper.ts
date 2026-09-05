@@ -1286,10 +1286,22 @@ export class LLMHelper {
     userPrompt: string,
     systemPrompt: string,
     imagePath: string,
+    // The calling chain's per-attempt budget and cancellation. Optional so the
+    // signature stays back-compatible, but VisionProviderRegistry always passes
+    // both — without them the chain's own deadline could not reach the provider
+    // and each method's private default silently became the real bound.
+    opts?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<string> {
     switch (providerId) {
       case 'natively':
-        return this.generateWithNatively(userPrompt, systemPrompt, [imagePath]);
+        // A screen-understanding extraction is the DENSE, non-streaming case
+        // that generateWithNatively's own 8s default explicitly warns is "far
+        // too short" — and no caller had ever passed the larger bound it asks
+        // for. Hand it the chain's budget so the two agree.
+        return this.generateWithNatively(userPrompt, systemPrompt, [imagePath], {
+          timeoutMs: opts?.timeoutMs,
+          signal: opts?.signal,
+        });
       case 'openai':
         return this.generateWithOpenai(userPrompt, systemPrompt, [imagePath]);
       case 'claude':
@@ -3907,7 +3919,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Routes AI generation through the Natively API backend (Gemini-powered).
    */
-  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number }): Promise<string> {
+  private async generateWithNatively(userMessage: string, systemPrompt?: string, imagePaths?: string[], opts?: { purpose?: 'extraction'; timeoutMs?: number; signal?: AbortSignal }): Promise<string> {
     this.assertOutboundScopes('natively', userMessage, imagePaths);
     // Prefer the in-memory field; fall back to CredentialsManager for the direct-routing path
     // where currentModelId === 'natively' but setNativelyKey() wasn't called yet.
@@ -3996,6 +4008,10 @@ let isMultimodal = !!(imagePaths?.length);
     // provider waterfall for 25-30s before the OS-level TCP reset fires. Callers doing a
     // DENSE structured extraction (meeting notes) pass a larger bound — 8s is far too
     // short for that, and silently selected for sparse output.
+    // `?? 8000` (not `opts?.timeoutMs || 8000`) so an explicit 0 is impossible
+    // to pass by accident, and so a caller that hands us `undefined` still gets
+    // the documented default. Callers doing a dense extraction — meeting notes,
+    // and now the screen-understanding vision rung — pass their own bound.
     const timeoutMs = opts?.timeoutMs ?? 8000;
     // Overall-deadline signal covers BOTH connect AND the body read below. Without
     // a read-phase bound, a server that sends headers then hangs the body would
@@ -4019,7 +4035,13 @@ let isMultimodal = !!(imagePaths?.length);
         method: 'POST',
         headers,
         body: serializedBody,
-        signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), overallController.signal]),
+        // opts.signal is the CALLER's cancellation (the vision chain's
+        // per-attempt controller). Including it here is what lets an upstream
+        // deadline actually tear this request down instead of leaving it
+        // running while the caller has already moved on.
+        signal: AbortSignal.any(
+          [AbortSignal.timeout(timeoutMs), overallController.signal, opts?.signal].filter(Boolean) as AbortSignal[],
+        ),
       });
     } catch (fetchErr: any) {
       clearTimeout(overallTimer);
@@ -9054,6 +9076,15 @@ let isMultimodal = !!(imagePaths?.length);
 
     } catch (e) {
       clearTimeout(streamTimeout);
+      // A CALLER-INITIATED abort is not a provider error and must not produce
+      // content. The fetch above rejects with AbortError the moment the caller
+      // cancels, and yielding here made that rejection look like a first token:
+      // in natively_debug (3).log the live deadline aborted the turn at 13.00s,
+      // this catch yielded 35 non-empty characters, and the vision chain
+      // committed to a stream the consumer had already stopped reading.
+      // The per-chunk `if (abortSignal?.aborted) return` above already applies
+      // this rule to the success path; the error path simply never learned it.
+      if (abortSignal?.aborted) return;
       console.error("Custom streaming failed", e);
       yield "Error streaming from custom provider.";
     } finally {
