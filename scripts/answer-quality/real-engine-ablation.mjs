@@ -62,8 +62,11 @@ const helper = new Proxy({}, {
 const mm = ModesManager.getInstance();
 try {
   const all = mm.getModes?.() ?? [];
-  const ti = all.find((m) => m.templateType === 'technical-interview');
-  if (ti && process.env.HARNESS_MODE === 'technical-interview') mm.setActiveMode(ti.id);
+  // HARNESS_MODE selects any built-in templateType; unset keeps the seeded default (general).
+  const want = process.env.HARNESS_MODE;
+  const target = want ? all.find((m) => m.templateType === want) : null;
+  if (target) mm.setActiveMode(target.id);
+  else if (want) console.log(`[harness] no mode with templateType=${want}; staying on the default`);
 } catch (e) { console.log('[harness] could not set technical-interview mode:', e?.message); }
 const activeInfo = mm.getActiveModeInfo?.();
 console.log(`[harness] active mode: ${activeInfo?.templateType ?? 'NONE'} (${activeInfo?.id ?? '-'})`);
