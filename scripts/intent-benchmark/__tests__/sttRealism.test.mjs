@@ -9,7 +9,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeInput, analyzeBatch, CATEGORY_PROFILES, MIN_SAMPLE_FOR_RATES, redundantTrapPairs } from '../lib/sttRealism.mjs';
+import { analyzeInput, analyzeBatch, CATEGORY_PROFILES, MIN_SAMPLE_FOR_RATES, redundantTrapPairs, partitionMalformed } from '../lib/sttRealism.mjs';
 
 const CLEAN_PROSE = [
   'Could you explain how the caching layer handles invalidation?',
@@ -173,5 +173,47 @@ describe('redundantTrapPairs', () => {
 
     test('normalises case and whitespace before comparing', () => {
         assert.equal(redundantTrapPairs([row('Is  That Valid', 'yes'), row('is that valid', 'yes')]), 1);
+    });
+});
+
+describe('partitionMalformed', () => {
+    // The defect: punctuation is a per-row property but was checked as a batch
+    // rate, so one bad row exceeded a 2% ceiling at every batch size we run and
+    // took the whole cell with it.
+    const good = 'so uh how does the caching layer know when to';
+
+    test('separates punctuated rows from clean ones', () => {
+        const { keep, drop } = partitionMalformed([good, 'is this good?', good]);
+        assert.equal(keep.length, 2);
+        assert.equal(drop.length, 1);
+        assert.equal(drop[0].reason, 'punctuation');
+    });
+
+    test('separates capitalised rows', () => {
+        const { keep, drop } = partitionMalformed([good, 'Is this good', good]);
+        assert.equal(drop.length, 1);
+        assert.equal(drop[0].reason, 'uppercase');
+        assert.equal(keep.length, 2);
+    });
+
+    test('reports the original index so the row can be found again', () => {
+        const { drop } = partitionMalformed([good, good, 'nope.']);
+        assert.equal(drop[0].index, 2);
+    });
+
+    test('a clean batch drops nothing', () => {
+        const { keep, drop } = partitionMalformed([good, good]);
+        assert.equal(drop.length, 0);
+        assert.equal(keep.length, 2);
+    });
+
+    test('one bad row in 24 no longer condemns the batch', () => {
+        const batch = Array.from({ length: 24 }, (_, i) => (i === 7 ? 'is this good?' : good));
+        const { keep, drop } = partitionMalformed(batch);
+        assert.equal(drop.length, 1);
+        assert.equal(keep.length, 23);
+        // and what survives now passes the hard checks it used to fail
+        const r = analyzeBatch(keep.map((k) => k.input));
+        assert.ok(!r.problems.some((p) => /punctuation/.test(p)), r.problems.join('; '));
     });
 });
