@@ -210,6 +210,28 @@ The honest reading is that `mode_intent` is not solvable at this corpus size by 
 
 `mode_intent` cannot be scored at this corpus size and reporting a number for it would be misleading. There are 78 labels partitioned by mode across 377 held-out rows, leaving fewer than ten rows per label in every mode. Every mode reports as underpowered.
 
+## A leak in the held-out split, measured rather than assumed
+
+33 of 419 held-out rows, 7.9%, have an exact input duplicate in the training split, and 31 of them carry the same `needs_response` label.
+
+The cause is the interaction of two decisions that are each correct on their own. Deduplication is keyed on mode and input together, deliberately, because the same backchannel in Team Meet and in Lecture is genuine signal for a mode-aware router. The split is a hash of the row id, also deliberately, so that regenerating the corpus cannot migrate rows across the boundary. But two rows with the same text have different ids, so the hash can put one in train and the other in holdout, and the held-out copy is then memorisable.
+
+The effect was measured on three candidates rather than estimated.
+
+| Candidate | full holdout | excluding leaked rows | on the leaked rows |
+|---|---|---|---|
+| head-minilm | 66.3 | 65.4 | 83.3% accuracy |
+| proto-potion | 50.8 | 50.6 | 63.3% accuracy |
+| nli-mobilebert | 23.5 | 24.2 | 10.0% accuracy |
+
+So the leading candidate is inflated by 0.9 points, the prototype by 0.2, and the MobileBERT baseline is actually deflated: it does far worse on the leaked rows than on the rest, because they are mostly short backchannels it mishandles.
+
+The ranking is unaffected and every reported figure moves by under a point. That is small enough that re-splitting and re-running every candidate would cost hours to change a conclusion by less than the difference between adjacent candidates. It is not small enough to leave unsaid, because 0.9 points of a score coming from memorisation is 0.9 points that will not appear in production.
+
+`assignGroupedSplits` fixes it by giving every row that shares a normalised input the split of its lexicographically first id, which is deterministic and still survives regeneration. It is deliberately NOT retrofitted to v1, since doing so would invalidate every measurement in this report. It should be applied when the corpus is regenerated at 5,000 rows, which is the recommendation this report already makes for other reasons.
+
+`validate.mjs` now reports the leak rate on every run, so a future corpus cannot acquire this silently.
+
 ## Hardware matrix
 
 | Machine | Status |

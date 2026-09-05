@@ -64,6 +64,46 @@ export function splitFor(id) {
   return bucket < 20 ? 'holdout' : 'train';
 }
 
+/**
+ * GROUP-AWARE SPLIT: every row sharing a normalised input lands in one split.
+ *
+ * `splitFor` alone hashes the id, which is stable across regeneration and is
+ * the property that matters most. It has one hole. Dedup is keyed on
+ * (mode, input), deliberately, because the same backchannel in Team Meet and in
+ * Lecture is genuine signal for a mode-aware router. But those two rows have
+ * different ids, so the hash can put one in train and the other in holdout, and
+ * the held-out copy is then memorisable.
+ *
+ * Measured on v1: 33 of 419 held-out rows, 7.9%, had an exact input duplicate in
+ * train, and 31 of them carried the same needs_response label. The effect on the
+ * result was small and did not change the ranking — the leading candidate scored
+ * 66.3 macro F1 overall and 65.4 excluding those rows, and the MobileBERT
+ * baseline actually did WORSE on them (10.0% against 33.7%) because they are
+ * mostly short backchannels. But 0.9 points of a candidate's score coming from
+ * memorisation is 0.9 points that do not generalise.
+ *
+ * The whole group takes the split of its lexicographically first id, so the
+ * assignment is deterministic and still survives regeneration.
+ *
+ * Not retrofitted to v1, because re-splitting invalidates every measurement
+ * already taken and the measured cost of the leak is under one point. Use this
+ * when the corpus is regenerated.
+ */
+export function assignGroupedSplits(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const key = String(r?.input ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  for (const group of groups.values()) {
+    const anchor = group.map((r) => r.id).sort()[0];
+    const split = splitFor(anchor);
+    for (const r of group) r.split = split;
+  }
+  return rows;
+}
+
 // ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------

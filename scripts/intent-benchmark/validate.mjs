@@ -55,6 +55,18 @@ const holdout = rows.filter((r) => splitFor(r.id) === 'holdout');
 console.log(`split   holdout ${holdout.length}/${rows.length} = ${((holdout.length / (rows.length || 1)) * 100).toFixed(1)}%` +
   (splitMismatch.length ? `   ${splitMismatch.length} STORED SPLITS DISAGREE WITH THE ID HASH` : ''));
 
+// ── split leakage ──────────────────────────────────────────────────────────
+// A held-out row whose exact input also appears in train is memorisable, and
+// its contribution to a score does not generalise. Reported rather than fixed
+// in place, because re-splitting invalidates every measurement already taken.
+const trainInputs = new Set(
+  rows.filter((r) => r.split === 'train').map((r) => String(r.input).toLowerCase().replace(/\s+/g, ' ').trim()),
+);
+const holdoutRows = rows.filter((r) => r.split === 'holdout');
+const leaked = holdoutRows.filter((r) => trainInputs.has(String(r.input).toLowerCase().replace(/\s+/g, ' ').trim()));
+console.log(`leak    ${leaked.length}/${holdoutRows.length} held-out rows share an exact input with train` +
+  (holdoutRows.length ? ` = ${((leaked.length / holdoutRows.length) * 100).toFixed(1)}%` : ''));
+
 // ── composition ────────────────────────────────────────────────────────────
 const count = (fn) => rows.filter(fn).length;
 const byMode = {};
