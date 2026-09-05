@@ -6,7 +6,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { splitFor, validateRow, validateCorpus, parseJsonl, AXES } from '../lib/schema.mjs';
+import { splitFor, validateRow, validateCorpus, parseJsonl, AXES, dedupeKey } from '../lib/schema.mjs';
 
 const baseRow = (over = {}) => ({
   id: 'tm-0412',
@@ -175,4 +175,35 @@ describe('jsonl parsing', () => {
     assert.equal(bad.length, 1);
     assert.equal(bad[0].line, 2);
   });
+});
+
+describe('dedupeKey', () => {
+    const row = (over = {}) => ({
+        mode: 'team-meet', input: 'hows the export coming along',
+        labels: { needs_response: 'yes', dialogue_act: 'ask', task: 'none' }, ...over,
+    });
+
+    test('identical rows collide', () => {
+        assert.equal(dedupeKey(row()), dedupeKey(row()));
+    });
+
+    test('an adversarial pair does NOT collide', () => {
+        // Same words, different answer. This is the trap category, and a
+        // label-blind key deleted one member of every such pair.
+        const a = row();
+        const b = row({ labels: { needs_response: 'no', dialogue_act: 'statement', task: 'none' } });
+        assert.notEqual(dedupeKey(a), dedupeKey(b));
+    });
+
+    test('the same words in a different mode do not collide', () => {
+        assert.notEqual(dedupeKey(row()), dedupeKey(row({ mode: 'lecture' })));
+    });
+
+    test('case and whitespace are normalised', () => {
+        assert.equal(dedupeKey(row()), dedupeKey(row({ input: '  Hows   THE export Coming Along ' })));
+    });
+
+    test('a missing row does not throw', () => {
+        assert.equal(typeof dedupeKey(undefined), 'string');
+    });
 });

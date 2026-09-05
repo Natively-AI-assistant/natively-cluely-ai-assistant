@@ -93,6 +93,25 @@ export function splitFor(id) {
  * already taken and the measured cost of the leak is under one point. Use this
  * when the corpus is regenerated.
  */
+/**
+ * The identity of a row for deduplication.
+ *
+ * Mode, normalised input, AND labels. The labels are load-bearing: an
+ * adversarial pair from the `trap` category is near-identical wording carrying
+ * DIFFERENT labels, disambiguated by the channel and history that the provider
+ * text puts in front of the model. A label-blind key silently deletes one
+ * member of every such pair, which is why the corpus contained no same-mode
+ * input collisions at all before this existed.
+ *
+ * Two rows agreeing on all three are a genuine repeat: identical words, identical
+ * answer, no new information.
+ */
+export function dedupeKey(row) {
+  const input = String(row?.input ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const l = row?.labels ?? {};
+  return `${row?.mode}::${input}::${l.needs_response}|${l.dialogue_act}|${l.task}`;
+}
+
 export function assignGroupedSplits(rows) {
   const groups = new Map();
   for (const r of rows) {

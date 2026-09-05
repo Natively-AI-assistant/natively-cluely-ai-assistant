@@ -25,7 +25,7 @@ import { ALL_SPECS, MODE_SPECS, CUSTOM_MODE_KEYS } from './lib/modeSpecs.mjs';
 import { buildGenerationPrompt, CATEGORY_BRIEFS, REQUIRED_TRAPS, isPromptExample } from './lib/prompts.mjs';
 import { analyzeBatch, redundantTrapPairs, formatBatchReport } from './lib/sttRealism.mjs';
 import { codeSwitches } from './lib/codeSwitch.mjs';
-import { validateRow, splitFor, AXES, CAPABILITIES, LEGACY_INTENTS, parseJsonl } from './lib/schema.mjs';
+import { validateRow, splitFor, AXES, CAPABILITIES, LEGACY_INTENTS, parseJsonl, dedupeKey } from './lib/schema.mjs';
 import { generateJson, readApiKey } from './lib/gemini.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -205,7 +205,7 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
       const key = r.custom_mode_key ?? r.mode;
       const n = Number(String(r.id).split('-').pop());
       if (Number.isFinite(n)) preSeq[key] = Math.max(preSeq[key] ?? 0, n);
-      preInputs.add(`${r.mode}::${String(r.input).toLowerCase().replace(/\s+/g, ' ').trim()}`);
+      preInputs.add(dedupeKey(r));
     }
     console.log(`continuing from ${existing.length} existing rows; per-mode next seq: ` +
       Object.entries(preSeq).map(([k, v]) => `${k}=${v + 1}`).join(' '));
@@ -282,7 +282,7 @@ function toDatasetRow({ raw, modeKey, spec, withFiles, seq }) {
             // Leakage filter: a row that copied an example out of the
             // instructions measures the prompt, not the language.
             if (isPromptExample(row.input)) { parroted++; continue; }
-            const dedupKey = `${row.mode}::${String(row.input).toLowerCase().replace(/\s+/g, ' ').trim()}`;
+            const dedupKey = dedupeKey(row);
             if (seenInputs.has(dedupKey)) { deduped++; continue; }
             seenInputs.add(dedupKey);
             out.write(JSON.stringify(row) + '\n');
