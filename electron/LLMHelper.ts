@@ -7467,7 +7467,34 @@ let isMultimodal = !!(imagePaths?.length);
 
     // 2a. CustomProvider (switchToCustom path) — full SSE-capable streaming
     if (this.customProvider) {
-      yield* this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, abortSignal);
+      // This rung is TERMINAL: it returns unconditionally, so there is no
+      // provider behind it to fall back to. That is why the user-facing failure
+      // sentence belongs here and not inside streamWithCustom — inside the
+      // generator it was also being handed to the vision chain and the Natively
+      // TTFT race, where a non-empty chunk means "this provider works" and the
+      // real fallback was therefore never reached.
+      const commit = { emitted: false };
+      try {
+        yield* this.trackCommit(
+          this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, abortSignal),
+          commit,
+        );
+      } catch (e: any) {
+        if (abortSignal?.aborted) return;
+        if (commit.emitted) {
+          // Died mid-answer. Appending an error sentence after text the user is
+          // already reading would look like a second, contradictory answer —
+          // signal truncation instead, as the last-resort rung below does.
+          console.warn(`[LLMHelper] Custom provider failed AFTER first token — ending stream: ${e?.message || e}`);
+          yield LLMHelper.TRUNCATION_SENTINEL;
+          return;
+        }
+        // Byte-identical to what streamWithCustom used to yield, so this path's
+        // UX is unchanged.
+        yield typeof e?.status === 'number'
+          ? `Error: Custom Provider returned HTTP ${e.status}`
+          : 'Error streaming from custom provider.';
+      }
       return;
     }
 
@@ -9277,14 +9304,36 @@ let isMultimodal = !!(imagePaths?.length);
       clearTimeout(streamTimeout);
 
       if (!response.ok) {
+        // strictErrors callers keep main's exact early throw, message shape and
+        // all, so nothing that already depends on it changes. Everything below
+        // is the NON-strict path, which used to yield the error as if it were an
+        // answer.
         if (strictErrors) {
           const error = new Error(`Custom Provider returned HTTP ${response.status}`) as Error & { status?: number };
           error.status = response.status;
           throw error;
         }
+        // Keep the structured status log AND throw. The log is the operator's
+        // only breadcrumb when a chain silently falls back to another provider,
+        // and SensitiveLogRedaction pins this exact line as the redaction-safe
+        // shape (status only, never a body snippet).
         console.error('[LLMHelper] Custom Provider stream HTTP error', { status: response.status });
-        yield `Error: Custom Provider returned HTTP ${response.status}`;
-        return;
+        // THROW, never yield. Yielding made a provider failure indistinguishable
+        // from an answer: every consumer of this generator decides "did the
+        // provider work?" by whether a non-empty first chunk arrived, so a 500
+        // was a successful commit. Measured against a local 500 —
+        //   [Vision] committed to Custom (OpenRouter) (attempt 1/1, ttft=11ms)
+        // — the healthy fallback rung behind it was never invoked, the provider
+        // was marked healthy, and the user's answer was the literal string
+        // "Error: Custom Provider returned HTTP 500".
+        //
+        // Message shape matches executeCustomProvider's ("Custom Provider HTTP
+        // <status>"), which is what the non-streaming twin has always thrown, so
+        // both chains' classifiers bucket the two identically.
+        throw Object.assign(
+          new Error(`Custom Provider HTTP ${response.status}`),
+          { status: response.status },
+        );
       }
 
       if (!response.body) return;
@@ -9404,7 +9453,12 @@ let isMultimodal = !!(imagePaths?.length);
       if (abortSignal?.aborted) return;
       if (strictErrors) throw e;
       console.error("Custom streaming failed", e);
-      yield "Error streaming from custom provider.";
+      // Same rule as the HTTP branch above: a failure must reach the caller AS a
+      // failure. The user-facing sentence this used to yield now lives at the
+      // one call site that is genuinely terminal (the `2a. CustomProvider`
+      // branch of _streamChatInner), where "there is no provider after this"
+      // is actually known. Here, it is not.
+      throw e instanceof Error ? e : new Error(String(e));
     } finally {
       // Always drop the listener so we don't leak a subscription on a
       // long-lived AbortSignal shared across many calls.
