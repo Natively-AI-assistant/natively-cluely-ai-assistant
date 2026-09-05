@@ -29,9 +29,23 @@ AXES = ["needs_response", "dialogue_act", "task", "answer_form", "grounding", "m
 class MultiHead(nn.Module):
     def __init__(self, encoder_name, sizes):
         super().__init__()
-        self.encoder = AutoModel.from_pretrained(encoder_name)
+        # fp32, for the same reason train_multihead.py forces it, and it has to
+        # be repeated here because this is a SECOND definition of MultiHead: the
+        # exporter does not import the trainer's.
+        #
+        # The failure differs on this side. Training a mixed fp16/fp32 model on
+        # MPS gives a NaN loss. Exporting one gives a graph that quantizes into
+        # fp16 scale tensors, and onnxruntime then refuses to load it:
+        #
+        #   Type 'tensor(float16)' of input parameter
+        #   (encoder.embeddings.word_embeddings.weight_scale) of operator
+        #   (DequantizeLinear) is invalid
+        #
+        # Which is a loud failure rather than a silent one, but only at load
+        # time, well after the export reported success.
+        self.encoder = AutoModel.from_pretrained(encoder_name).float()
         h = self.encoder.config.hidden_size
-        self.heads = nn.ModuleDict({a: nn.Linear(h, n) for a, n in sizes.items()})
+        self.heads = nn.ModuleDict({a: nn.Linear(h, n) for a, n in sizes.items()}).float()
 
     def forward(self, input_ids, attention_mask):
         out = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
@@ -78,6 +92,11 @@ def main():
     (out / "onnx").mkdir(parents=True, exist_ok=True)
 
     model = MultiHead(cfg["encoder"], cfg["sizes"])
+    _dt = {p.dtype for p in model.parameters()}
+    assert _dt == {torch.float32}, (
+        f"the graph must be fp32 before export; found {_dt}. "
+        "A fp16 parameter survives into the quantized graph as a fp16 scale "
+        "tensor, and onnxruntime rejects the model at load time.")
     state = torch.load(trained / "model.pt", map_location="cpu")
     # The training module carried a dropout layer that inference does not need,
     # so load non-strictly and report anything unexpected rather than silently
@@ -146,6 +165,20 @@ def main():
         # ships a 90.5MB model where 22.8MB would do — four times the size on a
         # 25ms latency budget.
         stripped = out / "onnx" / "_stripped.onnx"
+        # Remove any sidecar left by an earlier run BEFORE saving. onnx.save
+        # refuses to overwrite an existing external-data file and raises
+        # "External data file exists in _stripped.onnx.data.", the export then
+        # falls back to fp32, and the model ships six times larger and roughly
+        # nine times slower with only a warning to say so. A previous run that
+        # failed after writing the sidecar leaves exactly this trap for the next
+        # one, which is how deberta was first measured at 107.8ms unquantized.
+        for stale in (stripped, out / "onnx" / "_stripped.onnx.data"):
+            try:
+                if stale.exists():
+                    stale.unlink()
+                    print(f"[export] removed stale {stale.name} from a previous run")
+            except OSError:
+                pass
         graph = onnx.load(str(src))
         del graph.graph.value_info[:]
         # `location` is resolved relative to the PROCESS CWD, not to the model
