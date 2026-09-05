@@ -19,6 +19,7 @@ Macro F1 percent on the held-out English split. p95 measured inside the worker o
 | **composite (head + prototype)** | **66.3** | **52.7** | 35.4 | 36.9 | 31.9 | **36.0** | **11.74ms** | yes |
 | head-minilm (fine-tuned) | 66.3 | 52.7 | 35.4 | 36.9 | 31.9 | 14.4 | 11.31ms | yes |
 | headproto-minilm (one session) | 66.3 | 52.7 | 35.4 | 36.9 | 31.9 | 16.4 | 11.30ms | yes |
+| head-modernbert (150M) | 60.9 | 45.6 | 30.3 | 35.1 | 32.2 | 14.9 | 83.5ms | yes |
 | head-tiny (3-layer) | 59.6 | 39.3 | 29.0 | 32.2 | 30.1 | 20.6 | 5.78ms | yes |
 | proto-potion (static) | 50.8 | 33.0 | 27.8 | 27.4 | 25.7 | 36.0 | **0.07ms** | yes |
 | proto-minilm | 43.9 | 26.6 | 25.3 | 28.4 | 25.0 | 30.4 | 4.65ms | yes |
@@ -139,6 +140,24 @@ The specific collisions, counted:
 Half of all overlaps are one pair. "whats the status on the q three report" is a question in grammatical form and a request in conversational function, and the six-value enum forces a choice between them that carries no information. `answer` against `statement` is the same problem in a different place: an answer is a statement, and the distinction is about what preceded it rather than about the turn itself.
 
 On `needs_response` the overlap is smaller but has the same shape. Nine of eleven overlaps are `optional` against `yes`, which says the middle category is not cleanly separable from the positive one.
+
+## A bigger encoder does not help
+
+ModernBERT-base is roughly four times MiniLM-L6 in parameters and produces a 151.7MB quantized model against 22.8MB. It scores worse on both axes that matter.
+
+| Encoder | params | size | needs_response | dialogue_act |
+|---|---|---|---|---|
+| MiniLM-L6 | 22M | 22.8MB | **66.3** | **52.7** |
+| ModernBERT-base | 150M | 151.7MB | 60.9 | 45.6 |
+| MiniLM-L3 (distilled) | 17M | 17.4MB | 59.6 | 39.3 |
+
+It is also seven times slower, at p95 83.5ms on a quiet machine against MiniLM's 11.3ms, which puts it over the 25ms budget on its own before anything else runs.
+
+It trained cleanly. The loss reached 3.53 against MiniLM's 7.07, and the collapse detector reported every axis predicting multiple classes, including 46 of 79 on `mode_intent` where MiniLM manages fewer. So the larger model fits the training split better and generalises worse, which is what overfitting looks like on 1,589 rows.
+
+That is consistent with everything else here. The corpus is the binding constraint, not model capacity, and adding capacity against a small corpus makes the fit tighter rather than the answer better. It is one more argument for the 5,000 rows this report recommends, and against reaching for a bigger encoder first.
+
+Two practical notes. ModernBERT could not be trained at batch 32 and sequence length 192 on this machine: 150M parameters plus optimizer state plus activations thrashed unified memory, and the symptom was under two percent CPU with no progress rather than an error. Batch 8 at length 128 worked immediately. And its graph contains a `Split` carrying `num_outputs`, which exists only from opset 18, so exporting at 17 produced a file onnxruntime rejects at load with a message that reads like a corrupt export.
 
 ## The local SLM does not do this task zero-shot
 
