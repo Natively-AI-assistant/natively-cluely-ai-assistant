@@ -131,9 +131,17 @@ console.log(`\nSTT realism, whole corpus`);
 // team-meet and in lecture is the same string with the same correct
 // needs_response label, and a mode-aware router should get both right. Those
 // rows are signal. Two copies of the same string inside ONE mode are not.
+//
+// Cold start augmentations are excluded, and they have to be. Each one is a
+// deliberate copy of its source turn with the history shortened or removed, so
+// it is the same string inside the same mode by construction. That is the whole
+// point of it: the model reads history through buildText, so the pair differs in
+// what the model sees even though the words match. Counting them as accidental
+// repetition would report a 26% duplicate rate for a corpus that has none.
 const withinModeDupes = (() => {
   const byMode = new Map();
   for (const r of rows) {
+    if (r.augmented === 'coldstart') continue;
     const k = r.custom_mode_key ?? r.mode;
     if (!byMode.has(k)) byMode.set(k, new Map());
     const m = byMode.get(k);
@@ -144,10 +152,16 @@ const withinModeDupes = (() => {
   for (const m of byMode.values()) for (const c of m.values()) if (c > 1) d += c - 1;
   return d;
 })();
-const realism = analyzeBatch(rows.map((r) => r.input), { maxDuplicateRate: 1 });
-realism.withinModeDuplicateRate = rows.length ? withinModeDupes / rows.length : 0;
+// Realism is a property of the TEXT, and a cold start augmentation introduces
+// no new text: it is its source turn with the history shortened. Including the
+// copies would double count every string they duplicate and report a 31.8%
+// duplicate rate for a corpus whose text is unchanged. So the realism block is
+// measured over the rows that actually carry distinct text.
+const realismRows = rows.filter((r) => r.augmented !== 'coldstart');
+const realism = analyzeBatch(realismRows.map((r) => r.input), { maxDuplicateRate: 1 });
+realism.withinModeDuplicateRate = realismRows.length ? withinModeDupes / realismRows.length : 0;
 console.log(formatBatchReport(realism));
-console.log(`  within-mode duplicates ${(realism.withinModeDuplicateRate * 100).toFixed(1)}%  (cross-mode repeats are intentional)`);
+console.log(`  within-mode duplicates ${(realism.withinModeDuplicateRate * 100).toFixed(1)}%  (cross-mode repeats and cold-start variants are intentional)`);
 
 // Leakage: rows that copied an example straight out of the generation prompt.
 // They measure the instruction rather than the language, and become outright
