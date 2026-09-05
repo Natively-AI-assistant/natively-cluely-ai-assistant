@@ -4784,6 +4784,40 @@ export class IntelligenceEngine extends EventEmitter {
                 });
             } catch { /* instrumentation must never break a live turn */ }
 
+            // ── PR 9: SHADOW RUN ────────────────────────────────────────────
+            //
+            // What the router WOULD have decided, beside what actually
+            // happened. This is the evidence PR 11 needs before MobileBERT and
+            // the legacy Answer Shape table can be removed: a benchmark says
+            // the model is better on rows a generator wrote, and only a shadow
+            // run says it is better on this user's turns.
+            //
+            // NOT AWAITED. The turn is already decided and about to be
+            // dispatched. The router costs about 18ms and the user gets nothing
+            // for it here, so paying for the experiment with their latency
+            // would be the wrong trade. Fired and forgotten, failures swallowed
+            // inside.
+            try {
+                const { recordShadowDecision } = require('./llm/routing/shadowRun') as typeof import('./llm/routing/shadowRun');
+                const _shadowTurn = (question || extractedQuestion.latestQuestion || lastInterviewerTurn || '').trim();
+                if (_shadowTurn) {
+                    void recordShadowDecision({
+                        turn: _shadowTurn,
+                        mode: this.getActiveModeId(),
+                        channel: 'system',
+                        history: this.session.getContext(120)
+                            .filter((i) => i.role !== 'assistant')
+                            .slice(-4)
+                            .map((i) => `[${i.role === 'user' ? 'USER' : 'SYSTEM'}] ${i.text}`),
+                        modeHasReferenceFiles: false,
+                        legacyIntent: answerPlan?.answerType ?? 'none',
+                        legacyConfidence: confidence,
+                        liveWasSilent: IntelligenceEngine.isNonAnswerSentinel(fullAnswer),
+                        surface: isSpeculative ? 'speculative' : 'manual',
+                    });
+                }
+            } catch { /* the shadow run never reaches the turn it observes */ }
+
             if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {
                 // [TRACE:LONGCTX] Campaign 2, F-longsession-1 (2026-07-16): the
                 // "Nothing actionable right now." escape hatch in the WTA prompts is
