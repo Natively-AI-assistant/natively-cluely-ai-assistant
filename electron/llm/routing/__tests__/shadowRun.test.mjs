@@ -69,7 +69,10 @@ describe('it cannot break the turn it observes', () => {
 
     test('the call site is wrapped so a require failure cannot reach the turn', () => {
         const i = engine.indexOf('PR 9: SHADOW RUN');
-        const block = engine.slice(i, i + 2000);
+        // End-anchored on the sentinel branch that follows the shadow block; a
+        // fixed 2000-char window stopped covering the catch once an argument grew.
+        const end = engine.indexOf('if (IntelligenceEngine.isNonAnswerSentinel(fullAnswer)) {', i);
+        const block = engine.slice(i, end);
         assert.ok(/try \{[\s\S]*recordShadowDecision[\s\S]*\} catch/.test(block));
     });
 

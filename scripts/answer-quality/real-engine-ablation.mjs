@@ -26,7 +26,8 @@ process.resourcesPath ||= path.join(repoRoot, 'resources');
 const { IntelligenceEngine } = await import(pathToFileURL(dist('IntelligenceEngine.js')).href);
 const { SessionTracker } = require(dist('SessionTracker.js'));
 const { ModesManager } = require(dist('services/ModesManager.js'));
-const IC = require(dist('llm/IntentClassifier.js'));
+// The legacy classifier is removed; classifyIntent is the constant in PlannerDecision.
+const IC = require(dist('llm/PlannerDecision.js'));
 
 // ── recording llmHelper ─────────────────────────────────────────────────────
 const dispatched = [];
@@ -120,7 +121,7 @@ for (const line of lines) {
 console.log = origLog;
 
 console.log(`\nREAL ENGINE, REAL CLASSIFIER, REAL PROMPT ASSEMBLY — active mode ${activeInfo?.templateType ?? 'NONE'}\n`);
-console.log('classifier said    promptSource  dispatches  intent in ANY dispatched prompt?   sys/usr chars   question');
+console.log('planner intent     promptSource  dispatches  intent in ANY dispatched prompt?   sys/usr chars   question');
 console.log('-'.repeat(104));
 for (const r of rows) console.log(`${r.intent.padEnd(18)} ${String(r.promptSource).padEnd(13)} ${String(r.dispatches).padEnd(11)} ${String(r.intentInPrompt).padEnd(34)} ${String(r.sys).padStart(5)}/${String(r.usr).padEnd(6)} "${r.q}"`);
 

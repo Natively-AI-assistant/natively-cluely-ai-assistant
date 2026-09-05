@@ -23,6 +23,14 @@
 //
 // Then judge blind.
 
+// HISTORICAL (2026-09-05): this script measured the legacy three-tier classifier, which
+// has since been removed. It cannot run against the current tree and is kept as the
+// record of how the with/without-intent comparison was produced.
+import { existsSync as __exists } from 'node:fs';
+if (!__exists(new URL('../../dist-electron/electron/llm/IntentClassifier.js', import.meta.url))) {
+  console.error('historical harness: electron/llm/IntentClassifier.ts was removed on 2026-09-05; see docs/natively-router-final-answer-2026-09-05.md');
+  process.exit(2);
+}
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';

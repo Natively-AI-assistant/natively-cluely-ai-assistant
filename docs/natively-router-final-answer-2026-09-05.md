@@ -153,3 +153,46 @@ The router stays flagged off, and the shadow run remains the gate for turning it
 on. That gate was always about the router's needs_response decisions, not about
 the classifier, whose removal rests on the finding that its output was
 unreachable.
+
+## Code review, 2026-09-05, and what it caught
+
+A /code-review pass over the branch confirmed 27 findings. Ten were mine and are
+fixed; three belong to the vision chain work in commit e079cd4a and are reported
+rather than touched, because that is another session's live work in this same
+checkout.
+
+The one that matters most is a verification failure of mine. I ran `npx tsc -p
+tsconfig.json` and called the tree clean. The gate CI runs is `npm run
+typecheck:electron`, which is `electron/tsconfig.json` under TypeScript 7, and it
+was red at HEAD with two errors from the classifier removal: a double quoted
+`import { IntentResult } from "./IntentClassifier"` in WhatToAnswerLLM.ts that my
+single quote grep never saw, and an orphaned `scoreChunk` still calling the
+removed `classifyZeroShotRaw`. esbuild elided both, so every local test passed.
+The stale compiled `IntentClassifier.js` from before the deletion also sat in
+dist-electron, because the build has no clean step, and two tests plus three
+harness scripts kept importing it and passing. One of those was the real engine
+harness whose "classifier said" column I have been quoting today. The column was
+the old bundle. The dispatch and V3 measurements were not, because those go
+through the rebuilt engine, and they stand.
+
+Fixed: both type errors; the stale artifacts deleted and the importing tests and
+scripts repointed or retired; the coding detection regression, where the removed
+regex tier had been the only thing catching "give me an example of a React
+component in TypeScript", now carried by CODING_PATTERNS with an object required
+so a behavioral "example of a conflict in your team" stays out; the empty grant
+gate, which I had fixed at one of its two assignment sites while the second
+silently undid it; the "nothing uploaded" wording, which is a different fact from
+"not enabled here"; the phone mirror clarification call; and four router defects
+that only bite with the flag on: a slot wait with no deadline, a poison sentinel
+consumed during the router's own load, a warmup nothing called, and session
+options copied two fields at a time with the arena setting dropped.
+
+Not fixed and reported: the vision chain budget is non binding on every cloud
+rung but Natively and Ollama, the manual chat screenshot deadline stayed at 7
+seconds after WTA moved to a vision aware one, and a provider error string is
+committed as a first token. All three are in e079cd4a. Also left: the router's
+model directory is in no download or verify list, so a clean checkout ships the
+worker without its model and the flag path returns null; the shadow run's
+legacy_agrees field compares two different label vocabularies and is constant;
+and `classifyIntent` survives as an awaited constant threaded through five
+modules.

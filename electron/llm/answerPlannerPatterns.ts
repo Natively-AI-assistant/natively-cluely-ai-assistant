@@ -154,6 +154,16 @@ export const CODING_PATTERNS = [
   /\b(write|implement|code|program|solve)\b/i,
   /\bcode for\b|\bprogram for\b|\bfunction for\b|\balgorithm for\b/i,
   /\balgorithm\b|\bdebug this\b|\bfix (this|the) bug\b/i,
+  // 2026-09-05: the legacy IntentClassifier's regex tier was removed, and its
+  // `intent === 'coding'` OR-arm below went permanently false. That tier caught
+  // "give me an example of a React component in TypeScript" with a bare
+  // `example of .* in .*`, which this list never had — and which also fired on
+  // "an example of a conflict in your last team", a behavioral question. These
+  // restore the coding cases with an OBJECT (a language, framework, or code
+  // artifact) required, so the behavioral shape stays out.
+  /\bexample of\b[^.?!]{0,60}\bin\s+(?:typescript|javascript|python|java|golang|go|rust|react|angular|vue|svelte|sql|c\+\+|c#|csharp|swift|kotlin|ruby|php|bash|shell|node(?:\.js)?|scala|dart|elixir|haskell|html|css)\b/i,
+  /\bexample of\b[^.?!]{0,40}\b(?:component|function|hook|class|query|snippet|implementation|script|module|endpoint|regex|loop|closure|promise|coroutine)\b/i,
+  /\b(?:snippet|boilerplate|how to code)\b|\bset ?up a\b[^.?!]{0,40}\bproject\b|\busing (?:a |the )?\w+ (?:library|framework|sdk)\b/i,
   // `class`/`method` count as a coding signal ONLY when paired with an
   // explicit coding verb or a function/algorithm noun in the same clause —
   // "write a class that…", "implement the method for sorting…" — never bare.
