@@ -46,6 +46,7 @@ import nativelyIcon from '../../../assets/icon-512.png';
  */
 export const AI_PROVIDER_BRANDS: Record<string, { mono: string; brand: string }> = {
     gemini:   { mono: 'GE', brand: '#7C9CF5' },
+    antigravity: { mono: 'AG', brand: '#7C9CF5' },
     groq:     { mono: 'GQ', brand: '#F2755C' },
     openai:   { mono: 'OA', brand: '#10A37F' },
     claude:   { mono: 'CL', brand: '#D97757' },
@@ -86,6 +87,7 @@ export const AI_PROVIDER_MARK_IMAGES: Record<string, string> = {
  */
 export const AI_PROVIDER_MARKS: Record<string, string> = {
     gemini: geminiMark,
+    antigravity: geminiMark,
     claude: claudeMark,
     anthropic: claudeMark,
     deepseek: deepseekMark,

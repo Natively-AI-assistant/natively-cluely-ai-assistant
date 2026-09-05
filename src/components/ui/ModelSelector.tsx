@@ -86,6 +86,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ currentModel, onSe
     };
 
     const getModelDisplayName = (model: string) => {
+        if (model.startsWith('antigravity:')) return `${model.slice('antigravity:'.length)} (Antigravity)`;
         const codexCliName = getCodexCliModelDisplayName(model);
         if (codexCliName) return codexCliName;
         if (model.startsWith('ollama-')) return model.replace('ollama-', '');

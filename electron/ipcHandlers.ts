@@ -1,6 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
+import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
@@ -204,6 +205,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       const defaultModel = cm.getDefaultModel();
+      const antigravityCatalog = defaultModel.startsWith('antigravity:') && AntigravityService.getInstance().getStatus().signedIn
+        ? await AntigravityService.getInstance().getModels().catch(() => null)
+        : null;
       const curlProviders = cm.getCurlProviders() || [];
       const legacyProviders = cm.getCustomProviders() || [];
       const allProviders = [...curlProviders, ...legacyProviders];
@@ -236,6 +240,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // isProviderEnabled() in AIProvidersSettings.tsx must use the same names.
       const providerFamily = (modelId: string): string => {
         if (modelId === 'natively') return 'natively';
+        if (modelId.startsWith('antigravity:')) return 'antigravity';
         if (modelId.startsWith('codex-cli')) return 'codex-cli';
         if (modelId.startsWith('litellm/')) return 'litellm';
         if (modelId.startsWith('nvidia_nim/')) return 'nvidia_nim';
@@ -289,6 +294,8 @@ export function initializeIpcHandlers(appState: AppState): void {
 
         if (modelId === 'natively') return has(cm.getNativelyApiKey());
         if (modelId.startsWith('codex-cli')) return codexConfig.enabled === true && codexSignedIn;
+        if (modelId.startsWith('antigravity:')) return AntigravityService.getInstance().getStatus().signedIn
+          && (antigravityCatalog === null || antigravityCatalog.some(({ id }) => modelId === `antigravity:${id}`));
         if (modelId.startsWith('litellm/')) return has(cm.getLitellmBaseURL());
         if (modelId.startsWith('nvidia_nim/')) return has(cm.getNvidiaNimApiKey());
         if (modelId.startsWith('ollama-')) return true; // live Ollama probe happens at execution time
@@ -352,7 +359,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       const geminiNext = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.1-flash-lite']
         .find(id => modelAvailable(id));
 
-      const next = modelAvailable('natively') ? 'natively'
+      const antigravityFallback = AntigravityService.getInstance().getStatus().signedIn
+        && !cm.getDisabledProviders().includes('antigravity')
+        ? (antigravityCatalog ?? await AntigravityService.getInstance().getModels().catch(() => []))
+          .map(({ id }) => `antigravity:${id}`).find(modelAvailable)
+        : undefined;
+      const next = defaultModel.startsWith('antigravity:') && antigravityFallback ? antigravityFallback
+        : modelAvailable('natively') ? 'natively'
         : geminiNext ? geminiNext
         : modelAvailable('gpt-5.4') ? 'gpt-5.4'
         : modelAvailable('claude-sonnet-4-6') ? 'claude-sonnet-4-6'
@@ -360,6 +373,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         : modelAvailable('deepseek-v4-flash') ? 'deepseek-v4-flash'
         : (codexConfig.enabled === true && codexSignedIn && modelAvailable('codex-cli')) ? 'codex-cli'
         : (litellmFallbackModel && modelAvailable(litellmFallbackModel)) ? litellmFallbackModel
+        : antigravityFallback ? antigravityFallback
         : allProviders.find((p: any) => modelAvailable(p?.id))?.id
           || null;
       if (!next) {
@@ -369,6 +383,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         console.warn('[IPC] refreshRuntimeDefaultIfUnavailable: no available model (all providers disabled or unconfigured)');
         return null;
       }
+      if (cm.getDefaultModel() !== defaultModel) return null;
       cm.setDefaultModel(next);
       llmHelper.setModel(next, allProviders);
       // Same two listeners as every other model change. Converted alongside the
@@ -11330,6 +11345,30 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('codex-cli:logout', async (_, config?: any) => runCodexAuthAction('logout', config));
   safeHandle('codex-cli:login', async (_, config?: any) => runCodexAuthAction('login', config));
   safeHandle('codex-cli:doctor', async (_, config?: any) => runCodexAuthAction('doctor', config));
+
+  // Google Antigravity OAuth uses the existing encrypted store and model settings.
+  const antigravity = AntigravityService.getInstance();
+  initializeAntigravityLifecycle(app, (status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('antigravity:status-changed', status);
+    }
+    broadcastCredentialsChanged();
+    void refreshRuntimeDefaultIfUnavailable();
+  }, broadcastCredentialsChanged);
+  safeHandle('antigravity:status', () => antigravity.getStatus());
+  safeHandle('antigravity:start-login', async () => {
+    try { await antigravity.startLogin(); return { success: true }; }
+    catch (error: any) { return { success: false, error: error.message }; }
+  });
+  safeHandle('antigravity:cancel-login', () => antigravity.cancelLogin());
+  safeHandle('antigravity:sign-out', async () => {
+    try { return await antigravity.signOut(); }
+    catch (error: any) { return { success: false, error: error.message }; }
+  });
+  safeHandle('antigravity:models', async (_, force?: boolean) => {
+    try { return { success: true, models: await antigravity.getModels(force === true) }; }
+    catch (error: any) { return { success: false, models: [], error: error.message }; }
+  });
 
   // ── ChatGPT OAuth (new — replaces `codex login` CLI subprocess) ──────────
   // The renderer calls codex:start-login, which kicks off the PKCE flow,
