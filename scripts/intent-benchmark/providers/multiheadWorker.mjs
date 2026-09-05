@@ -83,7 +83,23 @@ parentPort.on('message', async (msg) => {
         if (!t) continue;
         result[axis] = softmaxTop(Array.from(t.data), inverse[axis]);
       }
-      parentPort.postMessage({ type: 'result', id: msg.id, axes: result, ms: performance.now() - t0 });
+
+      // The pooled encoder output, L2-normalised, returned alongside the head
+      // logits. It is what lets a nearest-centroid lookup for mode_intent run
+      // against THIS model's own representation in the SAME forward pass,
+      // rather than needing a second resident ONNX session — which was measured
+      // to cost the first session about 66% more latency even when the second
+      // model is trivially cheap and never runs concurrently.
+      let pooled = null;
+      if (out.pooled) {
+        const v = Array.from(out.pooled.data);
+        let norm = 0;
+        for (const x of v) norm += x * x;
+        norm = Math.sqrt(norm) || 1;
+        pooled = v.map((x) => x / norm);
+      }
+
+      parentPort.postMessage({ type: 'result', id: msg.id, axes: result, pooled, ms: performance.now() - t0 });
       return;
     }
     parentPort.postMessage({ type: 'error', id: msg.id, error: `unknown message ${msg.type}` });

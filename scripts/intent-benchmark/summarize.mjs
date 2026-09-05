@@ -37,7 +37,8 @@ for (const { d } of reports) {
     `${num(a.needs_response?.macroF1)}      ${num(a.dialogue_act?.macroF1)}   ${num(a.task?.macroF1)}  ` +
     `${num(a.answer_form?.macroF1)}   ${num(a.grounding?.macroF1)}   ${num(a.mode_intent?.macroF1)}   ` +
     `${ms(d.latency?.p95)}  ${String(passes ?? '-').padStart(6)}` +
-    (attempts(d) ? '' : '   [legacy-only: does not attempt the frame axes]'),
+    (attempts(d) ? '' : '   [legacy-only: does not attempt the frame axes]') +
+    (d.meta?.latencyTrustworthy === false ? '   [latency measured on a BUSY machine]' : ''),
   );
 }
 

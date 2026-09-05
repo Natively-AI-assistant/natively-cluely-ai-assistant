@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import { parseJsonl } from './lib/schema.mjs';
 import { ALL_SPECS, MODE_SPECS } from './lib/modeSpecs.mjs';
 import { rowToInput, SCORED_AXES } from './providers/contract.mjs';
@@ -124,6 +125,41 @@ async function buildProvider(id) {
     if (!cfg) throw new Error(`unknown slm ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new SlmProvider({ id, ...cfg });
   }
+  if (id.startsWith('headproto-')) {
+    const { HeadWithPrototypesProvider } = await import('./providers/headWithPrototypes.mjs');
+    const trainRows = rows.filter((r) => r.split === 'train' && (r.language ?? 'en') === 'en');
+    const REGISTRY = {
+      'headproto-minilm': { dir: 'resources/models/natively/router-minilm-multihead', prototypeAxes: ['mode_intent'] },
+    };
+    const cfg = REGISTRY[id];
+    if (!cfg) throw new Error(`unknown headproto ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    return new HeadWithPrototypesProvider({ id, trainRows, ...cfg });
+  }
+  if (id.startsWith('composite-')) {
+    const { CompositeProvider } = await import('./providers/composite.mjs');
+    const { EmbeddingPrototypeProvider } = await import('./providers/embeddingPrototype.mjs');
+    const { MultiHeadProvider } = await import('./providers/multihead.mjs');
+    const trainRows = rows.filter((r) => r.split === 'train' && (r.language ?? 'en') === 'en');
+    const potion = new EmbeddingPrototypeProvider({
+      id: 'potion', modelId: 'minishlab/potion-base-8M', rule: 'centroid',
+      localOnly: true, staticEmbed: true, dtype: 'fp32', trainRows,
+    });
+    const head = new MultiHeadProvider({ id: 'head', dir: 'resources/models/natively/router-minilm-multihead' });
+    const REGISTRY = {
+      // The head owns every low-cardinality axis; the prototype owns the only
+      // high-cardinality one. Measured per-axis, not assigned by intuition.
+      'composite-head-potion': {
+        a: head, b: potion, legacyFrom: 'a',
+        axisOwners: {
+          needs_response: 'a', dialogue_act: 'a', task: 'a',
+          answer_form: 'a', grounding: 'a', mode_intent: 'b',
+        },
+      },
+    };
+    const cfg = REGISTRY[id];
+    if (!cfg) throw new Error(`unknown composite ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
+    return new CompositeProvider({ id, ...cfg });
+  }
   if (id.startsWith('hybrid-')) {
     const { HybridProvider } = await import('./providers/hybrid.mjs');
     const { RulesProvider } = await import('./providers/rules.mjs');
@@ -173,6 +209,29 @@ if (PUNCTUATED) {
 
 console.log(`\nprovider ${PROVIDER}   split ${SPLIT}   lang ${LANG}   rows ${target.length}   input ${PUNCTUATED ? 'restored' : 'raw'}`);
 
+// MACHINE-LOAD GUARD.
+//
+// Latency here is the whole point of several candidates, and it is silently
+// destroyed by anything else running. Measured on this machine: the same
+// provider on the same rows reported p95 14.12ms on a quiet machine and
+// 25.66ms while a training job ran, an 80% inflation with no other symptom.
+// Several reports were written that way before this existed.
+//
+// One-minute load average against core count is a coarse signal, and coarse is
+// enough: the failure it catches is "something big is running", not a subtle
+// scheduling effect. Warn rather than refuse, because a contaminated accuracy
+// number is still valid and a blocked run helps nobody, but stamp the report so
+// a reader can tell.
+const cores = os.cpus().length || 1;
+const load1 = os.loadavg()[0];
+const loadRatio = load1 / cores;
+const MACHINE_BUSY = loadRatio > 0.4;
+if (MACHINE_BUSY) {
+  console.warn(`\n  WARNING: load average ${load1.toFixed(2)} over ${cores} cores (${(loadRatio * 100).toFixed(0)}%).`);
+  console.warn(`  Latency figures from this run are NOT comparable to ones taken on a quiet machine.`);
+  console.warn(`  Accuracy is unaffected. Re-run for latency once the machine is idle.\n`);
+}
+
 const provider = await buildProvider(PROVIDER);
 const t0 = Date.now();
 await provider.load();
@@ -217,7 +276,10 @@ const scored = scoreRun({
   rowsById: new Map(target.map((r) => [r.id, r])),
   results,
   latencies: workerMs.length ? workerMs : roundTripMs,
-  meta: { ...provider.meta(), loadMs, split: SPLIT, language: LANG, punctuated: PUNCTUATED, failed },
+  meta: { ...provider.meta(), loadMs, split: SPLIT, language: LANG, punctuated: PUNCTUATED, failed,
+    // Stamped so a later reader can tell whether the latency in this report is
+    // trustworthy, without having to remember what else was running that day.
+    machineLoad: Number(loadRatio.toFixed(2)), latencyTrustworthy: !MACHINE_BUSY },
 });
 scored.roundTrip = { p50: percentile(roundTripMs, 50), p95: percentile(roundTripMs, 95) };
 scored.latencySource = workerMs.length ? 'worker' : 'round-trip';

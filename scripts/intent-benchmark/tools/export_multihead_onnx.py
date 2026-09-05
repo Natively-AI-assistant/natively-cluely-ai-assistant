@@ -40,7 +40,23 @@ class MultiHead(nn.Module):
         # Tuple, not dict: torch.onnx names outputs positionally, and a dict
         # return makes the output order implicit. The order here is AXES, and
         # the Node side reads it by that same list.
-        return tuple(self.heads[a](pooled) for a in AXES)
+        #
+        # The POOLED EMBEDDING is emitted as a final output, and that is what
+        # makes a one-session composite possible.
+        #
+        # Measured: a second resident ONNX session costs the first one about
+        # 66% more latency on this machine (12.71ms to 21.15ms) even when the
+        # second model is trivially cheap and never runs concurrently. Disabling
+        # ORT's thread spinning made it worse (35.27ms) and dropping to one
+        # intra-op thread made it much worse (42.49ms), so the obvious
+        # mitigations do not work.
+        #
+        # The fine-tuned heads win the low-cardinality axes and lose badly on
+        # mode_intent, where a nearest-centroid prototype beats them in eleven
+        # of twelve modes. Exposing the pooled vector lets the centroid lookup
+        # run against THIS model's own representation, so both behaviours come
+        # from one forward pass in one session instead of two.
+        return tuple(self.heads[a](pooled) for a in AXES) + (pooled,)
 
 
 def main():
@@ -74,11 +90,12 @@ def main():
         (sample["input_ids"], sample["attention_mask"]),
         str(out / "onnx" / "model.onnx"),
         input_names=["input_ids", "attention_mask"],
-        output_names=[f"logits_{a}" for a in AXES],
+        output_names=[f"logits_{a}" for a in AXES] + ["pooled"],
         dynamic_axes={
             "input_ids": {0: "batch", 1: "sequence"},
             "attention_mask": {0: "batch", 1: "sequence"},
             **{f"logits_{a}": {0: "batch"} for a in AXES},
+            "pooled": {0: "batch"},
         },
         opset_version=17,
         do_constant_folding=True,
