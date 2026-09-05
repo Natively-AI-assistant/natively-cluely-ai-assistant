@@ -126,7 +126,29 @@ def main():
     print(f"[train] device {device}")
 
     dl = DataLoader(Rows(train, tok, label_maps), batch_size=args.batch, shuffle=True)
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+
+    # LINEAR WARMUP THEN DECAY.
+    #
+    # Added after the DeBERTa-v3-xsmall run collapsed: it predicted a single
+    # class for all 377 held-out rows, which is uniform logits with argmax
+    # taking index 0. That is a non-convergence signature, not a verdict on the
+    # encoder, and DeBERTa-v3 in particular is known to need a warmup — its
+    # disentangled attention is unstable at a full learning rate from step one,
+    # and a constant LR is enough to flatten the heads permanently.
+    #
+    # MiniLM converged without it, so this changes nothing for the candidate
+    # that currently leads; it exists so a larger encoder gets a fair run.
+    total_steps = max(1, len(dl) * args.epochs)
+    warmup_steps = max(1, int(total_steps * 0.1))
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return step / warmup_steps
+        progress = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return max(0.0, 1.0 - progress)
+
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda)
     # Class imbalance is severe and deliberate (needs_response=no is 43% of the
     # corpus). Unweighted loss would let a head win by always predicting the
     # majority, which is exactly the failure the LLM labeller made on `voice`.
@@ -144,9 +166,34 @@ def main():
             ids = batch["input_ids"].to(device); am = batch["attention_mask"].to(device)
             logits = model(ids, am)
             loss = sum(losses[a](logits[a], batch[f"y_{a}"].to(device)) for a in AXES)
-            opt.zero_grad(); loss.backward(); opt.step()
+            opt.zero_grad(); loss.backward()
+            # Clip before stepping. A single outlier batch can otherwise put a
+            # head into the flat region it never leaves, which is the collapse
+            # this run is guarding against.
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step(); sched.step()
             total += loss.item()
         print(f"[train] epoch {epoch+1}/{args.epochs}  loss {total/max(1,len(dl)):.4f}", flush=True)
+
+    # COLLAPSE CHECK, on the training split, before anything is saved.
+    #
+    # A collapsed head is indistinguishable from a weak one in the loss curve
+    # and looks like a hopeless model in the benchmark. Both the DeBERTa
+    # multi-head and the Qwen3 SLM shipped a single-class predictor before this
+    # existed. Checking here means the failure is named at training time.
+    model.eval()
+    with torch.no_grad():
+        check = DataLoader(Rows(train[:256], tok, label_maps), batch_size=args.batch)
+        seen = {a: Counter() for a in AXES}
+        for batch in check:
+            logits = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
+            for a in AXES:
+                for idx in logits[a].argmax(dim=-1).tolist():
+                    seen[a][idx] += 1
+    for a in AXES:
+        distinct = len(seen[a])
+        flag = "  COLLAPSED (predicts one class)" if distinct <= 1 else ""
+        print(f"[train] {a:16} predicts {distinct}/{sizes[a]} distinct classes{flag}")
 
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / "model.pt")
