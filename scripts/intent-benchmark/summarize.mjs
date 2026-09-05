@@ -21,6 +21,23 @@ const reports = fs.readdirSync(DIR).filter((f) => f.endsWith('.json') && !f.incl
   .map((f) => ({ f, d: JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8')) }))
   .filter((r) => r.d.axes);
 
+// A table that silently mixes corpora is worse than no table. reports/ persists
+// across runs, so this names every dataset present and says plainly when there
+// is more than one rather than ranking across them as if they were comparable.
+{
+  const datasets = [...new Set(reports.map((r) => r.d.meta?.dataset ?? 'UNSTAMPED (pre-dating the dataset stamp)'))];
+  if (datasets.length > 1) {
+    console.log('\nWARNING: these reports were scored on DIFFERENT corpora, so the ranking below is not a like-for-like comparison:');
+    for (const d of datasets) {
+      const which = reports.filter((r) => (r.d.meta?.dataset ?? 'UNSTAMPED (pre-dating the dataset stamp)') === d).map((r) => r.f.replace('.json', ''));
+      console.log(`  ${d}: ${which.join(', ')}`);
+    }
+    console.log('');
+  } else {
+    console.log(`\nall reports scored on ${datasets[0]}`);
+  }
+}
+
 const num = (v, d = 1) => (v == null ? '   -' : (v * 100).toFixed(d).padStart(5));
 const ms = (v) => (v == null ? '    -' : `${v.toFixed(1)}`.padStart(6));
 

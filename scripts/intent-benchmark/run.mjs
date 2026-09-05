@@ -287,7 +287,11 @@ const scored = scoreRun({
   rowsById: new Map(target.map((r) => [r.id, r])),
   results,
   latencies: workerMs.length ? workerMs : roundTripMs,
-  meta: { ...provider.meta(), loadMs, split: SPLIT, language: LANG, punctuated: PUNCTUATED, failed,
+  // The dataset is stamped into every report. reports/ accumulates across runs,
+  // and summarize.mjs tables whatever it finds, so without this a report scored
+  // on an older corpus sits in the same table as a new one and nothing on the
+  // page says which is which.
+  meta: { ...provider.meta(), dataset: path.basename(IN), datasetRows: rows.length, loadMs, split: SPLIT, language: LANG, punctuated: PUNCTUATED, failed,
     // Stamped so a later reader can tell whether the latency in this report is
     // trustworthy, without having to remember what else was running that day.
     machineLoad: Number(loadRatio.toFixed(2)), latencyTrustworthy: !MACHINE_BUSY },
