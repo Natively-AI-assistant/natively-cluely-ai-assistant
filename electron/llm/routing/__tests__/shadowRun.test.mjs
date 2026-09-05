@@ -15,6 +15,9 @@ const { isShadowRunEnabled, SHADOW_ENV_KEY, recordShadowDecision } = await impor
     pathToFileURL(path.join(repoRoot, 'dist-electron/electron/llm/routing/shadowRun.js')).href
 );
 const engine = fs.readFileSync(path.join(repoRoot, 'electron/IntelligenceEngine.ts'), 'utf8');
+const { scrubTelemetry } = await import(
+    pathToFileURL(path.join(repoRoot, 'dist-electron/electron/llm/piTelemetry.js')).href
+);
 
 describe('shadow logging is off by default', () => {
     test('no env means off', () => {
@@ -88,5 +91,46 @@ describe('it records the cell that decides safety', () => {
     test('and it records whether the shim agreed with the shipped label', () => {
         assert.ok(src.includes('legacy_agrees'));
         assert.ok(src.includes('shim_ambiguous'), 'an ambiguous shim result must be visible in the analysis');
+    });
+});
+
+describe('the markers actually survive the privacy scrubber', () => {
+    // The allowlist drops unknown keys OUTRIGHT. Without these entries the
+    // shadow run emits two weeks of events carrying nothing but mode and
+    // surface, and the omission surfaces only when the analysis finds no data.
+    const payload = {
+        mode: 'team-meet', surface: 'speculative', outcome: 'compared',
+        router_needs_response: 'no', router_dialogue_act: 'backchannel', router_confidence: 0.979,
+        live_was_silent: true, cell: 'agree_silent',
+        legacy_intent: 'general', legacy_confidence: 0.5, legacy_agrees: true,
+        shim_intent: 'general', shim_ambiguous: true, shim_via: 'default', elapsed_ms: 18,
+    };
+
+    for (const key of Object.keys(payload)) {
+        test(`${key} survives`, () => {
+            assert.ok(key in scrubTelemetry(payload), `${key} is dropped by the allowlist`);
+        });
+    }
+
+    test('the pre-check markers survive too', () => {
+        const out = scrubTelemetry({
+            mode: 'general', surface: 'speculative', needs_response: 'no',
+            dialogue_act: 'backchannel', confidence: 0.93, acted: true,
+        });
+        for (const k of ['needs_response', 'dialogue_act', 'confidence', 'acted']) {
+            assert.ok(k in out, `${k} is dropped`);
+        }
+    });
+
+    test('and raw content still cannot pass', () => {
+        const out = scrubTelemetry({
+            ...payload,
+            turn: 'the raw transcript line which must never be emitted',
+            history: ['[SYSTEM] something private'],
+            answer: 'the generated answer',
+        });
+        assert.ok(!('turn' in out), 'raw turn text must be dropped');
+        assert.ok(!('history' in out), 'history must be dropped');
+        assert.ok(!('answer' in out), 'the answer must be dropped');
     });
 });
