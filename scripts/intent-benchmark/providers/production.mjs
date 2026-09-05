@@ -92,8 +92,21 @@ export class ProductionProvider extends Provider {
   }
 
   async unload() {
-    // Release the MobileBERT worker and its ONNX concurrency slot.
-    try { await this.mod?.ZeroShotClassifier?.getInstance?.()?.dispose?.(); } catch { /* best effort */ }
+    // NOTHING TO DO, AND THAT IS NOT AN OVERSIGHT.
+    //
+    // `ZeroShotClassifier` is a private class with no exported teardown, so
+    // this provider cannot dispose the worker it started. An earlier version of
+    // this method optional-chained its way to `ZeroShotClassifier.getInstance()`
+    // and read as if it released the worker; that expression is `undefined` at
+    // every step and the method was a no-op wearing a cleanup comment.
+    //
+    // It is safe because the harness runs each provider in its own `node
+    // run.mjs` process, and the production code unrefs the worker, so the
+    // process exits and the OS reaps it. Verified: exit code 0 in about a
+    // second, with no `intentClassifierWorker` left behind.
+    //
+    // If this provider is ever run in-process alongside others, the stray
+    // worker WILL hold an ONNX slot and tax every latency measured after it.
   }
 
   meta() {
