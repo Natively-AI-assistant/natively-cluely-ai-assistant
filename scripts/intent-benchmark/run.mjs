@@ -160,6 +160,15 @@ async function buildProvider(id) {
     if (!cfg) throw new Error(`unknown composite ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new CompositeProvider({ id, ...cfg });
   }
+  if (id === 'production') {
+    const { ProductionProvider } = await import('./providers/production.mjs');
+    return new ProductionProvider();
+  }
+  if (id === 'majority') {
+    const { MajorityProvider } = await import('./providers/majority.mjs');
+    const trainRows = rows.filter((r) => r.split === 'train');
+    return new MajorityProvider({ trainRows });
+  }
   if (id.startsWith('hybrid-')) {
     const { HybridProvider } = await import('./providers/hybrid.mjs');
     const { RulesProvider } = await import('./providers/rules.mjs');
