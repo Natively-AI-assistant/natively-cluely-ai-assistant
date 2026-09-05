@@ -113,3 +113,43 @@ refusal. It is outside this campaign and it deserves its own investigation.
 
 Windows, on every number here. The recruiting mode, which produced no usable
 real fixture. Human judgement of any answer.
+
+## Landed, 2026-09-05
+
+The removal is in. What went: `electron/llm/IntentClassifier.ts` and its worker,
+the MobileBERT model from every manifest and download script, the asarUnpack
+entry, the poison sentinel wiring in main.ts, the Answer Shape table, and the
+`<intent_and_shape>` block in WhatToAnswerLLM. `ConversationIntent` and
+`IntentResult` survive as types in PlannerDecision.ts because three consumers
+still carry them, and `classifyIntent` survives as a function that returns
+`general`, so no call site moved.
+
+The planner now answers by default. Its old gate passed on seven of eight labels
+and its terminal tier could not produce the eighth except by heuristic, so this
+is the behaviour it already had on 98.3 percent of held out rows, made explicit.
+
+`hasQuestionSignal` is one exported definition, shared by the planner and the
+speculation gate, tuned on the train split of the router corpus and reported on
+the held out split: recall 38.0 to 51.4 percent, false positive 10.0 to 14.0
+percent. What it still misses are statements that need a response, which is the
+router's needs_response axis and not a regex's job.
+
+`checkAnswerRelevance` returns null. The enforcing arm of that guard was default
+off because validation run-032 found the classifier could not separate real
+from hallucinated answers, so nothing shipped is lost and the test that pinned
+the opt in regeneration now pins the pass through instead.
+
+One regression found and fixed on the way. PR 7's pre check awaited the router
+on every speculative turn even with the flag off, which lagged the run's
+observable state by a microtask and broke a test that reads it synchronously.
+Availability is now checked synchronously first, so a disabled router adds no
+async hop.
+
+The five other failures in the wide suite are the four known red tests recorded
+at the campaign baseline plus their parent suite, reproduced with these changes
+stashed. Wide suite otherwise: 8,679 passing.
+
+The router stays flagged off, and the shadow run remains the gate for turning it
+on. That gate was always about the router's needs_response decisions, not about
+the classifier, whose removal rests on the finding that its output was
+unreachable.

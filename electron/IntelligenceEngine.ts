@@ -9,7 +9,7 @@ import {
     AnswerLLM, AssistLLM, BrainstormLLM, ClarifyLLM, CodeHintLLM, FollowUpLLM, RecapLLM,
     FollowUpQuestionsLLM, WhatToAnswerLLM,
     prepareTranscriptForWhatToAnswer, buildTemporalContext,
-    AssistantResponse as LLMAssistantResponse, classifyIntent, planNextAssistantAction, PlannerDecision,
+    AssistantResponse as LLMAssistantResponse, classifyIntent, hasQuestionSignal, planNextAssistantAction, PlannerDecision,
     extractLatestQuestion, toCandidateFraming, planAnswer, validateAnswerStructure, isCompleteShortAnswer, detectExplicitCodingContract, detectAndExtractScaffoldMisfire, hasUnrecoveredScaffoldContamination, isScaffoldRegenerationEligible, isCodingAnswerType, isJdFactualLookupNotNegotiationAdvice, resolveFollowUp, resolveFollowUpOrClarify,
     isLiveSessionMemoryEnabled, resolveLiveFollowup, toMemoryMode, toSurface, effectiveMemoryMode,
     resolveLiveSessionMemoryConfig, piTelemetry, ageBucket,
@@ -563,9 +563,11 @@ export class IntelligenceEngine extends EventEmitter {
     // Transcript Handling (delegates to SessionTracker)
     // ============================================
 
+    // One definition, shared with the planner and tuned on the router corpus for
+    // unpunctuated STT. The private copy this replaced caught 38.0% of held-out
+    // turns that needed a response; the shared one catches 51.4%.
     private static hasQuestionSignal(text: string): boolean {
-        if (text.trimEnd().endsWith('?')) return true;
-        return /\b(what|how|why|where|when|which|who|can you|could you|tell me|explain|describe|walk me through|talk me through)\b/i.test(text);
+        return hasQuestionSignal(text);
     }
 
     // Fires speculative LLM inference on a stable high-confidence interviewer partial.
@@ -1181,7 +1183,14 @@ export class IntelligenceEngine extends EventEmitter {
         // off, the model is missing, the load was poisoned, memory is tight, or
         // the call times out.
         if (isSpeculative) {
-            const routerSkip = await this.routerSaysStaySilent(question);
+            // Availability is checked SYNCHRONOUSLY first. With the flag off, which
+            // is the shipped default, this path must add no async hop at all: a
+            // speculative run's observable state (isAnswerStreaming, activeMode)
+            // is read by callers on the same tick they start it, and an `await`
+            // here, even one that resolves to false, lagged that state by a
+            // microtask and read as "idle" while the stream was starting.
+            // `false && await x` short-circuits without awaiting.
+            const routerSkip = IntelligenceEngine.routerAvailableSync() && await this.routerSaysStaySilent(question);
             if (routerSkip) {
                 // The same state the post-generation sentinel path leaves
                 // behind. Skipping any of it would make the engine behave
@@ -1834,8 +1843,8 @@ export class IntelligenceEngine extends EventEmitter {
                 question || extractedQuestion.latestQuestion || lastInterviewerTurn,
                 preparedTranscript,
                 this.session.getAssistantResponseHistory().length
-            ).catch((): { intent: 'general'; confidence: number; answerShape: string } => (
-                { intent: 'general', confidence: 0.4, answerShape: 'Concise, direct answer to the question.' }
+            ).catch((): { intent: 'general'; confidence: number } => (
+                { intent: 'general', confidence: 0.4 }
             ));
             // Retrieval-query provenance (HDFC leak, 2026-08-18): the prefetch
             // query must be USER-originated — question, then non-assistant
@@ -6566,6 +6575,14 @@ export class IntelligenceEngine extends EventEmitter {
      * evidence, never to make a benchmark number look better.
      */
     private static readonly ROUTER_SILENCE_CONFIDENCE = 0.90;
+
+    /** Flag, poison sentinel and model presence, without touching the worker. Never throws. */
+    private static routerAvailableSync(): boolean {
+        try {
+            const { RouterModel } = require('./llm/routing/RouterModel') as typeof import('./llm/routing/RouterModel');
+            return RouterModel.getInstance().isAvailable();
+        } catch { return false; }
+    }
 
     private async routerSaysStaySilent(question?: string): Promise<boolean> {
         try {

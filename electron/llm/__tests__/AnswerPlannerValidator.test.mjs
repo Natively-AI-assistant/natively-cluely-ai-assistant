@@ -80,18 +80,6 @@ test('validateAnswerStructure repairs unstructured dsa answer', () => {
   assertCodingMarkdownContract(result.repaired ?? '');
 });
 
-test('classifyIntent prioritizes coding over generic example phrasing', async () => {
-  const prompts = [
-    'give me an example of a React component in TypeScript',
-    'can you give a concrete implementation of binary search in Python?',
-  ];
-
-  for (const prompt of prompts) {
-    const result = await classifyIntent(prompt, prompt, 0);
-    assert.equal(result.intent, 'coding', `${prompt} classified as ${result.intent}`);
-  }
-});
-
 test('planAnswer classifies required odd/even manual prompts as coding answers', () => {
   const prompts = [
     'what is the code for odd even',

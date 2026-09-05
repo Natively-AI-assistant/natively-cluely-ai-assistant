@@ -22,7 +22,7 @@ describe('the gate can never silence an explicit user action', () => {
     test('it is reachable only under isSpeculative', () => {
         const i = engine.indexOf('PR 7: INTERACTION ROUTER PRE-CHECK');
         assert.ok(i > 0, 'the gate must exist');
-        const block = engine.slice(i, i + 2400);
+        const block = engine.slice(i, engine.indexOf('if (this.assistCancellationToken) {', i));
         const guard = block.indexOf('if (isSpeculative) {');
         const call = block.indexOf('routerSaysStaySilent');
         assert.ok(guard > 0, 'the gate must be guarded by isSpeculative');
@@ -48,7 +48,7 @@ describe('the gate leaves the engine in the state the generated path would have'
     // saving. These are the five the post-generation sentinel path performs.
     const block = (() => {
         const i = engine.indexOf('PR 7: INTERACTION ROUTER PRE-CHECK');
-        return engine.slice(i, i + 2400);
+        return engine.slice(i, engine.indexOf('if (this.assistCancellationToken) {', i));
     })();
 
     for (const mutation of [

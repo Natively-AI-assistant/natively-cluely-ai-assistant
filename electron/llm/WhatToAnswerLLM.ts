@@ -312,12 +312,11 @@ ${promptInstruction.trim()}
                 : undefined;
 
             const intentContextParts = [];
-            if (intentResult) {
-                intentContextParts.push(`<intent_and_shape>
-DETECTED INTENT: ${intentResult.intent}
-ANSWER SHAPE: ${intentResult.answerShape}
-</intent_and_shape>`);
-            }
+            // <intent_and_shape> removed 2026-09-05. It only ever entered the v2/v1
+            // carriers, both discarded whenever V3 composes the turn (default ON),
+            // so the model never saw it on the live path. `intentResult` stays in
+            // the signature for callers; it is not read here.
+            void intentResult;
             if (answerPlan) {
                 intentContextParts.push(formatAnswerPlanForPrompt(answerPlan, isCodeVerificationEnabled()));
             }

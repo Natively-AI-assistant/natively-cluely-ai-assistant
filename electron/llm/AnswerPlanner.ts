@@ -1,4 +1,4 @@
-import type { IntentResult } from './IntentClassifier';
+import type { IntentResult } from './PlannerDecision';
 import type { ExtractedQuestion } from './transcriptQuestionExtractor';
 import { CODING_CONTRACT, CODING_CONTRACT_IMPL, CODING_VERIFICATION_INSTRUCTION } from './codingContract';
 import { detectAnswerStyle, type AnswerStyle } from './answerStyle';

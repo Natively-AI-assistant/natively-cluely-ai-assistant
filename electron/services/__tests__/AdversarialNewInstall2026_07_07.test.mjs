@@ -82,11 +82,11 @@ describe('preflight — adversarial coverage', () => {
     clearModule(REGISTRY_PATH);
   });
 
-  test('A1: preflight publishes ALL four packaged_local providers, not just the obvious two', async () => {
+  test('A1: preflight publishes ALL three packaged_local providers, not just the obvious two', async () => {
     const restore = stubElectron({ isPackaged: true });
     const { runLocalFallbackPreflight, ProviderStatusRegistry } = require(PREFLIGHT_PATH);
     await runLocalFallbackPreflight({ ollamaSelected: false });
-    const ids = ['local-embedding', 'intent-classifier', 'local-reranker', 'native-audio'];
+    const ids = ['local-embedding', 'local-reranker', 'native-audio'];
     for (const id of ids) {
       const status = ProviderStatusRegistry.getInstance().getStatus(id);
       assert.ok(status, `expected ${id} status to be published`);
@@ -100,7 +100,7 @@ describe('preflight — adversarial coverage', () => {
     const { runLocalFallbackPreflight, ProviderStatusRegistry } = require(PREFLIGHT_PATH);
     await runLocalFallbackPreflight({ ollamaSelected: false });
     const reg = ProviderStatusRegistry.getInstance();
-    for (const id of ['local-embedding', 'intent-classifier', 'local-reranker', 'native-audio', 'ollama']) {
+    for (const id of ['local-embedding', 'local-reranker', 'native-audio', 'ollama']) {
       const status = reg.getStatus(id);
       if (!status) continue;
       // Should NOT contain debug tokens like "function", "Object", or
@@ -158,7 +158,7 @@ describe('preflight — adversarial coverage', () => {
     const { runLocalFallbackPreflight, ProviderStatusRegistry } = require(PREFLIGHT_PATH);
     await runLocalFallbackPreflight({ ollamaSelected: false });
     const reg = ProviderStatusRegistry.getInstance();
-    for (const id of ['local-embedding', 'intent-classifier', 'local-reranker', 'native-audio']) {
+    for (const id of ['local-embedding', 'local-reranker', 'native-audio']) {
       const status = reg.getStatus(id);
       assert.ok(status);
       assert.equal(status.requiredForStartup, false, `${id} must not be required for startup`);

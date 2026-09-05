@@ -1,4 +1,12 @@
-# What the shadow run must show before PR 11, 2026-09-05
+# What the shadow run must show before the ROUTER flag flips, 2026-09-05
+
+Updated 2026-09-05. The classifier removal that this document originally gated
+has landed on different evidence: on the default V3 path the classifier's output
+never reached a dispatched prompt, measured on the real engine. Nothing this
+gate protects was implicated. What the gate still governs is the router's
+needs_response decision on the speculative path, which is the one behaviour
+change that can take an answer away from the user. The text below is unchanged
+except for this note.
 
 PR 11 removes MobileBERT and the legacy Answer Shape table. It is prepared on a
 branch and deliberately not merged. This is the gate it has to clear, written

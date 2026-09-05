@@ -10048,8 +10048,8 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('onnx-reset-family', async (_: any, family: 'whisper' | 'intent' | 'embeddings' | 'reranker') => {
     try {
       if (family === 'intent') {
-        const { clearIntentClassifierPoison } = require('./llm/IntentClassifier');
-        clearIntentClassifierPoison();
+        // No model in this family since 2026-09-05 (MobileBERT classifier removed);
+        // kept so an older renderer sending 'intent' gets success, not an error.
         return { success: true };
       }
       if (family === 'embeddings') {
