@@ -101,6 +101,33 @@ export const CATEGORY_PROFILES = {
  */
 export const MIN_SAMPLE_FOR_RATES = 8;
 
+/**
+ * Split a batch into the rows that are individually malformed and the rest.
+ *
+ * Punctuation and capitals are per-ROW properties with an unambiguous right
+ * answer: the local STT models emit neither, so a row carrying them is simply
+ * not a transcript. Expressing that as a batch RATE made the gate harsher the
+ * smaller the batch. At a ceiling of 2 percent, one offending row is 4.17
+ * percent at n=24 and 12.5 percent at n=8, so a single bad row discarded every
+ * good row beside it, while the same row inside a batch of 50 passed. Measured
+ * on one expansion run, that was the single largest cause of lost `ambiguous`
+ * cells.
+ *
+ * So the malformed rows are dropped and the batch keeps going. The rate checks
+ * that remain are genuine distribution properties, where a rate is the right
+ * shape and a small sample is a real reason not to judge.
+ */
+export function partitionMalformed(inputs) {
+  const keep = [];
+  const drop = [];
+  inputs.forEach((input, index) => {
+    const a = analyzeInput(input);
+    if (a.hasPunctuation || a.hasUppercase) drop.push({ index, input, reason: a.hasPunctuation ? 'punctuation' : 'uppercase' });
+    else keep.push({ index, input });
+  });
+  return { keep, drop };
+}
+
 export function analyzeBatch(inputs, {
   category = null,
   maxPunctuationRate = 0.02,

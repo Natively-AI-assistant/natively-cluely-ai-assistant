@@ -23,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_SPECS, MODE_SPECS, CUSTOM_MODE_KEYS } from './lib/modeSpecs.mjs';
 import { buildGenerationPrompt, CATEGORY_BRIEFS, REQUIRED_TRAPS, isPromptExample } from './lib/prompts.mjs';
-import { analyzeBatch, redundantTrapPairs, formatBatchReport } from './lib/sttRealism.mjs';
+import { analyzeBatch, redundantTrapPairs, formatBatchReport, partitionMalformed } from './lib/sttRealism.mjs';
 import { codeSwitches } from './lib/codeSwitch.mjs';
 import { validateRow, splitFor, AXES, CAPABILITIES, LEGACY_INTENTS, parseJsonl, dedupeKey } from './lib/schema.mjs';
 import { generateJson, readApiKey } from './lib/gemini.mjs';
@@ -140,6 +140,24 @@ async function generateCell({ modeKey, spec, category, count, withFiles, seq }) 
     const { data } = await generateJson({ prompt: p, responseSchema: ROW_SCHEMA, model: MODEL, temperature: 1.0 });
     const raw = Array.isArray(data?.rows) ? data.rows : [];
     if (raw.length === 0) { lastReport = { problems: ['model returned no rows'] }; continue; }
+
+    // Per-ROW defects drop the row; DISTRIBUTION defects reject the cell. A
+    // single punctuated row used to discard the twenty-three good rows beside
+    // it, because the ceiling was a rate and one row exceeds it at every batch
+    // size we run. If most of the batch is malformed the generation really is
+    // prose and the cell is rejected on that instead.
+    const { keep, drop } = partitionMalformed(raw.map((r) => r.input));
+    const malformedShare = raw.length > 0 ? drop.length / raw.length : 0;
+    if (drop.length > 0) {
+      console.log(`    dropped ${drop.length}/${raw.length} malformed rows (${[...new Set(drop.map((d) => d.reason))].join(', ')})`);
+    }
+    if (malformedShare > 0.25) {
+      lastReport = { problems: [`${(malformedShare * 100).toFixed(1)}% of rows carry punctuation or capitals — the generation is prose, not transcript`] };
+      continue;
+    }
+    const kept = keep.map((k) => raw[k.index]);
+    if (kept.length === 0) { lastReport = { problems: ['every row was malformed'] }; continue; }
+    raw.length = 0; raw.push(...kept);
 
     const report = analyzeBatch(raw.map((r) => r.input), { category });
     if (category === 'trap') {
