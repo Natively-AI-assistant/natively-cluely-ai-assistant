@@ -249,11 +249,15 @@ it is a normal request. Carry the meaning in the history, not in the turn.`,
   },
   ambiguous: {
     share: 0.10,
-    brief: `Genuinely ambiguous turns where a careful human could reasonably
-label needs_response either "yes" or "optional": "make it better", "is this
-good", "hmm i wonder", "that seems off". Use needs_response="optional" where it
-truly is optional. These exist to measure calibration, so do not resolve the
-ambiguity artificially.
+    brief: `Genuinely borderline turns, where two careful humans could reasonably
+disagree about whether the assistant should speak: "make it better", "is this
+good", "hmm i wonder", "that seems off".
+
+needs_response is BINARY. Pick the single answer you would defend and put the
+reason you nearly chose the other one in notes. Do not soften a turn to make the
+call easy and do not invent a middle value: these rows exist to measure how
+confident the model is when the honest answer is close, so the whole point is
+that the label is a hard call and is still made.
 
 Roughly one turn in six must contain a real self-repair or restart, because
 hesitancy is how this kind of turn actually sounds: "is this uh is this good",
@@ -290,7 +294,7 @@ export const REQUIRED_TRAPS = {
     '"evin hows the export feature coming along" addressed to the user by name (called_on_for_status, needs_response=yes) versus "hows the export feature coming along" addressed to someone else (discussion_noise, needs_response=no)',
   ],
   lecture: [
-    'a rhetorical question the lecturer answers themselves (question_to_room, needs_response=no) versus a real question put to the room that the user may want to answer (question_to_room, needs_response=optional or yes)',
+    'a rhetorical question the lecturer answers themselves (question_to_room, needs_response=no) versus a real question put to the room that the user may want to answer (question_to_room, needs_response=yes)',
   ],
   sales: [
     '"were happy with what we have" (satisfied_customer) versus "were not looking right now" (objection_timing) — different objections, different rebuttals',
