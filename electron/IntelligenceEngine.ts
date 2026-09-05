@@ -1969,6 +1969,16 @@ export class IntelligenceEngine extends EventEmitter {
             if (_wtaTurnSourceDecision) {
                 wtaDecisionAllowsCandidateProfile = _wtaTurnSourceDecision.outcome === 'default'
                     || _wtaTurnSourceDecision.outcome === 'explicit_granted';
+                // An EMPTY allowed list grants nothing (2026-09-05). This gate used
+                // to narrow only when the list was non-empty, so a `default`
+                // decision that granted no evidence at all still let the résumé
+                // orchestrator run. Nothing to read made it a no-op, but the
+                // manual-chat twin (_contractAllowsProfile in ipcHandlers.ts) asks
+                // the contract per kind and would say no here; the two paths now
+                // agree. Never-retrieve means never, not "unless the list is empty".
+                if (_wtaTurnSourceDecision.allowedEvidenceKinds.length === 0) {
+                    wtaDecisionAllowsCandidateProfile = false;
+                }
                 if (_wtaTurnSourceDecision.allowedEvidenceKinds.length > 0) {
                     // Grounding-campaign fix (2026-07-16): this check previously
                     // omitted 'profile_jd', so a JD-only-granted turn (e.g.
@@ -2907,7 +2917,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // the manual-chat path (ipcHandlers.ts, same short-circuit
                     // pattern) for the full rationale.
                     const clarify = wtaOwnershipDecision?.shouldClarifyInsteadOfProfile
-                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(wtaOwnershipDecision.owner)
+                        // Name the source the user actually asked for, and do not claim
+                        // "uploaded material" when none is attached (2026-09-05). The
+                        // phone-mirror path already did both.
+                        ? require('./llm/sourceOwnership').buildSourceSwitchClarification(
+                            wtaOwnershipDecision.owner,
+                            wtaOwnershipDecision.requestedSource ?? null,
+                            { hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles) },
+                        )
                         : buildSourceClarification({
                             hasReferenceFiles: Boolean((snapshotModeInfo as any)?.hasReferenceFiles),
                             hasProfileFacts: Boolean((this.llmHelper.getKnowledgeOrchestrator?.() as any)?.activeResume?.structured_data),

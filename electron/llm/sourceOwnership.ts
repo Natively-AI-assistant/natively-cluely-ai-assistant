@@ -45,6 +45,14 @@ export interface SourceOwnershipDecision {
   owner: SourceOwner;
   /** May the deterministic profile fast-path / profile evidence run this turn? */
   profileAllowed: boolean;
+  /**
+   * The source the user explicitly named, when any. Carried so the clarification
+   * can name the source actually asked for. Before this the WTA and manual-chat
+   * paths called buildSourceSwitchClarification(owner) with no source, so a
+   * user asking about the JOB DESCRIPTION was told "I'm not pulling from your
+   * RÉSUMÉ" (the default label). The phone-mirror path already passed it.
+   */
+  requestedSource?: 'reference_files' | 'profile' | 'job_description' | 'transcript' | null;
   /** Did the user explicitly claim ownership ("my resume / my project / from my …")? */
   explicitProfileAsk: boolean;
   /**
@@ -141,6 +149,7 @@ export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): Sour
       owner,
       profileAllowed,
       explicitProfileAsk,
+      requestedSource: d.explicitRequest ?? d.explicitRequests?.[0] ?? null,
       shouldClarifyInsteadOfProfile:
         d.outcome === 'explicit_denied' || d.outcome === 'source_unavailable',
       reason: `turn_source_decision:${d.reasonCode}`,
@@ -161,6 +170,7 @@ export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): Sour
         owner: 'reference_files',
         profileAllowed: false,
         explicitProfileAsk,
+        requestedSource: explicitProfileAsk ? 'profile' : null,
         shouldClarifyInsteadOfProfile: explicitProfileAsk,
         reason: explicitProfileAsk
           ? `${authority}:explicit_profile_ask_clarify`
@@ -177,6 +187,7 @@ export function resolveSourceOwnership(input: ResolveSourceOwnershipInput): Sour
         owner: explicitProfileAsk && hasProfileFacts ? 'profile' : 'reference_files',
         profileAllowed: explicitProfileAsk && hasProfileFacts,
         explicitProfileAsk,
+        requestedSource: explicitProfileAsk ? 'profile' : null,
         shouldClarifyInsteadOfProfile: explicitProfileAsk && !hasProfileFacts,
         reason: explicitProfileAsk
           ? (hasProfileFacts ? `${authority}:explicit_profile_switch_granted` : `${authority}:explicit_profile_ask_no_facts_clarify`)
@@ -259,8 +270,17 @@ const requestedSourceLabel = (
 export function buildSourceSwitchClarification(
   owner: SourceOwner,
   requestedSource?: 'reference_files' | 'profile' | 'job_description' | 'transcript' | null,
+  opts?: { hasReferenceFiles?: boolean },
 ): string {
   const label = requestedSourceLabel(requestedSource);
+  // "This mode only answers from your uploaded material" is true of a
+  // reference-bound mode WITH files. Said by General with nothing attached it
+  // is false twice: General is not reference-only, and there is no material.
+  // When the caller knows no files are attached, say what is actually true:
+  // the source the user named is not enabled for this mode.
+  if (opts?.hasReferenceFiles === false && (owner === 'reference_files' || owner === 'unknown')) {
+    return `This mode doesn't have your ${label} enabled as a source, so I'm not pulling from it here. Switch to a mode that enables that source and I'll use it.`;
+  }
   if (owner === 'transcript') {
     return `This mode answers from the current conversation, not your ${label}. Switch to a mode that enables that source and I'll use it.`;
   }
