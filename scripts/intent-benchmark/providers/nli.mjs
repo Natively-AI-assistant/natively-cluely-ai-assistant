@@ -50,12 +50,10 @@ export const LEGACY_THRESHOLD = 0.35;
 export const AXIS_HYPOTHESES = {
   needs_response: {
     'a turn that the assistant should respond to': 'yes',
-    'a turn where a response is optional': 'optional',
     'background talk that needs no response at all': 'no',
   },
   dialogue_act: {
-    'a question': 'question',
-    'a request or instruction': 'request',
+    'a question or a request for something': 'ask',
     'a statement of fact or opinion': 'statement',
     'an answer to an earlier question': 'answer',
     'a brief acknowledgement like mhm or right': 'backchannel',

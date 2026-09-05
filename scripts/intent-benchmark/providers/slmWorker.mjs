@@ -24,8 +24,8 @@ let llama = null;
 let sequence = null;
 
 const AXES = {
-  needs_response: ['yes', 'optional', 'no'],
-  dialogue_act: ['question', 'request', 'statement', 'answer', 'backchannel', 'interruption'],
+  needs_response: ['yes', 'no'],
+  dialogue_act: ['ask', 'statement', 'answer', 'backchannel', 'interruption'],
   task: ['answer', 'explain', 'create', 'debug', 'summarize', 'compare', 'rewrite', 'plan', 'research', 'extract', 'none'],
   answer_form: ['code', 'fact', 'explanation', 'example', 'recommendation', 'summary', 'rebuttal', 'steps', 'table', 'none'],
   grounding: ['profile', 'mode_files', 'knowledge_base', 'conversation_memory', 'none'],
@@ -83,7 +83,6 @@ needs_response — describe BOTH directions, because the answer is genuinely
   "no"   backchannels ("mhm", "right"), the other party thinking aloud, two
          other people talking to each other, admin chatter, and the user's OWN
          speech on their own mic.
-  "optional" the user could reasonably reply or stay quiet.
 
 dialogue_act — what the turn IS: question, request, statement, answer,
   backchannel, interruption.

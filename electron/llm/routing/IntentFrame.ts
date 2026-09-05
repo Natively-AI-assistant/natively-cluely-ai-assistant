@@ -20,10 +20,20 @@
 //
 // `domain` is deliberately absent. The active mode carries it.
 
-/** What the speaker DID. Independent of whether anyone should reply. */
+/**
+ * What the speaker DID. Independent of whether anyone should reply.
+ *
+ * `ask` covers both questions and requests, which were separate values until
+ * the Phase 5 error analysis showed the distinction was unlearnable: 27 of 54
+ * overlapping-label failures on this axis were that one pair. "whats the status
+ * on the q three report" is a question in grammatical form and a request in
+ * conversational function, and nothing downstream treated the two differently.
+ * The merged value is named `ask` rather than keeping either original, because
+ * calling a direct instruction a question, or "how does this work" a request,
+ * would each be wrong half the time.
+ */
 export type DialogueAct =
-    | 'question'
-    | 'request'
+    | 'ask'
     | 'statement'
     | 'answer'
     | 'backchannel'
@@ -37,14 +47,16 @@ export type DialogueAct =
  * a fallthrough answer type, meaning the system had already concluded it could
  * not identify the turn and then spent a full cloud generation confirming it.
  *
- * OPEN TAXONOMY QUESTION, evidence in docs/natively-router-benchmark-2026-09.md:
- * nine of eleven overlapping-label failures on this axis are `optional` against
- * `yes`. If a human labeller and a model both fail to separate them, `optional`
- * is not carrying information and this should probably be binary. Left as three
- * values because the brief specifies three and changing a taxonomy is a product
- * decision, not a benchmark one.
+ * BINARY, deliberately. There was an `optional` value until the Phase 5 error
+ * analysis showed nine of eleven overlapping-label failures on this axis were
+ * `optional` against `yes`. Inspecting those rows showed what `optional` had
+ * actually become: 70% arrived on the microphone channel and 80% were
+ * statements, which is the user thinking aloud mid-sentence rather than a turn
+ * that could go either way. A middle category that neither a human nor a model
+ * separates reliably is not carrying information, and this is the axis where
+ * that costs the most.
  */
-export type NeedsResponse = 'yes' | 'optional' | 'no';
+export type NeedsResponse = 'yes' | 'no';
 
 /**
  * Who speaks the output.
