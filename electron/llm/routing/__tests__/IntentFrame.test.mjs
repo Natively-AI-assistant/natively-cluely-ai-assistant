@@ -15,7 +15,7 @@ const repoRoot = path.resolve(__dirname, '../../../..');
 
 const {
   MODE_ROUTING, MODE_INTENT_LABELS, PROVISIONAL_MODE_INTENTS,
-  routingConfigFor, deriveVoice, groundingIsLegal,
+  routingConfigFor, deriveVoice, groundingIsLegal, assembleIntentFrame, AXIS_OWNER,
 } = await import(pathToFileURL(path.join(repoRoot, 'dist-electron/electron/llm/routing/IntentFrame.js')).href);
 
 // The benchmark's own derivation, which labels the corpus. If these two
@@ -121,5 +121,72 @@ describe('grounding legality', () => {
       assert.equal(groundingIsLegal(g, false), true, g);
       assert.equal(groundingIsLegal(g, true), true, g);
     }
+  });
+});
+
+describe('assembling a frame from router + V3', () => {
+  const pred = (needs_response, dialogue_act = 'ask') => ({
+    needs_response, dialogue_act,
+    confidence: { needs_response: 0.9 }, alternatives: {}, provenance: 'primary',
+  });
+
+  test('the router owns only the two axes V3 does not model', () => {
+    // The correction this split exists for: V3 already decides grounding,
+    // retrieval and most of task, deterministically and in production. A router
+    // that re-decided them would be a second opinion on settled questions.
+    const owners = Object.entries(AXIS_OWNER);
+    assert.deepEqual(owners.filter(([, o]) => o === 'router').map(([a]) => a).sort(),
+      ['dialogue_act', 'needs_response']);
+    assert.equal(AXIS_OWNER.voice, 'derived');
+    for (const a of ['task', 'mode_intent', 'answer_form', 'grounding', 'capabilities']) {
+      assert.equal(AXIS_OWNER[a], 'v3', a);
+    }
+  });
+
+  test('V3 values pass through untouched when it owned the turn', () => {
+    const f = assembleIntentFrame(pred('yes'), {
+      task: 'debug', mode_intent: 'dsa_problem', answer_form: 'code',
+      grounding: 'mode_files', capabilities: ['files'], current_information: false,
+    }, 'technical-interview');
+    assert.equal(f.task, 'debug');
+    assert.equal(f.grounding, 'mode_files');
+    assert.equal(f.answer_form, 'code');
+    assert.deepEqual(f.capabilities, ['files']);
+  });
+
+  test('a silent turn collapses every answer-shaped field', () => {
+    // The invariant the hand check found missing from the corpus, where it
+    // surfaced as 10.3% disagreement on answer_form. Written here so the router
+    // cannot reintroduce it even if V3 hands over values.
+    const f = assembleIntentFrame(pred('no', 'backchannel'), {
+      task: 'debug', mode_intent: 'discussion_noise', answer_form: 'code',
+      grounding: 'mode_files', capabilities: ['files'], current_information: true,
+    }, 'team-meet');
+    assert.equal(f.voice, 'silent');
+    assert.equal(f.task, 'none');
+    assert.equal(f.answer_form, 'none');
+    assert.equal(f.grounding, 'none');
+    assert.deepEqual(f.capabilities, []);
+    assert.equal(f.current_information, false);
+    assert.deepEqual(f.secondary_tasks, []);
+  });
+
+  test('V3 returning null yields an honest empty frame, not invented values', () => {
+    // The proactive case, which is most of live audio: V3 declines the turn.
+    const f = assembleIntentFrame(pred('yes'), null, 'general');
+    assert.equal(f.task, 'none');
+    assert.equal(f.grounding, 'none');
+    assert.equal(f.mode_intent, 'unknown');
+    assert.equal(f.needs_response, 'yes', 'the router still decided its own axis');
+  });
+
+  test('voice is derived, never taken from the router or V3', () => {
+    const capture = assembleIntentFrame(pred('yes'), { mode_intent: 'action_item' }, 'team-meet');
+    assert.equal(capture.voice, 'capture');
+    const spoken = assembleIntentFrame(pred('yes'), { mode_intent: 'called_on_for_status' }, 'team-meet');
+    assert.equal(spoken.voice, 'first_person_script');
+    // Recruiting can never put the candidate's words in the interviewer's mouth.
+    const rec = assembleIntentFrame(pred('yes'), { mode_intent: 'red_flag' }, 'recruiting');
+    assert.equal(rec.voice, 'advisor');
   });
 });
