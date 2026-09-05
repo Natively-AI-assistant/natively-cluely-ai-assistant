@@ -32,6 +32,7 @@ import {
   VisionProviderConfig,
   VisionMode,
   VisionFailureReason,
+  VisionRungHealth,
 } from './VisionProviderFallbackChain';
 import { getImageOptimizer, ImageOptimizer } from './ImageOptimizer';
 import { buildVisionProviders, VisionProviderBuildInputs } from './VisionProviderRegistry';
@@ -136,6 +137,17 @@ export class ScreenUnderstandingService {
   private optimizer: ImageOptimizer;
   private lastResult: ScreenUnderstandingResult | null = null;
   private readonly STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  /**
+   * Per-rung failure memory, held on the singleton so it survives across turns
+   * (the chain itself is a pure function called once per screenshot).
+   *
+   * This is what stops a dead rung from charging the user its share of the
+   * pre-pass budget on every single press. Note the boundary: it helps from the
+   * SECOND failing turn onward — the first turn after an app start, or after a
+   * cooldown lapses, still pays. That is deliberate; a provider that recovers
+   * has to be allowed to prove it.
+   */
+  private readonly rungHealth = new Map<string, VisionRungHealth>();
 
   constructor(optimizer?: ImageOptimizer) {
     this.imageHashService = new ImageHashService();
@@ -274,6 +286,7 @@ export class ScreenUnderstandingService {
       // screen context" is the cheaper outcome, and the healthy case (a cloud
       // vision rung returning in 2-4s) never reaches this ceiling.
       totalDeadlineMs: SCREEN_UNDERSTANDING_TOTAL_BUDGET_MS,
+      health: this.rungHealth,
     });
 
     // The chain's attempt ledger is otherwise WRITE-ONLY: runVisionFallback
