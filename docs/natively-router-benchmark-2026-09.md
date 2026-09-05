@@ -25,6 +25,7 @@ Macro F1 percent on the held-out English split. p95 measured inside the worker o
 | gliclass-small | 31.0 | 6.7 | 12.4 | 8.3 | 17.8 | 125ms | 7 |
 | gliclass-base | 29.2 | 9.3 | 3.7 | 3.3 | 3.4 | 465ms | 7 |
 | nli-mobilebert (frame) | 23.5 | 20.1 | 6.9 | 8.6 | 13.1 | 508ms | 50 |
+| slm-qwen3-0.6b (GGUF) | 20.9 | 4.1 | untested | untested | untested | 939ms | 1 |
 | head-deberta | 19.8 | 2.2 | untested | untested | untested | 34ms | 1 |
 
 Legacy eight-label taxonomy, which is the only axis the shipped system attempts:
@@ -135,6 +136,20 @@ The specific collisions, counted:
 Half of all overlaps are one pair. "whats the status on the q three report" is a question in grammatical form and a request in conversational function, and the six-value enum forces a choice between them that carries no information. `answer` against `statement` is the same problem in a different place: an answer is a statement, and the distinction is about what preceded it rather than about the turn itself.
 
 On `needs_response` the overlap is smaller but has the same shape. Nine of eleven overlaps are `optional` against `yes`, which says the middle category is not cleanly separable from the positive one.
+
+## The local SLM does not do this task zero-shot
+
+Qwen3-0.6B, GGUF, grammar-constrained JSON so an out-of-vocabulary label is impossible rather than merely unlikely. Measured at p95 939ms, which is six times the escalation budget the brief allows and sixty-six times the leading encoder.
+
+The accuracy result is more interesting than the latency one, and it took two runs to see. The first prompt produced `no` for all 377 rows. That looked like a hopeless model, but the same run showed real variety on `dialogue_act`, which proved the model was working and the prompt was not: it described when to answer `no` and never described when to answer `yes`.
+
+The corrected prompt described both directions. It then produced `yes` for 376 of 377 rows.
+
+Two prompts, two collapses in opposite directions, each following whichever class the prompt emphasised. That is not a tuning problem to be solved with a third prompt. It says the model is not performing the discrimination at all on this axis, and is instead reproducing the prompt's emphasis. A 0.6B is being asked to hold a three-way judgement about conversational pragmatics over noisy speech-to-text, and it is answering a different, easier question.
+
+The number reported here is therefore a lower bound in a specific sense: more prompt work would move it, and there is no evidence that any amount of prompt work would make it discriminate rather than follow. The honest conclusion is that the zero-shot local SLM is ruled out on latency regardless, and that its accuracy failure is a capability limit rather than a prompting one.
+
+The brief's answer to that would be the LoRA fine-tune, listed as the accuracy ceiling for escalation. That row was not built, because the escalation role it would fill has itself been ruled out on p95 grounds.
 
 ## Acceptance bar
 
