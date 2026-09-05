@@ -166,7 +166,9 @@ async function buildProvider(id) {
   }
   if (id === 'majority') {
     const { MajorityProvider } = await import('./providers/majority.mjs');
-    const trainRows = rows.filter((r) => r.split === 'train');
+    // English only, matching every other fitted provider. A floor fitted on a
+    // different population than the models it is the floor FOR is not a floor.
+    const trainRows = rows.filter((r) => r.split === 'train' && (r.language ?? 'en') === 'en');
     return new MajorityProvider({ trainRows });
   }
   if (id.startsWith('hybrid-')) {
