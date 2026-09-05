@@ -57,3 +57,25 @@ describe('every executable script parses', () => {
     });
   }
 });
+
+describe('prompts agree with the taxonomy', () => {
+    // The `ambiguous` brief went on asking for needs_response="optional" after
+    // the taxonomy collapsed optional into no. validateRow rejects that value,
+    // so the whole calibration category would have been generated and then
+    // dropped as schema-invalid, an hour downstream and without a word. A brief
+    // that names a label value the schema does not accept is a silent data loss.
+    test('no brief asks for a needs_response value outside the schema', async () => {
+        const { CATEGORY_BRIEFS, REQUIRED_TRAPS } = await import('../lib/prompts.mjs');
+        const { AXES } = await import('../lib/schema.mjs');
+        const allowed = new Set(AXES.needs_response);
+
+        const text = [
+            ...Object.values(CATEGORY_BRIEFS).map((b) => b.brief),
+            ...Object.values(REQUIRED_TRAPS).flat(),
+        ].join('\n');
+
+        const asked = [...text.matchAll(/needs_response\s*=\s*"?([a-z_]+)"?/g)].map((m) => m[1]);
+        const bad = [...new Set(asked)].filter((v) => !allowed.has(v));
+        assert.deepEqual(bad, [], `briefs ask for needs_response values the schema rejects: ${bad.join(', ')}`);
+    });
+});
