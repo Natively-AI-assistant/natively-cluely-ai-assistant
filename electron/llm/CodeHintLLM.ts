@@ -10,11 +10,24 @@ export class CodeHintLLM {
         this.llmHelper = llmHelper;
     }
 
+    /**
+     * @param v3 A Context-Intelligence-V3 composed prompt, when the engine
+     *   resolved one for this turn. Same shape and same substitution rule as
+     *   AssistLLM, ClarifyLLM and BrainstormLLM.
+     *
+     *   This surface was in the V3 bridge's stated scope from the start — its
+     *   header names "assist, clarify, brainstorm, code-hint and manual answer"
+     *   — and was the one of the five never wired. So a coding question asked
+     *   in a mode holding, say, a company coding-standards document got no
+     *   source authority and no governed retrieval, while the same question
+     *   asked through assist did.
+     */
     async *generateStream(
         imagePaths?: string[],
         questionContext?: string,
         questionSource?: 'screenshot' | 'transcript' | null,
-        transcriptContext?: string
+        transcriptContext?: string,
+        v3?: { system: string; user: string }
     ): AsyncGenerator<string> {
         try {
             // Vision-required + small model lacking image support → fail loud, not malformed.
@@ -39,15 +52,29 @@ export class CodeHintLLM {
                 transcriptContext ?? null
             );
 
-            const promptOverride = resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
+            const promptOverride = v3?.system
+                ?? resolveV2SystemPrompt({ action: 'code_hint', tier: v2TierForPromptTier(this.llmHelper.getPromptTier()) })
                 ?? (this.llmHelper.getPromptTier() === 'tiny' ? TINY_CODE_HINT_PROMPT : CODE_HINT_PROMPT);
-            const fittedMessage = this.llmHelper.fitContextForCurrentModel(message);
+            // V3 composed the turn content too, evidence and all, so it must not
+            // be re-fitted: fitContextForCurrentModel would truncate a governed
+            // evidence block from the middle and leave a citation pointing at
+            // text no longer present.
+            const fittedMessage = v3?.user ?? this.llmHelper.fitContextForCurrentModel(message);
 
             yield* this.llmHelper.streamChat(
                 fittedMessage,
                 imagePaths,
                 undefined,
-                promptOverride
+                promptOverride,
+                // Both flags are FALSE without v3, which is exactly what the four
+                // positional arguments defaulted to before, so the legacy path is
+                // byte-for-byte unchanged.
+                Boolean(v3),   // ignoreKnowledgeMode — a V3-owned prompt must not be re-classified
+                Boolean(v3),   // skipModeInjection — V3's prompt already carries the mode contract
+                [],
+                undefined,
+                undefined,
+                v3 ? { v3Owned: true } : undefined
             );
         } catch (error) {
             console.error("[CodeHintLLM] Stream failed:", error);

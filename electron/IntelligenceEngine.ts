@@ -5654,14 +5654,32 @@ export class IntelligenceEngine extends EventEmitter {
      * its legacy behaviour — proactivity is the product feature, and degrading it
      * into no-evidence disclosures would be adoption theatre.
      */
-    private async buildV3ForTranscriptSurface(tag: 'assist' | 'clarify' | 'brainstorm' = 'assist'): Promise<{ system: string; user: string } | null> {
+    private async buildV3ForTranscriptSurface(
+        tag: 'assist' | 'clarify' | 'brainstorm' | 'code-hint' = 'assist',
+        /**
+         * A question the caller already has, which beats resolving one out of
+         * speech. Code hint is the case: the problem statement comes off a
+         * screenshot or a pinned coding question, so running the transcript
+         * resolver would either find nothing or find a DIFFERENT question that
+         * happens to be more recent than the problem being worked on.
+         *
+         * `surface` selects the AnswerSurface member; the type has no
+         * `code-hint`, and `screenshot` is what that turn actually is.
+         */
+        pinned?: { question: string; surface?: 'assist' | 'screenshot'; source?: 'screenshot' | 'transcript' | 'manual' },
+    ): Promise<{ system: string; user: string } | null> {
         try {
             const { isContextIntelligenceV3Enabled } = require('./context-intelligence/contracts/flag');
             if (!isContextIntelligenceV3Enabled()) return null;
             const segs: any[] = (this.session as any)?.getContext?.(120) ?? [];
-            if (!segs.length) return null;
+            // A pinned question stands on its own. Requiring a transcript here
+            // would silently disable V3 for a screenshot-only code hint, which
+            // is the most common way that surface is used.
+            if (!segs.length && !pinned?.question) return null;
             const { resolveQuestion } = require('./context-intelligence/question/question-resolver');
-            const resolved = resolveQuestion({
+            const resolved = pinned?.question
+                ? { resolvedQuestion: pinned.question, requiresClarification: false, confidence: 1 }
+                : resolveQuestion({
                 // getContext() returns ContextItem, whose field is `role`
                 // ('interviewer' | 'user' | 'assistant') — there is no `speaker`
                 // here. The previous mapping read `t.speaker` (always undefined)
@@ -5680,7 +5698,7 @@ export class IntelligenceEngine extends EventEmitter {
             if (!ctx) return null;
             const { buildV3Prompt } = require('./context-intelligence/orchestration/engine-bridge');
             const _v3 = await buildV3Prompt({
-                surface: 'assist',
+                surface: pinned?.surface ?? 'assist',
                 // See the what-to-answer call site: the rollback must reach
                 // every surface, not just typed chat.
                 multiTurnHistory: isIntelligenceFlagEnabled('chatHistoryMultiTurn'),
@@ -5703,7 +5721,10 @@ export class IntelligenceEngine extends EventEmitter {
                 // manual/1.0. The resolver's own confidence is already gated at
                 // >= 0.6 above; pass the real value through rather than
                 // discarding it at the boundary.
-                questionSource: 'transcript',
+                // A pinned question did not come out of speech, so it must not
+                // be stamped 'transcript' — the provenance drives how much the
+                // policy layer trusts it.
+                questionSource: pinned?.source ?? 'transcript',
                 questionConfidence: resolved.confidence,
                 conversationSummary: ctx.conversationWindow(60),
                 retrieval: ctx.port as any,
@@ -6280,11 +6301,23 @@ export class IntelligenceEngine extends EventEmitter {
 
             const generationId = ++this.currentGenerationId;
             let fullHint = "";
+            // V3 for code hint. The bridge named this surface in its own scope
+            // from the start and it was the one of five never connected, so a
+            // coding question in a mode holding reference files got no source
+            // authority while the same question through assist did.
+            //
+            // The pinned question is preferred over transcript resolution: the
+            // problem statement is what the user is actually working on, and the
+            // most recent spoken question may be about something else entirely.
+            const codeHintV3 = await this.buildV3ForTranscriptSurface('code-hint', questionContext
+                ? { question: questionContext, surface: 'screenshot', source: questionSource === 'transcript' ? 'transcript' : 'screenshot' }
+                : undefined);
             const stream = this.codeHintLLM.generateStream(
                 imagePaths,
                 questionContext ?? undefined,
                 questionSource,
-                transcriptContext ?? undefined
+                transcriptContext ?? undefined,
+                codeHintV3 ?? undefined
             );
 
             let streamAborted = false;
