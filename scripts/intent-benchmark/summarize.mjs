@@ -43,15 +43,16 @@ const ms = (v) => (v == null ? '    -' : `${v.toFixed(1)}`.padStart(6));
 
 reports.sort((a, b) => (b.d.axes.needs_response?.macroF1 ?? -1) - (a.d.axes.needs_response?.macroF1 ?? -1));
 
-console.log('\nRanked by needs_response macro F1 (bar: 85.0)   n = held-out rows\n');
-console.log('provider                      n   needs_resp  dialogue  task   answer  ground  mode_int   p95ms  passes/row');
-console.log('─'.repeat(112));
+console.log('\nRanked by needs_response macro F1   n = held-out rows');
+console.log('The bar is the SHIPPED classifier (provider `production`), with `majority` as the floor.\n');
+console.log('provider                      n   needs_resp  dialogue  legacy   task   answer  ground  mode_int   p95ms  passes/row');
+console.log('─'.repeat(124));
 for (const { d } of reports) {
   const a = d.axes;
   const passes = d.meta?.forwardPassesPerRow ?? (d.meta?.forwardPassesTotal && d.n ? Math.round(d.meta.forwardPassesTotal / d.n) : null);
   console.log(
     `${d.providerId.padEnd(26)} ${String(d.n).padStart(4)}  ` +
-    `${num(a.needs_response?.macroF1)}      ${num(a.dialogue_act?.macroF1)}   ${num(a.task?.macroF1)}  ` +
+    `${num(a.needs_response?.macroF1)}      ${num(a.dialogue_act?.macroF1)}   ${num(d.legacy?.macroF1)}  ${num(a.task?.macroF1)}  ` +
     `${num(a.answer_form?.macroF1)}   ${num(a.grounding?.macroF1)}   ${num(a.mode_intent?.macroF1)}   ` +
     `${ms(d.latency?.p95)}  ${String(passes ?? '-').padStart(6)}` +
     (attempts(d) ? '' : '   [legacy-only: does not attempt the frame axes]') +
@@ -67,6 +68,14 @@ function attempts(d) {
 console.log('\nnotes');
 console.log('  All figures are macro F1 percent on the English held-out split, which no');
 console.log('  candidate trained on or built prototypes from.');
+console.log('  `legacy` is the 8-label intent the SHIPPED classifier produces, and it is the');
+console.log('  only axis on which the shipped classifier and a candidate can be compared');
+console.log('  head to head. `production` runs all three shipped tiers: the ten regex rules,');
+console.log('  MobileBERT zero-shot in its worker gated at 0.35, then the context heuristic.');
+console.log('  Production has NO needs_response output, so its 0.0 there is an absence and');
+console.log('  not a failure, and beating it on that axis is satisfied by anything that');
+console.log('  emits the axis. `majority` is the number that says whether a model learned:');
+console.log('  it always predicts the training-set majority class.');
 console.log('  A 0.0 on a row marked [legacy-only] means the provider did not ATTEMPT');
 console.log('  that axis, not that it attempted and failed. Those runs reproduce');
 console.log('  production exactly: eight hypotheses, one softmax, nothing else. The');
