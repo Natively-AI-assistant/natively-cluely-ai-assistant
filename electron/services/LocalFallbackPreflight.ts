@@ -360,12 +360,10 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
     // Publish provider statuses for the local fallback stack.
     const importOk = checks.filter(c => c.id.includes('import')).every(c => c.ok);
     const minilmOk = checks.filter(c => c.id.includes('minilm')).every(c => c.ok);
-    const mobilebertOk = checks.filter(c => c.id.includes('mobilebert')).every(c => c.ok);
     const rerankerOk = checks.filter(c => c.id === 'reranker model assets').every(c => c.ok);
     const nativeOk = checks.filter(c => c.id.startsWith('rust native') || c.id.includes('better-sqlite3') || c.id.startsWith('sharp ') || c.id.startsWith('sqlite-vec ')).every(c => c.ok);
 
     const localEmbeddingOk = importOk && minilmOk && nativeOk;
-    const intentOk = importOk && mobilebertOk;
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-embedding',
@@ -379,15 +377,7 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       },
     ));
 
-    ProviderStatusRegistry.getInstance().setStatus(statusFor(
-      'intent-classifier',
-      'packaged_local',
-      intentOk ? 'ready' : 'missing_required_asset',
-      intentOk
-        ? 'Packaged zero-shot intent classifier assets are ready'
-        : 'Natively local classifier assets are missing or corrupted. Please reinstall Natively.',
-      { checks: checks.filter(c => c.id.includes('mobilebert') || c.id.includes('import')) },
-    ));
+    // 'intent-classifier' status removed 2026-09-05 with the MobileBERT classifier.
 
     ProviderStatusRegistry.getInstance().setStatus(statusFor(
       'local-reranker',

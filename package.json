@@ -133,7 +133,6 @@
       "**/*.node",
       "**/*.dylib",
       "**/whisperWorker.js",
-      "**/intentClassifierWorker.js",
       "**/localEmbeddingWorker.js",
       "**/localRerankerWorker.js",
       "**/ggufRerankerWorker.js",

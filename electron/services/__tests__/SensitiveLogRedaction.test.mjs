@@ -82,7 +82,6 @@ test('STT providers log transcript metadata without transcript text', () => {
 test('IPC and meeting summary logs avoid answer and LLM response snippets', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const persistence = read('electron/MeetingPersistence.ts');
-  const intent = read('electron/llm/IntentClassifier.ts');
 
   assert.match(ipc, /gemini - chat response received`, \{ length: result\?\.length \?\? 0 \}/);
   assert.match(ipc, /Updated IntelligenceManager\.Last message`,[\s\S]{0,120}length: intelligenceManager\.getLastAssistantMessage\(\)\?\.length \?\? 0/);
@@ -98,12 +97,8 @@ test('IPC and meeting summary logs avoid answer and LLM response snippets', () =
   // the log moved into `mapWorkerResult(result, textLength: number)`, so the raw
   // text is not even in scope there — it cannot be logged by accident. The pin
   // still demanded the literal `textLength: text.length` from the old call site.
-  const slmLog = intent.match(/SLM classified`[^;]*;/);
-  assert.ok(slmLog, 'the SLM classification log must still exist');
-  assert.match(slmLog[0], /textLength/, 'must log the classified text LENGTH');
-  assert.doesNotMatch(slmLog[0], /text\.(?:substring|slice)\(|\$\{\s*text\s*\}|[,{]\s*text\s*[,}]/,
-    'must never log the classified text itself — only its length');
-  assert.doesNotMatch(intent, /text\.substring\(/);
+
+  // Intent-classifier log pins removed 2026-09-05 with the classifier.
 });
 
 test('main.ts transcript content traces are gated, never unconditional', () => {

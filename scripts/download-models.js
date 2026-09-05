@@ -12,10 +12,6 @@ const REQUIRED_MODEL_FILES = [
     'Xenova/all-MiniLM-L6-v2/tokenizer.json',
     'Xenova/all-MiniLM-L6-v2/tokenizer_config.json',
     'Xenova/all-MiniLM-L6-v2/onnx/model_quantized.onnx',
-    'Xenova/mobilebert-uncased-mnli/config.json',
-    'Xenova/mobilebert-uncased-mnli/tokenizer.json',
-    'Xenova/mobilebert-uncased-mnli/tokenizer_config.json',
-    'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
     // The bundled cross-encoder. ms-marco replaced bge-reranker-base on
     // 2026-09-04 — see step 3 below for the numbers. bge is gone entirely: not
     // bundled, not lazily downloaded, not in the catalogue.
@@ -131,10 +127,9 @@ async function downloadModels() {
         await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', QUANTIZED);
         console.log('[download-models] all-MiniLM-L6-v2 downloaded.');
 
-        // 2. Zero-shot classification model (Intent Classifier)
-        console.log('[download-models] Downloading Xenova/mobilebert-uncased-mnli (q8)...');
-        await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', QUANTIZED);
-        console.log('[download-models] mobilebert-uncased-mnli downloaded.');
+        // 2. (removed 2026-09-05) Xenova/mobilebert-uncased-mnli, the zero-shot
+        //    intent classifier. Its output never reached the dispatched prompt
+        //    on the default V3 path; see docs/natively-router-final-answer-2026-09-05.md.
 
         // 3. Cross-encoder reranker — ms-marco-MiniLM-L-6-v2 (q8, ~24MB).
         //

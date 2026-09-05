@@ -32,12 +32,8 @@ export {
     formatTemporalContextForPrompt
 } from "./TemporalContextBuilder";
 export type { TemporalContext, AssistantResponse } from "./TemporalContextBuilder";
-export {
-    classifyIntent,
-    getAnswerShapeGuidance,
-    warmupIntentClassifier
-} from "./IntentClassifier";
-export type { ConversationIntent, IntentResult } from "./IntentClassifier";
+export { classifyIntent, hasQuestionSignal } from "./PlannerDecision";
+export type { ConversationIntent, IntentResult } from "./PlannerDecision";
 export { checkAnswerRelevance } from "./AnswerRelevanceChecker";
 export type { AnswerRelevanceResult } from "./AnswerRelevanceChecker";
 export { planNextAssistantAction } from "./PlannerDecision";

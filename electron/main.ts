@@ -1233,7 +1233,6 @@ import { punctuationSourceFor } from "./llm/punctuationProvenance"
 import { ThemeManager } from "./ThemeManager"
 import { RAGManager } from "./rag/RAGManager"
 import { DatabaseManager } from "./db/DatabaseManager"
-import { warmupIntentClassifier } from "./llm"
 
 /** Unified type for all STT providers with optional extended capabilities */
 type STTProvider = (GoogleSTT | RestSTT | DeepgramStreamingSTT | SonioxStreamingSTT | ElevenLabsStreamingSTT | OpenAIStreamingSTT | NativelyProSTT | NvidiaNimStreamingSTT) & {
@@ -1705,20 +1704,10 @@ export class AppState {
     // experience instead of a crashloop.
     setImmediate(() => {
       try {
-        const { consumeIntentClassifierSentinel } = require('./llm/IntentClassifier');
         const { consumeLocalEmbeddingSentinel } = require('./rag/providers/LocalEmbeddingProvider');
         const { consumeLocalRerankerSentinel } = require('./rag/LocalReranker');
 
-        const intentPoisoned = consumeIntentClassifierSentinel();
-        if (intentPoisoned) {
-          const message = `Recovered from an intent classifier crash. ${intentPoisoned.modelId} is skipped this launch — falling back to regex/heuristic intent.`;
-          console.warn(`[AppState] ${message}`);
-          this.setOnnxRecoveryNotice('intent', {
-            family: 'intent',
-            badModelId: intentPoisoned.modelId,
-            message,
-          });
-        }
+        // Intent-classifier poison sentinel removed 2026-09-05 with the classifier.
 
         const embeddingPoisoned = consumeLocalEmbeddingSentinel();
         if (embeddingPoisoned) {
@@ -8737,13 +8726,8 @@ if (process.env.THINKING_MATRIX === '1') {
   // Defer the zero-shot intent classifier warmup until after the launcher has
   // had a chance to paint and settle. The classifier still lazy-loads on first
   // use, so this only moves startup CPU work out of the visible launch path.
-  setTimeout(() => {
-    try {
-      warmupIntentClassifier();
-    } catch (err) {
-      console.warn('[Init] Intent classifier warmup scheduling failed (non-fatal):', err);
-    }
-  }, Number(process.env.NATIVELY_INTENT_WARMUP_DELAY_MS || '2500'));
+  // Intent classifier warmup removed 2026-09-05: the MobileBERT classifier is gone.
+  // See docs/natively-router-final-answer-2026-09-05.md.
 
   // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are
   // applied and the window exists, promote back to 'regular' so a SINGLE dock
