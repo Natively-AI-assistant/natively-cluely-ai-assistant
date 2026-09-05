@@ -124,8 +124,17 @@ def main():
         stripped = out / "onnx" / "_stripped.onnx"
         graph = onnx.load(str(src))
         del graph.graph.value_info[:]
-        onnx.save(graph, str(stripped), save_as_external_data=True,
-                  location="_stripped.onnx.data", all_tensors_to_one_file=True, size_threshold=1024)
+        # `location` is resolved relative to the PROCESS CWD, not to the model
+        # path, so a bare filename drops a 90MB sidecar in whatever directory
+        # the script was launched from. Write into the onnx dir explicitly.
+        import os
+        cwd = os.getcwd()
+        os.chdir(out / "onnx")
+        try:
+            onnx.save(graph, "_stripped.onnx", save_as_external_data=True,
+                      location="_stripped.onnx.data", all_tensors_to_one_file=True, size_threshold=1024)
+        finally:
+            os.chdir(cwd)
         quantize_dynamic(str(stripped), str(q8), weight_type=QuantType.QInt8)
         for leftover in (stripped, out / "onnx" / "_stripped.onnx.data"):
             if leftover.exists():

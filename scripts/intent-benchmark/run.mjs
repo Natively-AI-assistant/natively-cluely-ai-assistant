@@ -32,6 +32,7 @@ const LIMIT = Number(val('--limit', '0'));
 const PUNCTUATED = has('--punctuated');
 const OUT = val('--out', `reports/${PROVIDER}${PUNCTUATED ? '-punctuated' : ''}.json`);
 const LANG = val('--language', 'en');
+const SAVE_ROWS = has('--save-rows');
 
 /** mode -> that mode's own mode_intent label set, for candidates that need it. */
 const MODE_INTENTS = Object.fromEntries(
@@ -226,9 +227,47 @@ function percentile(v, p) {
   return s.length ? Number(s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)].toFixed(2)) : null;
 }
 
+// Per-row predictions, for the Phase 5 error analysis. Kept out of the default
+// report because it is ~10x the size and only the error-analysis step reads it.
+if (SAVE_ROWS) {
+  const rowsOut = path.resolve(__dirname, OUT.replace(/\.json$/, '.rows.json'));
+  fs.mkdirSync(path.dirname(rowsOut), { recursive: true });
+  fs.writeFileSync(rowsOut, JSON.stringify(results.map((r) => {
+    const row = target.find((t) => t.id === r.id);
+    return {
+      id: r.id,
+      mode: row?.custom_mode_key ?? row?.mode,
+      channel: row?.channel,
+      input: row?.input,
+      history: row?.history ?? [],
+      expected: r.expected,
+      predicted: Object.fromEntries(SCORED_AXES.map((a) => [a, r.predicted?.[a] ?? null])),
+      expectedLegacyIntent: r.expectedLegacyIntent,
+      predictedLegacyIntent: r.predictedLegacyIntent,
+      confidence: r.predicted?.confidence ?? {},
+    };
+  }), null, 2));
+  console.log(`per-row predictions -> ${path.relative(process.cwd(), rowsOut)}`);
+}
+
 const outPath = path.resolve(__dirname, OUT);
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(scored, null, 2));
+
+// Per-row predictions, for the Phase 5 error analysis. Kept in a SEPARATE file
+// because the scored report is read by replay.mjs on every merge and should
+// stay small; the row dump is only read when someone is analysing failures.
+const rowsOut = outPath.replace(/\.json$/, '.rows.jsonl');
+fs.writeFileSync(rowsOut, results.map((r) => JSON.stringify({
+  id: r.id,
+  input: target.find((t) => t.id === r.id)?.input,
+  mode: target.find((t) => t.id === r.id)?.mode,
+  channel: target.find((t) => t.id === r.id)?.channel,
+  expected: r.expected,
+  predicted: r.predicted ? Object.fromEntries(SCORED_AXES.map((a) => [a, r.predicted[a] ?? null])) : null,
+  expectedLegacyIntent: r.expectedLegacyIntent,
+  predictedLegacyIntent: r.predictedLegacyIntent,
+})).join('\n') + '\n');
 
 console.log(formatReport(scored));
 console.log(`\nlatency source  ${scored.latencySource}   round-trip p50 ${scored.roundTrip.p50}ms p95 ${scored.roundTrip.p95}ms`);
