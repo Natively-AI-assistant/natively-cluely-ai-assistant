@@ -56,10 +56,24 @@ the answer on both sides of the boundary.
 The held out set gets the same treatment, so the cold start case is measured
 rather than assumed, and the two conditions are reported separately.
 
-## What is not yet done
+## The result
 
-The augmentation is implemented but not yet run. The numbers above are from the
-model as trained today, and the comparison against the shipped classifier is
-scored on the corpus as it stands. Both will be re measured after the
-augmentation, and both sets of numbers reported, because the difference between
-them is the size of this defect.
+Run. The corpus went from 5,328 rows to 7,214, of which 18.6 percent now carry
+an empty history where none did before. Both models were scored on the same held
+out rows, taken from the preserved pre augmentation corpus, so that neither is
+tested on rows built from its own training distribution.
+
+    model                  with history   cold start    gap
+    before augmentation        78.5          68.3      10.3
+    after augmentation         78.8          78.0       0.7
+
+Cold start gained 9.8 points. The warm case gained 0.3, so the fix did not buy
+one at the cost of the other, which is the usual outcome and the reason both
+conditions are measured on both models rather than quoting a single number.
+
+The gap of 0.7 points is what remains. The router is now close to indifferent to
+whether it has been given any history at all, which is the property it needed
+and did not have.
+
+Both the pre augmentation corpus and the pre augmentation model are preserved on
+disk, so this comparison can be re run rather than taken on trust.
