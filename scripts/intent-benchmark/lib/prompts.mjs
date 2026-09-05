@@ -241,7 +241,11 @@ question or request to the user, in this mode's normal register.`,
     share: 0.12,
     brief: `Conversational fragments that only make sense against the history:
 "why", "what about the second one", "make that simpler", "and the other one",
-"how come", "says who". The history you provide must make the referent clear.`,
+"how come", "says who". The history you provide must make the referent clear.
+
+LENGTH IS THE POINT OF THIS CATEGORY. At least two thirds of these turns must
+be FIVE WORDS OR FEWER. A fragment that runs to a full clause is not a fragment,
+it is a normal request. Carry the meaning in the history, not in the turn.`,
   },
   ambiguous: {
     share: 0.10,
@@ -249,7 +253,12 @@ question or request to the user, in this mode's normal register.`,
 label needs_response either "yes" or "optional": "make it better", "is this
 good", "hmm i wonder", "that seems off". Use needs_response="optional" where it
 truly is optional. These exist to measure calibration, so do not resolve the
-ambiguity artificially.`,
+ambiguity artificially.
+
+Roughly one turn in six must contain a real self-repair or restart, because
+hesitancy is how this kind of turn actually sounds: "is this uh is this good",
+"i mean maybe we could", "that seems that seems off". Write the restart into
+the words rather than describing it.`,
   },
   multi_intent: {
     share: 0.08,
@@ -262,7 +271,12 @@ Set task to the primary one and secondary_tasks to the rest.`,
     brief: `ADVERSARIAL PAIRS. For each pair, produce two rows that are
 superficially similar in wording but must receive DIFFERENT labels. Make the
 surface similarity real, so a keyword matcher gets one of them wrong. Put the
-distinguishing reason in notes for both rows of the pair.`,
+distinguishing reason in notes for both rows of the pair.
+
+The two members of a pair must NOT be the same string. Similar is the brief,
+identical is not: change a name, a filler, a word order, and let the history or
+the channel carry the rest of the difference. Two rows with the same words and
+the same labels are a repeat and are thrown away.`,
   },
 };
 
@@ -308,6 +322,10 @@ export const REQUIRED_TRAPS = {
  * filter is a guarantee.
  */
 export const PROMPT_EXAMPLE_STRINGS = new Set([
+  // Added with the fragment length rule and the ambiguous restart rule.
+  'is this uh is this good',
+  'i mean maybe we could',
+  'that seems that seems off',
   'could you explain how the caching layer handles invalidation',
   'so could you uh explain how the cashing layer handles invalidation',
   'wait how does the the caching layer know when to',
