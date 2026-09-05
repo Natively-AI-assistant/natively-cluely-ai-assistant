@@ -2,7 +2,16 @@
 //
 // Single source of truth for the LIVE-COPILOT latency contract (Issue 1, P0).
 // What-to-answer and live manual chat must NEVER make the user wait 10s+ or show
-// an empty answer. These budgets are shared by IntelligenceEngine (WTA),
+// an empty answer.
+//
+// That sentence was written for, and still governs, the TEXT path. It does not
+// hold for a turn carrying a screenshot: image encode + multimodal prefill put
+// a healthy vision first-token at 3-8s (measured p50 5.6s, tail 11.6s), so a
+// 10s-shaped ceiling there does not protect the user, it just replaces a real
+// answer with a canned line. LIVE_VISION_TOTAL_HARD_TIMEOUT_MS is the vision
+// ceiling and is deliberately above 10s — see its own comment.
+//
+// These budgets are shared by IntelligenceEngine (WTA),
 // ipcHandlers (manual chat), and the benchmark runners so the product and its
 // measurement agree exactly.
 //
@@ -108,6 +117,36 @@ export function isCompleteShortAnswer(text: string): boolean {
  * mid-stream hang, which is a different failure mode.
  */
 export const LIVE_TOTAL_HARD_TIMEOUT_MS = 13000;
+/**
+ * VISION counterpart to LIVE_TOTAL_HARD_TIMEOUT_MS: the ceiling for an
+ * image-bearing turn served by a provider OTHER than the natively cascade.
+ *
+ * 13000 is not a general-purpose number. Its derivation — read the comment
+ * above — is "the natively-api server's 10s cutover + 3s for the next leg".
+ * A user whose selected model is their own OpenRouter/LiteLLM/Gemini key never
+ * touches that server, so on their turns 13000 is an arbitrary bound applied
+ * for a reason that does not hold, and it was truncating the vision layer's own
+ * budget: streamVisionWithFallback deliberately runs at ttftTimeoutMs 20_000
+ * ("Vision TTFT is slower than text — image encode + multimodal prefill"), and
+ * the vision call site scales FLASH_TTFT_MS/PRO_TTFT_MS up from 20s with image
+ * count. Every one of those was dead: the outer 13s always fired first.
+ *
+ * Measured through the real app (natively_debug (3).log, one meeting, 33 vision
+ * turns on a Custom/OpenRouter provider): 26 answers delivered with TTFT p50
+ * 5.6s and a maximum of 11.6s; the remaining 7 (21%) were aborted at the 13.0s
+ * ceiling and replaced with "The model did not produce an answer in time…". A
+ * ceiling 1.4s above the observed tail is not a safety net — it is a coin flip.
+ * 20_000 matches the vision chain's own base budget so a single attempt gets
+ * the time that layer was already designed to give it.
+ *
+ * What this does NOT do: resurrect attempts 2 and 3. The chain is 3 attempts of
+ * up to 20s, and no ceiling compatible with the live-copilot latency contract
+ * can span that — the second provider stays unreachable on a first-token
+ * timeout, by design. This buys the FIRST attempt its documented budget and
+ * nothing more; say so plainly rather than letting the next reader re-derive
+ * the confusion the 20_000 constant has already caused once.
+ */
+export const LIVE_VISION_TOTAL_HARD_TIMEOUT_MS = 20000;
 /**
  * Local-provider counterpart to LIVE_TOTAL_HARD_TIMEOUT_MS: the no-fallback ceiling
  * when there is no deterministic fallback to swap in. Matches the local first-useful
@@ -234,6 +273,29 @@ export function firstUsefulDeadlineMs(
   return COMPLEX_TYPES.has(answerType)
     ? LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS
     : LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS;
+}
+
+/**
+ * The absolute first-token ceiling for a turn — the companion to
+ * {@link firstUsefulDeadlineMs}, which answers the same question for the
+ * per-provider soft cap.
+ *
+ * Lives here, not inline at the call site, because the choice is a policy with
+ * three cases and each one exists for a documented reason (see the constants
+ * above). Inline it was two cases and a comment, which is how the vision budget
+ * came to be truncated silently for every user not on the natively cascade.
+ */
+export function totalHardTimeoutMs(opts: {
+  /** Ollama / on-device: cold weight load dominates first-token. */
+  isLocal?: boolean;
+  /** The turn carries a screenshot, so it is served by the vision chain. */
+  isVisionTurn?: boolean;
+  /** Routed through natively-api, whose own cutover LIVE_TOTAL_HARD_TIMEOUT_MS encodes. */
+  viaServerCascade?: boolean;
+}): number {
+  if (opts.isLocal) return LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS;
+  if (opts.isVisionTurn && !opts.viaServerCascade) return LIVE_VISION_TOTAL_HARD_TIMEOUT_MS;
+  return LIVE_TOTAL_HARD_TIMEOUT_MS;
 }
 
 const DEADLINE = Symbol('deadline');

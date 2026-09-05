@@ -104,6 +104,17 @@ export interface VisionInvocationParams {
   systemPrompt: string;
   userPrompt: string;
   signal: AbortSignal;
+  /**
+   * The budget this attempt is being given, in ms — the same value that arms
+   * `signal`. Passed explicitly because a provider implementation may hold its
+   * OWN inner deadline that would otherwise fire first and make both this
+   * number and `signal` decorative. `generateWithNatively` did exactly that: an
+   * 8s default written for cheap text calls governed a non-streaming VISION
+   * extraction, so the chain's 12s never applied and every screenshot died at
+   * 8.0s (31/31 non-cached turns in natively_debug (3).log). A provider that
+   * reads this can align its inner bound with the chain's.
+   */
+  timeoutMs: number;
 }
 
 export interface RunFallbackParams {
@@ -128,6 +139,13 @@ export type VisionTelemetryEvent =
   | { type: 'vision_failed'; provider: string; errorClass: VisionErrorClass; durationMs: number };
 
 const DEFAULT_PER_PROVIDER_TIMEOUT_MS = 12_000;
+
+/**
+ * Largest share of `totalDeadlineMs` one attempt may take while an eligible
+ * rung still waits behind it. 0.6 leaves 40% for the rest of the chain — enough
+ * that the rung after a dead one gets a real attempt rather than 0ms.
+ */
+const FIRST_RUNG_BUDGET_SHARE = 0.6;
 
 // ─── Implementation ───────────────────────────────────────────────────────
 
@@ -272,7 +290,37 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
 
     const providerStarted = Date.now();
     const controller = new AbortController();
-    const timeoutMs = provider.timeoutMs ?? perProviderTimeoutMs;
+    // `totalDeadlineMs` used to be checked only BETWEEN rungs (step 5 above),
+    // which made it advisory: one slow rung could overrun the whole budget by
+    // its full per-provider timeout before anyone looked at the clock. Clamp
+    // each attempt to whatever is actually left so the total bound binds.
+    const remainingMs = totalDeadlineMs
+      ? Math.max(0, totalDeadlineMs - (Date.now() - started))
+      : Number.POSITIVE_INFINITY;
+    // A total budget alone lets the FIRST rung eat all of it, which starves
+    // every rung behind it — and the rung behind is usually the provider the
+    // user actually selected. Observed immediately after adding the budget: a
+    // dead Natively rung consumed 6000/6000ms and the ledger read
+    // `custom:timeout(0ms)`, so the user's own OpenRouter provider was reached
+    // and given nothing. That would have quietly cancelled out 3e29a67f, whose
+    // whole point was to let the chain reach that rung at all.
+    //
+    // So while an eligible rung remains behind this one, cap this attempt's
+    // share of the budget. Not a health tracker — this is mechanical and has no
+    // memory; a chronically-dead leading rung still burns its share on every
+    // single turn. Fixing THAT needs failure memory in this chain.
+    const laterRungEligible = params.providers.slice(i + 1).some(p =>
+      p.isConfigured && p.supportsVision && p.scopeAllowsScreenshots
+      && (params.mode !== 'private_vision' || p.isLocal));
+    // No lower floor here: a `Math.max(1000, …)` guard against absurdly small
+    // slices made the share EQUAL the whole budget whenever the total was
+    // <= ~1.7s, so the cap silently did nothing in exactly the tight cases it
+    // exists for. A rung handed a uselessly small slice fails fast, which for a
+    // best-effort pre-pass is the correct outcome.
+    const shareMs = (totalDeadlineMs && laterRungEligible)
+      ? Math.floor(totalDeadlineMs * FIRST_RUNG_BUDGET_SHARE)
+      : Number.POSITIVE_INFINITY;
+    const timeoutMs = Math.min(provider.timeoutMs ?? perProviderTimeoutMs, remainingMs, shareMs);
     const timer = setTimeout(() => controller.abort(new Error('per-provider-timeout')), timeoutMs);
 
     try {
@@ -281,6 +329,7 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         systemPrompt: params.systemPrompt,
         userPrompt: params.userPrompt,
         signal: controller.signal,
+        timeoutMs,
       });
       clearTimeout(timer);
       const durationMs = Date.now() - providerStarted;
