@@ -95,15 +95,34 @@ is 53 percent general, and `follow_up` 0.4 percent against a measured prior of
 0.2 percent. The baseline is credible, and it is the more favourable of the two
 readings, so the comparison is conservative.
 
-## The defect this decision does not fix
+## The cold start defect, found and fixed
 
-The corpus has history on every row. Production's first turn has none. Measured
-on this model, needs_response macro F1 falls from 78.5 to 68.3 when history is
-stripped from the held out split.
+The corpus had history on every row and production's first turn has none, so the
+model was operating out of distribution exactly when a session starts.
 
-That is recorded in `natively-router-coldstart-2026-09-05.md`. The augmentation
-is written and tested but the retrain and re measurement are still to run, so
-the 79.2 above describes a distribution that production only partly matches.
+Measured on the model above, needs_response macro F1 fell from 78.5 to 68.3 when
+history was stripped from the held out split. A quarter of the training rows
+then got a history stripped copy and a tenth got a single prior turn copy,
+labels unchanged, each staying in its source's split. The model was retrained
+and both models were scored on the SAME held out rows, taken from the preserved
+pre augmentation corpus so that neither model is tested on rows built from its
+own training distribution.
+
+    model                  with history   cold start    gap
+    before augmentation        78.5          68.3      10.3
+    after augmentation         78.8          78.0       0.7
+
+The cold start case gained 9.8 points and the warm case gained 0.3. The gap
+closed from 10.3 points to 0.7. The augmentation did not buy cold start accuracy
+by trading away the warm case, which is the usual outcome and the thing the two
+by two table exists to catch.
+
+The shipped model is the augmented one. On the augmented held out split, which
+now contains both warm and cold turns as production does, it scores 78.2 on
+needs_response against production's 0.0 and an always guessing floor of 36.0,
+and 38.7 on legacy_intent against production's 15.2.
+
+Details in `natively-router-coldstart-2026-09-05.md`.
 
 ## Not measured
 
