@@ -160,9 +160,13 @@ async function buildProvider(id) {
     if (!cfg) throw new Error(`unknown composite ${id}. Known: ${Object.keys(REGISTRY).join(', ')}`);
     return new CompositeProvider({ id, ...cfg });
   }
-  if (id === 'production') {
+  if (id === 'production' || id.startsWith('production-amc')) {
     const { ProductionProvider } = await import('./providers/production.mjs');
-    return new ProductionProvider();
+    // production-amc0 / production-amc2 pin the assistant message count, which
+    // the corpus does not carry and which decides whether tier 3 can reach its
+    // follow_up branch at all.
+    const m = /^production-amc(\d+)$/.exec(id);
+    return new ProductionProvider({ assistantMessageCount: m ? Number(m[1]) : 0 });
   }
   if (id === 'majority') {
     const { MajorityProvider } = await import('./providers/majority.mjs');
