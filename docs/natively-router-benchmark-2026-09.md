@@ -151,6 +151,52 @@ The number reported here is therefore a lower bound in a specific sense: more pr
 
 The brief's answer to that would be the LoRA fine-tune, listed as the accuracy ceiling for escalation. That row was not built, because the escalation role it would fill has itself been ruled out on p95 grounds.
 
+## The two families fail in opposite places, and a second model is not free
+
+This was the last thing measured and it changes what a shipped router should look like.
+
+### The split is cardinality, not quality
+
+| Axis | Classes | Fine-tuned head | Static prototype |
+|---|---|---|---|
+| needs_response | 3 | **66.3** | 50.8 |
+| dialogue_act | 6 | **52.7** | 33.0 |
+| mode_intent | 79 | 14.4 | **36.0** |
+
+The prototype beats the head on `mode_intent` in eleven of twelve modes, several by more than twenty points. Seminar goes from 6.7 to 49.2, sales from 23.1 to 52.2, technical interview from 16.3 to 44.1.
+
+The cause is how many examples each class gets. With 1,589 training rows, three classes means hundreds of examples each and a fine-tuned softmax head learns them comfortably. Seventy-nine classes partitioned by mode means about twenty each, and at twenty examples a centroid is still a usable point while a decision boundary is not. That is a property of the data regime rather than of either model, and it is why the two disagree so sharply on one axis and agree on the rest.
+
+### Combining them works, and costs more than it should
+
+A composite that lets each family own the axes it wins takes `mode_intent` from 14.4 to 36.0 with every other axis unchanged. It is strictly more accurate than either component.
+
+It is also far slower than the sum of its parts, and the reason is not what it appears to be.
+
+| Configuration | p95 |
+|---|---|
+| head alone, one session | 15.31ms |
+| head with a second session merely resident | 33.93ms |
+| the second model's own cost | 0.37ms |
+
+A second ONNX session taxes the first by roughly two thirds even when it does almost no work and never runs concurrently. Running the two sequentially rather than together changed nothing. The obvious mitigations made it worse: disabling ONNX Runtime's thread spinning gave 35.27ms, and dropping to a single intra-op thread gave 42.49ms, against 21.15ms for the untouched default.
+
+That is a constraint on the shipped router and not only on this benchmark. Natively already keeps four local models behind worker isolation and a concurrency slot, and this says the cost of an additional resident session is paid by every other model whether or not it is being used.
+
+### The single-session version does not recover the accuracy
+
+Since the encoder already computes a pooled vector on its way to the heads, the export was changed to emit it, so the centroid lookup can run against that vector in the same forward pass. One session, one inference, both decision rules.
+
+It reaches `mode_intent` 16.4 against the two-model composite's 36.0.
+
+So the trick works mechanically and fails on substance. Fine-tuning the encoder for the low-cardinality axes evidently specialises its representation in a way that costs the seventy-nine-way distinction, and the general-purpose static embedding retains something the fine-tuned one has given up. That is worth knowing before anyone tries to get both behaviours from one model by training harder.
+
+### What this means for the decision
+
+None of the three is deployable as it stands. The head alone is fast and weak on `mode_intent`. The composite is accurate and over budget. The single-session version is fast and does not deliver the accuracy that motivated it.
+
+The honest reading is that `mode_intent` is not solvable at this corpus size by any of these arrangements, which is the same conclusion the underpowered-support analysis reached from the other direction. It is an argument for more data rather than for a cleverer combination.
+
 ## Acceptance bar
 
 | Requirement | Best achieved | Verdict |
