@@ -1157,6 +1157,45 @@ export class IntelligenceEngine extends EventEmitter {
             return null;
         }
 
+        // ── PR 7: INTERACTION ROUTER PRE-CHECK ──────────────────────────────
+        //
+        // The one thing the router is for. Today the decision to say nothing is
+        // made by the cloud LLM AFTER a full generation: retrieval runs, a
+        // prompt is built, tokens are spent, and the answer is the mode's
+        // silence string which the branch near the end of this method then
+        // discards. Production telemetry put that at 6.1% of generations, and
+        // 95.9% of them on two answer types.
+        //
+        // SPECULATIVE ONLY, AND THAT IS THE WHOLE SAFETY ARGUMENT.
+        //
+        // A manual press is explicit user intent and the user must always see
+        // something, which is why the sentinel branch below substitutes an
+        // honest fallback rather than silence on that path. The router must
+        // never be able to swallow a turn the user asked for. On the
+        // speculative path the sentinel already produces nothing visible, so
+        // this gate does not change what the user sees. It changes what it cost
+        // to show it.
+        //
+        // Null from the router means NO OPINION, not `no`. Falling through is
+        // the correct reading of it, and it is what happens when the flag is
+        // off, the model is missing, the load was poisoned, memory is tight, or
+        // the call times out.
+        if (isSpeculative) {
+            const routerSkip = await this.routerSaysStaySilent(question);
+            if (routerSkip) {
+                // The same state the post-generation sentinel path leaves
+                // behind. Skipping any of it would make the engine behave
+                // differently on the next turn purely because the router fired,
+                // which would be a behaviour change rather than a cost saving.
+                this.speculativeText = null;
+                this.speculativeTextExpiry = Infinity;
+                this.lastTriggerTime = Date.now();
+                this.lastTriggerQuestion = question ?? null;
+                this.setMode('idle');
+                return null;
+            }
+        }
+
         if (this.assistCancellationToken) {
             this.assistCancellationToken.abort();
             this.assistCancellationToken = null;
@@ -6456,6 +6495,104 @@ export class IntelligenceEngine extends EventEmitter {
      * for live session-memory routing. Read defensively (dynamic require avoids a
      * load-time cycle); returns 'general' when unavailable. Never throws.
      */
+    /**
+     * Does the interaction router say this turn needs no response?
+     *
+     * Returns false unless it is confidently sure. Every uncertainty resolves
+     * to "generate as before", because the two errors are not symmetric. A skip
+     * we do not take costs one wasted generation, which is today's behaviour. A
+     * skip we take wrongly costs the user an answer they should have had, on
+     * the speculative path where they never learn it was suppressed.
+     *
+     * So the threshold is high and the failure direction is fixed.
+     */
+    /**
+     * How sure the router must be before a turn is skipped without generating.
+     *
+     * 0.90, not the 0.50 an argmax would imply. The measured model is sharply
+     * confident when it is right about silence: a backchannel comes back at
+     * 0.979. Setting the bar near that keeps the skips to the cases the model
+     * is certain about and lets everything else pay for a generation, which is
+     * today's cost and today's behaviour.
+     *
+     * Raise it to make the router more conservative. Lower it only with live
+     * evidence, never to make a benchmark number look better.
+     */
+    private static readonly ROUTER_SILENCE_CONFIDENCE = 0.90;
+
+    private async routerSaysStaySilent(question?: string): Promise<boolean> {
+        try {
+            const { RouterModel } = require('./llm/routing/RouterModel') as typeof import('./llm/routing/RouterModel');
+            const router = RouterModel.getInstance();
+            // Cheap and synchronous. Checks the flag, the poison sentinel from a
+            // previous launch, and whether the model is on disk at all.
+            if (!router.isAvailable()) return false;
+
+            const turn = (question ?? this.session.getLastInterviewerTurn() ?? '').trim();
+            if (!turn) return false;
+
+            // getContext, not an invented accessor. The first version of this
+            // called `getConversationHistory`, which SessionTracker does not
+            // define, behind an optional chain: it returned undefined, the
+            // fallback produced an empty array, and the router would have run
+            // in cold-start mode on every single turn with nothing anywhere
+            // saying so. The corpus marks the other party [SYSTEM] and the user
+            // [USER], and `role` here is interviewer, user or assistant.
+            const history = this.session.getContext(120)
+                .filter((i) => i.role !== 'assistant')
+                .slice(-4)
+                .map((i) => `[${i.role === 'user' ? 'USER' : 'SYSTEM'}] ${i.text}`);
+
+            const modeId = this.getActiveModeId();
+            let hasFiles = false;
+            try {
+                const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
+                const active = ModesManager.getInstance().getActiveMode?.();
+                hasFiles = Boolean((active as { hasReferenceFiles?: boolean } | undefined)?.hasReferenceFiles);
+            } catch { /* absent ModesManager means no files, which is the safe reading */ }
+
+            const pred = await router.classify({
+                turn,
+                mode: modeId,
+                // The speculative path is driven by the other party on system
+                // audio. The router was trained with the channel as a feature
+                // and Recruiting inverts who the user is, so this must be the
+                // real channel rather than an assumption that mic is the user.
+                channel: 'system',
+                history,
+                modeHasReferenceFiles: hasFiles,
+            });
+
+            // No opinion. Generate, as before.
+            if (!pred) return false;
+            if (pred.needs_response !== 'no') return false;
+
+            const conf = pred.confidence?.needs_response ?? 0;
+            const silent = conf >= IntelligenceEngine.ROUTER_SILENCE_CONFIDENCE;
+            try {
+                // Emitted for BOTH outcomes, not only the skip, for the same
+                // reason the silence-share instrument is: a count of skips
+                // without a count of consultations is not a rate, and the rate
+                // is what says whether the router is worth its latency.
+                piTelemetry.emit('router_precheck_decision', {
+                    mode: modeId,
+                    needs_response: pred.needs_response,
+                    dialogue_act: pred.dialogue_act,
+                    confidence: Number(conf.toFixed(3)),
+                    // Whether the gate actually skipped a generation, which is
+                    // not the same as the model saying `no`: below the
+                    // threshold it says no and we generate anyway.
+                    acted: silent,
+                    surface: 'speculative',
+                });
+            } catch { /* instrumentation must never break a live turn */ }
+            return silent;
+        } catch {
+            // Every failure generates. See the header.
+            return false;
+        }
+    }
+
     private getActiveModeId(): string {
         try {
             const { ModesManager } = require('./services/ModesManager') as typeof import('./services/ModesManager');
