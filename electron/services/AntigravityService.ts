@@ -448,6 +448,21 @@ function describeTier(tier: unknown): Record<string, unknown> | null {
   };
 }
 
+/**
+ * A Google Cloud project the USER supplies, same mechanism and same precedence
+ * as gemini-cli (GOOGLE_CLOUD_PROJECT wins over GOOGLE_CLOUD_PROJECT_ID).
+ *
+ * Needed because Google refuses this client the free tier outright —
+ * loadCodeAssist returns
+ *   ineligibleTiers: [{ tierId: 'free-tier', reasonCode: 'UNSUPPORTED_CLIENT' }]
+ * — leaving only `standard-tier`, which is a bring-your-own-project tier. The
+ * project must have the Gemini for Cloud API enabled, and usage bills to it.
+ */
+export function preferredCloudProject(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.GOOGLE_CLOUD_PROJECT?.trim() || env.GOOGLE_CLOUD_PROJECT_ID?.trim();
+  return raw || undefined;
+}
+
 function requiresUserProject(tier: unknown): boolean {
   return Boolean(tier && typeof tier === 'object'
     && (tier as Record<string, unknown>).userDefinedCloudaicompanionProject === true);
@@ -455,9 +470,21 @@ function requiresUserProject(tier: unknown): boolean {
 
 async function discoverProject(accessToken: string, signal: AbortSignal): Promise<string> {
   const headers = antigravitySetupHeaders(accessToken);
+  // The reference client's LoadCodeAssistRequest carries `cloudaicompanionProject`
+  // when the user has one; this used to send `{ metadata }` only, so even a user
+  // with a perfectly good project had no way to get it onto the wire.
+  const preferred = preferredCloudProject();
   const loadResponse = await fetchWithDnsRetry(
     `${ANTIGRAVITY_PROD_ENDPOINT}/v1internal:loadCodeAssist`,
-    { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ metadata: metadata('ANTIGRAVITY') }), signal },
+    {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...(preferred ? { cloudaicompanionProject: preferred } : {}),
+        metadata: metadata('ANTIGRAVITY'),
+      }),
+      signal,
+    },
     4,
   );
   const loaded = await responseJson(loadResponse, 'setup');
@@ -467,6 +494,7 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
   // there was no way to tell a non-eligible account from a slow provision.
   console.log('[Antigravity] loadCodeAssist ok', JSON.stringify({
     hasProject: Boolean(existing),
+    suppliedProject: preferred ? 'set' : 'unset',
     currentTier: describeTier(loaded?.currentTier),
     allowedTiers: Array.isArray(loaded?.allowedTiers) ? loaded.allowedTiers.map(describeTier) : null,
     ineligibleTiers: Array.isArray(loaded?.ineligibleTiers)
@@ -482,16 +510,26 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
   }
 
   // Fail fast and say what is actually wrong. Polling five times cannot help:
-  // Google is waiting for a project id this client never sends.
-  if (requiresUserProject(selectedTier)) {
-    console.warn(`[Antigravity] tier "${tierId}" requires a caller-supplied Google Cloud project; Natively does not send one.`);
-    throw new AntigravityError('setup', 'This Google account needs its own Google Cloud project for Antigravity, which Natively cannot supply yet. Use a personal Google account, or pick another provider.');
+  // Google is waiting for a project id, and without one the operation stays
+  // pending forever.
+  if (requiresUserProject(selectedTier) && !preferred) {
+    console.warn(`[Antigravity] tier "${tierId}" requires a caller-supplied Google Cloud project and none is set.`);
+    throw new AntigravityError('setup', 'Antigravity needs your own Google Cloud project on this account. Set GOOGLE_CLOUD_PROJECT to a project with the Gemini for Cloud API enabled, then sign in again.');
   }
 
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const onboardResponse = await fetchWithDnsRetry(
       `${ANTIGRAVITY_PROD_ENDPOINT}/v1internal:onboardUser`,
-      { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ tierId, metadata: metadata('ANTIGRAVITY') }), signal },
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tierId,
+          ...(preferred ? { cloudaicompanionProject: preferred } : {}),
+          metadata: metadata('ANTIGRAVITY'),
+        }),
+        signal,
+      },
       4,
     );
     const onboarded = await responseJson(onboardResponse, 'setup');
@@ -513,7 +551,9 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
   // ~6s of polling total (5 requests, 4 x 1.5s waits). Say so, because "try
   // again" is only good advice if the cause was slowness.
   console.warn('[Antigravity] onboardUser never returned done+project within 5 attempts (~6s of polling).');
-  throw new AntigravityError('setup', 'Google did not finish setting up this account within ~6 seconds. Try signing in again; if it keeps failing, this account is probably not eligible for Antigravity.');
+  throw new AntigravityError('setup', preferred
+    ? `Google did not finish setting up project "${preferred}" within ~6 seconds. Check that the Gemini for Cloud API is enabled on it, then try again.`
+    : 'Google did not finish setting up this account within ~6 seconds. Try signing in again; if it keeps failing, this account is probably not eligible for Antigravity.');
 }
 
 export class AntigravityService extends EventEmitter {
