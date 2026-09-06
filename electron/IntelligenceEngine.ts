@@ -3744,8 +3744,14 @@ export class IntelligenceEngine extends EventEmitter {
                     // the same gateway IN PARALLEL. Regenerating here would be a
                     // third identical call on the user's own key, for a provider
                     // that has already been tried twice.
-                    const engineAlreadyRetried = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
-                        && (this.llmHelper as any).isUsingUserEndpoint() === true
+                    // hasEngineLevelRetry(), NOT isUsingUserEndpoint(): the
+                    // latter answers "whose key pays", which is a different
+                    // question and is wrong for the cURL provider — branch 2b is
+                    // blocking and terminal, so the engine never retried it and
+                    // suppressing the regeneration there left that user with a
+                    // single attempt and then the canned line.
+                    const engineAlreadyRetried = typeof (this.llmHelper as any).hasEngineLevelRetry === 'function'
+                        && (this.llmHelper as any).hasEngineLevelRetry() === true
                         && !isVisionTurn;
                     const regenBudget = engineAlreadyRetried ? 0 : regenerationBudgetMs({
                         routeBudgetMs: firstUsefulDeadline,

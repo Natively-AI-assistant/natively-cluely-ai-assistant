@@ -365,9 +365,15 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
     // share of the budget. Not a health tracker — this is mechanical and has no
     // memory; a chronically-dead leading rung still burns its share on every
     // single turn. Fixing THAT needs failure memory in this chain.
+    // The circuit state is part of eligibility. Without it this cap starved a
+    // healthy leading rung for the benefit of a rung that step 4b then skipped
+    // as circuit_open — the chain gave away 40% of its budget to nobody. The
+    // comment above used to end "Fixing THAT needs failure memory in this
+    // chain"; the failure memory now exists, so it is consulted here.
     const laterRungEligible = params.providers.slice(i + 1).some(p =>
       p.isConfigured && p.supportsVision && p.scopeAllowsScreenshots
-      && (params.mode !== 'private_vision' || p.isLocal));
+      && (params.mode !== 'private_vision' || p.isLocal)
+      && (health?.get(p.id)?.openUntil ?? 0) <= nowMs());
     // No lower floor here: a `Math.max(1000, …)` guard against absurdly small
     // slices made the share EQUAL the whole budget whenever the total was
     // <= ~1.7s, so the cap silently did nothing in exactly the tight cases it
@@ -443,6 +449,15 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
       clearTimeout(timer);
       const durationMs = Date.now() - providerStarted;
       const errorClass = classifyError(err, controller.signal.aborted);
+      // Was the deadline that fired the provider's own, or one WE imposed? When
+      // shareMs (the 60% cap that exists to leave room for a later rung) or the
+      // chain's remaining time is what cut the attempt short, a resulting
+      // 'timeout' says nothing about the provider's health — it says we did not
+      // give it enough time. Cooling it for RUNG_TRANSIENT_COOLDOWN_MS on that
+      // basis disables the leading rung that would have answered inside the
+      // full budget, which is the opposite of what the cap is for.
+      const selfInflictedTimeout = errorClass === 'timeout'
+        && timeoutMs < (provider.timeoutMs ?? perProviderTimeoutMs);
       attempts.push({
         provider: provider.id,
         model: provider.modelId,
@@ -451,7 +466,7 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         durationMs,
       });
       params.telemetry?.({ type: 'vision_failed', provider: provider.id, errorClass, durationMs });
-      noteRungFailure(health, provider.id, errorClass, nowMs);
+      if (!selfInflictedTimeout) noteRungFailure(health, provider.id, errorClass, nowMs);
       if (i < params.providers.length - 1) {
         const next = params.providers[i + 1];
         params.telemetry?.({ type: 'vision_fallback', from: provider.id, to: next.id });

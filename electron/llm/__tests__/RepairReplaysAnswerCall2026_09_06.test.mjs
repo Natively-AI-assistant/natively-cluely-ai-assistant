@@ -469,7 +469,27 @@ describe('a selected single provider now fails over — or retries itself in par
   test('IE does not ALSO regenerate a route the engine already retried', () => {
     // Otherwise a single-provider user pays a third identical call on their own
     // key for a gateway that has already been tried twice concurrently.
-    assert.match(ie, /engineAlreadyRetried[\s\S]{0,300}?isUsingUserEndpoint\(\) === true/);
+    assert.match(ie, /engineAlreadyRetried[\s\S]{0,400}?hasEngineLevelRetry\(\) === true/);
     assert.match(ie, /const regenBudget = engineAlreadyRetried \? 0 :/);
+    // NOT isUsingUserEndpoint(): that asks whose key pays, which is a different
+    // question and was wrong for cURL. Measured before the fix: a cURL user got
+    // one request and then the canned line — no engine retry AND no
+    // regeneration.
+    assert.equal(/engineAlreadyRetried[\s\S]{0,400}?isUsingUserEndpoint\(\) === true/.test(ie), false,
+      'the regeneration gate must not key off isUsingUserEndpoint again');
+  });
+
+  test('the cURL route is excluded from "already retried" because it is terminal', () => {
+    // executeCustomProvider returns Promise<string> — blocking, no first token
+    // to race — so branch 2b is deliberately not wrapped in the engine. The
+    // predicate must therefore report NO engine retry for it, or the
+    // regeneration is suppressed for a route that never got one.
+    assert.match(llm, /public hasEngineLevelRetry\(\): boolean \{/);
+    const at = llm.indexOf('public hasEngineLevelRetry(): boolean {');
+    const body = llm.slice(at, at + 400);
+    assert.match(body, /if \(this\.activeCurlProvider\) return false;/,
+      'cURL must report no engine-level retry');
+    assert.match(body, /return this\.isUsingUserEndpoint\(\);/,
+      'every other user-endpoint route DOES go through the engine');
   });
 });

@@ -182,6 +182,11 @@ const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
 // per-provider gate never fires before the single source-of-truth deadline. See the
 // natively text-provider registration for the full rationale.
 const NATIVELY_TEXT_TTFT_MS = 8_000;
+// The smallest window in which a spare rung has any realistic chance of a first
+// token. Below this the rung is dropped rather than opened: a request that
+// cannot win before the caller's deadline still costs the user money and the
+// provider a slot.
+const MIN_USEFUL_RUNG_MS = 3_000;
 
 // ── Deterministic sampling for interview/coding answers (REPORT §22 D1) ──────
 // The text streaming methods previously used scattered temperatures (0.3/0.4/
@@ -1853,6 +1858,28 @@ export class LLMHelper {
    * user has not selected and poison its adaptive budget. Adding it needs the
    * key pinned for the turn first; the rungs below touch no instance state.
    */
+  /**
+   * Did THIS route actually go through the shared fallback engine?
+   *
+   * IntelligenceEngine suppresses its verbatim regeneration when the engine has
+   * already retried, and it used to ask `isUsingUserEndpoint()`. That predicate
+   * is about WHOSE ENDPOINT is being billed, not about whether a retry happened,
+   * and the two disagree for exactly one route: the cURL provider. Branch 2b
+   * calls executeCustomProvider, which returns Promise<string> — it is fully
+   * blocking, has no first token to race, and is deliberately NOT wrapped in
+   * the engine. A cURL user therefore got no engine retry AND no regeneration:
+   * measured, one request and then the canned line. Strictly worse than before
+   * the failover work, which at least still regenerated.
+   *
+   * Wrapping 2b instead would be the wrong tool — a hedge on a blocking call
+   * duplicates the whole request for no latency win.
+   */
+  public hasEngineLevelRetry(): boolean {
+    if (this.useOllama || this.isUsingCodexCli()) return false;
+    if (this.activeCurlProvider) return false;      // branch 2b: blocking, terminal
+    return this.isUsingUserEndpoint();
+  }
+
   private buildTextSpareRungs(
     userContent: string,
     finalSystemPrompt: string,
@@ -1860,6 +1887,10 @@ export class LLMHelper {
     excludeIds: string[] = [],
   ): TextStreamProvider[] {
     const spares: TextStreamProvider[] = [];
+    // Belt and braces with the per-method guards: a local-only user gets no
+    // cloud spare offered at all, so the failure mode is "no spare" rather
+    // than "a spare that throws on every turn".
+    if (this.isLocalOnlyMode) return spares;
     const skip = new Set(excludeIds);
     let prio = 1;
     if (!skip.has('natively') && this.hasNatively()) {
@@ -1956,6 +1987,24 @@ export class LLMHelper {
     // and it is measurement-aware, which is what stops a gateway with a known
     // 11.6s tail being abandoned at the engine's text-sized 2.5s default.
     const primaryTtftMs = spares.length > 0 ? this.hedgeDelayForBudget(budgetMs) : budgetMs;
+
+    // Fit the spare rungs INSIDE the caller's ceiling. Each rung previously
+    // declared its own ttft (natively 8000) or inherited the whole budget, so
+    // the chain's worst case was primary + 8000 + budget + budget against a
+    // budget-sized ceiling: measured on a 15000ms route, rung 3 opened at
+    // 13047ms with 1953ms left and rung 4 never opened at all. Opening a rung
+    // that cannot reach first token before the caller kills the turn is not a
+    // failover, it is a billed request with no chance of winning. So walk the
+    // spares against the remaining time and drop the ones that do not fit.
+    let remainingForSpares = Math.max(0, budgetMs - primaryTtftMs);
+    const fittedSpares: TextStreamProvider[] = [];
+    for (const spare of spares) {
+      if (remainingForSpares < MIN_USEFUL_RUNG_MS) break;
+      const want = spare.ttftTimeoutMs ?? remainingForSpares;
+      const give = Math.min(want, remainingForSpares);
+      fittedSpares.push({ ...spare, ttftTimeoutMs: give });
+      remainingForSpares -= give;
+    }
     const primary: TextStreamProvider = {
       id: opts.id, name: opts.name, isLocal: false, priority: 0,
       ttftTimeoutMs: primaryTtftMs,
@@ -1975,7 +2024,9 @@ export class LLMHelper {
     }
 
     console.log('[LLMHelper] selected-provider text turn', {
-      provider: opts.id, budgetMs, primaryTtftMs, spares: spares.map(p => p.id),
+      provider: opts.id, budgetMs, primaryTtftMs,
+      spares: fittedSpares.map(p => `${p.id}@${p.ttftTimeoutMs}ms`),
+      sparesDropped: spares.length - fittedSpares.length,
       mode: hedging ? 'hedged (no spare rung configured)' : 'failover',
     });
 
@@ -1986,7 +2037,7 @@ export class LLMHelper {
     // losing its health tracking.
     if (!this.textHealth) this.textHealth = new Map();
     yield* runStreamingTextFallback(
-      [primary, ...spares],
+      [primary, ...fittedSpares],
       this.textHealth,
       {
         ...DEFAULT_TEXT_FALLBACK_CONFIG,
@@ -8292,6 +8343,17 @@ let isMultimodal = !!(imagePaths?.length);
    * Throws on empty response so the fallback chain tries the next provider.
    */
   private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, connectTimeoutMs: number = INTERACTIVE_CONNECT_TIMEOUT_MS, directMode = false): AsyncGenerator<string, void, unknown> {
+    // Local-only + outbound-scope guards, matching streamWithGeminiModel and
+    // streamWithGroq. This method was the ONE cloud stream sibling carrying
+    // neither, which went unnoticed while natively was only ever reached from
+    // the server cascade. Adding it as a text SPARE RUNG made the gap
+    // reachable from a user-selected provider: measured, a local-only user
+    // whose gateway stalled had the turn failed over to natively-api and their
+    // transcript sent off-device. The scope assert is a backstop (denied
+    // evidence is stripped upstream), but local-only is NOT enforced by
+    // stripping — nothing else stands between this call and the network.
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    this.assertOutboundScopes('natively', userContent, imagePaths);
     // ── REAL SSE STREAM (replaces the fake word-by-word simulation) ──────────
     // Previous implementation called generateWithNatively() (blocking, waited for
     // the full response), then drip-fed words with setTimeout delays — pure theater.

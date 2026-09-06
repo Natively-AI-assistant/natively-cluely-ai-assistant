@@ -359,9 +359,21 @@ export async function* openHedged(
   const firstSuccess = (ps: Promise<{ branch: Branch; first: IteratorResult<string> }>[]) =>
     new Promise<{ branch: Branch; first: IteratorResult<string> }>((resolve, reject) => {
       let remaining = ps.length; let settled = false;
+      // Keep the first branch's real rejection. Rejecting with a synthetic
+      // 'all-branches-failed' discarded the provider's own error — status code,
+      // vendor message and all — before the engine's classifier or the caller
+      // ever saw it, so a hedged 401 surfaced as an unknown, retryable failure.
+      let branchError: any = null;
       for (const p of ps) p.then(
         (v) => { if (!settled) { settled = true; resolve(v); } },
-        () => { remaining--; if (remaining === 0 && !settled) { settled = true; reject(new Error('all-branches-failed')); } },
+        (e) => {
+          if (branchError === null) branchError = e;
+          remaining--;
+          if (remaining === 0 && !settled) {
+            settled = true;
+            reject(branchError ?? new Error('all-branches-failed'));
+          }
+        },
       );
     });
 
@@ -455,6 +467,7 @@ export async function* runStreamingVisionFallback(
   }
 
   const failures: string[] = [];
+  let firstError: any = null;
 
   // Time-bounded close of a provider's upstream iterator (module helper).
   const closeIterator = (it: AsyncIterator<string> | null): Promise<void> =>
@@ -584,6 +597,15 @@ export async function* runStreamingVisionFallback(
         const detail = `${provider.name} attempt ${attempt}/${cfg.maxAttempts}: ${cls}`;
         warn(`[Vision] ${detail} (${err?.message || err})`);
         failures.push(detail);
+        // Keep the FIRST provider error itself, not just its classification.
+        // The aggregate thrown below is prose: it drops `err.status` and the
+        // vendor's message body, so a caller that classifies downstream (a 401
+        // -> "check your API key", a custom provider's HTTP 500 -> "returned
+        // HTTP 500") saw only "auth" or "server" inside a sentence its regexes
+        // do not match, and reported a revoked key as a retryable unknown
+        // error. When the whole chain was ONE rung there is no aggregate worth
+        // forming, so that error is rethrown verbatim.
+        if (firstError === null) firstError = err;
 
         // Whole-chain abort: when the remaining providers would fail for the SAME
         // reason (e.g. every sibling shares one expired/no-credit API key), stop
@@ -639,5 +661,12 @@ export async function* runStreamingVisionFallback(
     }
   }
 
-  throw new Error(`All vision providers failed: ${failures.join(' | ') || 'no attempts made'}`);
+  // A single-rung chain has nothing to aggregate: give the caller back the
+  // provider's own error, with its status and message intact.
+  if (orderedProviders.length === 1 && firstError !== null) throw firstError;
+  const aggregate: any = new Error(`All vision providers failed: ${failures.join(' | ') || 'no attempts made'}`);
+  // Carry the first error through even on a multi-rung chain, so a caller that
+  // wants the real shape can reach it without parsing the sentence.
+  if (firstError !== null) { aggregate.cause = firstError; aggregate.firstProviderError = firstError; }
+  throw aggregate;
 }
