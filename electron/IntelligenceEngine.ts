@@ -3842,6 +3842,15 @@ export class IntelligenceEngine extends EventEmitter {
                         // two branches used to be sequential, which is why the
                         // early return was load-bearing.
                     } else {
+                        // This turn ends in the canned line, so it did NOT
+                        // commit — and recordAnswerFirstToken's contract is that
+                        // only a committed turn teaches the budget. Attempt 1 may
+                        // still have a pending measurement here (a few
+                        // sub-threshold tokens arrived before it stalled); the
+                        // emitChunk below would otherwise commit it while
+                        // rendering OUR fallback text, conflating "we printed an
+                        // apology" with "the provider produced content".
+                        pendingFirstTokenMs = null;
                         trace.mark('answer_regeneration_failed', { attempted: regenBudget > 0, answerType: answerPlan.answerType });
                         const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                             ? "I don't have enough context from the conversation to answer that yet."
