@@ -740,6 +740,17 @@ export class AntigravityService extends EventEmitter {
     } catch (error) { throw this.normalizeError(error, 'Google request failed.'); }
   }
 
+  /**
+   * The last discovered catalogue, or null if discovery has not run this
+   * session. Synchronous on purpose: LLMHelper builds its fallback rungs
+   * inline and cannot await, and a rung that cannot NAME a model must not be
+   * seated at all — sending an arbitrary id to Antigravity would fail at the
+   * wire rather than fall through to the next provider.
+   */
+  public getCachedModels(): AntigravityModel[] | null {
+    return this.cachedModels ? this.cachedModels.map(model => ({ ...model })) : null;
+  }
+
   public async getModels(force = false): Promise<AntigravityModel[]> {
     if (this.signedOut) throw new AntigravityError('auth_required', 'Sign in with Google Antigravity first.');
     if (!force && this.cachedModels) return this.cachedModels.map(model => ({ ...model }));
