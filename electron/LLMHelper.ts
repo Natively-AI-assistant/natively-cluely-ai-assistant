@@ -1834,6 +1834,156 @@ export class LLMHelper {
   }
 
   /**
+   * Spare rungs for a text turn whose SELECTED provider is a single terminal
+   * branch (Custom / cURL / LiteLLM / NVIDIA NIM).
+   *
+   * Those branches return unconditionally, so until now a user on their own
+   * gateway had no failover at all on the text path — and, worse, the only
+   * mechanism in this file that converts SLOWNESS into failover is the Natively
+   * TTFT race, which they never reach. A provider that connects and then goes
+   * quiet throws nothing, so no catch fires and nothing falls through; the outer
+   * live deadline was the only thing that noticed, and a deadline can only give
+   * up.
+   *
+   * Deliberately does NOT include a configured-but-not-active custom provider,
+   * even though installConfiguredCustomForRace exists for the Natively race.
+   * That helper temporarily reassigns `this.customProvider`, and while it is
+   * swapped answerLatencyKey() resolves to the WRONG provider — a first token
+   * arriving in that window would file the latency sample under a gateway the
+   * user has not selected and poison its adaptive budget. Adding it needs the
+   * key pinned for the turn first; the rungs below touch no instance state.
+   */
+  private buildTextSpareRungs(
+    userContent: string,
+    finalSystemPrompt: string,
+    thinkingBudget: number,
+  ): TextStreamProvider[] {
+    const spares: TextStreamProvider[] = [];
+    let prio = 1;
+    if (this.hasNatively()) {
+      spares.push({
+        id: 'natively', name: 'Natively API', isLocal: false, priority: prio++,
+        ttftTimeoutMs: NATIVELY_TEXT_TTFT_MS,
+        open: (sig) => this.streamWithNatively(userContent, finalSystemPrompt, undefined, sig, INTERACTIVE_CONNECT_TIMEOUT_MS),
+      });
+    }
+    if (this.client) {
+      spares.push({
+        id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: prio++,
+        open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_MODEL, undefined, finalSystemPrompt, sig, thinkingBudget),
+      });
+    }
+    if (this.groqClient) {
+      const groqSystem = this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
+      spares.push({
+        id: 'groq', name: 'Groq', isLocal: false, priority: prio++,
+        open: (sig) => this.streamWithGroq(userContent, GROQ_MODEL, groqSystem, sig),
+      });
+    }
+    return spares;
+  }
+
+  /**
+   * When to launch the parallel retry, for a single-provider user who has no
+   * spare rung to fail over to.
+   *
+   * MUST sit ABOVE this endpoint's observed first token, or the hedge fires on
+   * turns that were about to succeed and bills the user's own key twice for
+   * nothing. The engine's own default (hedgeDelayDefaultMs, clamped 2.5-6s) is
+   * sized for the shipped text chain and is far too eager for a gateway
+   * measured at 11.6s — and its EWMA input is absent here anyway, because the
+   * selected provider's terminal branch never populated textHealth. So the
+   * delay comes from the same decaying max the adaptive ceiling uses; a second
+   * latency statistic for one provider is the recurring mistake in this area.
+   */
+  private hedgeDelayForBudget(budgetMs: number): number {
+    const observed = this.observedAnswerLatency();
+    const floor = Math.round(budgetMs * 0.5);
+    const ceil = Math.round(budgetMs * 0.85);
+    if (!observed || observed.count <= 0) return Math.round(budgetMs * 0.6);
+    return Math.min(ceil, Math.max(floor, Math.round(observed.maxMs) + 1500));
+  }
+
+  /**
+   * Run a single-terminal-rung text turn through the shared fallback engine, so
+   * that a STALL fails over (or, with nothing to fail over to, is retried in
+   * parallel) instead of running out the clock.
+   *
+   * The rung budget comes from the live route table, NOT
+   * DEFAULT_TEXT_FALLBACK_CONFIG's 2_500ms. That default is sized for the
+   * shipped chain; applying it here would fail this population over at 2.5s
+   * when their measured tail is 11.6s, silently undoing the whole route table.
+   */
+  private async *streamSelectedProviderWithFailover(opts: {
+    id: string;
+    name: string;
+    open: (signal: AbortSignal) => AsyncGenerator<string, void, unknown>;
+    userContent: string;
+    finalSystemPrompt: string;
+    thinkingBudget: number;
+    abortSignal?: AbortSignal;
+  }): AsyncGenerator<string, void, unknown> {
+    // Dynamic, like every other liveDeadlines use in this file — a static
+    // import here closes a module cycle.
+    const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
+    const budgetMs = totalHardTimeoutMs({
+      isUserEndpoint: this.isUsingUserEndpoint(),
+      observedUserEndpointLatency: this.observedAnswerLatency(),
+    });
+    const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget);
+    const hedging = spares.length === 0;
+
+    // How long to wait on this provider before doing something else. With a
+    // spare behind it that is a FAILOVER trigger; with nothing behind it, it is
+    // the whole budget, because giving up early on the only provider you have
+    // buys nothing. Same question either way, so the same number answers it —
+    // and it is measurement-aware, which is what stops a gateway with a known
+    // 11.6s tail being abandoned at the engine's text-sized 2.5s default.
+    const primaryTtftMs = spares.length > 0 ? this.hedgeDelayForBudget(budgetMs) : budgetMs;
+    const primary: TextStreamProvider = {
+      id: opts.id, name: opts.name, isLocal: false, priority: 0,
+      ttftTimeoutMs: primaryTtftMs,
+      open: (sig) => opts.open(sig),
+    };
+    if (hedging) {
+      // A distinct id so the primary's own breaker does not suppress its hedge.
+      // The cost of the distinct id is that the hedge gets its own cooldown, so
+      // a chronically dead provider keeps being hedged — accepted, because the
+      // alternative is that the first failure disables the only retry this user
+      // has.
+      primary.hedgeWith = {
+        id: `${opts.id}#hedge`,
+        name: `${opts.name} (parallel retry)`,
+        open: (sig) => opts.open(sig),
+      };
+    }
+
+    console.log('[LLMHelper] selected-provider text turn', {
+      provider: opts.id, budgetMs, primaryTtftMs, spares: spares.map(p => p.id),
+      mode: hedging ? 'hedged (no spare rung configured)' : 'failover',
+    });
+
+    yield* runStreamingTextFallback(
+      [primary, ...spares],
+      this.textHealth,
+      {
+        ...DEFAULT_TEXT_FALLBACK_CONFIG,
+        // One attempt per rung: the hedge is already a second concurrent call,
+        // and maxAttempts 2 would make a single-provider turn four billed
+        // requests before the chain even ends.
+        maxAttempts: 1,
+        ttftTimeoutMs: budgetMs,
+        hedgeEnabled: hedging,
+        hedgeDelayDefaultMs: this.hedgeDelayForBudget(budgetMs),
+        hedgeDelayMinMs: Math.round(budgetMs * 0.4),
+        hedgeDelayMaxMs: Math.round(budgetMs * 0.9),
+      },
+      {},
+      opts.abortSignal,
+    );
+  }
+
+  /**
    * Pick a configured-but-not-selected custom provider as a last-resort fallback
    * for the live cascade. Returns the first one (arbitrary — users typically
    * configure at most one or two). Returns null if none configured.
@@ -7636,16 +7786,26 @@ let isMultimodal = !!(imagePaths?.length);
 
     // 2a. CustomProvider (switchToCustom path) — full SSE-capable streaming
     if (this.customProvider) {
-      // This rung is TERMINAL: it returns unconditionally, so there is no
-      // provider behind it to fall back to. That is why the user-facing failure
-      // sentence belongs here and not inside streamWithCustom — inside the
-      // generator it was also being handed to the vision chain and the Natively
-      // TTFT race, where a non-empty chunk means "this provider works" and the
-      // real fallback was therefore never reached.
+      // This rung used to be TERMINAL — it returned unconditionally, so a user
+      // on their own gateway had no failover on the text path at all, and the
+      // one mechanism here that turns SLOWNESS into failover (the Natively TTFT
+      // race) was unreachable for them. A gateway that connects then goes quiet
+      // throws nothing, so no catch fired and nothing fell through.
+      //
+      // It now runs through the shared fallback engine: a spare rung if the user
+      // has one keyed, and a PARALLEL RETRY of the same gateway if they do not.
+      // The engine still returns unconditionally afterwards, so the user-facing
+      // failure sentence below is still the last word — it just now speaks only
+      // once every rung, including the hedge, has failed.
       const commit = { emitted: false };
       try {
         yield* this.trackCommit(
-          this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, abortSignal),
+          this.streamSelectedProviderWithFailover({
+            id: 'custom',
+            name: `Custom (${this.customProvider.name})`,
+            open: (sig) => this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, sig),
+            userContent, finalSystemPrompt, thinkingBudget, abortSignal,
+          }),
           commit,
         );
       } catch (e: any) {
@@ -7719,7 +7879,15 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (this.isNvidiaNimModel(this.currentModelId) && this.nvidiaNimClient) {
       const nimSystem = this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
-      yield* this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      // Same treatment as Custom and LiteLLM: a self-hosted NIM endpoint may be
+      // cold-starting a container, and this branch had neither failover nor an
+      // exception to fall through on.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'nvidia_nim',
+        name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`,
+        open: (sig) => this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: nimSystem, thinkingBudget, abortSignal,
+      });
       return;
     }
 
@@ -7728,7 +7896,15 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isLiteLLMModel(this.currentModelId) && this.litellmClient) {
       const litellmSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalLitellmSystem = this.injectLanguageInstruction(litellmSystem);
-      yield* this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, abortSignal);
+      // Same treatment as the Custom rung above: a LiteLLM gateway is an address
+      // we have not measured, fronting an upstream we cannot see, and this branch
+      // had no failover and no exception on a stall.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'litellm',
+        name: `LiteLLM (${this.currentModelId.replace('litellm/', '')})`,
+        open: (sig) => this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
+        userContent, finalSystemPrompt: finalLitellmSystem, thinkingBudget, abortSignal,
+      });
       return;
     }
 

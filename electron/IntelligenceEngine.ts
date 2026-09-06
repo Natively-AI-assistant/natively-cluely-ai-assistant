@@ -3738,7 +3738,16 @@ export class IntelligenceEngine extends EventEmitter {
                     // does not consult rung health — that costs the regeneration
                     // budget and nothing else, which is why the budget is capped
                     // by the turn total rather than being a second full one.
-                    const regenBudget = regenerationBudgetMs({
+                    // A user-endpoint route no longer needs this: LLMHelper now
+                    // runs those turns through the shared fallback engine, which
+                    // has already either failed over to a spare rung or retried
+                    // the same gateway IN PARALLEL. Regenerating here would be a
+                    // third identical call on the user's own key, for a provider
+                    // that has already been tried twice.
+                    const engineAlreadyRetried = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
+                        && (this.llmHelper as any).isUsingUserEndpoint() === true
+                        && !isVisionTurn;
+                    const regenBudget = engineAlreadyRetried ? 0 : regenerationBudgetMs({
                         routeBudgetMs: firstUsefulDeadline,
                         elapsedMs: Date.now() - answerStreamStartedAt,
                     });
