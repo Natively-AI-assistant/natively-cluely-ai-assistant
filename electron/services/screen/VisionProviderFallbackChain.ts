@@ -131,6 +131,16 @@ export interface VisionInvocationParams {
 export interface VisionRungHealth {
   /** Epoch ms until which this rung is skipped. */
   openUntil: number;
+  /**
+   * Consecutive timeouts caused by OUR OWN budget clamp rather than by the
+   * provider. The first is forgiven — it is genuinely not the rung's fault and
+   * cooling a healthy rung for it disables the one that would have answered.
+   * The second is not: a rung that hangs past its slice on every turn will keep
+   * doing so, and forgiving it forever re-creates the memoryless behaviour this
+   * whole structure exists to prevent (measured: a hanging leading rung burned
+   * the full budget on 5 consecutive turns and was never cooled).
+   */
+  clampedMisses?: number;
 }
 
 export interface RunFallbackParams {
@@ -466,7 +476,15 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         durationMs,
       });
       params.telemetry?.({ type: 'vision_failed', provider: provider.id, errorClass, durationMs });
-      if (!selfInflictedTimeout) noteRungFailure(health, provider.id, errorClass, nowMs);
+      if (selfInflictedTimeout) {
+        const prior = health?.get(provider.id);
+        const misses = (prior?.clampedMisses ?? 0) + 1;
+        health?.set(provider.id, { openUntil: prior?.openUntil ?? 0, clampedMisses: misses });
+        // Forgive the first, cool from the second on.
+        if (misses > 1) noteRungFailure(health, provider.id, errorClass, nowMs);
+      } else {
+        noteRungFailure(health, provider.id, errorClass, nowMs);
+      }
       if (i < params.providers.length - 1) {
         const next = params.providers[i + 1];
         params.telemetry?.({ type: 'vision_fallback', from: provider.id, to: next.id });
@@ -511,7 +529,7 @@ function noteRungFailure(
   if (!health) return;
   if (errorClass === 'invalid_payload' || errorClass === 'no_vision') return;
   const cooldown = errorClass === 'auth_error' ? RUNG_AUTH_COOLDOWN_MS : RUNG_TRANSIENT_COOLDOWN_MS;
-  health.set(id, { openUntil: now() + cooldown });
+  health.set(id, { openUntil: now() + cooldown, clampedMisses: health.get(id)?.clampedMisses });
 }
 
 function classifyError(err: any, aborted: boolean): VisionErrorClass {

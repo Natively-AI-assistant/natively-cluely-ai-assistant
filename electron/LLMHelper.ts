@@ -649,6 +649,24 @@ export class LLMHelper {
     const replayed = [...args] as Parameters<LLMHelper['streamChat']>;
     replayed[0] = message;
     replayed[7] = signal;
+    // The spread is SHALLOW, so the route object at [9] — and the
+    // contextOsGeneration inside it — was the very same instance the answer
+    // turn is still using. The govern branch sets
+    // `governedEvidenceResolutionStarted = true` before it checks
+    // `_cogEarly.evidencePack`, so any throw inside that try replaces the pack
+    // with emptyEvidencePack({ answerPolicy: 'refuse_insufficient_evidence' }).
+    // Reproduced: the repair's write turned the ANSWER's real pack into a
+    // refuse-pack, which the post-stream validator and claim persistence then
+    // read for an answer that had already been delivered. A repair must be able
+    // to resolve its own evidence without editing the turn it is repairing.
+    const route: any = replayed[9];
+    if (route && typeof route === 'object') {
+      const copy: any = { ...route };
+      if (copy.contextOsGeneration && typeof copy.contextOsGeneration === 'object') {
+        copy.contextOsGeneration = { ...copy.contextOsGeneration };
+      }
+      replayed[9] = copy;
+    }
     return replayed;
   }
 
@@ -1978,7 +1996,6 @@ export class LLMHelper {
       observedUserEndpointLatency: this.observedAnswerLatency(),
     });
     const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget, [opts.id, ...(opts.excludeSpareIds ?? [])]);
-    const hedging = spares.length === 0;
 
     // How long to wait on this provider before doing something else. With a
     // spare behind it that is a FAILOVER trigger; with nothing behind it, it is
@@ -1986,7 +2003,7 @@ export class LLMHelper {
     // buys nothing. Same question either way, so the same number answers it —
     // and it is measurement-aware, which is what stops a gateway with a known
     // 11.6s tail being abandoned at the engine's text-sized 2.5s default.
-    const primaryTtftMs = spares.length > 0 ? this.hedgeDelayForBudget(budgetMs) : budgetMs;
+    let primaryTtftMs = spares.length > 0 ? this.hedgeDelayForBudget(budgetMs) : budgetMs;
 
     // Fit the spare rungs INSIDE the caller's ceiling. Each rung previously
     // declared its own ttft (natively 8000) or inherited the whole budget, so
@@ -2005,6 +2022,18 @@ export class LLMHelper {
       fittedSpares.push({ ...spare, ttftTimeoutMs: give });
       remainingForSpares -= give;
     }
+    // If fitting dropped EVERY spare, this is the lone-provider case after all,
+    // and both decisions above were made on the pre-fitting count: the primary
+    // would keep a shortened failover-trigger ttft while having nothing to fail
+    // over to, and no hedge would be armed — strictly worse than before rung
+    // fitting existed. Today the arithmetic cannot quite reach that (the
+    // user-endpoint budget is observed+5000 while the hedge fires at
+    // observed+1500, leaving exactly 3500ms, and the shipped 8000ms route never
+    // records latency so it always leaves 3200ms) — but that is a coincidence
+    // of two unrelated constants, not a guarantee, and it would break silently
+    // the day either one moves. Decide from what actually survived.
+    if (fittedSpares.length === 0) primaryTtftMs = budgetMs;
+    const hedging = fittedSpares.length === 0;
     const primary: TextStreamProvider = {
       id: opts.id, name: opts.name, isLocal: false, priority: 0,
       ttftTimeoutMs: primaryTtftMs,

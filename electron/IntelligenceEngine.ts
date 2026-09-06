@@ -3588,7 +3588,6 @@ export class IntelligenceEngine extends EventEmitter {
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {
-                noteFirstToken();
                 emittedStreamingToken = true;
                 openedStreamRow = true;
                 if (trace.markFirstUseful({ via: 'stream', answerType: answerPlan.answerType })) {
@@ -3630,6 +3629,18 @@ export class IntelligenceEngine extends EventEmitter {
                 onFirstUsefulTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { budgetMs: firstUsefulDeadline, answerType: answerPlan.answerType }); },
                 onStallTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { reason: 'inter_token_stall', answerType: answerPlan.answerType }); },
                 onToken: (token: string) => {
+                    // TTFT is measured HERE, at the first token off the wire —
+                    // not in emitChunk. emitChunk fires on the first VISIBLE
+                    // token, which on a coding turn is gated behind
+                    // CodingStreamGate until a '## ' heading is confirmed, so
+                    // seconds of gate-hold were being recorded as provider
+                    // latency. That feeds a decaying MAX (max(ms, prev*0.9)),
+                    // so one gated turn widened the endpoint's budget by up to
+                    // 5s and decayed only ~10% per turn afterwards — an upward
+                    // ratchet on a number whose whole purpose is to track the
+                    // endpoint. Manual chat already measured it here; the two
+                    // surfaces feed one map and must mean the same thing.
+                    if (!isSpeculative) noteFirstToken();
                     fullAnswer += token;
                     if (isSpeculative) return; // speculative prefetch never streams to UI
                     if (codingGate) {
@@ -3771,7 +3782,14 @@ export class IntelligenceEngine extends EventEmitter {
                                     stream: this.llmHelper.streamChat(...(retryArgs as Parameters<LLMHelper['streamChat']>)) as AsyncGenerator<string>,
                                     firstUsefulDeadlineMs: regenBudget,
                                     interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
-                                    onToken: (tok: string) => { regenerated += tok; },
+                                    onToken: (tok: string) => {
+                                        // Same reason: without this the single
+                                        // emitChunk(regenerated) below recorded
+                                        // the WHOLE regeneration wall-clock as
+                                        // this endpoint's first-token cost.
+                                        if (!isSpeculative) noteFirstToken();
+                                        regenerated += tok;
+                                    },
                                     isUsefulYet: () => regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS
                                         || isCompleteShortAnswer(regenerated),
                                     // A regeneration can outlive the question that

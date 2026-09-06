@@ -350,6 +350,7 @@ describe('a selected single provider now fails over — or retries itself in par
   const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const llm = strip(fs.readFileSync(path.join(root, 'electron/LLMHelper.ts'), 'utf8'));
   const ie = strip(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
+  const ipc = strip(fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8'));
 
   test('every single-rung CLOUD branch goes through the fallback engine', () => {
     for (const id of ['custom', 'litellm', 'nvidia_nim', 'openai', 'claude', 'deepseek']) {
@@ -438,7 +439,13 @@ describe('a selected single provider now fails over — or retries itself in par
   });
 
   test('the hedge only arms when there is nothing to fail over to', () => {
-    assert.match(llm, /const hedging = spares\.length === 0;/);
+    // Decided from the FITTED list, not the raw one: if budget-fitting drops
+    // every spare, this is the lone-provider case after all and the hedge must
+    // arm — otherwise the primary keeps a shortened failover-trigger ttft with
+    // nothing behind it and no parallel retry, worse than before fitting.
+    assert.match(llm, /const hedging = fittedSpares\.length === 0;/);
+    assert.match(llm, /if \(fittedSpares\.length === 0\) primaryTtftMs = budgetMs;/,
+      'a turn whose spares were all dropped must get the whole budget back');
     assert.match(llm, /hedgeEnabled: hedging/);
     assert.match(llm, /if \(hedging\) \{[\s\S]{0,600}?hedgeWith = \{/,
       'hedgeWith must only be attached when no spare rung exists');
@@ -454,7 +461,7 @@ describe('a selected single provider now fails over — or retries itself in par
   });
 
   test('a rung with a spare behind it waits LESS than one without', () => {
-    assert.match(llm, /const primaryTtftMs = spares\.length > 0 \? this\.hedgeDelayForBudget\(budgetMs\) : budgetMs;/,
+    assert.match(llm, /let primaryTtftMs = spares\.length > 0 \? this\.hedgeDelayForBudget\(budgetMs\) : budgetMs;/,
       'waiting the full ceiling before failing over makes failover as slow as giving up');
   });
 
@@ -477,6 +484,42 @@ describe('a selected single provider now fails over — or retries itself in par
     // regeneration.
     assert.equal(/engineAlreadyRetried[\s\S]{0,400}?isUsingUserEndpoint\(\) === true/.test(ie), false,
       'the regeneration gate must not key off isUsingUserEndpoint again');
+  });
+
+  test('a repair gets its OWN route object, never the answer\'s', () => {
+    // Shallow-spreading the argument tuple shared contextOsGeneration with the
+    // live answer turn, so the repair's govern catch could replace the answer's
+    // real evidencePack with a refuse-pack AFTER the answer had been delivered.
+    assert.match(llm, /const route: any = replayed\[9\];/);
+    assert.match(llm, /copy\.contextOsGeneration = \{ \.\.\.copy\.contextOsGeneration \};/);
+  });
+
+  test('TTFT is measured at the first token off the wire, not the first VISIBLE one', () => {
+    // noteFirstToken() inside emitChunk recorded CodingStreamGate hold time as
+    // provider latency, and it feeds a decaying MAX — an upward ratchet.
+    const emitAt = ie.indexOf('const emitChunk = (chunk: string) => {');
+    assert.ok(emitAt > 0);
+    assert.equal(ie.slice(emitAt, emitAt + 200).includes('noteFirstToken()'), false,
+      'emitChunk must not be the TTFT measurement point');
+    assert.match(ie, /onToken: \(token: string\) => \{[\s\S]{0,80}?if \(!isSpeculative\) noteFirstToken\(\);/);
+    // and the regeneration times its own first token, not its whole duration
+    assert.match(ie, /if \(!isSpeculative\) noteFirstToken\(\);\s*\n\s*regenerated \+= tok;/);
+  });
+
+  test('a successful regeneration takes the NORMAL exit, not an early return', () => {
+    // An early `return fullAnswer` skipped the terminal suggested_answer emit,
+    // setMode('idle'), persistence, trace.finish and every post-stream
+    // sanitizer — on raw model output that had never been validated.
+    const at = ie.indexOf("trace.mark('answer_regeneration_succeeded'");
+    assert.ok(at > 0, 'regeneration success branch not found');
+    const branch = ie.slice(at, at + 700);
+    assert.equal(/return fullAnswer;/.test(branch), false,
+      'the regeneration success branch must fall through, never return');
+    assert.match(branch, /\} else \{/, 'the failure path must be an else, or success falls into it');
+  });
+
+  test('the manual repair honours a caller-supplied context, not just a system prompt', () => {
+    assert.match(ipc, /if \(fallbackContext !== undefined\) replayed\[2\] = fallbackContext;/);
   });
 
   test('the cURL route is excluded from "already retried" because it is terminal', () => {

@@ -69,6 +69,12 @@ function repairCallArgs(
     // contract it is re-running under. The caller's wins; the images,
     // transcript, scopes and route are still inherited.
     if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+    // Same precedence for the context. It was accepted and then ignored on this
+    // branch, so the two coding-regen sites silently lost
+    // codingPriorProblemBlock in the common case (a turn that HAS a remembered
+    // answer) — a regeneration that exists to re-solve the previous problem
+    // could no longer see it, and nothing typechecked or warned.
+    if (fallbackContext !== undefined) replayed[2] = fallbackContext;
     return replayed;
   }
   return [repairPrompt, undefined, fallbackContext, fallbackSystemPrompt, true, true, [], signal] as StreamChatArgs;
