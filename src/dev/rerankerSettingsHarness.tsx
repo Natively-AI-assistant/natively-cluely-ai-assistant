@@ -43,7 +43,7 @@ const CATALOG_MODELS = [
     },
     {
         id: 'bge-reranker-large', name: 'BGE Reranker Large', runtime: 'onnx', repo: 'Xenova/bge-reranker-large',
-        params: '560M · int8', note: 'Highest quality of the local models measured — but the slowest to load.',
+        params: '560M · int8', note: 'High quality local model (560M parameters), but slower to load.',
         bytes: 580038433, recommended: false,
         license: { spdx: 'MIT', url: '#', commercialUseRestricted: false, requiresAcknowledgement: false },
         state: 'not-installed', bytesOnDisk: 0, selected: false,
