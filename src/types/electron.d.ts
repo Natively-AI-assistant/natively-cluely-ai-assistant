@@ -690,9 +690,6 @@ export interface ElectronAPI {
   antigravityCancelLogin: () => Promise<void>;
   antigravitySignOut: () => Promise<{ success: boolean; error?: string }>;
   antigravityModels: (force?: boolean) => Promise<{ success: boolean; models: { id: string; label: string }[]; error?: string }>;
-  getAntigravityCloudProject: () => Promise<string>;
-  setAntigravityCloudProject: (value: string) => Promise<{ success: boolean; error?: string }>;
-  onAntigravityCloudProjectChanged: (callback: (value: string) => void) => () => void;
   onAntigravityStatusChanged: (callback: (status: { signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }) => void) => () => void;
   codexStartLogin: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
   codexSignOut: () => Promise<{ success: boolean; error?: string }>;

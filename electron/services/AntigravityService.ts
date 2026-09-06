@@ -424,165 +424,35 @@ function extractProjectId(value: unknown): string | undefined {
   return undefined;
 }
 
-/**
- * Tier shape, for logging and for the "needs your own project" decision.
- *
- * `userDefinedCloudaicompanionProject` is the field that matters: when a tier
- * sets it, Google expects the CALLER to pass `cloudaicompanionProject`, and
- * onboardUser's long-running operation simply never reaches `done: true`
- * without one. gemini-cli (the public client for this same v1internal surface)
- * reads it and fails with an actionable message; this service did not, so every
- * such account got the generic "did not finish" after five polls.
- *
- * Deliberately shape-only — no token, no email, no raw body.
- */
-function describeTier(tier: unknown): Record<string, unknown> | null {
-  if (!tier || typeof tier !== 'object') return null;
-  const t = tier as Record<string, unknown>;
-  return {
-    id: t.id,
-    isDefault: t.isDefault,
-    userDefinedCloudaicompanionProject: t.userDefinedCloudaicompanionProject,
-    hasAcceptedTos: t.hasAcceptedTos,
-    hasOnboardedPreviously: t.hasOnboardedPreviously,
-  };
-}
-
-/**
- * GCP project id rule: 6-30 chars, lowercase letter first, then lowercase
- * letters/digits/hyphens, no trailing hyphen. Validated here rather than only in
- * the UI so an env var or a hand-edited settings.json cannot put a malformed id
- * on the wire and turn a typo into "setup did not finish".
- */
-export const CLOUD_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
-
-export function isValidCloudProject(value: string): boolean {
-  return CLOUD_PROJECT_PATTERN.test(value.trim());
-}
-
-/**
- * Explicit setting, pushed in by the IPC layer. Kept as module state with a
- * setter rather than importing SettingsManager here: this service is
- * deliberately self-contained (see the file header), and its test suite stubs
- * module loading, so a new import would have to be mocked in every case.
- */
-let configuredCloudProject: string | undefined;
-
-export function setConfiguredCloudProject(value: string | null | undefined): void {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  configuredCloudProject = trimmed && isValidCloudProject(trimmed) ? trimmed : undefined;
-}
-
-/**
- * A Google Cloud project the USER supplies.
- *
- * Needed because Google refuses this client the free tier outright —
- * loadCodeAssist returns
- *   ineligibleTiers: [{ tierId: 'free-tier', reasonCode: 'UNSUPPORTED_CLIENT' }]
- * — leaving only `standard-tier`, which is a bring-your-own-project tier. The
- * project must have the Gemini for Cloud API enabled, and usage bills to it.
- *
- * The in-app setting wins over the environment. gemini-cli only has the env
- * vars so it ranks them against each other; here a value the user typed into
- * Settings must beat an ambient one they may not even know is exported.
- */
-export function preferredCloudProject(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  if (configuredCloudProject) return configuredCloudProject;
-  const raw = env.GOOGLE_CLOUD_PROJECT?.trim() || env.GOOGLE_CLOUD_PROJECT_ID?.trim();
-  return raw && isValidCloudProject(raw) ? raw : undefined;
-}
-
-function requiresUserProject(tier: unknown): boolean {
-  return Boolean(tier && typeof tier === 'object'
-    && (tier as Record<string, unknown>).userDefinedCloudaicompanionProject === true);
-}
-
 async function discoverProject(accessToken: string, signal: AbortSignal): Promise<string> {
   const headers = antigravitySetupHeaders(accessToken);
-  // The reference client's LoadCodeAssistRequest carries `cloudaicompanionProject`
-  // when the user has one; this used to send `{ metadata }` only, so even a user
-  // with a perfectly good project had no way to get it onto the wire.
-  const preferred = preferredCloudProject();
   const loadResponse = await fetchWithDnsRetry(
     `${ANTIGRAVITY_PROD_ENDPOINT}/v1internal:loadCodeAssist`,
-    {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...(preferred ? { cloudaicompanionProject: preferred } : {}),
-        metadata: metadata('ANTIGRAVITY'),
-      }),
-      signal,
-    },
+    { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ metadata: metadata('ANTIGRAVITY') }), signal },
     4,
   );
   const loaded = await responseJson(loadResponse, 'setup');
   const existing = extractProjectId(loaded?.cloudaicompanionProject);
-  // This service used to log NOTHING, which is why a failed sign-in produced a
-  // one-line UI string and an app log with no Antigravity entries at all —
-  // there was no way to tell a non-eligible account from a slow provision.
-  console.log('[Antigravity] loadCodeAssist ok', JSON.stringify({
-    hasProject: Boolean(existing),
-    suppliedProject: preferred ? 'set' : 'unset',
-    currentTier: describeTier(loaded?.currentTier),
-    allowedTiers: Array.isArray(loaded?.allowedTiers) ? loaded.allowedTiers.map(describeTier) : null,
-    ineligibleTiers: Array.isArray(loaded?.ineligibleTiers)
-      ? loaded.ineligibleTiers.map((item: any) => ({ tierId: item?.tierId, reasonCode: item?.reasonCode })) : null,
-  }));
   if (existing) return existing;
 
   let tierId = 'legacy-tier';
-  let selectedTier: unknown = loaded?.currentTier ?? null;
   if (Array.isArray(loaded?.allowedTiers)) {
     const tier = loaded.allowedTiers.find((item: any) => item?.isDefault === true && typeof item?.id === 'string' && item.id.trim());
-    if (tier) { tierId = tier.id.trim(); selectedTier = tier; }
+    if (tier) tierId = tier.id.trim();
   }
-
-  // Fail fast and say what is actually wrong. Polling five times cannot help:
-  // Google is waiting for a project id, and without one the operation stays
-  // pending forever.
-  if (requiresUserProject(selectedTier) && !preferred) {
-    console.warn(`[Antigravity] tier "${tierId}" requires a caller-supplied Google Cloud project and none is set.`);
-    throw new AntigravityError('setup', 'Antigravity needs your own Google Cloud project on this account. Set GOOGLE_CLOUD_PROJECT to a project with the Gemini for Cloud API enabled, then sign in again.');
-  }
-
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const onboardResponse = await fetchWithDnsRetry(
       `${ANTIGRAVITY_PROD_ENDPOINT}/v1internal:onboardUser`,
-      {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tierId,
-          ...(preferred ? { cloudaicompanionProject: preferred } : {}),
-          metadata: metadata('ANTIGRAVITY'),
-        }),
-        signal,
-      },
+      { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ tierId, metadata: metadata('ANTIGRAVITY') }), signal },
       4,
     );
     const onboarded = await responseJson(onboardResponse, 'setup');
     const project = onboarded?.done === true
       ? extractProjectId(onboarded?.response?.cloudaicompanionProject) : undefined;
-    console.log(`[Antigravity] onboardUser ${attempt}/5`, JSON.stringify({
-      tierId,
-      done: onboarded?.done === true,
-      gotProject: Boolean(project),
-      // `done: true` with no project id is a DIFFERENT failure from a pending
-      // LRO, and the old code collapsed both into one message.
-      responseKeys: onboarded?.response && typeof onboarded.response === 'object'
-        ? Object.keys(onboarded.response) : null,
-      error: onboarded?.error ? { code: onboarded.error.code, status: onboarded.error.status } : null,
-    }));
     if (project) return project;
     if (attempt < 5) await wait(1_500, undefined, { signal });
   }
-  // ~6s of polling total (5 requests, 4 x 1.5s waits). Say so, because "try
-  // again" is only good advice if the cause was slowness.
-  console.warn('[Antigravity] onboardUser never returned done+project within 5 attempts (~6s of polling).');
-  throw new AntigravityError('setup', preferred
-    ? `Google did not finish setting up project "${preferred}" within ~6 seconds. Check that the Gemini for Cloud API is enabled on it, then try again.`
-    : 'Google did not finish setting up this account within ~6 seconds. Try signing in again; if it keeps failing, this account is probably not eligible for Antigravity.');
+  throw new AntigravityError('setup', 'Google account setup did not finish. Try signing in again.');
 }
 
 export class AntigravityService extends EventEmitter {

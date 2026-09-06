@@ -40,8 +40,6 @@ export interface AppSettings {
     // Keep the persisted default OFF during rollout; the operator kill switch
     // (NATIVELY_DIRECT_ASSIST_KILL_SWITCH) always wins over this preference.
     directAssistEnabled?: boolean;
-    /** Google Cloud project used for Antigravity's standard tier. See AntigravityService. */
-    antigravityCloudProject?: string;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
@@ -405,15 +403,6 @@ export class SettingsManager {
     public getDirectAssistEnabled(): boolean {
         if (this.isDirectAssistKilledByOperator()) return false;
         return this.settings.directAssistEnabled === true;
-    }
-
-    /**
-     * Google Cloud project for Antigravity. Empty string means "not set" — the
-     * service then falls back to GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_PROJECT_ID.
-     */
-    public getAntigravityCloudProject(): string {
-        const raw = this.settings.antigravityCloudProject;
-        return typeof raw === 'string' ? raw.trim() : '';
     }
 
     // ── Smart Browser Context v2 — resolved settings (single default source) ──
