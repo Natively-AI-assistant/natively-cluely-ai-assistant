@@ -3816,7 +3816,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     than replacing it — Antigravity can abort a pending browser
                     round-trip and Codex cannot, and that capability should not
                     cost the shared shape. */}
-                <div className="flex flex-wrap gap-2">
+                {/* `.aip-provider-row`, the same class Groq / NVIDIA NIM / every
+                    ProviderCard action row uses — not an ad-hoc `flex flex-wrap gap-2`,
+                    which was 8px in both axes where that class is 12px column / 8px row.
+                    Reusing it keeps the two card families spaced identically instead of
+                    close enough to look like a mistake. */}
+                <div className="aip-provider-row">
                     {antigravityStatus.inProgress ? (
                         <>
                             <button type="button" className="aip-btn flex-1" data-size="row" disabled>
@@ -3840,38 +3845,44 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         >
                             <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
                         </button>
-                    ) : (
-                        /* "Reload models" is gone from this row: AipModelList below owns
+                    ) : (<>
+                        {/* "Reload models" is gone from this row: AipModelList owns
                            discovery, exactly as ProviderCard's comment says for the cloud
-                           cards. Two controls for one action is what that note warns about. */
+                           cards. Two controls for one action is what that note warns about. */}
                         <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
-                    )}
+
+                        {/* Beside Disconnect, not under it — the same row placement Groq,
+                            NVIDIA NIM and every other ProviderCard uses.
+
+                            It MUST be a direct child of this wrapping flex row: AipModelList
+                            is a fragment whose summary is `order-2` (so it lands after the
+                            order-0 buttons) and whose panel is `basis-full order-4` (so the
+                            panel wraps onto its own line). Outside a wrapping flex row those
+                            classes are inert and the panel squeezes — which is exactly what
+                            it did when this sat in a block below. The enclosing fragment is
+                            transparent to flex, so these stay direct children.
+
+                            Ids carry the `antigravity:` prefix because that is the form
+                            buildAvailableModelOptions and the allow-list already use; a bare
+                            id would tick a row that never matches at read time. Antigravity
+                            is not an opt-in provider (isOptInModelProvider is litellm-only),
+                            so an empty allow-list still means ALL models. */}
+                        {antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
+                            <AipModelList
+                                models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
+                                enabled={cloudEnabledModels['antigravity'] || []}
+                                onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
+                                onReset={() => handleResetModels('antigravity')}
+                                defaultId={defaultModel.startsWith('antigravity:') ? defaultModel : undefined}
+                                onSetDefault={(modelId) => handleSetDefaultModel('antigravity', modelId)}
+                                error={modelSaveError['antigravity'] ? 'save-failed' : null}
+                                refreshing={antigravityBusy}
+                                onRefresh={() => void runAntigravityAction('models')}
+                                catalogIsComplete
+                            />
+                        )}
+                    </>)}
                 </div>
-
-                {/* Model list, same control every key-backed provider gets via
-                    ProviderCard — tick rows to narrow the picker, promote one to
-                    default, refresh the catalogue. Antigravity is NOT an opt-in
-                    provider (isOptInModelProvider is litellm-only), so an empty
-                    allow-list means ALL models, which is the behaviour the plain
-                    count line described before.
-
-                    Ids carry the `antigravity:` prefix here because that is the form
-                    buildAvailableModelOptions and the allow-list already use; passing
-                    the bare id would tick a row that never matches at read time. */}
-                {antigravityStatus.signedIn && antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
-                    <AipModelList
-                        models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
-                        enabled={cloudEnabledModels['antigravity'] || []}
-                        onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
-                        onReset={() => handleResetModels('antigravity')}
-                        defaultId={defaultModel.startsWith('antigravity:') ? defaultModel : undefined}
-                        onSetDefault={(modelId) => handleSetDefaultModel('antigravity', modelId)}
-                        error={modelSaveError['antigravity'] ? 'save-failed' : null}
-                        refreshing={antigravityBusy}
-                        onRefresh={() => void runAntigravityAction('models')}
-                        catalogIsComplete
-                    />
-                )}
                 {antigravityStatus.signedIn && antigravityModels.length === 0 && (
                     <p className="text-xs aip-muted">{t('No Antigravity models currently have quota. Reload models later.')}</p>
                 )}
