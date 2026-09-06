@@ -268,6 +268,84 @@ export const LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS = 30000;
  * inter-token STALL, never a wall-clock cap, so healthy long answers are never
  * truncated mid-sentence.
  */
+/**
+ * First-token budget for a post-answer REPAIR or REGENERATION stream.
+ *
+ * A repair has different economics from the answer. The user already has an
+ * answer on screen; if the repair times out they keep it. So the cost of a
+ * short deadline here is a wasted repair, not a lost answer — which is why
+ * these have always been shorter than the answer ceiling, and should stay so.
+ *
+ * But a FIXED 7000 was wrong for the same reason a fixed 13000 was wrong for
+ * the answer: it ignored the route. On a gateway whose first token measures 9s,
+ * a 7s repair window can never succeed — so every repair on that provider was
+ * spent and thrown away, every time. That is the actual defect here, and it is
+ * silent: the user just never sees their answer improve.
+ *
+ * Derived from the route's own budget so the two cannot drift, and clamped so
+ * the derivation can never make a repair LONGER than a repair should be:
+ *
+ *   default provider   8000 * 0.6 -> floored to  7000   (unchanged)
+ *   server cascade    13000 * 0.6 ->             7800
+ *   user endpoint     15000 * 0.6 ->             9000   (adaptive; up to 12000)
+ *   local                          LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS (unchanged)
+ *
+ * The floor is today's value, so no repair anywhere gets SHORTER than it is
+ * now — this change only ever buys a slow route more room. Local is passed
+ * through untouched: a cold weight load is not a fraction of anything.
+ */
+export const REPAIR_BUDGET_SHARE_OF_ROUTE = 0.6;
+export const REPAIR_MIN_FIRST_USEFUL_MS = 7000;
+export const REPAIR_MAX_FIRST_USEFUL_MS = 12000;
+/**
+ * Headroom the repair window must leave over the endpoint's OBSERVED first
+ * token, when we have one.
+ *
+ * A share of the answer budget alone does not do this, and the live probe
+ * caught it: a gateway measured at 9s got 15000 * 0.6 = 9000, a repair window
+ * exactly equal to the tail it has to clear. That is a zero-margin deadline —
+ * the same "1.4s above the tail is a coin flip" geometry this file already
+ * documents, at margin zero. Smaller than the answer path's 5000 because a lost
+ * repair costs the user nothing they can see; it only needs to clear the
+ * measurement, not comfortably outlast it.
+ */
+export const REPAIR_LATENCY_MARGIN_MS = 2000;
+
+export function repairDeadlineMs(opts: {
+  isLocal?: boolean;
+  viaServerCascade?: boolean;
+  isUserEndpoint?: boolean;
+  observedUserEndpointLatency?: ObservedLatency | null;
+  /**
+   * The value this call site used before it became route-aware, kept as its own
+   * floor. Two of the eleven sites were tuned to 8000 rather than 7000, and a
+   * single shared floor would have quietly SHORTENED them — turning a change
+   * that is supposed to only ever add room into a regression on two paths.
+   * Defaults to REPAIR_MIN_FIRST_USEFUL_MS.
+   */
+  minMs?: number;
+}): number {
+  if (opts.isLocal) return LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS;
+  const floor = Math.max(REPAIR_MIN_FIRST_USEFUL_MS, opts.minMs ?? 0);
+  const routeBudget = totalHardTimeoutMs({
+    viaServerCascade: opts.viaServerCascade,
+    isUserEndpoint: opts.isUserEndpoint,
+    observedUserEndpointLatency: opts.observedUserEndpointLatency,
+  });
+  const share = Math.round(routeBudget * REPAIR_BUDGET_SHARE_OF_ROUTE);
+  // If this endpoint has been measured, the window must actually clear that
+  // measurement — a repair that cannot finish is not a shorter repair, it is a
+  // wasted one, which is the whole defect being fixed here.
+  const obs = opts.isUserEndpoint ? opts.observedUserEndpointLatency : null;
+  const clearsObserved = obs && obs.count > 0 && Number.isFinite(obs.maxMs)
+    ? Math.round(obs.maxMs) + REPAIR_LATENCY_MARGIN_MS
+    : 0;
+  return Math.min(
+    Math.max(REPAIR_MAX_FIRST_USEFUL_MS, floor),
+    Math.max(floor, share, clearsObserved),
+  );
+}
+
 export const LIVE_INTER_TOKEN_STALL_MS = 8000;
 /** Benchmark per-question hard timeout — the outer wrapper that must never be exceeded. */
 export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;

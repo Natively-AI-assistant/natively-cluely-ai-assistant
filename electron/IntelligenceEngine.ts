@@ -16,7 +16,7 @@ import {
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
-    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs,
+    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs, repairDeadlineMs,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
@@ -218,6 +218,29 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Keep reference to LLMHelper for client access
     private llmHelper: LLMHelper;
+
+    /**
+     * First-token budget for a post-answer repair/regeneration stream.
+     *
+     * These were a hardcoded 7000 on every route. On a gateway whose first token
+     * measures 9s that window can never succeed, so the repair was spent and
+     * discarded on every turn — silently, since the user just never sees their
+     * answer improve. Derived from the route budget instead; see
+     * liveDeadlines.repairDeadlineMs. `minMs` preserves each site's own previous
+     * value as a floor so nothing gets shorter than it is today.
+     */
+    private repairFirstUsefulMs(minMs: number = 7000): number {
+        const h: any = this.llmHelper;
+        const isUserEndpoint = typeof h?.isUsingUserEndpoint === 'function' ? h.isUsingUserEndpoint() === true : false;
+        return repairDeadlineMs({
+            isLocal: typeof h?.isUsingOllama === 'function' ? h.isUsingOllama() === true : false,
+            viaServerCascade: typeof h?.isUsingNativelyServerCascade === 'function' ? h.isUsingNativelyServerCascade() === true : false,
+            isUserEndpoint,
+            observedUserEndpointLatency: isUserEndpoint && typeof h?.observedAnswerLatency === 'function'
+                ? h.observedAnswerLatency() : null,
+            minMs,
+        });
+    }
 
     // Reference to SessionTracker for context
     private session: SessionTracker;
@@ -4098,7 +4121,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 [],
                                 whatToAnswerCancellationToken.signal,
                             ) as AsyncGenerator<string>,
-                            firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                            firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
                             interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
                             shouldAbort: () => scaffoldRepaired.length > 1800
@@ -4400,7 +4423,7 @@ export class IntelligenceEngine extends EventEmitter {
                                             ['reference_files'],
                                             whatToAnswerCancellationToken.signal,
                                         ) as AsyncGenerator<string>,
-                                        firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
                                         interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                                         isUsefulYet: () => repaired.trim().length >= 5,
                                         shouldAbort: () => repaired.length > 1800
@@ -4619,7 +4642,7 @@ export class IntelligenceEngine extends EventEmitter {
                                     [],
                                     whatToAnswerCancellationToken.signal,
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
                                 isUsefulYet: () => repaired.length >= 5,
                                 shouldAbort: () => repaired.length > 1200
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -5025,7 +5048,7 @@ export class IntelligenceEngine extends EventEmitter {
                                     [],
                                     whatToAnswerCancellationToken.signal,
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
                                 isUsefulYet: () => clauseAddition.length >= 5,
                                 shouldAbort: () => clauseAddition.length > 900
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -5239,7 +5262,7 @@ export class IntelligenceEngine extends EventEmitter {
                                         [],
                                         whatToAnswerCancellationToken.signal,
                                     ) as AsyncGenerator<string>,
-                                    firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                    firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
                                     isUsefulYet: () => repaired.length >= 5,
                                     shouldAbort: () => repaired.length > 1200
                                         || whatToAnswerCancellationToken.signal.aborted
@@ -5640,7 +5663,7 @@ export class IntelligenceEngine extends EventEmitter {
                             [],
                             abortSignal,
                         ) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
                         isUsefulYet: () => fixed.length >= 5,
                         shouldAbort: () => fixed.length > 1200 || superseded(),
                         onToken: (tok: string) => { fixed += tok; },

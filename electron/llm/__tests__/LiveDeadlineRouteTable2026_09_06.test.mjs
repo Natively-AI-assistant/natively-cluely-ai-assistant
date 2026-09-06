@@ -86,6 +86,10 @@ const {
   LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS,
   LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS,
   USER_ENDPOINT_MIN_SAMPLES_TO_NARROW,
+  repairDeadlineMs,
+  REPAIR_MIN_FIRST_USEFUL_MS,
+  REPAIR_MAX_FIRST_USEFUL_MS,
+  LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS,
 } = dl;
 
 describe('the route table assigns each route the number its own path justifies', () => {
@@ -417,5 +421,80 @@ describe('the answer call sites actually record what the budget reads', () => {
     assert.ok(/notePhoneFirstToken\(\)/.test(src), 'the phone-mirror path must record');
     assert.equal((src.match(/recordAnswerFirstToken\?\.\(/g) || []).length, 2,
       'both ipcHandlers answer streams must record, and nothing else should');
+  });
+});
+
+
+describe('a repair stream is route-aware without becoming an answer stream', () => {
+  // Different economics: the user already has an answer, so a timed-out repair
+  // costs a wasted repair, not a lost answer. Repairs stay SHORTER than the
+  // answer ceiling — but a fixed 7000 on a 9s gateway could never succeed, so
+  // every repair there was spent and discarded, silently.
+  test('the default route is unchanged at its previous value', () => {
+    assert.equal(repairDeadlineMs({ minMs: 7000 }), 7000);
+    assert.equal(repairDeadlineMs({ minMs: 8000 }), 8000, 'the two 8000-tuned sites must not shrink');
+  });
+
+  test('a slow route buys the repair more room', () => {
+    assert.ok(repairDeadlineMs({ viaServerCascade: true, minMs: 7000 }) > 7000);
+    assert.ok(repairDeadlineMs({ isUserEndpoint: true, minMs: 7000 }) > 7000);
+  });
+
+  test('a repair NEVER outlasts the answer ceiling on the same route', () => {
+    for (const opts of [
+      { viaServerCascade: true },
+      { isUserEndpoint: true },
+      { isUserEndpoint: true, observedUserEndpointLatency: { maxMs: 15_000, count: 10 } },
+      {},
+    ]) {
+      const repair = repairDeadlineMs({ ...opts, minMs: 7000 });
+      const answer = totalHardTimeoutMs(opts);
+      assert.ok(repair <= answer,
+        `repair ${repair}ms must not exceed the answer ceiling ${answer}ms for ${JSON.stringify(opts)}`);
+    }
+  });
+
+  test('no route can make a repair shorter than it is today', () => {
+    for (const minMs of [7000, 8000]) {
+      for (const opts of [{}, { viaServerCascade: true }, { isUserEndpoint: true },
+                          { isUserEndpoint: true, observedUserEndpointLatency: { maxMs: 300, count: 50 } }]) {
+        assert.ok(repairDeadlineMs({ ...opts, minMs }) >= minMs,
+          `${JSON.stringify(opts)} at floor ${minMs} produced ${repairDeadlineMs({ ...opts, minMs })}`);
+      }
+    }
+  });
+
+  test('a measured endpoint gets a window that actually CLEARS its first token', () => {
+    // The hole the live probe found: a share of the answer budget alone gave a
+    // 9s gateway a 9000ms repair window — exactly the tail it had to clear, so
+    // the repair still could never finish. A repair that cannot finish is not a
+    // shorter repair, it is a wasted one.
+    const obs = { maxMs: 9000, count: 3 };
+    const ms = repairDeadlineMs({ isUserEndpoint: true, observedUserEndpointLatency: obs, minMs: 7000 });
+    assert.ok(ms > obs.maxMs, `repair window ${ms}ms must exceed the observed ${obs.maxMs}ms first token`);
+    assert.equal(ms, 11_000);
+  });
+
+  test('a repair is bounded above so it cannot hold the UI', () => {
+    const slowest = repairDeadlineMs({
+      isUserEndpoint: true,
+      observedUserEndpointLatency: { maxMs: 60_000, count: 50 },
+      minMs: 7000,
+    });
+    assert.equal(slowest, REPAIR_MAX_FIRST_USEFUL_MS);
+  });
+
+  test('local is passed through untouched — a cold load is not a fraction of anything', () => {
+    assert.equal(repairDeadlineMs({ isLocal: true, minMs: 7000 }), LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS);
+    assert.equal(repairDeadlineMs({ isLocal: true, isUserEndpoint: true, minMs: 8000 }), LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS);
+  });
+
+  test('every repair call site is route-aware — no bare literals left', () => {
+    const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    for (const rel of ['electron/IntelligenceEngine.ts', 'electron/ipcHandlers.ts']) {
+      const src = strip(fs.readFileSync(path.join(root, rel), 'utf8'));
+      const bare = src.match(/firstUsefulDeadlineMs:\s*(?:usingLocalLlm\s*\?[^,]*:\s*)?\d+\s*,/g) || [];
+      assert.deepEqual(bare, [], `${rel} still has hardcoded repair deadlines: ${bare.join(' | ')}`);
+    }
   });
 });
