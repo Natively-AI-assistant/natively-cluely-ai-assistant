@@ -541,4 +541,97 @@ test('OAuth exchange and onboarding use reference headers, PKCE verifier, select
   } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
 });
 
+test('Voice-app project fallback requires model access and preserves discovered projects', async () => {
+  const mod = await loadService();
+  const oldFetch = globalThis.fetch;
+  const oldOpen = fakeElectron.shell.openExternal;
+  const reason = 'This client is no longer supported for Gemini Code Assist for individuals.';
+  for (const [projectId, modelStatus, modelBody, expectedProject] of [
+    [null, 200, catalog, mod.ANTIGRAVITY_DEFAULT_PROJECT_ID],
+    [null, 403, {}, null],
+    [null, 200, { models: {} }, null],
+    ['paid-project', 200, catalog, 'paid-project'],
+  ]) {
+    const stored = storageWith(null);
+    const { service, oldGetter } = prepareService(mod, stored);
+    const opened = {};
+    let onboardCalls = 0;
+    let modelCalls = 0;
+    fakeElectron.shell.openExternal = async url => { opened.value = url; };
+    globalThis.fetch = async (url, init) => {
+      if (url === mod.ANTIGRAVITY_TOKEN_URL) return jsonResponse({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+      if (url.endsWith(':loadCodeAssist')) return jsonResponse({
+        allowedTiers: [{ id: 'standard-tier', isDefault: true, userDefinedCloudaicompanionProject: true }],
+        ineligibleTiers: [{ reasonCode: 'UNSUPPORTED_CLIENT', reasonMessage: reason }],
+      });
+      if (url.endsWith(':fetchAvailableModels')) {
+        modelCalls++;
+        assert.equal(JSON.parse(init.body).project, 'rising-fact-p41fc');
+        assert.equal(init.headers.Authorization, 'Bearer access');
+        assert.match(init.headers['User-Agent'], /^antigravity\/1\.23\.2 /);
+        return jsonResponse(modelBody, modelStatus);
+      }
+      assert.ok(url.endsWith(':onboardUser'));
+      onboardCalls++;
+      return jsonResponse({ done: true, response: { cloudaicompanionProject: projectId ? { id: projectId } : {} } });
+    };
+    try {
+      const login = service.startLogin();
+      const outcome = expectedProject ? login : assert.rejects(login);
+      const url = await waitForBrowserUrl(opened);
+      await requestCallback(`/oauth-callback?code=code&state=${url.searchParams.get('state')}`);
+      await outcome;
+      assert.equal(onboardCalls, 1);
+      assert.equal(modelCalls, projectId ? 0 : 1);
+      assert.equal(stored.current()?.projectId ?? null, expectedProject);
+      assert.equal(service.getStatus().signedIn, Boolean(expectedProject));
+      await assertCallbackPortFree();
+    } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
+  }
+});
+
+// The Voice-app project fallback is for ONE condition: onboarding completed and
+// the account has no project. responseJson stamps 'setup' on 401/403/429/5xx and
+// invalid JSON too, and the fallback originally caught all of them — so signing
+// in during a transient Google 500 adopted the shared project and saveToStorage
+// PERSISTED it, pinning a user who owns a real Code Assist project to it forever
+// (nothing re-runs discovery short of a sign-out).
+test('a transient onboarding failure does NOT adopt the shared project', async () => {
+  const mod = await loadService();
+  const oldFetch = globalThis.fetch;
+  const oldOpen = fakeElectron.shell.openExternal;
+  for (const [label, status, body] of [
+    ['500 Google unavailable', 500, {}],
+    ['429 quota', 429, {}],
+    ['401 rejected', 401, {}],
+    ['invalid JSON', 200, null],
+  ]) {
+    const stored = storageWith(null);
+    const { service, oldGetter } = prepareService(mod, stored);
+    const opened = {};
+    let modelCalls = 0;
+    fakeElectron.shell.openExternal = async url => { opened.value = url; };
+    globalThis.fetch = async (url) => {
+      if (url === mod.ANTIGRAVITY_TOKEN_URL) return jsonResponse({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+      if (url.endsWith(':loadCodeAssist')) return jsonResponse({ allowedTiers: [{ id: 'standard-tier', isDefault: true }] });
+      if (url.endsWith(':fetchAvailableModels')) { modelCalls++; return jsonResponse({}); }
+      // onboardUser fails transiently.
+      return body === null
+        ? new Response('<html>502</html>', { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : jsonResponse(body, status);
+    };
+    try {
+      const login = service.startLogin();
+      const url = await waitForBrowserUrl(opened);
+      const rejected = assert.rejects(login);
+      await requestCallback(`/oauth-callback?code=code&state=${url.searchParams.get('state')}`);
+      await rejected;
+      assert.equal(modelCalls, 0, `${label}: the fallback must not even probe the shared project`);
+      assert.equal(stored.current(), null, `${label}: nothing may be persisted`);
+      assert.equal(service.getStatus().signedIn, false, `${label}: the session must not be adopted`);
+      await assertCallbackPortFree();
+    } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
+  }
+});
+
 test.after(() => { Module._load = originalModuleLoad; });
