@@ -4,7 +4,7 @@ import path from "node:path"
 const isDev = process.env.NODE_ENV === "development"
 
 const startUrl = isDev
-    ? "http://localhost:5180"
+    ? "http://127.0.0.1:5180"
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 /**
