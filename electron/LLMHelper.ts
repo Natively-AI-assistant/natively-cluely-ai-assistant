@@ -182,10 +182,30 @@ const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
 // per-provider gate never fires before the single source-of-truth deadline. See the
 // natively text-provider registration for the full rationale.
 const NATIVELY_TEXT_TTFT_MS = 8_000;
-// The smallest window in which a spare rung has any realistic chance of a first
-// token. Below this the rung is dropped rather than opened: a request that
-// cannot win before the caller's deadline still costs the user money and the
-// provider a slot.
+/**
+ * The smallest window in which a spare rung is worth opening at all. Below it
+ * the rung is dropped: a request that cannot reach first token before the
+ * caller's deadline still costs the user money and the provider a slot.
+ *
+ * WHERE THE NUMBER COMES FROM. It is not a measurement and deliberately not
+ * adaptive. The only spare that declares a need is natively at
+ * NATIVELY_TEXT_TTFT_MS (8000), so this is ~37% of the one figure the codebase
+ * actually asserts about a spare — enough that a fast rung can land, low enough
+ * that it does not itself become the reason a rung is dropped.
+ *
+ * Deriving it per-rung from observed latency was considered and REJECTED: the
+ * only per-rung statistic here is textHealth's ttftEma, which is populated on
+ * SUCCESS only. A spare that has never won has no EMA, so the measured path
+ * would apply precisely where it is least needed — and a rung whose thin slice
+ * made it time out would raise its own floor, drop itself from fitting, and
+ * never be measured again. A rung's own history must not decide whether the
+ * rung is ever tried.
+ *
+ * What makes the bare number safe is the invariant, not the value: the fitted
+ * chain never exceeds the route ceiling, and a turn whose spares are all
+ * dropped falls back to the whole budget plus a hedge. Both are swept across
+ * the entire reachable latency range in LiveDeadlineRouteTable2026_09_06.
+ */
 const MIN_USEFUL_RUNG_MS = 3_000;
 
 // ── Deterministic sampling for interview/coding answers (REPORT §22 D1) ──────

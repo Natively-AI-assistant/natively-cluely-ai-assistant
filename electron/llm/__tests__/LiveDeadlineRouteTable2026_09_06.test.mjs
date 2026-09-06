@@ -498,3 +498,86 @@ describe('a repair stream is route-aware without becoming an answer stream', () 
     }
   });
 });
+
+describe('rung fitting keeps the whole chain inside the route ceiling', () => {
+  // MIN_USEFUL_RUNG_MS is a bare 3000 and deliberately not adaptive (see its
+  // docblock). What makes that safe is not the value but these two invariants,
+  // swept across every observed latency the adaptive budget can produce.
+  const MIN_USEFUL_RUNG_MS = 3000;
+  const NATIVELY_TEXT_TTFT_MS = 8000;
+  // Mirrors LLMHelper.hedgeDelayForBudget.
+  const hedgeDelayForBudget = (budget, obs) => obs == null
+    ? Math.round(budget * 0.6)
+    : Math.min(Math.round(budget * 0.85), Math.max(Math.round(budget * 0.5), Math.round(obs) + 1500));
+
+  // Mirrors the fitting loop in streamSelectedProviderWithFailover.
+  const fit = (budget, obs, spareWants) => {
+    let primary = spareWants.length > 0 ? hedgeDelayForBudget(budget, obs) : budget;
+    let remaining = Math.max(0, budget - primary);
+    const fitted = [];
+    for (const want of spareWants) {
+      if (remaining < MIN_USEFUL_RUNG_MS) break;
+      const give = Math.min(want ?? remaining, remaining);
+      fitted.push(give);
+      remaining -= give;
+    }
+    if (fitted.length === 0) primary = budget;
+    return { primary, fitted, hedging: fitted.length === 0 };
+  };
+
+  test('the mirror above matches the real implementation', () => {
+    // The two sweeps re-implement the fitting loop. That is only sound while the
+    // mirror and the source agree, so pin the three things the mirror assumes.
+    // Without this the sweeps would keep passing against a fitting loop that had
+    // changed underneath them — a model test proving its own model.
+    const src = fs.readFileSync(path.join(root, 'electron/LLMHelper.ts'), 'utf8');
+    assert.match(src, /const MIN_USEFUL_RUNG_MS = 3_000;/,
+      'mirror assumes a 3000ms floor');
+    assert.match(src, /const NATIVELY_TEXT_TTFT_MS = 8_000;/,
+      'mirror assumes the natively spare asks for 8000ms');
+    assert.match(src, /if \(remainingForSpares < MIN_USEFUL_RUNG_MS\) break;/,
+      'mirror assumes the loop stops below the floor');
+    assert.match(src, /const give = Math\.min\(want, remainingForSpares\);/,
+      'mirror assumes each rung gets min(what it wants, what is left)');
+    assert.match(src, /if \(fittedSpares\.length === 0\) primaryTtftMs = budgetMs;/,
+      'mirror assumes an all-dropped turn gets the whole budget back');
+  });
+
+  test('the fitted chain NEVER exceeds the route ceiling, at any observed latency', () => {
+    for (let obs = 0; obs <= 30000; obs += 250) {
+      for (const isUserEndpoint of [true, false]) {
+        const observed = isUserEndpoint ? { maxMs: obs, ewmaMs: obs, count: 9 } : null;
+        const budget = totalHardTimeoutMs({ isUserEndpoint, observedUserEndpointLatency: observed });
+        const { primary, fitted } = fit(budget, isUserEndpoint ? obs : null,
+          [NATIVELY_TEXT_TTFT_MS, undefined, undefined]);
+        const total = primary + fitted.reduce((a, b) => a + b, 0);
+        assert.ok(total <= budget,
+          `obs=${obs} userEndpoint=${isUserEndpoint}: chain ${total}ms exceeds ceiling ${budget}ms`);
+        for (const give of fitted) {
+          assert.ok(give >= MIN_USEFUL_RUNG_MS,
+            `obs=${obs}: a rung was opened with only ${give}ms, below the floor`);
+        }
+      }
+    }
+  });
+
+  test('a turn whose spares are ALL dropped gets the whole budget back, and a hedge', () => {
+    // The failure this pins: hedging and the primary ttft were decided from the
+    // PRE-fitting count, so dropping every spare left the primary on a
+    // shortened failover trigger with nothing behind it and no parallel retry.
+    for (let obs = 0; obs <= 30000; obs += 250) {
+      const budget = totalHardTimeoutMs({ isUserEndpoint: true,
+        observedUserEndpointLatency: { maxMs: obs, ewmaMs: obs, count: 9 } });
+      // A spare so slow that nothing can fit behind the primary.
+      const { primary, hedging } = fit(budget, obs, [Number.MAX_SAFE_INTEGER, undefined]);
+      if (hedging) {
+        assert.equal(primary, budget,
+          `obs=${obs}: every spare dropped but the primary kept a shortened ${primary}ms ttft`);
+      }
+    }
+    // And the degenerate no-spare case is the same shape.
+    const none = fit(15000, 5000, []);
+    assert.equal(none.hedging, true);
+    assert.equal(none.primary, 15000);
+  });
+});

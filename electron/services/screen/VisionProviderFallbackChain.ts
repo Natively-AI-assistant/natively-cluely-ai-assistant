@@ -141,6 +141,8 @@ export interface VisionRungHealth {
    * the full budget on 5 consecutive turns and was never cooled).
    */
   clampedMisses?: number;
+  /** When the last clamped miss was seen, so the count can expire. */
+  clampedAt?: number;
 }
 
 export interface RunFallbackParams {
@@ -187,6 +189,17 @@ const FIRST_RUNG_BUDGET_SHARE = 0.6;
  */
 const RUNG_TRANSIENT_COOLDOWN_MS = 30_000;
 const RUNG_AUTH_COOLDOWN_MS = 300_000;
+/**
+ * How long a forgiven clamp-induced timeout is remembered.
+ *
+ * MUST be comfortably longer than RUNG_TRANSIENT_COOLDOWN_MS. Reusing the
+ * cooldown itself as this window would expire the counter at the exact moment
+ * the rung becomes eligible again, so the second miss could never land inside
+ * it and the forgiveness would be permanent — a no-op that reads like a fix.
+ * Five cooldowns: two clamped misses inside 2.5 minutes is a rung that is
+ * actually misbehaving; two an hour apart are unrelated events.
+ */
+const CLAMP_MISS_WINDOW_MS = RUNG_TRANSIENT_COOLDOWN_MS * 5;
 
 // ─── Implementation ───────────────────────────────────────────────────────
 
@@ -478,8 +491,14 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
       params.telemetry?.({ type: 'vision_failed', provider: provider.id, errorClass, durationMs });
       if (selfInflictedTimeout) {
         const prior = health?.get(provider.id);
-        const misses = (prior?.clampedMisses ?? 0) + 1;
-        health?.set(provider.id, { openUntil: prior?.openUntil ?? 0, clampedMisses: misses });
+        // Expire a stale count: two clamped misses months apart say nothing
+        // about this rung, and without expiry the single forgiveness is spent
+        // forever on the first one the process ever saw.
+        const fresh = prior?.clampedAt != null && (nowMs() - prior.clampedAt) <= CLAMP_MISS_WINDOW_MS;
+        const misses = (fresh ? (prior?.clampedMisses ?? 0) : 0) + 1;
+        health?.set(provider.id, {
+          openUntil: prior?.openUntil ?? 0, clampedMisses: misses, clampedAt: nowMs(),
+        });
         // Forgive the first, cool from the second on.
         if (misses > 1) noteRungFailure(health, provider.id, errorClass, nowMs);
       } else {
@@ -529,7 +548,11 @@ function noteRungFailure(
   if (!health) return;
   if (errorClass === 'invalid_payload' || errorClass === 'no_vision') return;
   const cooldown = errorClass === 'auth_error' ? RUNG_AUTH_COOLDOWN_MS : RUNG_TRANSIENT_COOLDOWN_MS;
-  health.set(id, { openUntil: now() + cooldown, clampedMisses: health.get(id)?.clampedMisses });
+  const prior = health.get(id);
+  health.set(id, {
+    openUntil: now() + cooldown,
+    clampedMisses: prior?.clampedMisses, clampedAt: prior?.clampedAt,
+  });
 }
 
 function classifyError(err: any, aborted: boolean): VisionErrorClass {
