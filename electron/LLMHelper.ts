@@ -647,6 +647,33 @@ export class LLMHelper {
     return replayed;
   }
 
+  /**
+   * The turn's answer call, VERBATIM, for a regeneration after the first attempt
+   * produced no answer in time.
+   *
+   * Distinct from replayAnswerCall, and the difference is the whole point. A
+   * post-answer REPAIR has an answer to improve, so it appends an instruction
+   * saying how. A REGENERATION has no answer at all — the request was correct
+   * and simply did not come back — so the right second attempt is the same
+   * request again: same prompt, same 180s transcript, same reference files,
+   * same realtime prompt, same screenshot. Appending anything here would make
+   * attempt 2 a different question from the one the user asked.
+   *
+   * Only the abort signal is swapped: the original was aborted by the deadline
+   * driver's cleanup before this runs.
+   */
+  public retryAnswerCall(
+    key: object | undefined | null,
+    signal?: AbortSignal,
+  ): Parameters<LLMHelper['streamChat']> | null {
+    if (!key || typeof key !== 'object') return null;
+    const args = this.answerCallByTurn.get(key);
+    if (!args) return null;
+    const retried = [...args] as Parameters<LLMHelper['streamChat']>;
+    retried[7] = signal;
+    return retried;
+  }
+
   /** Does this turn carry a screenshot? Repairs need it to size their deadline. */
   public replayedAnswerHasImages(key: object | undefined | null): boolean {
     if (!key || typeof key !== 'object') return false;

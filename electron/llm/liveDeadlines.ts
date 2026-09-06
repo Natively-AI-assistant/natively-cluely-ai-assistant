@@ -368,6 +368,49 @@ export function repairDeadlineMs(opts: {
   );
 }
 
+/**
+ * Total wall clock ONE turn may spend trying to produce a first token, across
+ * the original attempt and its regeneration.
+ *
+ * A regeneration is a genuine second attempt at the same request, so without a
+ * total the turn's worst case is simply doubled — 40s on a vision turn, long
+ * past the point the user has given up and asked again. This bounds the pair,
+ * not each half.
+ *
+ * Deliberately above this file's "never make the user wait 10s+" line, which
+ * governs a SINGLE attempt on the text path. A user who has already waited out
+ * attempt 1 is in a failure they can see; the choice is between a bounded second
+ * try and the canned no-answer line, and that is a different trade than the one
+ * the 10s rule was written for.
+ */
+export const LIVE_TURN_TOTAL_BUDGET_MS = 25000;
+/**
+ * A regeneration must get a MEANINGFUL share of its route's budget or not run at
+ * all. A vision turn that has already spent 20s of a 25s total would get 5s —
+ * far under the 11.6s tail a vision first token is measured at, so it could only
+ * fail, having cost the user another 5s to learn nothing.
+ */
+export const REGENERATION_MIN_SHARE_OF_ROUTE = 0.6;
+
+/**
+ * Budget for a verbatim regeneration after the first attempt produced nothing,
+ * or 0 when there is not enough of the turn left to be worth trying.
+ *
+ * The caller re-sends the ORIGINAL request unchanged — same prompt, same
+ * transcript, same reference files, same screenshot. What differs is the
+ * connection: this rescues a provider that stalled, not one that is down. The
+ * primary dispatch path does not consult rung health, so a genuinely dead
+ * provider will fail again and this will have cost the returned budget. That is
+ * the trade, and the share floor is what bounds it.
+ */
+export function regenerationBudgetMs(opts: { routeBudgetMs: number; elapsedMs: number }): number {
+  const remaining = LIVE_TURN_TOTAL_BUDGET_MS - Math.max(0, opts.elapsedMs);
+  if (remaining <= 0) return 0;
+  const budget = Math.min(opts.routeBudgetMs, remaining);
+  if (budget < opts.routeBudgetMs * REGENERATION_MIN_SHARE_OF_ROUTE) return 0;
+  return Math.round(budget);
+}
+
 export const LIVE_INTER_TOKEN_STALL_MS = 8000;
 /** Benchmark per-question hard timeout — the outer wrapper that must never be exceeded. */
 export const BENCHMARK_PER_QUESTION_HARD_TIMEOUT_MS = 30000;

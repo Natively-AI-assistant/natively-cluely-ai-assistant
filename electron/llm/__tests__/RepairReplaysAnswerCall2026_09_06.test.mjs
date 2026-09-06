@@ -58,7 +58,10 @@ electronStub.loaded = true;
 cjs.cache[cjs.resolve('electron')] = electronStub;
 
 const { LLMHelper } = cjs(path.join(root, 'dist-electron/electron/LLMHelper.js'));
-const { repairDeadlineMs, REPAIR_VISION_MIN_FIRST_USEFUL_MS } = cjs(path.join(root, 'dist-electron/electron/llm/index.js'));
+const {
+  repairDeadlineMs, REPAIR_VISION_MIN_FIRST_USEFUL_MS,
+  regenerationBudgetMs, LIVE_TURN_TOTAL_BUDGET_MS, REGENERATION_MIN_SHARE_OF_ROUTE,
+} = cjs(path.join(root, 'dist-electron/electron/llm/index.js'));
 
 // The measured tail this repo already pins for a vision first token.
 const OBSERVED_MAX_SUCCESSFUL_TTFT_MS = 11_629;
@@ -213,5 +216,119 @@ describe('every repair call site actually replays', () => {
     // A repair must never overwrite the copy it is about to read.
     const ie = strip(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
     assert.equal(/rememberAnswerCall/.test(ie), false, 'IntelligenceEngine must only ever replay, never remember');
+  });
+});
+
+
+describe('a REGENERATION is not a repair, and the difference is the prompt', () => {
+  // Two different failures. A post-answer REPAIR has an answer to improve, so it
+  // appends an instruction saying how. A REGENERATION has no answer at all — the
+  // request was correct and simply did not come back — so the second attempt is
+  // the same request again. Appending anything there would make attempt 2 a
+  // different question from the one the user asked.
+  test('retryAnswerCall re-sends the prompt BYTE-IDENTICAL', () => {
+    const { h, turn } = helperWithRememberedAnswer();
+    const r = h.retryAnswerCall(turn.signal, new AbortController().signal);
+    assert.equal(r[0], ANSWER_MSG, 'a regeneration must not alter the question');
+    // And the contrast with the repair path, which deliberately does alter it.
+    const repaired = h.replayAnswerCall(turn.signal, 'REPAIR ME', new AbortController().signal);
+    assert.notEqual(repaired[0], ANSWER_MSG);
+    assert.ok(repaired[0].startsWith(ANSWER_MSG));
+  });
+
+  test('everything except the abort signal is carried through untouched', () => {
+    const { h, turn, args } = helperWithRememberedAnswer();
+    const mine = new AbortController().signal;
+    const r = h.retryAnswerCall(turn.signal, mine);
+    for (const i of [0, 1, 2, 3, 4, 5, 6, 8, 9]) {
+      assert.deepEqual(r[i], args[i], `argument ${i} must survive the regeneration verbatim`);
+    }
+    assert.equal(r[7], mine, 'only the signal changes — the original was aborted by the deadline cleanup');
+  });
+
+  test('an unremembered turn cannot be regenerated', () => {
+    const { h } = helperWithRememberedAnswer();
+    assert.equal(h.retryAnswerCall(new AbortController().signal, undefined), null);
+    assert.equal(h.retryAnswerCall(null, undefined), null);
+  });
+});
+
+describe('the regeneration budget bounds the PAIR of attempts, not each half', () => {
+  test('a fresh turn gets its whole route budget', () => {
+    assert.equal(regenerationBudgetMs({ routeBudgetMs: 8000, elapsedMs: 0 }), 8000);
+  });
+
+  test('the turn total caps the second attempt', () => {
+    // 15s user endpoint + a full second 15s would be 30s. The total is 25s.
+    const ms = regenerationBudgetMs({ routeBudgetMs: 15000, elapsedMs: 15000 });
+    assert.ok(ms > 0 && ms <= 10000, `expected the remainder of the turn total, got ${ms}`);
+    assert.equal(15000 + ms <= LIVE_TURN_TOTAL_BUDGET_MS, true);
+  });
+
+  test('a regeneration that could only fail is not attempted', () => {
+    // A vision turn that already spent 20s of the 25s total would get 5s, far
+    // under the 11.6s tail a vision first token is measured at. Spending 5s to
+    // learn nothing is worse than the canned line.
+    assert.equal(regenerationBudgetMs({ routeBudgetMs: 20000, elapsedMs: 20000 }), 0);
+    assert.equal(regenerationBudgetMs({ routeBudgetMs: 30000, elapsedMs: 30000 }), 0);
+  });
+
+  test('the share floor is what makes that call, and it is a real fraction', () => {
+    assert.ok(REGENERATION_MIN_SHARE_OF_ROUTE > 0 && REGENERATION_MIN_SHARE_OF_ROUTE <= 1);
+    const route = 10000;
+    const justEnough = regenerationBudgetMs({
+      routeBudgetMs: route,
+      elapsedMs: LIVE_TURN_TOTAL_BUDGET_MS - route * REGENERATION_MIN_SHARE_OF_ROUTE,
+    });
+    assert.ok(justEnough > 0, 'exactly at the floor should still run');
+    const justUnder = regenerationBudgetMs({
+      routeBudgetMs: route,
+      elapsedMs: LIVE_TURN_TOTAL_BUDGET_MS - route * REGENERATION_MIN_SHARE_OF_ROUTE + 1,
+    });
+    assert.equal(justUnder, 0, 'just under the floor should decline');
+  });
+
+  test('no combination can exceed the turn total', () => {
+    for (const routeBudgetMs of [8000, 13000, 15000, 20000, 30000]) {
+      for (const elapsedMs of [0, 5000, 12000, 19000, 24000, 40000]) {
+        const ms = regenerationBudgetMs({ routeBudgetMs, elapsedMs });
+        if (ms > 0) {
+          assert.ok(elapsedMs + ms <= LIVE_TURN_TOTAL_BUDGET_MS,
+            `route ${routeBudgetMs} after ${elapsedMs} gave ${ms}, total ${elapsedMs + ms}`);
+        }
+      }
+    }
+  });
+});
+
+describe('the WTA failure path regenerates before it gives up', () => {
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const ie = strip(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
+
+  test('the canned no-answer line is reached only after a regeneration attempt', () => {
+    const regenAt = ie.indexOf('retryAnswerCall');
+    const cannedAt = ie.indexOf('did not produce an answer in time');
+    assert.ok(regenAt > 0, 'the WTA failure path must attempt a regeneration');
+    assert.ok(regenAt < cannedAt, 'the regeneration must be attempted BEFORE the canned line');
+  });
+
+  test('the regeneration times itself rather than inheriting the failed attempt', () => {
+    // Reusing attempt 1's start records the whole dead budget as this endpoint's
+    // first-token cost — the upward ratchet the adaptive budget guards against.
+    assert.match(ie, /answerStreamStartedAt = Date\.now\(\);\s*\n\s*recordedFirstToken = false;/,
+      'the regeneration must reset the latency start and the recorded flag');
+    assert.equal(/const answerStreamStartedAt/.test(ie), false,
+      'answerStreamStartedAt must be reassignable for the regeneration to time itself');
+  });
+
+  test('supersession is re-checked after the regeneration, not only before', () => {
+    assert.match(ie, /shouldAbort: \(\) => this\.currentGenerationId !== generationId/);
+    assert.match(ie, /regenUsable = this\.currentGenerationId === generationId/);
+  });
+
+  test('the trace can distinguish "retried and succeeded" from "was just slow"', () => {
+    for (const marker of ['answer_regeneration_started', 'answer_regeneration_succeeded', 'answer_regeneration_failed']) {
+      assert.ok(ie.includes(marker), `missing trace marker ${marker}`);
+    }
   });
 });
