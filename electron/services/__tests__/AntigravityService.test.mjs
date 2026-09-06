@@ -554,6 +554,10 @@ test('a tier that requires a caller-supplied project fails fast instead of polli
   const oldOpen = fakeElectron.shell.openExternal;
   const opened = {};
   let onboardCalls = 0;
+  // Explicitly unset: the fail-fast only fires when no project is supplied, and
+  // a stray env var in the runner would silently turn this assertion vacuous.
+  const oldEnv = { p: process.env.GOOGLE_CLOUD_PROJECT, i: process.env.GOOGLE_CLOUD_PROJECT_ID };
+  delete process.env.GOOGLE_CLOUD_PROJECT; delete process.env.GOOGLE_CLOUD_PROJECT_ID;
   fakeElectron.shell.openExternal = async url => { opened.value = url; };
   globalThis.fetch = async (url, init) => {
     if (url === mod.ANTIGRAVITY_TOKEN_URL) {
@@ -577,7 +581,60 @@ test('a tier that requires a caller-supplied project fails fast instead of polli
     await rejected;
     assert.equal(onboardCalls, 0, 'onboardUser must not be called when the tier needs a project id');
     await assertCallbackPortFree();
-  } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
+  } finally {
+    cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen;
+    if (oldEnv.p !== undefined) process.env.GOOGLE_CLOUD_PROJECT = oldEnv.p;
+    if (oldEnv.i !== undefined) process.env.GOOGLE_CLOUD_PROJECT_ID = oldEnv.i;
+  }
+});
+
+// Google refuses this client the free tier outright (observed live:
+// ineligibleTiers [{ tierId: 'free-tier', reasonCode: 'UNSUPPORTED_CLIENT' }]),
+// leaving only the bring-your-own-project standard-tier. Assert the supplied
+// project reaches BOTH calls — loadCodeAssist as well as onboardUser, which is
+// what the reference client does and what this service used to omit entirely.
+test('GOOGLE_CLOUD_PROJECT is sent on loadCodeAssist and onboardUser and completes the standard tier', async () => {
+  const mod = await loadService();
+  const stored = storageWith(null);
+  const { service, oldGetter } = prepareService(mod, stored);
+  const oldFetch = globalThis.fetch;
+  const oldOpen = fakeElectron.shell.openExternal;
+  const oldEnv = process.env.GOOGLE_CLOUD_PROJECT;
+  const opened = {};
+  const sentProject = {};
+  process.env.GOOGLE_CLOUD_PROJECT = 'my-gcp-project';
+  fakeElectron.shell.openExternal = async url => { opened.value = url; };
+  globalThis.fetch = async (url, init) => {
+    if (url === mod.ANTIGRAVITY_TOKEN_URL) {
+      return jsonResponse({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+    }
+    const body = JSON.parse(init.body);
+    if (url.endsWith(':loadCodeAssist')) {
+      sentProject.load = body.cloudaicompanionProject;
+      return jsonResponse({ allowedTiers: [{ id: 'standard-tier', isDefault: true, userDefinedCloudaicompanionProject: true }], ineligibleTiers: [{ tierId: 'free-tier', reasonCode: 'UNSUPPORTED_CLIENT' }] });
+    }
+    sentProject.onboard = body.cloudaicompanionProject;
+    return jsonResponse({ done: true, response: { cloudaicompanionProject: { id: 'my-gcp-project' } } });
+  };
+  try {
+    const login = service.startLogin();
+    const url = await waitForBrowserUrl(opened);
+    await requestCallback(`/oauth-callback?code=code&state=${url.searchParams.get('state')}`);
+    assert.equal((await login).projectId, 'my-gcp-project');
+    assert.equal(sentProject.load, 'my-gcp-project');
+    assert.equal(sentProject.onboard, 'my-gcp-project');
+    await assertCallbackPortFree();
+  } finally {
+    cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen;
+    if (oldEnv === undefined) delete process.env.GOOGLE_CLOUD_PROJECT; else process.env.GOOGLE_CLOUD_PROJECT = oldEnv;
+  }
+});
+
+test('preferredCloudProject prefers GOOGLE_CLOUD_PROJECT and ignores blank values', async () => {
+  const mod = await loadService();
+  assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: ' a ', GOOGLE_CLOUD_PROJECT_ID: 'b' }), 'a');
+  assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: '   ', GOOGLE_CLOUD_PROJECT_ID: 'b' }), 'b');
+  assert.equal(mod.preferredCloudProject({}), undefined);
 });
 
 test.after(() => { Module._load = originalModuleLoad; });
