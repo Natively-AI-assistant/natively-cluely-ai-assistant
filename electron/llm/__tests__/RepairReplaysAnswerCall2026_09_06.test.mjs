@@ -358,16 +358,42 @@ describe('a selected single provider now fails over — or retries itself in par
     }
   });
 
+  // The three exclusions below are asserted on the DISPATCH, not on a byte
+  // window after the first `indexOf` of a guard. The window form was vacuous:
+  // `this.useOllama` first occurs in the field declaration and
+  // `isGroqModel(this.currentModelId)` in the warm-up block, so all three
+  // assertions were reading code that was never going to call the engine, and
+  // would have kept passing if the real branch had been wired.
+  // Anchored on the DISPATCH, which is unique, then walked BACKWARD to the
+  // guard — not forward from the first `indexOf` of a guard string. The forward
+  // form was vacuous: `this.useOllama` first occurs in the field declaration and
+  // `isGroqModel(this.currentModelId)` in the warm-up block, so all three
+  // assertions were reading code that was never going to call the engine, and
+  // would have kept passing if the real branch HAD been wired.
+  const excludedBranch = (dispatch, guard) => {
+    const at = llm.indexOf(dispatch);
+    assert.ok(at >= 0, `dispatch not found (branch rewired or removed?): ${dispatch}`);
+    assert.equal(llm.indexOf(dispatch, at + 1), -1, `dispatch is no longer unique: ${dispatch}`);
+    const before = llm.slice(Math.max(0, at - 500), at);
+    assert.ok(before.includes(guard), `${dispatch} is no longer guarded by ${guard}`);
+    const fromGuard = before.slice(before.lastIndexOf(guard));
+    assert.equal(fromGuard.includes('streamSelectedProviderWithFailover'), false,
+      `${guard} must dispatch directly, never through the failover engine`);
+  };
+
   test('local providers are deliberately EXCLUDED, and stay excluded', () => {
     // A parallel retry would load the model twice — setModel unloads the old pin
     // precisely so two are never resident — and a cloud spare would send the
     // transcript off-device after the user chose local. A latency fix must not
     // become a privacy regression.
-    for (const marker of ['this.useOllama', 'isUsingCodexCli()']) {
-      const at = llm.indexOf(marker);
-      assert.ok(at >= 0, `${marker} branch not found`);
-      assert.equal(llm.slice(at, at + 900).includes('streamSelectedProviderWithFailover'), false,
-        `${marker} must dispatch directly, never through the failover engine`);
+    excludedBranch('yield* this.streamWithOllama(contextOsGoverningBlock', 'if (this.useOllama) {');
+    excludedBranch(
+      'yield* this.streamWithCodexCli(userContent, finalSystemPrompt, false, imagePaths, abortSignal);',
+      'if (this.isCodexCliModel(this.currentModelId) && this.isCodexAvailable()) {',
+    );
+    for (const id of ['ollama', 'codex', 'codex_cli']) {
+      assert.equal(new RegExp(`streamSelectedProviderWithFailover\\(\\{\\s*\\n?\\s*id: '${id}'`).test(llm), false,
+        `${id} must never become a failover rung`);
     }
   });
 
@@ -375,9 +401,12 @@ describe('a selected single provider now fails over — or retries itself in par
     // Groq is the one branch that ALREADY falls through, into the Natively TTFT
     // race. Wrapping it would sit between its auth-disable / over-capacity /
     // commit.emitted branches and that fall-through.
-    const at = llm.indexOf('isGroqModel(this.currentModelId)');
-    assert.ok(at >= 0);
-    assert.equal(llm.slice(at, at + 900).includes('streamSelectedProviderWithFailover'), false);
+    excludedBranch(
+      'yield* this.trackCommit(this.streamWithGroq(userContent, this.currentModelId',
+      'const finalGroqSystem = this.injectLanguageInstruction(groqSystem);',
+    );
+    assert.equal(/streamSelectedProviderWithFailover\(\{\s*\n?\s*id: 'groq'/.test(llm), false,
+      'groq must never become a failover rung');
   });
 
   test('an image-bearing turn gets NO spares and NO hedge', () => {

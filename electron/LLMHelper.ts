@@ -7921,6 +7921,9 @@ let isMultimodal = !!(imagePaths?.length);
         id: 'deepseek', name: 'DeepSeek',
         open: (sig) => this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, sig),
         userContent, finalSystemPrompt: finalDeepseekSystem, thinkingBudget, abortSignal,
+        // No `hasImages` here, unlike every other rung: the guard above already
+        // excludes image turns from this branch entirely, so it is always false.
+        // Passing it would read as the bug the other five sites exist to avoid.
       });
       return;
     }
