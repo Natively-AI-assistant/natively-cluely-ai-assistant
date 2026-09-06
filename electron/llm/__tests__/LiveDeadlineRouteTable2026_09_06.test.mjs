@@ -82,6 +82,10 @@ const {
   LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS,
   LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS,
   LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS,
+  userEndpointBudgetMs,
+  LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS,
+  LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS,
+  USER_ENDPOINT_MIN_SAMPLES_TO_NARROW,
 } = dl;
 
 describe('the route table assigns each route the number its own path justifies', () => {
@@ -272,5 +276,146 @@ describe('the predicate that selects the user-endpoint route', () => {
     const h = helperWithModel('natively');
     assert.equal(h.isUsingNativelyServerCascade(), true);
     assert.equal(h.isUsingUserEndpoint(), false);
+  });
+});
+
+
+describe('the user-endpoint budget stops guessing once the endpoint has answered', () => {
+  // 15000 is honest for an address we have never called. It stops being the
+  // best answer the moment that address answers once.
+  test('unmeasured stays at the 15s guess', () => {
+    assert.equal(userEndpointBudgetMs(null), LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(userEndpointBudgetMs(undefined), LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(userEndpointBudgetMs({ maxMs: 900, count: 0 }), LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(userEndpointBudgetMs({ maxMs: NaN, count: 3 }), LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS);
+  });
+
+  test('WIDENS from a single sample — the direction that costs a healthy turn nothing', () => {
+    // The vision-log tail. One turn at 11.6s is enough to prove 15000 is too
+    // tight for this endpoint, and waiting for more evidence just means more
+    // turns die in the meantime.
+    assert.equal(userEndpointBudgetMs({ maxMs: 11_600, count: 1 }), 16_600);
+  });
+
+  test('NARROWS only after enough evidence, and never below the default route', () => {
+    const fast = { maxMs: 600, count: 1 };
+    assert.equal(userEndpointBudgetMs(fast), LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS,
+      'one fast turn must not shorten the leash');
+    assert.equal(
+      userEndpointBudgetMs({ maxMs: 600, count: USER_ENDPOINT_MIN_SAMPLES_TO_NARROW - 1 }),
+      LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS,
+    );
+    assert.equal(
+      userEndpointBudgetMs({ maxMs: 600, count: USER_ENDPOINT_MIN_SAMPLES_TO_NARROW }),
+      LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS,
+      'a proven-fast gateway settles at the default-provider ceiling, not below it',
+    );
+  });
+
+  test('the adaptive budget stays inside [default ceiling, vision ceiling]', () => {
+    assert.equal(LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS, LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS, LIVE_VISION_TOTAL_HARD_TIMEOUT_MS);
+    // A pathologically slow endpoint cannot buy itself an unbounded wait.
+    assert.equal(userEndpointBudgetMs({ maxMs: 60_000, count: 20 }), LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS);
+    for (const maxMs of [0, 300, 5_000, 9_000, 14_000, 30_000]) {
+      for (const count of [1, 5, 50]) {
+        const ms = userEndpointBudgetMs({ maxMs, count });
+        assert.ok(ms >= LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS && ms <= LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS,
+          `maxMs=${maxMs} count=${count} produced ${ms}`);
+      }
+    }
+  });
+
+  test('measurement reaches the ceiling ONLY on the user-endpoint route', () => {
+    // Every other route's number is derived from something known about the
+    // transport, so an observation has nothing to correct there.
+    const slow = { maxMs: 18_000, count: 10 };
+    assert.equal(totalHardTimeoutMs({ observedUserEndpointLatency: slow }), LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(totalHardTimeoutMs({ viaServerCascade: true, observedUserEndpointLatency: slow }), LIVE_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(totalHardTimeoutMs({ isLocal: true, observedUserEndpointLatency: slow }), LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(totalHardTimeoutMs({ isVisionTurn: true, isUserEndpoint: true, observedUserEndpointLatency: slow }),
+      LIVE_VISION_TOTAL_HARD_TIMEOUT_MS);
+    assert.equal(totalHardTimeoutMs({ isUserEndpoint: true, observedUserEndpointLatency: slow }), 20_000);
+  });
+
+  test('both selectors adapt identically', () => {
+    const obs = { maxMs: 11_600, count: 3 };
+    assert.equal(
+      firstUsefulDeadlineMs('identity_answer', false, false, true, obs),
+      totalHardTimeoutMs({ isUserEndpoint: true, observedUserEndpointLatency: obs }),
+    );
+  });
+});
+
+describe('what gets measured, and what must not blend', () => {
+  function customHelper(id, baseUrl) {
+    const h = new LLMHelper(undefined, false);
+    h.setModel(id, [{ id, name: id, model: 'x/y', apiKey: 'sk-test', baseUrl }]);
+    return h;
+  }
+
+  test('two gateways sharing a provider id are measured separately', () => {
+    // textHealth keys these both as 'custom'. Sizing a deadline off that would
+    // let a fast OpenRouter set the budget for a slow self-hosted proxy — which
+    // is why this is a separate map keyed by the endpoint.
+    const a = customHelper('same-id', 'https://gateway-a.example/v1');
+    const b = customHelper('same-id', 'https://gateway-b.example/v1');
+    for (let i = 0; i < 6; i++) a.recordAnswerFirstToken(500);
+    assert.equal(a.observedAnswerLatency().count, 6);
+    assert.equal(b.observedAnswerLatency(), null, 'a different base URL must start fresh');
+  });
+
+  test('editing a provider’s base URL restarts measurement rather than inheriting it', () => {
+    const h = customHelper('my-proxy', 'https://old.example/v1');
+    for (let i = 0; i < 6; i++) h.recordAnswerFirstToken(500);
+    assert.equal(h.observedAnswerLatency().count, 6);
+    h.setModel('my-proxy', [{ id: 'my-proxy', name: 'my-proxy', model: 'x/y', apiKey: 'sk-test', baseUrl: 'https://new.example/v1' }]);
+    assert.equal(h.observedAnswerLatency(), null, 'stale samples from the old endpoint must not size the new one');
+  });
+
+  test('nothing is recorded on a route that does not adapt', () => {
+    const h = new LLMHelper(undefined, false);
+    h.setModel('gemini', []);
+    h.recordAnswerFirstToken(900);
+    assert.equal(h.observedAnswerLatency(), null);
+  });
+
+  test('the decaying max forgives one outlier instead of pinning the budget', () => {
+    const h = customHelper('flaky', 'https://flaky.example/v1');
+    h.recordAnswerFirstToken(13_000);
+    const spiked = userEndpointBudgetMs(h.observedAnswerLatency());
+    for (let i = 0; i < 8; i++) h.recordAnswerFirstToken(500);
+    const recovered = userEndpointBudgetMs(h.observedAnswerLatency());
+    assert.ok(spiked > LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS, `spike should widen, got ${spiked}`);
+    assert.ok(recovered < spiked, `a recovered endpoint must come back down: ${spiked} -> ${recovered}`);
+  });
+
+  test('a garbage measurement is ignored, not stored', () => {
+    const h = customHelper('junk', 'https://junk.example/v1');
+    h.recordAnswerFirstToken(NaN);
+    h.recordAnswerFirstToken(-5);
+    h.recordAnswerFirstToken(Infinity);
+    assert.equal(h.observedAnswerLatency(), null);
+  });
+});
+
+describe('the answer call sites actually record what the budget reads', () => {
+  // The policy above is worthless if nothing feeds it. These anchor on real
+  // code only — a previous test in this area was defeated by the searched-for
+  // text appearing in a comment.
+  const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  test('IntelligenceEngine records first-token latency and reads it back', () => {
+    const src = stripComments(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
+    assert.ok(/recordAnswerFirstToken\?\.\(/.test(src), 'WTA must record its first-token latency');
+    assert.ok(/observedUserEndpointLatency/.test(src), 'WTA must pass the observation into the selector');
+  });
+
+  test('manual chat and the phone-mirror path both record', () => {
+    const src = stripComments(fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8'));
+    assert.ok(/noteManualFirstToken\(\)/.test(src), 'manual chat must record');
+    assert.ok(/notePhoneFirstToken\(\)/.test(src), 'the phone-mirror path must record');
+    assert.equal((src.match(/recordAnswerFirstToken\?\.\(/g) || []).length, 2,
+      'both ipcHandlers answer streams must record, and nothing else should');
   });
 });

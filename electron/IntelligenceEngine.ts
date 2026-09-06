@@ -3500,15 +3500,33 @@ export class IntelligenceEngine extends EventEmitter {
             const isUserEndpoint = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
                 ? (this.llmHelper as any).isUsingUserEndpoint() === true
                 : false;
+            const observedUserEndpointLatency = isUserEndpoint
+                && typeof (this.llmHelper as any).observedAnswerLatency === 'function'
+                ? (this.llmHelper as any).observedAnswerLatency()
+                : null;
             const firstUsefulDeadline = totalHardTimeoutMs({
                 isLocal: usingLocalLlm,
                 isVisionTurn,
                 viaServerCascade,
                 isUserEndpoint,
+                observedUserEndpointLatency,
             });
+            // Time-to-first-token for THIS turn, recorded only if it commits —
+            // see LLMHelper.recordAnswerFirstToken for why an aborted turn must
+            // not teach the budget.
+            const answerStreamStartedAt = Date.now();
+            let recordedFirstToken = false;
+            const noteFirstToken = () => {
+                if (recordedFirstToken || !isUserEndpoint) return;
+                recordedFirstToken = true;
+                try {
+                    (this.llmHelper as any).recordAnswerFirstToken?.(Date.now() - answerStreamStartedAt);
+                } catch { /* measurement must never break the answer */ }
+            };
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {
+                noteFirstToken();
                 emittedStreamingToken = true;
                 openedStreamRow = true;
                 if (trace.markFirstUseful({ via: 'stream', answerType: answerPlan.answerType })) {
