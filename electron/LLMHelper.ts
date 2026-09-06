@@ -7713,10 +7713,16 @@ let isMultimodal = !!(imagePaths?.length);
             open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_MODEL, imagePaths, finalSystemPrompt, sig, thinkingBudget),
           });
         }
-        // Fallback: Antigravity, if signed in. Same reasoning as the vision chain
-        // — a connected provider that answered nothing when the selected one
-        // failed. Seated after Gemini Flash because its TTFT is the slower of
-        // the two, so the cheap rung still gets first refusal.
+        // Fallback: Antigravity, if signed in. Seated after Gemini Flash because
+        // its TTFT is the slower of the two, so the cheap rung keeps first
+        // refusal.
+        //
+        // SCOPE, because it is easy to over-read: this ladder is the
+        // `currentModelId === 'natively'` branch, so what this rung buys is a
+        // Natively-selected user reaching Antigravity when the Natively API is
+        // down. It is NOT general text failover — a selected provider is still
+        // one terminal rung, which is a separate gap and not one this change
+        // closes.
         const antigravityTextModel = this.antigravityFallbackModel();
         if (antigravityTextModel) {
           textProviders.push({
@@ -10597,12 +10603,20 @@ let isMultimodal = !!(imagePaths?.length);
     const antigravitySummaryModel = this.antigravityFallbackModel();
     if (antigravitySummaryModel) {
       console.log(`[LLMHelper] Attempting Antigravity for summary...`);
+      // withTimeout only RACES: when the timer wins, the loser keeps running.
+      // stream() honours input.signal, so an abort is what actually stops the
+      // HTTP stream — without it a timed-out summary kept streaming to
+      // completion with nothing consuming it, holding the socket and spending
+      // output tokens on a request whose result had already been discarded.
+      // Aborted in `finally`, so the success path tears it down too.
+      const antigravityAbort = new AbortController();
       try {
         const text = await this.withTimeout(
           (async () => {
             let out = '';
             for await (const chunk of this.streamWithAntigravity(
-              `Context:\n${context}`, systemPrompt, undefined, undefined, `antigravity:${antigravitySummaryModel}`,
+              `Context:\n${context}`, systemPrompt, undefined, antigravityAbort.signal,
+              `antigravity:${antigravitySummaryModel}`,
             )) out += chunk;
             return out;
           })(),
@@ -10615,6 +10629,8 @@ let isMultimodal = !!(imagePaths?.length);
         }
       } catch (e: any) {
         console.warn(`[LLMHelper] ⚠️ Antigravity summary failed: ${e.message}. Falling back...`);
+      } finally {
+        antigravityAbort.abort();
       }
     }
 
