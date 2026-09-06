@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Module from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { LIVE_LOAD_CODE_ASSIST } from './fixtures/antigravityLiveTiers.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
@@ -539,6 +540,51 @@ test('OAuth exchange and onboarding use reference headers, PKCE verifier, select
     assert.equal(stored.current().projectId, 'own-project');
     await assertCallbackPortFree();
   } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
+});
+
+test('driving the real sign-in against that response: 5 polls, no project ever sent, generic failure', async () => {
+  const mod = await loadService();
+  const stored = storageWith(null);
+  const { service, oldGetter } = prepareService(mod, stored);
+  const oldFetch = globalThis.fetch;
+  const oldOpen = fakeElectron.shell.openExternal;
+  const opened = {};
+  const onboardBodies = [];
+  fakeElectron.shell.openExternal = async (url) => { opened.value = url; };
+  globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href === mod.ANTIGRAVITY_TOKEN_URL) {
+      return jsonResponse({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+    }
+    if (href.endsWith(':loadCodeAssist')) return jsonResponse(LIVE_LOAD_CODE_ASSIST);
+    onboardBodies.push(JSON.parse(init.body));
+    // Google's long-running operation cannot complete without a project id,
+    // so it stays pending no matter how long we poll.
+    return jsonResponse({ done: false });
+  };
+  try {
+    const login = service.startLogin();
+    const url = await waitForBrowserUrl(opened);
+    // Handler attached before the callback resolves it, or the rejection is
+    // unhandled for a tick and node --test fails the run on that instead.
+    const rejected = assert.rejects(login, (error) => error.code === 'setup');
+    await requestCallback(`/oauth-callback?code=code&state=${url.searchParams.get('state')}`);
+    await rejected;
+
+    // THE DEFECT, asserted three ways so a partial fix cannot leave this green:
+    assert.equal(onboardBodies.length, 5, 'the loop polls onboardUser five times before giving up');
+    assert.ok(
+      onboardBodies.every((body) => body.cloudaicompanionProject === undefined),
+      'no onboardUser call carries cloudaicompanionProject — this is why the operation never completes',
+    );
+    assert.equal(onboardBodies[0].tierId, 'standard-tier', 'it selects the only allowed tier and asks anyway');
+
+    assert.equal(stored.current(), null, 'a failed onboarding must not persist a half-signed-in session');
+  } finally {
+    cleanupService(service, oldGetter);
+    globalThis.fetch = oldFetch;
+    fakeElectron.shell.openExternal = oldOpen;
+  }
 });
 
 test.after(() => { Module._load = originalModuleLoad; });
