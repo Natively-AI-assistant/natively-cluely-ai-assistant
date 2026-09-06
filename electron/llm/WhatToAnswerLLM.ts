@@ -1171,6 +1171,15 @@ The user triggered this action with a coding problem on screen and NO new questi
             // fixes that and additionally checks arity and order against the real
             // signature — which an `as const` tuple silently did not.
             const _wtaArgs: Parameters<LLMHelper['streamChat']> = [_wtaUserMessage, imagePaths, undefined, _wtaSystemPrompt, true, true, packetScopes, abortSignal, wtaThinkingBudget, _wtaRoute];
+            // Hand this turn's fully-composed answer call to LLMHelper so the
+            // post-answer repair passes can reuse it. Because positions 5 and 6
+            // are both `true`, everything the answer knows — transcript,
+            // screenshot, reference files, realtime prompt, mode prompt,
+            // evidence pack — is already inside _wtaUserMessage/_wtaSystemPrompt
+            // rather than injected downstream, so a repair that replays this
+            // tuple sees the same turn at no retrieval cost. Keyed by this
+            // turn's abort signal so a later turn cannot inherit it.
+            this.llmHelper.rememberAnswerCall?.(abortSignal, _wtaArgs);
             const _wtaStream = typeof (this.llmHelper as any).streamChatWithOutcome === 'function'
                 ? (this.llmHelper as any).streamChatWithOutcome(..._wtaArgs)
                 : { stream: (this.llmHelper as any).streamChat(..._wtaArgs), outcome: { truncated: false } };

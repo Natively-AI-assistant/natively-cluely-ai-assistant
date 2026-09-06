@@ -242,11 +242,27 @@ describe('#6 — runWhatShouldISay captures ONE mode snapshot at t0 and threads 
     // fragment case this test was written for still falls through to the fallback.
     assert.match(body, /fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS/,
       'the sub-threshold length test must remain — it is what makes the fallback reachable');
-    assert.match(body, /&&\s*!isCompleteShortAnswer\(fullAnswer\)\)\s*\{\s*const safe =/s,
+    // 2026-09-06: a verbatim REGENERATION now runs between this condition and
+    // the canned line, so `const safe =` is no longer adjacent to the guard.
+    // The invariant is unchanged and still pinned — a COMPLETE short answer
+    // never enters this branch at all, so it is exempt from both the
+    // regeneration and the substitution. Anchor on the CONDITION, and pin the
+    // ordering separately below rather than on adjacency.
+    assert.match(body, /&&\s*!isCompleteShortAnswer\(fullAnswer\)\)\s*\{/s,
       'a COMPLETE short answer must be exempt from the timeout substitution');
+    const exemptionAt = body.search(/&&\s*!isCompleteShortAnswer\(fullAnswer\)\)/s);
+    const cannedAt = body.indexOf('const safe =');
+    assert.ok(exemptionAt >= 0 && cannedAt > exemptionAt,
+      'the canned line must still be reachable from inside that guard');
     // Negative pin: the exemption must NARROW the fallback, never replace it.
-    assert.doesNotMatch(body, /if \(!isCompleteShortAnswer\(fullAnswer\)\)\s*\{\s*const safe =/s,
+    assert.doesNotMatch(body, /if \(!isCompleteShortAnswer\(fullAnswer\)\)\s*\{/s,
       'the length test must not be dropped in favour of the completeness check alone');
+    // And the regeneration must sit INSIDE the guard, not before it — a complete
+    // short answer must never trigger a second provider call.
+    const guardAt = body.search(/fullAnswer\.trim\(\)\.length < STREAMING_SAFE_PREFIX_CHARS/);
+    const regenAt = body.indexOf('retryAnswerCall');
+    assert.ok(regenAt > guardAt && guardAt >= 0,
+      'the regeneration must be inside the sub-threshold guard, never ahead of it');
   });
 
   test('a post-deadline exception is not mistaken for supersession', () => {
