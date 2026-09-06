@@ -28,8 +28,28 @@ const noop = async () => ([] as any);
 // The handful of getters whose result is destructured further than one level.
 // `[]` would be truthy and then blow up on the second hop, so they answer null
 // (each consumer already treats null as "nothing to show").
+// `?signedIn=1` drives the post-sign-in half of the OAuth cards, which is
+// otherwise unreachable here: the default stub reports signed-out, so the model
+// list, the account line and the Disconnect action never render and cannot be
+// looked at. Model ids match the real catalogue shape (bare ids; the card adds
+// the `antigravity:` prefix itself).
+const SIGNED_IN = new URLSearchParams(location.search).get('signedIn') === '1';
+
 const OVERRIDES: Record<string, () => Promise<any>> = {
     getAmbiguousCredentialStores: async () => null,
+    antigravityStatus: async () => ({
+        signedIn: SIGNED_IN, inProgress: false,
+        expiresAt: SIGNED_IN ? Date.now() + 3_600_000 : undefined,
+    }),
+    antigravityModels: async () => ({
+        success: true,
+        models: SIGNED_IN ? [
+            { id: 'gemini-3-pro', label: 'Gemini 3 Pro' },
+            { id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
+            { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+            { id: 'gpt-5.4', label: 'GPT-5.4' },
+        ] : [],
+    }),
 };
 
 (window as any).electronAPI = new Proxy({}, {

@@ -1243,6 +1243,18 @@ interface AipModelListProps {
     /** Discovery in flight. */
     refreshing?: boolean;
     /**
+     * Every row came from provider discovery, so there is no preset/fetched
+     * split and the "Showing built-in models only." note below would be false.
+     *
+     * That note is a heuristic on list LENGTH — it fires under
+     * AIP_MODEL_FILTER_THRESHOLD, which is right for the key-backed cards that
+     * ship a handful of presets and fetch the rest. A provider whose whole
+     * catalogue arrives from an authenticated call (Antigravity) has nothing
+     * built in, and a short list there means the account has four models, not
+     * that discovery has not run.
+     */
+    catalogIsComplete?: boolean;
+    /**
      * Called once, the first time the panel is expanded with no catalog yet.
      * Expanding this list IS the intent to browse models, so discovery belongs
      * here rather than behind a separate button elsewhere in the card.
@@ -1272,6 +1284,7 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
+    catalogIsComplete = false,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -1510,7 +1523,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                             })}
                         </div>
 
-                        {models.length <= AIP_MODEL_FILTER_THRESHOLD && (
+                        {!catalogIsComplete && models.length <= AIP_MODEL_FILTER_THRESHOLD && (
                             <p className="aip-meta mt-2">{t('Showing built-in models only.')}</p>
                         )}
                     </div>
@@ -3827,18 +3840,41 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         >
                             <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
                         </button>
-                    ) : <>
-                        {/* Left as plain buttons: the ask was the sign-in bar. Codex
-                            puts its post-sign-in Refresh/Sign out in the CARD HEADER
-                            as sm ghosts, which is a different move than restyling
-                            these in place. */}
-                        <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>{t('Reload models')}</button>
+                    ) : (
+                        /* "Reload models" is gone from this row: AipModelList below owns
+                           discovery, exactly as ProviderCard's comment says for the cloud
+                           cards. Two controls for one action is what that note warns about. */
                         <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
-                    </>}
+                    )}
                 </div>
-                {antigravityStatus.signedIn && <p className="text-xs aip-muted">{antigravityModels.length
-                    ? `${antigravityModels.length} ${t('models available in the model picker.')}`
-                    : t('No Antigravity models currently have quota. Reload models later.')}</p>}
+
+                {/* Model list, same control every key-backed provider gets via
+                    ProviderCard — tick rows to narrow the picker, promote one to
+                    default, refresh the catalogue. Antigravity is NOT an opt-in
+                    provider (isOptInModelProvider is litellm-only), so an empty
+                    allow-list means ALL models, which is the behaviour the plain
+                    count line described before.
+
+                    Ids carry the `antigravity:` prefix here because that is the form
+                    buildAvailableModelOptions and the allow-list already use; passing
+                    the bare id would tick a row that never matches at read time. */}
+                {antigravityStatus.signedIn && antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
+                    <AipModelList
+                        models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
+                        enabled={cloudEnabledModels['antigravity'] || []}
+                        onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
+                        onReset={() => handleResetModels('antigravity')}
+                        defaultId={defaultModel.startsWith('antigravity:') ? defaultModel : undefined}
+                        onSetDefault={(modelId) => handleSetDefaultModel('antigravity', modelId)}
+                        error={modelSaveError['antigravity'] ? 'save-failed' : null}
+                        refreshing={antigravityBusy}
+                        onRefresh={() => void runAntigravityAction('models')}
+                        catalogIsComplete
+                    />
+                )}
+                {antigravityStatus.signedIn && antigravityModels.length === 0 && (
+                    <p className="text-xs aip-muted">{t('No Antigravity models currently have quota. Reload models later.')}</p>
+                )}
                 {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
 
