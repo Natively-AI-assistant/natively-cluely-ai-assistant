@@ -1461,7 +1461,11 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 title={t('Re-read the model list from this provider')}
                             >
                                 <RefreshCw size={11} strokeWidth={1.75} className={refreshing ? 'aip-spinner' : ''} />
-                                {refreshing ? t('Fetching...') : showFilterBar ? t('Refresh') : t('Fetch all models')}
+                                {/* "Fetch all models" offers to go and get the REST of the
+                                    catalogue — right for the preset-shipping cards, wrong for
+                                    one whose catalogue already arrived whole. Same signal
+                                    catalogIsComplete uses to silence the built-in note. */}
+                                {refreshing ? t('Fetching...') : (showFilterBar || catalogIsComplete) ? t('Refresh') : t('Fetch all models')}
                             </button>
                         )}
                         </div>
@@ -2550,6 +2554,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
         // would make the two surfaces disagree and the filter would silently no-op.
         if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, litellmModelLabel(m)));
+        // Antigravity is the same shape of problem as LiteLLM: no preset table, and
+        // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
+        // covers the key-backed providers and never the OAuth ones. Without this the
+        // universe is EMPTY, and handleToggleModel's "empty allow-list means all"
+        // branch then materialises `universe` — nothing — so un-ticking one row
+        // persisted an allow-list containing ONLY that row. Measured before the fix:
+        // un-ticking the 2nd of 4 models took the summary from "All 4" to "1 / 4" and
+        // moved the default onto the row just un-ticked. handleBulkToggleModels reads
+        // the same universe and had the same landmine.
+        //
+        // Prefixed, because `antigravity:<id>` is the form the allow-list, the picker
+        // and modelAvailable() in ipcHandlers.ts all compare against.
+        if (provider === 'antigravity') antigravityModels.forEach(m => push(`antigravity:${m.id}`, m.label || m.id));
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
         // LiteLLM ids are proxy literals, so they take the segment label rather than
@@ -2558,7 +2575,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         (cloudEnabledModels[provider] || []).forEach(id =>
             push(id, provider === 'litellm' ? litellmModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, antigravityModels]);
 
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
@@ -3932,8 +3949,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         )}
                     </>)}
                 </div>
+                {/* The empty catalogue keeps its own Reload control. Discovery moved
+                    into AipModelList, which is gated on `antigravityModels.length > 0`
+                    — so in exactly the state that needs a retry there was none, and
+                    signing out and back in was the only way to re-run it. */}
                 {antigravityStatus.signedIn && antigravityModels.length === 0 && (
-                    <p className="text-xs aip-muted">{t('No Antigravity models currently have quota. Reload models later.')}</p>
+                    <div className="space-y-1">
+                        <p className="text-xs aip-muted">{t('No Antigravity models currently have quota.')}</p>
+                        <button type="button" className="aip-btn" data-size="sm" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>
+                            <RefreshCw size={12} strokeWidth={1.75} className={antigravityBusy ? 'aip-spinner' : undefined} />
+                            {antigravityBusy ? t('Reloading…') : t('Reload models')}
+                        </button>
+                    </div>
                 )}
                 {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
