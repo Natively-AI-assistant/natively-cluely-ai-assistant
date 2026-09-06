@@ -16,7 +16,7 @@ import {
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
-    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs, repairDeadlineMs,
+    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs, repairDeadlineMs, regenerationBudgetMs,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
@@ -3572,7 +3572,11 @@ export class IntelligenceEngine extends EventEmitter {
             // Time-to-first-token for THIS turn, recorded only if it commits —
             // see LLMHelper.recordAnswerFirstToken for why an aborted turn must
             // not teach the budget.
-            const answerStreamStartedAt = Date.now();
+            // `let`, because a regeneration must time ITSELF. Reusing attempt 1's
+            // start would record the whole failed budget as this endpoint's
+            // first-token cost, which is the upward ratchet the adaptive budget
+            // was explicitly built to avoid.
+            let answerStreamStartedAt = Date.now();
             let recordedFirstToken = false;
             const noteFirstToken = () => {
                 if (recordedFirstToken || !isUserEndpoint) return;
@@ -3716,6 +3720,63 @@ export class IntelligenceEngine extends EventEmitter {
                 // so the fragment case still falls through to the fallback.
                 if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS
                     && !isCompleteShortAnswer(fullAnswer)) {
+                    // ── ONE VERBATIM REGENERATION BEFORE GIVING UP ──────────
+                    // The request was not wrong; it did not come back. So the
+                    // second attempt is the SAME request — same prompt, same
+                    // 180s transcript, same reference files, same realtime
+                    // prompt, same screenshot — not a repair, which would be
+                    // asking a different question than the user asked.
+                    //
+                    // Safe to re-issue: the deadline driver's onCleanup above
+                    // aborts whatToAnswerCancellationToken on every non-'done'
+                    // reason, so attempt 1's request is already cancelled and
+                    // this cannot put two identical calls in flight.
+                    //
+                    // What it can and cannot rescue: a provider that STALLED
+                    // gets a fresh connection and often answers. A provider that
+                    // is DOWN fails again, because the primary dispatch path
+                    // does not consult rung health — that costs the regeneration
+                    // budget and nothing else, which is why the budget is capped
+                    // by the turn total rather than being a second full one.
+                    const regenBudget = regenerationBudgetMs({
+                        routeBudgetMs: firstUsefulDeadline,
+                        elapsedMs: Date.now() - answerStreamStartedAt,
+                    });
+                    let regenerated = '';
+                    if (regenBudget > 0) {
+                        const retryController = new AbortController();
+                        const retryArgs = (this.llmHelper as any).retryAnswerCall?.(
+                            whatToAnswerCancellationToken.signal, retryController.signal);
+                        if (retryArgs) {
+                            trace.mark('answer_regeneration_started', { budgetMs: regenBudget, answerType: answerPlan.answerType });
+                            answerStreamStartedAt = Date.now();
+                            recordedFirstToken = false;
+                            try {
+                                await raceStreamWithDeadline({
+                                    stream: this.llmHelper.streamChat(...(retryArgs as Parameters<LLMHelper['streamChat']>)) as AsyncGenerator<string>,
+                                    firstUsefulDeadlineMs: regenBudget,
+                                    interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
+                                    onToken: (tok: string) => { regenerated += tok; },
+                                    isUsefulYet: () => regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS
+                                        || isCompleteShortAnswer(regenerated),
+                                    // A regeneration can outlive the question that
+                                    // started it; the entry guard above is no longer
+                                    // current by the time this finishes.
+                                    shouldAbort: () => this.currentGenerationId !== generationId,
+                                    onCleanup: () => { try { retryController.abort(); } catch { /* noop */ } },
+                                });
+                            } catch { regenerated = ''; }
+                        }
+                    }
+                    const regenUsable = this.currentGenerationId === generationId
+                        && (regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS || isCompleteShortAnswer(regenerated));
+                    if (regenUsable) {
+                        trace.mark('answer_regeneration_succeeded', { chars: regenerated.trim().length, answerType: answerPlan.answerType });
+                        fullAnswer = regenerated;
+                        emitChunk(regenerated);
+                        return fullAnswer;
+                    }
+                    trace.mark('answer_regeneration_failed', { attempted: regenBudget > 0, answerType: answerPlan.answerType });
                     const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
                         ? "I don't have enough context from the conversation to answer that yet."
                         : "The model did not produce an answer in time, so I won't guess from your profile.";
