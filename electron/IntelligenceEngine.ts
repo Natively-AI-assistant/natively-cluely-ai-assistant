@@ -16,7 +16,7 @@ import {
     buildContextRoute, summarizeContextRoute, shouldThrottleTrigger,
     validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, sanitizeCandidateAnswer, CANDIDATE_VOICE_ANSWER_TYPES,
     detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES,
-    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs,
+    raceStreamWithDeadline, LIVE_INTER_TOKEN_STALL_MS, totalHardTimeoutMs, repairDeadlineMs, regenerationBudgetMs,
     LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, isLeakedSchemaStub, isLeakedJsonEnvelope, extractAnswerFromJsonEnvelope,
     isProviderTransportError, isLeakedInternalTagBlock, isLeakedAnswerArtifact,
     cleanAnswerArtifacts, compressToSpeakable, SCAFFOLD_LABEL_RE, BOLD_PSEUDO_HEADER_RE,
@@ -218,6 +218,64 @@ export class IntelligenceEngine extends EventEmitter {
 
     // Keep reference to LLMHelper for client access
     private llmHelper: LLMHelper;
+
+    /**
+     * First-token budget for a post-answer repair/regeneration stream.
+     *
+     * These were a hardcoded 7000 on every route. On a gateway whose first token
+     * measures 9s that window can never succeed, so the repair was spent and
+     * discarded on every turn — silently, since the user just never sees their
+     * answer improve. Derived from the route budget instead; see
+     * liveDeadlines.repairDeadlineMs. `minMs` preserves each site's own previous
+     * value as a floor so nothing gets shorter than it is today.
+     */
+    /**
+     * Arguments for a post-answer repair stream.
+     *
+     * Prefers a replay of THIS turn's answer call, so the repair sees the same
+     * transcript, screenshot, reference files, realtime prompt and evidence the
+     * answer saw. Falls back to the caller's own arguments when the turn has no
+     * remembered answer — the ScopeFallback route and the Context-OS
+     * refuse/clarify terminals never compose one, so that is a real branch.
+     *
+     * The abort signal is always the caller's, never the remembered one.
+     */
+    private repairCallArgs(
+        turnKey: object | undefined,
+        repairPrompt: string,
+        signal: AbortSignal | undefined,
+        fallbackSystemPrompt?: string,
+        fallbackScopes: any[] = [],
+    ): Parameters<LLMHelper['streamChat']> {
+        const replayed = (this.llmHelper as any).replayAnswerCall?.(turnKey, repairPrompt, signal);
+        if (replayed) {
+            // A repair site that supplies its OWN system prompt means it: the
+            // doc-grounded repair pass, for one, deliberately runs under a
+            // different contract from the answer. Inheriting the answer's
+            // system prompt there would silently undo that. The caller's wins;
+            // everything else — images, transcript, scopes, route — is inherited.
+            if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+            if (fallbackScopes && fallbackScopes.length > 0) replayed[6] = fallbackScopes as any;
+            return replayed;
+        }
+        return [repairPrompt, undefined, undefined, fallbackSystemPrompt, true, true, fallbackScopes as any, signal] as any;
+    }
+
+    private repairFirstUsefulMs(minMs: number = 7000, turnKey?: object): number {
+        const h: any = this.llmHelper;
+        const isUserEndpoint = typeof h?.isUsingUserEndpoint === 'function' ? h.isUsingUserEndpoint() === true : false;
+        return repairDeadlineMs({
+            // A repair that inherits the answer's screenshot pays a multimodal
+            // prefill, which no text-sized window can clear.
+            hasImages: turnKey ? h?.replayedAnswerHasImages?.(turnKey) === true : false,
+            isLocal: typeof h?.isUsingOllama === 'function' ? h.isUsingOllama() === true : false,
+            viaServerCascade: typeof h?.isUsingNativelyServerCascade === 'function' ? h.isUsingNativelyServerCascade() === true : false,
+            isUserEndpoint,
+            observedUserEndpointLatency: isUserEndpoint && typeof h?.observedAnswerLatency === 'function'
+                ? h.observedAnswerLatency() : null,
+            minMs,
+        });
+    }
 
     // Reference to SessionTracker for context
     private session: SessionTracker;
@@ -3492,14 +3550,62 @@ export class IntelligenceEngine extends EventEmitter {
                 ? (this.llmHelper as any).isUsingNativelyServerCascade() === true
                 : false;
             const isVisionTurn = (imagePaths?.length ?? 0) > 0;
+            // A user-supplied endpoint (Custom / cURL / LiteLLM / NVIDIA NIM) is an
+            // address we have never measured, so it gets a longer ceiling than a
+            // shipped provider called directly. Same reasoning as viaServerCascade
+            // above: ask which route this turn actually takes, rather than letting
+            // one route's number become everyone's default.
+            const isUserEndpoint = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
+                ? (this.llmHelper as any).isUsingUserEndpoint() === true
+                : false;
+            const observedUserEndpointLatency = isUserEndpoint
+                && typeof (this.llmHelper as any).observedAnswerLatency === 'function'
+                ? (this.llmHelper as any).observedAnswerLatency()
+                : null;
             const firstUsefulDeadline = totalHardTimeoutMs({
                 isLocal: usingLocalLlm,
                 isVisionTurn,
                 viaServerCascade,
+                isUserEndpoint,
+                observedUserEndpointLatency,
             });
+            // Time-to-first-token for THIS turn, recorded only if it commits —
+            // see LLMHelper.recordAnswerFirstToken for why an aborted turn must
+            // not teach the budget.
+            // `let`, because a regeneration must time ITSELF. Reusing attempt 1's
+            // start would record the whole failed budget as this endpoint's
+            // first-token cost, which is the upward ratchet the adaptive budget
+            // was explicitly built to avoid.
+            let answerStreamStartedAt = Date.now();
+            let recordedFirstToken = false;
+            // MEASURED off the wire, RECORDED only once the turn actually
+            // produces content. Two separate steps on purpose. Measuring at the
+            // first visible token folded CodingStreamGate hold time into
+            // provider latency; recording the instant a token arrives would
+            // undo recordAnswerFirstToken's own contract, which is that a turn
+            // the deadline killed must not teach the budget — a first token at
+            // 14.9s of a 15s budget then dying is exactly the upward ratchet
+            // that contract exists to prevent. So capture the accurate number
+            // here and commit it from emitChunk, which is the same
+            // produced-usable-content signal manual chat commits on.
+            let pendingFirstTokenMs: number | null = null;
+            const noteFirstToken = () => {
+                if (recordedFirstToken || !isUserEndpoint) return;
+                recordedFirstToken = true;
+                pendingFirstTokenMs = Date.now() - answerStreamStartedAt;
+            };
+            const commitFirstTokenMeasurement = () => {
+                if (pendingFirstTokenMs == null) return;
+                const ms = pendingFirstTokenMs;
+                pendingFirstTokenMs = null;
+                try {
+                    (this.llmHelper as any).recordAnswerFirstToken?.(ms);
+                } catch { /* measurement must never break the answer */ }
+            };
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {
+                commitFirstTokenMeasurement();
                 emittedStreamingToken = true;
                 openedStreamRow = true;
                 if (trace.markFirstUseful({ via: 'stream', answerType: answerPlan.answerType })) {
@@ -3541,6 +3647,18 @@ export class IntelligenceEngine extends EventEmitter {
                 onFirstUsefulTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { budgetMs: firstUsefulDeadline, answerType: answerPlan.answerType }); },
                 onStallTimeout: () => { liveDeadlineFired = true; trace.mark('provider_timeout', { reason: 'inter_token_stall', answerType: answerPlan.answerType }); },
                 onToken: (token: string) => {
+                    // TTFT is measured HERE, at the first token off the wire —
+                    // not in emitChunk. emitChunk fires on the first VISIBLE
+                    // token, which on a coding turn is gated behind
+                    // CodingStreamGate until a '## ' heading is confirmed, so
+                    // seconds of gate-hold were being recorded as provider
+                    // latency. That feeds a decaying MAX (max(ms, prev*0.9)),
+                    // so one gated turn widened the endpoint's budget by up to
+                    // 5s and decayed only ~10% per turn afterwards — an upward
+                    // ratchet on a number whose whole purpose is to track the
+                    // endpoint. Manual chat already measured it here; the two
+                    // surfaces feed one map and must mean the same thing.
+                    if (!isSpeculative) noteFirstToken();
                     fullAnswer += token;
                     if (isSpeculative) return; // speculative prefetch never streams to UI
                     if (codingGate) {
@@ -3631,17 +3749,121 @@ export class IntelligenceEngine extends EventEmitter {
                 // so the fragment case still falls through to the fallback.
                 if (fullAnswer.trim().length < STREAMING_SAFE_PREFIX_CHARS
                     && !isCompleteShortAnswer(fullAnswer)) {
-                    const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                        ? "I don't have enough context from the conversation to answer that yet."
-                        : "The model did not produce an answer in time, so I won't guess from your profile.";
-                    fullAnswer = safe;
-                    emitChunk(safe);
-                    wtaWriteDecision = decideSessionWritePolicy({
-                        finalGenerationMode: 'provider_error_no_answer',
-                        validationOk: false,
-                        criticalViolations: ['provider_timeout_no_answer'],
+                    // ── ONE VERBATIM REGENERATION BEFORE GIVING UP ──────────
+                    // The request was not wrong; it did not come back. So the
+                    // second attempt is the SAME request — same prompt, same
+                    // 180s transcript, same reference files, same realtime
+                    // prompt, same screenshot — not a repair, which would be
+                    // asking a different question than the user asked.
+                    //
+                    // Safe to re-issue: the deadline driver's onCleanup above
+                    // aborts whatToAnswerCancellationToken on every non-'done'
+                    // reason, so attempt 1's request is already cancelled and
+                    // this cannot put two identical calls in flight.
+                    //
+                    // What it can and cannot rescue: a provider that STALLED
+                    // gets a fresh connection and often answers. A provider that
+                    // is DOWN fails again, because the primary dispatch path
+                    // does not consult rung health — that costs the regeneration
+                    // budget and nothing else, which is why the budget is capped
+                    // by the turn total rather than being a second full one.
+                    // A user-endpoint route no longer needs this: LLMHelper now
+                    // runs those turns through the shared fallback engine, which
+                    // has already either failed over to a spare rung or retried
+                    // the same gateway IN PARALLEL. Regenerating here would be a
+                    // third identical call on the user's own key, for a provider
+                    // that has already been tried twice.
+                    // hasEngineLevelRetry(), NOT isUsingUserEndpoint(): the
+                    // latter answers "whose key pays", which is a different
+                    // question and is wrong for the cURL provider — branch 2b is
+                    // blocking and terminal, so the engine never retried it and
+                    // suppressing the regeneration there left that user with a
+                    // single attempt and then the canned line.
+                    const engineAlreadyRetried = typeof (this.llmHelper as any).hasEngineLevelRetry === 'function'
+                        && (this.llmHelper as any).hasEngineLevelRetry() === true
+                        && !isVisionTurn;
+                    const regenBudget = engineAlreadyRetried ? 0 : regenerationBudgetMs({
+                        routeBudgetMs: firstUsefulDeadline,
+                        elapsedMs: Date.now() - answerStreamStartedAt,
                     });
-                    trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
+                    let regenerated = '';
+                    if (regenBudget > 0) {
+                        const retryController = new AbortController();
+                        const retryArgs = (this.llmHelper as any).retryAnswerCall?.(
+                            whatToAnswerCancellationToken.signal, retryController.signal);
+                        if (retryArgs) {
+                            trace.mark('answer_regeneration_started', { budgetMs: regenBudget, answerType: answerPlan.answerType });
+                            answerStreamStartedAt = Date.now();
+                            recordedFirstToken = false;
+                            // Attempt 1 produced nothing usable, so whatever it
+                            // measured is not this endpoint's first-token cost.
+                            pendingFirstTokenMs = null;
+                            try {
+                                await raceStreamWithDeadline({
+                                    stream: this.llmHelper.streamChat(...(retryArgs as Parameters<LLMHelper['streamChat']>)) as AsyncGenerator<string>,
+                                    firstUsefulDeadlineMs: regenBudget,
+                                    interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
+                                    onToken: (tok: string) => {
+                                        // Same reason: without this the single
+                                        // emitChunk(regenerated) below recorded
+                                        // the WHOLE regeneration wall-clock as
+                                        // this endpoint's first-token cost.
+                                        if (!isSpeculative) noteFirstToken();
+                                        regenerated += tok;
+                                    },
+                                    isUsefulYet: () => regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS
+                                        || isCompleteShortAnswer(regenerated),
+                                    // A regeneration can outlive the question that
+                                    // started it; the entry guard above is no longer
+                                    // current by the time this finishes.
+                                    shouldAbort: () => this.currentGenerationId !== generationId,
+                                    onCleanup: () => { try { retryController.abort(); } catch { /* noop */ } },
+                                });
+                            } catch { regenerated = ''; }
+                        }
+                    }
+                    const regenUsable = this.currentGenerationId === generationId
+                        && (regenerated.trim().length >= STREAMING_SAFE_PREFIX_CHARS || isCompleteShortAnswer(regenerated));
+                    if (regenUsable) {
+                        trace.mark('answer_regeneration_succeeded', { chars: regenerated.trim().length, answerType: answerPlan.answerType });
+                        fullAnswer = regenerated;
+                        emitChunk(regenerated);
+                        // FALL THROUGH — never `return fullAnswer` here. An early
+                        // return skips the terminal `suggested_answer` emit, the
+                        // setMode('idle'), session persistence, trace.finish AND
+                        // the whole post-stream chain (leaked-schema guard,
+                        // validateAnswerStructure, repairCodingMarkdown,
+                        // sanitizeCandidateAnswer). The renderer would open a
+                        // streaming row that never gets its final event and the
+                        // engine would sit in a non-idle mode — a rescued answer
+                        // is the ONE case that must take the normal exit, since
+                        // it is real model output that has never been validated.
+                        // The failure path below is deliberately an `else`: the
+                        // two branches used to be sequential, which is why the
+                        // early return was load-bearing.
+                    } else {
+                        // This turn ends in the canned line, so it did NOT
+                        // commit — and recordAnswerFirstToken's contract is that
+                        // only a committed turn teaches the budget. Attempt 1 may
+                        // still have a pending measurement here (a few
+                        // sub-threshold tokens arrived before it stalled); the
+                        // emitChunk below would otherwise commit it while
+                        // rendering OUR fallback text, conflating "we printed an
+                        // apology" with "the provider produced content".
+                        pendingFirstTokenMs = null;
+                        trace.mark('answer_regeneration_failed', { attempted: regenBudget > 0, answerType: answerPlan.answerType });
+                        const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                            ? "I don't have enough context from the conversation to answer that yet."
+                            : "The model did not produce an answer in time, so I won't guess from your profile.";
+                        fullAnswer = safe;
+                        emitChunk(safe);
+                        wtaWriteDecision = decideSessionWritePolicy({
+                            finalGenerationMode: 'provider_error_no_answer',
+                            validationOk: false,
+                            criticalViolations: ['provider_timeout_no_answer'],
+                        });
+                        trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
+                    }
                 }
             }
 
@@ -4062,16 +4284,15 @@ export class IntelligenceEngine extends EventEmitter {
                     try {
                         await raceStreamWithDeadline({
                             stream: this.llmHelper.streamChat(
-                                scaffoldRepairPrompt,
-                                undefined,
-                                undefined,
-                                undefined,
-                                true,
-                                true,
-                                [],
-                                whatToAnswerCancellationToken.signal,
+                                ...this.repairCallArgs(
+                                    whatToAnswerCancellationToken.signal,
+                                    scaffoldRepairPrompt,
+                                    whatToAnswerCancellationToken.signal,
+                                    undefined,
+                                    [],
+                                )
                             ) as AsyncGenerator<string>,
-                            firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                            firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                             interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
                             shouldAbort: () => scaffoldRepaired.length > 1800
@@ -4364,16 +4585,15 @@ export class IntelligenceEngine extends EventEmitter {
                                 try {
                                     await raceStreamWithDeadline({
                                         stream: this.llmHelper.streamChat(
-                                            repairPrompt,
-                                            undefined,
-                                            undefined,
-                                            wtaRepairSystemPrompt,
-                                            true,
-                                            true,
-                                            ['reference_files'],
-                                            whatToAnswerCancellationToken.signal,
+                                            ...this.repairCallArgs(
+                                                whatToAnswerCancellationToken.signal,
+                                                repairPrompt,
+                                                whatToAnswerCancellationToken.signal,
+                                                wtaRepairSystemPrompt,
+                                                ['reference_files'],
+                                            )
                                         ) as AsyncGenerator<string>,
-                                        firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                         interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                                         isUsefulYet: () => repaired.trim().length >= 5,
                                         shouldAbort: () => repaired.length > 1800
@@ -4583,16 +4803,15 @@ export class IntelligenceEngine extends EventEmitter {
                         try {
                             await raceStreamWithDeadline({
                                 stream: this.llmHelper.streamChat(
-                                    repairPrompt,
-                                    undefined,
-                                    undefined,
-                                    undefined,
-                                    true,
-                                    true,
-                                    [],
-                                    whatToAnswerCancellationToken.signal,
+                                    ...this.repairCallArgs(
+                                        whatToAnswerCancellationToken.signal,
+                                        repairPrompt,
+                                        whatToAnswerCancellationToken.signal,
+                                        undefined,
+                                        [],
+                                    )
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => repaired.length >= 5,
                                 shouldAbort: () => repaired.length > 1200
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -4989,16 +5208,15 @@ export class IntelligenceEngine extends EventEmitter {
                         try {
                             await raceStreamWithDeadline({
                                 stream: this.llmHelper.streamChat(
-                                    coverageRepairPrompt,
-                                    undefined,
-                                    undefined,
-                                    undefined,
-                                    true,
-                                    true,
-                                    [],
-                                    whatToAnswerCancellationToken.signal,
+                                    ...this.repairCallArgs(
+                                        whatToAnswerCancellationToken.signal,
+                                        coverageRepairPrompt,
+                                        whatToAnswerCancellationToken.signal,
+                                        undefined,
+                                        [],
+                                    )
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => clauseAddition.length >= 5,
                                 shouldAbort: () => clauseAddition.length > 900
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -5203,16 +5421,15 @@ export class IntelligenceEngine extends EventEmitter {
                             try {
                                 await raceStreamWithDeadline({
                                     stream: this.llmHelper.streamChat(
-                                        repairPrompt,
-                                        undefined,
-                                        undefined,
-                                        undefined,
-                                        true,
-                                        true,
-                                        [],
-                                        whatToAnswerCancellationToken.signal,
+                                        ...this.repairCallArgs(
+                                            whatToAnswerCancellationToken.signal,
+                                            repairPrompt,
+                                            whatToAnswerCancellationToken.signal,
+                                            undefined,
+                                            [],
+                                        )
                                     ) as AsyncGenerator<string>,
-                                    firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                                    firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                     isUsefulYet: () => repaired.length >= 5,
                                     shouldAbort: () => repaired.length > 1200
                                         || whatToAnswerCancellationToken.signal.aborted
@@ -5604,16 +5821,15 @@ export class IntelligenceEngine extends EventEmitter {
                     let fixed = '';
                     await raceStreamWithDeadline({
                         stream: this.llmHelper.streamChat(
-                            repairPrompt,
-                            undefined,
-                            undefined,
-                            undefined,
-                            true,
-                            true,
-                            [],
-                            abortSignal,
+                            ...this.repairCallArgs(
+                                abortSignal,
+                                repairPrompt,
+                                abortSignal,
+                                undefined,
+                                [],
+                            )
                         ) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: this.llmHelper.isUsingOllama() ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, abortSignal),
                         isUsefulYet: () => fixed.length >= 5,
                         shouldAbort: () => fixed.length > 1200 || superseded(),
                         onToken: (tok: string) => { fixed += tok; },

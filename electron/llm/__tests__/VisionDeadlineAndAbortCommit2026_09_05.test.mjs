@@ -67,9 +67,17 @@ describe('vision turns get a ceiling that is not derived from the natively casca
     );
   });
 
-  test('a text turn is unchanged on both routes', () => {
-    assert.equal(totalHardTimeoutMs({}), LIVE_TOTAL_HARD_TIMEOUT_MS);
+  test('a text turn on the natively route still uses the natively ceiling', () => {
+    // This test asserted `totalHardTimeoutMs({}) === LIVE_TOTAL_HARD_TIMEOUT_MS`
+    // when it was written, because on 2026-09-05 the bare default WAS the
+    // natively number — every route shared that `return`. On 2026-09-06 the
+    // default-provider route was given its own 8000 ceiling, so the bare case
+    // moved deliberately; LiveDeadlineRouteTable2026_09_06 owns the new table.
+    // What THIS file still owns is that the cascade route is untouched by the
+    // vision work.
     assert.equal(totalHardTimeoutMs({ viaServerCascade: true }), LIVE_TOTAL_HARD_TIMEOUT_MS);
+    assert.notEqual(totalHardTimeoutMs({}), LIVE_VISION_TOTAL_HARD_TIMEOUT_MS,
+      'a text turn must never pick up the vision ceiling');
   });
 
   test('local still wins over the vision case', () => {

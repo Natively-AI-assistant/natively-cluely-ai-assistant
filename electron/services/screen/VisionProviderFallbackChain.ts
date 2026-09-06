@@ -46,7 +46,8 @@ export type VisionSkipReason =
   | 'no_vision'
   | 'privacy_blocked'
   | 'scope_blocked'
-  | 'rate_limited';
+  | 'rate_limited'
+  | 'circuit_open';
 
 export type VisionErrorClass =
   | 'timeout'
@@ -117,6 +118,33 @@ export interface VisionInvocationParams {
   timeoutMs: number;
 }
 
+/**
+ * Per-rung failure memory, owned by the CALLER so it survives across turns —
+ * same shape and the same reason as `runStreamingVisionFallback`'s `health`.
+ *
+ * Without it this chain had no memory at all: a rung that timed out on every
+ * turn was still tried FIRST on every turn. Measured over three consecutive
+ * screenshots against a dead gateway, the pre-pass cost 4001 / 4011 / 3959 ms —
+ * identical, forever, because nothing recorded that the rung had just failed
+ * three times in a row.
+ */
+export interface VisionRungHealth {
+  /** Epoch ms until which this rung is skipped. */
+  openUntil: number;
+  /**
+   * Consecutive timeouts caused by OUR OWN budget clamp rather than by the
+   * provider. The first is forgiven — it is genuinely not the rung's fault and
+   * cooling a healthy rung for it disables the one that would have answered.
+   * The second is not: a rung that hangs past its slice on every turn will keep
+   * doing so, and forgiving it forever re-creates the memoryless behaviour this
+   * whole structure exists to prevent (measured: a hanging leading rung burned
+   * the full budget on 5 consecutive turns and was never cooled).
+   */
+  clampedMisses?: number;
+  /** When the last clamped miss was seen, so the count can expire. */
+  clampedAt?: number;
+}
+
 export interface RunFallbackParams {
   imagePath: string;
   cacheKey?: string;                              // typically perceptual hash for optimizer cache
@@ -128,6 +156,10 @@ export interface RunFallbackParams {
   optimizationProfile?: 'fast' | 'balanced' | 'technical' | 'best';
   perProviderTimeoutMs?: number;                  // default 12_000
   totalDeadlineMs?: number;                       // optional ceiling across all attempts
+  /** Caller-owned failure memory; omit to keep the previous memoryless behaviour. */
+  health?: Map<string, VisionRungHealth>;
+  /** Injectable clock so the cooldown is testable without waiting it out. */
+  now?: () => number;
   telemetry?: (event: VisionTelemetryEvent) => void;
 }
 
@@ -146,6 +178,28 @@ const DEFAULT_PER_PROVIDER_TIMEOUT_MS = 12_000;
  * that the rung after a dead one gets a real attempt rather than 0ms.
  */
 const FIRST_RUNG_BUDGET_SHARE = 0.6;
+
+/**
+ * Cooldowns after a failed attempt. Deliberately the same magnitudes as
+ * visionStreamFallback's `transientCooldownMs` / `authCooldownMs`, so the two
+ * chains cannot form different opinions about the same provider.
+ *
+ * A bad key or a revoked one will not fix itself in 30s; a timeout or a 503
+ * often does.
+ */
+const RUNG_TRANSIENT_COOLDOWN_MS = 30_000;
+const RUNG_AUTH_COOLDOWN_MS = 300_000;
+/**
+ * How long a forgiven clamp-induced timeout is remembered.
+ *
+ * MUST be comfortably longer than RUNG_TRANSIENT_COOLDOWN_MS. Reusing the
+ * cooldown itself as this window would expire the counter at the exact moment
+ * the rung becomes eligible again, so the second miss could never land inside
+ * it and the forgiveness would be permanent — a no-op that reads like a fix.
+ * Five cooldowns: two clamped misses inside 2.5 minutes is a rung that is
+ * actually misbehaving; two an hour apart are unrelated events.
+ */
+const CLAMP_MISS_WINDOW_MS = RUNG_TRANSIENT_COOLDOWN_MS * 5;
 
 // ─── Implementation ───────────────────────────────────────────────────────
 
@@ -171,6 +225,8 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
   const optimizer = params.optimizer ?? getImageOptimizer();
   const perProviderTimeoutMs = params.perProviderTimeoutMs ?? DEFAULT_PER_PROVIDER_TIMEOUT_MS;
   const totalDeadlineMs = params.totalDeadlineMs;
+  const nowMs = params.now ?? Date.now;
+  const health = params.health;
   const attempts: VisionProviderAttempt[] = [];
 
   // Validate source exists once so we don't keep re-statting per provider.
@@ -189,6 +245,12 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
   let sawScopeBlocked = false;
   let sawPrivacyBlocked = false;
   let sawAtLeastOneAttempt = false;
+  // Tracked separately from the skip flags above: a rung skipped because it is
+  // cooling down is a rung that EXISTS and recently failed. Folding it into the
+  // others would resolve failureReason to 'no_vision_provider' and tell a user
+  // who has a provider configured that they have none — the exact class of
+  // misleading message the registry comments keep having to undo.
+  let sawCircuitOpen = false;
 
   for (let i = 0; i < params.providers.length; i++) {
     const provider = params.providers[i];
@@ -251,6 +313,23 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
       continue;
     }
 
+    // 4b. failure memory: skip a rung that just failed, so a chronically dead
+    // one stops charging the user its share of the budget on every turn.
+    const entry = health?.get(provider.id);
+    if (entry && entry.openUntil > nowMs()) {
+      attempts.push({
+        provider: provider.id,
+        model: provider.modelId,
+        ok: false,
+        skipped: true,
+        skipReason: 'circuit_open',
+        durationMs: 0,
+      });
+      params.telemetry?.({ type: 'vision_skipped', provider: provider.id, reason: 'circuit_open' });
+      sawCircuitOpen = true;
+      continue;
+    }
+
     // 5. total-deadline check
     if (totalDeadlineMs && Date.now() - started > totalDeadlineMs) {
       attempts.push({
@@ -309,9 +388,15 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
     // share of the budget. Not a health tracker — this is mechanical and has no
     // memory; a chronically-dead leading rung still burns its share on every
     // single turn. Fixing THAT needs failure memory in this chain.
+    // The circuit state is part of eligibility. Without it this cap starved a
+    // healthy leading rung for the benefit of a rung that step 4b then skipped
+    // as circuit_open — the chain gave away 40% of its budget to nobody. The
+    // comment above used to end "Fixing THAT needs failure memory in this
+    // chain"; the failure memory now exists, so it is consulted here.
     const laterRungEligible = params.providers.slice(i + 1).some(p =>
       p.isConfigured && p.supportsVision && p.scopeAllowsScreenshots
-      && (params.mode !== 'private_vision' || p.isLocal));
+      && (params.mode !== 'private_vision' || p.isLocal)
+      && (health?.get(p.id)?.openUntil ?? 0) <= nowMs());
     // No lower floor here: a `Math.max(1000, …)` guard against absurdly small
     // slices made the share EQUAL the whole budget whenever the total was
     // <= ~1.7s, so the cap silently did nothing in exactly the tight cases it
@@ -358,6 +443,7 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
           durationMs,
         });
         params.telemetry?.({ type: 'vision_success', provider: provider.id, model: provider.modelId, durationMs });
+        health?.delete(provider.id);
         return {
           ok: true,
           providerUsed: provider.id,
@@ -377,6 +463,7 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         durationMs,
       });
       params.telemetry?.({ type: 'vision_failed', provider: provider.id, errorClass: 'provider_error', durationMs });
+      noteRungFailure(health, provider.id, 'provider_error', nowMs);
       if (i < params.providers.length - 1) {
         const next = params.providers[i + 1];
         params.telemetry?.({ type: 'vision_fallback', from: provider.id, to: next.id });
@@ -385,6 +472,15 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
       clearTimeout(timer);
       const durationMs = Date.now() - providerStarted;
       const errorClass = classifyError(err, controller.signal.aborted);
+      // Was the deadline that fired the provider's own, or one WE imposed? When
+      // shareMs (the 60% cap that exists to leave room for a later rung) or the
+      // chain's remaining time is what cut the attempt short, a resulting
+      // 'timeout' says nothing about the provider's health — it says we did not
+      // give it enough time. Cooling it for RUNG_TRANSIENT_COOLDOWN_MS on that
+      // basis disables the leading rung that would have answered inside the
+      // full budget, which is the opposite of what the cap is for.
+      const selfInflictedTimeout = errorClass === 'timeout'
+        && timeoutMs < (provider.timeoutMs ?? perProviderTimeoutMs);
       attempts.push({
         provider: provider.id,
         model: provider.modelId,
@@ -393,6 +489,21 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
         durationMs,
       });
       params.telemetry?.({ type: 'vision_failed', provider: provider.id, errorClass, durationMs });
+      if (selfInflictedTimeout) {
+        const prior = health?.get(provider.id);
+        // Expire a stale count: two clamped misses months apart say nothing
+        // about this rung, and without expiry the single forgiveness is spent
+        // forever on the first one the process ever saw.
+        const fresh = prior?.clampedAt != null && (nowMs() - prior.clampedAt) <= CLAMP_MISS_WINDOW_MS;
+        const misses = (fresh ? (prior?.clampedMisses ?? 0) : 0) + 1;
+        health?.set(provider.id, {
+          openUntil: prior?.openUntil ?? 0, clampedMisses: misses, clampedAt: nowMs(),
+        });
+        // Forgive the first, cool from the second on.
+        if (misses > 1) noteRungFailure(health, provider.id, errorClass, nowMs);
+      } else {
+        noteRungFailure(health, provider.id, errorClass, nowMs);
+      }
       if (i < params.providers.length - 1) {
         const next = params.providers[i + 1];
         params.telemetry?.({ type: 'vision_fallback', from: provider.id, to: next.id });
@@ -402,7 +513,7 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
 
   // No provider succeeded. Pick the most specific failure reason.
   let failureReason: VisionFailureReason;
-  if (sawAtLeastOneAttempt) {
+  if (sawAtLeastOneAttempt || sawCircuitOpen) {
     failureReason = 'all_vision_failed';
   } else if (params.mode === 'private_vision' && sawPrivacyBlocked && !sawScopeBlocked) {
     failureReason = 'privacy_blocked';
@@ -422,6 +533,28 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
 
 // Map a raw error onto one of our redacted error classes. No message bodies are
 // exposed to telemetry — only the class.
+/**
+ * Open this rung's circuit for a cooldown proportional to how recoverable the
+ * failure looks. `invalid_payload` and `no_vision` are deliberately NOT cooled
+ * down: they are properties of THIS request (an oversized image, a model that
+ * cannot take one), not of the provider, so the next turn deserves a fresh try.
+ */
+function noteRungFailure(
+  health: Map<string, VisionRungHealth> | undefined,
+  id: string,
+  errorClass: VisionErrorClass,
+  now: () => number,
+): void {
+  if (!health) return;
+  if (errorClass === 'invalid_payload' || errorClass === 'no_vision') return;
+  const cooldown = errorClass === 'auth_error' ? RUNG_AUTH_COOLDOWN_MS : RUNG_TRANSIENT_COOLDOWN_MS;
+  const prior = health.get(id);
+  health.set(id, {
+    openUntil: now() + cooldown,
+    clampedMisses: prior?.clampedMisses, clampedAt: prior?.clampedAt,
+  });
+}
+
 function classifyError(err: any, aborted: boolean): VisionErrorClass {
   if (aborted) return 'timeout';
   const msg = String(err?.message || err || '').toLowerCase();

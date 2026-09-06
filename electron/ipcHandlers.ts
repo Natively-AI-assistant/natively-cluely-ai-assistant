@@ -29,7 +29,68 @@ import { TRIAL_SENTINEL_KEY, DOM_CONTEXT_MAX_CHARS } from './config/constants';
 import { AI_RESPONSE_LANGUAGES, RECOGNITION_LANGUAGES } from './config/languages';
 import { resolveCodingPromptSignals } from './llm/codingPromptSignals';
 import { isBareCodeRequest, looksLikeCodingAnswer, buildPriorCodingContextBlock as buildPriorCodingBlockForV3 } from './llm/codingFollowup';
-import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnswerStructure, validateProfileOutput, validateProfileEvidence, buildProfileRepairInstruction, raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs, repairDeadlineMs, LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS, CODING_REGEN_ABORT_CHARS, isStealthEvasionQuestion, stripProfileTokensFromCoding, isBareFollowUp, isRefinementFollowUp, buildContextFreeClarification, sanitizeCandidateAnswer, acceptRepairedAnswer, CANDIDATE_VOICE_ANSWER_TYPES, detectAssistantVoiceMisfire, ASSISTANT_VOICE_ANSWER_TYPES, piTelemetry, classifyProviderError, detectExplicitCodingContract, isCodingContinuation, buildPriorCodingContextBlock, buildCodingContractPrompt, explicitContractProducesCode, CODING_VERIFICATION_INSTRUCTION, humanizeDirectiveFor, detectCorporateFiller, humanizeForAnswerType, applySpeakabilityBudget, compressTechnicalConcept, checkCodeCompleteness, varySpokenOpening, type ExplicitCodingContract, type AnswerType } from './llm';
+
+/**
+ * First-token budget for a post-answer repair/regeneration stream.
+ *
+ * These were hardcoded (7000, or 8000 on the two coding-regen paths) on every
+ * route. On a gateway whose first token measures 9s that window can never
+ * succeed, so the repair was spent and thrown away every turn — silently, since
+ * the user just never sees their answer improve. Derived from the route budget
+ * now; `minMs` carries each site's own previous value as a floor so this change
+ * can only ever add room. See liveDeadlines.repairDeadlineMs.
+ */
+/** The exact argument tuple LLMHelper.streamChat takes. */
+type StreamChatArgs = Parameters<import('./LLMHelper').LLMHelper['streamChat']>;
+
+/**
+ * Arguments for a post-answer repair stream on the manual-chat surface.
+ *
+ * Replays this turn's answer call so the repair sees the same images, context,
+ * system prompt, scopes and route the answer saw — a repair used to be sent as
+ * `streamChat(prompt, undefined, undefined, undefined, true, true)` and was
+ * reasoning from the prior answer text alone. Falls back to the caller's own
+ * arguments when this turn has no remembered answer. The abort signal is always
+ * the caller's, never the remembered one.
+ */
+function repairCallArgs(
+  llmHelper: any,
+  turnKey: object | undefined | null,
+  repairPrompt: string,
+  signal: AbortSignal | undefined,
+  fallbackContext?: string,
+  fallbackSystemPrompt?: string,
+): StreamChatArgs {
+  const replayed = llmHelper?.replayAnswerCall?.(turnKey, repairPrompt, signal);
+  if (replayed) {
+    // A repair site that supplies its own system prompt (the strict doc-grounded
+    // regen) means it — inheriting the answer's would undo the stricter
+    // contract it is re-running under. The caller's wins; the images,
+    // transcript, scopes and route are still inherited.
+    if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+    // Same precedence for the context. It was accepted and then ignored on this
+    // branch, so the two coding-regen sites silently lost
+    // codingPriorProblemBlock in the common case (a turn that HAS a remembered
+    // answer) — a regeneration that exists to re-solve the previous problem
+    // could no longer see it, and nothing typechecked or warned.
+    if (fallbackContext !== undefined) replayed[2] = fallbackContext;
+    return replayed;
+  }
+  return [repairPrompt, undefined, fallbackContext, fallbackSystemPrompt, true, true, [], signal] as StreamChatArgs;
+}
+
+function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: object | null): number {
+  const isUserEndpoint = llmHelper?.isUsingUserEndpoint?.() === true;
+  return repairDeadlineMs({
+    hasImages: turnKey ? llmHelper?.replayedAnswerHasImages?.(turnKey) === true : false,
+    isLocal: llmHelper?.isUsingOllama?.() === true || llmHelper?.isUsingCodexCli?.() === true,
+    viaServerCascade: llmHelper?.isUsingNativelyServerCascade?.() === true,
+    isUserEndpoint,
+    observedUserEndpointLatency: isUserEndpoint ? (llmHelper?.observedAnswerLatency?.() ?? null) : null,
+    minMs,
+  });
+}
 import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
@@ -3640,7 +3701,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             providerAttempts: 1,
           });
           chatTrace.mark('provider_request_started', { ignoreKnowledgeMode: Boolean(ignoreKnowledge) });
-          const stream = llmHelper.streamChat(
+          // Hoisted so this turn's answer call can be handed to LLMHelper for
+          // its post-answer repairs to replay — same transcript, images,
+          // system prompt, scopes and route the answer got. Keyed by this
+          // stream's own controller so a later turn cannot inherit it.
+          const _manualAnswerArgs: StreamChatArgs = [
             message,
             imagePaths,
             context,
@@ -3726,7 +3791,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                   }
                 : {}),
             },
-          );
+          ];
+          llmHelper.rememberAnswerCall?.(myController.signal, _manualAnswerArgs);
+          const stream = llmHelper.streamChat(..._manualAnswerArgs);
 
           // Coding chat STREAMS LIVE through a gate that holds tokens only until
           // the first "## " heading is confirmed (never code-first), then passes
@@ -3831,6 +3898,31 @@ export function initializeIpcHandlers(appState: AppState): void {
           // F-301: on the natively-api route the server rotates providers at
           // 10s; give it room to rescue the turn instead of aborting at 7s.
           const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+          // A user-supplied endpoint gets the longer ceiling; a shipped provider
+          // called directly gets the shorter one. WTA and manual chat read the
+          // same route table so one surface cannot inherit the other's bound.
+          const usingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+          const observedUserEndpointLatency = usingUserEndpoint
+            ? (llmHelper.observedAnswerLatency?.() ?? null)
+            : null;
+          const manualStreamStartedAt = Date.now();
+          let manualRecordedFirstToken = false;
+          // Captured off the wire, recorded only once the turn produces usable
+          // content — the same two-step the WTA path uses. These two surfaces
+          // feed ONE latency map, so if they disagree about when a measurement
+          // counts the map means nothing.
+          let manualPendingFirstTokenMs: number | null = null;
+          const noteManualFirstToken = () => {
+            if (manualRecordedFirstToken || !usingUserEndpoint) return;
+            manualRecordedFirstToken = true;
+            manualPendingFirstTokenMs = Date.now() - manualStreamStartedAt;
+          };
+          const commitManualFirstToken = () => {
+            if (manualPendingFirstTokenMs == null) return;
+            const ms = manualPendingFirstTokenMs;
+            manualPendingFirstTokenMs = null;
+            try { llmHelper.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
+          };
           let manualFirstUseful = false;
           let manualSuperseded = false;
           await raceStreamWithDeadline({
@@ -3840,10 +3932,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             // aborted roughly half of healthy vision turns on this surface
             // (2026-09-06). WTA moved to totalHardTimeoutMs for this case in
             // e079cd4a; this site had been left on the text deadline. Non-vision
-            // turns keep the answer-type deadline they had.
+            // turns take the route table's answer-type deadline, which is now
+            // user-endpoint aware and measurement-aware.
             firstUsefulDeadlineMs: (imagePaths?.length ?? 0) > 0
               ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
-              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade),
+              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -3860,6 +3953,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               try { myController?.abort(); } catch { /* noop */ }
             },
             onToken: (token: string) => {
+              noteManualFirstToken();
               // F-302: "useful" must mean USER-USEFUL CONTENT, not "a token
               // object arrived". raceStreamWithDeadline forwards every yielded
               // value unfiltered, so a leading "\n\n" used to flip this flag —
@@ -3873,6 +3967,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // loses the interior whitespace ("a b" + " c" counted 4, not 5).
               if ((fullResponse + token).trim().length >= 5) {
                 manualFirstUseful = true;
+                commitManualFirstToken();
               }
               // First token back from the provider — the gap from
               // provider_request_started is pre-work + provider TTFT (the real cost).
@@ -3996,8 +4091,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 let regen = '';
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
-                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                  firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
+                  stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
                   shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
@@ -4105,8 +4200,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // silently no-op'd at runtime AND failed the typecheck.)
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
-                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                  firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 8000,
+                  stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
                   shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
@@ -4222,8 +4317,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // (was 4s) clears MiniMax's 4-6s first-token when it's the fallback.
                   // Local model: longer budget for the same cold-load reason as above.
                   await raceStreamWithDeadline({
-                    stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => repaired.length >= 5,
                     shouldAbort: () => repaired.length > 1200,
                     onToken: (tok: string) => { repaired += tok; },
@@ -5237,8 +5332,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // position, but the signal must go in its typed slot (#8,
                     // after extraDataScopes) to also satisfy the compiler —
                     // passing it as arg #7 typechecked as ProviderDataScope[].
-                    stream: llmHelper.streamChat(strictPrompt, undefined, undefined, regenSystemPrompt, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: usingLocalLlm ? LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS : 7000,
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, strictPrompt, regenAbort.signal, undefined, regenSystemPrompt)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => regen.length >= 8,
                     shouldAbort: () => regen.length > 2000,
                     onToken: (tok: string) => { regen += tok; },
@@ -5691,8 +5786,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                       // (was 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                       let fixed = '';
                       await raceStreamWithDeadline({
-                        stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: 7000,
+                        stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
+                        firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                         isUsefulYet: () => fixed.length >= 5,
                         onToken: (tok: string) => { fixed += tok; },
                       });
@@ -15676,9 +15771,20 @@ export function initializeIpcHandlers(appState: AppState): void {
         //     on the phone path to zero tokens.
         const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
         const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+        const phoneUsingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+        const phoneObservedLatency = phoneUsingUserEndpoint
+          ? (llmHelper.observedAnswerLatency?.() ?? null)
+          : null;
+        const phoneStreamStartedAt = Date.now();
+        let phoneRecordedFirstToken = false;
+        const notePhoneFirstToken = () => {
+          if (phoneRecordedFirstToken || !phoneUsingUserEndpoint) return;
+          phoneRecordedFirstToken = true;
+          try { llmHelper.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
+        };
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade),
+          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {
@@ -15690,6 +15796,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             return false;
           },
           onToken: (token: string) => {
+            notePhoneFirstToken();
             try { phoneMirror.publishToken(String(myStreamId), token); } catch (_) {}
             // streamId lets the desktop renderer drop tokens from a superseded
             // chat stream (audit finding #3); backward-compatible optional arg.

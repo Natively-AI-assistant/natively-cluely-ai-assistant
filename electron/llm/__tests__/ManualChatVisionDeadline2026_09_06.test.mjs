@@ -23,8 +23,16 @@ describe('manual chat screenshot deadline', () => {
     const site = ipc.slice(Math.max(0, i - 900), i);
     assert.ok(/\(imagePaths\?\.length \?\? 0\) > 0\s*\?\s*totalHardTimeoutMs\(\{ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade \}\)/.test(site),
       'vision turns must take totalHardTimeoutMs({ isVisionTurn: true })');
-    assert.ok(site.includes(': firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade)'),
+    // Prefix match, not the whole argument list. The property this test is named
+    // for is "a non-vision turn takes the ANSWER-TYPE deadline, not the vision
+    // ceiling" — the arity is incidental, and firstUsefulDeadlineMs has since
+    // gained route arguments (isUserEndpoint, then the observed latency) so the
+    // manual surface reads the same route table WTA does. Pinning the exact
+    // 3-arg call made a deliberate signature extension look like a regression.
+    assert.ok(/: firstUsefulDeadlineMs\(answerPlan\.answerType, usingLocalLlm, viaServerCascade[,)]/.test(site),
       'non-vision turns keep the answer-type deadline');
+    assert.equal(/: totalHardTimeoutMs\(\{ isLocal: usingLocalLlm, isVisionTurn: true[\s\S]{0,80}?\n\s*isUsefulYet/.test(site), false,
+      'the non-vision branch must not fall through to the vision ceiling');
   });
   test('totalHardTimeoutMs is imported where it is used', () => {
     assert.match(ipc, /raceStreamWithDeadline, firstUsefulDeadlineMs, totalHardTimeoutMs,/);
