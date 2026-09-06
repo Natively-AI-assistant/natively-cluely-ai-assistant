@@ -2812,6 +2812,55 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
     };
 
+    /**
+     * Antigravity's "Set default" promotes a model to the APP's active model,
+     * not to a per-provider preferred model.
+     *
+     * handleSetDefaultModel writes `preferredModels[provider]`, which persists as
+     * `<provider>PreferredModel`. That is a dead end here: PreferredModelProvider
+     * is gemini|groq|openai|claude|deepseek|nvidia_nim|litellm, StoredCredentials
+     * has no antigravityPreferredModel field, and the only reader in the codebase
+     * is litellm's. Wiring the button there would move a badge and change nothing —
+     * worse than no button.
+     *
+     * `antigravity:<id>` IS a valid app default: buildAvailableModelOptions emits
+     * those ids and the fallback effect above already handles them. So this sets
+     * the same state the Active Model select at the top of the panel sets, which
+     * is also why the two now agree on screen.
+     *
+     * Keeps handleSetDefaultModel's invariant — the default is ALWAYS allow-listed,
+     * or the picker would refuse to show the model the app defaults to — and the
+     * same ordering: allow-list first, because "allow-listed but not default" is a
+     * coherent resting state and "default but not allow-listed" is the one being
+     * abolished.
+     */
+    const handleSetAntigravityDefault = async (modelId: string) => {
+        const prevEnabled = cloudEnabledModels;
+        const prevDefault = defaultModel;
+        const current = cloudEnabledModels['antigravity'] || [];
+        // An empty allow-list already means "all", so there is nothing to add.
+        const needsAllow = current.length > 0 && !current.includes(modelId);
+        const nextList = needsAllow ? [...current, modelId] : current;
+
+        if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, antigravity: nextList }));
+        setDefaultModel(modelId);
+
+        try {
+            if (needsAllow) {
+                const r = await window.electronAPI?.setCloudEnabledModels?.('antigravity', nextList);
+                if (r && r.success === false) throw new Error(r.error || 'allow-list write failed');
+            }
+            // @ts-ignore - persist as default + update runtime + broadcast
+            await window.electronAPI?.setDefaultModel(modelId);
+        } catch (e) {
+            console.error('Failed to set Antigravity default model:', e);
+            setCloudEnabledModelsState(prevEnabled);
+            setDefaultModel(prevDefault);
+            setModelSaveError(p => ({ ...p, antigravity: true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, antigravity: false })), 4000);
+        }
+    };
+
     const handleResetModels = async (provider: string) => {
         const prev = cloudEnabledModels;
         setCloudEnabledModelsState(p => ({ ...p, [provider]: [] }));
@@ -3874,7 +3923,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
                                 onReset={() => handleResetModels('antigravity')}
                                 defaultId={defaultModel.startsWith('antigravity:') ? defaultModel : undefined}
-                                onSetDefault={(modelId) => handleSetDefaultModel('antigravity', modelId)}
+                                onSetDefault={(modelId) => void handleSetAntigravityDefault(modelId)}
                                 error={modelSaveError['antigravity'] ? 'save-failed' : null}
                                 refreshing={antigravityBusy}
                                 onRefresh={() => void runAntigravityAction('models')}
