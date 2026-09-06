@@ -431,6 +431,12 @@ scripts/combine_*_single_file.py
 # Autopilot campaign prompts — internal docs, not source
 /HANDOFF*.md
 /NATIVELY_CONTEXT_SYSTEM_SIMPLIFICATION_PROMPT.md
+# Evidence/data-access briefing for investigation agents. Carries no secret
+# VALUES, but in a PUBLIC repo it is still a map of the admin surface: which
+# /admin/* endpoints exist, that x-admin-secret gates them, the prod API and
+# Dodo base URLs, the Supabase table names, and which .env variable unlocks
+# each one. That is reconnaissance, so it stays local.
+/NATIVELY-EVIDENCE-ACCESS-REFERENCE.md
 # Generated Vite build output that mirrors src/**/*.{tsx,ts}
 /src/**/*.js
 
