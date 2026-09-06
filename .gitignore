@@ -568,3 +568,6 @@ models/Xenova/*
 !models/Xenova/bge-reranker-base/
 models/Xenova/bge-reranker-base/*
 !models/Xenova/bge-reranker-base/*.json
+
+# Router benchmark training checkpoints (PyTorch .pt, up to 570 MB each). Artifacts, never source.
+scripts/intent-benchmark/trained/
