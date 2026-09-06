@@ -9567,6 +9567,31 @@ let isMultimodal = !!(imagePaths?.length);
     return this.currentModelId === 'natively';
   }
 
+  /**
+   * True when this turn goes to an endpoint the USER pointed us at, rather than
+   * to a shipped provider-list entry.
+   *
+   * The distinction is the ENDPOINT, not whose key pays for it. A user's own
+   * Gemini or Groq key still hits Google's or Groq's well-known API with a
+   * sub-second healthy first token, so it belongs with the defaults. A Custom
+   * Provider, a cURL provider, a LiteLLM gateway or an NVIDIA NIM base URL is an
+   * address we have never measured and cannot see behind — it may be a proxy
+   * fronting a slow upstream, a self-hosted container cold-starting, or a
+   * queueing marketplace model.
+   *
+   * Ollama and Codex CLI are deliberately NOT here: they are local, and
+   * isUsingOllama()/isUsingCodexCli() already give them the far longer cold-load
+   * budget. A rung matching both would take the local one first.
+   *
+   * Callers use this to pick the deadline; see totalHardTimeoutMs() and
+   * firstUsefulDeadlineMs(). Mirrors isUsingOllama()/isUsingCodexCli()/
+   * isUsingNativelyServerCascade().
+   */
+  public isUsingUserEndpoint(): boolean {
+    if (this.customProvider || this.activeCurlProvider) return true;
+    return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId);
+  }
+
   public async getOllamaModels(): Promise<string[]> {
     const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
 

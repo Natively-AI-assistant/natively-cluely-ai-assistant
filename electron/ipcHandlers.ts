@@ -3831,6 +3831,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           // F-301: on the natively-api route the server rotates providers at
           // 10s; give it room to rescue the turn instead of aborting at 7s.
           const viaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+          // A user-supplied endpoint gets the longer ceiling; a shipped provider
+          // called directly gets the shorter one. WTA and manual chat read the
+          // same route table so one surface cannot inherit the other's bound.
+          const usingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
           let manualFirstUseful = false;
           let manualSuperseded = false;
           await raceStreamWithDeadline({
@@ -3840,10 +3844,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             // aborted roughly half of healthy vision turns on this surface
             // (2026-09-06). WTA moved to totalHardTimeoutMs for this case in
             // e079cd4a; this site had been left on the text deadline. Non-vision
-            // turns keep the answer-type deadline they had.
+            // turns take the route table's answer-type deadline, which is now
+            // user-endpoint aware.
             firstUsefulDeadlineMs: (imagePaths?.length ?? 0) > 0
               ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
-              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade),
+              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -15676,9 +15681,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         //     on the phone path to zero tokens.
         const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
         const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
+        const phoneUsingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade),
+          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {

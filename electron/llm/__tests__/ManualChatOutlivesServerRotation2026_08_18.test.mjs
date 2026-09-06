@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../..');
-const { firstUsefulDeadlineMs } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/llm/liveDeadlines.js')).href);
+const { firstUsefulDeadlineMs, LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/llm/liveDeadlines.js')).href);
 
 // The server's rotation budget, read from natively-api/server.js when that tree
 // is available so real drift is caught, and falling back to the DOCUMENTED value
@@ -61,17 +61,32 @@ test('manual chat outlives the server provider rotation on the cascade route', (
   }
 });
 
-test('routes with no server cascade keep their original budgets', () => {
-  // Stretching these would only make users wait longer for a failure that has
-  // no rescue path behind it.
-  assert.equal(firstUsefulDeadlineMs('general_meeting_answer', false, false), 7000);
-  assert.equal(firstUsefulDeadlineMs('coding_answer', false, false), 7000);
+test('routes with no server cascade stay SHORT relative to the cascade route', () => {
+  // Original rationale, unchanged and still the reason this test exists:
+  // stretching these would only make users wait longer for a failure that has no
+  // rescue path behind it.
+  //
+  // The literals moved on 2026-09-06 (7000 -> 8000) when the default-provider
+  // route was given its own named ceiling. Assert the ORDERING the rationale is
+  // actually about, not the number — a literal here turned a deliberate policy
+  // change into a red test that says nothing about the policy.
+  const cascade = firstUsefulDeadlineMs('general_meeting_answer', false, true);
+  const direct = firstUsefulDeadlineMs('general_meeting_answer', false, false);
+  assert.equal(direct, LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS);
+  assert.equal(firstUsefulDeadlineMs('coding_answer', false, false), LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS);
+  assert.ok(direct < cascade,
+    `a direct route (${direct}ms) must give up sooner than the cascade route (${cascade}ms), `
+    + 'which has another provider to rotate to');
   assert.equal(firstUsefulDeadlineMs('general_meeting_answer', true, false), 30000);
 });
 
 test('the manual-chat call site passes the server-cascade flag', () => {
   const src = fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8');
-  assert.ok(/firstUsefulDeadlineMs\(answerPlan\.answerType,\s*usingLocalLlm,\s*viaServerCascade\)/.test(src),
+  // The trailing route flags are matched loosely on purpose. This regex pinned
+  // an exact THREE-argument call, so adding a fourth route flag (usingUserEndpoint,
+  // 2026-09-06) failed it even though the invariant it owns — viaServerCascade
+  // reaches the deadline selector — was untouched. Require the flag, not the arity.
+  assert.ok(/firstUsefulDeadlineMs\(answerPlan\.answerType,\s*usingLocalLlm,\s*viaServerCascade[,)]/.test(src),
     'the manual-chat handler must pass viaServerCascade into firstUsefulDeadlineMs (F-301)');
   assert.ok(/isUsingNativelyServerCascade\?\.\(\)/.test(src),
     'viaServerCascade must be derived from the LLMHelper route predicate');
@@ -96,8 +111,11 @@ test('the phone-mirror call site passes BOTH route flags', () => {
   // comment. Anchor on real code only.
   const codeOnly = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+  // Trailing flags matched loosely — see the note on the manual-chat regex above.
+  // A fourth route flag was added 2026-09-06; pinning the arity turned that into
+  // a false failure.
   assert.ok(
-    /firstUsefulDeadlineMs\(\s*'general_meeting_answer'\s*,\s*phoneUsingLocalLlm\s*,\s*phoneViaServerCascade\s*\)/.test(codeOnly),
+    /firstUsefulDeadlineMs\(\s*'general_meeting_answer'\s*,\s*phoneUsingLocalLlm\s*,\s*phoneViaServerCascade\s*[,)]/.test(codeOnly),
     'the phone-mirror handler must pass isLocal AND viaServerCascade into firstUsefulDeadlineMs (CR-05)',
   );
   assert.ok(
