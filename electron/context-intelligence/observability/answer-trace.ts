@@ -176,7 +176,34 @@ export interface AnswerTrace {
 
 // ── redaction ───────────────────────────────────────────────────────────────
 
-const CONTENT_KEYS = new Set(['content', 'text', 'evidenceText', 'prompt', 'answer', 'snippet']);
+// These fields can all contain user, meeting, document, or screen-derived text.
+// Keep this list deliberately broader than the current trace schema: redactTrace
+// is also used as the last line of defence when callers attach diagnostic data.
+const CONTENT_KEYS = new Set([
+  'content', 'text', 'evidenceText', 'prompt', 'answer', 'snippet',
+  'originalQuestion', 'resolvedQuestion', 'previousQuestion',
+  'question', 'original', 'resolved', 'currentRequest', 'systemPrompt', 'userPrompt',
+  'query', 'queries', 'referent', 'activePerson', 'activeTopic',
+  'transcript', 'manualContext', 'referenceContext', 'history', 'instructions',
+  'dom', 'ocr', 'preview', 'finalAnswer', 'url', 'documentTitle',
+]);
+
+function contentLength(value: unknown): number {
+  if (typeof value === 'string') return value.length;
+  if (Array.isArray(value)) {
+    let total = 0;
+    for (const item of value) total += contentLength(item);
+    return total;
+  }
+  if (value && typeof value === 'object') {
+    let total = 0;
+    for (const item of Object.values(value as Record<string, unknown>)) {
+      total += contentLength(item);
+    }
+    return total;
+  }
+  return 0;
+}
 
 /**
  * Strip anything that could carry private source text.
@@ -192,7 +219,8 @@ export function redactTrace<T extends Record<string, unknown>>(obj: T): T {
       const out: Record<string, unknown> = {};
       for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
         if (CONTENT_KEYS.has(k)) {
-          out[`${k}Length`] = typeof val === 'string' ? val.length : 0;
+          out[`${k}Length`] = contentLength(val);
+          if (Array.isArray(val)) out[`${k}Count`] = val.length;
           continue;
         }
         out[k] = walk(val);
@@ -225,7 +253,29 @@ export function compareDecisions(legacy: AnswerTrace, v3: AnswerTrace): TraceDiv
     if (JSON.stringify(a) !== JSON.stringify(b)) out.push({ field, legacy: a, v3: b });
   };
 
-  cmp('resolvedQuestion', legacy.resolvedQuestion, v3.resolvedQuestion);
+  // Persisted traces intentionally replace questions with lengths. Compare raw
+  // text while both inputs are live, otherwise compare the privacy-safe length
+  // signal instead of manufacturing a divergence between raw and redacted data.
+  const comparableQuestion = (t: AnswerTrace, key: 'resolvedQuestion') => {
+    const raw = (t as unknown as Record<string, unknown>)[key];
+    if (typeof raw === 'string') return { length: raw.length, raw };
+    return { length: (t as unknown as Record<string, unknown>)[`${key}Length`] ?? null };
+  };
+  const legacyQuestion = comparableQuestion(legacy, 'resolvedQuestion');
+  const v3Question = comparableQuestion(v3, 'resolvedQuestion');
+  if ('raw' in legacyQuestion && 'raw' in v3Question) {
+    if (legacyQuestion.raw !== v3Question.raw) {
+      // Report the divergence without copying either private question into an
+      // observability object that may later be logged or exported.
+      out.push({
+        field: 'resolvedQuestion',
+        legacy: { length: legacyQuestion.length },
+        v3: { length: v3Question.length },
+      });
+    }
+  } else {
+    cmp('resolvedQuestion', legacyQuestion.length, v3Question.length);
+  }
   cmp('modeId', legacy.modeId, v3.modeId);
   cmp('questionTypes', [...legacy.questionTypes].sort(), [...v3.questionTypes].sort());
   cmp('groundingPolicy', legacy.groundingPolicy, v3.groundingPolicy);

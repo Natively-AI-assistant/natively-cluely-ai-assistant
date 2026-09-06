@@ -14,10 +14,44 @@ interface DomCaptureMeta {
   firstLine?: string;
 }
 
+type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
+
+interface DirectAssistRequest {
+  requestId: string;
+  source: DirectAssistSource;
+  currentRequest: string;
+  skillId?: string;
+  manualContext?: string;
+  referenceContext?: string;
+  pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  transcript?: string;
+  imagePaths?: string[];
+  requestedLanguage?: string;
+  requestedFormat?: string;
+  maxContextChars?: number;
+}
+
+interface DirectAssistError {
+  code: string;
+  message: string;
+  retryable: boolean;
+}
+
+type DirectAssistEvent =
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
+  | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
+  | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
+  | { type: 'cancel'; requestId: string; sequence: number };
+
 // Types for the exposed Electron API
 interface ElectronAPI {
   updateContentDimensions: (dimensions: { width: number; height: number }) => Promise<void>;
-  updateContentDimensionsCentered: (dimensions: { width: number; height: number }) => Promise<void>;
+  updateContentDimensionsCentered: (dimensions: {
+    width: number;
+    height: number;
+  }) => Promise<{ width: number; height: number } | undefined>;
   sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
   onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
   sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
@@ -66,7 +100,7 @@ interface ElectronAPI {
 
   // LLM Model Management
   getCurrentLlmConfig: () => Promise<{
-    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli';
+    provider: 'ollama' | 'gemini' | 'custom' | 'codex-cli' | 'antigravity';
     /**
      * @deprecated Use `modelId` for selection comparisons and `displayName`
      * for UI labels. Kept as an alias of `modelId` for back-compat.
@@ -418,6 +452,14 @@ interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>;
+  startDirectAssist: (
+    request: DirectAssistRequest,
+  ) => Promise<{ accepted: boolean; requestId: string; error?: DirectAssistError }>;
+  cancelDirectAssist: (
+    requestId: string,
+    source?: DirectAssistSource,
+  ) => Promise<{ success: boolean; cancelled: boolean; error?: string }>;
+  onDirectAssistEvent: (callback: (event: DirectAssistEvent) => void) => () => void;
   generateFollowUp: (
     intent: string,
     userRequest?: string,
@@ -649,6 +691,12 @@ interface ElectronAPI {
   // startLogin kicks off the PKCE flow + opens the system browser; the
   // renderer listens for codex:login:complete / :failed events to update UI.
   codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; email?: string; expiresAt?: number; error?: string }>;
+  antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
+  antigravityStartLogin: () => Promise<{ success: boolean; error?: string }>;
+  antigravityCancelLogin: () => Promise<void>;
+  antigravitySignOut: () => Promise<{ success: boolean; error?: string }>;
+  antigravityModels: (force?: boolean) => Promise<{ success: boolean; models: { id: string; label: string }[]; error?: string }>;
+  onAntigravityStatusChanged: (callback: (status: { signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }) => void) => () => void;
   codexStartLogin: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
   codexSignOut: () => Promise<{ success: boolean; error?: string }>;
   codexRefreshTokens: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
@@ -965,6 +1013,9 @@ interface ElectronAPI {
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getDirectAssistEnabled: () => Promise<boolean>;
+  setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
   getMeetingRetention: () => Promise<'forever' | '7d' | '30d' | 'never'>;
@@ -1854,6 +1905,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     imagePaths?: string[],
     options?: { promptInstruction?: string; domContext?: string; domContextEnvelope?: unknown },
   ) => ipcRenderer.invoke('generate-what-to-say', question, imagePaths, options),
+  startDirectAssist: (request: DirectAssistRequest) =>
+    ipcRenderer.invoke('direct-assist-stream', request),
+  cancelDirectAssist: (requestId: string, source?: DirectAssistSource) =>
+    ipcRenderer.invoke('direct-assist-cancel', requestId, source),
+  onDirectAssistEvent: (callback: (event: DirectAssistEvent) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, event: DirectAssistEvent) => callback(event);
+    ipcRenderer.on('direct-assist-event', subscription);
+    return () => {
+      ipcRenderer.removeListener('direct-assist-event', subscription);
+    };
+  },
   generateClarify: () => ipcRenderer.invoke('generate-clarify'),
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) =>
     ipcRenderer.invoke('generate-code-hint', imagePaths, problemStatement),
@@ -2265,6 +2327,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // The renderer listens for `codex:login:complete` / `:failed` /
   // `:signed-out` / `:tokens:refreshed` events for live UI updates.
   codexLoginStatus: () => ipcRenderer.invoke('codex:login-status'),
+  antigravityStatus: () => ipcRenderer.invoke('antigravity:status'),
+  antigravityStartLogin: () => ipcRenderer.invoke('antigravity:start-login'),
+  antigravityCancelLogin: () => ipcRenderer.invoke('antigravity:cancel-login'),
+  antigravitySignOut: () => ipcRenderer.invoke('antigravity:sign-out'),
+  antigravityModels: (force?: boolean) => ipcRenderer.invoke('antigravity:models', force),
+  onAntigravityStatusChanged: (callback) => {
+    const listener = (_: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]) => callback(status);
+    ipcRenderer.on('antigravity:status-changed', listener);
+    return () => ipcRenderer.removeListener('antigravity:status-changed', listener);
+  },
   codexStartLogin: () => ipcRenderer.invoke('codex:start-login'),
   codexSignOut: () => ipcRenderer.invoke('codex:sign-out'),
   codexRefreshTokens: () => ipcRenderer.invoke('codex:refresh-tokens'),
@@ -2733,6 +2805,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAmbientChatEnabled: (enabled: boolean) => ipcRenderer.invoke('set-ambient-chat-enabled', enabled),
   getAutoAnswerEnabled: () => ipcRenderer.invoke('get-auto-answer-enabled'),
   setAutoAnswerEnabled: (enabled: boolean) => ipcRenderer.invoke('set-auto-answer-enabled', enabled),
+  getDirectAssistEnabled: () => ipcRenderer.invoke('get-direct-assist-enabled'),
+  setDirectAssistEnabled: (enabled: boolean) => ipcRenderer.invoke('set-direct-assist-enabled', enabled),
+  onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('direct-assist-enabled-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('direct-assist-enabled-changed', subscription);
+    };
+  },
   getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
   setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),

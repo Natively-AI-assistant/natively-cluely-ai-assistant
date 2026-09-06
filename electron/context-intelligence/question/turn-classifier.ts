@@ -355,6 +355,20 @@ export const META_REQUEST_RE = new RegExp([
 
 const SCREEN_RE = /\b(this (code|function|error|screen|stack ?trace)|on (my|the) screen|highlighted|selected code|what does this)\b/;
 
+// An explicit request for code can be deictic when the problem itself is on
+// screen.  "Give me the code" contains no algorithm noun, so the generic
+// CODING_TASK_RE below cannot classify it without the screen attachment that
+// supplies the missing subject.  Keep this signal screen-gated: without a
+// current capture the same words are an underspecified follow-up and should be
+// resolved from conversation state rather than inventing a problem.
+const SCREEN_CODE_ASK_RE = /\b(?:give|show|provide|send|write|generate)(?: me)?(?: the| a)?(?: full| complete| working)? code\b|\bcode (?:this|it|the solution)\b/;
+
+// Possessives over a currently attached screen/page describe ownership of an
+// artefact, not the user's employment history.  PERSONAL_RE deliberately
+// contains bare "my" for real résumé questions; this narrow screen-aware guard
+// prevents "show the code from my screen" from requesting résumé authority.
+const SCREEN_ARTIFACT_OWNERSHIP_RE = /\b(?:my|your|the|this) (?:screen|page|editor)\b|\b(?:on|from) (?:my|your|the|this) screen\b/;
+
 // General technical/CS concepts. Deliberately conservative: matching a general
 // pattern makes us SKIP retrieval, so a false positive is the expensive
 // direction and the list stays narrow.
@@ -606,6 +620,10 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     && !hasCapsOrIdentifierEntity(input.resolvedQuestion) && !DOCUMENT_RE.test(q);
 
   for (const clause of splitClauses(q)) {
+    const screenCodeAsk = Boolean(input.hasScreenContext) && SCREEN_CODE_ASK_RE.test(clause);
+    const screenArtifactOwnership = Boolean(input.hasScreenContext)
+      && SCREEN_ARTIFACT_OWNERSHIP_RE.test(clause);
+    const codingTask = CODING_TASK_RE.test(clause) || screenCodeAsk;
     // ── deep-run 2 guards (2026-08-01) ──────────────────────────────────────
     // "Why did YOU refuse?" is about the ASSISTANT's own behaviour, not the
     // user's history — classified personal it claimed USER_MOTIVATION, planned
@@ -655,12 +673,12 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       : LEGACY_CANDIDATE_PERSON_RE.test(clause);
     // Second person carried by the main verb rather than an auxiliary.
     const secondPersonPast = tokenFramingOn() && SECOND_PERSON_PAST_RE.test(clause);
-    const personal = !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
+    const personal = !screenArtifactOwnership && !aboutAssistant && !salesClaimCue && (PERSONAL_RE.test(clause)
       || candidateAsPerson
       || secondPersonPast
       || (FIRST_PERSON_RE.test(clause)
         && !TECH_SELF_TALK_RE.test(clause)
-        && !CODING_TASK_RE.test(clause)
+        && !codingTask
         && !SYSTEM_DESIGN_RE.test(clause)));
 
     if (personal && PROJECT_RE.test(clause)) { types.add('PERSONAL_PROJECT'); noteClaim('USER_PROJECT', clause); }
@@ -709,7 +727,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // question signal, because the artifact and the ask usually sit in
     // different clauses.
     if (personal && !namedAnAspect && !deviceTroubleshoot
-        && !CODING_TASK_RE.test(clause) && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
+        && !codingTask && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
 
@@ -835,7 +853,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     }
     if (SCREEN_RE.test(clause)) { types.add('SCREEN_SPECIFIC'); noteClaim('SCREEN_FACT', clause); }
 
-    if (CODING_TASK_RE.test(clause)) { types.add('CODING_TASK'); noteClaim('GENERAL_TECHNICAL', clause); }
+    if (codingTask) { types.add('CODING_TASK'); noteClaim('GENERAL_TECHNICAL', clause); }
     if (SYSTEM_DESIGN_RE.test(clause)) { types.add('SYSTEM_DESIGN'); noteClaim('GENERAL_TECHNICAL', clause); }
     // Per-clause, so the general half of a mixed question is still recognised.
     // Gated on namesSpecificEntity: without it, an entity lookup acquires a
@@ -916,7 +934,8 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // (2026-08-02): both are questions no private source can improve, and both
   // were measured reaching the primary-source fallback — the fan question via
   // "what should I check" and the discount exercise via its own digits.
-  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q) || SYSTEM_DESIGN_RE.test(q)
+  const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q)
+    || (Boolean(input.hasScreenContext) && SCREEN_CODE_ASK_RE.test(q)) || SYSTEM_DESIGN_RE.test(q)
     || deviceTroubleshoot || selfContainedMath;
 
   // ── Definite value lookup (deep-test D2/D3, 2026-08-01) ────────────────────

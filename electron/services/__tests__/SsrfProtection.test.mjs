@@ -46,6 +46,17 @@ const root = path.resolve(__dirname, '../../..');
 const require = createRequire(import.meta.url);
 const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 
+/**
+ * Source with comments stripped.
+ *
+ * Every assertion below that looks for a guard's NAME must use this. The
+ * comment in chatWithCurl explaining that validateUrlForSsrf is deliberately
+ * absent contains the string "validateUrlForSsrf", so a raw scan scored a hit
+ * on the sentence saying the call is not there — the assertion passed while
+ * asserting the opposite of the code.
+ */
+const codeOf = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
 const { blockedInfrastructureHost, validateUrlForSsrf } =
   require(path.join(root, 'dist-electron/electron/utils/curlUtils.js'));
 
@@ -160,4 +171,198 @@ describe('validateUrlForSsrf still guards the lane it belongs to', () => {
     assert.equal(validateUrlForSsrf('http://127.0.0.2:8080/').isValid, false);
     assert.equal(validateUrlForSsrf('http://127.1.2.3:8080/').isValid, false);
   });
+});
+
+test('custom cURL transports never follow an unvalidated redirect target', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy chatWithCurl',
+      start: source.indexOf('public async chatWithCurl('),
+      endMarker: '\n  /**\n   * Non-streaming Claude generation',
+    },
+    {
+      name: 'Direct Assist cURL adapter',
+      start: source.indexOf('private async *streamWithDirectCurl('),
+      endMarker: '\n  // --- CUSTOM PROVIDER STREAMING ---',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+    const body = codeOf(source.slice(entry.start, end));
+    // Each transport names the guard that applies to it. chatWithCurl reaches
+    // USER-CONFIGURED endpoints — Ollama on 127.0.0.1, LM Studio on the LAN —
+    // so the full range check would refuse the feature's whole purpose; the
+    // metadata-host guard is what it must have. streamWithDirectCurl is Direct
+    // Assist's own path and keeps validateUrlForSsrf.
+    // `guard(url)`, not the bare identifier: the destructuring `const {
+    // validateUrlForSsrf } = require(...)` also contains the name, so a
+    // presence check stayed green when the CALL was replaced by a constant.
+    // Caught by mutation probe, not by reading.
+    // Both transports now use the metadata-host guard. streamWithDirectCurl used
+    // validateUrlForSsrf until 2026-09-04, which blocked the local endpoints its
+    // own customProviderIsLocal() branch exists to support.
+    const guard = 'blockedInfrastructureHost';
+    const validationAt = body.indexOf(`${guard}(url)`);
+    const axiosAt = body.indexOf('axios({');
+    const redirectsAt = body.indexOf('maxRedirects: 0');
+
+    assert.ok(validationAt >= 0, `${entry.name} should validate its destination via ${guard}`);
+    assert.ok(axiosAt > validationAt, `${entry.name} should validate before dispatch`);
+    assert.ok(
+      redirectsAt > axiosAt,
+      `${entry.name} must disable redirects so the request body is not replayed to an unchecked URL`,
+    );
+  }
+});
+
+test('fetch-based custom providers refuse redirects instead of replaying sensitive bodies', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = source.slice(entry.start, end);
+    const fetchAt = body.indexOf('fetch(url, {');
+    const manualRedirectAt = body.indexOf("redirect: 'manual'");
+
+    assert.ok(fetchAt >= 0, `${entry.name} should dispatch through fetch`);
+    assert.ok(
+      manualRedirectAt > fetchAt,
+      `${entry.name} must use manual redirects so fetch cannot replay prompt data to another URL`,
+    );
+  }
+});
+
+test('fetch-based custom providers refuse metadata hosts — and stay able to reach localhost', () => {
+  const source = read('electron/LLMHelper.ts');
+  const cases = [
+    {
+      name: 'legacy executeCustomProvider',
+      start: source.indexOf('public async executeCustomProvider('),
+      endMarker: '\n  /**\n   * Try to extract text content from common LLM API response formats.',
+    },
+    {
+      name: 'streamWithCustom',
+      start: source.indexOf('private async * streamWithCustom('),
+      endMarker: '\n  private parseStreamLine(',
+    },
+  ];
+
+  for (const entry of cases) {
+    assert.ok(entry.start >= 0, `${entry.name} should exist`);
+    const end = source.indexOf(entry.endMarker, entry.start);
+    assert.ok(end > entry.start, `${entry.name} should have a bounded source block`);
+
+    const body = codeOf(source.slice(entry.start, end));
+    const validationAt = body.indexOf('blockedInfrastructureHost(url)');
+    const fetchAt = body.indexOf('fetch(url, {');
+
+    // POLICY, and a deliberate departure from what this test asserted when it
+    // arrived from main. It required validateUrlForSsrf here, which rejects
+    // loopback, link-local, RFC-1918 and IPv6 ULA. Those are precisely the
+    // hosts a custom provider exists to reach, and enforcing it broke 8
+    // CustomProviderWirePayload cases with "Loopback addresses are not
+    // allowed". SSRF protection guards attacker-influenced URLs; this endpoint
+    // is typed into a settings field by the person running the app.
+    //
+    // What must still be refused is the metadata plane, and that is
+    // blockedInfrastructureHost: the whole 169.254/16, metadata.google.internal,
+    // fd00:ec2::254. Proven at runtime, not just here — all four are refused
+    // while 127.0.0.1 and 192.168.x reach the network.
+    assert.ok(validationAt >= 0, `${entry.name} must refuse cloud/container metadata hosts`);
+    assert.ok(fetchAt > validationAt, `${entry.name} should check the host before dispatch`);
+    assert.equal(body.includes('validateUrlForSsrf'), false,
+      `${entry.name} must NOT use the full range check — it blocks the localhost and LAN `
+      + 'endpoints a custom provider is configured to reach');
+  }
+});
+
+test('path traversal is blocked in URL variable substitution', () => {
+  const source = read('electron/LLMHelper.ts');
+
+  const chatWithCurlStart = source.indexOf('public async chatWithCurl(');
+  const nextFunction = source.indexOf('\n  public ', chatWithCurlStart + 10);
+  const functionBody = source.slice(chatWithCurlStart, nextFunction > -1 ? nextFunction : chatWithCurlStart + 3000);
+
+  // Check that URL variable replacement doesn't allow path traversal.
+  //
+  // Matches EITHER replacer, by property rather than by name. This test arrived
+  // on main asserting `deepVariableReplacer(curlConfig.url` specifically, while
+  // feat/extension-system had collapsed the three per-field calls
+  // (.url/.header/.data) into one `applyCurlVariables(curlConfig)`. The security
+  // property — the URL is substituted, then validated, then dispatched — is
+  // unchanged; only the function name moved, so pinning the name turned a
+  // refactor into a red security test.
+  const urlReplacementIndex = Math.max(
+    functionBody.indexOf('deepVariableReplacer(curlConfig.url'),
+    functionBody.indexOf('applyCurlVariables(curlConfig'),
+  );
+  assert.ok(urlReplacementIndex >= 0, 'URL should be processed through variable replacer');
+
+  // After URL replacement, there should be a validation step
+  const afterReplacement = functionBody.slice(urlReplacementIndex);
+  const hasValidationAfterReplacement =
+    /validate|check|isPrivate|isBlocked|isLocal/.test(afterReplacement.slice(0, afterReplacement.indexOf('axios(')));
+
+  assert.ok(hasValidationAfterReplacement, 'URL should be validated after variable replacement');
+});
+
+test('blocked SSRF hosts are explicitly rejected', () => {
+  const source = read('electron/LLMHelper.ts');
+  const curlUtils = read('electron/utils/curlUtils.ts');
+  const combined = source + '\n' + curlUtils;
+
+  // Check for blocked host patterns
+  const blockedPatterns = [
+    'localhost', '127.0.0.1', '0.0.0.0', '::1',
+    '169.254', 'link-local',
+    '10.', '172.16', '192.168'
+  ];
+
+  const hasBlockedHosts = blockedPatterns.some(pattern =>
+    /isBlocked|isPrivate|isLocal|blockList|denyList/.test(combined) &&
+    combined.includes(pattern)
+  );
+
+  // Alternative: check for IP range validation
+  const hasIPRangeValidation =
+    /parseInt|Number\(.*\)\s*[<>]/.test(combined) ||
+    /ip2int|ipToNumber|isInRange/.test(combined);
+
+  assert.ok(hasBlockedHosts || hasIPRangeValidation, 'Should block SSRF targets: localhost, private ranges, link-local');
+});
+
+test('loopback guard covers the full 127.0.0.0/8 range, not just 127.0.0.1', () => {
+  const curlUtils = read('electron/utils/curlUtils.ts');
+
+  // Locate the branch that rejects loopback addresses.
+  const loopbackIdx = curlUtils.indexOf("'Loopback addresses are not allowed'");
+  assert.ok(loopbackIdx >= 0, 'loopback rejection should exist');
+
+  // The guard preceding it must match the whole 127.0.0.0/8 range (e.g. via
+  // hostname.startsWith('127.')). A check limited to the literal '127.0.0.1'
+  // would let 127.0.0.2 and other in-range loopback addresses through.
+  const guard = curlUtils.slice(curlUtils.lastIndexOf('if (', loopbackIdx), loopbackIdx);
+  assert.ok(
+    /startsWith\(\s*['"]127\.['"]\s*\)/.test(guard),
+    'loopback guard should match the entire 127.0.0.0/8 range (e.g. hostname.startsWith("127."))'
+  );
 });

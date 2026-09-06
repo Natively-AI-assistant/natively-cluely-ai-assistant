@@ -161,6 +161,9 @@ function checkNativeModuleUnpacked(): { ok: boolean; message: string } {
   return { ok: false, message: `Native module binary missing under resources/app.asar.unpacked/native-module/` };
 }
 
+/** Fallback only — the real value comes from LocalReranker. See its use below. */
+const BUILT_IN_RERANKER_MODEL_ID = 'Xenova/ms-marco-MiniLM-L-6-v2';
+
 /**
  * A human-readable name for the bundled reranker, derived rather than written.
  *
@@ -285,7 +288,12 @@ export async function runLocalFallbackPreflight(options: { ollamaSelected?: bool
       // at all. Every packaged launch would then have reported the bundled
       // reranker missing, because the check was still looking for the previous
       // one. Deriving the id means the next swap cannot reintroduce that.
-      let bundledModelId = 'Xenova/ms-marco-MiniLM-L-6-v2';
+      // Last-resort literal, used only if the require below throws. Kept in
+      // step by BundledRerankerFirstRunCrossPlatform, which pins it against
+      // DEFAULT_RERANKER_MODEL — a stale value here would look for the wrong
+      // file and report the bundled reranker missing on every packaged launch,
+      // which is exactly what happened when the model changed.
+      let bundledModelId = BUILT_IN_RERANKER_MODEL_ID;
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { getBundledRerankerModelId } = require('../rag/LocalReranker') as typeof import('../rag/LocalReranker');

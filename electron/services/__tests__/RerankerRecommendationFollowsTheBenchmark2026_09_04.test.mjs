@@ -171,6 +171,61 @@ test('the bundled default is not silently promoted into the catalogue', () => {
     'and it must not be reachable by catalogue id either');
 });
 
+// ── the prose the user reads ──────────────────────────────────────────────
+
+test('every supported model\'s NOTE cites its own measured MRR', () => {
+  // The recommendation flag was corrected against the benchmark; the note was
+  // not, and the note is the sentence the panel renders under the model name
+  // (RerankerSettings.tsx). So the app said mxbai was "noticeably better than
+  // the built-in" while measuring 0.8394 against the bundled 0.8688, called
+  // bge-v2-m3 "the strongest local reranker measured here" when jina-v3.5 beat
+  // it by 0.09, quoted bge-large's "MRR 0.715 vs the built-in 0.539" from a run
+  // against a model that has since been deleted from the app — and told users
+  // that jina-v3.5, which it RECOMMENDS, was missing a runtime, three commits
+  // after that runtime shipped.
+  //
+  // Requiring the number makes staleness structural rather than a matter of
+  // someone re-reading prose: a superlative now has a checkable figure beside
+  // it, and changing the measurement forces the sentence to change.
+  for (const m of RERANKER_MODEL_CATALOG) {
+    if (!m.supported) continue;
+    const mrr = MEASURED_MRR[m.id];
+    assert.ok(mrr !== undefined, `${m.id} is offered but is not in the benchmark table`);
+    assert.ok(m.note, `${m.id} has no note`);
+    assert.ok(m.note.includes(`MRR ${mrr.toFixed(4)}`),
+      `${m.id}'s note must cite its measured MRR ${mrr.toFixed(4)} — it reads: ${m.note}`);
+  }
+});
+
+test('no note claims to beat the bundled model unless it does', () => {
+  // The specific false claim that shipped. "better than the built-in" is the
+  // phrase a user acts on, so it may only appear on a model that outscores the
+  // bundled default.
+  const bundled = MEASURED_MRR['ms-marco-MiniLM-L-6-v2'];
+  for (const m of RERANKER_MODEL_CATALOG) {
+    if (!m.supported || !m.note) continue;
+    const claimsBetter = /better than the (built-in|bundled)/i.test(m.note);
+    if (claimsBetter) {
+      assert.ok(MEASURED_MRR[m.id] > bundled,
+        `${m.id} claims to beat the bundled model but scored ${MEASURED_MRR[m.id]} vs ${bundled}`);
+    }
+  }
+});
+
+test('nothing still describes jina v3.5 as unrunnable', () => {
+  // It runs locally now: the catalogue entry carries scoring 'listwise' and
+  // downloads projector.safetensors, rerankerConfig resolves that companion
+  // file, GgufReranker forwards it, and ggufRerankerWorker loads it for
+  // listwise scoring. Verified along that whole chain before this was written.
+  const jina = findCatalogModel('jina-reranker-v3.5-q4km');
+  assert.equal(jina.supported, true);
+  assert.equal(jina.scoring, 'listwise');
+  assert.ok(jina.files.some(f => f.repoPath === 'projector.safetensors'),
+    'listwise scoring cannot work without the projector — the GGUF alone scores nothing');
+  assert.doesNotMatch(jina.note, /missing is a runtime|cannot run|does not run|not yet supported/i,
+    'the note still says the recommended model has no runtime');
+});
+
 test('a recommended model beats the bundled default it would replace', () => {
   // The point of downloading one at all. A recommendation that does not clear
   // the model already on disk is asking the user to spend megabytes for nothing.
