@@ -3907,10 +3907,21 @@ export function initializeIpcHandlers(appState: AppState): void {
             : null;
           const manualStreamStartedAt = Date.now();
           let manualRecordedFirstToken = false;
+          // Captured off the wire, recorded only once the turn produces usable
+          // content — the same two-step the WTA path uses. These two surfaces
+          // feed ONE latency map, so if they disagree about when a measurement
+          // counts the map means nothing.
+          let manualPendingFirstTokenMs: number | null = null;
           const noteManualFirstToken = () => {
             if (manualRecordedFirstToken || !usingUserEndpoint) return;
             manualRecordedFirstToken = true;
-            try { llmHelper.recordAnswerFirstToken?.(Date.now() - manualStreamStartedAt); } catch { /* never break the answer */ }
+            manualPendingFirstTokenMs = Date.now() - manualStreamStartedAt;
+          };
+          const commitManualFirstToken = () => {
+            if (manualPendingFirstTokenMs == null) return;
+            const ms = manualPendingFirstTokenMs;
+            manualPendingFirstTokenMs = null;
+            try { llmHelper.recordAnswerFirstToken?.(ms); } catch { /* never break the answer */ }
           };
           let manualFirstUseful = false;
           let manualSuperseded = false;
@@ -3956,6 +3967,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               // loses the interior whitespace ("a b" + " c" counted 4, not 5).
               if ((fullResponse + token).trim().length >= 5) {
                 manualFirstUseful = true;
+                commitManualFirstToken();
               }
               // First token back from the provider — the gap from
               // provider_request_started is pre-work + provider TTFT (the real cost).

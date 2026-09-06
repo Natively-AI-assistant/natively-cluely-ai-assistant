@@ -3578,16 +3578,34 @@ export class IntelligenceEngine extends EventEmitter {
             // was explicitly built to avoid.
             let answerStreamStartedAt = Date.now();
             let recordedFirstToken = false;
+            // MEASURED off the wire, RECORDED only once the turn actually
+            // produces content. Two separate steps on purpose. Measuring at the
+            // first visible token folded CodingStreamGate hold time into
+            // provider latency; recording the instant a token arrives would
+            // undo recordAnswerFirstToken's own contract, which is that a turn
+            // the deadline killed must not teach the budget — a first token at
+            // 14.9s of a 15s budget then dying is exactly the upward ratchet
+            // that contract exists to prevent. So capture the accurate number
+            // here and commit it from emitChunk, which is the same
+            // produced-usable-content signal manual chat commits on.
+            let pendingFirstTokenMs: number | null = null;
             const noteFirstToken = () => {
                 if (recordedFirstToken || !isUserEndpoint) return;
                 recordedFirstToken = true;
+                pendingFirstTokenMs = Date.now() - answerStreamStartedAt;
+            };
+            const commitFirstTokenMeasurement = () => {
+                if (pendingFirstTokenMs == null) return;
+                const ms = pendingFirstTokenMs;
+                pendingFirstTokenMs = null;
                 try {
-                    (this.llmHelper as any).recordAnswerFirstToken?.(Date.now() - answerStreamStartedAt);
+                    (this.llmHelper as any).recordAnswerFirstToken?.(ms);
                 } catch { /* measurement must never break the answer */ }
             };
             let liveDeadlineFired = false;
 
             const emitChunk = (chunk: string) => {
+                commitFirstTokenMeasurement();
                 emittedStreamingToken = true;
                 openedStreamRow = true;
                 if (trace.markFirstUseful({ via: 'stream', answerType: answerPlan.answerType })) {
@@ -3777,6 +3795,9 @@ export class IntelligenceEngine extends EventEmitter {
                             trace.mark('answer_regeneration_started', { budgetMs: regenBudget, answerType: answerPlan.answerType });
                             answerStreamStartedAt = Date.now();
                             recordedFirstToken = false;
+                            // Attempt 1 produced nothing usable, so whatever it
+                            // measured is not this endpoint's first-token cost.
+                            pendingFirstTokenMs = null;
                             try {
                                 await raceStreamWithDeadline({
                                     stream: this.llmHelper.streamChat(...(retryArgs as Parameters<LLMHelper['streamChat']>)) as AsyncGenerator<string>,
