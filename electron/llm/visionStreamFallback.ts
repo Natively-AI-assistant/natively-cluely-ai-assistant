@@ -479,7 +479,19 @@ export async function* runStreamingVisionFallback(
         // first usable token is raced across primary+partner (delayed launch).
         // Otherwise plain single-provider open. Either way the engine's own TTFT
         // timeout below wraps it as the hard ceiling.
-        const src = (cfg.hedgeEnabled && provider.hedgeWith && (health.get(provider.id)?.openUntil ?? 0) <= now())
+        // The breaker consulted here is the HEDGE PARTNER's, not the primary's.
+        // Keying it on provider.id made the hedge self-defeating: with
+        // maxAttempts:1 the primary is cooled for transientCooldownMs the first
+        // time it stalls, so every subsequent turn inside that window found its
+        // own breaker open and ran solo — the parallel retry was available only
+        // on the FIRST slow turn, on precisely the chronically-slow gateway it
+        // was built for. Measured: turn 1 issued 2 requests, turn 2 issued 1.
+        // The partner has its own id (`${id}#hedge`) exactly so it can be
+        // judged separately; openHedged re-checks it as partnerBreakerClosed.
+        const hedgePartnerId = provider.hedgeWith?.id;
+        const hedgeUsable = cfg.hedgeEnabled && provider.hedgeWith != null
+          && (health.get(hedgePartnerId as string)?.openUntil ?? 0) <= now();
+        const src = hedgeUsable
           ? openHedged(provider, cfg, health, hooks, ctrl.signal, attempt)
           : provider.open(ctrl.signal, attempt);
         it = src[Symbol.asyncIterator]();
