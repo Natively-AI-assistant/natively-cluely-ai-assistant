@@ -3857,16 +3857,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             <div className="aip-card p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                     <div className="flex gap-3 min-w-0">
-                        <AipProviderMark provider="codex" name="ChatGPT (Codex)" className="mt-0.5" />
+                        <AipProviderMark provider="codex" name="OpenAI Codex" className="mt-0.5" />
                         <div className="min-w-0">
-                            <h3 className="text-sm font-bold aip-hero mb-1">ChatGPT (Codex)</h3>
-                            <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.')}</p>
+                            <h3 className="text-sm font-bold aip-hero mb-1">OpenAI Codex</h3>
+                            <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
                         </div>
                     </div>
                     <AipSwitch
                         checked={!disabledProviders.includes('codex-cli')}
                         onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
-                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} Codex`}
+                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
                         title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
                     />
                 </div>
@@ -3875,7 +3875,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 <p className="text-xs aip-muted" role="status" hidden={!codexOauthInProgress && !codexOauthStatus.signedIn}>
                     {codexOauthInProgress ? t('Waiting for browser…')
                         : codexOauthStatus.signedIn
-                            ? `${t('ChatGPT connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
+                            ? `${t('Codex connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
                             : ''}
                 </p>
 
