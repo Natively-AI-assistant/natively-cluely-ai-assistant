@@ -95,6 +95,27 @@ describe('the vision chain hands its budget and cancellation to the provider', (
     assert.equal(seen.timeoutMs, 4321, 'the attempt budget must reach the provider');
   });
 
+  test('a provider that is DEAF to the signal and never resolves is still cut off at the budget', async () => {
+    // The sibling test below listens for abort and rejects itself, which is
+    // cooperative: every runVisionRequest provider except Natively ignores the
+    // signal entirely, so this is the shape that matters. Before 2026-09-06 the
+    // chain awaited invoke() with nothing racing it and this hung until the
+    // provider's own timeout, or forever.
+    const imagePath = await ensureFixture();
+    const started = Date.now();
+    const res = await runVisionFallback({
+      imagePath,
+      mode: 'vision_first',
+      systemPrompt: 's',
+      userPrompt: 'u',
+      perProviderTimeoutMs: 200,
+      providers: [rung('deaf', () => new Promise(() => { /* never settles, never reads the signal */ }))],
+    });
+    assert.equal(res.ok, false);
+    assert.equal(res.attempts[0].errorClass, 'timeout');
+    assert.ok(Date.now() - started < 2000, `must abort near the 200ms budget, took ${Date.now() - started}ms`);
+  });
+
   test('a provider that ignores the signal is still cut off at the budget', async () => {
     const imagePath = await ensureFixture();
     const started = Date.now();
