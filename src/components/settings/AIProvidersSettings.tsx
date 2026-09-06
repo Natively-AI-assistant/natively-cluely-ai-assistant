@@ -6,6 +6,7 @@ import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { useToggleInit } from './useToggleInit';
+import { motion, useReducedMotion } from 'framer-motion';
 
 // Official provider marks, vendored from @lobehub/icons-static-svg v1.94.0 (MIT).
 // See src/assets/provider-logos/README.md for provenance and why these are local
@@ -73,9 +74,17 @@ import { useResolvedTheme } from '../../hooks/useResolvedTheme';
    Tailwind is still used for LAYOUT only inside `.aip-root`. Colour comes from
    `var(--aip-*)`.
 
-   Motion is CSS-only — deliberately no framer-motion in this file. Animations
-   stay off the main thread, which matters because this renderer also hosts the
-   always-on-top overlay and a 3s Ollama poll.
+   Motion is CSS-only with ONE exception: the provider tablist's selection pill,
+   whose translate is driven by a framer-motion spring so it matches the
+   meeting-notes Summary/Transcript/Usage switcher (see the tablist below). It is
+   still one transform on one element — framer-motion is the driver, not a new
+   layer of layout work, and layout/`layoutId` projection is deliberately avoided
+   there for a scroll regression documented at the call site. Everything else
+   stays on the compositor, which matters because this renderer also hosts the
+   always-on-top overlay and a 3s Ollama poll. framer-motion is already loaded in
+   this renderer by the sibling settings panels (Plans, Intelligence, Help, Pro,
+   Natively API), so the exception adds no bundle cost that was not already
+   being paid.
    ═══════════════════════════════════════════════════════════════════════════ */
 /* Exported so other panels can adopt this design language. Every token below is
    scoped to `.aip-root`, and this sheet is mounted by whichever panel renders it
@@ -893,17 +902,31 @@ select.aip-input { cursor:pointer; }
 .aip-select-option[aria-selected='true'] { background: var(--aip-item-active); color: var(--aip-primary); }
 .aip-select-empty { padding:6px 8px; font-size:12px; color: var(--aip-tertiary); }
 
-/* ── Segmented control. Architecture kept as-is (one absolutely-positioned
-      pill translated across the track, so only "transform" animates and the
-      work stays on the compositor; the tabs never restyle their own
-      background). The pill gets "state", not "travel" — it crosses ~200px so
-      a long duration reads as lag. ─────────────────────────────────────── */
+/* ── Segmented control. Architecture unchanged — still ONE absolutely-positioned
+      pill translated across a fixed-width track, so only "transform" animates and
+      the tabs never restyle their own background. What changed is the driver:
+      framer-motion springs the translate instead of a fixed-duration CSS ease, so
+      the travel matches the meeting-notes Summary/Transcript/Usage switcher and an
+      interrupted switch keeps its speed instead of restarting from rest. The pill
+      deliberately does NOT unmount per tab — see the tablist JSX for the scroll
+      regression that caused.
+      The tabs' own colour swap stays in CSS at 200ms, which is MeetingDetails'
+      "transition-all duration-200" — so it lands first: measured, the pill needs
+      ~250-350ms from click to settle. The label is already the right colour
+      under the arriving pill rather than catching up behind it. ────────── */
 .aip-tablist { background: var(--aip-well-bg); border:1px solid var(--aip-border); }
 .aip-tab-pill { background: var(--aip-pill-bg); border:1px solid var(--aip-pill-border);
                 box-shadow: var(--aip-pill-lift), var(--aip-pill-shadow); }
-.aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer; }
-/* The tablist is overflow:hidden, which clips an outside focus ring. Must be
-   specific enough to beat ".aip-root :focus-visible" (0,2,0) above. */
+/* No reduced-motion rule of its own: the .aip-root guard below already forces
+   transition-duration to 0.01ms !important on every descendant, and a
+   non-important shorthand here would lose to it anyway. */
+.aip-tab { color: var(--aip-secondary); background:transparent; cursor:pointer;
+           transition: color 200ms var(--aip-ease-out); }
+/* Inset focus ring. This started as a workaround for the tablist's
+   overflow:hidden (which the selection pill's spring overshoot has since forced
+   off, see the tablist JSX) and is kept as the deliberate look: the tabs sit
+   flush in the well, so an outside ring reads as a halo around the whole track.
+   Must be specific enough to beat ".aip-root :focus-visible" (0,2,0) above. */
 .aip-root .aip-tab:focus-visible { outline-offset:-2px; }
 .aip-tab:hover { color: var(--aip-primary); }
 .aip-tab[aria-selected='true'] { color: var(--aip-hero); }
@@ -2146,14 +2169,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
     const [confirmBusy, setConfirmBusy] = useState(false);
     const [activeTab, setActiveTab] = useState<ProviderTabId>('cloud');
-    // Index drives the sliding pill's translate; -1 can't happen (state is typed
-    // to the tab ids) but Math.max keeps a bad persisted value from shifting it off-track.
+    // Index drives the pill's spring target; -1 can't happen (state is typed to
+    // the tab ids) but Math.max keeps a bad persisted value from shifting it off-track.
     const activeTabIndex = Math.max(0, PROVIDER_TABS.findIndex((tab) => tab.id === activeTab));
     const [isRefreshingOllama, setIsRefreshingOllama] = useState(false);
     // Roving tabindex: only the selected tab is a tab stop, so Arrow/Home/End
     // are the ONLY way to reach the other two. Without this a keyboard user
     // landed on the active tab and could never leave it.
     const tabRefs = useRef<Partial<Record<ProviderTabId, HTMLButtonElement | null>>>({});
+    // Gates the tablist pill's spring only. Every other animation in this file
+    // is CSS and is already covered by the .aip-root reduced-motion block.
+    const prefersReducedMotion = useReducedMotion();
 
     const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
         const navKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
@@ -3468,48 +3494,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 </div>
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
-                            <AipBadge tone="info" label={t('Beta')} />
-                        </div>
-                        <p className="text-[10px] aip-muted mt-0.5">
-                            {t('Sends your current typed, spoken, screenshot, and page input straight to the active model without meeting retrieval or answer rewriting.')}
-                        </p>
-                        {directAssistError && (
-                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
-                        )}
-                    </div>
-                    <AipSwitch
-                        checked={directAssistEnabled}
-                        disabled={directAssistBusy}
-                        label={t('Direct Assist')}
-                        onChange={async () => {
-                            if (directAssistBusy) return;
-                            const previous = directAssistEnabled;
-                            const next = !previous;
-                            setDirectAssistBusy(true);
-                            setDirectAssistError('');
-                            setDirectAssistEnabled(next);
-                            try {
-                                const result = await window.electronAPI?.setDirectAssistEnabled?.(next);
-                                if (!result?.success) {
-                                    setDirectAssistEnabled(previous);
-                                    setDirectAssistError(result?.error || t('Could not update Direct Assist.'));
-                                }
-                            } catch (error) {
-                                setDirectAssistEnabled(previous);
-                                setDirectAssistError(
-                                    error instanceof Error ? error.message : t('Could not update Direct Assist.'),
-                                );
-                            } finally {
-                                setDirectAssistBusy(false);
-                            }
-                        }}
-                    />
-                </div>
-
-<div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
                         <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('AI Response Language')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">
@@ -3557,6 +3541,48 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </div>
                 </div>
 
+            <div className="aip-card p-5 flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Direct Assist')}</label>
+                            <AipBadge tone="info" label={t('Beta')} />
+                        </div>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('Sends your current typed, spoken, screenshot, and page input straight to the active model without meeting retrieval or answer rewriting.')}
+                        </p>
+                        {directAssistError && (
+                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistError}</p>
+                        )}
+                    </div>
+                    <AipSwitch
+                        checked={directAssistEnabled}
+                        disabled={directAssistBusy}
+                        label={t('Direct Assist')}
+                        onChange={async () => {
+                            if (directAssistBusy) return;
+                            const previous = directAssistEnabled;
+                            const next = !previous;
+                            setDirectAssistBusy(true);
+                            setDirectAssistError('');
+                            setDirectAssistEnabled(next);
+                            try {
+                                const result = await window.electronAPI?.setDirectAssistEnabled?.(next);
+                                if (!result?.success) {
+                                    setDirectAssistEnabled(previous);
+                                    setDirectAssistError(result?.error || t('Could not update Direct Assist.'));
+                                }
+                            } catch (error) {
+                                setDirectAssistEnabled(previous);
+                                setDirectAssistError(
+                                    error instanceof Error ? error.message : t('Could not update Direct Assist.'),
+                                );
+                            } finally {
+                                setDirectAssistBusy(false);
+                            }
+                        }}
+                    />
+                </div>
+
 <div
                     className={`aip-card p-5 flex items-center justify-between gap-4 ${!canUseFastMode ? 'opacity-50 grayscale' : ''}`}
                     title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
@@ -3564,7 +3590,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                             <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
-                            <AipBadge tone="info" label={t('New')} />
                             {!canUseFastMode && <AipBadge tone="warn" label={t('Needs Groq')} />}
                         </div>
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
@@ -3600,31 +3625,56 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 a roving-tabindex key handler (see handleTabKeyDown) — without it a
                 keyboard user landed on the active tab and could never leave it.
 
-                Motion matches the Plans & Billing tier switcher: the selection is
-                one absolutely-positioned pill translated across a fixed-width
-                track, so only `transform` animates and the work stays on the
-                compositor. The tabs themselves never restyle their background —
-                which is what stops the four-way colour swap that a per-button
-                `bg` transition produces. */}
+                Motion is the meeting-notes Summary/Transcript/Usage switcher's
+                (MeetingDetails.tsx): the same framer-motion spring, stiffness 400
+                / damping 30. Measured here: 2.8% positional overshoot, settled by
+                ~640ms, and on an interrupt at +100ms the pill goes 32 -> 23 -> 48
+                -> 46 px/frame — it keeps its speed instead of restarting from
+                rest, which is what the old `transition-transform` did (a fresh
+                full duration eased in from zero velocity, every time). That
+                interruption behaviour is the part that actually reads as "the
+                same switcher"; the easing curve alone is not.
+
+                What is deliberately NOT copied is MeetingDetails' `layoutId`
+                shared-layout element. This pill is ONE node that never unmounts,
+                springing `x` across the track. The reason is a real regression the
+                layoutId version caused: switching tabs from a scrolled position
+                snapped the panel back to the top. No code writes scrollTop (a
+                patched setter caught zero writes) — layout projection forces a
+                measure pass around the panel unmount/mount, the scroller's content
+                transiently collapses below scrollTop + clientHeight, and Chromium
+                clamps. Measured in the harness: scrollTop 260 -> 0 with layoutId,
+                260 -> 260 with this version, same spring in both. `overflow-anchor:
+                none` on SettingsOverlay's scroller means nothing restores it.
+
+                Still transform-only, and the tabs themselves still never restyle
+                their background — which is what stops the three-way colour swap
+                that a per-button `bg` transition produces. Only the label colour
+                crossfades, from `.aip-tab`'s own CSS transition.
+
+                The track's `overflow-hidden` is GONE, and that is load-bearing:
+                the spring overshoots by ~13px on the ~465px cloud->privacy hop
+                while the track has only 4px of `p-1` plus a ~1px gap to spare, so
+                on the end tabs the clip shaved the pill's outer edge flat for ~4
+                frames — exactly the part of the meeting-notes feel being ported.
+                Nothing else needed the clip: the pill is inset and `rounded-md`
+                inside the track's `rounded-lg`, and the labels self-truncate. */}
             <div
                 role="tablist"
                 aria-label={t('Provider groups')}
-                className="aip-tablist grid grid-cols-3 relative p-1 rounded-lg overflow-hidden"
+                className="aip-tablist grid grid-cols-3 relative p-1 rounded-lg"
             >
-                {/* Active sliding pill. duration-150 is what the Plans & Billing
-                    pill actually renders at — its `duration-220` is not a real
-                    Tailwind class (no 220 on the scale, and the config doesn't
-                    extend transitionDuration), so it is dropped and
-                    transition-transform's own 150ms default applies there.
-                    Bump both to duration-[220ms] together to get the timing that
-                    code originally intended. */}
-                <div
+                <motion.div
                     aria-hidden="true"
-                    className="absolute top-0 bottom-0 left-0 w-1/3 p-1 transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform motion-reduce:transition-none"
-                    style={{ transform: `translate3d(${activeTabIndex * 100}%, 0, 0)` }}
+                    className="absolute top-0 bottom-0 left-0 w-1/3 p-1 will-change-transform"
+                    initial={false}
+                    animate={{ x: `${activeTabIndex * 100}%` }}
+                    transition={prefersReducedMotion
+                        ? { duration: 0 }
+                        : { type: 'spring', stiffness: 400, damping: 30 }}
                 >
                     <div className="w-full h-full rounded-md aip-tab-pill" />
-                </div>
+                </motion.div>
 
                 {PROVIDER_TABS.map(({ id, label, Icon }) => (
                     <button
@@ -3717,21 +3767,71 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <p className="text-xs aip-muted">{t('Sign in with Google to use your Antigravity models.')}</p>
                         </div>
                     </div>
-                    <button type="button" className="aip-btn" onClick={() => handleToggleProvider('antigravity', disabledProviders.includes('antigravity'))}>
-                        {disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
-                    </button>
+                    {/* Same switch every other provider header carries (Codex above,
+                        ProviderCard's key-backed providers below) — not an
+                        Enable/Disable button, which read as a different kind of
+                        control for the same state. Shown unconditionally, like
+                        Codex: ProviderCard gates its switch on `hasStoredKey`
+                        because there is nothing to hide before a key exists, but
+                        this provider's models are gated by sign-in, not a key, and
+                        the disabled flag is independently meaningful. */}
+                    <AipSwitch
+                        checked={!disabledProviders.includes('antigravity')}
+                        onChange={() => handleToggleProvider('antigravity', disabledProviders.includes('antigravity'))}
+                        label={`${disabledProviders.includes('antigravity') ? t('Enable') : t('Disable')} Google Antigravity`}
+                        title={disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
+                    />
                 </div>
-                <p className="text-xs aip-muted" role="status">
+                {/* No "Not connected" line: the sign-in bar directly below already
+                    says the account is not connected, so the label was a second
+                    copy of the same fact taking a row.
+                    The live region stays MOUNTED and is hidden instead of being
+                    conditionally rendered — a role="status" that mounts together
+                    with its first message is not reliably announced, and Tailwind's
+                    space-y uses `:not([hidden]) ~ :not([hidden])`, so a hidden node
+                    drops out of the spacing chain and leaves no gap. */}
+                <p className="text-xs aip-muted" role="status" hidden={!antigravityStatus.inProgress && !antigravityStatus.signedIn}>
                     {antigravityStatus.inProgress ? t('Waiting for Google sign-in…')
-                        : antigravityStatus.signedIn ? t('Antigravity connected') : t('Not connected')}
+                        : antigravityStatus.signedIn ? t('Antigravity connected') : ''}
                     {antigravityStatus.signedIn && antigravityStatus.expiresAt && ` · ${t('Refreshes automatically before')} ${new Date(antigravityStatus.expiresAt).toLocaleTimeString()}`}
                 </p>
+                {/* Primary action takes Codex's full-width row SHAPE (aip-btn
+                    flex-1, data-size="row") but NOT its data-variant="accent":
+                    the accent tint is periwinkle in this panel's token scope, and
+                    the card keeps the neutral button colour it already had.
+                    Cancel stays a compact ghost beside the in-flight bar rather
+                    than replacing it — Antigravity can abort a pending browser
+                    round-trip and Codex cannot, and that capability should not
+                    cost the shared shape. */}
                 <div className="flex flex-wrap gap-2">
                     {antigravityStatus.inProgress ? (
-                        <button type="button" className="aip-btn" onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}>{t('Cancel sign-in')}</button>
+                        <>
+                            <button type="button" className="aip-btn flex-1" data-size="row" disabled>
+                                <Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}
+                            </button>
+                            <button
+                                type="button"
+                                className="aip-btn shrink-0"
+                                data-size="row"
+                                data-variant="ghost"
+                                onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
+                            >{t('Cancel')}</button>
+                        </>
                     ) : !antigravityStatus.signedIn ? (
-                        <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('login')}>{t('Sign in with Google')}</button>
+                        <button
+                            type="button"
+                            className="aip-btn flex-1"
+                            data-size="row"
+                            disabled={antigravityBusy}
+                            onClick={() => void runAntigravityAction('login')}
+                        >
+                            <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
+                        </button>
                     ) : <>
+                        {/* Left as plain buttons: the ask was the sign-in bar. Codex
+                            puts its post-sign-in Refresh/Sign out in the CARD HEADER
+                            as sm ghosts, which is a different move than restyling
+                            these in place. */}
                         <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>{t('Reload models')}</button>
                         <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
                     </>}
@@ -3742,92 +3842,79 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
 
-            {/* Codex — ChatGPT subscription proxy */}
-            <div className="space-y-5">
+            {/* Codex — ChatGPT subscription proxy.
+
+                Same card shape as Google Antigravity above: ONE aip-card that owns
+                its provider header (mark + title + description + switch), then a
+                hidden-until-meaningful role="status" line, then the action row.
+                Previously the header sat OUTSIDE the card and the card repeated the
+                provider with a "ChatGPT Account" label — two nested sections for one
+                provider, and the only card on the panel shaped that way.
+
+                The account email moves from a dedicated `aip-well` into the status
+                line, which is where Antigravity puts the same fact; the well was the
+                third element competing to say "you are signed in". */}
+            <div className="aip-card p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                        <AipProviderMark provider="codex" name="ChatGPT (Codex)" className="mt-0.5" />
+                    <div className="flex gap-3 min-w-0">
+                        <AipProviderMark provider="codex" name="OpenAI Codex" className="mt-0.5" />
                         <div className="min-w-0">
-                        <h3 className="text-sm font-bold aip-hero mb-1">ChatGPT (Codex)</h3>
-                        <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.')}</p>
+                            <h3 className="text-sm font-bold aip-hero mb-1">OpenAI Codex</h3>
+                            <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
                         </div>
                     </div>
                     <AipSwitch
                         checked={!disabledProviders.includes('codex-cli')}
                         onChange={() => handleToggleProvider('codex-cli', disabledProviders.includes('codex-cli'))}
-                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} Codex`}
+                        label={`${disabledProviders.includes('codex-cli') ? t('Enable') : t('Disable')} OpenAI Codex`}
                         title={disabledProviders.includes('codex-cli') ? t('Enable provider') : t('Disable provider')}
                     />
                 </div>
 
-                <div className="aip-card p-5 space-y-4">
-                    {/* Header row: title + sign-in state + actions — mirrors ProviderCard */}
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide aip-hero">
-                            {t('ChatGPT Account')}
-                        </label>
-                        {codexOauthStatus.signedIn ? (
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={handleCodexRefresh}
-                                    disabled={codexOauthInProgress}
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                    title={t("Refresh session")}
-                                >
-                                    <RefreshCw size={12} strokeWidth={1.75} />
-                                    <span className="uppercase tracking-wide">{t('Refresh')}</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleCodexSignOut}
-                                    disabled={codexOauthInProgress}
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                >
-                                    <LogOut size={12} strokeWidth={1.75} />
-                                    <span className="uppercase tracking-wide">{t('Sign out')}</span>
-                                </button>
-                            </div>
-                        ) : null}
-                    </div>
+                {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
+                <p className="text-xs aip-muted" role="status" hidden={!codexOauthInProgress && !codexOauthStatus.signedIn}>
+                    {codexOauthInProgress ? t('Waiting for browser…')
+                        : codexOauthStatus.signedIn
+                            ? `${t('Codex connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
+                            : ''}
+                </p>
 
-                    {/* Sign-in area or signed-in account display */}
-                    {codexOauthStatus.signedIn ? (
-                        <div className="flex gap-2 mb-3">
-                            <div className="aip-well flex-1 min-w-0 px-3 py-2.5 text-xs aip-text flex items-center gap-2">
-                                <span className="aip-badge-dot aip-ok-fg" aria-hidden="true" />
-                                <span className="truncate">{codexOauthStatus.email || t('ChatGPT account connected')}</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 mb-3">
-                            <button
-                                type="button"
-                                onClick={() => handleCodexAuthAction('login')}
-                                disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
-                                className="aip-btn flex-1"
-                                data-size="row"
-                                data-variant="accent"
-                            >
-                                {codexOauthInProgress || codexAuthAction === 'login'
-                                    ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
-                                    : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
-                            </button>
-                        </div>
-                    )}
+                <div className="flex flex-wrap gap-2">
+                    {!codexOauthStatus.signedIn ? (
+                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
+                           periwinkle, which the Antigravity bar deliberately does not do. */
+                        <button
+                            type="button"
+                            onClick={() => handleCodexAuthAction('login')}
+                            disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
+                            className="aip-btn flex-1"
+                            data-size="row"
+                        >
+                            {codexOauthInProgress || codexAuthAction === 'login'
+                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
+                                : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
+                        </button>
+                    ) : <>
+                        {/* Plain aip-btn in a wrap row, matching Antigravity's
+                            Reload models / Disconnect pair. Glyphs kept: they cost
+                            nothing here and the two actions are easy to confuse. */}
+                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
+                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
+                        </button>
+                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
+                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
+                        </button>
+                    </>}
+                </div>
 
-                    {codexAuthMessage && (
-                        <p className={`text-[10px] mt-1.5 mb-2 ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`}>
-                            {codexAuthMessage}
-                        </p>
-                    )}
+                {codexAuthMessage && (
+                    <p className={`text-xs ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`} role="alert">
+                        {codexAuthMessage}
+                    </p>
+                )}
 
-                    {/* Model + settings — only shown once signed in */}
-                    {codexOauthStatus.signedIn && (
+                {/* Model + settings — only shown once signed in */}
+                {codexOauthStatus.signedIn && (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
@@ -3931,7 +4018,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
                         </>
                     )}
-                </div>
             </div>
 
             </div>

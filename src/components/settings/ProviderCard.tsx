@@ -6,7 +6,7 @@ import { Trash2, AlertCircle, ExternalLink, Loader2, Check, KeyRound } from 'luc
 // src/components/settings/ EXACTLY equal its GUARDED_FILES list, so adding a file
 // here fails that suite. The resulting import cycle is safe — every reference
 // below is inside a render function, never at module-evaluation time.
-import { AipBadge, AipSwitch, AipProviderMark, AipModelList, type AipTone } from './AIProvidersSettings';
+import { AipSwitch, AipProviderMark, AipModelList } from './AIProvidersSettings';
 
 interface FetchedModel {
     id: string;
@@ -144,21 +144,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
     };
 
 
-    // ── Status. ONE vocabulary via AipBadge; nothing else here carries a status
-    // colour. Key stored + on → ok "Connected"; key stored + off → neutral
-    // "Off"; no key → no badge at all (there is nothing to report yet).
-    // The badge carries only what NO control on the card already says.
+    // ── No status badge. Testing / Failed / Saving went first as echoes of the
+    // control you had just pressed; "Off" was the last one left, kept on the
+    // argument that nothing else stated it in words.
     //
-    // Testing / Failed / Saving were all echoes: press Test and the button reads
-    // "Testing..." with a spinner while the badge read "Testing" with a second
-    // spinner — one operation, two spinners, two words, 200px apart. The control you
-    // pressed owns its own feedback; that is where you are already looking.
-    //
-    // "Off" is the exception and the reason the badge still exists: nothing else
-    // states it in words, it persists rather than resolving on its own, and it is the
-    // explanation for why the models control vanished from the row below.
-    const statusBadge: { tone: AipTone; label: string; busy?: boolean } | null =
-        (hasStoredKey && isDisabled) ? { tone: 'neutral', label: t('Off') } : null;
+    // It is gone too: the switch sits on the same header row, reads off, and is
+    // the control that owns this state — the badge was a second rendering of it
+    // 200px away. The OAuth cards on this panel (Antigravity, OpenAI Codex)
+    // already show disabled state through their switch alone, so this is also
+    // what makes the key-backed cards consistent with them.
 
 
     return (
@@ -176,9 +170,6 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                     card's heading, uppercased, made an entity read as a form label. The
                     input keeps its aria-label, so nothing is lost to a screen reader. */}
                 <h4 className="aip-card-title truncate min-w-0">{providerName}</h4>
-                {statusBadge && (
-                    <AipBadge tone={statusBadge.tone} label={statusBadge.label} busy={statusBadge.busy} />
-                )}
 
                 {/* Get Key stays here permanently now that Test has moved back down to
                     the body row. Key rotation is real, so the signpost is still useful
