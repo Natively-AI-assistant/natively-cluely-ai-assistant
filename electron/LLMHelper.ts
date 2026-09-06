@@ -578,6 +578,82 @@ export class LLMHelper {
     });
   }
 
+  // ─── A copy of the turn's ANSWER call, for its post-answer repairs ───────
+  //
+  // A repair used to be dispatched as `streamChat(repairPrompt, undefined,
+  // undefined, undefined, true, true)`: no images, no transcript, no system
+  // prompt, no scopes, no route. The answer had all of it. So the repair was
+  // asked to improve an answer it could not see the evidence for — on a
+  // screenshot turn it could not see the screenshot at all, and with
+  // skipModeInjection still true it could not pull the reference files back
+  // either. It was reasoning from the prior answer text alone.
+  //
+  // WhatToAnswerLLM already composes the answer as a single argument tuple with
+  // ignoreKnowledgeMode/skipModeInjection BOTH true, which means the transcript,
+  // the screenshot, the reference files, the realtime prompt and the mode prompt
+  // are already baked into that tuple's message and system prompt rather than
+  // injected downstream. So the tuple is self-contained and replaying it costs
+  // no retrieval — the repair simply gets the turn the answer got.
+  //
+  // KEYED BY THE TURN'S ABORT SIGNAL, and a WeakMap so a finished turn's copy is
+  // collectable. The key matters: replaying turn N-1's tuple on turn N would
+  // hand the repair a stale transcript and a stale screenshot, which is strictly
+  // worse than the `undefined` it passes today. A missing or mismatched key
+  // returns null and the caller keeps its current arguments — and that is a live
+  // branch, not an edge case: the ScopeFallback route and the Context-OS
+  // refuse/clarify terminals never reach the compose step at all.
+  private answerCallByTurn: WeakMap<object, Parameters<LLMHelper['streamChat']>> = new WeakMap();
+
+  /** Longest prefix of the answer prompt a repair may inherit. */
+  private static readonly REPLAYED_ANSWER_PROMPT_MAX_CHARS = 24000;
+
+  /** Called by the ANSWER paths only. Repairs must never overwrite the copy. */
+  public rememberAnswerCall(key: object | undefined | null, args: Parameters<LLMHelper['streamChat']>): void {
+    if (!key || typeof key !== 'object') return;
+    try { this.answerCallByTurn.set(key, args); } catch { /* never break the answer */ }
+  }
+
+  /**
+   * The answer call's arguments, with the repair's own message and abort signal
+   * substituted. Returns null when this turn has no remembered answer.
+   *
+   * The signal is REPLACED, never inherited. By the time a repair runs the
+   * answer's controller may already be aborted — often that is why the repair is
+   * running — and a replayed aborted signal yields zero tokens, trips no
+   * "useful" threshold, and looks exactly like the old behaviour while being
+   * silent about it.
+   */
+  public replayAnswerCall(
+    key: object | undefined | null,
+    repairMessage: string,
+    signal?: AbortSignal,
+  ): Parameters<LLMHelper['streamChat']> | null {
+    if (!key || typeof key !== 'object') return null;
+    const args = this.answerCallByTurn.get(key);
+    if (!args) return null;
+    // The answer prompt was already fitted to the model's context budget, so an
+    // appended instruction pushes past what it was fitted to. Trim the INHERITED
+    // half — never the repair instruction, which is the only part that says what
+    // to do.
+    const original = String(args[0] ?? '');
+    const cap = LLMHelper.REPLAYED_ANSWER_PROMPT_MAX_CHARS;
+    const inherited = original.length > cap
+      ? `${original.slice(0, cap)}\n\n[...answer context truncated for the repair pass...]`
+      : original;
+    const message = `${inherited}\n\n---\n${repairMessage}`;
+    const replayed = [...args] as Parameters<LLMHelper['streamChat']>;
+    replayed[0] = message;
+    replayed[7] = signal;
+    return replayed;
+  }
+
+  /** Does this turn carry a screenshot? Repairs need it to size their deadline. */
+  public replayedAnswerHasImages(key: object | undefined | null): boolean {
+    if (!key || typeof key !== 'object') return false;
+    const args = this.answerCallByTurn.get(key);
+    return Array.isArray(args?.[1]) && (args![1] as string[]).length > 0;
+  }
+
   /** What we have measured from the selected endpoint; null when unmeasured. */
   public observedAnswerLatency(): { maxMs: number; count: number } | null {
     const key = this.answerLatencyKey();

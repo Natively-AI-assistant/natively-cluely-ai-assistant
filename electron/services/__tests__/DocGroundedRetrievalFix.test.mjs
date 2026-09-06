@@ -706,8 +706,12 @@ test('round2: ipcHandlers wires regenAbort.signal into streamChat call', () => {
   // Find the line that contains the actual streamChat call (not the comment) and
   // verify regenAbort.signal is on that same line.
   const lines = ipcHandlersSrc.split('\n');
-  const streamChatLine = lines.find(l => l.includes('llmHelper.streamChat(strictPrompt'));
-  assert.ok(streamChatLine, 'llmHelper.streamChat(strictPrompt must exist in ipcHandlers');
+  // The call is argument-tuple based since 2026-09-06 so the repair can replay
+  // the answer's context; the signal now travels as repairCallArgs' 4th
+  // argument. Still the same invariant: regenAbort.signal, and not the answer's
+  // (possibly already-aborted) signal, governs this stream.
+  const streamChatLine = lines.find(l => l.includes('repairCallArgs(llmHelper') && l.includes('strictPrompt'));
+  assert.ok(streamChatLine, 'the strictPrompt regen call must exist in ipcHandlers');
   assert.ok(
     streamChatLine.includes('regenAbort.signal'),
     `regenAbort.signal must be in the streamChat(strictPrompt...) call — found line: ${streamChatLine.trim()}`,
