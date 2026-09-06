@@ -351,9 +351,51 @@ describe('a selected single provider now fails over — or retries itself in par
   const llm = strip(fs.readFileSync(path.join(root, 'electron/LLMHelper.ts'), 'utf8'));
   const ie = strip(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
 
-  test('every user-endpoint text branch goes through the fallback engine', () => {
-    const n = (llm.match(/this\.streamSelectedProviderWithFailover\(/g) || []).length;
-    assert.equal(n, 3, `custom, litellm and nvidia_nim must all route through it — found ${n}`);
+  test('every single-rung CLOUD branch goes through the fallback engine', () => {
+    for (const id of ['custom', 'litellm', 'nvidia_nim', 'openai', 'claude', 'deepseek']) {
+      assert.match(llm, new RegExp(`streamSelectedProviderWithFailover\\(\\{\\s*\\n?\\s*id: '${id}'`),
+        `${id} is a single terminal rung and must get failover`);
+    }
+  });
+
+  test('local providers are deliberately EXCLUDED, and stay excluded', () => {
+    // A parallel retry would load the model twice — setModel unloads the old pin
+    // precisely so two are never resident — and a cloud spare would send the
+    // transcript off-device after the user chose local. A latency fix must not
+    // become a privacy regression.
+    for (const marker of ['this.useOllama', 'isUsingCodexCli()']) {
+      const at = llm.indexOf(marker);
+      assert.ok(at >= 0, `${marker} branch not found`);
+      assert.equal(llm.slice(at, at + 900).includes('streamSelectedProviderWithFailover'), false,
+        `${marker} must dispatch directly, never through the failover engine`);
+    }
+  });
+
+  test('Groq keeps its own error ladder', () => {
+    // Groq is the one branch that ALREADY falls through, into the Natively TTFT
+    // race. Wrapping it would sit between its auth-disable / over-capacity /
+    // commit.emitted branches and that fall-through.
+    const at = llm.indexOf('isGroqModel(this.currentModelId)');
+    assert.ok(at >= 0);
+    assert.equal(llm.slice(at, at + 900).includes('streamSelectedProviderWithFailover'), false);
+  });
+
+  test('an image-bearing turn gets NO spares and NO hedge', () => {
+    // Every spare rung is text-only, so failing over would silently drop the
+    // screenshot and answer a different question than the user asked.
+    assert.match(llm, /if \(opts\.hasImages\) \{\s*\n\s*yield\* opts\.open\(/,
+      'the image guard must return before any spare or hedge is built');
+    const guardAt = llm.indexOf('if (opts.hasImages)');
+    const sparesAt = llm.indexOf('const spares = this.buildTextSpareRungs');
+    assert.ok(guardAt > 0 && guardAt < sparesAt, 'the guard must precede spare construction');
+  });
+
+  test('a provider can never be its own spare', () => {
+    assert.match(llm, /buildTextSpareRungs\(opts\.userContent, opts\.finalSystemPrompt, opts\.thinkingBudget, \[opts\.id,/);
+    assert.match(llm, /const skip = new Set\(excludeIds\);/);
+    for (const id of ['natively', 'gemini_flash', 'groq']) {
+      assert.match(llm, new RegExp(`!skip\\.has\\('${id}'\\)`), `${id} spare must be skippable`);
+    }
   });
 
   test('the rung budget comes from the route table, NOT the 2.5s text default', () => {

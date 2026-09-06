@@ -1857,23 +1857,25 @@ export class LLMHelper {
     userContent: string,
     finalSystemPrompt: string,
     thinkingBudget: number,
+    excludeIds: string[] = [],
   ): TextStreamProvider[] {
     const spares: TextStreamProvider[] = [];
+    const skip = new Set(excludeIds);
     let prio = 1;
-    if (this.hasNatively()) {
+    if (!skip.has('natively') && this.hasNatively()) {
       spares.push({
         id: 'natively', name: 'Natively API', isLocal: false, priority: prio++,
         ttftTimeoutMs: NATIVELY_TEXT_TTFT_MS,
         open: (sig) => this.streamWithNatively(userContent, finalSystemPrompt, undefined, sig, INTERACTIVE_CONNECT_TIMEOUT_MS),
       });
     }
-    if (this.client) {
+    if (!skip.has('gemini_flash') && this.client) {
       spares.push({
         id: 'gemini_flash', name: 'Gemini Flash', isLocal: false, priority: prio++,
         open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_MODEL, undefined, finalSystemPrompt, sig, thinkingBudget),
       });
     }
-    if (this.groqClient) {
+    if (!skip.has('groq') && this.groqClient) {
       const groqSystem = this.injectLanguageInstruction(GROQ_SYSTEM_PROMPT);
       spares.push({
         id: 'groq', name: 'Groq', isLocal: false, priority: prio++,
@@ -1922,7 +1924,21 @@ export class LLMHelper {
     finalSystemPrompt: string;
     thinkingBudget: number;
     abortSignal?: AbortSignal;
+    /** This turn carries a screenshot — see the guard at the top of the body. */
+    hasImages?: boolean;
+    /** Rungs this provider must never fail over to (itself, above all). */
+    excludeSpareIds?: string[];
   }): AsyncGenerator<string, void, unknown> {
+    // An image-bearing turn gets NO spares and NO hedge. Every spare rung built
+    // below is text-only, so failing over would silently drop the screenshot and
+    // answer a different question than the user asked. Image turns are supposed
+    // to be intercepted by the unified vision chain far above this; reaching here
+    // with images means that chain already declined, and a text-only rescue is
+    // not a rescue.
+    if (opts.hasImages) {
+      yield* opts.open(opts.abortSignal ?? new AbortController().signal);
+      return;
+    }
     // Dynamic, like every other liveDeadlines use in this file — a static
     // import here closes a module cycle.
     const { totalHardTimeoutMs } = await import('./llm/liveDeadlines');
@@ -1930,7 +1946,7 @@ export class LLMHelper {
       isUserEndpoint: this.isUsingUserEndpoint(),
       observedUserEndpointLatency: this.observedAnswerLatency(),
     });
-    const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget);
+    const spares = this.buildTextSpareRungs(opts.userContent, opts.finalSystemPrompt, opts.thinkingBudget, [opts.id, ...(opts.excludeSpareIds ?? [])]);
     const hedging = spares.length === 0;
 
     // How long to wait on this provider before doing something else. With a
@@ -1963,6 +1979,12 @@ export class LLMHelper {
       mode: hedging ? 'hedged (no spare rung configured)' : 'failover',
     });
 
+    // Lazily materialised: several suites drive _streamChatInner on an
+    // Object.create(LLMHelper.prototype) instance, which never runs the field
+    // initialisers, so this map is undefined there. The engine dereferences it
+    // unconditionally, so without this the whole turn throws rather than merely
+    // losing its health tracking.
+    if (!this.textHealth) this.textHealth = new Map();
     yield* runStreamingTextFallback(
       [primary, ...spares],
       this.textHealth,
@@ -7773,6 +7795,18 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     // 1. Ollama Streaming
+    //
+    // DELIBERATELY NOT routed through streamSelectedProviderWithFailover, unlike
+    // every cloud rung below. Two independent reasons:
+    //   • A parallel retry would load the model TWICE. setModel already unloads
+    //     the previous pin precisely so two models are not resident at once; a
+    //     hedge would put two concurrent loads on one laptop's RAM and make both
+    //     attempts slower than the single attempt it was meant to rescue.
+    //   • A cloud spare rung would send the transcript off-device after the user
+    //     chose a local model. That is what the provider data-scope system
+    //     exists to prevent — a latency fix must not become a privacy
+    //     regression.
+    // Codex CLI below is excluded for the same two reasons.
     if (this.useOllama) {
       const ollamaSystemPrompt = this.resolveLocalSystemPrompt(finalSystemPrompt);
       yield* this.streamWithOllama(contextOsGoverningBlock ? userContent : message, contextOsGoverningBlock ? undefined : combinedContext || undefined, ollamaSystemPrompt, imagePaths, abortSignal);
@@ -7805,6 +7839,7 @@ let isMultimodal = !!(imagePaths?.length);
             name: `Custom (${this.customProvider.name})`,
             open: (sig) => this.streamWithCustom(message, context, imagePaths, finalSystemPrompt, sig),
             userContent, finalSystemPrompt, thinkingBudget, abortSignal,
+            hasImages: Boolean(isMultimodal && imagePaths?.length),
           }),
           commit,
         );
@@ -7848,11 +7883,17 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isOpenAiModel(this.currentModelId) && this.openaiClient) {
       const openAiSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalOpenAiSystem = this.injectLanguageInstruction(openAiSystem);
-      if (isMultimodal && imagePaths) {
-        yield* this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem, undefined, abortSignal);
-      } else {
-        yield* this.streamWithOpenai(userContent, finalOpenAiSystem, undefined, abortSignal);
-      }
+      // Single terminal rung, same as Custom/LiteLLM/NIM: a well-known endpoint
+      // is usually fast, but nothing sits behind it, and a stall throws nothing
+      // for a catch to see. The engine gives it a spare rung when one is keyed.
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'openai', name: 'OpenAI',
+        open: (sig) => ((isMultimodal && imagePaths)
+          ? this.streamWithOpenaiMultimodal(userContent, imagePaths, finalOpenAiSystem, undefined, sig)
+          : this.streamWithOpenai(userContent, finalOpenAiSystem, undefined, sig)),
+        userContent, finalSystemPrompt: finalOpenAiSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
       return;
     }
 
@@ -7860,11 +7901,14 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isClaudeModel(this.currentModelId) && this.claudeClient) {
       const claudeSystem = systemPromptOverride || CLAUDE_SYSTEM_PROMPT;
       const finalClaudeSystem = this.injectLanguageInstruction(claudeSystem);
-      if (isMultimodal && imagePaths) {
-        yield* this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem, undefined, abortSignal);
-      } else {
-        yield* this.streamWithClaude(userContent, finalClaudeSystem, undefined, abortSignal);
-      }
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'claude', name: 'Claude',
+        open: (sig) => ((isMultimodal && imagePaths)
+          ? this.streamWithClaudeMultimodal(userContent, imagePaths, finalClaudeSystem, undefined, sig)
+          : this.streamWithClaude(userContent, finalClaudeSystem, undefined, sig)),
+        userContent, finalSystemPrompt: finalClaudeSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
+      });
       return;
     }
 
@@ -7873,7 +7917,11 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isDeepseekModel(this.currentModelId) && this.deepseekClient && !(isMultimodal && imagePaths)) {
       const deepseekSystem = systemPromptOverride || OPENAI_SYSTEM_PROMPT;
       const finalDeepseekSystem = this.injectLanguageInstruction(deepseekSystem);
-      yield* this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, abortSignal);
+      yield* this.streamSelectedProviderWithFailover({
+        id: 'deepseek', name: 'DeepSeek',
+        open: (sig) => this.streamWithDeepseek(userContent, finalDeepseekSystem, undefined, sig),
+        userContent, finalSystemPrompt: finalDeepseekSystem, thinkingBudget, abortSignal,
+      });
       return;
     }
 
@@ -7887,6 +7935,7 @@ let isMultimodal = !!(imagePaths?.length);
         name: `NVIDIA NIM (${this.currentModelId.replace('nvidia_nim/', '')})`,
         open: (sig) => this.streamWithNvidiaNim(userContent, nimSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: nimSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
       });
       return;
     }
@@ -7904,11 +7953,21 @@ let isMultimodal = !!(imagePaths?.length);
         name: `LiteLLM (${this.currentModelId.replace('litellm/', '')})`,
         open: (sig) => this.streamWithLiteLLM(userContent, finalLitellmSystem, (isMultimodal && imagePaths) ? imagePaths : undefined, sig),
         userContent, finalSystemPrompt: finalLitellmSystem, thinkingBudget, abortSignal,
+        hasImages: Boolean(isMultimodal && imagePaths?.length),
       });
       return;
     }
 
     // Groq (Text + Multimodal)
+    //
+    // NOT routed through streamSelectedProviderWithFailover, unlike the other
+    // cloud rungs. Groq is the one branch that ALREADY falls through — its error
+    // ladder below (auth-failure disable, over-capacity, the commit.emitted
+    // guard) drops into the Natively TTFT race, so a Groq user already reaches a
+    // multi-rung recovery on error. The only gap is a STALL, and that gap is not
+    // worth wrapping a carefully-built ladder to close: Groq's healthy first
+    // token is sub-second, and the wrap would sit between those branches and
+    // their fall-through.
     if (this.isGroqModel(this.currentModelId) && this.groqClient) {
       try {
         if (isMultimodal && imagePaths) {
