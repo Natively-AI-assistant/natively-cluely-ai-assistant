@@ -35,6 +35,8 @@ export const GOOGLE_API_USER_AGENT = 'google-api-nodejs-client/9.15.1';
 export const ANTIGRAVITY_SETUP_CLIENT = 'google-cloud-sdk vscode_cloudshelleditor/0.1';
 export const ANTIGRAVITY_PROD_ENDPOINT = 'https://cloudcode-pa.googleapis.com';
 export const ANTIGRAVITY_DAILY_ENDPOINT = 'https://daily-cloudcode-pa.googleapis.com';
+// Voice-app's configured project is usable independently of Code Assist onboarding.
+export const ANTIGRAVITY_DEFAULT_PROJECT_ID = 'rising-fact-p41fc';
 export const ANTIGRAVITY_REFRESH_LEAD_MS = 60_000;
 export const ANTIGRAVITY_STREAM_URL =
   `${ANTIGRAVITY_DAILY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`;
@@ -48,6 +50,16 @@ export type AntigravityErrorCode =
   | 'auth_required'
   | 'auth_revoked'
   | 'setup'
+  /**
+   * Onboarding COMPLETED and the account still has no project — the one
+   * condition the Voice-app project fallback is meant for. Distinct from
+   * 'setup', which responseJson also stamps on 401/403/429/5xx/invalid-JSON:
+   * those mean the call to find out failed, not that there is nothing to find,
+   * and diverting them to the shared project pins the user there permanently
+   * (saveToStorage persists it and nothing re-runs discovery short of a
+   * sign-out).
+   */
+  | 'setup_no_project'
   | 'models'
   | 'request'
   | 'response'
@@ -450,9 +462,18 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
     const project = onboarded?.done === true
       ? extractProjectId(onboarded?.response?.cloudaicompanionProject) : undefined;
     if (project) return project;
+    if (onboarded?.done === true) {
+      const reasons = Array.isArray(loaded?.ineligibleTiers)
+        ? loaded.ineligibleTiers
+          .filter((tier: any) => typeof tier?.reasonMessage === 'string' && tier.reasonMessage.trim())
+          .map((tier: any) => tier.reasonMessage.trim()) : [];
+      throw new AntigravityError('setup_no_project', reasons.length
+        ? `Google account setup failed: ${reasons.join(' ')}`
+        : 'Google completed account setup without providing a project ID. This account may require a Google Cloud project.');
+    }
     if (attempt < 5) await wait(1_500, undefined, { signal });
   }
-  throw new AntigravityError('setup', 'Google account setup did not finish. Try signing in again.');
+  throw new AntigravityError('setup_no_project', 'Google account setup did not finish. Try signing in again.');
 }
 
 export class AntigravityService extends EventEmitter {
@@ -557,7 +578,28 @@ export class AntigravityService extends EventEmitter {
 
       const exchanged = await this.exchangeCode(callback.code, pkce.verifier, controller.signal);
       this.assertGeneration(generation);
-      const projectId = await discoverProject(exchanged.accessToken, controller.signal);
+      let projectId: string;
+      try {
+        projectId = await discoverProject(exchanged.accessToken, controller.signal);
+      } catch (error) {
+        this.assertGeneration(generation);
+        controller.signal.throwIfAborted();
+        // ONLY the no-project outcome. A transient Google 500, a 429, a 401 or an
+        // invalid-JSON body during sign-in are all 'setup' too, and adopting the
+        // shared project for those pinned a user who owns a perfectly good Code
+        // Assist project to it forever.
+        if (!(error instanceof AntigravityError) || error.code !== 'setup_no_project') throw error;
+        // Voice-app keeps its configured project when optional discovery fails.
+        // Validate that project's model access before adopting the new session.
+        const response = await fetchWithDnsRetry(`${ANTIGRAVITY_DAILY_ENDPOINT}/v1internal:fetchAvailableModels`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${exchanged.accessToken}`, 'Content-Type': 'application/json', 'User-Agent': ANTIGRAVITY_USER_AGENT },
+          body: JSON.stringify({ project: ANTIGRAVITY_DEFAULT_PROJECT_ID }), signal: controller.signal,
+        }, 12);
+        const models = parseAntigravityModels(await responseJson(response, 'models'));
+        if (!models.length) throw new AntigravityError('models', 'The Voice-app project returned no available Antigravity models.');
+        projectId = ANTIGRAVITY_DEFAULT_PROJECT_ID;
+      }
       this.assertGeneration(generation);
       const tokens = { ...exchanged, projectId };
       if (!this.saveToStorage(tokens)) throw new AntigravityError('storage', 'Google sign-in could not be saved. Check credential storage and try again.');
@@ -710,6 +752,17 @@ export class AntigravityService extends EventEmitter {
       if (!refreshed) throw new AntigravityError('auth_required', 'Sign in with Google Antigravity first.');
       return await send(refreshed.accessToken);
     } catch (error) { throw this.normalizeError(error, 'Google request failed.'); }
+  }
+
+  /**
+   * The last discovered catalogue, or null if discovery has not run this
+   * session. Synchronous on purpose: LLMHelper builds its fallback rungs
+   * inline and cannot await, and a rung that cannot NAME a model must not be
+   * seated at all — sending an arbitrary id to Antigravity would fail at the
+   * wire rather than fall through to the next provider.
+   */
+  public getCachedModels(): AntigravityModel[] | null {
+    return this.cachedModels ? this.cachedModels.map(model => ({ ...model })) : null;
   }
 
   public async getModels(force = false): Promise<AntigravityModel[]> {

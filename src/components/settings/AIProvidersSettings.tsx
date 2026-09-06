@@ -1243,6 +1243,18 @@ interface AipModelListProps {
     /** Discovery in flight. */
     refreshing?: boolean;
     /**
+     * Every row came from provider discovery, so there is no preset/fetched
+     * split and the "Showing built-in models only." note below would be false.
+     *
+     * That note is a heuristic on list LENGTH — it fires under
+     * AIP_MODEL_FILTER_THRESHOLD, which is right for the key-backed cards that
+     * ship a handful of presets and fetch the rest. A provider whose whole
+     * catalogue arrives from an authenticated call (Antigravity) has nothing
+     * built in, and a short list there means the account has four models, not
+     * that discovery has not run.
+     */
+    catalogIsComplete?: boolean;
+    /**
      * Called once, the first time the panel is expanded with no catalog yet.
      * Expanding this list IS the intent to browse models, so discovery belongs
      * here rather than behind a separate button elsewhere in the card.
@@ -1272,6 +1284,7 @@ const AIP_MODEL_FILTER_THRESHOLD = 12;
 export const AipModelList: React.FC<AipModelListProps> = ({
     models, enabled, onToggle, onReset, defaultId, onSetDefault, staleIds = [], error,
     onRefresh, refreshing, onFirstOpen, optIn = false, onBulkToggle,
+    catalogIsComplete = false,
 }) => {
     const t = useT();
     const [open, setOpen] = useState(false);
@@ -1448,7 +1461,11 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                                 title={t('Re-read the model list from this provider')}
                             >
                                 <RefreshCw size={11} strokeWidth={1.75} className={refreshing ? 'aip-spinner' : ''} />
-                                {refreshing ? t('Fetching...') : showFilterBar ? t('Refresh') : t('Fetch all models')}
+                                {/* "Fetch all models" offers to go and get the REST of the
+                                    catalogue — right for the preset-shipping cards, wrong for
+                                    one whose catalogue already arrived whole. Same signal
+                                    catalogIsComplete uses to silence the built-in note. */}
+                                {refreshing ? t('Fetching...') : (showFilterBar || catalogIsComplete) ? t('Refresh') : t('Fetch all models')}
                             </button>
                         )}
                         </div>
@@ -1510,7 +1527,7 @@ export const AipModelList: React.FC<AipModelListProps> = ({
                             })}
                         </div>
 
-                        {models.length <= AIP_MODEL_FILTER_THRESHOLD && (
+                        {!catalogIsComplete && models.length <= AIP_MODEL_FILTER_THRESHOLD && (
                             <p className="aip-meta mt-2">{t('Showing built-in models only.')}</p>
                         )}
                     </div>
@@ -2537,6 +2554,19 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // modelAvailable() in ipcHandlers.ts compares against; storing the bare name
         // would make the two surfaces disagree and the filter would silently no-op.
         if (provider === 'litellm') litellmModels.forEach(m => push(`litellm/${m}`, litellmModelLabel(m)));
+        // Antigravity is the same shape of problem as LiteLLM: no preset table, and
+        // `cloudFetchedModels` is written only from getCloudFetchedModels(), which
+        // covers the key-backed providers and never the OAuth ones. Without this the
+        // universe is EMPTY, and handleToggleModel's "empty allow-list means all"
+        // branch then materialises `universe` — nothing — so un-ticking one row
+        // persisted an allow-list containing ONLY that row. Measured before the fix:
+        // un-ticking the 2nd of 4 models took the summary from "All 4" to "1 / 4" and
+        // moved the default onto the row just un-ticked. handleBulkToggleModels reads
+        // the same universe and had the same landmine.
+        //
+        // Prefixed, because `antigravity:<id>` is the form the allow-list, the picker
+        // and modelAvailable() in ipcHandlers.ts all compare against.
+        if (provider === 'antigravity') antigravityModels.forEach(m => push(`antigravity:${m.id}`, m.label || m.id));
         (cloudFetchedModels[provider] || []).forEach(m => push(m.id, m.label || m.id));
         // Allow-listed ids with no catalog entry still get a row, labelled as best we can.
         // LiteLLM ids are proxy literals, so they take the segment label rather than
@@ -2545,7 +2575,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         (cloudEnabledModels[provider] || []).forEach(id =>
             push(id, provider === 'litellm' ? litellmModelLabel(id) : prettifyModelId(id)));
         return out;
-    }, [cloudFetchedModels, cloudEnabledModels, litellmModels]);
+    }, [cloudFetchedModels, cloudEnabledModels, litellmModels, antigravityModels]);
 
     const buildAvailableModelOptions = (): { id: string; name: string }[] => {
         const opts: { id: string; name: string }[] = [];
@@ -2796,6 +2826,55 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             setPreferredModels(prevPreferred);
             setModelSaveError(p => ({ ...p, [provider]: true }));
             setTimeout(() => setModelSaveError(p => ({ ...p, [provider]: false })), 4000);
+        }
+    };
+
+    /**
+     * Antigravity's "Set default" promotes a model to the APP's active model,
+     * not to a per-provider preferred model.
+     *
+     * handleSetDefaultModel writes `preferredModels[provider]`, which persists as
+     * `<provider>PreferredModel`. That is a dead end here: PreferredModelProvider
+     * is gemini|groq|openai|claude|deepseek|nvidia_nim|litellm, StoredCredentials
+     * has no antigravityPreferredModel field, and the only reader in the codebase
+     * is litellm's. Wiring the button there would move a badge and change nothing —
+     * worse than no button.
+     *
+     * `antigravity:<id>` IS a valid app default: buildAvailableModelOptions emits
+     * those ids and the fallback effect above already handles them. So this sets
+     * the same state the Active Model select at the top of the panel sets, which
+     * is also why the two now agree on screen.
+     *
+     * Keeps handleSetDefaultModel's invariant — the default is ALWAYS allow-listed,
+     * or the picker would refuse to show the model the app defaults to — and the
+     * same ordering: allow-list first, because "allow-listed but not default" is a
+     * coherent resting state and "default but not allow-listed" is the one being
+     * abolished.
+     */
+    const handleSetAntigravityDefault = async (modelId: string) => {
+        const prevEnabled = cloudEnabledModels;
+        const prevDefault = defaultModel;
+        const current = cloudEnabledModels['antigravity'] || [];
+        // An empty allow-list already means "all", so there is nothing to add.
+        const needsAllow = current.length > 0 && !current.includes(modelId);
+        const nextList = needsAllow ? [...current, modelId] : current;
+
+        if (needsAllow) setCloudEnabledModelsState(p => ({ ...p, antigravity: nextList }));
+        setDefaultModel(modelId);
+
+        try {
+            if (needsAllow) {
+                const r = await window.electronAPI?.setCloudEnabledModels?.('antigravity', nextList);
+                if (r && r.success === false) throw new Error(r.error || 'allow-list write failed');
+            }
+            // @ts-ignore - persist as default + update runtime + broadcast
+            await window.electronAPI?.setDefaultModel(modelId);
+        } catch (e) {
+            console.error('Failed to set Antigravity default model:', e);
+            setCloudEnabledModelsState(prevEnabled);
+            setDefaultModel(prevDefault);
+            setModelSaveError(p => ({ ...p, antigravity: true }));
+            setTimeout(() => setModelSaveError(p => ({ ...p, antigravity: false })), 4000);
         }
     };
 
@@ -3803,7 +3882,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     than replacing it — Antigravity can abort a pending browser
                     round-trip and Codex cannot, and that capability should not
                     cost the shared shape. */}
-                <div className="flex flex-wrap gap-2">
+                {/* `.aip-provider-row`, the same class Groq / NVIDIA NIM / every
+                    ProviderCard action row uses — not an ad-hoc `flex flex-wrap gap-2`,
+                    which was 8px in both axes where that class is 12px column / 8px row.
+                    Reusing it keeps the two card families spaced identically instead of
+                    close enough to look like a mistake. */}
+                <div className="aip-provider-row">
                     {antigravityStatus.inProgress ? (
                         <>
                             <button type="button" className="aip-btn flex-1" data-size="row" disabled>
@@ -3827,18 +3911,57 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         >
                             <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
                         </button>
-                    ) : <>
-                        {/* Left as plain buttons: the ask was the sign-in bar. Codex
-                            puts its post-sign-in Refresh/Sign out in the CARD HEADER
-                            as sm ghosts, which is a different move than restyling
-                            these in place. */}
-                        <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>{t('Reload models')}</button>
+                    ) : (<>
+                        {/* "Reload models" is gone from this row: AipModelList owns
+                           discovery, exactly as ProviderCard's comment says for the cloud
+                           cards. Two controls for one action is what that note warns about. */}
                         <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
-                    </>}
+
+                        {/* Beside Disconnect, not under it — the same row placement Groq,
+                            NVIDIA NIM and every other ProviderCard uses.
+
+                            It MUST be a direct child of this wrapping flex row: AipModelList
+                            is a fragment whose summary is `order-2` (so it lands after the
+                            order-0 buttons) and whose panel is `basis-full order-4` (so the
+                            panel wraps onto its own line). Outside a wrapping flex row those
+                            classes are inert and the panel squeezes — which is exactly what
+                            it did when this sat in a block below. The enclosing fragment is
+                            transparent to flex, so these stay direct children.
+
+                            Ids carry the `antigravity:` prefix because that is the form
+                            buildAvailableModelOptions and the allow-list already use; a bare
+                            id would tick a row that never matches at read time. Antigravity
+                            is not an opt-in provider (isOptInModelProvider is litellm-only),
+                            so an empty allow-list still means ALL models. */}
+                        {antigravityModels.length > 0 && !disabledProviders.includes('antigravity') && (
+                            <AipModelList
+                                models={antigravityModels.map(({ id, label }) => ({ id: `antigravity:${id}`, label }))}
+                                enabled={cloudEnabledModels['antigravity'] || []}
+                                onToggle={(modelId) => handleToggleModel('antigravity', modelId)}
+                                onReset={() => handleResetModels('antigravity')}
+                                defaultId={defaultModel.startsWith('antigravity:') ? defaultModel : undefined}
+                                onSetDefault={(modelId) => void handleSetAntigravityDefault(modelId)}
+                                error={modelSaveError['antigravity'] ? 'save-failed' : null}
+                                refreshing={antigravityBusy}
+                                onRefresh={() => void runAntigravityAction('models')}
+                                catalogIsComplete
+                            />
+                        )}
+                    </>)}
                 </div>
-                {antigravityStatus.signedIn && <p className="text-xs aip-muted">{antigravityModels.length
-                    ? `${antigravityModels.length} ${t('models available in the model picker.')}`
-                    : t('No Antigravity models currently have quota. Reload models later.')}</p>}
+                {/* The empty catalogue keeps its own Reload control. Discovery moved
+                    into AipModelList, which is gated on `antigravityModels.length > 0`
+                    — so in exactly the state that needs a retry there was none, and
+                    signing out and back in was the only way to re-run it. */}
+                {antigravityStatus.signedIn && antigravityModels.length === 0 && (
+                    <div className="space-y-1">
+                        <p className="text-xs aip-muted">{t('No Antigravity models currently have quota.')}</p>
+                        <button type="button" className="aip-btn" data-size="sm" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>
+                            <RefreshCw size={12} strokeWidth={1.75} className={antigravityBusy ? 'aip-spinner' : undefined} />
+                            {antigravityBusy ? t('Reloading…') : t('Reload models')}
+                        </button>
+                    </div>
+                )}
                 {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
 

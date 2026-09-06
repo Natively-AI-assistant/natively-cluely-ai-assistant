@@ -1795,6 +1795,56 @@ export class LLMHelper {
     });
   }
 
+  /**
+   * The Antigravity model a FALLBACK rung should ask for, or null when the rung
+   * must not be seated.
+   *
+   * Two things make this necessary. streamWithAntigravity defaults `model` to
+   * `currentModelId` and only strips an `antigravity:` prefix — so when
+   * Antigravity is recruited as a fallback for some OTHER provider,
+   * `currentModelId` is that provider's id ("gemini-3.8-flash") and would go
+   * onto Antigravity's wire verbatim. And the catalogue is per-account: there is
+   * no id that is safe to hardcode.
+   *
+   * So: the user's own Antigravity selection wins; otherwise the first model
+   * discovery actually returned. If discovery has not run this session there is
+   * nothing to name, and returning null skips the rung — a chain that fails at
+   * the wire is worse than one rung shorter, because the rung still burns its
+   * TTFT budget before the next provider gets a turn.
+   */
+  private antigravityFallbackModel(): string | null {
+    if (this.isLocalOnlyMode) return null;
+    if (this.isProviderDisabled('antigravity')) return null;
+    try {
+      const service = AntigravityService.getInstance();
+      return LLMHelper.resolveAntigravityFallbackModel(
+        service.getStatus().signedIn, this.currentModelId, service.getCachedModels(),
+      );
+    } catch {
+      // A credential-store or service failure must not take the turn down; it
+      // just means no Antigravity rung this time.
+      return null;
+    }
+  }
+
+  /**
+   * The decision half of antigravityFallbackModel, split out as a pure static so
+   * it is testable: the wrapper's only other job is reaching a singleton that
+   * esbuild inlines per bundle and no test can substitute.
+   */
+  static resolveAntigravityFallbackModel(
+    signedIn: boolean, currentModelId: string, cached: readonly { id: string }[] | null,
+  ): string | null {
+    if (!signedIn) return null;
+    // The user's own selection wins over anything discovery happens to list first.
+    if (currentModelId.startsWith('antigravity:')) {
+      const id = currentModelId.slice('antigravity:'.length).trim();
+      return id || null;
+    }
+    const first = cached?.[0]?.id?.trim();
+    return first || null;
+  }
+
   private isCodexAvailable(): boolean {
     // The store spells this family 'codex-cli'; isProviderFamilyDisabled also
     // accepts the router's 'codex'.
@@ -6165,6 +6215,18 @@ let isMultimodal = !!(imagePaths?.length);
         cloud.push({ id: 'codex-cli', name: `Codex CLI (${this.codexCliConfig.model})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
           open: (sig) => this.streamWithCodexCli(userContent, systemPrompt, false, imagePaths, sig) });
       }
+      // Antigravity, beside Codex CLI: the panel's other OAuth provider, seated
+      // whenever it is signed in rather than only when selected. It was declared
+      // vision-capable in the support switch but had no rung here — and this
+      // chain intercepts EVERY image-bearing request and returns, so that
+      // declaration was unreachable: a user whose selected model was an
+      // Antigravity one still had their screenshots answered by somebody else,
+      // or refused outright when nothing else was configured.
+      const antigravityVisionModel = this.antigravityFallbackModel();
+      if (antigravityVisionModel) {
+        cloud.push({ id: 'antigravity', name: `Antigravity (${antigravityVisionModel})`, isLocal: false, priority: prio++, ttftTimeoutMs: PRO_TTFT_MS,
+          open: (sig) => this.streamWithAntigravity(userContent, systemPrompt, imagePaths, sig, `antigravity:${antigravityVisionModel}`) });
+      }
     }
 
     // Local providers (always available, including in local-only mode).
@@ -8183,6 +8245,23 @@ let isMultimodal = !!(imagePaths?.length);
           textProviders.push({
             id: 'gemini_flash', name: `Gemini Flash`, isLocal: false, priority: prio++,
             open: (sig) => this.streamWithGeminiModel(userContent, GEMINI_FLASH_MODEL, imagePaths, finalSystemPrompt, sig, thinkingBudget),
+          });
+        }
+        // Fallback: Antigravity, if signed in. Seated after Gemini Flash because
+        // its TTFT is the slower of the two, so the cheap rung keeps first
+        // refusal.
+        //
+        // SCOPE, because it is easy to over-read: this ladder is the
+        // `currentModelId === 'natively'` branch, so what this rung buys is a
+        // Natively-selected user reaching Antigravity when the Natively API is
+        // down. It is NOT general text failover — a selected provider is still
+        // one terminal rung, which is a separate gap and not one this change
+        // closes.
+        const antigravityTextModel = this.antigravityFallbackModel();
+        if (antigravityTextModel) {
+          textProviders.push({
+            id: 'antigravity', name: `Antigravity (${antigravityTextModel})`, isLocal: false, priority: prio++,
+            open: (sig) => this.streamWithAntigravity(userContent, finalSystemPrompt, imagePaths, sig, `antigravity:${antigravityTextModel}`),
           });
         }
         // Fallback: configured-but-not-active Custom provider (e.g. OpenRouter).
@@ -11107,6 +11186,48 @@ let isMultimodal = !!(imagePaths?.length);
         }
       } catch (e: any) {
         console.warn(`[LLMHelper] ⚠️ Codex CLI summary failed: ${e.message}. Falling back...`);
+      }
+    }
+
+    // ATTEMPT 2b: Antigravity (signed in). Beside Codex CLI, the chain's other
+    // OAuth provider. This chain is FIXED — it does not consult the active model
+    // — so before this rung a user whose only working provider was Antigravity
+    // got no meeting summary at all once Natively and Codex were unavailable.
+    //
+    // Consumes the streaming generator rather than adding a non-streaming path:
+    // AntigravityService only exposes stream(), and one more shape to maintain
+    // is not worth saving a join here.
+    const antigravitySummaryModel = this.antigravityFallbackModel();
+    if (antigravitySummaryModel) {
+      console.log(`[LLMHelper] Attempting Antigravity for summary...`);
+      // withTimeout only RACES: when the timer wins, the loser keeps running.
+      // stream() honours input.signal, so an abort is what actually stops the
+      // HTTP stream — without it a timed-out summary kept streaming to
+      // completion with nothing consuming it, holding the socket and spending
+      // output tokens on a request whose result had already been discarded.
+      // Aborted in `finally`, so the success path tears it down too.
+      const antigravityAbort = new AbortController();
+      try {
+        const text = await this.withTimeout(
+          (async () => {
+            let out = '';
+            for await (const chunk of this.streamWithAntigravity(
+              `Context:\n${context}`, systemPrompt, undefined, antigravityAbort.signal,
+              `antigravity:${antigravitySummaryModel}`,
+            )) out += chunk;
+            return out;
+          })(),
+          opts?.timeoutMs ? opts.timeoutMs + 5000 : 60000,
+          'Antigravity Summary',
+        );
+        if (text.trim().length > 0) {
+          console.log(`[LLMHelper] ✅ Antigravity summary generated successfully.`);
+          return this.processResponse(text);
+        }
+      } catch (e: any) {
+        console.warn(`[LLMHelper] ⚠️ Antigravity summary failed: ${e.message}. Falling back...`);
+      } finally {
+        antigravityAbort.abort();
       }
     }
 
