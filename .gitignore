@@ -577,3 +577,11 @@ models/Xenova/bge-reranker-base/*
 
 # Router benchmark training checkpoints (PyTorch .pt, up to 570 MB each). Artifacts, never source.
 scripts/intent-benchmark/trained/
+
+# Router benchmark model downloads (NLI, GLiClass, potion, bge-small). Weights, never source.
+resources/models/MoritzLaurer/
+resources/models/Xenova/nli-deberta-v3-base/
+resources/models/Xenova/nli-deberta-v3-small/
+resources/models/Xenova/bge-small-en-v1.5/
+resources/models/knowledgator/
+resources/models/minishlab/
