@@ -3783,20 +3783,33 @@ export class IntelligenceEngine extends EventEmitter {
                         trace.mark('answer_regeneration_succeeded', { chars: regenerated.trim().length, answerType: answerPlan.answerType });
                         fullAnswer = regenerated;
                         emitChunk(regenerated);
-                        return fullAnswer;
+                        // FALL THROUGH — never `return fullAnswer` here. An early
+                        // return skips the terminal `suggested_answer` emit, the
+                        // setMode('idle'), session persistence, trace.finish AND
+                        // the whole post-stream chain (leaked-schema guard,
+                        // validateAnswerStructure, repairCodingMarkdown,
+                        // sanitizeCandidateAnswer). The renderer would open a
+                        // streaming row that never gets its final event and the
+                        // engine would sit in a non-idle mode — a rescued answer
+                        // is the ONE case that must take the normal exit, since
+                        // it is real model output that has never been validated.
+                        // The failure path below is deliberately an `else`: the
+                        // two branches used to be sequential, which is why the
+                        // early return was load-bearing.
+                    } else {
+                        trace.mark('answer_regeneration_failed', { attempted: regenBudget > 0, answerType: answerPlan.answerType });
+                        const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
+                            ? "I don't have enough context from the conversation to answer that yet."
+                            : "The model did not produce an answer in time, so I won't guess from your profile.";
+                        fullAnswer = safe;
+                        emitChunk(safe);
+                        wtaWriteDecision = decideSessionWritePolicy({
+                            finalGenerationMode: 'provider_error_no_answer',
+                            validationOk: false,
+                            criticalViolations: ['provider_timeout_no_answer'],
+                        });
+                        trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
                     }
-                    trace.mark('answer_regeneration_failed', { attempted: regenBudget > 0, answerType: answerPlan.answerType });
-                    const safe = (answerPlan.answerType === 'general_meeting_answer' || answerPlan.answerType === 'lecture_answer')
-                        ? "I don't have enough context from the conversation to answer that yet."
-                        : "The model did not produce an answer in time, so I won't guess from your profile.";
-                    fullAnswer = safe;
-                    emitChunk(safe);
-                    wtaWriteDecision = decideSessionWritePolicy({
-                        finalGenerationMode: 'provider_error_no_answer',
-                        validationOk: false,
-                        criticalViolations: ['provider_timeout_no_answer'],
-                    });
-                    trace.mark('fallback_answer_used', { answerType: answerPlan.answerType, finalGenerationMode: 'provider_error_no_answer' });
                 }
             }
 
