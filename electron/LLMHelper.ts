@@ -520,6 +520,72 @@ export class LLMHelper {
   // vision breaker and vice-versa (different endpoints, different latencies).
   private textHealth: Map<string, VisionHealthEntry> = new Map();
 
+  // ─── Observed first-token latency of the SELECTED answer provider ────────
+  // Feeds the adaptive user-endpoint deadline (liveDeadlines.userEndpointBudgetMs).
+  //
+  // Deliberately NOT textHealth. That map is the emergency text RACE's breaker,
+  // keyed by rung id ('custom', 'litellm'), and its ttftEma exists to reorder
+  // rungs. Two different gateways both land on the id 'custom' there, which is
+  // harmless for ordering and wrong for a deadline — one user's fast OpenRouter
+  // would size the budget for their slow self-hosted proxy. This map is keyed by
+  // the ENDPOINT (see answerLatencyKey), so editing a provider's base URL starts
+  // a fresh measurement instead of inheriting a stale one, with no setter hook
+  // to remember.
+  //
+  // maxMs is a DECAYING maximum, not a mean: a deadline sized off an average
+  // lands near p50 and guillotines the tail, which is the exact geometry of the
+  // vision-ceiling defect. The 0.9 decay lets one freak sample age out over
+  // ~10 healthy turns instead of pinning the budget for the session.
+  private answerLatency: Map<string, { maxMs: number; ewmaMs: number; count: number }> = new Map();
+
+  /**
+   * Stable identity for the endpoint currently selected, or null when the route
+   * is not a user endpoint (nothing else adapts, so nothing else is measured).
+   */
+  private answerLatencyKey(): string | null {
+    if (this.customProvider) {
+      const c: any = this.customProvider;
+      return `custom:${c.id}:${c.baseUrl || c.model || ''}`;
+    }
+    if (this.activeCurlProvider) {
+      const c: any = this.activeCurlProvider;
+      return `curl:${c.id}:${c.curlCommand ? String(c.curlCommand).length : ''}`;
+    }
+    if (this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId)) {
+      return `model:${this.currentModelId}`;
+    }
+    return null;
+  }
+
+  /**
+   * Record how long the selected provider took to produce its first token on a
+   * turn that COMMITTED. Only committed turns are recorded: a turn aborted by
+   * the deadline would otherwise teach the budget that this endpoint takes
+   * exactly as long as the budget allows, which is a feedback loop that can only
+   * ratchet upward.
+   */
+  public recordAnswerFirstToken(ms: number): void {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    const key = this.answerLatencyKey();
+    if (!key) return;
+    const prev = this.answerLatency.get(key);
+    this.answerLatency.set(key, {
+      // Rounded: this feeds a setTimeout and a log line, and a decaying float
+      // accumulates a long fractional tail that makes both unreadable.
+      maxMs: prev ? Math.round(Math.max(ms, prev.maxMs * 0.9)) : Math.round(ms),
+      ewmaMs: prev ? Math.round(0.2 * ms + 0.8 * prev.ewmaMs) : Math.round(ms),
+      count: (prev?.count ?? 0) + 1,
+    });
+  }
+
+  /** What we have measured from the selected endpoint; null when unmeasured. */
+  public observedAnswerLatency(): { maxMs: number; count: number } | null {
+    const key = this.answerLatencyKey();
+    if (!key) return null;
+    const e = this.answerLatency.get(key);
+    return e ? { maxMs: e.maxMs, count: e.count } : null;
+  }
+
   // Process-local cache of Gemini explicit context caches (caches.create).
   // Lifecycle and contract documented in GeminiPromptCache.ts.
   private geminiPromptCache: GeminiPromptCache = new GeminiPromptCache();

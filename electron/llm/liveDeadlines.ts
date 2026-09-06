@@ -174,6 +174,75 @@ export const LIVE_VISION_TOTAL_HARD_TIMEOUT_MS = 20000;
  */
 export const LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS = 15000;
 /**
+ * Floor and ceiling for the ADAPTIVE user-endpoint budget below.
+ *
+ * The floor is the default-provider ceiling: however fast a gateway is measured
+ * to be, it never earns a shorter leash than a direct API call. The ceiling is
+ * the vision ceiling: a text turn never out-waits an image turn.
+ */
+export const LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS = 8000;
+export const LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS = LIVE_VISION_TOTAL_HARD_TIMEOUT_MS;
+/**
+ * How much headroom to leave above the slowest first token actually observed
+ * from this endpoint.
+ *
+ * Sized off the defect this whole area keeps producing: a 13s ceiling sitting
+ * 1.4s above an 11.6s observed tail killed 21% of one user's turns. 5s is the
+ * margin that would have made that session succeed outright.
+ */
+export const USER_ENDPOINT_LATENCY_MARGIN_MS = 5000;
+/**
+ * Widening is free; NARROWING can cut off a turn that was about to succeed. So
+ * widening applies from the first sample that warrants it, and narrowing waits
+ * for this many committed turns from the same endpoint.
+ */
+export const USER_ENDPOINT_MIN_SAMPLES_TO_NARROW = 5;
+
+/** What the caller has actually measured from one endpoint this session. */
+export interface ObservedLatency {
+  /** Slowest first token seen, decayed — see LLMHelper.recordAnswerFirstToken. */
+  maxMs: number;
+  /** Committed turns observed. 0 means we know nothing. */
+  count: number;
+}
+
+/**
+ * The user-endpoint budget, given what we have measured from that endpoint.
+ *
+ * 15000 is a GUESS. It is the honest answer for an address we have never called
+ * — a proxy fronting an unknown upstream, a container that may be cold, a
+ * marketplace model that may be queueing — but it stays a guess only until the
+ * endpoint has answered once. After that we are no longer guessing, and a
+ * deadline derived from what this endpoint actually does beats a constant
+ * derived from what gateways in general might do.
+ *
+ * DERIVED FROM A MAX, NOT A MEAN. An EWMA of TTFT lands near p50; a deadline
+ * placed there guillotines the tail, which is precisely the geometry of the
+ * bug this file already documents twice. `maxMs` is a decaying maximum, so the
+ * budget tracks the worst first token this endpoint has actually produced and
+ * forgets it slowly as the endpoint proves faster.
+ *
+ * ASYMMETRIC. Widening costs a healthy turn nothing — the ceiling only fires
+ * when a provider is slow — and it fixes a known user-visible failure, so it
+ * applies from the first sample. Narrowing is the direction that can kill a
+ * turn that was about to succeed, so it needs USER_ENDPOINT_MIN_SAMPLES_TO_NARROW
+ * turns of evidence and can never go below the default-provider ceiling.
+ */
+export function userEndpointBudgetMs(observed?: ObservedLatency | null): number {
+  if (!observed || observed.count <= 0 || !Number.isFinite(observed.maxMs)) {
+    return LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS;
+  }
+  const want = Math.round(observed.maxMs) + USER_ENDPOINT_LATENCY_MARGIN_MS;
+  if (want > LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS) {
+    // Widen immediately: this endpoint has already been slower than the guess.
+    return Math.min(want, LIVE_USER_ENDPOINT_MAX_TOTAL_HARD_TIMEOUT_MS);
+  }
+  if (observed.count < USER_ENDPOINT_MIN_SAMPLES_TO_NARROW) {
+    return LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS;
+  }
+  return Math.max(want, LIVE_USER_ENDPOINT_MIN_TOTAL_HARD_TIMEOUT_MS);
+}
+/**
  * Ceiling for a shipped provider-list entry called directly — Gemini, Groq,
  * Claude, OpenAI, DeepSeek — on the user's own key or ours.
  *
@@ -319,6 +388,7 @@ export function firstUsefulDeadlineMs(
   isLocal: boolean = false,
   viaServerCascade: boolean = false,
   isUserEndpoint: boolean = false,
+  observedUserEndpointLatency?: ObservedLatency | null,
 ): number {
   if (isLocal) return LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS;
   // F-301: on the natively-api route the SERVER runs a sequential cascade and
@@ -337,7 +407,7 @@ export function firstUsefulDeadlineMs(
   // silently inherited a bound written for the other. That is how the natively
   // ceiling came to govern vision turns, and how this cap governed manual chat
   // while WTA used a different one.
-  if (isUserEndpoint) return LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS;
+  if (isUserEndpoint) return userEndpointBudgetMs(observedUserEndpointLatency);
   return COMPLEX_TYPES.has(answerType)
     ? LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS
     : LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS;
@@ -368,6 +438,13 @@ export function totalHardTimeoutMs(opts: {
   viaServerCascade?: boolean;
   /** A provider the user pointed at us: Custom / cURL / LiteLLM / NVIDIA NIM. */
   isUserEndpoint?: boolean;
+  /**
+   * What this endpoint's first token has actually cost so far, from
+   * llmHelper.observedAnswerLatency(). Only consulted on the user-endpoint
+   * route — every other route's number is derived from something we know about
+   * the transport, not guessed, so measurement has nothing to correct.
+   */
+  observedUserEndpointLatency?: ObservedLatency | null;
 }): number {
   // ROUTE TABLE, most-specific first. Each number exists because something in
   // THAT route's request path justifies it; none of them is a general default:
@@ -375,7 +452,9 @@ export function totalHardTimeoutMs(opts: {
   //   local            30000  cold weight load precedes the first token
   //   vision           20000  image encode + multimodal prefill (measured 11.6s tail)
   //   server cascade   13000  natively-api's 10s provider cutover + 3s
-  //   user endpoint    15000  an unobservable gateway we do not control
+  //   user endpoint    15000  a gateway we have not measured YET — adaptive once
+  //                           we have, between 8000 and 20000 (see
+  //                           userEndpointBudgetMs)
   //   default provider  8000  a direct call with nothing behind it to rescue it
   //
   // Order matters twice over. Vision stays ABOVE the user-endpoint case, so a
@@ -387,7 +466,7 @@ export function totalHardTimeoutMs(opts: {
   if (opts.isLocal) return LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS;
   if (opts.isVisionTurn && !opts.viaServerCascade) return LIVE_VISION_TOTAL_HARD_TIMEOUT_MS;
   if (opts.viaServerCascade) return LIVE_TOTAL_HARD_TIMEOUT_MS;
-  if (opts.isUserEndpoint) return LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS;
+  if (opts.isUserEndpoint) return userEndpointBudgetMs(opts.observedUserEndpointLatency);
   return LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS;
 }
 

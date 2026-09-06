@@ -3835,6 +3835,16 @@ export function initializeIpcHandlers(appState: AppState): void {
           // called directly gets the shorter one. WTA and manual chat read the
           // same route table so one surface cannot inherit the other's bound.
           const usingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+          const observedUserEndpointLatency = usingUserEndpoint
+            ? (llmHelper.observedAnswerLatency?.() ?? null)
+            : null;
+          const manualStreamStartedAt = Date.now();
+          let manualRecordedFirstToken = false;
+          const noteManualFirstToken = () => {
+            if (manualRecordedFirstToken || !usingUserEndpoint) return;
+            manualRecordedFirstToken = true;
+            try { llmHelper.recordAnswerFirstToken?.(Date.now() - manualStreamStartedAt); } catch { /* never break the answer */ }
+          };
           let manualFirstUseful = false;
           let manualSuperseded = false;
           await raceStreamWithDeadline({
@@ -3845,10 +3855,10 @@ export function initializeIpcHandlers(appState: AppState): void {
             // (2026-09-06). WTA moved to totalHardTimeoutMs for this case in
             // e079cd4a; this site had been left on the text deadline. Non-vision
             // turns take the route table's answer-type deadline, which is now
-            // user-endpoint aware.
+            // user-endpoint aware and measurement-aware.
             firstUsefulDeadlineMs: (imagePaths?.length ?? 0) > 0
               ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
-              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint),
+              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -3865,6 +3875,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               try { myController?.abort(); } catch { /* noop */ }
             },
             onToken: (token: string) => {
+              noteManualFirstToken();
               // F-302: "useful" must mean USER-USEFUL CONTENT, not "a token
               // object arrived". raceStreamWithDeadline forwards every yielded
               // value unfiltered, so a leading "\n\n" used to flip this flag —
@@ -15682,9 +15693,19 @@ export function initializeIpcHandlers(appState: AppState): void {
         const phoneUsingLocalLlm = llmHelper.isUsingOllama() || llmHelper.isUsingCodexCli();
         const phoneViaServerCascade = llmHelper.isUsingNativelyServerCascade?.() === true;
         const phoneUsingUserEndpoint = llmHelper.isUsingUserEndpoint?.() === true;
+        const phoneObservedLatency = phoneUsingUserEndpoint
+          ? (llmHelper.observedAnswerLatency?.() ?? null)
+          : null;
+        const phoneStreamStartedAt = Date.now();
+        let phoneRecordedFirstToken = false;
+        const notePhoneFirstToken = () => {
+          if (phoneRecordedFirstToken || !phoneUsingUserEndpoint) return;
+          phoneRecordedFirstToken = true;
+          try { llmHelper.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
+        };
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint),
+          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {
@@ -15696,6 +15717,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             return false;
           },
           onToken: (token: string) => {
+            notePhoneFirstToken();
             try { phoneMirror.publishToken(String(myStreamId), token); } catch (_) {}
             // streamId lets the desktop renderer drop tokens from a superseded
             // chat stream (audit finding #3); backward-compatible optional arg.
