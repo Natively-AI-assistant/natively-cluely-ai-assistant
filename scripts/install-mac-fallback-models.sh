@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Natively Fallback Models Installer for macOS
-# This script downloads and installs the required local fallback models (MiniLM, MobileBERT, Reranker)
+# This script downloads and installs the required local fallback models (MiniLM embedder, ms-marco reranker)
 # for the Natively desktop application into the application resources bundle.
 #
 # Exit immediately if a command exits with a non-zero status.

@@ -5261,8 +5261,8 @@ export class IntelligenceEngine extends EventEmitter {
             // appears empty.", "(trajectory truncated; nothing captured yet)" —
             // every occurrence uses different wording), so a semantic check is the
             // only way to generalize. Runs a local zero-shot NLI entailment check
-            // (AnswerRelevanceChecker.ts, reusing IntentClassifier.ts's existing
-            // warmed classifier/worker — no added model load) and, if the answer
+            // (AnswerRelevanceChecker.ts; since 2026-09-05 it returns null, the
+            // MobileBERT session it reused left with the classifier) and, if the answer
             // doesn't semantically address the question, attempts ONE bounded
             // regeneration mirroring the profile-repair pattern just above: same
             // trust-scoped XML repair prompt shape, same raceStreamWithDeadline

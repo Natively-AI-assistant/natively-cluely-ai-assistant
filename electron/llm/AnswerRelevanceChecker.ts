@@ -16,8 +16,8 @@
 // 27) cannot generalize to this; a semantic check is the only remaining
 // option.
 //
-// Reuses the SAME local zero-shot NLI classifier (Xenova/mobilebert-
-// uncased-mnli) IntentClassifier.ts already loads and warms on the live WTA
+// It reused the local zero-shot NLI classifier (Xenova/mobilebert-
+// uncased-mnli) the intent classifier loaded and warmed on the live WTA
 // path — no second model/worker/ONNX session. transformers.js's zero-shot-
 // classification pipeline supports a custom `hypothesis_template`, so a
 // single-label classification with the ANSWER as the premise and a
@@ -113,7 +113,7 @@ export interface AnswerRelevanceResult {
  * entailment rather than pattern-matching specific non-answer phrasings.
  * Returns null when the classifier is unavailable/fails — callers MUST
  * treat null as "skip this check", exactly like every other null-returning
- * guard in this codebase (IntentClassifier.classify, etc.) — never as a
+ * guard in this codebase — never as a
  * negative verdict.
  */
 export async function checkAnswerRelevance(_question: string, _answer: string): Promise<AnswerRelevanceResult | null> {

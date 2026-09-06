@@ -78,7 +78,7 @@ const buildOptions = {
     '@vectorize-io/hindsight-client',
     // onnxruntime-node ships a compiled `.node` binary. Every other ONNX
     // consumer in this codebase (Whisper, LocalReranker, LocalEmbeddingProvider,
-    // IntentClassifier) only reaches it indirectly through @huggingface/transformers'
+    // LocalEmbeddingProvider) only reaches it indirectly through @huggingface/transformers'
     // own dynamic loading, which doesn't trip esbuild's bundler. The Nemotron
     // ONNX modules (electron/audio/whisper/nemotron/) are the first place
     // with a direct static `import ... from 'onnxruntime-node'`, and esbuild

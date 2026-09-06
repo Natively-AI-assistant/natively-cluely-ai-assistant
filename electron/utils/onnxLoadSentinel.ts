@@ -30,7 +30,7 @@
 //     (returns null).
 //
 // CROSS-FAMILY ISOLATION:
-// One file per family. When IntentClassifier / LocalEmbeddingProvider /
+// One file per family. When LocalEmbeddingProvider /
 // LocalReranker are spawned in the same tick from independent modules, they
 // write to different filenames so concurrent writers don't lose updates
 // (which a single shared JSON file would suffer under read-modify-write).

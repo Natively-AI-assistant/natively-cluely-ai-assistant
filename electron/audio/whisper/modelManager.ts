@@ -410,6 +410,44 @@ export function deleteModel(modelId: WhisperModelId): void {
 }
 
 /**
+ * Cache directories under getModelsDir() that no shipped code opens any more.
+ *
+ * transformers.js downloads land here keyed by model id, and nothing removes
+ * them when the code that needed them goes. The intent classifier's MobileBERT
+ * was removed on 2026-09-05; every machine that ever warmed it still carries a
+ * 94 MB copy in this cache. Listed by exact id so the sweep can only ever touch
+ * models that were deliberately retired, never a Whisper or Nemotron download.
+ */
+const OBSOLETE_MODEL_CACHE_DIRS: readonly string[] = [
+  'Xenova/mobilebert-uncased-mnli',
+];
+
+/**
+ * Remove retired model caches. Returns the ids it removed. Safe to call on
+ * every launch: a missing directory is a no-op, and a failure to remove one
+ * (a Windows handle still open, a permission error) is logged and skipped so
+ * a stale cache can never block startup.
+ *
+ * `cacheDir` is injectable so the sweep can be tested against a temp dir
+ * without an Electron `app`.
+ */
+export function purgeObsoleteModelCaches(cacheDir: string = getModelsDir()): string[] {
+  const removed: string[] = [];
+  for (const id of OBSOLETE_MODEL_CACHE_DIRS) {
+    const dir = path.join(cacheDir, ...id.split('/'));
+    try {
+      if (!fs.existsSync(dir)) continue;
+      fs.rmSync(dir, { recursive: true, force: true });
+      removed.push(id);
+      console.log(`[modelManager] Removed obsolete model cache: ${id}`);
+    } catch (e: any) {
+      console.warn(`[modelManager] Could not remove obsolete model cache ${id}: ${e?.message || e}`);
+    }
+  }
+  return removed;
+}
+
+/**
  * Errors that mean "the bytes on disk are not a usable model", as opposed to
  * "this machine cannot run models at all".
  *
