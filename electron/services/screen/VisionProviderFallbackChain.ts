@@ -324,13 +324,29 @@ export async function runVisionFallback(params: RunFallbackParams): Promise<Visi
     const timer = setTimeout(() => controller.abort(new Error('per-provider-timeout')), timeoutMs);
 
     try {
-      const output = await provider.invoke({
+      // RACED, not merely awaited (2026-09-06). Of the providers behind
+      // runVisionRequest only Natively receives {signal, timeoutMs}; OpenAI,
+      // Claude, Groq, LiteLLM, NIM, Gemini and custom ignore both, so the timer
+      // above aborted a controller nobody was listening to and this await kept
+      // waiting on the provider's own timeout, or forever. The budget was
+      // non-binding on every cloud rung but one. The abort now rejects this
+      // await directly; the orphaned request finishes in the background and
+      // its late result is discarded.
+      const invocation = provider.invoke({
         optimized,
         systemPrompt: params.systemPrompt,
         userPrompt: params.userPrompt,
         signal: controller.signal,
         timeoutMs,
       });
+      invocation.catch(() => { /* late failure of an orphaned attempt: already accounted for */ });
+      const output = await Promise.race([
+        invocation,
+        new Promise<never>((_, reject) => {
+          if (controller.signal.aborted) { reject(controller.signal.reason ?? new Error('per-provider-timeout')); return; }
+          controller.signal.addEventListener('abort', () => reject(controller.signal.reason ?? new Error('per-provider-timeout')), { once: true });
+        }),
+      ]);
       clearTimeout(timer);
       const durationMs = Date.now() - providerStarted;
 

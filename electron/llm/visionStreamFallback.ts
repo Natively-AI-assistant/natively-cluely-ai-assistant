@@ -415,6 +415,18 @@ export async function* openHedged(
 }
 
 /**
+ * The exact failure shapes LLMHelper's streaming generators yield instead of
+ * throwing. Anchored at the start of the chunk and kept narrow on purpose: a
+ * real answer that happens to contain the word "Error" must still commit.
+ */
+export function isProviderErrorProse(chunk: string): boolean {
+  const t = chunk.trimStart();
+  return /^Error: Custom Provider returned HTTP \d{3}\b/.test(t)
+    || /^Error streaming from custom provider\./.test(t)
+    || /^Error: Failed to stream from Ollama\b/.test(t);
+}
+
+/**
  * Run the streaming vision fallback over an already-ordered provider list.
  * Yields content tokens from the first provider that produces a first chunk.
  * Throws only when every provider fails pre-commit (the caller turns that into
@@ -506,6 +518,16 @@ export async function* runStreamingVisionFallback(
 
         if (first.done || typeof first.value !== 'string' || first.value.trim().length === 0) {
           throw new Error('empty-stream');
+        }
+        // Error prose is not a token (2026-09-06). LLMHelper's streaming
+        // generators YIELD their failures for non-abort errors (a custom provider
+        // HTTP 500, an Ollama stream failure) rather than throwing, so a provider
+        // that failed outright produced a non-empty first chunk, was committed,
+        // had a TTFT recorded and was marked healthy, and no later rung was tried.
+        // Treat those shapes as the pre-commit failure they are; the message is
+        // kept so classifyVisionFailure can see the status code.
+        if (isProviderErrorProse(first.value)) {
+          throw new Error(first.value.trim());
         }
 
         // ── COMMIT ──────────────────────────────────────────────────────────
