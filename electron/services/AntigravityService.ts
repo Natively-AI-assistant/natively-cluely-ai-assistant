@@ -424,6 +424,35 @@ function extractProjectId(value: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Tier shape, for logging and for the "needs your own project" decision.
+ *
+ * `userDefinedCloudaicompanionProject` is the field that matters: when a tier
+ * sets it, Google expects the CALLER to pass `cloudaicompanionProject`, and
+ * onboardUser's long-running operation simply never reaches `done: true`
+ * without one. gemini-cli (the public client for this same v1internal surface)
+ * reads it and fails with an actionable message; this service did not, so every
+ * such account got the generic "did not finish" after five polls.
+ *
+ * Deliberately shape-only — no token, no email, no raw body.
+ */
+function describeTier(tier: unknown): Record<string, unknown> | null {
+  if (!tier || typeof tier !== 'object') return null;
+  const t = tier as Record<string, unknown>;
+  return {
+    id: t.id,
+    isDefault: t.isDefault,
+    userDefinedCloudaicompanionProject: t.userDefinedCloudaicompanionProject,
+    hasAcceptedTos: t.hasAcceptedTos,
+    hasOnboardedPreviously: t.hasOnboardedPreviously,
+  };
+}
+
+function requiresUserProject(tier: unknown): boolean {
+  return Boolean(tier && typeof tier === 'object'
+    && (tier as Record<string, unknown>).userDefinedCloudaicompanionProject === true);
+}
+
 async function discoverProject(accessToken: string, signal: AbortSignal): Promise<string> {
   const headers = antigravitySetupHeaders(accessToken);
   const loadResponse = await fetchWithDnsRetry(
@@ -433,13 +462,32 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
   );
   const loaded = await responseJson(loadResponse, 'setup');
   const existing = extractProjectId(loaded?.cloudaicompanionProject);
+  // This service used to log NOTHING, which is why a failed sign-in produced a
+  // one-line UI string and an app log with no Antigravity entries at all —
+  // there was no way to tell a non-eligible account from a slow provision.
+  console.log('[Antigravity] loadCodeAssist ok', JSON.stringify({
+    hasProject: Boolean(existing),
+    currentTier: describeTier(loaded?.currentTier),
+    allowedTiers: Array.isArray(loaded?.allowedTiers) ? loaded.allowedTiers.map(describeTier) : null,
+    ineligibleTiers: Array.isArray(loaded?.ineligibleTiers)
+      ? loaded.ineligibleTiers.map((item: any) => ({ tierId: item?.tierId, reasonCode: item?.reasonCode })) : null,
+  }));
   if (existing) return existing;
 
   let tierId = 'legacy-tier';
+  let selectedTier: unknown = loaded?.currentTier ?? null;
   if (Array.isArray(loaded?.allowedTiers)) {
     const tier = loaded.allowedTiers.find((item: any) => item?.isDefault === true && typeof item?.id === 'string' && item.id.trim());
-    if (tier) tierId = tier.id.trim();
+    if (tier) { tierId = tier.id.trim(); selectedTier = tier; }
   }
+
+  // Fail fast and say what is actually wrong. Polling five times cannot help:
+  // Google is waiting for a project id this client never sends.
+  if (requiresUserProject(selectedTier)) {
+    console.warn(`[Antigravity] tier "${tierId}" requires a caller-supplied Google Cloud project; Natively does not send one.`);
+    throw new AntigravityError('setup', 'This Google account needs its own Google Cloud project for Antigravity, which Natively cannot supply yet. Use a personal Google account, or pick another provider.');
+  }
+
   for (let attempt = 1; attempt <= 5; attempt += 1) {
     const onboardResponse = await fetchWithDnsRetry(
       `${ANTIGRAVITY_PROD_ENDPOINT}/v1internal:onboardUser`,
@@ -449,10 +497,23 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
     const onboarded = await responseJson(onboardResponse, 'setup');
     const project = onboarded?.done === true
       ? extractProjectId(onboarded?.response?.cloudaicompanionProject) : undefined;
+    console.log(`[Antigravity] onboardUser ${attempt}/5`, JSON.stringify({
+      tierId,
+      done: onboarded?.done === true,
+      gotProject: Boolean(project),
+      // `done: true` with no project id is a DIFFERENT failure from a pending
+      // LRO, and the old code collapsed both into one message.
+      responseKeys: onboarded?.response && typeof onboarded.response === 'object'
+        ? Object.keys(onboarded.response) : null,
+      error: onboarded?.error ? { code: onboarded.error.code, status: onboarded.error.status } : null,
+    }));
     if (project) return project;
     if (attempt < 5) await wait(1_500, undefined, { signal });
   }
-  throw new AntigravityError('setup', 'Google account setup did not finish. Try signing in again.');
+  // ~6s of polling total (5 requests, 4 x 1.5s waits). Say so, because "try
+  // again" is only good advice if the cause was slowness.
+  console.warn('[Antigravity] onboardUser never returned done+project within 5 attempts (~6s of polling).');
+  throw new AntigravityError('setup', 'Google did not finish setting up this account within ~6 seconds. Try signing in again; if it keeps failing, this account is probably not eligible for Antigravity.');
 }
 
 export class AntigravityService extends EventEmitter {
