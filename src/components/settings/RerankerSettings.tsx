@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { AlertCircle, Check, ChevronDown, Cloud, Download, ExternalLink, Filter, FolderOpen, HardDrive, KeyRound, Loader2, Monitor, Puzzle, RefreshCw, Search, ShieldAlert, Trash2, X } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
@@ -384,6 +385,51 @@ const RerankerModelSelect: React.FC<FloatingSelectProps> = ({
                     )}
                 </div>
             )}
+        </div>
+    );
+};
+
+interface CandidatesSlidingTabsProps {
+    value: number;
+    choices: number[];
+    onChange: (choice: number) => void;
+}
+
+/**
+ * Tab switcher for candidate count using Framer Motion layoutId spring transition,
+ * matching MeetingDetails (Summary / Transcript / Usage) 1:1.
+ */
+const CandidatesSlidingTabs: React.FC<CandidatesSlidingTabsProps> = ({ value, choices, onChange }) => {
+    const layoutId = React.useId();
+    const theme = useResolvedTheme();
+    const isLight = theme === 'light';
+
+    return (
+        <div className={`p-1 rounded-xl inline-flex items-center gap-0.5 border shrink-0 ${isLight ? 'bg-[#E5E5EA] border-black/[0.04]' : 'bg-[#0D0D0F] border-white/[0.08]'}`}>
+            {choices.map((n) => {
+                const isSelected = value === n;
+                return (
+                    <button
+                        key={n}
+                        type="button"
+                        onClick={() => onChange(n)}
+                        className={`
+                            relative px-3 py-1 text-xs font-medium rounded-lg transition-colors duration-200 z-10 select-none
+                            ${isSelected ? (isLight ? 'text-black' : 'text-[#E9E9E9]') : (isLight ? 'text-black/60 hover:text-black' : 'text-white/40 hover:text-white/80')}
+                        `}
+                    >
+                        {isSelected && (
+                            <motion.div
+                                layoutId={`candidatesTabActive-${layoutId}`}
+                                className={`absolute inset-0 rounded-lg -z-10 shadow-sm ${isLight ? 'bg-white' : 'bg-[#3A3A3C]'}`}
+                                initial={false}
+                                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            />
+                        )}
+                        {n}
+                    </button>
+                );
+            })}
         </div>
     );
 };
@@ -1799,27 +1845,35 @@ export const RerankerSettings: React.FC = () => {
                 </div>
             </div>
 
-            {/* Provider Card 5: Candidates. The hosted fallback used to share this
-                card; it now sits under Active Reranker, where it belongs. */}
-            <div className="aip-card p-5">
-                <div className="space-y-1.5">
-                    <label className="block text-xs font-medium uppercase tracking-wide aip-hero">{t('Candidates to rerank')}</label>
-                    <div className="flex gap-2 flex-wrap">
-                        {CANDIDATE_CHOICES.map(n => (
-                            <button
-                                key={n}
-                                type="button"
-                                className="aip-btn"
-                                data-active={status.candidateCount === n ? 'true' : undefined}
-                                onClick={() => void setConfig({ candidateCount: n })}
-                            >
-                                {n}
-                            </button>
-                        ))}
+            {/* Provider Card 5: Candidates Selector — High-End Segmented Control */}
+            <div className="aip-card p-5 space-y-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
+                    <div>
+                        <label className="block text-xs font-medium uppercase tracking-wide aip-hero">
+                            {t('Candidates to rerank')}
+                        </label>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('Number of initial retrieved passages scored by the reranker.')}
+                        </p>
                     </div>
-                    <p className="text-[10px] aip-muted">
-                        {t('More candidates can improve the answer but cost more and take longer. Leave this alone unless you have a reason.')}
-                    </p>
+
+                    <CandidatesSlidingTabs
+                        value={status.candidateCount ?? 15}
+                        choices={CANDIDATE_CHOICES}
+                        onChange={(n) => void setConfig({ candidateCount: n })}
+                    />
+                </div>
+
+                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10.5px] aip-muted">
+                    <span>
+                        {(status.candidateCount ?? 15) <= 5 && t('Fast & low latency — best for quick queries.')}
+                        {(status.candidateCount ?? 15) === 10 && t('Balanced speed and recall.')}
+                        {(status.candidateCount ?? 15) === 15 && t('Recommended default — high accuracy with manageable cost.')}
+                        {(status.candidateCount ?? 15) >= 20 && t('Deep recall — evaluates maximum context passages.')}
+                    </span>
+                    <span className="font-mono text-white/50 text-[9.5px]">
+                        {status.candidateCount ?? 15} {t('passages')}
+                    </span>
                 </div>
             </div>
 
