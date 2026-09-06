@@ -35,6 +35,8 @@ export const GOOGLE_API_USER_AGENT = 'google-api-nodejs-client/9.15.1';
 export const ANTIGRAVITY_SETUP_CLIENT = 'google-cloud-sdk vscode_cloudshelleditor/0.1';
 export const ANTIGRAVITY_PROD_ENDPOINT = 'https://cloudcode-pa.googleapis.com';
 export const ANTIGRAVITY_DAILY_ENDPOINT = 'https://daily-cloudcode-pa.googleapis.com';
+// Voice-app's configured project is usable independently of Code Assist onboarding.
+export const ANTIGRAVITY_DEFAULT_PROJECT_ID = 'rising-fact-p41fc';
 export const ANTIGRAVITY_REFRESH_LEAD_MS = 60_000;
 export const ANTIGRAVITY_STREAM_URL =
   `${ANTIGRAVITY_DAILY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse`;
@@ -450,6 +452,15 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
     const project = onboarded?.done === true
       ? extractProjectId(onboarded?.response?.cloudaicompanionProject) : undefined;
     if (project) return project;
+    if (onboarded?.done === true) {
+      const reasons = Array.isArray(loaded?.ineligibleTiers)
+        ? loaded.ineligibleTiers
+          .filter((tier: any) => typeof tier?.reasonMessage === 'string' && tier.reasonMessage.trim())
+          .map((tier: any) => tier.reasonMessage.trim()) : [];
+      throw new AntigravityError('setup', reasons.length
+        ? `Google account setup failed: ${reasons.join(' ')}`
+        : 'Google completed account setup without providing a project ID. This account may require a Google Cloud project.');
+    }
     if (attempt < 5) await wait(1_500, undefined, { signal });
   }
   throw new AntigravityError('setup', 'Google account setup did not finish. Try signing in again.');
@@ -557,7 +568,24 @@ export class AntigravityService extends EventEmitter {
 
       const exchanged = await this.exchangeCode(callback.code, pkce.verifier, controller.signal);
       this.assertGeneration(generation);
-      const projectId = await discoverProject(exchanged.accessToken, controller.signal);
+      let projectId: string;
+      try {
+        projectId = await discoverProject(exchanged.accessToken, controller.signal);
+      } catch (error) {
+        this.assertGeneration(generation);
+        controller.signal.throwIfAborted();
+        if (!(error instanceof AntigravityError) || error.code !== 'setup') throw error;
+        // Voice-app keeps its configured project when optional discovery fails.
+        // Validate that project's model access before adopting the new session.
+        const response = await fetchWithDnsRetry(`${ANTIGRAVITY_DAILY_ENDPOINT}/v1internal:fetchAvailableModels`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${exchanged.accessToken}`, 'Content-Type': 'application/json', 'User-Agent': ANTIGRAVITY_USER_AGENT },
+          body: JSON.stringify({ project: ANTIGRAVITY_DEFAULT_PROJECT_ID }), signal: controller.signal,
+        }, 12);
+        const models = parseAntigravityModels(await responseJson(response, 'models'));
+        if (!models.length) throw new AntigravityError('models', 'The Voice-app project returned no available Antigravity models.');
+        projectId = ANTIGRAVITY_DEFAULT_PROJECT_ID;
+      }
       this.assertGeneration(generation);
       const tokens = { ...exchanged, projectId };
       if (!this.saveToStorage(tokens)) throw new AntigravityError('storage', 'Google sign-in could not be saved. Check credential storage and try again.');
