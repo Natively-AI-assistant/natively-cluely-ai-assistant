@@ -332,3 +332,73 @@ describe('the WTA failure path regenerates before it gives up', () => {
     }
   });
 });
+
+describe('a selected single provider now fails over — or retries itself in parallel', () => {
+  // Until 2026-09-06 the Custom / cURL / LiteLLM / NVIDIA NIM branches returned
+  // unconditionally, so a user on their own gateway had NO failover on the text
+  // path. Worse, the only mechanism in LLMHelper that turns SLOWNESS into
+  // failover is the Natively TTFT race, which those users never reach: a gateway
+  // that connects then goes quiet throws nothing, so no catch fires and nothing
+  // falls through. The outer live deadline was the only thing that noticed, and
+  // a deadline can only give up.
+  //
+  // Behaviour is proven in scratchpad/repro-failover.js against a real HTTP
+  // server: a stalled gateway with a spare keyed fails over at 9s and the spare
+  // answers; with NO spare the same gateway is re-issued in parallel and the
+  // second connection answers at 9008ms; a healthy gateway is called exactly
+  // once. These pin the wiring that probe cannot re-run in CI.
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const llm = strip(fs.readFileSync(path.join(root, 'electron/LLMHelper.ts'), 'utf8'));
+  const ie = strip(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
+
+  test('every user-endpoint text branch goes through the fallback engine', () => {
+    const n = (llm.match(/this\.streamSelectedProviderWithFailover\(/g) || []).length;
+    assert.equal(n, 3, `custom, litellm and nvidia_nim must all route through it — found ${n}`);
+  });
+
+  test('the rung budget comes from the route table, NOT the 2.5s text default', () => {
+    // DEFAULT_TEXT_FALLBACK_CONFIG.ttftTimeoutMs is 2_500, sized for the shipped
+    // chain. Applying it to this population would fail over at 2.5s against a
+    // measured 11.6s tail, silently undoing the whole route table.
+    assert.match(llm, /\.\.\.DEFAULT_TEXT_FALLBACK_CONFIG,[\s\S]{0,400}?ttftTimeoutMs: budgetMs/,
+      'the engine config must override ttftTimeoutMs with the route budget');
+    assert.match(llm, /const budgetMs = totalHardTimeoutMs\(\{/,
+      'the budget must come from the shared route table');
+  });
+
+  test('the hedge only arms when there is nothing to fail over to', () => {
+    assert.match(llm, /const hedging = spares\.length === 0;/);
+    assert.match(llm, /hedgeEnabled: hedging/);
+    assert.match(llm, /if \(hedging\) \{[\s\S]{0,600}?hedgeWith = \{/,
+      'hedgeWith must only be attached when no spare rung exists');
+  });
+
+  test('the hedge partner gets its own id so the primary breaker cannot suppress it', () => {
+    assert.match(llm, /id: `\$\{opts\.id\}#hedge`/);
+  });
+
+  test('one attempt per rung, so a hedged turn is two calls and not four', () => {
+    assert.match(llm, /maxAttempts: 1,/,
+      'the engine default of 2 would make a hedged single-provider turn four billed requests');
+  });
+
+  test('a rung with a spare behind it waits LESS than one without', () => {
+    assert.match(llm, /const primaryTtftMs = spares\.length > 0 \? this\.hedgeDelayForBudget\(budgetMs\) : budgetMs;/,
+      'waiting the full ceiling before failing over makes failover as slow as giving up');
+  });
+
+  test('the hedge delay uses the adaptive max, not a second latency statistic', () => {
+    // The engine's own EWMA input is absent on this path (the terminal branch
+    // never populated textHealth), and a second statistic for one provider is
+    // the recurring mistake in this area.
+    assert.match(llm, /hedgeDelayForBudget\(budgetMs: number\)[\s\S]{0,400}?this\.observedAnswerLatency\(\)/);
+    assert.match(llm, /hedgeDelayDefaultMs: this\.hedgeDelayForBudget\(budgetMs\)/);
+  });
+
+  test('IE does not ALSO regenerate a route the engine already retried', () => {
+    // Otherwise a single-provider user pays a third identical call on their own
+    // key for a gateway that has already been tried twice concurrently.
+    assert.match(ie, /engineAlreadyRetried[\s\S]{0,300}?isUsingUserEndpoint\(\) === true/);
+    assert.match(ie, /const regenBudget = engineAlreadyRetried \? 0 :/);
+  });
+});
