@@ -33,6 +33,14 @@ export const LIVE_FIRST_USEFUL_BUDGET_MS = {
 /**
  * Hard cap on the FIRST useful token from the provider before we abort.
  *
+ * 8000ms as of 2026-09-06 (was 7000). This is the DEFAULT-PROVIDER route's budget:
+ * a shipped provider-list entry called directly (Gemini / Groq / Claude / OpenAI /
+ * DeepSeek), where the client is the ONLY layer that can recover — there is no
+ * server cascade behind it to rotate, so the client giving up and falling back is
+ * the whole recovery story. See totalHardTimeoutMs() for the full route table.
+ *
+ * The history below explains the 3500 -> 7000 move and still governs the floor.
+ *
  * 7000ms, NOT 3500ms. MiniMax (the strong fallback when the Gemini chain is down —
  * see natively-api lib/minimaxProvider.js) has a 4-6s first-token latency; a 3500ms
  * cap aborted every MiniMax stream before it produced a token, so the fallback could
@@ -43,13 +51,13 @@ export const LIVE_FIRST_USEFUL_BUDGET_MS = {
  * takes 3.5-7s AND aborting to the next fallback would have been faster — rare, since
  * MiniMax IS the next strong fallback.
  */
-export const LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS = 7000;
+export const LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS = 8000;
 /**
  * First-useful cap for genuinely complex answers (coding/system-design). Equal to the
  * standard cap now that both must clear MiniMax's 4-6s first-token; kept as a separate
  * symbol so the two can diverge again without touching call sites.
  */
-export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 7000;
+export const LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS = 8000;
 /**
  * First-useful cap for a LOCAL provider (Ollama). The 7s cloud cap is wrong for a
  * local model: a cold model must load its weights into RAM before the first token,
@@ -147,6 +155,38 @@ export const LIVE_TOTAL_HARD_TIMEOUT_MS = 13000;
  * the confusion the 20_000 constant has already caused once.
  */
 export const LIVE_VISION_TOTAL_HARD_TIMEOUT_MS = 20000;
+/**
+ * Ceiling for a provider the USER pointed at us: an OpenAI-compatible Custom
+ * Provider, a cURL provider, a LiteLLM gateway, an NVIDIA NIM endpoint.
+ *
+ * Same argument as the vision ceiling above, applied to the text path. 13000 is
+ * "the natively-api server's 10s cutover + 3s"; a user on their own endpoint
+ * never reaches that server, so on their turns 13000 is a bound imported from a
+ * mechanism that is not in the request path. The number that IS in the path is
+ * whatever their gateway does — a LiteLLM proxy fronting a slow upstream, a
+ * self-hosted NIM cold-starting a container, an OpenRouter model queueing — and
+ * none of it is observable from here.
+ *
+ * 15000 buys those routes ~2s over the natively ceiling. It is deliberately
+ * BELOW the 20s vision ceiling and not merged with it: vision is sized off a
+ * measured 11.6s tail on image turns (see above), and a text turn on the same
+ * provider has no image encode or multimodal prefill to pay for.
+ */
+export const LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS = 15000;
+/**
+ * Ceiling for a shipped provider-list entry called directly — Gemini, Groq,
+ * Claude, OpenAI, DeepSeek — on the user's own key or ours.
+ *
+ * These are well-known endpoints with sub-second healthy first-token latency,
+ * and, unlike the natively route, nothing behind them can rescue a slow turn.
+ * Waiting 13s to conclude that a direct Gemini call is not coming back spends
+ * 13s of the user's meeting to reach a fallback that was available at 8. Equal
+ * to LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS by construction: on a route with
+ * one layer there is no honest difference between "the provider's cap" and "the
+ * ceiling", and keeping them equal is what stops the two selectors below from
+ * disagreeing about the same turn.
+ */
+export const LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS = LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS;
 /**
  * Local-provider counterpart to LIVE_TOTAL_HARD_TIMEOUT_MS: the no-fallback ceiling
  * when there is no deterministic fallback to swap in. Matches the local first-useful
@@ -250,15 +290,35 @@ const COMPLEX_TYPES = new Set<AnswerType>([
  * coding/system-design, otherwise the standard hard cap. Used as the time the
  * provider has to produce a useful token before we abort and fall back.
  *
+ * ROUTE FIRST, ANSWER TYPE SECOND. The answer-type split (complex vs standard)
+ * applies only on the DEFAULT-PROVIDER route; every other route's budget is a
+ * property of the transport, which a coding question cannot change. The route
+ * flags are checked in the same order, and return the same numbers, as
+ * {@link totalHardTimeoutMs} — see that function's table. Keeping the two in
+ * lockstep is deliberate: WTA reads the ceiling and manual chat reads this, so a
+ * divergence is invisible from either surface.
+ *
  * `isLocal` (Ollama / on-device): the cloud caps assume sub-second first-token; a
  * local model may need to cold-load its weights first, so a local provider gets the
  * far longer LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS regardless of answer type. The
- * caller passes llmHelper.isUsingOllama(). Defaults false (cloud) for back-compat.
+ * caller passes llmHelper.isUsingOllama(). Checked FIRST, so a local rung is never
+ * re-classified by another flag. Defaults false (cloud) for back-compat.
+ *
+ * `viaServerCascade`: llmHelper.isUsingNativelyServerCascade().
+ * `isUserEndpoint`: llmHelper.isUsingUserEndpoint() — Custom / cURL / LiteLLM /
+ * NVIDIA NIM. Both default false, so an un-updated caller still gets the previous
+ * default-route behaviour.
+ *
+ * NOT applied to the regen/repair streams, which pass their own literals
+ * (IntelligenceEngine 4026/4328/4547/4953/5167/5568, ipcHandlers
+ * 3903/4012/4129/5144/5598). Those bound a post-answer repair, not the answer the
+ * user is waiting on, and were left alone deliberately.
  */
 export function firstUsefulDeadlineMs(
   answerType: AnswerType,
   isLocal: boolean = false,
   viaServerCascade: boolean = false,
+  isUserEndpoint: boolean = false,
 ): number {
   if (isLocal) return LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS;
   // F-301: on the natively-api route the SERVER runs a sequential cascade and
@@ -270,6 +330,14 @@ export function firstUsefulDeadlineMs(
   // the WTA path, never to manual chat, which is the path its own rationale
   // describes. Reuse that constant so the two cannot drift apart.
   if (viaServerCascade) return LIVE_TOTAL_HARD_TIMEOUT_MS;
+  // A user-supplied endpoint (Custom / cURL / LiteLLM / NVIDIA NIM) gets the same
+  // budget here as it does from totalHardTimeoutMs(). These two functions answer
+  // the same question for two surfaces — WTA reads the ceiling, manual chat reads
+  // this — and every time they have been allowed to disagree, one surface has
+  // silently inherited a bound written for the other. That is how the natively
+  // ceiling came to govern vision turns, and how this cap governed manual chat
+  // while WTA used a different one.
+  if (isUserEndpoint) return LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS;
   return COMPLEX_TYPES.has(answerType)
     ? LIVE_PROVIDER_FIRST_USEFUL_COMPLEX_TIMEOUT_MS
     : LIVE_PROVIDER_FIRST_USEFUL_HARD_TIMEOUT_MS;
@@ -281,9 +349,15 @@ export function firstUsefulDeadlineMs(
  * per-provider soft cap.
  *
  * Lives here, not inline at the call site, because the choice is a policy with
- * three cases and each one exists for a documented reason (see the constants
- * above). Inline it was two cases and a comment, which is how the vision budget
- * came to be truncated silently for every user not on the natively cascade.
+ * FIVE cases and each one exists for a documented reason (see the constants
+ * above, and the table in the body). Inline it was two cases and a comment,
+ * which is how the vision budget came to be truncated silently for every user
+ * not on the natively cascade — and how the natively cascade's own number came
+ * to govern direct provider calls that have no cascade behind them.
+ *
+ * Returns the same value as {@link firstUsefulDeadlineMs} for every route except
+ * vision, which only this function knows about (a screenshot turn does not reach
+ * the manual-chat path).
  */
 export function totalHardTimeoutMs(opts: {
   /** Ollama / on-device: cold weight load dominates first-token. */
@@ -292,10 +366,29 @@ export function totalHardTimeoutMs(opts: {
   isVisionTurn?: boolean;
   /** Routed through natively-api, whose own cutover LIVE_TOTAL_HARD_TIMEOUT_MS encodes. */
   viaServerCascade?: boolean;
+  /** A provider the user pointed at us: Custom / cURL / LiteLLM / NVIDIA NIM. */
+  isUserEndpoint?: boolean;
 }): number {
+  // ROUTE TABLE, most-specific first. Each number exists because something in
+  // THAT route's request path justifies it; none of them is a general default:
+  //
+  //   local            30000  cold weight load precedes the first token
+  //   vision           20000  image encode + multimodal prefill (measured 11.6s tail)
+  //   server cascade   13000  natively-api's 10s provider cutover + 3s
+  //   user endpoint    15000  an unobservable gateway we do not control
+  //   default provider  8000  a direct call with nothing behind it to rescue it
+  //
+  // Order matters twice over. Vision stays ABOVE the user-endpoint case, so a
+  // screenshot turn on a Custom provider keeps the 20s that turn was measured to
+  // need rather than being shortened to 15s. And the server cascade is now an
+  // EXPLICIT branch rather than the fallthrough: 13000 was reaching the default
+  // providers only because they shared its `return`, which is the same silent
+  // inheritance that put it on vision turns.
   if (opts.isLocal) return LIVE_LOCAL_TOTAL_HARD_TIMEOUT_MS;
   if (opts.isVisionTurn && !opts.viaServerCascade) return LIVE_VISION_TOTAL_HARD_TIMEOUT_MS;
-  return LIVE_TOTAL_HARD_TIMEOUT_MS;
+  if (opts.viaServerCascade) return LIVE_TOTAL_HARD_TIMEOUT_MS;
+  if (opts.isUserEndpoint) return LIVE_USER_ENDPOINT_TOTAL_HARD_TIMEOUT_MS;
+  return LIVE_DEFAULT_PROVIDER_TOTAL_HARD_TIMEOUT_MS;
 }
 
 const DEADLINE = Symbol('deadline');

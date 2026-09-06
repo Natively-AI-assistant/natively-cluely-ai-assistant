@@ -3492,10 +3492,19 @@ export class IntelligenceEngine extends EventEmitter {
                 ? (this.llmHelper as any).isUsingNativelyServerCascade() === true
                 : false;
             const isVisionTurn = (imagePaths?.length ?? 0) > 0;
+            // A user-supplied endpoint (Custom / cURL / LiteLLM / NVIDIA NIM) is an
+            // address we have never measured, so it gets a longer ceiling than a
+            // shipped provider called directly. Same reasoning as viaServerCascade
+            // above: ask which route this turn actually takes, rather than letting
+            // one route's number become everyone's default.
+            const isUserEndpoint = typeof (this.llmHelper as any).isUsingUserEndpoint === 'function'
+                ? (this.llmHelper as any).isUsingUserEndpoint() === true
+                : false;
             const firstUsefulDeadline = totalHardTimeoutMs({
                 isLocal: usingLocalLlm,
                 isVisionTurn,
                 viaServerCascade,
+                isUserEndpoint,
             });
             let liveDeadlineFired = false;
 
