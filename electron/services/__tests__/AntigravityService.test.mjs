@@ -541,4 +541,43 @@ test('OAuth exchange and onboarding use reference headers, PKCE verifier, select
   } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
 });
 
+// A tier carrying `userDefinedCloudaicompanionProject` means Google is waiting
+// for a project id this client never sends — onboardUser's LRO can only stay
+// pending. The old code polled it five times and reported "did not finish",
+// which reads as a transient failure and sent users round the sign-in loop
+// forever. Assert it stops before the first onboardUser and says why.
+test('a tier that requires a caller-supplied project fails fast instead of polling onboardUser', async () => {
+  const mod = await loadService();
+  const stored = storageWith(null);
+  const { service, oldGetter } = prepareService(mod, stored);
+  const oldFetch = globalThis.fetch;
+  const oldOpen = fakeElectron.shell.openExternal;
+  const opened = {};
+  let onboardCalls = 0;
+  fakeElectron.shell.openExternal = async url => { opened.value = url; };
+  globalThis.fetch = async (url, init) => {
+    if (url === mod.ANTIGRAVITY_TOKEN_URL) {
+      return jsonResponse({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+    }
+    if (url.endsWith(':loadCodeAssist')) {
+      return jsonResponse({ allowedTiers: [{ id: 'standard-tier', isDefault: true, userDefinedCloudaicompanionProject: true }] });
+    }
+    onboardCalls++;
+    return jsonResponse({ done: false });
+  };
+  try {
+    const login = service.startLogin();
+    const url = await waitForBrowserUrl(opened);
+    // Handler attached BEFORE the callback resolves it — same shape as the
+    // cancel/browser/callback cases above. Awaiting requestCallback first
+    // leaves a window where the rejection is unhandled and node --test fails
+    // the run on that, not on the assertion.
+    const rejected = assert.rejects(login, error => error.code === 'setup' && /own Google Cloud project/.test(error.message));
+    await requestCallback(`/oauth-callback?code=code&state=${url.searchParams.get('state')}`);
+    await rejected;
+    assert.equal(onboardCalls, 0, 'onboardUser must not be called when the tier needs a project id');
+    await assertCallbackPortFree();
+  } finally { cleanupService(service, oldGetter); globalThis.fetch = oldFetch; fakeElectron.shell.openExternal = oldOpen; }
+});
+
 test.after(() => { Module._load = originalModuleLoad; });
