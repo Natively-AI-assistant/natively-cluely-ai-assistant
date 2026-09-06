@@ -229,10 +229,45 @@ export class IntelligenceEngine extends EventEmitter {
      * liveDeadlines.repairDeadlineMs. `minMs` preserves each site's own previous
      * value as a floor so nothing gets shorter than it is today.
      */
-    private repairFirstUsefulMs(minMs: number = 7000): number {
+    /**
+     * Arguments for a post-answer repair stream.
+     *
+     * Prefers a replay of THIS turn's answer call, so the repair sees the same
+     * transcript, screenshot, reference files, realtime prompt and evidence the
+     * answer saw. Falls back to the caller's own arguments when the turn has no
+     * remembered answer — the ScopeFallback route and the Context-OS
+     * refuse/clarify terminals never compose one, so that is a real branch.
+     *
+     * The abort signal is always the caller's, never the remembered one.
+     */
+    private repairCallArgs(
+        turnKey: object | undefined,
+        repairPrompt: string,
+        signal: AbortSignal | undefined,
+        fallbackSystemPrompt?: string,
+        fallbackScopes: any[] = [],
+    ): Parameters<LLMHelper['streamChat']> {
+        const replayed = (this.llmHelper as any).replayAnswerCall?.(turnKey, repairPrompt, signal);
+        if (replayed) {
+            // A repair site that supplies its OWN system prompt means it: the
+            // doc-grounded repair pass, for one, deliberately runs under a
+            // different contract from the answer. Inheriting the answer's
+            // system prompt there would silently undo that. The caller's wins;
+            // everything else — images, transcript, scopes, route — is inherited.
+            if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+            if (fallbackScopes && fallbackScopes.length > 0) replayed[6] = fallbackScopes as any;
+            return replayed;
+        }
+        return [repairPrompt, undefined, undefined, fallbackSystemPrompt, true, true, fallbackScopes as any, signal] as any;
+    }
+
+    private repairFirstUsefulMs(minMs: number = 7000, turnKey?: object): number {
         const h: any = this.llmHelper;
         const isUserEndpoint = typeof h?.isUsingUserEndpoint === 'function' ? h.isUsingUserEndpoint() === true : false;
         return repairDeadlineMs({
+            // A repair that inherits the answer's screenshot pays a multimodal
+            // prefill, which no text-sized window can clear.
+            hasImages: turnKey ? h?.replayedAnswerHasImages?.(turnKey) === true : false,
             isLocal: typeof h?.isUsingOllama === 'function' ? h.isUsingOllama() === true : false,
             viaServerCascade: typeof h?.isUsingNativelyServerCascade === 'function' ? h.isUsingNativelyServerCascade() === true : false,
             isUserEndpoint,
@@ -4112,16 +4147,15 @@ export class IntelligenceEngine extends EventEmitter {
                     try {
                         await raceStreamWithDeadline({
                             stream: this.llmHelper.streamChat(
-                                scaffoldRepairPrompt,
-                                undefined,
-                                undefined,
-                                undefined,
-                                true,
-                                true,
-                                [],
-                                whatToAnswerCancellationToken.signal,
+                                ...this.repairCallArgs(
+                                    whatToAnswerCancellationToken.signal,
+                                    scaffoldRepairPrompt,
+                                    whatToAnswerCancellationToken.signal,
+                                    undefined,
+                                    [],
+                                )
                             ) as AsyncGenerator<string>,
-                            firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
+                            firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                             interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                             isUsefulYet: () => scaffoldRepaired.length >= 5,
                             shouldAbort: () => scaffoldRepaired.length > 1800
@@ -4414,16 +4448,15 @@ export class IntelligenceEngine extends EventEmitter {
                                 try {
                                     await raceStreamWithDeadline({
                                         stream: this.llmHelper.streamChat(
-                                            repairPrompt,
-                                            undefined,
-                                            undefined,
-                                            wtaRepairSystemPrompt,
-                                            true,
-                                            true,
-                                            ['reference_files'],
-                                            whatToAnswerCancellationToken.signal,
+                                            ...this.repairCallArgs(
+                                                whatToAnswerCancellationToken.signal,
+                                                repairPrompt,
+                                                whatToAnswerCancellationToken.signal,
+                                                wtaRepairSystemPrompt,
+                                                ['reference_files'],
+                                            )
                                         ) as AsyncGenerator<string>,
-                                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
+                                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                         interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
                                         isUsefulYet: () => repaired.trim().length >= 5,
                                         shouldAbort: () => repaired.length > 1800
@@ -4633,16 +4666,15 @@ export class IntelligenceEngine extends EventEmitter {
                         try {
                             await raceStreamWithDeadline({
                                 stream: this.llmHelper.streamChat(
-                                    repairPrompt,
-                                    undefined,
-                                    undefined,
-                                    undefined,
-                                    true,
-                                    true,
-                                    [],
-                                    whatToAnswerCancellationToken.signal,
+                                    ...this.repairCallArgs(
+                                        whatToAnswerCancellationToken.signal,
+                                        repairPrompt,
+                                        whatToAnswerCancellationToken.signal,
+                                        undefined,
+                                        [],
+                                    )
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => repaired.length >= 5,
                                 shouldAbort: () => repaired.length > 1200
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -5039,16 +5071,15 @@ export class IntelligenceEngine extends EventEmitter {
                         try {
                             await raceStreamWithDeadline({
                                 stream: this.llmHelper.streamChat(
-                                    coverageRepairPrompt,
-                                    undefined,
-                                    undefined,
-                                    undefined,
-                                    true,
-                                    true,
-                                    [],
-                                    whatToAnswerCancellationToken.signal,
+                                    ...this.repairCallArgs(
+                                        whatToAnswerCancellationToken.signal,
+                                        coverageRepairPrompt,
+                                        whatToAnswerCancellationToken.signal,
+                                        undefined,
+                                        [],
+                                    )
                                 ) as AsyncGenerator<string>,
-                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
+                                firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                 isUsefulYet: () => clauseAddition.length >= 5,
                                 shouldAbort: () => clauseAddition.length > 900
                                     || whatToAnswerCancellationToken.signal.aborted
@@ -5253,16 +5284,15 @@ export class IntelligenceEngine extends EventEmitter {
                             try {
                                 await raceStreamWithDeadline({
                                     stream: this.llmHelper.streamChat(
-                                        repairPrompt,
-                                        undefined,
-                                        undefined,
-                                        undefined,
-                                        true,
-                                        true,
-                                        [],
-                                        whatToAnswerCancellationToken.signal,
+                                        ...this.repairCallArgs(
+                                            whatToAnswerCancellationToken.signal,
+                                            repairPrompt,
+                                            whatToAnswerCancellationToken.signal,
+                                            undefined,
+                                            [],
+                                        )
                                     ) as AsyncGenerator<string>,
-                                    firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
+                                    firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, whatToAnswerCancellationToken.signal),
                                     isUsefulYet: () => repaired.length >= 5,
                                     shouldAbort: () => repaired.length > 1200
                                         || whatToAnswerCancellationToken.signal.aborted
@@ -5654,16 +5684,15 @@ export class IntelligenceEngine extends EventEmitter {
                     let fixed = '';
                     await raceStreamWithDeadline({
                         stream: this.llmHelper.streamChat(
-                            repairPrompt,
-                            undefined,
-                            undefined,
-                            undefined,
-                            true,
-                            true,
-                            [],
-                            abortSignal,
+                            ...this.repairCallArgs(
+                                abortSignal,
+                                repairPrompt,
+                                abortSignal,
+                                undefined,
+                                [],
+                            )
                         ) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000),
+                        firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, abortSignal),
                         isUsefulYet: () => fixed.length >= 5,
                         shouldAbort: () => fixed.length > 1200 || superseded(),
                         onToken: (tok: string) => { fixed += tok; },

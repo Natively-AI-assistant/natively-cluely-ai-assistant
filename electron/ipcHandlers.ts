@@ -41,9 +41,43 @@ import { planAnswer, formatAnswerPlanForPrompt, isCodingAnswerType, validateAnsw
  * now; `minMs` carries each site's own previous value as a floor so this change
  * can only ever add room. See liveDeadlines.repairDeadlineMs.
  */
-function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000): number {
+/** The exact argument tuple LLMHelper.streamChat takes. */
+type StreamChatArgs = Parameters<import('./LLMHelper').LLMHelper['streamChat']>;
+
+/**
+ * Arguments for a post-answer repair stream on the manual-chat surface.
+ *
+ * Replays this turn's answer call so the repair sees the same images, context,
+ * system prompt, scopes and route the answer saw — a repair used to be sent as
+ * `streamChat(prompt, undefined, undefined, undefined, true, true)` and was
+ * reasoning from the prior answer text alone. Falls back to the caller's own
+ * arguments when this turn has no remembered answer. The abort signal is always
+ * the caller's, never the remembered one.
+ */
+function repairCallArgs(
+  llmHelper: any,
+  turnKey: object | undefined | null,
+  repairPrompt: string,
+  signal: AbortSignal | undefined,
+  fallbackContext?: string,
+  fallbackSystemPrompt?: string,
+): StreamChatArgs {
+  const replayed = llmHelper?.replayAnswerCall?.(turnKey, repairPrompt, signal);
+  if (replayed) {
+    // A repair site that supplies its own system prompt (the strict doc-grounded
+    // regen) means it — inheriting the answer's would undo the stricter
+    // contract it is re-running under. The caller's wins; the images,
+    // transcript, scopes and route are still inherited.
+    if (fallbackSystemPrompt !== undefined) replayed[3] = fallbackSystemPrompt;
+    return replayed;
+  }
+  return [repairPrompt, undefined, fallbackContext, fallbackSystemPrompt, true, true, [], signal] as StreamChatArgs;
+}
+
+function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: object | null): number {
   const isUserEndpoint = llmHelper?.isUsingUserEndpoint?.() === true;
   return repairDeadlineMs({
+    hasImages: turnKey ? llmHelper?.replayedAnswerHasImages?.(turnKey) === true : false,
     isLocal: llmHelper?.isUsingOllama?.() === true || llmHelper?.isUsingCodexCli?.() === true,
     viaServerCascade: llmHelper?.isUsingNativelyServerCascade?.() === true,
     isUserEndpoint,
@@ -3661,7 +3695,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             providerAttempts: 1,
           });
           chatTrace.mark('provider_request_started', { ignoreKnowledgeMode: Boolean(ignoreKnowledge) });
-          const stream = llmHelper.streamChat(
+          // Hoisted so this turn's answer call can be handed to LLMHelper for
+          // its post-answer repairs to replay — same transcript, images,
+          // system prompt, scopes and route the answer got. Keyed by this
+          // stream's own controller so a later turn cannot inherit it.
+          const _manualAnswerArgs: StreamChatArgs = [
             message,
             imagePaths,
             context,
@@ -3747,7 +3785,9 @@ export function initializeIpcHandlers(appState: AppState): void {
                   }
                 : {}),
             },
-          );
+          ];
+          llmHelper.rememberAnswerCall?.(myController.signal, _manualAnswerArgs);
+          const stream = llmHelper.streamChat(..._manualAnswerArgs);
 
           // Coding chat STREAMS LIVE through a gate that holds tokens only until
           // the first "## " heading is confirmed (never code-first), then passes
@@ -4033,8 +4073,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 let regen = '';
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
-                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000),
+                  stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
                   shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
@@ -4142,8 +4182,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // silently no-op'd at runtime AND failed the typecheck.)
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
-                  stream: llmHelper.streamChat(regenPrompt, undefined, codingPriorProblemBlock || undefined, undefined, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000),
+                  stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
+                  firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
                   shouldAbort: () => regen.length > CODING_REGEN_ABORT_CHARS,
                   onToken: (tok: string) => { regen += tok; },
@@ -4259,8 +4299,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // (was 4s) clears MiniMax's 4-6s first-token when it's the fallback.
                   // Local model: longer budget for the same cold-load reason as above.
                   await raceStreamWithDeadline({
-                    stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000),
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => repaired.length >= 5,
                     shouldAbort: () => repaired.length > 1200,
                     onToken: (tok: string) => { repaired += tok; },
@@ -5274,8 +5314,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                     // position, but the signal must go in its typed slot (#8,
                     // after extraDataScopes) to also satisfy the compiler —
                     // passing it as arg #7 typechecked as ProviderDataScope[].
-                    stream: llmHelper.streamChat(strictPrompt, undefined, undefined, regenSystemPrompt, true, true, [], regenAbort.signal) as AsyncGenerator<string>,
-                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000),
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, strictPrompt, regenAbort.signal, undefined, regenSystemPrompt)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => regen.length >= 8,
                     shouldAbort: () => regen.length > 2000,
                     onToken: (tok: string) => { regen += tok; },
@@ -5728,8 +5768,8 @@ export function initializeIpcHandlers(appState: AppState): void {
                       // (was 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                       let fixed = '';
                       await raceStreamWithDeadline({
-                        stream: llmHelper.streamChat(repairPrompt, undefined, undefined, undefined, true, true) as AsyncGenerator<string>,
-                        firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000),
+                        stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
+                        firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                         isUsefulYet: () => fixed.length >= 5,
                         onToken: (tok: string) => { fixed += tok; },
                       });

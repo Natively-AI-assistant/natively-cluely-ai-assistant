@@ -310,6 +310,22 @@ export const REPAIR_MAX_FIRST_USEFUL_MS = 12000;
  * measurement, not comfortably outlast it.
  */
 export const REPAIR_LATENCY_MARGIN_MS = 2000;
+/**
+ * Floor for a repair that carries the turn's SCREENSHOT.
+ *
+ * These deadlines were sized when a repair was text-only, because that is all
+ * they were — the repair call passed `undefined` for imagePaths. Now that a
+ * repair inherits the answer's images it pays image encode + multimodal
+ * prefill, which this file measures at p50 5.6s and a tail of 11.6s. A 7000ms
+ * window there can never reliably finish, which would re-create the
+ * "wasted repair" defect from the other direction, one commit after fixing it.
+ *
+ * Above REPAIR_MAX_FIRST_USEFUL_MS deliberately: that cap exists to stop a
+ * background repair holding the UI, and it was also sized for text. A vision
+ * repair that cannot clear the measured tail is not cheaper, it is free to
+ * throw away. Still well under the 20s vision ANSWER ceiling.
+ */
+export const REPAIR_VISION_MIN_FIRST_USEFUL_MS = 14000;
 
 export function repairDeadlineMs(opts: {
   isLocal?: boolean;
@@ -324,9 +340,15 @@ export function repairDeadlineMs(opts: {
    * Defaults to REPAIR_MIN_FIRST_USEFUL_MS.
    */
   minMs?: number;
+  /** The repair inherits the answer's screenshot, so it pays a vision prefill. */
+  hasImages?: boolean;
 }): number {
   if (opts.isLocal) return LIVE_LOCAL_FIRST_USEFUL_TIMEOUT_MS;
-  const floor = Math.max(REPAIR_MIN_FIRST_USEFUL_MS, opts.minMs ?? 0);
+  const floor = Math.max(
+    REPAIR_MIN_FIRST_USEFUL_MS,
+    opts.minMs ?? 0,
+    opts.hasImages ? REPAIR_VISION_MIN_FIRST_USEFUL_MS : 0,
+  );
   const routeBudget = totalHardTimeoutMs({
     viaServerCascade: opts.viaServerCascade,
     isUserEndpoint: opts.isUserEndpoint,
