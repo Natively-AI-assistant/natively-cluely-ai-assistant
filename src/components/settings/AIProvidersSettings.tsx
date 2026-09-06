@@ -2222,14 +2222,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [antigravityError, setAntigravityError] = useState('');
     const [antigravityBusy, setAntigravityBusy] = useState(false);
     const antigravityLoad = useRef(0);
-    // Google refuses this client the free tier (loadCodeAssist returns
-    // free-tier / UNSUPPORTED_CLIENT), so the only usable tier onboards against
-    // a Cloud project the user owns. `saved` is what is persisted; `draft` is
-    // what is being typed, so the field does not fight the user mid-edit.
-    const [antigravityProject, setAntigravityProject] = useState('');
-    const [antigravityProjectDraft, setAntigravityProjectDraft] = useState('');
-    const [antigravityProjectError, setAntigravityProjectError] = useState('');
-    const [antigravityProjectSaved, setAntigravityProjectSaved] = useState(false);
 
     useEffect(() => window.electronAPI.onAntigravityStatusChanged?.((status) => {
         ++antigravityLoad.current;
@@ -2467,10 +2459,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setDefaultModel(result.model);
                 }
 
-                window.electronAPI?.getAntigravityCloudProject?.().then((value) => {
-                    setAntigravityProject(value || '');
-                    setAntigravityProjectDraft(value || '');
-                }).catch(() => { /* older main without the handler */ });
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
 
@@ -2496,13 +2484,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             unsubs.push(window.electronAPI.onGroqFastTextChanged((enabled: boolean) => {
                 setFastResponseMode(enabled);
                 localStorage.setItem('natively_groq_fast_text', String(enabled));
-            }));
-        }
-        if (window.electronAPI?.onAntigravityCloudProjectChanged) {
-            unsubs.push(window.electronAPI.onAntigravityCloudProjectChanged((value: string) => {
-                setAntigravityProject(value || '');
-                setAntigravityProjectDraft(value || '');
-                setAntigravityProjectError('');
             }));
         }
         if (window.electronAPI?.onDirectAssistEnabledChanged) {
@@ -3846,52 +3827,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>{t('Reload models')}</button>
                         <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
                     </>}
-                </div>
-                {/* Google returns free-tier / UNSUPPORTED_CLIENT for this client, so the
-                    only tier left onboards against a project the user owns. Without a
-                    field this was reachable only by exporting GOOGLE_CLOUD_PROJECT
-                    before launching the app, which is not a fix anyone can use. */}
-                <div className="space-y-1">
-                    <label className="aip-label" htmlFor="antigravity-cloud-project">{t('Google Cloud project')}</label>
-                    <div className="flex gap-2">
-                        <input
-                            id="antigravity-cloud-project"
-                            className="aip-input flex-1 min-w-0"
-                            value={antigravityProjectDraft}
-                            placeholder={t('my-project-id')}
-                            spellCheck={false}
-                            autoCapitalize="off"
-                            autoCorrect="off"
-                            onChange={(event) => {
-                                setAntigravityProjectDraft(event.target.value);
-                                setAntigravityProjectError('');
-                                setAntigravityProjectSaved(false);
-                            }}
-                            onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
-                            onBlur={async () => {
-                                const next = antigravityProjectDraft.trim();
-                                if (next === antigravityProject) return;
-                                const result = await window.electronAPI?.setAntigravityCloudProject?.(next);
-                                if (result?.success) {
-                                    setAntigravityProject(next);
-                                    setAntigravityProjectDraft(next);
-                                    setAntigravityProjectSaved(true);
-                                    return;
-                                }
-                                // Put the saved value back rather than leaving a rejected
-                                // string in a field that looks persisted.
-                                setAntigravityProjectDraft(antigravityProject);
-                                setAntigravityProjectError(result?.error === 'invalid_project_id'
-                                    ? t('Not a valid project id: 6–30 characters, lowercase letters, digits and hyphens, starting with a letter.')
-                                    : t('Could not save the project id.'));
-                            }}
-                        />
-                    </div>
-                    {antigravityProjectError
-                        ? <p className="text-[10px] aip-danger-fg" role="alert">{antigravityProjectError}</p>
-                        : antigravityProjectSaved
-                            ? <p className="text-[10px] aip-ok-fg">{t('Saved. Sign in again to apply it.')}</p>
-                            : <p className="text-[10px] aip-muted">{t('Required: this Google client is not offered the free tier, so Antigravity runs against your own project. It needs the Gemini for Cloud API enabled, and usage is billed to it.')}</p>}
                 </div>
                 {antigravityStatus.signedIn && <p className="text-xs aip-muted">{antigravityModels.length
                     ? `${antigravityModels.length} ${t('models available in the model picker.')}`
