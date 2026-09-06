@@ -2,7 +2,7 @@
 //
 // Shared bounded ONNX Runtime thread-count config + cross-loader concurrency
 // gate for every local onnxruntime-node consumer in this app
-// (LocalEmbeddingProvider, LocalReranker, IntentClassifier's zero-shot
+// (LocalEmbeddingProvider, LocalReranker,
 // worker, Whisper's worker).
 //
 // WHY THIS EXISTS (2026-07-05 SIGTRAP crash hardening):
@@ -10,7 +10,7 @@
 // showed an identical main-thread crash inside onnxruntime::BFCArena::Extend →
 // posix_memalign, happening during a live InferenceSession::Run() call, with
 // 16-17 ORT-related OS threads alive at crash time. This is consistent with
-// multiple ONNX Runtime sessions (Whisper STT + IntentClassifier + a local
+// multiple ONNX Runtime sessions (Whisper STT + a local
 // embedding/rerank fallback) racing on native allocator/thread-pool resources
 // when several are concurrently active in-process.
 //
@@ -27,7 +27,7 @@
 // parallelism) and 1 inter-op thread (sequential execution mode; these
 // models have no independent parallel subgraphs to exploit anyway). This is
 // the safest configuration for small/quantized transformer models like
-// MiniLM, mobilebert, bge-reranker-base, and Whisper's encoder/decoder —
+// MiniLM, ms-marco, and Whisper's encoder/decoder —
 // none of these benefit meaningfully from multi-threaded intra-op execution
 // at these model sizes, so the throughput cost of bounding is minimal while
 // the crash-surface reduction is significant.
@@ -41,7 +41,7 @@
 // concurrent ONNX sessions on the BFCArena. A global acquire/release gate
 // caps how many can be live at once, and a `os.freemem()` floor refuses
 // any new session when the system is tight. All four consumers
-// (LocalEmbeddingProvider, LocalReranker, IntentClassifier, Whisper) gate
+// (LocalEmbeddingProvider, LocalReranker, Whisper) gate
 // here before posting `init` to their worker.
 
 import os from 'os';

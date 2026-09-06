@@ -8,12 +8,12 @@
 // (BFCArena::Extend → posix_memalign) during a live InferenceSession::Run()
 // call, with 16-17 ORT-related OS threads alive at crash time. This is
 // consistent with multiple ONNX sessions (Whisper's streaming STT worker +
-// IntentClassifier's zero-shot worker + this local-embedding fallback) being
+// the intent classifier's zero-shot worker, since removed + this local-embedding fallback) being
 // concurrently active in-process. Both of those other consumers already ran
 // their ONNX sessions inside a worker_threads.Worker; this provider was the
 // ONLY one still calling pipeline()/embed() directly on the main process. It
 // is now isolated the same way, following the exact message-passing pattern
-// used by electron/llm/IntentClassifier.ts / intentClassifierWorker.ts.
+// the (since removed) intent classifier used.
 //
 // Public API (isAvailable/embed/embedQuery/embedBatch) is UNCHANGED — all
 // worker plumbing is internal so EmbeddingPipeline.ts and
@@ -39,7 +39,7 @@ const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
 
 /** Process-local poison flag: set by the cold-start consume path to tell the
  *  ensureLoaded + embed paths to fast-fail this launch. Mirrors
- *  IntentClassifier's startupPoisoned. */
+ *  LocalReranker's startupPoisoned. */
 let startupPoisoned = false;
 
 /**
@@ -99,7 +99,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   // Same candidate-search pattern as resolveModelPath, but for the worker
   // script itself — the compiled `localEmbeddingWorker.js` sibling of this
-  // compiled provider file. Mirrors IntentClassifier's getWorkerPath().
+  // compiled provider file. Same shape as LocalReranker's getWorkerPath().
   private getWorkerPath(): string {
     const candidates = [
       path.join(__dirname, 'localEmbeddingWorker.js'),
@@ -328,7 +328,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
 
   /**
    * Latch a synthetic non-recoverable failure when the worker dies before
-   * the model is fully loaded. Idempotent. Mirrors IntentClassifier's latch
+   * the model is fully loaded. Idempotent. Mirrors LocalReranker's latch
    * so the retry-on-every-call pathology can't happen against a missing
    * packaged asset.
    */
@@ -408,7 +408,7 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       return;
     }
 
-    // Cross-loader ONNX gate (shared with LocalReranker / IntentClassifier /
+    // Cross-loader ONNX gate (shared with LocalReranker /
     // Whisper). A gate refusal here is non-fatal — embedBatch will reject,
     // EmbeddingPipeline falls back to lexical retrieval, and the next call
     // retries. We do NOT have a `loadFailed` latch (matches the pre-gate
@@ -481,7 +481,7 @@ export function consumeLocalEmbeddingSentinel(): { modelId: string; startedAt: n
 
 /**
  * Public reset: clears the cold-start poison flag, allowing the next
- * embed() call to attempt a fresh load. Mirrors `clearIntentClassifierPoison`
+ * embed() call to attempt a fresh load. Mirrors `clearLocalRerankerPoison`
  * and the local-whisper-reset-to-default IPC but generalized. Idempotent.
  */
 export function clearLocalEmbeddingPoison(): void {

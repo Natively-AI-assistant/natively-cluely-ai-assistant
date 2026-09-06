@@ -34,7 +34,6 @@ const PREFLIGHT_PATH = path.join(repoRoot, 'dist-electron/electron/services/Loca
 const OLLAMA_PATH = path.join(repoRoot, 'dist-electron/electron/services/OllamaManager.js');
 const ASSETS_PATH = path.join(repoRoot, 'dist-electron/electron/services/LocalFallbackAssets.js');
 const REGISTRY_PATH = path.join(repoRoot, 'dist-electron/electron/services/ProviderStatusRegistry.js');
-const INTENT_PATH = path.join(repoRoot, 'dist-electron/electron/llm/IntentClassifier.js');
 const EMBED_PATH = path.join(repoRoot, 'dist-electron/electron/rag/providers/LocalEmbeddingProvider.js');
 const SMOKE_PATH = path.join(repoRoot, 'scripts/smoke-packaged-local-fallback.mjs');
 

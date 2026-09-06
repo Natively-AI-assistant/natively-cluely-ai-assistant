@@ -1,12 +1,12 @@
 // electron/rag/providers/localEmbeddingWorker.ts
 //
 // Worker-thread host for LocalEmbeddingProvider's ONNX inference. Mirrors the
-// exact pattern used by electron/llm/intentClassifierWorker.ts.
+// exact pattern the (since removed) intent classifier worker used.
 //
 // WHY (2026-07-05 SIGTRAP crash hardening): 9/9 real macOS crash reports
 // showed the app crashing on the MAIN THREAD inside ONNX Runtime's BFC
 // allocator during a live InferenceSession::Run() call — consistent with
-// multiple ONNX sessions (Whisper STT worker + IntentClassifier worker +
+// multiple ONNX sessions (Whisper STT worker + reranker worker +
 // this local-embedding fallback) being concurrently active in-process. The
 // embedding fallback was the only one of the three still running its
 // pipeline()/inference DIRECTLY on the main process, so it is moved into its
@@ -15,7 +15,7 @@
 // electron/utils/onnxThreadConfig.ts) to reduce native thread/memory
 // pressure even when multiple sessions are concurrently active.
 //
-// Message protocol (mirrors intentClassifierWorker.ts):
+// Message protocol:
 //   { type: 'init', requestId, isPackaged, localModelPath, cacheDir }
 //     -> { type: 'ready', requestId } | { type: 'error', requestId, error }
 //   { type: 'embed', requestId, texts: string[] }

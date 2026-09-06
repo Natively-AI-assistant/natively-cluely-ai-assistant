@@ -85,6 +85,11 @@ test('a model that is not bundled does not ride along', () => {
   for (const rel of [
     'Xenova/bge-reranker-large/onnx/model_quantized.onnx',
     'Xenova/bge-reranker-large/config.json',
+    // The intent classifier's model. Removed 2026-09-05, but its filter line
+    // outlived the code that loaded it, so a build kept shipping 121 MB nothing
+    // opened. Pinned here so the filter cannot drift back.
+    'Xenova/mobilebert-uncased-mnli/onnx/model_quantized.onnx',
+    'Xenova/mobilebert-uncased-mnli/config.json',
     'Xenova/some-future-experiment/onnx/model.onnx',
   ]) {
     assert.equal(shipped(rel), false, rel + ' would be shipped - the filter is too broad');

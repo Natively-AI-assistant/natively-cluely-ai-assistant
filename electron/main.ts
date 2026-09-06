@@ -8711,6 +8711,14 @@ if (process.env.THINKING_MATRIX === '1') {
       console.log('[LocalFallbackPreflight] skipped — app is quitting');
       return;
     }
+    // Sweep retired model caches first, so the preflight below never reports
+    // a model nothing opens any more. Non-fatal by construction.
+    try {
+      const { purgeObsoleteModelCaches } = require('./audio/whisper/modelManager');
+      purgeObsoleteModelCaches();
+    } catch (err: any) {
+      console.warn('[modelManager] obsolete cache sweep failed (non-fatal):', err?.message || err);
+    }
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
       const { runLocalFallbackPreflight } = require('./services/LocalFallbackPreflight');
@@ -8723,10 +8731,8 @@ if (process.env.THINKING_MATRIX === '1') {
   // Don't let the preflight timer keep the process alive past quit.
   if (preflightTimer && typeof preflightTimer.unref === 'function') preflightTimer.unref();
 
-  // Defer the zero-shot intent classifier warmup until after the launcher has
-  // had a chance to paint and settle. The classifier still lazy-loads on first
-  // use, so this only moves startup CPU work out of the visible launch path.
-  // Intent classifier warmup removed 2026-09-05: the MobileBERT classifier is gone.
+  // The zero-shot intent classifier warmup that used to sit here was removed
+  // on 2026-09-05 with the classifier itself; its cache is swept above.
   // See docs/natively-router-final-answer-2026-09-05.md.
 
   // DUAL-DOCK-ICON FIX (promotion half): now that the disguised name/icon are

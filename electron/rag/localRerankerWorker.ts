@@ -1,7 +1,7 @@
 // electron/rag/localRerankerWorker.ts
 //
 // Worker-thread host for LocalReranker's cross-encoder ONNX inference.
-// Mirrors electron/llm/intentClassifierWorker.ts and
+// Mirrors
 // electron/rag/providers/localEmbeddingWorker.ts.
 //
 // WHY (2026-07-05 SIGTRAP crash hardening): see localEmbeddingWorker.ts for
