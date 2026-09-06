@@ -27,10 +27,29 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 describe('Bug 002: manually attached screenshots set hasScreenContext', () => {
   test('WTA surface: hasScreenContext covers the imagePaths channel, not just periodic OCR', () => {
     const source = read('electron/IntelligenceEngine.ts');
-    assert.doesNotMatch(source, /hasScreenContext: Boolean\(options\?\.screenContext\),/,
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    // The OCR-only form is still forbidden — that was the bug.
+    assert.doesNotMatch(code, /hasScreenContext: Boolean\(options\?\.screenContext\),/,
       'the OCR-only guard must be widened to cover imagePaths');
-    assert.match(source, /hasScreenContext: Boolean\(options\?\.screenContext\) \|\| \(imagePaths\?\.length \?\? 0\) > 0,/,
-      'hasScreenContext must be true when manual screenshots ride in imagePaths');
+
+    // But the widened form is no longer written inline. It became the named
+    // predicate _wtaHasVisualContext, which the engine also uses for its
+    // no-context guard and the clarification bypass — one definition instead of
+    // three subtly different ones. Pinning the old inline expression made this
+    // test fail on a refactor that strictly IMPROVED what it guards (the
+    // predicate adds browser-DOM capture as a third visual channel).
+    //
+    // So: assert the property. hasScreenContext must come from the predicate,
+    // and the predicate must count imagePaths.
+    assert.match(code, /hasScreenContext: _wtaHasVisualContext,/,
+      'hasScreenContext must be derived from the shared visual-context predicate');
+    const defn = code.match(/const _wtaHasVisualContext =([\s\S]{0,220}?);/);
+    assert.ok(defn, '_wtaHasVisualContext is gone — hasScreenContext has no definition to check');
+    assert.match(defn[1], /\(imagePaths\?\.length \?\? 0\) > 0/,
+      'the predicate must count manually attached screenshots, which is the whole bug (#429 Bug 002)');
+    assert.match(defn[1], /options\?\.screenContext/,
+      'and must still count periodic OCR');
   });
 
   test('manual-chat surface: the gemini-chat-stream buildV3Prompt call passes hasScreenContext from imagePaths', () => {

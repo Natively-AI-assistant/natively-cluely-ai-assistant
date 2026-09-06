@@ -230,6 +230,13 @@ export interface StoredCredentials {
          */
         lastRefreshAt?: number;
     };
+    /** Google Antigravity OAuth bundle, persisted through the same encrypted store. */
+    antigravityOAuthTokens?: {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        projectId: string;
+    };
 }
 
 export class CredentialsManager {
@@ -704,6 +711,58 @@ export class CredentialsManager {
         this.credentials.codexOAuthTokens = undefined;
         this.saveCredentials();
         console.log('[CredentialsManager] Codex OAuth tokens cleared');
+    }
+
+    /**
+     * Persisted Google Antigravity OAuth tokens. The service never exposes this
+     * bundle to the renderer; it reads it only to refresh and call Code Assist.
+     */
+    public getAntigravityOAuthTokens(): {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        projectId: string;
+    } | null {
+        const tokens = this.credentials.antigravityOAuthTokens;
+        if (!tokens || typeof tokens.accessToken !== 'string' || !tokens.accessToken.trim() ||
+            typeof tokens.refreshToken !== 'string' || !tokens.refreshToken.trim() ||
+            !Number.isFinite(tokens.expiresAt) || typeof tokens.projectId !== 'string' || !tokens.projectId.trim()) {
+            return null;
+        }
+        return { ...tokens, projectId: tokens.projectId.trim() };
+    }
+
+    /** Checked write: failed/degraded storage leaves memory unchanged. */
+    public setAntigravityOAuthTokens(tokens: {
+        accessToken: string;
+        refreshToken: string;
+        expiresAt: number;
+        projectId: string;
+    }): boolean {
+        if (this.refuseWriteWhileDegraded('set Antigravity OAuth tokens')) return false;
+        if (!tokens.accessToken || !tokens.refreshToken || !tokens.projectId?.trim()) return false;
+        const previous = this.credentials.antigravityOAuthTokens;
+        this.credentials.antigravityOAuthTokens = { ...tokens, projectId: tokens.projectId.trim() };
+        if (this.saveCredentials()) {
+            console.log('[CredentialsManager] Antigravity OAuth tokens updated');
+            return true;
+        }
+        this.credentials.antigravityOAuthTokens = previous;
+        return false;
+    }
+
+    /** Checked clear: failed/degraded storage leaves the in-memory store intact. */
+    public clearAntigravityOAuthTokens(): boolean {
+        if (this.refuseWriteWhileDegraded('clear Antigravity OAuth tokens')) return false;
+        const previous = this.credentials.antigravityOAuthTokens;
+        if (!previous) return true;
+        this.credentials.antigravityOAuthTokens = undefined;
+        if (this.saveCredentials()) {
+            console.log('[CredentialsManager] Antigravity OAuth tokens cleared');
+            return true;
+        }
+        this.credentials.antigravityOAuthTokens = previous;
+        return false;
     }
 
     public getLitellmApiKey(): string | undefined {

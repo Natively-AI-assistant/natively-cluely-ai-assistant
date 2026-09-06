@@ -846,22 +846,21 @@ The user triggered this action with a coding problem on screen and NO new questi
                     const { buildInsufficientPropertyAnswer, renderGoverningFactualBlock } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
                     const pack = governedEvidencePack ?? _cog.evidencePack;
                     if (!pack) throw new Error('governed WTA turn missing canonical EvidencePack');
-                    // Screenshot outranks a TEXT-evidence decline (2026-08-19):
-                    // refuse/clarify here is a verdict about the text universe
-                    // only — with user-attached pixels it would silently drop
-                    // the screenshot (manual chat's clarify short-circuit is
-                    // already image-gated; this is the WTA twin). Fall through
-                    // WITHOUT rendering the declining pack: legacy composition
-                    // + the vision instruction answer from the screenshot,
-                    // while the profile stays suppressed (governed turn) and
-                    // no forbidden text source is added back.
+                    // Current-screen evidence outranks a TEXT-evidence decline
+                    // (2026-08-19/29): refuse/clarify here is a verdict about the
+                    // other text universe only. User-attached pixels, browser
+                    // DOM, or screen OCR must all fall through WITHOUT rendering
+                    // the declining pack; the screen instruction then answers
+                    // from the active visual channel while the profile stays
+                    // suppressed and no forbidden text source is added back.
                     const { declineYieldsToAttachedImages } = require('../intelligence/context-os') as typeof import('../intelligence/context-os');
                     const _declineYields = declineYieldsToAttachedImages({
                         answerPolicy: pack.answerPolicy,
                         hasAttachedImages,
+                        hasScreenText,
                     });
                     if (_declineYields) {
-                        console.log('[CONTEXT-OS] text-evidence decline yields to attached screenshot(s) — answering from pixels');
+                        console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — answering from visual evidence');
                     } else {
                     if (pack.answerPolicy === 'ask_clarification') {
                         // contract.reason is a developer diagnostic (e.g. "sourceAuthority=
@@ -887,7 +886,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                     // retrieval pronouns; it never enters the provider packet as facts.
                     if (_cog.contract.sourceOwner === 'reference_files') transcriptForPrompt = '';
                     (_cog as any).evidencePack = pack;
-                    } // end !_declineYields — image-exempted turns skip decline AND pack rendering
+                    } // end !_declineYields — visual-context turns skip decline AND pack rendering
                 }
             } catch (cogErr: any) {
                 if (governedEvidenceResolutionStarted) throw cogErr;
@@ -1053,6 +1052,11 @@ The user triggered this action with a coding problem on screen and NO new questi
                 ? {
                     answerType: answerPlan?.answerType,
                     contextOsGeneration: governedWtaContextOs,
+                    // Preserve the request-scoped visual channel through the
+                    // LLMHelper governance and final-prompt decline gates. DOM
+                    // and OCR turns have no image path, so image-only routing
+                    // metadata would re-refuse after WTA already yielded.
+                    hasScreenText,
                     // Grounding-campaign3 (2026-07-23): thread the t0 mode pin so
                     // LLMHelper._streamChatInner's always-on document-grounded
                     // retrieval reads the SAME mode the request was planned
@@ -1062,6 +1066,7 @@ The user triggered this action with a coding problem on screen and NO new questi
                 }
                 : {
                     answerType: answerPlan?.answerType,
+                    hasScreenText,
                     pinnedModeId: requestSnapshot?.modeUniqueId ?? null,
                 };
             // CONTEXT INTELLIGENCE V3 (Phase 6) — prompt substitution, transport intact.

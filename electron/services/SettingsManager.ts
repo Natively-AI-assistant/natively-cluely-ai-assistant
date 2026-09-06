@@ -35,6 +35,11 @@ export interface AppSettings {
     // produced only by the What-to-Answer hotkey, exactly as before. The
     // trigger itself lives in AppState.scheduleAutoAnswer().
     autoAnswerEnabled?: boolean;
+    // Direct Assist is the opt-in, single-provider answer path. It deliberately
+    // bypasses meeting retrieval and the legacy answer-orchestration pipeline.
+    // Keep the persisted default OFF during rollout; the operator kill switch
+    // (NATIVELY_DIRECT_ASSIST_KILL_SWITCH) always wins over this preference.
+    directAssistEnabled?: boolean;
     actionButtonMode?: 'recap' | 'brainstorm';
     groqFastTextMode?: boolean;
     codexCliEnabled?: boolean;
@@ -379,6 +384,25 @@ export class SettingsManager {
 
     public getTechnicalInterviewVisionFirst(): boolean {
         return this.settings.technicalInterviewVisionFirst !== false;
+    }
+
+    /**
+     * Emergency operator stop for Direct Assist. This is intentionally a
+     * hard-off switch: renderer settings can never override it. The value is
+     * read on every call so a test harness or a managed launch environment can
+     * establish the effective state before any request is dispatched.
+     */
+    public isDirectAssistKilledByOperator(): boolean {
+        const raw = String(process.env.NATIVELY_DIRECT_ASSIST_KILL_SWITCH ?? '')
+            .trim()
+            .toLowerCase();
+        return raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes';
+    }
+
+    /** Effective Direct Assist state. Persisted default is false. */
+    public getDirectAssistEnabled(): boolean {
+        if (this.isDirectAssistKilledByOperator()) return false;
+        return this.settings.directAssistEnabled === true;
     }
 
     // ── Smart Browser Context v2 — resolved settings (single default source) ──

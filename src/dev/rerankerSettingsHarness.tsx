@@ -16,21 +16,26 @@ import { RerankerSettings } from '../components/settings/RerankerSettings';
 // not being looked at.
 const CATALOG_MODELS = [
     {
+        // The INSTALLED + selected row. This was a second copy of
+        // mxbai-rerank-xsmall carrying ms-marco's 24MB size — a rename that
+        // changed the id but not the numbers, leaving two entries with the same
+        // id in a list React keys by id. Now a real, distinct catalogue model.
+        //
         // NOT ms-marco: that is the BUNDLED model and is deliberately absent
-        // from the download catalogue. Using a real catalogue entry here keeps
-        // the harness honest about what the panel actually renders.
-        id: 'mxbai-rerank-xsmall', name: 'mxbai Rerank XSmall', runtime: 'onnx', repo: 'mixedbread-ai/mxbai-rerank-xsmall-v1',
-        params: '22M · int8', note: 'Tiny and quick. The lightest option that actually reranks.',
-        bytes: 23857086, recommended: false,
+        // from the download catalogue.
+        id: 'ettin-reranker-68m', name: 'Ettin Reranker 68M', runtime: 'onnx', repo: 'cross-encoder/ettin-reranker-68m-v1',
+        params: '68M', note: 'MRR 0.9205 — the strongest model here that is free for commercial use, at half the download of the 150M.',
+        bytes: 277620876, recommended: true,
         license: { spdx: 'Apache-2.0', url: '#', commercialUseRestricted: false, requiresAcknowledgement: false },
-        state: 'installed', bytesOnDisk: 23857086, selected: true,
+        state: 'installed', bytesOnDisk: 277620876, selected: true,
         extensionId: null, extensionInstalled: null, requiresBinary: null,
         supported: true, unsupportedReason: null, activatable: true,
     },
     {
+        // The not-installed row. Values match the real catalogue entry.
         id: 'mxbai-rerank-xsmall', name: 'mxbai Rerank XSmall', runtime: 'onnx', repo: 'mixedbread-ai/mxbai-rerank-xsmall-v1',
-        params: '70M · int8', note: 'A good default: small download, noticeably better than the built-in.',
-        bytes: 95898326, recommended: true,
+        params: '70M · int8', note: 'MRR 0.8394 against a 0.8368 no-reranker baseline — below the bundled ms-marco-MiniLM-L-6-v2 (0.8688). Small and fast, but downloading it makes ranking slightly worse.',
+        bytes: 95898326, recommended: false,
         license: { spdx: 'Apache-2.0', url: '#', commercialUseRestricted: false, requiresAcknowledgement: false },
         state: 'not-installed', bytesOnDisk: 0, selected: false,
         extensionId: null, extensionInstalled: null, requiresBinary: null,
@@ -112,8 +117,8 @@ const delay = <T,>(v: T): Promise<T> =>
         candidateCount: 15, topN: 5, fallbackToLocal: false,
         hasApiKey: true, eligible: false, ineligibleReason: 'provider-not-selected',
         ineligibleMessage: 'The reranker provider is set to Local.',
-        builtIn: { id: 'bge-reranker-base', name: 'BGE Reranker Base', bundled: true, cached: true, available: true },
-        effective: { kind: 'local', id: 'mxbai-rerank-xsmall' },
+        builtIn: { id: 'ms-marco-MiniLM-L-6-v2', name: 'MS MARCO MiniLM L6', bundled: true, cached: true, available: true },
+        effective: { kind: 'local', id: 'ettin-reranker-68m' },
         lastTest: { at: '2026-09-01T10:00:00Z', model: 'voyageai/rerank-2.5-lite', latencyMs: 412, ok: true },
     } as any),
     getRerankerCatalog: async () => ({
@@ -125,7 +130,7 @@ const delay = <T,>(v: T): Promise<T> =>
             { id: 'nvidia/llama-nemotron-rerank-vl-1b-v2:free', label: 'NVIDIA: Nemotron Rerank VL', vendor: 'nvidia', contextLength: 10240, free: true, multimodal: true, group: 'multimodal', note: '10K context · multimodal · free tier' },
         ],
     }),
-    listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'mxbai-rerank-xsmall', builtInSelected: false }),
+    listLocalRerankerModels: async () => ({ models: CATALOG_MODELS, selectedId: 'ettin-reranker-68m', builtInSelected: false }),
     listExtensions: async () => ({ available: true, extensions: EXTENSIONS }),
     setRerankerConfig: async () => ({ success: true }),
     useLocalRerankerModel: async () => ({ success: true }),

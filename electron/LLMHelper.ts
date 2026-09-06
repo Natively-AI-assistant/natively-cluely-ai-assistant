@@ -68,7 +68,15 @@ import { promisify } from 'util';
 import axios from 'axios';
 import { createProviderRateLimiters, RateLimiter } from './services/RateLimiter';
 import { CodexCliConfig, CodexCliService, DEFAULT_CODEX_CLI_CONFIG } from './services/CodexCliService';
+import { AntigravityService } from './services/AntigravityService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
+import { DirectAssistError } from './direct-assist/errors';
+import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER } from './direct-assist/requestBuilder';
+import type {
+  DirectAssistDispatchRequest,
+  DirectAssistProvider,
+  DirectAssistSelection,
+} from './direct-assist/types';
 const execAsync = promisify(exec);
 const NATIVELY_API_URL = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
 
@@ -731,7 +739,7 @@ export class LLMHelper {
   private static readonly PROVIDER_LABEL_FAMILY: Readonly<Record<string, string>> = {
     gemini: 'gemini', groq: 'groq', natively: 'natively', openai: 'openai',
     claude: 'claude', deepseek: 'deepseek', litellm: 'litellm', codex: 'codex-cli',
-    custom_curl: 'custom', custom_provider: 'custom',
+    antigravity: 'antigravity', custom_curl: 'custom', custom_provider: 'custom',
   };
 
   /**
@@ -791,6 +799,7 @@ export class LLMHelper {
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
    *  that would otherwise have been answered. */
   private anyVisionProviderAvailable(): boolean {
+    if (!this.isProviderDisabled('antigravity') && AntigravityService.getInstance().getStatus().signedIn) return true;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
@@ -1554,6 +1563,26 @@ export class LLMHelper {
     return modelId === "codex-cli" || modelId.startsWith("codex-cli:");
   }
 
+  private isAntigravityModel(model: string): boolean { return model.startsWith('antigravity:'); }
+
+  private getAntigravityModelId(model: string): string { return model.replace(/^antigravity:/, ''); }
+
+  private async *streamWithAntigravity(userPrompt: string, systemPrompt?: string, imagePaths?: string[], signal?: AbortSignal, model = this.currentModelId, direct = false): AsyncGenerator<string> {
+    if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
+    // Direct Assist has already classified/stripped optional context. Its typed
+    // current question must not be reclassified as meeting transcript here.
+    this.assertOutboundScopes('antigravity', direct ? '' : userPrompt, imagePaths, direct ? this.inferEmbeddedMessageScopes(userPrompt) : []);
+    const images = [];
+    for (const imagePath of imagePaths || []) {
+      signal?.throwIfAborted();
+      images.push(await this.processImage(imagePath));
+    }
+    yield* AntigravityService.getInstance().stream({
+      model: this.getAntigravityModelId(model), userPrompt, systemPrompt, images, signal,
+      maxOutputTokens: getModelCapabilities(this.getAntigravityModelId(model), false).outputBudgetTokens,
+    });
+  }
+
   private isCodexAvailable(): boolean {
     // The store spells this family 'codex-cli'; isProviderFamilyDisabled also
     // accepts the router's 'codex'.
@@ -1738,7 +1767,7 @@ export class LLMHelper {
     });
   }
 
-  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async *streamWithCodexCli(userContent: string, systemPrompt?: string, fastMode = false, imagePaths?: string[], signal?: AbortSignal, modelOverride?: string): AsyncGenerator<string, void, unknown> {
     if (!this.isCodexAvailable()) throw new Error('Codex CLI transport is disabled or ChatGPT is signed out.');
     // Codex routes to chatgpt.com/backend-api — it is a CLOUD provider, and it
     // needs the same local-only last boundary every other cloud provider has.
@@ -1752,7 +1781,7 @@ export class LLMHelper {
     // first next() rather than at call time — still strictly before any byte
     // reaches CodexCliService.stream, which is the property that matters.
     this.assertOutboundScopes('codex', userContent, imagePaths);
-    const model = this.getSelectedCodexCliModel(fastMode);
+    const model = modelOverride || this.getSelectedCodexCliModel(fastMode);
     // See note in generateWithCodexCli — system prompt is sent
     // separately as `body.instructions`, not concatenated.
     yield* CodexCliService.stream(this.codexCliConfig.path, {
@@ -3293,6 +3322,12 @@ let isMultimodal = !!(imagePaths?.length);
       const openaiSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || OPENAI_SYSTEM_PROMPT);
       const claudeSystemPrompt = skipSystemPrompt ? undefined : this.injectLanguageInstruction(systemPromptOverride || CLAUDE_SYSTEM_PROMPT);
 
+      if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+        let text = '';
+        for await (const chunk of this.streamWithAntigravity(cloudUserContent, openaiSystemPrompt, cloudImagePaths)) text += chunk;
+        return text;
+      }
+
       // GROQ FAST TEXT OVERRIDE (Text-Only) — gated on picked model so Gemini/Claude/OpenAI
       // selections aren't silently routed to Groq. See streamChat() for matching gate.
       // !this.isCodexCliModel(this.currentModelId) prevents fast-mode from
@@ -3839,14 +3874,15 @@ let isMultimodal = !!(imagePaths?.length);
    * nothing that accepts an image — the vision chain must fall through to
    * another provider rather than silently answer text-only.
    */
-  private async createGroqCompletion(request: any, opts?: { signal?: AbortSignal }): Promise<any> {
+  private async createGroqCompletion(request: any, opts?: { signal?: AbortSignal; strictModel?: boolean }): Promise<any> {
     if (!this.groqClient) throw new Error("Groq client not initialized");
+    const sdkOptions = opts?.signal ? { signal: opts.signal } : undefined;
     // KNOWN-GONE MEMO (code-review 2026-08-23): after a retirement, every call
     // used to pay a doomed full-payload round trip to the dead model before
     // laddering — callers keep passing the module const. Skip straight to the
     // fallback rung when this process has already seen the model die.
     const { markGroqModelGone, isGroqModelKnownGone, groqReasoningParams } = require('./llm/groqModels') as typeof import('./llm/groqModels');
-    if (isGroqModelKnownGone(request?.model)) {
+    if (!opts?.strictModel && isGroqModelKnownGone(request?.model)) {
       const memoFallback = groqFallbackFor(request?.model);
       if (memoFallback) {
         return await this.createGroqCompletion({ ...request, model: memoFallback }, opts);
@@ -3863,7 +3899,7 @@ let isMultimodal = !!(imagePaths?.length);
       return { ...rest, ...groqReasoningParams(r?.model) };
     };
     try {
-      return await this.groqClient.chat.completions.create(withReasoning(request), opts as any);
+      return await this.groqClient.chat.completions.create(withReasoning(request), sdkOptions as any);
     } catch (err: any) {
       const gone = !opts?.signal?.aborted && isGroqModelGone(err);
       // NOTIFY DISCOVERY BEFORE the exhausted-ladder throw (code-review
@@ -3876,10 +3912,10 @@ let isMultimodal = !!(imagePaths?.length);
         markGroqModelGone(request?.model);
         this.modelVersionManager.onModelError(request?.model).catch(() => { });
       }
-      const fallback = gone ? groqFallbackFor(request?.model) : null;
+      const fallback = gone && !opts?.strictModel ? groqFallbackFor(request?.model) : null;
       if (!fallback) throw err;
       console.warn(`[LLMHelper] Groq model ${request?.model} is gone — retrying on ${fallback}`);
-      return await this.groqClient.chat.completions.create(withReasoning({ ...request, model: fallback }), opts as any);
+      return await this.groqClient.chat.completions.create(withReasoning({ ...request, model: fallback }), sdkOptions as any);
     }
   }
 
@@ -4382,6 +4418,10 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         data: data,
         timeout: 60_000,
+        // The URL above is the only destination that passed the SSRF policy.
+        // Never replay the prompt, credentials, or image body to an unchecked
+        // redirect target.
+        maxRedirects: 0,
       });
 
       // 6. Extract Answer
@@ -4571,6 +4611,17 @@ let isMultimodal = !!(imagePaths?.length);
       if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
     }
 
+    // 4b. NO validateUrlForSsrf here — deliberately. It blocks loopback and
+    //     RFC-1918, which are exactly the hosts a custom provider exists to
+    //     reach: Ollama on 127.0.0.1, LM Studio on the LAN, llama.cpp on
+    //     localhost. SSRF protection is for attacker-influenced URLs; this one
+    //     is typed into a settings field by the person running the app, so the
+    //     metadata-host guard above is the check that still applies.
+    //
+    //     It came back through the main merge on 2026-09-04 and broke every
+    //     local endpoint — 8 CustomProviderWirePayload cases went red with
+    //     "SSRF protection blocked URL (Loopback addresses are not allowed)".
+
     // 5. Execute Fetch (30s timeout — same as RestSTT uploads)
     const customAbort = new AbortController();
     const customTimeout = setTimeout(() => customAbort.abort(), 30_000);
@@ -4593,6 +4644,8 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         body: serializedBody,
         signal: customAbort.signal,
+        // Do not replay credentials or generated content to an unchecked URL.
+        redirect: 'manual',
       });
       clearTimeout(customTimeout);
 
@@ -7008,14 +7061,17 @@ let isMultimodal = !!(imagePaths?.length);
         const { renderGoverningFactualBlock } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         const pack = _cog.evidencePack;
         if (!pack) throw new Error('governed turn missing canonical EvidencePack');
-        // Screenshot outranks a TEXT-evidence decline (2026-08-19): a
-        // refuse/clarify pack judges only the text universe; with user-attached
-        // pixels the honest move is dispatching so the model answers from the
-        // screenshot (the WTA govern block and manual chat's clarify
-        // short-circuit draw the same line — see refusalPolicy.ts).
+        // Current-screen evidence outranks a TEXT-evidence decline
+        // (2026-08-19/29): a refuse/clarify pack judges only the other text
+        // universe. Dispatch for either attached pixels or request-scoped
+        // browser DOM/screen OCR; the WTA govern block draws the same line.
         const { declineYieldsToAttachedImages: _declineYieldsLLM } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
-        if (_declineYieldsLLM({ answerPolicy: pack.answerPolicy, hasAttachedImages: Boolean(imagePaths?.length) })) {
-          console.log('[CONTEXT-OS] text-evidence decline yields to attached screenshot(s) — dispatching with pixels');
+        if (_declineYieldsLLM({
+          answerPolicy: pack.answerPolicy,
+          hasAttachedImages: Boolean(imagePaths?.length),
+          hasScreenText: routeOptions?.hasScreenText === true,
+        })) {
+          console.log('[CONTEXT-OS] text-evidence decline yields to current-screen context — dispatching with visual evidence');
         } else {
         if (pack.answerPolicy === 'ask_clarification') {
           const { recordContextOsBenchmarkAudit } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
@@ -7053,7 +7109,7 @@ let isMultimodal = !!(imagePaths?.length);
         // the EXACT same pack — Phase 9 identity requirement). A no-op
         // reassignment when `pack` already came from `_cog.evidencePack`.
         (_cog as any).evidencePack = pack;
-        } // end image-exemption else — exempted turns skip decline AND pack rendering
+        } // end visual-context exemption — skip decline AND pack rendering
       }
     } catch (cogErr: any) {
       const governedContext = routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined;
@@ -7189,21 +7245,20 @@ let isMultimodal = !!(imagePaths?.length);
         });
         cog.finalPromptValidation = finalPromptValidation;
         contextOsFinalPromptValidation = finalPromptValidation;
-        // Screenshot outranks a DECLINE-class boundary refusal (2026-08-19,
-        // narrowed by code review): a refuse/clarify verdict judges the text
-        // universe only, and the upstream govern-block exemption deliberately
-        // lets those packs through — without this yield they would just be
-        // re-refused here. Every OTHER failure reason (structural manifest
-        // damage, a missing required family, and above all
-        // forbidden_evidence_rendered) still fails CLOSED with pixels
-        // attached: a source-isolation leak is not something a screenshot
-        // makes safe to dispatch. See boundaryDeclineYieldsToAttachedImages.
+        // Current-screen evidence outranks a DECLINE-class boundary refusal
+        // (2026-08-19/29, narrowed by code review): a refuse/clarify verdict
+        // judges the other text universe only, and the upstream govern-block
+        // exemption deliberately lets those packs through. Every OTHER failure
+        // reason (structural manifest damage, a missing required family, and
+        // above all forbidden_evidence_rendered) still fails CLOSED with any
+        // visual channel present. See boundaryDeclineYieldsToAttachedImages.
         const { boundaryDeclineYieldsToAttachedImages: _boundaryYields } = require('./intelligence/context-os') as typeof import('./intelligence/context-os');
         if (!finalPromptValidation.ok && _boundaryYields({
           reason: finalPromptValidation.reason,
           hasAttachedImages: Boolean(imagePaths?.length),
+          hasScreenText: routeOptions?.hasScreenText === true,
         })) {
-          console.log('[CONTEXT-OS] decline-class boundary validation failure yields to attached screenshot(s) — dispatching with pixels');
+          console.log('[CONTEXT-OS] decline-class boundary validation failure yields to current-screen context — dispatching with visual evidence');
         } else if (!finalPromptValidation.ok) {
           recordContextOsBenchmarkAudit({
             contract: cog.contract,
@@ -7282,6 +7337,11 @@ let isMultimodal = !!(imagePaths?.length);
     }
     markH4Stage('provider_dispatch_start', { model: this.currentModelId });
     _stage(`provider dispatch START (sysPrompt=${finalSystemPrompt.length}c, userContent=${userContent.length}c, model=${this.currentModelId})`);
+
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      yield* this.streamWithAntigravity(userContent, finalSystemPrompt, imagePaths, abortSignal);
+      return;
+    }
 
     // ── UNIFIED MULTIMODAL PATH ────────────────────────────────────────────
     // Every image-bearing request goes through the single streaming vision
@@ -7797,7 +7857,7 @@ let isMultimodal = !!(imagePaths?.length);
    * Yields the full response in small word-batches so the UI typing effect still plays.
    * Throws on empty response so the fallback chain tries the next provider.
    */
-  private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, connectTimeoutMs: number = INTERACTIVE_CONNECT_TIMEOUT_MS): AsyncGenerator<string, void, unknown> {
+  private async * streamWithNatively(userContent: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, connectTimeoutMs: number = INTERACTIVE_CONNECT_TIMEOUT_MS, directMode = false): AsyncGenerator<string, void, unknown> {
     // ── REAL SSE STREAM (replaces the fake word-by-word simulation) ──────────
     // Previous implementation called generateWithNatively() (blocking, waited for
     // the full response), then drip-fed words with setTimeout delays — pure theater.
@@ -7820,9 +7880,12 @@ let isMultimodal = !!(imagePaths?.length);
       messages: [{ role: 'user', content: userContent }],
       stream: true,
     };
-    if (this.groqFastTextMode) body.fast_mode = true;
+    // Direct Assist must preserve the selected gateway path. Legacy fast mode
+    // is an implicit server-side model substitution, so it is never sent for a
+    // direct request.
+    if (!directMode && this.groqFastTextMode) body.fast_mode = true;
     if (systemPrompt) body.system = systemPrompt;
-    if (this.aiResponseLanguage) {
+    if (!directMode && this.aiResponseLanguage) {
       // 'auto' AND 'English' are both forwarded — the server injects for each.
       // English used to be excluded here, which (together with the empty prompt
       // suffix above) left an English-pinned turn with no directive at all.
@@ -7845,14 +7908,22 @@ let isMultimodal = !!(imagePaths?.length);
             images.push({ mime_type: 'image/jpeg', data: compressed.toString('base64') });
           } catch (compressErr: any) {
             // Fallback: send raw if sharp fails (e.g. unsupported format)
-            console.warn('[LLMHelper] streamWithNatively: image compression failed, sending raw:', compressErr.message);
+            console.warn(
+              '[LLMHelper] streamWithNatively: image compression failed, sending raw:',
+              directMode ? '[details omitted]' : compressErr.message,
+            );
             const imageData = await fs.promises.readFile(p);
             if (imageData.length > 500 * 1024) {
-              console.warn('[LLMHelper] streamWithNatively: raw fallback image too large, skipping:', p);
+              if (directMode) {
+                throw new DirectAssistError('INVALID_ATTACHMENT', 'The image attachment could not be prepared for the selected provider.');
+              }
+              console.warn('[LLMHelper] streamWithNatively: raw fallback image too large, skipping:', directMode ? '[path omitted]' : p);
               continue;
             }
             images.push({ mime_type: 'image/png', data: imageData.toString('base64') });
           }
+        } else if (directMode) {
+          throw new DirectAssistError('INVALID_ATTACHMENT', 'The image attachment is no longer available.');
         }
       }
       if (images.length) body.images = images;
@@ -7940,12 +8011,14 @@ let isMultimodal = !!(imagePaths?.length);
         if (streamController.signal.aborted) break;
         try {
           const serializedBody = JSON.stringify(body);
-          require('./llm/providerPayloadCapture').captureProviderPayload({
-            provider: 'natively_gateway',
-            classification: 'exact_serialized_provider_payload',
-            payload: body,
-            serializedPayload: serializedBody,
-          });
+          if (!directMode) {
+            require('./llm/providerPayloadCapture').captureProviderPayload({
+              provider: 'natively_gateway',
+              classification: 'exact_serialized_provider_payload',
+              payload: body,
+              serializedPayload: serializedBody,
+            });
+          }
           response = await fetch(endpointUrl, {
             method: 'POST',
             headers: streamHeaders,
@@ -7970,17 +8043,33 @@ let isMultimodal = !!(imagePaths?.length);
               provider: 'natively',
               connectTimeoutMs,
               durationMs,
-              error: summarizeFetchError(fetchErr),
+              error: directMode ? '[omitted for Direct Assist]' : summarizeFetchError(fetchErr),
               aborted: streamController.signal.aborted,
-              abortReason: (streamController.signal as any).reason?.message ?? (streamController.signal as any).reason,
+              abortReason: directMode
+                ? undefined
+                : (streamController.signal as any).reason?.message ?? (streamController.signal as any).reason,
             });
+            if (directMode) {
+              if (abortSignal?.aborted) {
+                throw new DirectAssistError('CANCELLED', 'The request was cancelled.');
+              }
+              if (streamController.signal.aborted) {
+                throw new DirectAssistError('CONNECT_TIMEOUT', 'The selected provider timed out.', true);
+              }
+              throw new DirectAssistError('PROVIDER_ERROR', 'The selected provider could not start the stream.', true);
+            }
             throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${connectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
           }
           console.warn(`[streamWithNatively] DNS failure req=${requestId} (${fetchErr.cause?.code ?? fetchErr.code}), retry ${attempt + 1}/2 in 500ms`);
           await new Promise<void>(r => setTimeout(r, 500));
         }
       }
-      if (lastErr) throw lastErr;
+      if (lastErr) {
+        if (directMode) {
+          throw new DirectAssistError('PROVIDER_ERROR', 'The selected provider could not start the stream.', true);
+        }
+        throw lastErr;
+      }
     } finally {
       // Connection established (or failed) — stop the connect-phase timer.
       // The stream body will now be read without any timeout (until/unless
@@ -8000,13 +8089,18 @@ let isMultimodal = !!(imagePaths?.length);
         method: 'POST',
         stage: 'http_status',
         status: response.status,
-        statusText: response.statusText,
+        statusText: directMode ? undefined : response.statusText,
         model: this.currentModelId,
         provider: 'natively',
         connectTimeoutMs,
         durationMs: Math.round(nowMs() - streamStartedAt),
-        responseBody: errText.slice(0, 1000),
+        responseBody: directMode ? '[omitted for Direct Assist]' : errText.slice(0, 1000),
       });
+      if (directMode) {
+        const error = new Error(`Natively API stream HTTP ${response.status}`) as Error & { status?: number };
+        error.status = response.status;
+        throw error;
+      }
       throw new Error(`Natively API stream HTTP ${response.status} requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} endpoint=${endpointUrl}: ${errData.error || errText.slice(0, 300) || 'unknown'}`);
     }
 
@@ -8067,9 +8161,16 @@ let isMultimodal = !!(imagePaths?.length);
               connectTimeoutMs,
               tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
               durationMs: Math.round(nowMs() - streamStartedAt),
-              error: chunk.error,
-              message: chunk.message,
+              error: directMode ? '[omitted for Direct Assist]' : chunk.error,
+              message: directMode ? undefined : chunk.message,
             });
+            if (directMode) {
+              throw new DirectAssistError(
+                'PROVIDER_ERROR',
+                'The selected provider reported a streaming failure.',
+                true,
+              );
+            }
             throw new Error(`Natively API stream server error requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} model=${providerModel || 'unknown'} error=${chunk.error}`);
           }
           if (typeof chunk.delta === 'string' && chunk.delta) {
@@ -8096,8 +8197,19 @@ let isMultimodal = !!(imagePaths?.length);
         durationMs: Math.round(nowMs() - streamStartedAt),
         tokens: tokenCount,
         chars: charCount,
-        error: summarizeFetchError(streamErr),
+        error: directMode ? '[omitted for Direct Assist]' : summarizeFetchError(streamErr),
       });
+      if (directMode) {
+        if (streamErr instanceof DirectAssistError) throw streamErr;
+        if (abortSignal?.aborted) {
+          throw new DirectAssistError('CANCELLED', 'The request was cancelled.');
+        }
+        throw new DirectAssistError(
+          'PROVIDER_ERROR',
+          'The selected provider stream ended unexpectedly.',
+          true,
+        );
+      }
       throw new Error(`Natively API stream failed during read requestId=${requestId} serverRequestId=${serverRequestId || 'n/a'} stage=${firstTokenAt ? 'during_stream' : 'before_first_token'} model=${providerModel || 'unknown'} ${formatFetchError(streamErr)}`);
     } finally {
       const totalMs = Math.max(1, nowMs() - streamStartedAt);
@@ -8140,7 +8252,7 @@ let isMultimodal = !!(imagePaths?.length);
    * `userMessage`) so Groq's prefix cache hits across turns. See generateWithGroq
    * for the full rationale. The single-arg form is retained for legacy callers.
    */
-  private async * streamWithGroq(userMessage: string, modelId: string = GROQ_MODEL, systemPrompt?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithGroq(userMessage: string, modelId: string = GROQ_MODEL, systemPrompt?: string, abortSignal?: AbortSignal, strictModel = false): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.groqClient) throw new Error("Groq client not initialized");
     this.assertOutboundScopes('groq', userMessage);
@@ -8166,7 +8278,7 @@ let isMultimodal = !!(imagePaths?.length);
     require('./llm/providerPayloadCapture').captureProviderPayload({
       provider: 'groq', classification: 'sdk_request_object_before_serialization', payload: request,
     });
-    const stream = await this.createGroqCompletion(request, { signal: abortSignal });
+    const stream = await this.createGroqCompletion(request, { signal: abortSignal, strictModel });
 
     try {
       for await (const chunk of stream) {
@@ -8184,7 +8296,7 @@ let isMultimodal = !!(imagePaths?.length);
   /**
    * Stream multimodal (image + text) response from Groq using Llama 4 Scout as a last resort
    */
-  private async * streamWithGroqMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithGroqMultimodal(userMessage: string, imagePaths: string[], systemPrompt?: string, abortSignal?: AbortSignal, modelId: string = GROQ_VISION_MODEL): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.groqClient) throw new Error("Groq client not initialized");
     this.assertOutboundScopes('groq', userMessage, imagePaths);
@@ -8208,7 +8320,7 @@ let isMultimodal = !!(imagePaths?.length);
 
     if (abortSignal?.aborted) return;
     const stream = await this.groqClient.chat.completions.create({
-      model: GROQ_VISION_MODEL,
+      model: modelId,
       messages,
       stream: true,
       max_tokens: 8192,
@@ -8387,14 +8499,14 @@ let isMultimodal = !!(imagePaths?.length);
    * DeepSeek streaming path: scope-gated, rate-limited, abort-aware. Images are
    * forwarded when present and the upstream model decides vision support.
    */
-  private async * streamWithLiteLLM(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithLiteLLM(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error("Cloud providers disabled in local-only mode");
     if (!this.litellmClient) throw new Error("LiteLLM client not initialized");
     this.assertOutboundScopes('litellm', userMessage, imagePaths);
 
     await this.rateLimiters.litellm.acquire();
 
-    const litellmModel = this.currentModelId.replace('litellm/', '');
+    const litellmModel = (modelId || this.currentModelId).replace('litellm/', '');
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
     if (imagePaths?.length) {
@@ -8428,12 +8540,12 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
+  private async * streamWithNvidiaNim(userMessage: string, systemPrompt?: string, imagePaths?: string[], abortSignal?: AbortSignal, modelId?: string): AsyncGenerator<string, void, unknown> {
     if (this.isLocalOnlyMode) throw new Error('Cloud providers disabled in local-only mode');
     if (!this.nvidiaNimClient) throw new Error('NVIDIA NIM client not initialized');
     this.assertOutboundScopes('nvidia_nim', userMessage, imagePaths);
     await this.rateLimiters.nvidia_nim.acquire();
-    const model = this.currentModelId.replace('nvidia_nim/', '');
+    const model = (modelId || this.currentModelId).replace('nvidia_nim/', '');
     const messages: any[] = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (imagePaths?.length) {
@@ -8774,7 +8886,7 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   // --- OLLAMA STREAMING (uses /api/chat with proper messages array) ---
-  private async * streamWithOllama(message: string, context?: string, systemPrompt: string = TINY_SYSTEM_PROMPT, imagePaths?: string[], abortSignal?: AbortSignal, modelOverride?: string): AsyncGenerator<string, void, unknown> {
+  private async * streamWithOllama(message: string, context?: string, systemPrompt: string = TINY_SYSTEM_PROMPT, imagePaths?: string[], abortSignal?: AbortSignal, modelOverride?: string, strictErrors = false): AsyncGenerator<string, void, unknown> {
     // When a screenshot is attached and the primary model is text-only, the
     // caller passes the resolved vision-capable model here so the image is
     // actually understood instead of silently dropped.
@@ -8802,6 +8914,9 @@ let isMultimodal = !!(imagePaths?.length);
           const data = await fs.promises.readFile(p);
           encoded.push(data.toString("base64"));
         } catch (e) {
+          if (strictErrors) {
+            throw new DirectAssistError('INVALID_ATTACHMENT', 'The image attachment could not be read.');
+          }
           console.warn("[LLMHelper] streamWithOllama: failed to read image, skipping:", p, e);
         }
       }
@@ -8916,14 +9031,109 @@ let isMultimodal = !!(imagePaths?.length);
         }
       }
     } catch (e: any) {
+      if (strictErrors) throw e;
       console.error('[LLMHelper] Ollama streaming failed:', e?.message || e);
       yield `Error: Failed to stream from Ollama (${e?.message || 'unknown'}).`;
     }
   }
 
+  /** One-shot, abort-aware raw cURL adapter for Direct Assist. */
+  private async *streamWithDirectCurl(
+    provider: CurlProvider,
+    userMessage: string,
+    systemPrompt: string,
+    imagePaths: string[],
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<string, void, unknown> {
+    if (customProviderIsLocal(provider)) {
+      if (this.isProviderDisabled('custom') || this.isProviderDisabled(provider.id)) {
+        throw new ProviderDisabledError(provider.id);
+      }
+    } else {
+      this.assertOutboundScopes('custom_curl', userMessage, imagePaths);
+    }
+    if (abortSignal?.aborted) return;
+
+    // @ts-ignore third-party parser has no useful declaration for its result
+    const curlConfig = curl2Json(provider.curlCommand);
+    let base64Image = '';
+    const imagePath = imagePaths[0];
+    if (imagePath) {
+      try {
+        base64Image = (await fs.promises.readFile(imagePath)).toString('base64');
+      } catch {
+        throw new DirectAssistError('INVALID_ATTACHMENT', 'The image attachment could not be read.');
+      }
+    }
+
+    const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${userMessage}` : userMessage;
+    const variables = {
+      TEXT: JSON.stringify(fullPrompt).slice(1, -1),
+      IMAGE_BASE64: base64Image,
+    };
+    // applyCurlVariables, not three raw deepVariableReplacer calls. This
+    // function arrived with the main merge still calling the older helper,
+    // which this branch had already replaced — it no longer exists, so TS7
+    // failed the electron typecheck on both platforms. The replacement is also
+    // stricter: it percent-encodes the URL (an unencoded &, # or space in a
+    // substituted value rewrites the request shape) and strips control
+    // characters from header values.
+    const { url, headers, data: substituted } = applyCurlVariables(curlConfig, variables);
+    let data = substituted;
+    if (base64Image && imagePath) data = injectImageIntoMessages(data, base64Image, imagePath);
+
+    // The metadata-host guard, NOT validateUrlForSsrf — the same policy the
+    // other two custom-provider transports use.
+    //
+    // This function already branches on customProviderIsLocal(provider) a few
+    // lines above, so it knows the endpoint can be on this machine. It then ran
+    // the full range check, which rejects loopback and RFC-1918 — so a Direct
+    // Assist provider pointed at Ollama on 127.0.0.1 was refused with "The
+    // custom provider URL was blocked by network safety policy." by the same
+    // function that had just classified it as local. Verified at runtime before
+    // this change, and again after.
+    //
+    // blockedInfrastructureHost keeps the part that matters: cloud and
+    // container metadata hosts stay refused (169.254/16,
+    // metadata.google.internal, fd00:ec2::254 — checked directly against both
+    // guards, they block the identical set).
+    const blockedHost = blockedInfrastructureHost(url);
+    if (blockedHost) {
+      throw new DirectAssistError('INVALID_REQUEST', `The custom provider endpoint was refused: ${blockedHost}`);
+    }
+
+    const response = await axios({
+      method: curlConfig.method || 'POST',
+      url,
+      headers,
+      data,
+      timeout: 60_000,
+      signal: abortSignal,
+      // The initial URL is validated immediately above. Refuse redirects so
+      // Axios cannot resend Direct Assist data to an unvalidated destination.
+      maxRedirects: 0,
+    });
+    if (abortSignal?.aborted) return;
+
+    const answer = provider.responsePath
+      ? getByPath(response.data, provider.responsePath)
+      : response.data;
+    if (typeof answer === 'string') {
+      yield answer;
+      return;
+    }
+    if (answer !== undefined) yield JSON.stringify(answer);
+  }
+
   // --- CUSTOM PROVIDER STREAMING ---
-  private async * streamWithCustom(message: string, context?: string, imagePaths?: string[], systemPrompt: string = UNIVERSAL_SYSTEM_PROMPT, abortSignal?: AbortSignal): AsyncGenerator<string, void, unknown> {
-    if (!this.customProvider) return;
+  private async * streamWithCustom(message: string, context?: string, imagePaths?: string[], systemPrompt: string = UNIVERSAL_SYSTEM_PROMPT, abortSignal?: AbortSignal, providerOverride?: CustomProvider, strictErrors = false, bypassCloudDataScopes = false): AsyncGenerator<string, void, unknown> {
+    // Direct Assist passes an immutable provider snapshot. Legacy callers omit
+    // it and retain the active-provider behaviour.
+    const selectedCustomProvider = providerOverride || this.customProvider;
+    if (!selectedCustomProvider) {
+      if (strictErrors) throw new Error('Custom provider not configured');
+      return;
+    }
     // We reuse the executeCustomProvider logic but we need it to stream.
     // If the user provided a curl command, it might support streaming (SSE) or not.
     // If we execute it via Child Process, we can read stdout stream.
@@ -8933,48 +9143,76 @@ let isMultimodal = !!(imagePaths?.length);
     // But we can't easily reuse the function since it awaits the whole fetch.
     // So we'll implement a simplified streaming version using our existing variable replacer and node-fetch.
 
-    this.assertOutboundScopes('custom_provider', message, imagePaths);
+    if (bypassCloudDataScopes) {
+      if (this.isProviderDisabled('custom') || this.isProviderDisabled(selectedCustomProvider.id)) {
+        throw new ProviderDisabledError(selectedCustomProvider.id);
+      }
+    } else {
+      this.assertOutboundScopes('custom_provider', message, imagePaths);
+    }
 
-    const curlCommand = this.customProvider.curlCommand;
+    const curlCommand = selectedCustomProvider.curlCommand;
     const requestConfig = curl2Json(curlCommand);
 
     let base64Image = "";
-    // See executeCustomProvider: this must track the ENCODED file, because the
-    // optimizer turns a .png screenshot into JPEG and the declared mime is
-    // derived from this path.
-    let imageTypePath = imagePaths?.[0];
+    // Tracks the ENCODED file, not the original: the optimizer turns a .png
+    // screenshot into JPEG and the declared mime type is derived from this
+    // path, so pointing it at imagePaths[0] declares a mime that contradicts
+    // the bytes. Assigned from sourcePath below and re-pointed at
+    // optimized.path when the optimizer runs.
+    let preparedImagePath: string | undefined;
     if (imagePaths?.length) {
+      const sourcePath = imagePaths[0];
+      // Raw fallback bytes retain the source file's MIME/extension. Successful
+      // optimization replaces this with ImageOptimizer's MIME-correct temp
+      // path (balanced commonly converts PNG to .jpg).
+      preparedImagePath = sourcePath;
       try {
         // 2026-07-19: same image-size fix as executeCustomProvider (see that
         // method for the full rationale). Optimize before base64-encoding so the
         // wire payload stays under the 10 MB Anthropic per-image limit.
         // Use the first image for custom providers (they typically only support one).
-        const sourcePath = imagePaths[0];
         const optimized = await getImageOptimizer().optimize(sourcePath, {
           profile: 'balanced',
           provider: 'custom',
           cacheKey: sourcePath,
         });
         base64Image = await getImageOptimizer().getBase64(optimized);
-        imageTypePath = optimized.path;
+        preparedImagePath = optimized.path;
       } catch (e) {
-        console.warn(
-          "[LLMHelper] streamWithCustom: image optimization failed, falling back to raw read:",
-          e,
-        );
+        if (!strictErrors) {
+          console.warn(
+            "[LLMHelper] streamWithCustom: image optimization failed, falling back to raw read:",
+            e,
+          );
+        }
         try {
-          const data = await fs.promises.readFile(imagePaths[0]);
+          const data = await fs.promises.readFile(sourcePath);
           base64Image = data.toString("base64");
-          imageTypePath = imagePaths[0];
-        } catch (e2) { /* keep empty */ }
+          preparedImagePath = sourcePath;
+        } catch (e2) {
+          if (strictErrors) {
+            throw new DirectAssistError('INVALID_ATTACHMENT', 'The image attachment could not be read.');
+          }
+          /* keep empty for legacy callers */
+        }
       }
     }
 
     const combinedMessage = context ? `${context}\n\n${message}` : message;
+    const directCustomMode = strictErrors && Boolean(providerOverride);
+    const templateUsesSystemPrompt = /\{\{\s*SYSTEM_PROMPT\s*\}\}/i.test(curlCommand);
+    // Many saved custom templates expose only {{TEXT}}/{{PROMPT}}. Legacy
+    // callers keep their byte-for-byte variable contract, while Direct folds
+    // its short system contract into those generic fields only when the
+    // template has no separate system slot.
+    const genericPromptValue = directCustomMode && systemPrompt && !templateUsesSystemPrompt
+      ? `${systemPrompt}\n\n${combinedMessage}`
+      : combinedMessage;
 
     const variables = {
-      TEXT: combinedMessage,
-      PROMPT: combinedMessage,
+      TEXT: genericPromptValue,
+      PROMPT: genericPromptValue,
       SYSTEM_PROMPT: systemPrompt,
       USER_MESSAGE: message,
       CONTEXT: context || "",
@@ -8989,15 +9227,23 @@ let isMultimodal = !!(imagePaths?.length);
 
     // Auto-upgrade last user message to multimodal content array when an image is present.
     // No-op for non-OpenAI formats and templates already containing a proper image_url part.
-    // imageTypePath — not imagePaths[0] — so the declared mime matches the bytes.
-    if (base64Image && imageTypePath) {
-      body = injectImageIntoMessages(body, base64Image, imageTypePath);
+    // preparedImagePath — not imagePaths[0] — so the declared mime matches the bytes.
+    if (base64Image && preparedImagePath) {
+      body = injectImageIntoMessages(body, base64Image, preparedImagePath);
     }
 
-    // Refuse only cloud/container metadata hosts — see blockedInfrastructureHost
-    // for why the old broad SSRF check is deliberately not used here. Thrown, not
-    // returned as answer text, so the fallback chain classifies it as a provider
-    // failure instead of showing the user an error where the reply belongs.
+    // ONE check, not two. An earlier resolution of this merge ran
+    // validateUrlForSsrf here as well, on the stated reasoning that it "rejects
+    // file:/data:/javascript: and malformed URLs" and that "neither blocks
+    // loopback or private ranges". That was simply wrong: it rejects loopback,
+    // link-local, RFC-1918 and IPv6 ULA too, and a custom provider pointed at
+    // Ollama on 127.0.0.1 is the ordinary case, not an attack.
+    //
+    // blockedInfrastructureHost is the guard that belongs here: cloud and
+    // container metadata hosts (the whole 169.254/16, metadata.google.internal,
+    // fd00:ec2::254) stay refused, and a local endpoint keeps working. Thrown
+    // rather than yielded, so the fallback chain classifies it as a provider
+    // failure instead of printing an error where the model's reply belongs.
     {
       const blocked = blockedInfrastructureHost(url);
       if (blocked) throw new Error(`Custom provider endpoint refused: ${blocked}`);
@@ -9022,10 +9268,20 @@ let isMultimodal = !!(imagePaths?.length);
         headers: headers,
         body: JSON.stringify(body),
         signal: streamAbort.signal,
+        // WHATWG fetch follows redirects by default and can replay this body
+        // and its credentials to a destination that never passed provider
+        // selection or network-safety checks. Treat every redirect as an HTTP
+        // error instead of following it.
+        redirect: 'manual',
       });
       clearTimeout(streamTimeout);
 
       if (!response.ok) {
+        if (strictErrors) {
+          const error = new Error(`Custom Provider returned HTTP ${response.status}`) as Error & { status?: number };
+          error.status = response.status;
+          throw error;
+        }
         console.error('[LLMHelper] Custom Provider stream HTTP error', { status: response.status });
         yield `Error: Custom Provider returned HTTP ${response.status}`;
         return;
@@ -9036,16 +9292,52 @@ let isMultimodal = !!(imagePaths?.length);
       // Collect all chunks to handle both SSE streaming and non-SSE JSON responses
       let fullBody = "";
       let yieldedAny = false;
+      const streamDecoder = new TextDecoder();
+      let lineBuffer = "";
+      // Every parseStreamLine call passes the configured responsePath. This
+      // helper arrived with the main merge and omitted it, which put a whole
+      // non-streaming JSON body back on the raw-JSON path: such a body is ONE
+      // complete object on ONE line, so it lands here rather than in the
+      // !yieldedAny fallback, and without the path the user saw
+      // `{"data":{"answer":"..."}}` instead of the answer.
+      //
+      // Safe to pass unconditionally: parseStreamLine ignores it for `data: `
+      // SSE frames, which are deltas a whole-body path cannot address, and
+      // applies it only to a complete JSON object.
+      const parseCompleteChunkFrame = (): { complete: boolean; item: string | null } => {
+        const trimmed = lineBuffer.trim();
+        if (!trimmed) return { complete: false, item: null };
+        if (trimmed.startsWith('data: ')) {
+          const payload = trimmed.slice(6).trim();
+          if (payload === '[DONE]') return { complete: true, item: null };
+          try {
+            JSON.parse(payload);
+            return { complete: true, item: this.parseStreamLine(trimmed, this.customProvider?.responsePath) };
+          } catch {
+            return { complete: false, item: null };
+          }
+        }
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+          try {
+            JSON.parse(trimmed);
+            return { complete: true, item: this.parseStreamLine(trimmed, this.customProvider?.responsePath) };
+          } catch {
+            return { complete: false, item: null };
+          }
+        }
+        return { complete: false, item: null };
+      };
 
       // @ts-ignore
       for await (const chunk of response.body) {
         // Per-chunk caller-cancel check (the abort above already closed the
         // socket, but a buffered chunk could still be in the iterator).
         if (abortSignal?.aborted) return;
-        const text = new TextDecoder().decode(chunk);
+        const text = streamDecoder.decode(chunk, { stream: true });
         fullBody += text;
-
-        const lines = text.split('\n');
+        lineBuffer += text;
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop() ?? "";
         for (const line of lines) {
           if (line.trim().length === 0) continue;
 
@@ -9054,6 +9346,31 @@ let isMultimodal = !!(imagePaths?.length);
             yield items;
             yieldedAny = true;
           }
+        }
+        // Some legacy custom endpoints use each HTTP chunk as the frame and
+        // omit newlines. Consume a syntactically-complete JSON/SSE frame now;
+        // otherwise retain it as a fragmented line for the next chunk.
+        const chunkFrame = parseCompleteChunkFrame();
+        if (chunkFrame.complete) {
+          lineBuffer = "";
+          if (chunkFrame.item) {
+            yield chunkFrame.item;
+            yieldedAny = true;
+          }
+        }
+      }
+
+      // Flush a split UTF-8 code point and the final non-newline-terminated
+      // SSE/JSON line. This keeps legacy extraction semantics while preventing
+      // a valid delta split across TCP chunks from disappearing.
+      const decoderTail = streamDecoder.decode();
+      fullBody += decoderTail;
+      lineBuffer += decoderTail;
+      if (lineBuffer.trim().length > 0) {
+        const item = this.parseStreamLine(lineBuffer, this.customProvider?.responsePath);
+        if (item) {
+          yield item;
+          yieldedAny = true;
         }
       }
 
@@ -9085,6 +9402,7 @@ let isMultimodal = !!(imagePaths?.length);
       // The per-chunk `if (abortSignal?.aborted) return` above already applies
       // this rule to the success path; the error path simply never learned it.
       if (abortSignal?.aborted) return;
+      if (strictErrors) throw e;
       console.error("Custom streaming failed", e);
       yield "Error streaming from custom provider.";
     } finally {
@@ -9405,8 +9723,9 @@ let isMultimodal = !!(imagePaths?.length);
     }
   }
 
-  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" {
+  public getCurrentProvider(): "ollama" | "gemini" | "custom" | "codex-cli" | "antigravity" {
     if (this.customProvider) return "custom";
+    if (!this.useOllama && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) return "antigravity";
     if (this.isCodexCliModel(this.currentModelId)) return "codex-cli";
     return this.useOllama ? "ollama" : "gemini";
   }
@@ -9428,10 +9747,318 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Snapshot the exact provider/model pair used by Direct Assist. Unlike the
+   * legacy getCurrentProvider(), this identifies every supported provider and
+   * never labels OpenAI/Claude/Groq selections as Gemini.
+   */
+  public getDirectAssistSelection(): DirectAssistSelection {
+    let provider: DirectAssistProvider;
+    let model: string;
+
+    if (this.customProvider) {
+      provider = 'custom';
+      model = this.customProvider.id;
+    } else if (this.activeCurlProvider) {
+      provider = 'curl';
+      model = this.activeCurlProvider.id;
+    } else if (this.useOllama) {
+      provider = 'ollama';
+      model = this.ollamaModel;
+    } else {
+      const selected = this.currentModelId;
+      model = selected;
+      // Gateway IDs can contain a nested vendor/model name (for example,
+      // litellm/openai/gpt-4o). Classify those explicit prefixes before the
+      // generic vendor predicates or the request escapes through the wrong
+      // credential/client boundary.
+      if (selected === 'natively') provider = 'natively';
+      else if (this.isAntigravityModel(selected)) provider = 'antigravity';
+      else if (this.isCodexCliModel(selected)) {
+        provider = 'codex-cli';
+        model = this.getSelectedCodexCliModel(false);
+      } else if (this.isNvidiaNimModel(selected)) provider = 'nvidia_nim';
+      else if (this.isLiteLLMModel(selected)) provider = 'litellm';
+      else if (this.isGroqModel(selected)) provider = 'groq';
+      else if (this.isOpenAiModel(selected)) provider = 'openai';
+      else if (this.isClaudeModel(selected)) provider = 'claude';
+      else if (this.isDeepseekModel(selected)) provider = 'deepseek';
+      else if (this.isGeminiModel(selected)) provider = 'gemini';
+      else throw new DirectAssistError('MODEL_UNAVAILABLE', 'The selected model has no Direct Assist adapter.');
+    }
+
+    if (!model || !model.trim()) {
+      throw new DirectAssistError('NO_PROVIDER_CONFIGURED', 'No model is selected for Direct Assist.');
+    }
+    return Object.freeze({ provider, model });
+  }
+
+  /**
+   * Direct Assist provider boundary. The request is copied synchronously so a
+   * later Settings/model change cannot alter an in-flight dispatch. The
+   * returned generator invokes exactly one adapter and contains no fallback.
+   */
+  public streamDirectAssist(
+    request: DirectAssistDispatchRequest,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<string, void, unknown> {
+    if (!request?.selection?.provider || !request.selection.model) {
+      throw new DirectAssistError('NO_PROVIDER_CONFIGURED', 'Direct Assist requires a selected provider and model.');
+    }
+
+    const frozenRequest: DirectAssistDispatchRequest = Object.freeze({
+      requestId: request.requestId,
+      selection: Object.freeze({
+        provider: request.selection.provider,
+        model: request.selection.model,
+      }),
+      systemPrompt: request.systemPrompt,
+      userPrompt: request.userPrompt,
+      imagePaths: Object.freeze([...request.imagePaths]),
+    });
+    const custom = request.selection.provider === 'custom'
+      ? this.snapshotDirectCustomProvider(request.selection.model)
+      : null;
+    const curl = request.selection.provider === 'curl' && this.activeCurlProvider?.id === request.selection.model
+      ? Object.freeze({ ...this.activeCurlProvider })
+      : null;
+
+    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal);
+  }
+
+  private snapshotDirectCustomProvider(modelId: string): CustomProvider | null {
+    const provider = this.customProvider?.id === modelId
+      ? this.customProvider
+      : this.configuredCustomProviders.find((candidate) => candidate.id === modelId) ?? null;
+    return provider ? Object.freeze({ ...provider }) : null;
+  }
+
+  private directSelectionSupportsImages(
+    selection: DirectAssistSelection,
+    custom: CustomProvider | null,
+    curl: CurlProvider | null,
+  ): boolean {
+    switch (selection.provider) {
+      case 'natively':
+      case 'codex-cli':
+      case 'antigravity':
+        return true;
+      case 'custom':
+        return customProviderSupportsVision(custom);
+      case 'curl':
+        return customProviderSupportsVision(curl);
+      case 'ollama':
+        return this.ollamaVisionCache.get(selection.model)
+          ?? getModelCapabilities(selection.model, true).supportsImages;
+      case 'litellm':
+      case 'nvidia_nim':
+        // These adapters are image-forwarding gateways whose catalogues can
+        // contain newly-added upstream vision models that are unknown to the
+        // app's static capability table. Preserve the image and exact model;
+        // an unsupported upstream returns a normal provider error, never a
+        // fallback or a text-only retry.
+        return true;
+      case 'deepseek':
+        return false;
+      default:
+        return getModelCapabilities(selection.model, false).supportsImages;
+    }
+  }
+
+  private async *streamDirectAssistFrozen(
+    request: DirectAssistDispatchRequest,
+    custom: CustomProvider | null,
+    curl: CurlProvider | null,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<string, void, unknown> {
+    if (abortSignal?.aborted) return;
+
+    const { provider, model } = request.selection;
+    const imagePaths = [...request.imagePaths];
+    for (const imagePath of imagePaths) {
+      try {
+        if (!fs.statSync(imagePath).isFile()) throw new Error('not a regular file');
+      } catch {
+        throw new DirectAssistError('INVALID_ATTACHMENT', 'An image attachment is no longer available.');
+      }
+    }
+    const disabledFamily = provider === 'codex-cli'
+      ? 'codex-cli'
+      : provider === 'curl' || provider === 'custom'
+        ? 'custom'
+        : provider;
+    if (this.isProviderDisabled(disabledFamily)) {
+      throw new ProviderDisabledError(provider);
+    }
+    if (imagePaths.length && !this.directSelectionSupportsImages(request.selection, custom, curl)) {
+      throw new DirectAssistError(
+        'MODEL_DOES_NOT_SUPPORT_IMAGES',
+        `The selected ${model} model does not support image input.`,
+      );
+    }
+    if ((provider === 'custom' || provider === 'curl') && imagePaths.length > 1) {
+      throw new DirectAssistError(
+        'INVALID_ATTACHMENT',
+        'The selected custom provider accepts at most one image per request.',
+      );
+    }
+
+    // Direct Assist bypasses the legacy context assembler, so enforce the
+    // existing provider-data-scope policy here before the sole dispatch. The
+    // request builder emits the same recognized scope tags as legacy/V3.
+    const directProviderIsLocal = provider === 'ollama'
+      || (provider === 'custom' && customProviderIsLocal(custom))
+      || (provider === 'curl' && customProviderIsLocal(curl));
+    if (this.isLocalOnlyMode && !directProviderIsLocal) {
+      throw new DirectAssistError('PROVIDER_ERROR', 'Cloud providers are disabled in local-only mode.');
+    }
+    // This is the shared last boundary for every Direct image dispatch. The
+    // provider-specific streamers are intentionally not trusted to remember
+    // private_vision: a cloud Natively request, for example, otherwise reaches
+    // its transport without passing through assertOutboundScopes. Verified
+    // local Direct providers may still perform private vision on-device.
+    if (imagePaths.length > 0 && !directProviderIsLocal) {
+      this.assertOutboundImagesAllowed(provider, true);
+    }
+    const directScopes = this.inferEmbeddedMessageScopes(request.userPrompt);
+    const deniedScopes = directProviderIsLocal
+      ? []
+      : this.getDeniedOutboundScopes(request.userPrompt, imagePaths, directScopes);
+    if (deniedScopes.includes('screenshots')) {
+      throw new DirectAssistError(
+        'SCREENSHOT_BLOCKED_BY_PRIVACY',
+        'Screenshots and current page data are disabled for cloud providers.',
+      );
+    }
+    // scopesForPayload()'s 'transcript' tag is a last-boundary backstop that
+    // fires on ANY non-empty prompt text, not only when the prompt actually
+    // carries transcript-derived content — Direct Assist's userPrompt always
+    // has a "CURRENT REQUEST" section, so it fires on every request.
+    //
+    // directScopes.includes('transcript') is NOT the right gate either:
+    // meetingTranscript (the live session's last 180s, added unconditionally
+    // to every Direct Assist request) is correctly tagged
+    // <evidence source_type="MEETING_TRANSCRIPT">, so directScopes includes
+    // 'transcript' on almost every request during a live meeting. Gating the
+    // hard block on that would re-fail every typed/reference-file question
+    // the instant any meeting audio exists, regardless of relevance.
+    //
+    // The only case that must hard-fail rather than silently strip-and-
+    // continue is screenshot's CURRENT TURN SPEECH: it IS the current
+    // request (see this file's system-prompt authority line), so answering
+    // with it removed would answer a different, incomplete question.
+    // meetingTranscript, history and everything else are optional context by
+    // design — stripDeniedScopedBlocksFromMessage below removes them and the
+    // request proceeds, same as the legacy chat path.
+    if (deniedScopes.includes('transcript') && request.userPrompt.includes(DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER)) {
+      throw new DirectAssistError(
+        'TRANSCRIPT_BLOCKED_BY_PRIVACY',
+        'Transcript data is disabled for cloud providers, so this request was not sent.',
+      );
+    }
+    const directUserPrompt = deniedScopes.length
+      ? this.stripDeniedScopedBlocksFromMessage(request.userPrompt, deniedScopes)
+      : request.userPrompt;
+    const capabilityModel = provider === 'antigravity'
+      ? this.getAntigravityModelId(model)
+      : provider === 'litellm'
+      ? model.replace(/^litellm\//, '')
+      : provider === 'nvidia_nim'
+        ? model.replace(/^nvidia_nim\//, '')
+        : model;
+    const directCapabilities = getModelCapabilities(capabilityModel, provider === 'ollama');
+    const directInputTokens = estimateTokens(request.systemPrompt) + estimateTokens(directUserPrompt);
+    if (directInputTokens + directCapabilities.outputBudgetTokens > directCapabilities.maxContextTokens) {
+      throw new DirectAssistError(
+        'CONTEXT_TOO_LARGE',
+        'The Direct Assist request exceeds the selected model context limit.',
+      );
+    }
+
+    // Every branch yields from one exact adapter and returns. There is no
+    // provider race, model ladder or cross-provider recovery below this point.
+    switch (provider) {
+      case 'natively':
+        yield* this.streamWithNatively(
+          directUserPrompt,
+          request.systemPrompt,
+          imagePaths,
+          abortSignal,
+          INTERACTIVE_CONNECT_TIMEOUT_MS,
+          true,
+        );
+        return;
+      case 'gemini':
+        yield* this.streamWithGeminiModel(directUserPrompt, model, imagePaths, request.systemPrompt, abortSignal);
+        return;
+      case 'openai':
+        if (imagePaths.length) {
+          yield* this.streamWithOpenaiMultimodal(directUserPrompt, imagePaths, request.systemPrompt, model, abortSignal);
+        } else {
+          yield* this.streamWithOpenai(directUserPrompt, request.systemPrompt, model, abortSignal);
+        }
+        return;
+      case 'claude':
+        if (imagePaths.length) {
+          yield* this.streamWithClaudeMultimodal(directUserPrompt, imagePaths, request.systemPrompt, model, abortSignal);
+        } else {
+          yield* this.streamWithClaude(directUserPrompt, request.systemPrompt, model, abortSignal);
+        }
+        return;
+      case 'groq':
+        if (imagePaths.length) {
+          yield* this.streamWithGroqMultimodal(directUserPrompt, imagePaths, request.systemPrompt, abortSignal, model);
+        } else {
+          yield* this.streamWithGroq(directUserPrompt, model, request.systemPrompt, abortSignal, true);
+        }
+        return;
+      case 'deepseek':
+        yield* this.streamWithDeepseek(directUserPrompt, request.systemPrompt, model, abortSignal);
+        return;
+      case 'nvidia_nim':
+        yield* this.streamWithNvidiaNim(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'litellm':
+        yield* this.streamWithLiteLLM(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model);
+        return;
+      case 'ollama':
+        yield* this.streamWithOllama(directUserPrompt, undefined, request.systemPrompt, imagePaths, abortSignal, model, true);
+        return;
+      case 'codex-cli':
+        if (!this.isCodexAvailable()) throw new Error('Codex CLI provider not configured');
+        yield* this.streamWithCodexCli(directUserPrompt, request.systemPrompt, false, imagePaths, abortSignal, model);
+        return;
+      case 'antigravity':
+        yield* this.streamWithAntigravity(directUserPrompt, request.systemPrompt, imagePaths, abortSignal, model, true);
+        return;
+      case 'custom':
+        if (!custom) throw new Error('Custom provider not configured');
+        if (this.isLocalOnlyMode && !customProviderIsLocal(custom)) {
+          throw new Error('Cloud providers disabled in local-only mode');
+        }
+        yield* this.streamWithCustom(directUserPrompt, undefined, imagePaths, request.systemPrompt, abortSignal, custom, true, directProviderIsLocal);
+        return;
+      case 'curl':
+        if (!curl) throw new Error('cURL provider not configured');
+        if (this.isLocalOnlyMode && !customProviderIsLocal(curl)) {
+          throw new Error('Cloud providers disabled in local-only mode');
+        }
+        yield* this.streamWithDirectCurl(curl, directUserPrompt, request.systemPrompt, imagePaths, abortSignal);
+        return;
+      default: {
+        const exhaustive: never = provider;
+        throw new DirectAssistError('MODEL_UNAVAILABLE', `No Direct Assist adapter exists for ${exhaustive}.`);
+      }
+    }
+  }
+
+  /**
    * Human-readable label for the active model. Prefer this for UI rendering
    * and never compare the result to option IDs (use {@link getCurrentModelId}).
    */
   public getCurrentModelDisplayName(): string {
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      return `${this.getAntigravityModelId(this.currentModelId)} (Antigravity)`;
+    }
     if (this.customProvider) return this.customProvider.name;
     if (this.activeCurlProvider) return this.activeCurlProvider.id;
     return this.useOllama ? this.ollamaModel : this.currentModelId;
@@ -9482,6 +10109,9 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   public getCapabilities(): ModelCapabilities {
+    if (!this.useOllama && !this.customProvider && !this.activeCurlProvider && this.isAntigravityModel(this.currentModelId)) {
+      return getModelCapabilities(this.getAntigravityModelId(this.currentModelId), false);
+    }
     return getModelCapabilities(this.getCurrentModel(), this.useOllama);
   }
 

@@ -32,11 +32,50 @@ export interface DynamicActionPayload {
   }
 }
 
+export type DirectAssistSource = 'typed' | 'stt' | 'screenshot'
+
+export interface DirectAssistRequest {
+  requestId: string
+  source: DirectAssistSource
+  currentRequest: string
+  skillId?: string
+  manualContext?: string
+  referenceContext?: string
+  pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  transcript?: string
+  imagePaths?: string[]
+  requestedLanguage?: string
+  requestedFormat?: string
+  maxContextChars?: number
+}
+
+export interface DirectAssistError {
+  code: string
+  message: string
+  retryable: boolean
+}
+
+export type DirectAssistEvent =
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
+  | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
+  | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
+  | { type: 'cancel'; requestId: string; sequence: number }
+
 export interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
     height: number
   }) => Promise<void>
+  // X-anchored overlay resize. Resolves with the size the main process
+  // ACTUALLY applied after its floor(workArea * 0.9) clamp — the renderer
+  // adopts that value so its panel width, toggle anchor and hover-gate margin
+  // never drift from the real window. Optional: older preloads lack it.
+  updateContentDimensionsCentered?: (dimensions: {
+    width: number
+    height: number
+  }) => Promise<{ width: number; height: number } | undefined>
   // Overlay aux windows (pill / resize toggle) coordination
   sendOverlayUiState?: (state: Record<string, unknown>) => Promise<void>
   onOverlayUiState?: (
@@ -144,7 +183,7 @@ export interface ElectronAPI {
   onOpenSettingsTab: (callback: (tab: string) => void) => () => void
 
   // LLM Model Management
-  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini" | "custom" | "codex-cli" | "antigravity"; /** @deprecated use `modelId` for selection, `displayName` for UI */ model: string; modelId: string; displayName: string; isOllama: boolean }>
   getAvailableOllamaModels: () => Promise<string[]>
   /** Whether a denied data scope would actually be handled on-device. */
   getLocalFallbackStatus: () => Promise<{ text: boolean; vision: boolean }>
@@ -312,6 +351,16 @@ export interface ElectronAPI {
     imageCount?: number;
     usedImageInput?: boolean;
   }>
+  startDirectAssist: (request: DirectAssistRequest) => Promise<{
+    accepted: boolean
+    requestId: string
+    error?: DirectAssistError
+  }>
+  cancelDirectAssist: (
+    requestId: string,
+    source?: DirectAssistSource
+  ) => Promise<{ success: boolean; cancelled: boolean; error?: string }>
+  onDirectAssistEvent: (callback: (event: DirectAssistEvent) => void) => () => void
   generateClarify: () => Promise<{ clarification: string | null }>
   generateCodeHint: (imagePaths?: string[], problemStatement?: string) => Promise<{ hint: string | null }>
   generateBrainstorm: (imagePaths?: string[], problemStatement?: string) => Promise<{ script: string | null }>
@@ -636,6 +685,12 @@ export interface ElectronAPI {
   codexCliDoctor: (config?: any) => Promise<{ success: boolean; action: string; output?: string; error?: string; resolvedPath?: string; config?: any }>;
   // ChatGPT OAuth (PKCE) — replaces the old `codex login` CLI subprocess.
   codexLoginStatus: () => Promise<{ success: boolean; signedIn: boolean; email?: string; expiresAt?: number; error?: string }>;
+  antigravityStatus: () => Promise<{ signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }>;
+  antigravityStartLogin: () => Promise<{ success: boolean; error?: string }>;
+  antigravityCancelLogin: () => Promise<void>;
+  antigravitySignOut: () => Promise<{ success: boolean; error?: string }>;
+  antigravityModels: (force?: boolean) => Promise<{ success: boolean; models: { id: string; label: string }[]; error?: string }>;
+  onAntigravityStatusChanged: (callback: (status: { signedIn: boolean; inProgress: boolean; expiresAt?: number; projectId?: string; error?: string }) => void) => () => void;
   codexStartLogin: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
   codexSignOut: () => Promise<{ success: boolean; error?: string }>;
   codexRefreshTokens: () => Promise<{ success: boolean; email?: string; expiresAt?: number; error?: string }>;
@@ -820,6 +875,9 @@ export interface ElectronAPI {
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
   getAutoAnswerEnabled: () => Promise<boolean>;
   setAutoAnswerEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  getDirectAssistEnabled: () => Promise<boolean>;
+  setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
