@@ -11045,6 +11045,22 @@ export function initializeIpcHandlers(appState: AppState): void {
                 {
                   model: candidate,
                   messages: [{ role: 'user', content: 'Hello' }],
+                  // Groq enforces output-tokens-per-minute, and with no cap it
+                  // reserves the MODEL's full completion budget up front: on the
+                  // on_demand tier that is 1113 expected output tokens against a
+                  // 1000 OTPM limit, so the test 413s before it ever reaches the
+                  // key — reported to the user as a failed connection.
+                  // Success here is only `status === 200`; the body is never
+                  // read, so ten tokens proves exactly as much as a thousand.
+                  // Matches the Claude and DeepSeek legs, which already cap at 10.
+                  //
+                  // A cap, NOT `reasoning_effort: 'none'`, even though the
+                  // preferred rung is a reasoning model that will spend these ten
+                  // tokens thinking: that param is HTTP 400 on openai/gpt-oss-120b
+                  // ("must be one of low, medium, high"), which is further down
+                  // this same ladder, and a 400 is not `isGroqModelGone`, so the
+                  // walk would stop dead on it.
+                  max_tokens: 10,
                 },
                 {
                   headers: { Authorization: `Bearer ${apiKey}` },
