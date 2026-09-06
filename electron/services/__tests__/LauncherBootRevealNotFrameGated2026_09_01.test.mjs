@@ -36,7 +36,7 @@
 // STRATEGY. Source-level static check on WindowHelper.ts. The helper
 // instantiates BrowserWindow on import and pulls in Electron main-process APIs,
 // so it cannot be cleanly unit-tested in isolation — same approach as
-// OverlayAlwaysContentProtected.test.mjs and SetContentProtectionDedupe.test.mjs.
+// OverlayContentProtectionFollowsUndetectable.test.mjs and SetContentProtectionDedupe.test.mjs.
 //
 // IMPORTANT — why the assertion is anchored to the `launcherSettings` object
 // literal rather than run against the whole file: WindowHelper.ts creates

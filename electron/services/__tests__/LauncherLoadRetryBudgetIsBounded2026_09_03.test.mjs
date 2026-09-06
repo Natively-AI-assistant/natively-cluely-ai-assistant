@@ -27,7 +27,7 @@
 // `did-finish-load` handler no longer touches the counter.
 //
 // STRATEGY. Source-level static check, same as the neighbouring
-// LauncherBootRevealNotFrameGated2026_09_01 / OverlayAlwaysContentProtected
+// LauncherBootRevealNotFrameGated2026_09_01 / OverlayContentProtectionFollowsUndetectable
 // tests: WindowHelper.ts instantiates BrowserWindow on import and pulls in
 // main-process-only Electron APIs, so the handler cannot be exercised in
 // isolation without standing up a real app.

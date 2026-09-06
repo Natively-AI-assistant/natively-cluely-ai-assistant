@@ -269,27 +269,31 @@ export class WindowHelper {
   }
 
   private applyContentProtection(enable: boolean): void {
-    // The meeting overlay chrome (overlay body + pill + toggle) is a ghost
-    // surface: it must NEVER appear in a screen capture, independent of
-    // undetectable/dock mode. "Undetectable mode" governs Dock/taskbar
-    // masquerading and the launcher's capture visibility — NOT the overlay's
-    // screen-share invisibility, which is the app's core promise and is always
-    // wanted while a meeting overlay is up. Coupling the two let the overlay
-    // leak into a shared screen whenever undetectable mode was off (its
-    // default), re-exposing it via `NSWindowSharingReadOnly` and overriding the
-    // unconditional `NSWindowSharingNone` the native stealth module applies to
-    // exactly these three windows. Force it on for them regardless of `enable`.
-    const overlayChrome = [this.overlayWindow, this.pillWindow, this.toggleWindow];
-    overlayChrome.forEach((win) => {
-      if (win && !win.isDestroyed()) {
-        win.setContentProtection(true);
-      }
-    });
-    // The launcher and popover catcher are not meeting chrome; they follow the
-    // undetectable-mode toggle (the launcher is the main window shown outside a
-    // meeting, and the native module deliberately does NOT force-hide it).
-    const undetectableFollowers = [this.launcherWindow, this.popoverCatcher];
-    undetectableFollowers.forEach((win) => {
+    // EVERY window — overlay chrome included — follows the undetectable-mode
+    // toggle. This is a product decision, not an oversight: screen-capture
+    // invisibility is what the user is buying when they turn undetectable mode
+    // ON, and in normal (detectable) mode the overlay is meant to be visible in
+    // a shared screen / recording, e.g. for demos and support captures.
+    //
+    // PR #509 decoupled the overlay/pill/toggle from `enable` and forced them
+    // permanently protected; that made the overlay invisible to captures even
+    // with undetectable mode off, which is not the intended behaviour. Reverted
+    // deliberately — do not re-gate this on a literal `true` without a product
+    // decision. (Trade-off: with undetectable mode off the overlay can appear in
+    // a shared screen — the issue #500 class. That is the mode's contract.)
+    //
+    // Note this method must keep pushing the value unconditionally (it is what
+    // reassertContentProtection routes through): app.dock.hide()/show() flips the
+    // macOS activation policy and WindowServer silently resets sharingType, so
+    // the in-memory value alone is not enough.
+    const windows = [
+      this.launcherWindow,
+      this.overlayWindow,
+      this.pillWindow,
+      this.toggleWindow,
+      this.popoverCatcher,
+    ];
+    windows.forEach((win) => {
       if (win && !win.isDestroyed()) {
         win.setContentProtection(enable);
       }
@@ -860,12 +864,11 @@ export class WindowHelper {
       // "still steals focus" reports — the bundle is only read at launch).
       console.log('[WindowHelper] Windows no-activate policy applied to overlay');
     }
-    // Always protected: the overlay is a ghost surface that must never show in a
-    // screen capture, regardless of undetectable/dock mode (see
-    // applyContentProtection). This mirrors the native module's unconditional
-    // NSWindowSharingNone and closes the leak on builds where that native binary
-    // is unavailable (e.g. an Intel prebuild mismatch).
-    this.overlayWindow.setContentProtection(true);
+    // Follows undetectable mode (see applyContentProtection): protected from
+    // screen capture only while that mode is ON. Note the native stealth module
+    // force-applies NSWindowSharingNone on 'ready-to-show' regardless of mode;
+    // this JS push is what restores NSWindowSharingReadOnly in normal mode.
+    this.overlayWindow.setContentProtection(this.contentProtection);
     // Apply the current mouse-interaction policy to the NEW window. Without
     // this, a window (re)created while stealth passthrough is ON would start
     // fully interactive — silently breaking passthrough until the next toggle.
@@ -1680,10 +1683,9 @@ export class WindowHelper {
       [this.toggleWindow, 'overlay-toggle'],
     ];
     for (const [win, name] of auxPairs) {
-      // Always protected, like the overlay body — the pill/toggle are the
-      // on-screen meeting chrome and must never leak into a shared screen
-      // regardless of undetectable/dock mode (see applyContentProtection).
-      win.setContentProtection(true);
+      // Follows undetectable mode, like the overlay body (see
+      // applyContentProtection).
+      win.setContentProtection(this.contentProtection);
       if (process.platform === 'darwin') {
         win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
         win.setHiddenInMissionControl(true);
@@ -2333,11 +2335,11 @@ export class WindowHelper {
       });
 
       // Restore opacity before showing (it may have been zeroed by hideMainWindow).
-      // The overlay is ALWAYS content-protected (see applyContentProtection), so on
-      // Windows the opacity shield must run on every overlay show — not only in
-      // undetectable mode — or the first frame leaks before DWM applies the
-      // capture-exclusion flag.
-      if (process.platform === 'win32') {
+      // The opacity shield only matters when the overlay is actually going to be
+      // capture-excluded, i.e. in undetectable mode — that is the only case where
+      // a pre-flag frame could leak. In normal mode the overlay is meant to be
+      // visible to captures anyway, so it takes the plain branch below.
+      if (process.platform === 'win32' && this.contentProtection) {
         // Opacity Shield: Show at 0 opacity first to prevent frame leak.
         // The aux windows (pill/toggle) show via the overlay's 'show' event,
         // so shield them the same way — they carry the same on-screen chrome.
@@ -2353,6 +2355,15 @@ export class WindowHelper {
         // after the timer would flash the pill through content protection.
         this.applyOverlayAuxVisibility(true);
         this.overlayWindow.setContentProtection(true);
+        // The pill/toggle are the same chrome as the body and must share its
+        // capture visibility. Their creation-time push is overridden by the
+        // native applyStealthToWindow (it runs later, on 'ready-to-show', and
+        // force-sets NSWindowSharingNone regardless of mode), so without a push
+        // here they stay protected on the default path even in normal mode —
+        // measured on macOS: body ReadOnly, pill/toggle None. Same value as the
+        // body above (this branch only runs while contentProtection is true).
+        this.pillWindow?.setContentProtection(this.contentProtection);
+        this.toggleWindow?.setContentProtection(this.contentProtection);
         // Small delay to ensure Windows DWM processes the flag before making it opaque
 
         if (this.opacityTimeout) clearTimeout(this.opacityTimeout);
@@ -2368,18 +2379,28 @@ export class WindowHelper {
           }
         }, 60);
       } else {
-        // macOS / Linux path (Windows always takes the shielded branch above).
+        // macOS/Linux, and win32 with undetectable mode OFF (the shield above is
+        // gated on it), so the win32 z-order push below is reachable again.
         // Restore opacity (may have been zeroed pre-screenshot by hideMainWindow)
         this.overlayWindow.setOpacity(1);
         this.pillWindow?.setOpacity(1);
         this.toggleWindow?.setOpacity(1);
-        // Always protected — the overlay must never appear in a screen capture,
-        // regardless of undetectable/dock mode (see applyContentProtection).
-        this.overlayWindow.setContentProtection(true);
-        // No setAlwaysOnTop here: this branch is macOS/Linux only (Windows always
-        // takes the shielded branch above, which re-asserts z-order itself). On
-        // macOS calling setAlwaysOnTop would trigger [NSApp activate] and steal
-        // focus from Zoom/browser even when showInactive() was used.
+        // Follows undetectable mode (see applyContentProtection). The pill/toggle
+        // get the same value for the same reason as the win32 branch above: the
+        // native applyStealthToWindow force-protects them after creation, so this
+        // show-path push is the only thing that lets them follow the mode.
+        this.overlayWindow.setContentProtection(this.contentProtection);
+        this.pillWindow?.setContentProtection(this.contentProtection);
+        this.toggleWindow?.setContentProtection(this.contentProtection);
+        // Re-assert z-order BEFORE show on Windows — DWM processes setAlwaysOnTop
+        // synchronously, so calling it before show() ensures the window lands at the
+        // correct z-level on first paint. Calling it after focus() would leave a brief
+        // window where the HWND is focused at the wrong z-level (issue #136).
+        // Skipped on macOS — calling setAlwaysOnTop triggers [NSApp activate] which
+        // steals focus from Zoom/browser even when showInactive() was used.
+        if (process.platform === 'win32') {
+          this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+        }
         if (inactive) this.overlayWindow.showInactive();
         else this.overlayWindow.show();
         // Same synchronous block as the body's show (see the win32 branch) so
