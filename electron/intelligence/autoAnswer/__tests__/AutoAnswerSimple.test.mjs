@@ -11,8 +11,8 @@
  *   '?' fallback          → 'judge unavailable → only a trailing ? fires'
  *   early ask             → 'the early ask replaces the commit ask…'
  *   mid-word seam         → 'a final cut mid-word is rejoined…'
- *   mic echo latch        → 'speaker bleed cannot shred a question…'
- *   latch release         → '…and it releases once the bleed stops'
+ *   inert user channel    → 'the user's own speech never suppresses…'
+ *   loud park drop        → 'a park dropped by supersession says so…'
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +25,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const Simple = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/SimpleAutoAnswer.js'));
 const { isMidWordCut } = require(path.resolve(__dirname, '../../../../dist-electron/electron/intelligence/autoAnswer/AutoAnswerText.js'));
-const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, ECHO_MODE_HOLD_MS, EARLY_JUDGE_MS } = Simple;
+const { SimpleAutoAnswerEngine, STABILITY_MS, ENDPOINT_CONFIRM_MS, RETRY_MS, RETRY_TTL_MS, HELD_MAX_AGE_MS, EARLY_JUDGE_MS } = Simple;
 
 const flush = () => new Promise((r) => setImmediate(r));
 const YES = (over = {}) => JSON.stringify({ is_ask: true, directed_at_user: true, complete: true, act: 'question', answerability: 0.95, question_text: null, ...over });
@@ -179,22 +179,25 @@ test('busy engine: retries and dispatches when it frees up; gives up after the T
   assert.equal(g.clock.pendingCount(), 0, 'no leaked retry timer');
 });
 
-test('lenient mic: blips/echoes/backchannels ignored; a genuine sustained answer clears the candidate and barges in', async () => {
+test('the user\'s own speech never suppresses or cancels an automatic answer (user decision 2026-09-03)', async () => {
+  // The user answers the moment the question lands — they do not sit in
+  // silence waiting for the overlay. So the mic channel must be inert: no
+  // barge-in cancel, no "user is answering" skip, no cleared candidate.
   const h = makeSimple(async () => YES());
   h.interviewer('Okay, have you heard of the popular word game called wordle?');
   await h.advance(300);
-  h.user('Yeah.');                                          // blip — must not kill it
+  h.user('Yeah.');
   await h.advance(STABILITY_MS + 300);
   assert.equal(h.texts().length, 1, `skips: ${h.state.skips.join(',')}`);
 
   await h.advance(2000);
   h.interviewer('And how would you persist the game state across page reloads?');
   await h.advance(200);
-  h.user('I would probably use localStorage keyed by the date.');   // genuine answer
+  h.user('I would probably use localStorage keyed by the date.');   // the user starts answering at once
   await h.advance(STABILITY_MS + 500);
-  assert.equal(h.texts().length, 1, 'the second question is suppressed');
-  assert.ok(h.state.skips.includes('user_answering'));
-  assert.deepEqual(h.state.cancelled, ['user_barge_in'], 'the streaming first answer was barged in');
+  assert.equal(h.texts().length, 2, `the second question still answers (skips: ${h.state.skips.join(',')})`);
+  assert.ok(!h.state.skips.includes('user_answering'), 'the user talking is never a skip reason');
+  assert.deepEqual(h.state.cancelled, [], 'and never cancels the streaming answer');
 });
 
 test('judge unavailable → only a trailing ? fires (near-legacy fallback, no fire-on-everything)', async () => {
@@ -235,16 +238,15 @@ test('meeting stop clears everything; telemetry carries no transcript text', asy
 
 // ── Review fixes (2026-08-25): six confirmed findings, each pinned ────────
 
-test('review#2: a dispatch parked behind a busy engine dies when the user takes the floor', async () => {
+test('a dispatch parked behind a busy engine survives the user talking and fires when the engine frees up', async () => {
   const h = makeSimple(async () => YES(), { accepting: false });
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
   await h.advance(STABILITY_MS + 200);                    // verdict auto → retry loop armed
   assert.deepEqual(h.texts(), []);
-  h.user('I chose it mainly for the ecosystem and tooling.');   // genuine answer
+  h.user('I chose it mainly for the ecosystem and tooling.');   // the user is already answering
   h.state.accepting = true;                               // engine frees up inside the TTL
   await h.advance(RETRY_MS * 4);
-  assert.deepEqual(h.texts(), [], `the parked dispatch must die with the user answering (skips: ${h.state.skips.join(',')})`);
-  assert.equal(h.clock.pendingCount(), 0, 'retry timer cancelled');
+  assert.equal(h.texts().length, 1, `the parked dispatch still fires (skips: ${h.state.skips.join(',')})`);
 });
 
 test('review#5: a transient judge failure clears the key — the next stoppage retries the same question', async () => {
@@ -273,21 +275,15 @@ test('review#6: interviewer INTERIMS supersede an in-flight verdict — no dispa
   assert.deepEqual(h.texts(), [], 'the verdict for the pre-resume text must not dispatch');
 });
 
-test('review#7: a genuine user INTERIM barges in the streaming answer — no waiting for the final', async () => {
+test('a user INTERIM never cancels the streaming answer either', async () => {
   const h = makeSimple(async () => YES());
   h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
   await h.advance(STABILITY_MS + 200);
   assert.equal(h.texts().length, 1);
   assert.ok(h.state.streaming);
   h.engine.ingest({ speaker: 'user', text: 'Well I mostly picked it because of the', final: false, timestamp: h.clock.now(), origin: 'stt' });
-  assert.deepEqual(h.state.cancelled, ['user_barge_in'], 'cancelled at the interim, seconds before any final');
-  // A short or echoed interim never barges in.
-  const g = makeSimple(async () => YES());
-  g.interviewer('Why did you choose PostgreSQL over the alternatives here?');
-  await g.advance(STABILITY_MS + 200);
-  g.engine.ingest({ speaker: 'user', text: 'PostgreSQL over the alternatives here', final: false, timestamp: g.clock.now(), origin: 'stt' });  // echo
-  g.engine.ingest({ speaker: 'user', text: 'yeah', final: false, timestamp: g.clock.now(), origin: 'stt' });
-  assert.deepEqual(g.state.cancelled, []);
+  h.engine.ingest({ speaker: 'user', text: 'Well I mostly picked it because of the ecosystem and the tooling.', final: true, timestamp: h.clock.now(), origin: 'stt' });
+  assert.deepEqual(h.state.cancelled, [], 'the answer keeps streaming while the user talks');
 });
 
 test('review#4: punctuation provenance — no-\'?\' is negative evidence only when the provider guarantees marks', async () => {
@@ -560,11 +556,26 @@ test('onEngineIdle with nothing parked is inert, and a superseded park never fir
   const g = makeSimple(async () => YES(), { accepting: false });
   g.interviewer('Why did you choose PostgreSQL over the alternatives here?');
   await g.advance(STABILITY_MS + 200);
-  g.user('I picked it mainly for the ecosystem and the tooling around it.');   // user takes the floor
+  g.interviewer('and actually, let me rephrase that', false);   // the interviewer resumed: the park is stale
   g.state.accepting = true;
   g.engine.onEngineIdle();
   await flush(); await flush();
-  assert.deepEqual(g.texts(), [], 'the park died with the user answering');
+  assert.deepEqual(g.texts(), [], 'the park died with the interviewer resuming');
+  assert.ok(g.state.skips.includes('superseded_while_parked'), `a dropped park must say so (skips: ${g.state.skips.join(',')})`);
+});
+
+test('a park dropped by supersession says so — never a silent exit (live session 2026-09-03, 13-q6)', async () => {
+  // The real shape: verdict a=1.0 applied, engine busy with its own prefetch,
+  // dispatch parked; 195 ms later the next candidate bumped the sequence and
+  // the retry exited with no telemetry, no log, no answer.
+  const h = makeSimple(async () => YES({ answerability: 1 }), { accepting: false });
+  h.interviewer('Why did you choose PostgreSQL over the alternatives here?');
+  await h.advance(STABILITY_MS + 200);
+  assert.deepEqual(h.texts(), [], 'parked behind the busy engine');
+  assert.ok(!h.state.skips.includes('superseded_while_parked'), 'nothing dropped yet');
+  h.interviewer('And how does that interact with your caching layer?');   // new final supersedes
+  await h.advance(RETRY_MS + 50);                                          // the retry poll runs
+  assert.equal(h.state.skips.filter(s => s === 'superseded_while_parked').length, 1, `skips: ${h.state.skips.join(',')}`);
 });
 
 // ── deferred verdicts (live run 2026-08-25: 25 of 28 verdicts discarded) ─────
@@ -602,7 +613,7 @@ test('growth is never held across: a completed question re-judges rather than an
   assert.ok(/how you found it\?/.test(h.texts()[0]), 'the WHOLE question is answered');
 });
 
-test('the user taking the floor drops a deferred verdict (it is keyed to text, not to judgeSeq)', async () => {
+test('a deferred verdict survives the user talking over it', async () => {
   const resolvers = [];
   const h = makeSimple(() => new Promise((r) => resolvers.push(r)));
   h.interviewer('So how would you scale that service to ten times the traffic?');
@@ -612,14 +623,7 @@ test('the user taking the floor drops a deferred verdict (it is keyed to text, n
   await flush(); await flush();
   h.user('I would start by adding a read replica and caching the hot keys.');
   await h.advance(STABILITY_MS * 3);
-  assert.deepEqual(h.texts(), [], 'never answers a question the user answered themselves');
-  // Clearing `pending` alone does not cover this: the held verdict is keyed to
-  // TEXT, so an interviewer who repeats the sentence verbatim re-creates the
-  // matching key and would fire it. Only the explicit drop prevents that.
-  h.interviewer('So how would you scale that service to ten times the traffic?');
-  await h.advance(STABILITY_MS + 200);
-  assert.deepEqual(h.texts(), [], 'not even when the interviewer repeats it word for word');
-  assert.equal(resolvers.length, 2, 'the repeat is judged afresh, with the answer now in context');
+  assert.equal(h.texts().length, 1, `the held verdict still fires at the next stoppage (skips: ${h.state.skips.join(',')})`);
 });
 
 test('a deferred verdict expires, and a SILENT verdict is never deferred at all', async () => {
@@ -683,62 +687,6 @@ test('the dev content trace names the exact words judged, and the engine works w
   bare.ingest({ speaker: 'interviewer', text: 'And how would you shard that table once it stops fitting?', final: true, timestamp: clock.now(), origin: 'stt' });
   for (let i = 0; i < 14; i++) { clock.advance(100); await flush(); await flush(); }
   assert.equal(out.length, 1, 'dispatches identically with no content hook wired');
-});
-
-// ── mic echo (live session 2026-08-26: speakers, not headphones) ────────────
-
-/** The bled shape from the real session: the mic transcribes the SAME speech,
- *  segmented at different boundaries, so edge words arrive cut in half. */
-test('speaker bleed cannot shred a question: the interviewer pending survives', async () => {
-  const h = makeSimple(async () => YES({ question_text: 'how would you design the rate limiter?' }));
-  const bleed = [
-    ['So the next thing I want to ask you about is', 'So the next thing I want to ask you ab'],
-    ['how would you design the rate limit', 'out is how would you design the rate lim'],
-    ['er for that endpoint?', 'iter for that endpoint?'],
-  ];
-  for (const [heard, echoed] of bleed) {
-    h.interviewer(heard);
-    await h.advance(120);
-    h.user(echoed);                                   // the mic echo, offset by a fragment
-    await h.advance(200);
-  }
-  await h.advance(STABILITY_MS + 300);
-  assert.equal(h.state.skips.filter(s => s === 'user_answering').length, 0,
-    'an echo must never count as the user answering');
-  assert.ok(h.state.skips.includes('mic_echo'), 'and it is reported as what it is');
-  const judged = h.state.judgeCalls.at(-1).candidateText.replace(/\s+/g, ' ');
-  // Both channels cut words mid-token, so "rate limiter" reaches the judge as
-  // "rate limit er" — an STT artefact, not a pending-wipe. What matters is
-  // that ALL THREE finals are in one candidate.
-  assert.match(judged, /^So the next thing I want to ask you about is how would you design the rate limit ?er for that endpoint\?$/,
-    'the WHOLE question reaches the judge, not a shredded fragment');
-  assert.equal(h.texts().length, 1);
-});
-
-test('the echo latch holds through fragments that dodge the per-utterance test, and releases once the bleed stops', async () => {
-  const h = makeSimple(async () => YES());
-  // Two clear echoes engage it.
-  h.interviewer('We are going to talk about database indexing strategies today');
-  await h.advance(150);
-  h.user('We are going to talk about database indexing strategies today');
-  await h.advance(150);
-  h.interviewer('and then move on to caching and invalidation');
-  await h.advance(150);
-  h.user('and then move on to caching and invalidation');
-  await h.advance(150);
-  // A fragment that dodges containment must NOT release the latch — that
-  // self-defeating release is what let 24 echoes through in the real session.
-  h.user('completely unrelated words that share nothing at all here');
-  assert.ok(!h.state.skips.includes('user_answering'), 'held by time, not by a 4-slot count');
-
-  // …but real silence on the echo front releases it, so a genuine answer works.
-  await h.advance(ECHO_MODE_HOLD_MS + 1000);
-  h.interviewer('So how many years of Postgres experience do you have?');
-  await h.advance(200);
-  h.user('I have about four years of production Postgres experience overall.');
-  await h.advance(STABILITY_MS + 300);
-  assert.ok(h.state.skips.includes('user_answering'),
-    'once the bleed stops the mic is trusted again');
 });
 
 // ── relay mid-word cuts (live session 2026-08-26) ───────────────────────────
