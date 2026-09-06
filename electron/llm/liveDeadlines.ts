@@ -521,10 +521,14 @@ const COMPLEX_TYPES = new Set<AnswerType>([
  * NVIDIA NIM. Both default false, so an un-updated caller still gets the previous
  * default-route behaviour.
  *
- * NOT applied to the regen/repair streams, which pass their own literals
- * (IntelligenceEngine 4026/4328/4547/4953/5167/5568, ipcHandlers
- * 3903/4012/4129/5144/5598). Those bound a post-answer repair, not the answer the
- * user is waiting on, and were left alone deliberately.
+ * ALSO applied to the regen/repair streams. They originally passed hardcoded
+ * 7000/8000 literals on every route, on the reasoning that they bound a
+ * post-answer repair rather than the answer the user is waiting on — but a
+ * repair window that expires before a slow gateway's first token is a repair
+ * that can never land, so all eleven now go through repairDeadlineMs() (six in
+ * IntelligenceEngine via repairFirstUsefulMs, five in ipcHandlers). Deliberately
+ * NOT pinned to line numbers here: the previous version of this note cited
+ * eleven of them and every single one was stale within the same branch.
  */
 export function firstUsefulDeadlineMs(
   answerType: AnswerType,
