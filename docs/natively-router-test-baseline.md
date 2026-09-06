@@ -35,3 +35,9 @@ One method note, because it cost time and will cost it again. A `git worktree` a
 ## Not investigated
 
 Neither failure is in a path this campaign touches, and Phase 1 changes no behaviour, so neither was diagnosed. `ModeRetrievalConfidence` sits in the retrieval-confidence area an unrelated reranker workstream was active in on 2026-09-04. If either is fixed before PR 6, update this file rather than leaving the gate calibrated against a stale baseline.
+
+## Update 2026-09-06
+
+All four baseline failures pass after merging `origin/main` (`2ca22d1e`) into the campaign branch. Main's `308f3610` and `f1801b85` changed the refusal path those tests exercise. The known-red count for the wide suite is now zero from this campaign's side.
+
+Main carries 24 failures of its own on the same date, all from PR #547 (Antigravity OAuth): `anyVisionProviderAvailable` in `LLMHelper.ts` calls `AntigravityService.getStatus()` outside its try block, and the CredentialsManager stubs in `DisabledProviderRouting2026_08_01`, `OutboundBoundaryUniversality2026_08_01`, `ProviderDataScopeOutbound2026_08_01` and `ScreenUnderstandingModeEnforcement2026_08_01` have no `getAntigravityOAuthTokens`. Verified identical on a clean `origin/main` build. Not touched by this campaign.

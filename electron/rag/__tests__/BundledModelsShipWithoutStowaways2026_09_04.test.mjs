@@ -41,7 +41,10 @@ function canonicalFiles() {
     return [...block.matchAll(/'([^']+\/[^']+)'/g)].map(m => m[1]);
   };
   const files = [...grab('REQUIRED_MODEL_FILES'), ...grab('OPTIONAL_MODEL_FILES')];
-  assert.ok(files.length >= 12, 'expected the full model list, found ' + files.length);
+  // Nine since 2026-09-05: the four mobilebert-uncased-mnli files left with the
+  // intent classifier. The floor guards the regex above going blind, not the
+  // catalogue size, so it tracks the real count.
+  assert.ok(files.length >= 9, 'expected the full model list, found ' + files.length);
   return files;
 }
 
