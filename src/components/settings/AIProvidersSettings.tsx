@@ -3782,9 +3782,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         title={disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
                     />
                 </div>
-                <p className="text-xs aip-muted" role="status">
+                {/* No "Not connected" line: the sign-in bar directly below already
+                    says the account is not connected, so the label was a second
+                    copy of the same fact taking a row.
+                    The live region stays MOUNTED and is hidden instead of being
+                    conditionally rendered — a role="status" that mounts together
+                    with its first message is not reliably announced, and Tailwind's
+                    space-y uses `:not([hidden]) ~ :not([hidden])`, so a hidden node
+                    drops out of the spacing chain and leaves no gap. */}
+                <p className="text-xs aip-muted" role="status" hidden={!antigravityStatus.inProgress && !antigravityStatus.signedIn}>
                     {antigravityStatus.inProgress ? t('Waiting for Google sign-in…')
-                        : antigravityStatus.signedIn ? t('Antigravity connected') : t('Not connected')}
+                        : antigravityStatus.signedIn ? t('Antigravity connected') : ''}
                     {antigravityStatus.signedIn && antigravityStatus.expiresAt && ` · ${t('Refreshes automatically before')} ${new Date(antigravityStatus.expiresAt).toLocaleTimeString()}`}
                 </p>
                 {/* Primary action takes Codex's full-width row SHAPE (aip-btn
@@ -3834,14 +3842,25 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
 
-            {/* Codex — ChatGPT subscription proxy */}
-            <div className="space-y-5">
+            {/* Codex — ChatGPT subscription proxy.
+
+                Same card shape as Google Antigravity above: ONE aip-card that owns
+                its provider header (mark + title + description + switch), then a
+                hidden-until-meaningful role="status" line, then the action row.
+                Previously the header sat OUTSIDE the card and the card repeated the
+                provider with a "ChatGPT Account" label — two nested sections for one
+                provider, and the only card on the panel shaped that way.
+
+                The account email moves from a dedicated `aip-well` into the status
+                line, which is where Antigravity puts the same fact; the well was the
+                third element competing to say "you are signed in". */}
+            <div className="aip-card p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="flex gap-3 min-w-0">
                         <AipProviderMark provider="codex" name="ChatGPT (Codex)" className="mt-0.5" />
                         <div className="min-w-0">
-                        <h3 className="text-sm font-bold aip-hero mb-1">ChatGPT (Codex)</h3>
-                        <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.')}</p>
+                            <h3 className="text-sm font-bold aip-hero mb-1">ChatGPT (Codex)</h3>
+                            <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider — no API key needed.')}</p>
                         </div>
                     </div>
                     <AipSwitch
@@ -3852,74 +3871,50 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     />
                 </div>
 
-                <div className="aip-card p-5 space-y-4">
-                    {/* Header row: title + sign-in state + actions — mirrors ProviderCard */}
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                        <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide aip-hero">
-                            {t('ChatGPT Account')}
-                        </label>
-                        {codexOauthStatus.signedIn ? (
-                            <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={handleCodexRefresh}
-                                    disabled={codexOauthInProgress}
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                    title={t("Refresh session")}
-                                >
-                                    <RefreshCw size={12} strokeWidth={1.75} />
-                                    <span className="uppercase tracking-wide">{t('Refresh')}</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleCodexSignOut}
-                                    disabled={codexOauthInProgress}
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                >
-                                    <LogOut size={12} strokeWidth={1.75} />
-                                    <span className="uppercase tracking-wide">{t('Sign out')}</span>
-                                </button>
-                            </div>
-                        ) : null}
-                    </div>
+                {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
+                <p className="text-xs aip-muted" role="status" hidden={!codexOauthInProgress && !codexOauthStatus.signedIn}>
+                    {codexOauthInProgress ? t('Waiting for browser…')
+                        : codexOauthStatus.signedIn
+                            ? `${t('ChatGPT connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
+                            : ''}
+                </p>
 
-                    {/* Sign-in area or signed-in account display */}
-                    {codexOauthStatus.signedIn ? (
-                        <div className="flex gap-2 mb-3">
-                            <div className="aip-well flex-1 min-w-0 px-3 py-2.5 text-xs aip-text flex items-center gap-2">
-                                <span className="aip-badge-dot aip-ok-fg" aria-hidden="true" />
-                                <span className="truncate">{codexOauthStatus.email || t('ChatGPT account connected')}</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex gap-2 mb-3">
-                            <button
-                                type="button"
-                                onClick={() => handleCodexAuthAction('login')}
-                                disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
-                                className="aip-btn flex-1"
-                                data-size="row"
-                                data-variant="accent"
-                            >
-                                {codexOauthInProgress || codexAuthAction === 'login'
-                                    ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
-                                    : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
-                            </button>
-                        </div>
-                    )}
+                <div className="flex flex-wrap gap-2">
+                    {!codexOauthStatus.signedIn ? (
+                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
+                           periwinkle, which the Antigravity bar deliberately does not do. */
+                        <button
+                            type="button"
+                            onClick={() => handleCodexAuthAction('login')}
+                            disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
+                            className="aip-btn flex-1"
+                            data-size="row"
+                        >
+                            {codexOauthInProgress || codexAuthAction === 'login'
+                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
+                                : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
+                        </button>
+                    ) : <>
+                        {/* Plain aip-btn in a wrap row, matching Antigravity's
+                            Reload models / Disconnect pair. Glyphs kept: they cost
+                            nothing here and the two actions are easy to confuse. */}
+                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
+                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
+                        </button>
+                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
+                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
+                        </button>
+                    </>}
+                </div>
 
-                    {codexAuthMessage && (
-                        <p className={`text-[10px] mt-1.5 mb-2 ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`}>
-                            {codexAuthMessage}
-                        </p>
-                    )}
+                {codexAuthMessage && (
+                    <p className={`text-xs ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`} role="alert">
+                        {codexAuthMessage}
+                    </p>
+                )}
 
-                    {/* Model + settings — only shown once signed in */}
-                    {codexOauthStatus.signedIn && (
+                {/* Model + settings — only shown once signed in */}
+                {codexOauthStatus.signedIn && (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
@@ -4023,7 +4018,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             </div>
                         </>
                     )}
-                </div>
             </div>
 
             </div>
