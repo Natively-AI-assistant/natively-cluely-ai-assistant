@@ -603,6 +603,7 @@ test('GOOGLE_CLOUD_PROJECT is sent on loadCodeAssist and onboardUser and complet
   const opened = {};
   const sentProject = {};
   process.env.GOOGLE_CLOUD_PROJECT = 'my-gcp-project';
+  mod.setConfiguredCloudProject('');   // env path under test; clear any leftover setting
   fakeElectron.shell.openExternal = async url => { opened.value = url; };
   globalThis.fetch = async (url, init) => {
     if (url === mod.ANTIGRAVITY_TOKEN_URL) {
@@ -630,11 +631,38 @@ test('GOOGLE_CLOUD_PROJECT is sent on loadCodeAssist and onboardUser and complet
   }
 });
 
-test('preferredCloudProject prefers GOOGLE_CLOUD_PROJECT and ignores blank values', async () => {
+test('cloud project: setting beats env, both are validated, blank clears', async () => {
   const mod = await loadService();
-  assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: ' a ', GOOGLE_CLOUD_PROJECT_ID: 'b' }), 'a');
-  assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: '   ', GOOGLE_CLOUD_PROJECT_ID: 'b' }), 'b');
-  assert.equal(mod.preferredCloudProject({}), undefined);
+  try {
+    // Env only, and only when well-formed. 'a'/'b' are too short to be project
+    // ids — the old assertion accepted them and would have shipped a malformed
+    // id straight onto the wire.
+    assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: ' good-project ', GOOGLE_CLOUD_PROJECT_ID: 'other-project' }), 'good-project');
+    assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: '   ', GOOGLE_CLOUD_PROJECT_ID: 'other-project' }), 'other-project');
+    assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: 'BAD_ID' }), undefined);
+    assert.equal(mod.preferredCloudProject({}), undefined);
+
+    // The in-app setting outranks the environment: a user who types a project
+    // into Settings must not be silently overridden by an ambient export.
+    mod.setConfiguredCloudProject('typed-project');
+    assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: 'env-project' }), 'typed-project');
+    // A malformed setting is rejected, not passed through — falls back to env.
+    mod.setConfiguredCloudProject('X');
+    assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: 'env-project' }), 'env-project');
+    // Clearing hands the choice back to the environment.
+    mod.setConfiguredCloudProject('');
+    assert.equal(mod.preferredCloudProject({ GOOGLE_CLOUD_PROJECT: 'env-project' }), 'env-project');
+  } finally { mod.setConfiguredCloudProject(''); }
+});
+
+test('isValidCloudProject matches Google project id rules', async () => {
+  const mod = await loadService();
+  for (const ok of ['my-project', 'natively-501917', 'abcdef', 'a'.repeat(29) + '1']) {
+    assert.equal(mod.isValidCloudProject(ok), true, ok);
+  }
+  for (const bad of ['', 'short', '1leading-digit', 'Upper-Case', 'trailing-', 'has_underscore', 'a'.repeat(31)]) {
+    assert.equal(mod.isValidCloudProject(bad), false, bad);
+  }
 });
 
 test.after(() => { Module._load = originalModuleLoad; });
