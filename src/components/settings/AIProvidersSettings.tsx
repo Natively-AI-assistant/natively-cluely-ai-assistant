@@ -3787,12 +3787,42 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         : antigravityStatus.signedIn ? t('Antigravity connected') : t('Not connected')}
                     {antigravityStatus.signedIn && antigravityStatus.expiresAt && ` · ${t('Refreshes automatically before')} ${new Date(antigravityStatus.expiresAt).toLocaleTimeString()}`}
                 </p>
+                {/* Primary action is Codex's full-width accent row (aip-btn flex-1,
+                    data-size="row" data-variant="accent"), so the two OAuth
+                    providers present sign-in identically. Cancel stays a compact
+                    ghost beside the in-flight bar rather than replacing it —
+                    Antigravity can abort a pending browser round-trip and Codex
+                    cannot, and that capability should not cost the shared shape. */}
                 <div className="flex flex-wrap gap-2">
                     {antigravityStatus.inProgress ? (
-                        <button type="button" className="aip-btn" onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}>{t('Cancel sign-in')}</button>
+                        <>
+                            <button type="button" className="aip-btn flex-1" data-size="row" data-variant="accent" disabled>
+                                <Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}
+                            </button>
+                            <button
+                                type="button"
+                                className="aip-btn shrink-0"
+                                data-size="row"
+                                data-variant="ghost"
+                                onClick={() => window.electronAPI.antigravityCancelLogin().catch(() => setAntigravityError(t('Could not cancel sign-in. Try again.')))}
+                            >{t('Cancel')}</button>
+                        </>
                     ) : !antigravityStatus.signedIn ? (
-                        <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('login')}>{t('Sign in with Google')}</button>
+                        <button
+                            type="button"
+                            className="aip-btn flex-1"
+                            data-size="row"
+                            data-variant="accent"
+                            disabled={antigravityBusy}
+                            onClick={() => void runAntigravityAction('login')}
+                        >
+                            <ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with Google')}
+                        </button>
                     ) : <>
+                        {/* Left as plain buttons: the ask was the sign-in bar. Codex
+                            puts its post-sign-in Refresh/Sign out in the CARD HEADER
+                            as sm ghosts, which is a different move than restyling
+                            these in place. */}
                         <button type="button" className="aip-btn" disabled={antigravityBusy} onClick={() => void runAntigravityAction('models')}>{t('Reload models')}</button>
                         <button type="button" className="aip-btn" onClick={() => void runAntigravityAction('logout')}>{t('Disconnect')}</button>
                     </>}
