@@ -3767,9 +3767,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             <p className="text-xs aip-muted">{t('Sign in with Google to use your Antigravity models.')}</p>
                         </div>
                     </div>
-                    <button type="button" className="aip-btn" onClick={() => handleToggleProvider('antigravity', disabledProviders.includes('antigravity'))}>
-                        {disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
-                    </button>
+                    {/* Same switch every other provider header carries (Codex above,
+                        ProviderCard's key-backed providers below) — not an
+                        Enable/Disable button, which read as a different kind of
+                        control for the same state. Shown unconditionally, like
+                        Codex: ProviderCard gates its switch on `hasStoredKey`
+                        because there is nothing to hide before a key exists, but
+                        this provider's models are gated by sign-in, not a key, and
+                        the disabled flag is independently meaningful. */}
+                    <AipSwitch
+                        checked={!disabledProviders.includes('antigravity')}
+                        onChange={() => handleToggleProvider('antigravity', disabledProviders.includes('antigravity'))}
+                        label={`${disabledProviders.includes('antigravity') ? t('Enable') : t('Disable')} Google Antigravity`}
+                        title={disabledProviders.includes('antigravity') ? t('Enable provider') : t('Disable provider')}
+                    />
                 </div>
                 <p className="text-xs aip-muted" role="status">
                     {antigravityStatus.inProgress ? t('Waiting for Google sign-in…')
