@@ -63,7 +63,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::app_chord::{
-    app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_CTRL, MOD_SHIFT,
+    app_chords_from_inputs, match_app_chord, AppChord, AppChordInput, MOD_ALT, MOD_CTRL, MOD_SHIFT,
 };
 use napi::bindgen_prelude::*;
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
@@ -85,9 +85,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, SetWindowsHookExW,
     TranslateMessage, UnhookWindowsHookEx, WindowFromPoint,
     EVENT_SYSTEM_FOREGROUND, GA_ROOT, HHOOK, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT,
-    PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT, WM_KEYDOWN, WM_KEYUP,
-    WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WM_SYSKEYDOWN, WM_SYSKEYUP,
-    WM_USER, WM_XBUTTONDOWN,
+    LLKHF_EXTENDED, PM_NOREMOVE, WH_KEYBOARD_LL, WH_MOUSE_LL, WINEVENT_OUTOFCONTEXT,
+    WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN,
+    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WM_XBUTTONDOWN,
 };
 
 // ─── napi objects shared with the macOS module's JS surface ──────────────────
@@ -161,7 +161,7 @@ struct HookState {
     num_on: AtomicBool,
     /// Threadsafe callback into V8. Set on start(), cleared on stop().
     callback: Mutex<Option<Arc<ThreadsafeFunction<CapturedKey>>>>,
-    /// The app's own global shortcuts (printable-leak subset) the hook swallows
+    /// The app's supported Ctrl-based global shortcuts the hook swallows
     /// and self-dispatches. Populated at start() from the JS-supplied table;
     /// empty ⟹ the feature is inert and every chord passes through exactly as
     /// before. See app_chord.rs for why and the scope.
@@ -171,6 +171,12 @@ struct HookState {
     /// VK alone: the modifiers may already be released by the time the up
     /// arrives.
     swallowed_ups: Mutex<HashSet<u32>>,
+    /// Tracks left/right Ctrl independently because swallowed events may not
+    /// appear in GetAsyncKeyState. Bit 0 is left; bit 1 is right.
+    ctrl_down: AtomicU32,
+    /// While the actual overlay window is visible, Ctrl down/up never reaches
+    /// the foreground app. JS updates this from BrowserWindow show/hide events.
+    suppress_ctrl: AtomicBool,
     /// Shortcut-guard mode. When true the hook does NOT swallow ordinary typing
     /// (everything passes straight through to the foreground app) and installs
     /// neither the mouse nor the foreground-change hook — its ONLY job is to
@@ -192,6 +198,8 @@ impl HookState {
             callback: Mutex::new(None),
             app_chords: Mutex::new(Vec::new()),
             swallowed_ups: Mutex::new(HashSet::new()),
+            ctrl_down: AtomicU32::new(0),
+            suppress_ctrl: AtomicBool::new(false),
             shortcut_only: AtomicBool::new(false),
         }
     }
@@ -267,6 +275,22 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     let vk = kb.vkCode;
     let scan = kb.scanCode;
 
+    // A swallowed Ctrl-down is not reflected reliably by GetAsyncKeyState from
+    // inside the low-level hook, so track its physical state ourselves. While
+    // the overlay is visible, swallow the complete Ctrl down/up sequence.
+    let ctrl_mask = ctrl_bit(vk, kb.flags.contains(LLKHF_EXTENDED));
+    if ctrl_mask != 0 {
+        if is_key_down {
+            state.ctrl_down.fetch_or(ctrl_mask, Ordering::AcqRel);
+        } else {
+            state.ctrl_down.fetch_and(!ctrl_mask, Ordering::AcqRel);
+        }
+        if is_key_down && state.suppress_ctrl.load(Ordering::Acquire) {
+            state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner()).insert(vk);
+            return LRESULT(1);
+        }
+    }
+
     // Keep our toggle state current. The lock keys are passed through below, but
     // we must observe their DOWN transition first — the worker thread's own
     // GetKeyState is unreliable for toggles (it pumps no keyboard input). A
@@ -302,7 +326,10 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // meeting app — the exact stealth leak this module prevents. So for AltGr we
     // resolve the character first and only pass through if it yields none (i.e.
     // it was a genuine Ctrl+Alt shortcut, which produces no text).
-    let ctrl = modifier_held(VK_CONTROL);
+    // A swallowed Ctrl-down may not appear in GetAsyncKeyState: low-level hooks
+    // run before Windows updates asynchronous key state. ctrl_down is therefore
+    // authoritative while suppression is active.
+    let ctrl = state.ctrl_down.load(Ordering::Acquire) != 0 || modifier_held(VK_CONTROL);
     let alt = modifier_held(VK_MENU);
     // AltGr == Ctrl+Alt. On layouts that define AltGr, Windows injects a
     // synthetic Left-Ctrl alongside right-Alt, so (ctrl && alt) already catches
@@ -310,9 +337,7 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // a plain Alt (no synthetic Ctrl), and flagging it as AltGr would fabricate
     // a Ctrl in the key-state and split right- vs left-Alt shortcut handling.
     let altgr = ctrl && alt;
-    if win_held() {
-        return pass();
-    }
+    let win = win_held();
 
     // ── APP-CHORD SWALLOW (defence against the RegisterHotKey-drop leak) ──
     // If this key-down completes one of the app's OWN registered shortcuts,
@@ -321,13 +346,12 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
     // registrations on sleep/wake, display/workspace change, etc.; during the
     // recovery window the chord would otherwise leak its completing character
     // into the focused field (a newline from Ctrl+Enter, a digit from Ctrl+1…).
-    // Only the printable-leak subset is eligible: Ctrl (optionally +Shift) —
-    // Alt/AltGr and Win combos are excluded here (`ctrl && !alt`, and Win already
-    // returned above) AND re-excluded inside match_app_chord. An empty table or
-    // a miss falls straight through to the unchanged pass-through below, so this
-    // is fully inert unless JS supplied chords and one matches exactly.
-    if is_key_down && ctrl && !alt {
-        let mods = MOD_CTRL | if modifier_held(VK_SHIFT) { MOD_SHIFT } else { 0 };
+    // Win combos are excluded. Alt is accepted by match_app_chord only for the
+    // arrow-key horizontal-scroll binds, so AltGr text still falls through.
+    if is_key_down && ctrl && !win {
+        let mods = MOD_CTRL
+            | if modifier_held(VK_SHIFT) { MOD_SHIFT } else { 0 }
+            | if alt { MOD_ALT } else { 0 };
         let matched = {
             let chords = state.app_chords.lock().unwrap_or_else(|p| p.into_inner());
             match_app_chord(chords.as_slice(), vk, mods).map(|s| s.to_string())
@@ -345,17 +369,18 @@ unsafe fn keyboard_hook_inner(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
                 app_chord_id: id,
             });
             if delivered {
-                state
-                    .swallowed_ups
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner())
-                    .insert(vk);
+                let mut ups = state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner());
+                ups.insert(vk);
                 return LRESULT(1);
             }
             // No live callback ⟹ nowhere to dispatch. Fall through so the OS /
             // RegisterHotKey can still handle it — never swallow a key with
             // nowhere to go (same rule as the plain-typing path below).
         }
+    }
+
+    if win {
+        return pass();
     }
 
     // Shortcut-guard mode: the app-chord swallow above is the ENTIRE job. Every
@@ -658,6 +683,15 @@ fn modifier_held(vk: VIRTUAL_KEY) -> bool {
     // hook decides to swallow the key, so it correctly reflects held modifiers.
     // High-order bit (0x8000) = currently down.
     (unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000) != 0
+}
+
+#[inline]
+fn ctrl_bit(vk: u32, extended: bool) -> u32 {
+    match (vk, extended) {
+        (0xA3, _) | (0x11, true) => 2,  // right or generic-extended Ctrl
+        (0xA2, _) | (0x11, false) => 1, // left or generic Ctrl
+        _ => 0,
+    }
 }
 
 #[inline]
@@ -1085,7 +1119,7 @@ impl StealthKeyboardTap {
 
     /// Engage the hook. Every plain-text keystroke fires `callback` and is
     /// swallowed from the foreground app. `app_chords` is the app's OWN global
-    /// shortcuts (printable-leak subset) the hook should swallow + self-dispatch
+    /// supported shortcuts the hook should swallow + self-dispatch
     /// so they can never leak into the foreground app while a `RegisterHotKey`
     /// registration is temporarily dropped; pass `[]` to disable that (fully
     /// inert — every chord passes through as before). `overlay_bounds` is
@@ -1114,6 +1148,7 @@ impl StealthKeyboardTap {
         *self.state.app_chords.lock().unwrap_or_else(|p| p.into_inner()) =
             app_chords_from_inputs(app_chords);
         self.state.swallowed_ups.lock().unwrap_or_else(|p| p.into_inner()).clear();
+        self.state.ctrl_down.store(0, Ordering::Release);
 
         // Join any prior worker still winding down before publishing active,
         // so its cleanup store(false) can't race our store(true).
@@ -1229,6 +1264,12 @@ impl StealthKeyboardTap {
         }
     }
 
+    /// Suppress Ctrl while the overlay is visible on Windows.
+    #[napi]
+    pub fn set_ctrl_suppressed(&self, suppressed: bool) {
+        self.state.suppress_ctrl.store(suppressed, Ordering::Release);
+    }
+
     #[napi(getter)]
     pub fn is_active(&self) -> bool {
         self.state.active.load(Ordering::Acquire)
@@ -1238,5 +1279,17 @@ impl StealthKeyboardTap {
 impl Default for StealthKeyboardTap {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ctrl_bit;
+
+    #[test]
+    fn left_and_right_ctrl_use_independent_bits() {
+        assert_eq!(ctrl_bit(0x11, false), ctrl_bit(0xA2, false));
+        assert_eq!(ctrl_bit(0x11, true), ctrl_bit(0xA3, false));
+        assert_ne!(ctrl_bit(0xA2, false), ctrl_bit(0xA3, false));
     }
 }

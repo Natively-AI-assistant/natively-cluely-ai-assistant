@@ -51,10 +51,12 @@ test('digit and letter chords map to their VKs', async () => {
   assert.equal(acceleratorToWin32Chord('CommandOrControl+Shift+Space', 'chat:focusInput').vk, 0x20);
 });
 
-test('Alt chords are excluded (AltGr ambiguity)', async () => {
-  const { acceleratorToWin32Chord } = await load();
-  // Ctrl+Alt+Left (scroll bind) must NOT become a swallowable chord.
-  assert.equal(acceleratorToWin32Chord('CommandOrControl+Alt+Left', 'chat:scrollLeft'), null);
+test('Alt is accepted only for arrow chords', async () => {
+  const { acceleratorToWin32Chord, MOD_ALT, MOD_CTRL } = await load();
+  assert.deepEqual(
+    acceleratorToWin32Chord('CommandOrControl+Alt+Left', 'chat:scrollLeft'),
+    { vk: 0x25, mods: MOD_CTRL | MOD_ALT, id: 'chat:scrollLeft' },
+  );
   assert.equal(acceleratorToWin32Chord('CommandOrControl+Alt+L', 'x'), null);
 });
 
@@ -71,11 +73,11 @@ test('bare keys and modifier-less accelerators are excluded', async () => {
   assert.equal(acceleratorToWin32Chord('Shift+Enter', 'x'), null); // no Ctrl
 });
 
-test('non-printable completing keys are excluded', async () => {
+test('arrow completing keys are mapped and function keys stay excluded', async () => {
   const { acceleratorToWin32Chord } = await load();
-  assert.equal(acceleratorToWin32Chord('CommandOrControl+Up', 'chat:scrollUp'), null);
+  assert.equal(acceleratorToWin32Chord('CommandOrControl+Up', 'chat:scrollUp').vk, 0x26);
   assert.equal(acceleratorToWin32Chord('CommandOrControl+F1', 'x'), null);
-  assert.equal(acceleratorToWin32Chord('CommandOrControl+Left', 'x'), null);
+  assert.equal(acceleratorToWin32Chord('CommandOrControl+Left', 'x').vk, 0x25);
 });
 
 test('empty / malformed accelerators return null, never throw', async () => {
@@ -86,16 +88,17 @@ test('empty / malformed accelerators return null, never throw', async () => {
 });
 
 test('buildChordTable keeps only global, in-subset binds', async () => {
-  const { buildChordTable, MOD_CTRL } = await load();
+  const { buildChordTable, MOD_ALT, MOD_CTRL } = await load();
   const table = buildChordTable([
     { id: 'a', accelerator: 'CommandOrControl+Enter', isGlobal: true },
-    { id: 'b', accelerator: 'CommandOrControl+Alt+Left', isGlobal: true }, // Alt -> dropped
+    { id: 'b', accelerator: 'CommandOrControl+Alt+Left', isGlobal: true },
     { id: 'c', accelerator: 'CommandOrControl+H', isGlobal: false },       // not global -> dropped
     { id: 'd', accelerator: '', isGlobal: true },                          // empty -> dropped
     { id: 'e', accelerator: 'CommandOrControl+5', isGlobal: true },
   ]);
   assert.deepEqual(table, [
     { vk: 0x0d, mods: MOD_CTRL, id: 'a' },
+    { vk: 0x25, mods: MOD_CTRL | MOD_ALT, id: 'b' },
     { vk: 0x35, mods: MOD_CTRL, id: 'e' },
   ]);
 });

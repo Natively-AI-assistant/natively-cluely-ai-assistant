@@ -50,6 +50,8 @@ export declare class StealthKeyboardTap {
    * reach the foreground app normally. Safe to call multiple times.
    */
   stop(): void
+  /** Suppress Ctrl while the overlay is visible on Windows. */
+  setCtrlSuppressed(suppressed: boolean): void
   /**
    * True while the tap is engaged. Use to drive UI state ("stealth
    * typing" badge, mode indicator, etc.).
