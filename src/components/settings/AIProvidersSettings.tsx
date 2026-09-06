@@ -3787,16 +3787,18 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         : antigravityStatus.signedIn ? t('Antigravity connected') : t('Not connected')}
                     {antigravityStatus.signedIn && antigravityStatus.expiresAt && ` · ${t('Refreshes automatically before')} ${new Date(antigravityStatus.expiresAt).toLocaleTimeString()}`}
                 </p>
-                {/* Primary action is Codex's full-width accent row (aip-btn flex-1,
-                    data-size="row" data-variant="accent"), so the two OAuth
-                    providers present sign-in identically. Cancel stays a compact
-                    ghost beside the in-flight bar rather than replacing it —
-                    Antigravity can abort a pending browser round-trip and Codex
-                    cannot, and that capability should not cost the shared shape. */}
+                {/* Primary action takes Codex's full-width row SHAPE (aip-btn
+                    flex-1, data-size="row") but NOT its data-variant="accent":
+                    the accent tint is periwinkle in this panel's token scope, and
+                    the card keeps the neutral button colour it already had.
+                    Cancel stays a compact ghost beside the in-flight bar rather
+                    than replacing it — Antigravity can abort a pending browser
+                    round-trip and Codex cannot, and that capability should not
+                    cost the shared shape. */}
                 <div className="flex flex-wrap gap-2">
                     {antigravityStatus.inProgress ? (
                         <>
-                            <button type="button" className="aip-btn flex-1" data-size="row" data-variant="accent" disabled>
+                            <button type="button" className="aip-btn flex-1" data-size="row" disabled>
                                 <Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}
                             </button>
                             <button
@@ -3812,7 +3814,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                             type="button"
                             className="aip-btn flex-1"
                             data-size="row"
-                            data-variant="accent"
                             disabled={antigravityBusy}
                             onClick={() => void runAntigravityAction('login')}
                         >
