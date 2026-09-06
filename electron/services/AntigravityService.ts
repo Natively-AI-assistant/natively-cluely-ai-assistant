@@ -50,6 +50,16 @@ export type AntigravityErrorCode =
   | 'auth_required'
   | 'auth_revoked'
   | 'setup'
+  /**
+   * Onboarding COMPLETED and the account still has no project — the one
+   * condition the Voice-app project fallback is meant for. Distinct from
+   * 'setup', which responseJson also stamps on 401/403/429/5xx/invalid-JSON:
+   * those mean the call to find out failed, not that there is nothing to find,
+   * and diverting them to the shared project pins the user there permanently
+   * (saveToStorage persists it and nothing re-runs discovery short of a
+   * sign-out).
+   */
+  | 'setup_no_project'
   | 'models'
   | 'request'
   | 'response'
@@ -457,13 +467,13 @@ async function discoverProject(accessToken: string, signal: AbortSignal): Promis
         ? loaded.ineligibleTiers
           .filter((tier: any) => typeof tier?.reasonMessage === 'string' && tier.reasonMessage.trim())
           .map((tier: any) => tier.reasonMessage.trim()) : [];
-      throw new AntigravityError('setup', reasons.length
+      throw new AntigravityError('setup_no_project', reasons.length
         ? `Google account setup failed: ${reasons.join(' ')}`
         : 'Google completed account setup without providing a project ID. This account may require a Google Cloud project.');
     }
     if (attempt < 5) await wait(1_500, undefined, { signal });
   }
-  throw new AntigravityError('setup', 'Google account setup did not finish. Try signing in again.');
+  throw new AntigravityError('setup_no_project', 'Google account setup did not finish. Try signing in again.');
 }
 
 export class AntigravityService extends EventEmitter {
@@ -574,7 +584,11 @@ export class AntigravityService extends EventEmitter {
       } catch (error) {
         this.assertGeneration(generation);
         controller.signal.throwIfAborted();
-        if (!(error instanceof AntigravityError) || error.code !== 'setup') throw error;
+        // ONLY the no-project outcome. A transient Google 500, a 429, a 401 or an
+        // invalid-JSON body during sign-in are all 'setup' too, and adopting the
+        // shared project for those pinned a user who owns a perfectly good Code
+        // Assist project to it forever.
+        if (!(error instanceof AntigravityError) || error.code !== 'setup_no_project') throw error;
         // Voice-app keeps its configured project when optional discovery fails.
         // Validate that project's model access before adopting the new session.
         const response = await fetchWithDnsRetry(`${ANTIGRAVITY_DAILY_ENDPOINT}/v1internal:fetchAvailableModels`, {
