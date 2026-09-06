@@ -449,18 +449,47 @@ function describeTier(tier: unknown): Record<string, unknown> | null {
 }
 
 /**
- * A Google Cloud project the USER supplies, same mechanism and same precedence
- * as gemini-cli (GOOGLE_CLOUD_PROJECT wins over GOOGLE_CLOUD_PROJECT_ID).
+ * GCP project id rule: 6-30 chars, lowercase letter first, then lowercase
+ * letters/digits/hyphens, no trailing hyphen. Validated here rather than only in
+ * the UI so an env var or a hand-edited settings.json cannot put a malformed id
+ * on the wire and turn a typo into "setup did not finish".
+ */
+export const CLOUD_PROJECT_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+
+export function isValidCloudProject(value: string): boolean {
+  return CLOUD_PROJECT_PATTERN.test(value.trim());
+}
+
+/**
+ * Explicit setting, pushed in by the IPC layer. Kept as module state with a
+ * setter rather than importing SettingsManager here: this service is
+ * deliberately self-contained (see the file header), and its test suite stubs
+ * module loading, so a new import would have to be mocked in every case.
+ */
+let configuredCloudProject: string | undefined;
+
+export function setConfiguredCloudProject(value: string | null | undefined): void {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  configuredCloudProject = trimmed && isValidCloudProject(trimmed) ? trimmed : undefined;
+}
+
+/**
+ * A Google Cloud project the USER supplies.
  *
  * Needed because Google refuses this client the free tier outright —
  * loadCodeAssist returns
  *   ineligibleTiers: [{ tierId: 'free-tier', reasonCode: 'UNSUPPORTED_CLIENT' }]
  * — leaving only `standard-tier`, which is a bring-your-own-project tier. The
  * project must have the Gemini for Cloud API enabled, and usage bills to it.
+ *
+ * The in-app setting wins over the environment. gemini-cli only has the env
+ * vars so it ranks them against each other; here a value the user typed into
+ * Settings must beat an ambient one they may not even know is exported.
  */
 export function preferredCloudProject(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  if (configuredCloudProject) return configuredCloudProject;
   const raw = env.GOOGLE_CLOUD_PROJECT?.trim() || env.GOOGLE_CLOUD_PROJECT_ID?.trim();
-  return raw || undefined;
+  return raw && isValidCloudProject(raw) ? raw : undefined;
 }
 
 function requiresUserProject(tier: unknown): boolean {

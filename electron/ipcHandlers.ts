@@ -1,7 +1,7 @@
 // ipcHandlers.ts
 
 import * as crypto from 'crypto';
-import { AntigravityService, initializeAntigravityLifecycle } from './services/AntigravityService';
+import { AntigravityService, initializeAntigravityLifecycle, isValidCloudProject, setConfiguredCloudProject } from './services/AntigravityService';
 import { buildEmbeddingConfig } from './rag/embeddingConfigIdentity';
 import { app, BrowserWindow, dialog, desktopCapturer, ipcMain, shell, systemPreferences } from 'electron';
 import { micSettingsUri } from '../src/lib/micPermissionPolicy.mjs';
@@ -11384,6 +11384,27 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('antigravity:models', async (_, force?: boolean) => {
     try { return { success: true, models: await antigravity.getModels(force === true) }; }
     catch (error: any) { return { success: false, models: [], error: error.message }; }
+  });
+
+  // Google refuses this client the free tier (loadCodeAssist returns
+  // free-tier / UNSUPPORTED_CLIENT), leaving only the standard tier, which
+  // onboards against a project the USER owns. Pushed into the service rather
+  // than imported by it — see setConfiguredCloudProject's comment.
+  setConfiguredCloudProject(SettingsManager.getInstance().getAntigravityCloudProject());
+  safeHandle('antigravity:get-cloud-project', () => SettingsManager.getInstance().getAntigravityCloudProject());
+  safeHandle('antigravity:set-cloud-project', async (_, value: unknown) => {
+    if (typeof value !== 'string') return { success: false, error: 'invalid_type' };
+    const trimmed = value.trim();
+    // Empty clears it and hands the choice back to the environment.
+    if (trimmed && !isValidCloudProject(trimmed)) return { success: false, error: 'invalid_project_id' };
+    if (!SettingsManager.getInstance().set('antigravityCloudProject', trimmed)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    setConfiguredCloudProject(trimmed);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('antigravity:cloud-project-changed', trimmed);
+    }
+    return { success: true };
   });
 
   // ── ChatGPT OAuth (new — replaces `codex login` CLI subprocess) ──────────
