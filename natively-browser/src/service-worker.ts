@@ -779,10 +779,10 @@ export function badgeForCaptureOutcome(kind: string): { text: string; title: str
  * has no user gesture — forcibly calling chrome.action.openPopup() here would
  * pull focus off the page the user is looking at (and be page-observable via
  * blur/focus) for a capture the user never initiated. The popup's own
- * "Capture" button (the `case 'capture'` message handler below) already runs
- * inside a real user gesture and grants access without needing this nudge to
- * open anything — the badge/title alone is enough to point the user at the
- * icon.
+ * "Capture" button (popup.ts `captureBtn`, which drives `case 'capture'` and
+ * then `case 'grant-host'` below) already runs inside a real user gesture and
+ * grants access without needing this nudge to open anything — the badge/title
+ * alone is enough to point the user at the icon.
  */
 function nudgeGrantViaAction(kind: string): void {
   const badge = badgeForCaptureOutcome(kind);
