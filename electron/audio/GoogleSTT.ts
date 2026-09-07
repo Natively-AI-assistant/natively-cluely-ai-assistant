@@ -20,6 +20,11 @@ export class GoogleSTT extends EventEmitter {
     private isStreaming = false;
     private isActive = false;
     private isFatalError = false;
+    // Set once a code-3 rejection has been answered by dropping to the `default`
+    // model. Bounds the downgrade to a SINGLE retry: a second INVALID_ARGUMENT,
+    // or one that arrives while we are already on `default`, is genuinely
+    // permanent and falls through to the fatal path.
+    private modelDowngraded = false;
     private label = 'default';
     private writeCount = 0;
 
@@ -160,6 +165,11 @@ export class GoogleSTT extends EventEmitter {
                 }
             }
 
+            // A downgrade is a fact about the OLD language+model pair, so the new
+            // language gets its own latest_long attempt. (start() resets this too,
+            // but only the active path reaches start().)
+            this.modelDowngraded = false;
+
             // Restart if active
             if (this.isStreaming || this.isActive) {
                 console.log(`[GoogleSTT/${this.label}] Language changed while active. Restarting stream...`);
@@ -175,6 +185,7 @@ export class GoogleSTT extends EventEmitter {
         if (this.isActive) return;
         this.isActive = true;
         this.isFatalError = false;
+        this.modelDowngraded = false;
         this.writeCount = 0;
 
         this.openDumpStream();
@@ -369,6 +380,27 @@ export class GoogleSTT extends EventEmitter {
         }
     }
 
+    /**
+     * `latest_long` is the quality default, but STT v1 offers it for only a
+     * subset of locales — Mandarin, for one, supports `default` and
+     * `command_and_search` only. An unsupported model+language pair is rejected
+     * with INVALID_ARGUMENT, a PERMANENT_GRPC_CODES entry, which used to kill
+     * STT for the entire session ("Chinese never transcribes", PR #494).
+     *
+     * LANGUAGES_WITHOUT_LATEST_LONG catches the pairs we know about up front;
+     * `modelDowngraded` catches the ones we do not, after Google has told us
+     * once. Google no longer publishes the v1 language x model table (both doc
+     * URLs now redirect to v2, which uses chirp/long/short), so the static list
+     * can never be proven complete — the runtime downgrade is what actually
+     * closes the class.
+     */
+    private resolveModel(): 'default' | 'latest_long' {
+        if (this.modelDowngraded) return 'default';
+        return GoogleSTT.LANGUAGES_WITHOUT_LATEST_LONG.has(this.languageCode)
+            ? 'default'
+            : 'latest_long';
+    }
+
     private startStream(): void {
         this.lastConnectAttempt = Date.now();
         this.isStreaming = true;
@@ -395,9 +427,7 @@ export class GoogleSTT extends EventEmitter {
                     audioChannelCount: this.audioChannelCount,
                     languageCode: this.languageCode,
                     enableAutomaticPunctuation: true,
-                    model: GoogleSTT.LANGUAGES_WITHOUT_LATEST_LONG.has(this.languageCode)
-                        ? 'default'
-                        : 'latest_long',
+                    model: this.resolveModel(),
                     useEnhanced: true,
                     alternativeLanguageCodes: this.alternativeLanguageCodes,
                 },
@@ -424,6 +454,26 @@ export class GoogleSTT extends EventEmitter {
                     || /Audio Timeout Error/i.test(err.message || '');
                 if (isIdleTimeout) {
                     console.warn(`[GoogleSTT/${this.label}] Stream idle-timed-out (Google's 10s no-audio limit), reconnecting on next chunk.`);
+                    return;
+                }
+
+                // INVALID_ARGUMENT on a `latest_long` stream is far more likely the
+                // model than the credentials: v1 supports latest_long for only some
+                // locales and rejects the pair outright. Answer the FIRST one by
+                // dropping to `default` and letting write()'s lazy reconnect reopen
+                // the stream, rather than disabling STT for the session. Not
+                // re-emitted, for the same reason the idle timeout is not: main.ts's
+                // consecutive-error counter would tear the session down anyway. A
+                // second code 3 — or one that arrives while we are already on
+                // `default` — falls through below and is treated as permanent.
+                if (grpcCode === 3 && !this.modelDowngraded && this.resolveModel() === 'latest_long') {
+                    this.modelDowngraded = true;
+                    console.warn(
+                        `[GoogleSTT/${this.label}] INVALID_ARGUMENT on model=latest_long ` +
+                        `(lang=${this.languageCode}) — retrying once on model=default. ` +
+                        `Add '${this.languageCode}' to LANGUAGES_WITHOUT_LATEST_LONG to skip this ` +
+                        `round-trip. Google said: ${err.message}`
+                    );
                     return;
                 }
 
