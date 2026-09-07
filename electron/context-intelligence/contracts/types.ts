@@ -240,6 +240,15 @@ export interface RetrievalPlan {
   maximumCandidates: number;
   maximumAcceptedEvidence: number;
   timeoutMs: number;
+  /**
+   * The user asked for EVERY occurrence ("find every place a latency number
+   * appears", "list all the metrics for A and B"). Measured 2026-09-07: such a
+   * question over six attached files listed 8 of ~20 values because the
+   * evidence cap was 6 chunks. When set, the orchestrator has already widened
+   * maximumCandidates/maximumAcceptedEvidence; the ports widen their token
+   * budget and rerank pool, and the composer adds the scan-everything rule.
+   */
+  exhaustive?: boolean;
 }
 
 // ── The turn decision ───────────────────────────────────────────────────────

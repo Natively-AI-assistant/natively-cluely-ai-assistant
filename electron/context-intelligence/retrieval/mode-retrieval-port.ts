@@ -235,10 +235,16 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
 
   return createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number }) => {
+    retrieve: async (query: string, opts: { topK: number; exhaustive?: boolean }) => {
       if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
+      // An exhaustive request (RetrievalPlan.exhaustive) needs the RETRIEVER
+      // to hand back more than the plan's widened topK can hold at the normal
+      // token budget, and the reranker to score a wider pool — otherwise the
+      // widened cap downstream just fills with padding.
+      const exhaustive = opts.exhaustive === true;
       const res = await input.modesManager.retrieveHybridRaw(input.modeInfo, input.files, {
-        query, topK: opts.topK, tokenBudget: input.tokenBudget,
+        query, topK: opts.topK, tokenBudget: input.tokenBudget * (exhaustive ? 3 : 1),
+        ...(exhaustive ? { rerankPoolMultiplier: 2 } : {}),
         // RERANK ON THE V3 PATH (2026-09-07). This was `allowRerank: false`, and
         // V3 is the default answer path — so a reranker the user selected in
         // Settings (Voyage, OpenRouter, a local cross-encoder) NEVER ran on a

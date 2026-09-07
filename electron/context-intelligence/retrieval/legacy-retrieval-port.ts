@@ -22,7 +22,7 @@ import { extractIdentifiers, positionalDirection, POSITIONAL_RE } from './query-
 
 /** The shape the legacy retriever returns (ModeHybridRetriever.retrieve). */
 export interface LegacyRetrieveFn {
-  (query: string, opts: { topK: number; timeoutMs: number }): Promise<LegacyChunk[]>;
+  (query: string, opts: { topK: number; timeoutMs: number; exhaustive?: boolean }): Promise<LegacyChunk[]>;
 }
 
 export interface SourceRegistry {
@@ -133,6 +133,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
           raw = await deps.retrieve(query, {
             topK: decision.retrievalPlan.maximumCandidates,
             timeoutMs: decision.retrievalPlan.timeoutMs,
+            ...(decision.retrievalPlan.exhaustive ? { exhaustive: true } : {}),
           });
         } catch (e) {
           // §22.1: a retrieval failure is RECORDED, never silently converted

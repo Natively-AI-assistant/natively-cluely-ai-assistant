@@ -1678,6 +1678,7 @@ export class ModesManager {
                         followUpReferentHint: retrievalOptions?.followUpReferentHint,
                         rerankSurface: retrievalOptions?.rerankSurface,
                         rerankDeadlineMs: retrievalOptions?.rerankDeadlineMs,
+                        rerankPoolMultiplier: retrievalOptions?.rerankPoolMultiplier,
                         ...(retrievalOptions?.relaxed ? { topK: retrievalOptions.topK, tokenBudget: tokenBudget ?? 5200 } : {}),
                     },
                 );

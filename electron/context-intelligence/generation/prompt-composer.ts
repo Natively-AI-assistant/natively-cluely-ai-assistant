@@ -782,8 +782,11 @@ function privacyWithholdingNotice(scopes: readonly string[] | undefined, hasEvid
 export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
 
+  // An exhaustive request carries a tripled evidence cap on its plan; the
+  // token budget must grow with it or the extra chunks are dropped here.
+  const exhaustive = d.retrievalPlan.exhaustive === true;
   const budget: PackBudget = {
-    evidenceTokens: policy.contextBudget.evidenceTokens,
+    evidenceTokens: policy.contextBudget.evidenceTokens * (exhaustive ? 3 : 1),
     conversationTokens: policy.contextBudget.conversationTokens,
     transcriptTokens: policy.contextBudget.transcriptTokens,
   };
@@ -818,6 +821,16 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     push('precedence_history', precedenceHistory(d)),
     push('secondary_source', secondarySourceGuidance(d)),
     push('evidence_coverage', weakEvidenceGuidance(d, input.fallbackUsed, Boolean(packed.evidenceBlock))),
+    push('exhaustive', exhaustive && packed.evidenceBlock
+      ? '# Exhaustive request\nThe user asked for EVERY occurrence. Read every evidence block to its end '
+        + 'before answering, then list each matching item with its value, what it refers to, and the '
+        + 'source_name and section attributes of the block it came from. Do not stop at the first block, '
+        + 'do not summarise, and do not merge distinct occurrences into one line. The blocks are grouped '
+        + 'by source_name: work through them file by file and finish one file before starting the next. '
+        + 'The evidence is the '
+        + 'retriever\'s widened selection, not the whole corpus: if it may not cover every file, say so '
+        + 'in one closing sentence rather than presenting the list as complete.'
+      : ''),
     push('capabilities', `# Capabilities\n${capabilityLines(policy)}`),
   ].filter((s) => s.trim()).join('\n\n');
 
