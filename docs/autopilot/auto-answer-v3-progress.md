@@ -1,6 +1,14 @@
 # Auto Answer V3 — Campaign Progress
 
-## Status: phase 7 complete + post-campaign code-review repairs (2026-08-24) — branch local, no PR, no push
+## Status: shipped. Phase 7 + the 2026-08-24 code-review repairs landed with PR #541 (merged 2026-09-07, `13fc8b5a`); latest fix `467a629e` on `main`
+
+> **Read the dated sections below as a LOG, not as a spec.** Several policies
+> described as live in 2026-08 have since been retired — most of all the entire
+> user-channel/mic-echo family (2026-09-03). Each such section carries a
+> `Superseded` banner; the current behaviour is whatever the newest entry and
+> the code say. `ECHO_*`, `GENUINE_ANSWER_MIN_WORDS` and the echo latch no
+> longer exist in the engine at all.
+
 
 Branch: `feat/auto-answer-v3` (created from `main` @ f7ba73c0, 2026-08-23).
 Specs: `docs/specs/auto-answer-v2-spec.md.md` (note: file has a doubled `.md.md` extension on disk),
@@ -782,6 +790,12 @@ prefixed `[AutoAnswer:legacy]`. Smoke-verified by hand (restart-then-fire-once, 
 unaffected (189/189). REMOVE the file and its main.ts wiring when the comparison is done.
 
 ### Live-run repairs, round 3 (2026-08-24 — the A/B session; mic echo)
+
+> **Superseded 2026-09-03** — mic-echo detection (item 6 below) is GONE. The
+> user channel is inert: `ECHO_*`, the latch and `GENUINE_ANSWER_MIN_WORDS`
+> were deleted, and no user speech suppresses, cancels or barges in. See the
+> 2026-09-03 entry. Kept here for the measurements that produced the constants.
+
 The user ran the A/B harness. LEGACY behaved exactly as preserved: it fired constantly on garbage single turns
 ("Cool.", ".", "My name is Kylie,") — the recorded PR #497 failure mode, now demonstrated live. V3 answered
 nothing: every candidate skipped `user_answering`. The log showed why — nearly every interviewer final had an
@@ -918,6 +932,11 @@ dispatches, zero user_answering skips, everything else silent. Test live#8/8b (b
 mutation-probed red). Suite 216/216 · typecheck clean.
 
 ### Lenient mic (2026-08-24 — user decision after rounds 3/5/6)
+
+> **Superseded 2026-09-03** — the lenient-mic policy was retired outright, not
+> loosened further: the user channel now has no vote at all. See the
+> 2026-09-03 entry.
+
 Every live mic interaction was FALSE suppression; the user asked whether to de-prioritize mic speech like the
 legacy engine (mic-blind). Decision: **lenient mic** — the mic suppresses only on strong evidence. A user final
 counts as answering only when non-echo, non-backchannel AND ≥ `GENUINE_ANSWER_MIN_WORDS`=4 words; blips below the
@@ -1455,6 +1474,14 @@ Windows: `Reviewed but not executed` (no platform-specific code paths touched).
 ---
 
 ## Live session 2026-08-26 (meeting 7e4cbe43) — mic echo was shredding every question
+
+> **Superseded 2026-09-03** — the latch this session produced (`ECHO_ACTIVATE_COUNT`,
+> `ECHO_FLAG_WINDOW`, `ECHO_MODE_HOLD_MS`, the `mic_echo` skip reason) no longer
+> exists in the engine. `echoContainment` survives in `AutoAnswerText.ts` for
+> `docs/triage/echo.mjs` only. The diagnosis below still stands — speaker bleed
+> IS real — but the answer is now "the user channel never closes a candidate",
+> so bleed cannot shred one either. See the 2026-09-03 entry.
+
 
 User report: "the auto answer is failure". Seven minutes produced **12 candidates and 1 answer**, with 82
 user-channel skips (50 backchannel, 30 user_answering). The judge was not the problem — the transcript was.

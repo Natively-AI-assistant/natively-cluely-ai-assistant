@@ -156,12 +156,20 @@ export interface SimpleAutoAnswerHost {
     isMeetingActive(): boolean;
     meetingGeneration(): number;
     engineAccepting(): boolean;
+    /**
+     * RETIRED 2026-09-03 with the user channel: the engine no longer calls
+     * either of these (nothing here cancels a stream any more — see the header)
+     * and `main.ts` still supplies both. Left on the interface so reviving the
+     * policy is a one-site change rather than a re-wiring; a reader must not
+     * take their presence for "the engine can barge in".
+     */
     answerStreamActive?(): boolean;
     /** Hot window for judge context (finalized turns, both speakers). */
     recentTurns(): TranscriptTurn[];
     dispatch(question: AutoAnswerQuestion, options: { reuseSpeculative: boolean }): void | Promise<unknown>;
     offer?(question: AutoAnswerQuestion): void;
     retractOffer?(questionId: string, reason: string): void;
+    /** See answerStreamActive: retired 2026-09-03, supplied but never called. */
     cancelAutomaticAnswer?(reason: 'user_barge_in'): boolean;
     /** The judge call (same hook as V3): raw model reply, parsed here. */
     judgeCandidate?(req: JudgeRequest): Promise<string | null>;

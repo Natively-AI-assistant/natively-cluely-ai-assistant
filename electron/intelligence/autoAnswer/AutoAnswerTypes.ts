@@ -1,7 +1,8 @@
 /**
  * Auto Answer subsystem types (spec V2 §4 verbatim, plus the V3 additions:
- * TranscriptEndpointEvent.confidence, the user_answering / user_barge_in skip
- * reasons, and the ternary dispatch action 'offer').
+ * TranscriptEndpointEvent.confidence, the user-channel skip reasons — retired
+ * 2026-09-03, see AutoAnswerSkipReason — and the ternary dispatch action
+ * 'offer').
  *
  * Nothing in this file has behaviour. Every threshold lives next to the code
  * that applies it, as a named constant, commented as unfitted.
@@ -110,11 +111,22 @@ export type AutoAnswerSkipReason =
     | 'cooldown'
     | 'stale_generation'
     | 'queue_full'
-    // V3 Amendment 1
+    // ── RETIRED 2026-09-03: the user channel is inert ─────────────────────
+    // Nothing emits these three any more. The user answers the moment the
+    // question lands, so their own speech no longer suppresses, cancels or
+    // barges in (SimpleAutoAnswer's header records the decision), and the
+    // mic-echo policy that needed the third went with it.
+    //
+    // They stay in the union because telemetry is PERSISTED: real
+    // `logs/telemetry.jsonl` files under the app's user-data directory carry
+    // these values, and `docs/triage/replay.mjs` still filters on them.
+    // Removing them would make this type wrong about data that exists. If the
+    // user-channel policy is ever revived, the emitters come back — not these.
     | 'user_answering'
     | 'user_barge_in'
     /** The user channel is carrying the interviewer's audio (speakers, not headphones). */
     | 'mic_echo'
+    // ── end retired ───────────────────────────────────────────────────────
     /** A dispatch parked behind a busy engine was superseded by newer interviewer speech before the engine freed up. */
     | 'superseded_while_parked'
     // Lifecycle reasons carried over from the PR #497 gate and the Phase 1 pending slot
@@ -209,6 +221,12 @@ export interface AutoAnswerTelemetryEvent {
      * say WHY: an interviewer interim (which cannot change the candidate — the
      * candidate is built from finals only) and a genuine new final call for
      * opposite fixes. Diagnostic only; nothing branches on it.
+     *
+     * `bumpJudgeSeq` now raises only 'interim', 'final' and 'meeting_reset';
+     * 'user_answering' is retired with the rest of the user channel and
+     * 'meeting_ended' is set directly by the staleness branch. Both are kept
+     * for the same reason as the retired skip reasons above — recorded runs
+     * contain them.
      */
     supersededBy?: 'interim' | 'final' | 'user_answering' | 'meeting_reset' | 'meeting_ended';
 }
