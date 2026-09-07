@@ -2708,6 +2708,8 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (turnContract
             && turnContract.sourceOwner === 'clarify'
             && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+            // Retired 2026-09-07 (always answer) — see clarificationShortCircuitEnabled.
+            && require('./intelligence/context-os').clarificationShortCircuitEnabled()
             && !isCodingChat
             && !imagePaths?.length
             && !isStealthChat
@@ -2979,6 +2981,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         // ask is an explicit internal refusal, so it may bypass provider generation;
         // it must not contain profile facts and is not authoritative memory.
         if (manualOwnership?.shouldClarifyInsteadOfProfile && !_ownerEnforcementOff
+            && require('./intelligence/context-os').clarificationShortCircuitEnabled()
             && !isCodingChat && !imagePaths?.length && !isStealthChat) {
           try {
             const { buildSourceSwitchClarification } = require('./llm/sourceOwnership');
@@ -15818,7 +15821,8 @@ export function initializeIpcHandlers(appState: AppState): void {
             hasProfileFacts: _pHasProfile,
             turnSourceDecision: _pTurnSourceDecision,
           });
-          if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId) {
+          if (_pOwn.shouldClarifyInsteadOfProfile && _phoneChatLatestId === myPhoneId
+              && require('./intelligence/context-os').clarificationShortCircuitEnabled()) {
             const clarify = buildSourceSwitchClarification(_pOwn.owner, _pExplicitSwitch, { hasReferenceFiles: Boolean((_pMode as any)?.hasReferenceFiles) });
             try { phoneMirror.publishToken(String(myStreamId), clarify); } catch (_) {}
             try { phoneMirror.publishDone(String(myStreamId), clarify); } catch (_) {}
@@ -16374,9 +16378,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           try { im.off?.('suggested_answer', onAnswer as any); } catch {}
           try { im.off?.('suggested_answer_token', onToken as any); } catch {}
           try { im.off?.('suggested_answer_discard', onDiscard as any); } catch {}
-          try { im.off?.('clarify_ready', onClarify as any); } catch {}
-          try { im.off?.('recap_ready', onRecap as any); } catch {}
-          try { im.off?.('follow_up_questions', onFollowUps as any); } catch {}
+          for (const ev of ['clarify_ready', 'clarify']) { try { im.off?.(ev, onClarify as any); } catch {} }
+          for (const ev of ['recap_ready', 'recap']) { try { im.off?.(ev, onRecap as any); } catch {} }
+          for (const ev of ['follow_up_questions', 'follow_up_questions_update']) { try { im.off?.(ev, onFollowUps as any); } catch {} }
           if (settleTimer) clearTimeout(settleTimer);
           clearTimeout(timer);
         };
@@ -16384,9 +16388,12 @@ export function initializeIpcHandlers(appState: AppState): void {
         im.on?.('suggested_answer', onAnswer as any);
         im.on?.('suggested_answer_token', onToken as any);
         im.on?.('suggested_answer_discard', onDiscard as any);
-        try { im.on?.('clarify_ready', onClarify as any); } catch {}
-        try { im.on?.('recap_ready', onRecap as any); } catch {}
-        try { im.on?.('follow_up_questions', onFollowUps as any); } catch {}
+        // The engine's real event names are 'recap', 'clarify' and
+        // 'follow_up_questions_update' (2026-09-07); the *_ready names were
+        // never emitted, so planner-routed turns settled as noDecision.
+        for (const ev of ['clarify_ready', 'clarify']) { try { im.on?.(ev, onClarify as any); } catch {} }
+        for (const ev of ['recap_ready', 'recap']) { try { im.on?.(ev, onRecap as any); } catch {} }
+        for (const ev of ['follow_up_questions', 'follow_up_questions_update']) { try { im.on?.(ev, onFollowUps as any); } catch {} }
         // Drive the real pipeline. handleSuggestionTrigger → runWhatShouldISay.
         // `hotkey: true` (2026-09-07) mirrors the manual Cmd+Enter press instead
         // — the same runWhatShouldISay call ipcHandlers makes for the hotkey,

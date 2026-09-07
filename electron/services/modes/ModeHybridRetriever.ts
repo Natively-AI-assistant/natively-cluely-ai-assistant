@@ -1196,6 +1196,18 @@ export class ModeHybridRetriever {
                 markH4HybridStage('perform_hybrid_enter', { candidateCount: allCandidates.length });
                 candidates = await this.performHybridRetrieval(allCandidates, queryWords, queryText, adaptiveThreshold, files);
                 markH4HybridStage('perform_hybrid_exit', { candidateCount: candidates.length });
+                // EMPTY-HYBRID FLOOR (2026-09-07, always answer). A paraphrased live
+                // question ("did we get paged or did a customer tell us") against a
+                // two-chunk mode scored every chunk under MIN_COMBINED_SCORE and the
+                // turn went to the model with NO evidence — while the answer sat in
+                // the only chunk that mentioned "pager". When the corpus has
+                // candidates and the threshold kept none, lexical retrieval at a zero
+                // threshold returns the best-overlapping chunks; downstream selection
+                // still caps them and the composer still judges answerability.
+                if (candidates.length === 0 && allCandidates.length > 0) {
+                    candidates = this.performLexicalRetrieval(allCandidates, queryWords, 0);
+                    markH4HybridStage('empty_hybrid_floor', { candidateCount: candidates.length, pool: allCandidates.length });
+                }
             } catch (error) {
                 markH4HybridStage('perform_hybrid_error', { message: error instanceof Error ? error.message : String(error) });
                 console.warn('[ModeHybridRetriever] Hybrid retrieval failed, falling back to lexical:', error);

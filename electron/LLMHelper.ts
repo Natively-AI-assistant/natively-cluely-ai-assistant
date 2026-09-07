@@ -7073,7 +7073,10 @@ let isMultimodal = !!(imagePaths?.length);
           const { isIntelligenceFlagEnabled: _isFlagOn } = require('./intelligence/intelligenceFlags');
           if (_cogEarly && _cogEarly.govern && forceDocumentGrounding && _isFlagOn('contextOsEvidencePackEnabled')) {
             governedEvidenceResolutionStarted = true;
-            governedTurnQuestion = _cogEarly.turnQuestion?.trim() || null;
+            // The user's message is the turn question when the governance
+            // context carries none (2026-09-07): this used to throw, and the
+            // throw surfaced as "could you rephrase the question?".
+            governedTurnQuestion = _cogEarly.turnQuestion?.trim() || String(message || '').trim() || null;
             markH4Stage('resolver_enter', { hasTurnQuestion: Boolean(governedTurnQuestion) });
             if (!governedTurnQuestion) throw new Error('governed turn missing immutable turn question');
             if (_cogEarly.evidencePack) {
@@ -7628,7 +7631,8 @@ let isMultimodal = !!(imagePaths?.length);
       const referent = callerSuppliedContextForPriorResolution
         ? `\n\n## RECENT CONVERSATION (for pronoun resolution only — not a source of facts)\n${callerSuppliedContextForPriorResolution}`
         : '';
-      const governedQuestion = (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.turnQuestion?.trim();
+      const governedQuestion = (routeOptions?.contextOsGeneration as import('./intelligence/context-os').ContextOsGenerationContext | undefined)?.turnQuestion?.trim()
+        || String(message || '').trim();
       if (!governedQuestion) throw new Error('governed prompt missing immutable turn question');
       userContent = `QUESTION: ${governedQuestion}\n\n${contextOsGoverningBlock}${referent}\n\nNow answer this question using ONLY the evidence_pack above: ${governedQuestion}`;
       void contextOsGovernedPack; // referenced for clarity; pack surfaced via _cog

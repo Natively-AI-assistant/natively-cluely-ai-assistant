@@ -1750,6 +1750,23 @@ export class IntelligenceEngine extends EventEmitter {
 
             const lastInterviewerTurn = this.session.getLastInterviewerTurn();
             const extractedQuestion = extractLatestQuestion(transcriptTurns);
+            // SPEAKER-MISATTRIBUTION FALLBACK (2026-09-07, always answer). Real
+            // diarization labels the other party as "user" often enough that a
+            // manual press can arrive with a transcript and NO interviewer turn.
+            // The extractor then yields nothing, the governed prompt threw
+            // "missing immutable turn question", and the catch showed "I didn't
+            // fully catch that — could you rephrase the question?". The user
+            // pressed the key: the most recent utterance from anyone is the
+            // thing to answer. Speculative runs keep the strict extractor.
+            if (!isSpeculative && !question?.trim() && !extractedQuestion.latestQuestion && !lastInterviewerTurn) {
+                const lastAnyTurn = [...transcriptTurns].reverse().find((t) => t.role !== 'assistant' && String(t.text || '').trim().length >= 3);
+                if (lastAnyTurn) {
+                    extractedQuestion.latestQuestion = String(lastAnyTurn.text).trim();
+                    extractedQuestion.confidence = Math.max(extractedQuestion.confidence ?? 0, 0.6);
+                    trace.mark('repair_used', { reason: 'question_from_any_speaker', role: lastAnyTurn.role });
+                    console.log('[IntelligenceEngine] no interviewer turn — answering the latest utterance regardless of speaker label', { role: lastAnyTurn.role, chars: extractedQuestion.latestQuestion.length });
+                }
+            }
             // WTA mint point (Phase 6 Slice 1, "what changes" item 1): one
             // TurnId for this What-to-Answer invocation, threaded into every
             // buildTurnContractIfEnabled call this method makes below instead
@@ -3137,6 +3154,8 @@ export class IntelligenceEngine extends EventEmitter {
             if (wtaTurnContract
                 && wtaTurnContract.sourceOwner === 'clarify'
                 && isIntelligenceFlagEnabled('contextOsPropertyValidation')
+                // Retired 2026-09-07 (always answer) — see clarificationShortCircuitEnabled.
+                && contextOsStatic.clarificationShortCircuitEnabled()
                 && !isSpeculative
                 // Visual turns bypass clarification — the manual-chat twin has
                 // had this since its escape hatches; WTA never did (2026-08-11:

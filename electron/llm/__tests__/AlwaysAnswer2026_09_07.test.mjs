@@ -127,3 +127,53 @@ describe('a bare "I can\'t help with that" is a misfire, so it regenerates', () 
     }
   });
 });
+
+describe('round 4: misattributed speakers and ambiguous problems still get an answer', () => {
+  const llm = src('electron/LLMHelper.ts');
+  const prompts = src('electron/llm/prompts.ts');
+  test('the engine answers the latest utterance when no interviewer turn exists', () => {
+    assert.ok(ie.includes("reason: 'question_from_any_speaker'"));
+  });
+  test('the governed prompt falls back to the user message instead of throwing', () => {
+    assert.ok(/governedTurnQuestion = _cogEarly\.turnQuestion\?\.trim\(\) \|\| String\(message \|\| ''\)\.trim\(\)/.test(llm));
+    assert.ok(/turnQuestion\?\.trim\(\)\s*\|\| String\(message \|\| ''\)\.trim\(\);\s*\n\s*if \(!governedQuestion\) throw/.test(llm));
+  });
+  test('prompts answer under a stated assumption instead of asking to repeat', () => {
+    assert.ok(!prompts.includes('ask one concise clarification question and STOP'));
+    assert.ok(!prompts.includes('Ambiguous ASR beats coding.'));
+    assert.ok(prompts.includes('never ask the user to repeat or rephrase'));
+    assert.ok(prompts.includes('Never stop at a clarification question and never ask the interviewer to repeat'));
+  });
+  test('the E2E ask hook listens to the engine\'s real event names', () => {
+    assert.ok(ipc.includes("['recap_ready', 'recap']") && ipc.includes("['follow_up_questions', 'follow_up_questions_update']"));
+  });
+});
+
+describe('composer permanent rules forbid asking to repeat and give the other party\'s requested value', () => {
+  const composer = src('electron/context-intelligence/generation/prompt-composer.ts');
+  test('both rules are in PERMANENT_RULES', () => {
+    assert.ok(composer.includes('Never ask the user to repeat, rephrase or clarify.'));
+    assert.ok(composer.includes('give that value plainly first'));
+  });
+});
+
+describe('round 4b: no source-switch short-circuit, bounded query embedding, empty-hybrid floor', () => {
+  const { clarificationShortCircuitEnabled } = require(path.join(root, 'dist-electron/electron/intelligence/context-os/refusalPolicy.js'));
+  test('the clarification short-circuit is retired at every site', () => {
+    assert.equal(clarificationShortCircuitEnabled(), false);
+    assert.equal((ie.match(/clarificationShortCircuitEnabled\(\)/g) || []).length, 1, 'engine WTA gate');
+    assert.equal((ipc.match(/clarificationShortCircuitEnabled\(\)/g) || []).length, 3, 'manual ×2 + phone mirror gates');
+  });
+  test('query embeddings have their own short budget', () => {
+    const ep = src('electron/rag/EmbeddingPipeline.ts');
+    assert.match(ep, /const QUERY_EMBED_TIMEOUT_MS = 3_000;/);
+    const q = ep.slice(ep.indexOf('async getEmbeddingForQuery('), ep.indexOf('async getEmbeddingForQueryLocalOnly'));
+    assert.ok(q.includes('QUERY_EMBED_TIMEOUT_MS') && !/[^_]EMBED_TIMEOUT_MS/.test(q.replace(/QUERY_EMBED_TIMEOUT_MS/g, '')), 'query path must use the query budget');
+  });
+  test('an empty hybrid result over a non-empty corpus falls to zero-threshold lexical', () => {
+    assert.ok(src('electron/services/modes/ModeHybridRetriever.ts').includes("markH4HybridStage('empty_hybrid_floor'"));
+  });
+  test('negotiation persona shows the user their own number before the spoken line', () => {
+    assert.ok(src('electron/llm/prompts.ts').includes('show the user that number first in one short clause'));
+  });
+});
