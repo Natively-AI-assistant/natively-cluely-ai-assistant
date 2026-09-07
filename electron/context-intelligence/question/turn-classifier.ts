@@ -174,7 +174,11 @@ const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me a
 // you build a rate limiter?", "how do you test this?") and must keep their
 // general-knowledge route. The distinction is grammatical rather than a keyword
 // list, so it does not need maintaining as vocabulary drifts.
-const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on)\b/;
+// got/achieved/reached/hit/measured/reduced/improved/cut/saw/used added
+// 2026-09-07: "what was the latency you got on the FastAPI backend" carried
+// no second-person cue at all and planned document pools only, so the fact —
+// which lived in the profile résumé — was never retrieved.
+const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on|got|achieved|reached|hit|measured|reduced|improved|increased|cut|saw|used|optimi[sz]ed)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -558,6 +562,9 @@ const RESPONSE_REQUEST_RE =
 // off; both surfaces then asked "what would you like me to explain?". A
 // fragment whose whole text is such a verb phrase has no subject of its own —
 // it is a follow-up, and the orchestrator lends it the attachments as subject.
+// Imperative generative asks are not lookups (2026-09-07 fragment rule).
+const GENERATIVE_ASK_RE = /^(?:please\s+)?(?:write|draft|generate|compose|create|make|craft|prepare|suggest|brainstorm|come up with|give me (?:a|an|some|three|five|\d+)|propose|outline|rewrite|rephrase|translate|improve|polish|shorten|expand on)\b/;
+
 const BARE_VERB_FRAGMENT_RE =
   /^(?:(?:please|ok(?:ay)?|so|and|just),?\s+)*(?:explain|elaborate|expand|continue|go on|keep going|say more|more|tell me more|(?:more|further) details?|details?|next|walk (?:me|us) through (?:it|that|this)|break (?:it|that|this) down|summari[sz]e(?: (?:it|that|this))?|clarify(?: (?:it|that|this))?|show me|(?:can|could) you (?:explain|elaborate|expand|clarify)(?: (?:it|that|this))?)(?:\s+(?:please|again))?$/;
 
@@ -1092,6 +1099,26 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
         claims.add('DOCUMENT_FACT'); types.add('DOCUMENT_FACT');
       }
     }
+  }
+  // ── STT fragment lookup (2026-09-07, always-answer) ──────────────────────
+  //
+  // Live transcripts hand the engine fragments with no question word: "l four
+  // base", "rate per hour and and the cap", "the sev". In a mode holding
+  // documents those are lookups — measured: both classified GENERAL_TECHNICAL,
+  // took the FAST path with no retrieval, and the answer was a market-rate
+  // guess ("typically $130k–$170k") or "the material does not specify". A short
+  // claimless fragment that is not coding/design self-talk, not arithmetic and
+  // not a bare follow-up retrieves against the documents; the composer's
+  // absence framing still answers from general knowledge when nothing matches.
+  // Runs AFTER the primary-source fallback so an entity question keeps its
+  // résumé claim, and skips generative asks ("write a cover letter").
+  if (modeHoldsDocuments && claims.size === 0 && !isBareFollowUp(q) && !techTask
+      && !GENERATIVE_ASK_RE.test(q)
+      && q.split(/\s+/).filter(Boolean).length <= 8
+      && !CODING_TASK_RE.test(q) && !SYSTEM_DESIGN_RE.test(q) && !TECH_SELF_TALK_RE.test(q)
+      && !deviceTroubleshoot && !/\d\s*(?:\+|−|-|\*|×|\/|÷|%)\s*\d/.test(q)
+      && !META_REQUEST_RE.test(input.resolvedQuestion)) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
   // LAST-RESORT document claim (deep-run 2, issue 1): a question-shaped input
   // that STILL produced zero claims in a mode holding documents ("How does a

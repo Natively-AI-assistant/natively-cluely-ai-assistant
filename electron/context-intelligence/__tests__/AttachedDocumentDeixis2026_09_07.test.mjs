@@ -95,3 +95,28 @@ describe('a bare fragment borrows the attached file names as its retrieval subje
     assert.equal(bareFragmentQuery('explain', undefined), null);
   });
 });
+
+describe('STT fragments and "you got" (2026-09-07)', () => {
+  test('a short claimless fragment in a document mode retrieves against the documents', () => {
+    for (const [q, mode] of [['l four base', 'recruiting'], ['rate per hour and and the cap', 'seminar'], ['the sev', 'team-meet'], ['batna', 'seminar']]) {
+      const r = classify(q, mode, { hasAttachedDocuments: true, attachedFileNames: ['a.md'] });
+      assert.ok(r.questionTypes.includes('DOCUMENT_FACT'), `${q}: ${JSON.stringify(r.questionTypes)}`);
+      assert.equal(r.shouldRetrieve, true, `${q}: ${r.reason}`);
+    }
+  });
+  test('arithmetic, coding tasks and design asks keep their general route', () => {
+    for (const q of ['what is 2 + 2', 'reverse a linked list', 'design a rate limiter', 'why do I get a segfault here']) {
+      const r = classify(q, 'technical-interview', { hasAttachedDocuments: true, attachedFileNames: ['a.md'] });
+      assert.ok(!r.questionTypes.includes('DOCUMENT_FACT'), `${q}: ${JSON.stringify(r.questionTypes)}`);
+    }
+  });
+  test('without documents a fragment is unchanged', () => {
+    const r = classify('l four base', 'general', { hasAttachedDocuments: false });
+    assert.equal(r.shouldRetrieve, false);
+  });
+  test('"the latency you got" is a second-person claim that reaches the résumé pool', () => {
+    const r = classify('what was the latency you got on the fastapi backend', 'technical-interview', { hasAttachedDocuments: true, attachedFileNames: TI_FILES });
+    assert.ok(r.claimTypes.some((c) => c.startsWith('USER_')), JSON.stringify(r.claimTypes));
+    assert.ok(r.requiredSourceTypes.includes('RESUME'), JSON.stringify(r.requiredSourceTypes));
+  });
+});
