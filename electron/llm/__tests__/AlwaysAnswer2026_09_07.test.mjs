@@ -177,3 +177,28 @@ describe('round 4b: no source-switch short-circuit, bounded query embedding, emp
     assert.ok(src('electron/llm/prompts.ts').includes('show the user that number first in one short clause'));
   });
 });
+
+describe('round 5: meeting/global chat and the strict reference policy still answer', () => {
+  const ragPrompts = src('electron/rag/prompts.ts');
+  const ragManager = src('electron/rag/RAGManager.ts');
+  const composer = src('electron/context-intelligence/generation/prompt-composer.ts');
+  test('meeting and global RAG prompts note the gap and answer from general knowledge', () => {
+    assert.ok(!ragPrompts.includes('say "I didn\'t catch that in the meeting"'));
+    assert.ok(!ragPrompts.includes('clearly say "I couldn\'t find any discussion about that in your meetings"'));
+    assert.ok(ragPrompts.includes('never stop at "I didn\'t catch that"'));
+    assert.ok(ragPrompts.includes('never stop at "I couldn\'t find that"'));
+  });
+  test('an empty global search goes to the model instead of yielding the fallback constant', () => {
+    assert.ok(!/yield NO_GLOBAL_CONTEXT_FALLBACK;/.test(ragManager));
+    assert.ok(ragManager.includes('No matching excerpts were found across the user'));
+  });
+  test('the strict "only answer from references" branches still produce a marked general-knowledge answer', () => {
+    assert.ok(!composer.includes("do not answer from general knowledge as though it were sourced.'"));
+    assert.ok(!composer.includes('do not answer it from general '));
+    // Three strict branches; one of them splits the phrase across string concatenation.
+    assert.ok((composer.match(/still answer the /g) || []).length >= 3);
+  });
+  test('tiny-model prompts never reply with only "Nothing actionable"', () => {
+    assert.ok(src('electron/llm/tinyPrompts.ts').includes('never reply with only "Nothing actionable"'));
+  });
+});

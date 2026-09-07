@@ -354,8 +354,11 @@ function absenceNoticeBody(
       + (profileCouldServe
         ? ' — or add their résumé and target job description once under Profile Intelligence in Settings, which this mode uses automatically'
         : '')
-      + ' — do NOT say a résumé, job description or document "does not mention" this, because no such file exists here, and '
-      + 'do not answer from general knowledge as though it were sourced.';
+      + ' — do NOT say a résumé, job description or document "does not mention" this, because no such file exists here. '
+      // ALWAYS ANSWER (2026-09-07, owner's direction): even under "Only answer
+      // from references" the turn still gets a usable answer — from general
+      // knowledge, clearly marked, never presented as sourced.
+      + 'Then still answer the question itself helpfully from general knowledge, clearly marked as general knowledge and never presented as sourced.';
   }
 
   const subject = has('MEETING_TRANSCRIPT') && types.length === 1
@@ -416,8 +419,9 @@ function absenceNoticeBody(
           ? ' Mention, in one short sentence, that attaching the relevant document to the active mode would let this be answered.'
           : '';
     return '# Evidence\nThis question requires a source the active mode does not authorize, so no evidence could be '
-      + 'gathered. Say plainly that it cannot be answered from the available material — do not answer it from general '
-      + 'knowledge, do not invent a template or example answer in its place, and do not describe it as missing from a '
+      + 'gathered. Say plainly, in one short clause, that the available material cannot establish it — then still answer the '
+      + 'question itself helpfully from general knowledge, clearly marked as general knowledge (never as a fact about the user, '
+      + 'the job, the meeting or a document), and do not describe it as missing from a '
       + 'document when no document was consulted.'
       + remedy;
   }
@@ -475,7 +479,10 @@ function absenceNoticeBody(
     // selected material" is the allowed shape; a definition of the concept is
     // not.
     + `If the question asks for a specific value from the material, say the exact value could not be retrieved `
-    + `— never answer with a generic definition or typical value as a substitute.`;
+    + `— never present a generic definition or typical value AS that value. `
+    // ALWAYS ANSWER (2026-09-07): the strict policy still gets a usable,
+    // clearly-marked general-knowledge answer after the honest gap.
+    + `Then still answer the question itself helpfully from general knowledge, clearly marked as general knowledge.`;
 }
 
 /**
