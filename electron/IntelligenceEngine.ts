@@ -3893,7 +3893,16 @@ export class IntelligenceEngine extends EventEmitter {
                             }
                         }
                         if (scaffoldStreamHold) return;
+                        // Canned-opener hold (2026-09-07): "Sorry, I don't have that in
+                        // front of me. Could you clarify which…?" followed by a real
+                        // answer must paint WITHOUT the opener — see cannedOpener.ts.
+                        let openerHold = false;
+                        try {
+                            const { shouldHoldForCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                            openerHold = shouldHoldForCannedOpener(streamingTokenBuffer);
+                        } catch { /* never hold on a helper failure */ }
                         if (streamingTokenBuffer.length >= STREAMING_SAFE_PREFIX_CHARS
+                            && !openerHold
                             && !IntelligenceEngine.isNonAnswerSentinel(streamingTokenBuffer)) {
                             // Prompt System v2: a misfired "[[NO_ACTION]] real
                             // text…" keeps its real text but the sentinel token
@@ -3902,6 +3911,11 @@ export class IntelligenceEngine extends EventEmitter {
                             try {
                                 const { stripLeadingNoActionSentinel } = require('./llm/promptSystemV2') as typeof import('./llm/promptSystemV2');
                                 visiblePrefix = stripLeadingNoActionSentinel(visiblePrefix) || visiblePrefix;
+                            } catch { /* emit unmodified */ }
+                            try {
+                                const { stripCannedOpener } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                                const cleaned = stripCannedOpener(visiblePrefix);
+                                if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped at first paint', { count: cleaned.stripped.length }); visiblePrefix = cleaned.text; }
                             } catch { /* emit unmodified */ }
                             emitChunk(visiblePrefix);
                             streamingTokenBuffer = '';
@@ -4102,8 +4116,26 @@ export class IntelligenceEngine extends EventEmitter {
             }
 
             if (!fullAnswer || fullAnswer.trim().length < 5) {
-                // W6b: topic-aware graceful retry instead of the fixed canned line.
-                fullAnswer = buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
+                // ALWAYS ANSWER (2026-09-07): an empty or aborted stream is retried
+                // ONCE with the same question, transcript and evidence before any
+                // fallback line is considered. The old behaviour substituted a
+                // "Could you repeat that?" line here, which told the user the app
+                // had not heard them.
+                let regenerated: string | null = null;
+                try {
+                    regenerated = await this.regenerateUsableAnswer({
+                        question: question || extractedQuestion.latestQuestion || lastInterviewerTurn || '',
+                        transcript: preparedTranscript,
+                        evidenceBlock: (requestSnapshot as any)?.v3Prompt?.evidenceBlock,
+                        turnKey: whatToAnswerCancellationToken.signal,
+                        signal: whatToAnswerCancellationToken.signal,
+                        isSuperseded: isWtaSuperseded,
+                        reason: 'empty_stream',
+                    });
+                } catch { regenerated = null; }
+                // W6b: topic-aware graceful retry — now an honest "no answer came
+                // back, press again" line, never a request to repeat.
+                fullAnswer = regenerated ?? buildGracefulRetry(question || extractedQuestion.latestQuestion || lastInterviewerTurn);
             }
 
             // LEAKED-SCHEMA-STUB GUARD + PROVIDER-TRANSPORT-ERROR GUARD — MUST run
@@ -4212,6 +4244,16 @@ export class IntelligenceEngine extends EventEmitter {
                         turnPlan: _c3TurnPlan,
                         evidenceFound: true,
                     });
+                // A canned opener that a real answer followed is thrown away here
+                // too, so the committed text matches what first paint showed
+                // (cannedOpener.ts, 2026-09-07).
+                try {
+                    const { stripCannedOpener, stripCannedTail } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+                    const cleaned = stripCannedOpener(fullAnswer);
+                    if (cleaned.stripped.length) { console.log('[IntelligenceEngine] canned opener stripped from the final answer', { count: cleaned.stripped.length }); fullAnswer = cleaned.text; }
+                    const tail = stripCannedTail(fullAnswer);
+                    if (tail.stripped) { console.log('[IntelligenceEngine] canned tail stripped from the final answer'); fullAnswer = tail.text; }
+                } catch { /* never block the emit */ }
                 // Phase 4 defense-in-depth (forensic-report §6b): carry generationId.
                 this.emit('suggested_answer', fullAnswer, question || extractedQuestion.latestQuestion || 'inferred', confidence, generationId, _c3SourceLabel);
                 this.setMode('idle');
@@ -5190,7 +5232,10 @@ export class IntelligenceEngine extends EventEmitter {
             // it") and emit "I'm Natively, an AI assistant" / "I can't share that"
             // instead of a real answer. Replace that misfire with an honest line — the
             // manual path (ipcHandlers) applies the identical guard.
-            if (ASSISTANT_VOICE_ANSWER_TYPES.has(answerPlan.answerType)) {
+            // A whole-answer "could you repeat/rephrase that?" is a misfire on EVERY
+            // answer type (2026-09-07), not only the assistant-voice ones.
+            if (ASSISTANT_VOICE_ANSWER_TYPES.has(answerPlan.answerType)
+                || detectAssistantVoiceMisfire(fullAnswer).reason === 'repeat_request') {
                 try {
                     const mis = detectAssistantVoiceMisfire(fullAnswer);
                     if (mis.isMisfire) {

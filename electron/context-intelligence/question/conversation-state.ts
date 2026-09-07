@@ -516,6 +516,23 @@ function ownSubjectPhrase(q: string): string | undefined {
   return phrase;
 }
 
+/** "what does it say about X" — "it" is the material. "Detection, what was it?"
+ *  — the subject precedes the pronoun clause. Either way the turn names its own
+ *  subject; a stale topic must not be glued on. The bare forms ("what does it
+ *  say?", "what was it?") carry no subject and still resolve as before. */
+const DOC_SAYS_RE = /\b(?:what|which|where)\s+(?:does|do|did)\s+(?:it|this|that)\s+(?:say|state|mention|list|show)\b/i;
+const LEADING_SUBJECT_THEN_PRONOUN_RE = /^(?:(?:so|and|okay|ok|right|um|uh|remind me|tell me|quick one)[,\s]+)*(?:the\s+)?([A-Za-z][\w./-]*(?:\s+[\w./-]+){0,4}),\s*(?:what|how|when|where|who)\s+(?:was|is|were|are|does|did)\s+(?:it|that|this)\b/i;
+export function pronounIsDocumentDeictic(q: string): boolean {
+  const t = q.trim();
+  if (DOC_SAYS_RE.test(t)) {
+    const after = t.replace(DOC_SAYS_RE, '').replace(/^\s*(?:about|regarding|on|for|of)\b/i, '').trim();
+    return /[A-Za-z0-9]/.test(after.replace(/[?.!]+$/, '')) && !PRONOUN_TOKEN_RE.test(after.split(/\s+/)[0] ?? '');
+  }
+  const m = t.match(LEADING_SUBJECT_THEN_PRONOUN_RE);
+  if (m) { const subj = m[1].trim(); return subj.length >= 3 && !PRONOUN_TOKEN_RE.test(subj) && !/^(?:it|that|this|so|and|ok|okay)$/i.test(subj); }
+  return false;
+}
+
 export interface ResolvedReference {
   resolved: string;
   usedState: boolean;
@@ -608,6 +625,17 @@ export function resolveReference(
   // opposite outcome, decided by word count. Now both return here, with a
   // reason that says why rather than "no trigger".
   if (hasQuotedSubject(q)) {
+    return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
+  }
+  // A pronoun that points at the DOCUMENT, not the previous topic (2026-09-07,
+  // measured in a 1,000-turn live campaign): "What does it say about the Step
+  // 4?" and "Remind me, Detection, what was it?" both carry "it", so every
+  // own-subject guard below was skipped and the previous turn's topic was glued
+  // on — "(referring to: milestones 2 title)", "(referring to: risks 3 title)"
+  // — and the answer came from the wrong file. "What does it say about X" is
+  // the material speaking; "<Subject>, what was it?" names its subject before
+  // the pronoun. Both are self-contained when they carry a subject of their own.
+  if (pronoun && pronounIsDocumentDeictic(q)) {
     return { resolved: q, usedState: false, reason: 'CURRENT_QUESTION_CONTAINS_EXPLICIT_ENTITY' };
   }
 

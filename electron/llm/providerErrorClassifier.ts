@@ -33,7 +33,7 @@ export interface ProviderErrorClassification {
 // A content-free clarification stall the model emits when it's confused/degraded.
 // MUST stay in sync with IntelligenceEngine's "Could you repeat that?" fallback and
 // the benchmark's stall quarantine.
-const STALL_RE = /^(?:\s*)(?:could you (?:please )?repeat|can you repeat|i(?:'m| am)? (?:sorry,? )?(?:i )?(?:didn'?t|did not) (?:catch|hear|get)|sorry,? (?:could|can) you|i want to make sure i (?:address|understand)|please (?:repeat|clarify|rephrase)|what (?:was|did) (?:the|you))/i;
+const STALL_RE = /^(?:\s*)(?:i couldn'?t generate an answer|the answer(?: about [^.]{1,60})? didn'?t come through|no answer came back|could you (?:please )?repeat|can you repeat|i(?:'m| am)? (?:sorry,? )?(?:i )?(?:didn'?t|did not) (?:catch|hear|get)|sorry,? (?:could|can) you|i want to make sure i (?:address|understand)|please (?:repeat|clarify|rephrase)|what (?:was|did) (?:the|you))/i;
 
 /** Is `text` a content-free clarification stall (not a real answer)? */
 export function isClarificationStall(text: string | null | undefined): boolean {
