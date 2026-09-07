@@ -38,6 +38,26 @@ export class GoogleSTT extends EventEmitter {
     //   16 = UNAUTHENTICATED (bad/expired credentials)
     private static readonly PERMANENT_GRPC_CODES = new Set([3, 7, 16]);
 
+    // Google STT v1 does not accept the common `zh-*` BCP-47 tags — its
+    // supported-languages table lists Mandarin only as `cmn-Hans-CN` (and
+    // Traditional as `cmn-Hant-TW`). The shared RECOGNITION_LANGUAGES map
+    // keeps `zh-CN` because other providers (Deepgram, Soniox) expect it,
+    // so the translation must stay Google-local.
+    private static readonly V1_LANGUAGE_CODE_OVERRIDES: Record<string, string> = {
+        'zh-CN': 'cmn-Hans-CN',
+        'zh-TW': 'cmn-Hant-TW',
+    };
+
+    // Languages the `latest_long` model does not cover in STT v1 (Mandarin
+    // supports only `default`/`command_and_search`). Requesting latest_long
+    // for these returns INVALID_ARGUMENT (gRPC code 3), which
+    // PERMANENT_GRPC_CODES above then escalates to a session-wide STT
+    // shutdown — the "Chinese never transcribes" bug.
+    private static readonly LANGUAGES_WITHOUT_LATEST_LONG = new Set([
+        'cmn-Hans-CN',
+        'cmn-Hant-TW',
+    ]);
+
     // Config
     private encoding = 'LINEAR16' as const;
     private sampleRateHertz = 16000;
@@ -125,8 +145,8 @@ export class GoogleSTT extends EventEmitter {
                     return;
                 }
 
-                console.log(`[GoogleSTT/${this.label}] Updating recognition language to: ${key} (${config.bcp47})`);
-                this.languageCode = config.bcp47;
+                this.languageCode = GoogleSTT.V1_LANGUAGE_CODE_OVERRIDES[config.bcp47] ?? config.bcp47;
+                console.log(`[GoogleSTT/${this.label}] Updating recognition language to: ${key} (${this.languageCode})`);
 
                 if ('alternates' in config) {
                     this.alternativeLanguageCodes = (config as EnglishVariant).alternates;
@@ -375,7 +395,9 @@ export class GoogleSTT extends EventEmitter {
                     audioChannelCount: this.audioChannelCount,
                     languageCode: this.languageCode,
                     enableAutomaticPunctuation: true,
-                    model: 'latest_long',
+                    model: GoogleSTT.LANGUAGES_WITHOUT_LATEST_LONG.has(this.languageCode)
+                        ? 'default'
+                        : 'latest_long',
                     useEnhanced: true,
                     alternativeLanguageCodes: this.alternativeLanguageCodes,
                 },
