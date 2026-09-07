@@ -72,6 +72,12 @@ export interface ModeRetrievalOptions {
      */
     rerankDeadlineMs?: number;
     /**
+     * Widen the rerank pool for an exhaustive request (RetrievalPlan.exhaustive):
+     * the user's candidateCount × this, capped by the retriever. 1/absent =
+     * the user's setting exactly.
+     */
+    rerankPoolMultiplier?: number;
+    /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
      * the subject — the bare query has no referent, so retrieval can't find the
@@ -1815,6 +1821,7 @@ export class ModeContextRetriever {
             // Measured 2026-09-07: without this hop the recap's 1000ms race still
             // started an 8000ms-budget hosted rerank and discarded it.
             rerankDeadlineMs: options.rerankDeadlineMs,
+            rerankPoolMultiplier: options.rerankPoolMultiplier,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

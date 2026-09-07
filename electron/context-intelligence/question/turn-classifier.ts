@@ -66,6 +66,9 @@ export interface Classification {
   path: RetrievalPath;
   shouldRetrieve: boolean;
   requiredSourceTypes: SourceType[];
+  /** The question asks for EVERY occurrence across the material — see
+   *  RetrievalPlan.exhaustive. */
+  exhaustive: boolean;
   /**
    * The question needs a source the ACTIVE MODE does not authorize.
    *
@@ -595,7 +598,7 @@ export const isResponseRequest = (raw: string): boolean => RESPONSE_REQUEST_RE.t
 const splitClauses = (q: string): string[] =>
   q.split(/\band\b|\balso\b|[;.]/).map((c) => c.trim()).filter(Boolean);
 
-function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>> } {
+function detectTypes(q: string, input: ClassificationInput): { types: QuestionType[]; claims: ClaimType[]; clauses: Partial<Record<ClaimType, string>>; exhaustive: boolean } {
   const types = new Set<QuestionType>();
   const claims = new Set<ClaimType>();
   const clauses: Partial<Record<ClaimType, string>> = {};
@@ -952,6 +955,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // (2026-08-02): both are questions no private source can improve, and both
   // were measured reaching the primary-source fallback — the fan question via
   // "what should I check" and the discount exercise via its own digits.
+  let exhaustive = false; // set by the exhaustive-request rule below (RetrievalPlan.exhaustive)
   const techTask = TECH_SELF_TALK_RE.test(q) || CODING_TASK_RE.test(q)
     || (Boolean(input.hasScreenContext) && SCREEN_CODE_ASK_RE.test(q)) || SYSTEM_DESIGN_RE.test(q)
     || deviceTroubleshoot || selfContainedMath;
@@ -1034,9 +1038,20 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // generic-noun list is deliberately document-shaped (log/spec/notes/…); bare
   // "this problem" stays coding self-talk unless an attached file is named.
   if (modeHoldsDocuments && !isBareFollowUp(q)
-      && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q))) {
+      && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q) || namesTitledTask(q))) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
+  // An exhaustive request over the material (2026-09-07). "Find every place a
+  // latency number appears" listed 8 of ~20 values live: the plan capped
+  // evidence at 6 chunks and the reranker pool at the user's 15. The flag is
+  // only meaningful when there is material to scan; the orchestrator widens
+  // the plan and the ports/composer widen with it.
+  exhaustive = modeHoldsDocuments && !isBareFollowUp(q) && EXHAUSTIVE_RE.test(q);
+  // "Give me every metric for reranker A and B" with documents attached IS a
+  // question about the documents even without a pointer word: an enumeration
+  // over "everything" has nothing to enumerate but the material. Retrieval is
+  // cheap and the evidence gate keeps the last word.
+  if (exhaustive) { types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT'); }
   // A technical/computational turn that produced NO claim at all is a
   // general-knowledge turn, and must SAY so (2026-08-02). Left claimless it
   // classified AMBIGUOUS → grounded-without-retrieval → answerability NONE,
@@ -1136,7 +1151,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   // and needs no retrieval. Returning early keeps prompt-shaped document text
   // out of the candidate pool entirely.
   if (META_REQUEST_RE.test(input.resolvedQuestion)) {
-    return { types: ['META_REQUEST'], claims: [], clauses: {} };
+    return { types: ['META_REQUEST'], claims: [], clauses: {}, exhaustive: false };
   }
 
   // LAST-RESORT general-knowledge claim (2026-08-02). Every claim branch above
@@ -1173,7 +1188,7 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
   if (hasPrivate && hasGeneral) types.add('MIXED');
 
   if (types.size === 0) types.add('AMBIGUOUS');
-  return { types: [...types], claims: [...claims], clauses };
+  return { types: [...types], claims: [...claims], clauses, exhaustive };
 }
 
 /** Capitalised tokens that are ordinary technical vocabulary, not references to
@@ -1315,6 +1330,45 @@ const DOC_DEIXIS_RE = /\b(?:the|this|that|my|our|your|attached|uploaded)\s+(?:[\
 
 const FILE_NAME_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'copy', 'final', 'draft', 'new', 'old', 'sample', 'file', 'doc', 'docs', 'notes', 'tech', 'test', 'v1', 'v2', 'v3']);
 
+// A TITLED task ("the debounce problem", "the two-sum question", "the LRU
+// exercise") is a pointer at an attached question bank even though "problem"
+// and "question" are kept out of DOC_DEIXIS_RE: bare "this problem" is coding
+// self-talk, but a problem that has a NAME is one the user expects the app to
+// look up. Measured 2026-09-07: "Implement the debounce problem and explain…"
+// went FAST with 01_coding_questions.md attached (CODING-ANCHOR-009 was the
+// debounce problem) — right answer, wrong path. Generic modifiers are excluded
+// so "the same problem" / "the main question" stay self-talk.
+const TITLED_TASK_RE = /\b(?:the|this|that)\s+([a-z][\w-]{2,})\s+(?:problem|question|exercise|task|scenario|challenge|puzzle|kata|prompt)s?\b/gi;
+const TITLED_TASK_STOP = new Set([
+  'same', 'main', 'only', 'real', 'first', 'next', 'last', 'other', 'biggest', 'core', 'root', 'whole', 'key',
+  'hard', 'easy', 'new', 'old', 'second', 'third', 'coding', 'technical', 'interview', 'design', 'current',
+  'above', 'below', 'previous', 'following', 'original', 'actual', 'bigger', 'smaller', 'general', 'exact',
+  'specific', 'right', 'wrong', 'entire', 'full', 'simple', 'basic', 'harder', 'easier', 'typical', 'common',
+  'usual', 'obvious', 'underlying', 'central', 'open', 'remaining', 'final', 'initial', 'related', 'broader',
+]);
+export function namesTitledTask(question: string): boolean {
+  TITLED_TASK_RE.lastIndex = 0;
+  for (const m of question.matchAll(TITLED_TASK_RE)) {
+    const mod = m[1].toLowerCase();
+    if (!TITLED_TASK_STOP.has(mod) && !/^\d+$/.test(mod)) return true;
+  }
+  return false;
+}
+
+// The question asks for EVERY occurrence, value or place — an enumeration over
+// the whole material rather than one fact from it. Deliberately narrow: an
+// ordinary "what are all the fallbacks?" matches ("all the … fallbacks"), but a
+// plain value lookup never does.
+const EXHAUSTIVE_RE = new RegExp([
+  '\\b(?:every|all|each)\\s+(?:the\\s+|of\\s+the\\s+)?(?:[\\w-]+\\s+){0,2}(?:places?|times?|occurrences?|instances?|mentions?|sections?|values?|numbers?|figures?|metrics?|items?|entries?|references?|files?|documents?|lines?|spots?|dates?|names?|steps?|milestones?|anchors?|scenarios?|questions?|fallbacks?|thresholds?|limits?|budgets?|timeouts?|rates?|latenc(?:y|ies)|scores?)\\b',
+  '\\b(?:list|find|show|give me|enumerate|collect|gather|extract|pull out|cite)\\s+(?:me\\s+)?(?:all|every|each|everything|everywhere)\\b',
+  '\\bexhaustive(?:ly)?\\b',
+  '\\bcomplete (?:list|inventory|set|table)\\b',
+  '\\beverywhere\\b',
+  '\\bhow many (?:places|times)\\b',
+  '\\bwherever\\b',
+].join('|'), 'i');
+
 /**
  * Does the question name one of the attached files? A run of two consecutive
  * filename words ("error log", "array problem", "launch checklist") or one
@@ -1339,7 +1393,7 @@ export function mentionsAttachedFile(question: string, fileNames: readonly strin
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
-  const { types, claims, clauses } = detectTypes(q, input);
+  const { types, claims, clauses, exhaustive } = detectTypes(q, input);
 
   // Required sources = union of what the detected claims need, INTERSECTED with
   // what the mode authorizes. A mode never has sources forced into it.
@@ -1438,5 +1492,5 @@ export function classifyTurn(input: ClassificationInput): Classification {
     reason = 'mode disables retrieval';
   }
 
-  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, unsupportedInMode, reason };
+  return { questionTypes: types, claimTypes: claims, claimClauses: clauses, path, shouldRetrieve, requiredSourceTypes, exhaustive, unsupportedInMode, reason };
 }

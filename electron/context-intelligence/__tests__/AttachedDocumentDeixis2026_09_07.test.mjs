@@ -17,7 +17,7 @@ import { pathToFileURL } from 'node:url';
 
 const base = path.resolve(process.cwd(), 'dist-electron/electron/context-intelligence');
 const load = (p) => import(pathToFileURL(path.join(base, p)).href);
-const { classifyTurn, mentionsAttachedFile } = await load('question/turn-classifier.js');
+const { classifyTurn, mentionsAttachedFile, namesTitledTask } = await load('question/turn-classifier.js');
 const { MODE_POLICIES } = await load('policies/mode-policy-registry.js');
 const { decide, bareFragmentQuery } = await load('orchestration/orchestrator.js');
 
@@ -74,6 +74,38 @@ describe('technical-interview: questions about the attached log/problem retrieve
     const r = classify('why?', 'technical-interview', { hasAttachedDocuments: true, attachedFileNames: TI_FILES });
     assert.ok(r.questionTypes.includes('FOLLOW_UP'), JSON.stringify(r.questionTypes));
     assert.ok(!r.questionTypes.includes('DOCUMENT_FACT'), JSON.stringify(r.questionTypes));
+  });
+});
+
+describe('a TITLED task points at the attached question bank (2026-09-07)', () => {
+  const BANK = ['01_coding_questions.md', '02_architecture_questions.md'];
+  test('"the debounce problem" / "the two-sum question" retrieve when files are attached', () => {
+    for (const q of [
+      'Implement the debounce problem and explain how you prevent stale network responses from overwriting newer results.',
+      'Solve the two-sum question in Python.',
+      'Walk me through the rate-limiter exercise.',
+    ]) {
+      const r = classify(q, 'technical-interview', { hasAttachedDocuments: true, attachedFileNames: BANK });
+      assert.ok(r.questionTypes.includes('DOCUMENT_FACT'), `${q}: ${JSON.stringify(r.questionTypes)}`);
+      assert.equal(r.shouldRetrieve, true, `${q}: ${r.reason}`);
+    }
+  });
+  test('the rule itself ignores a generic modifier ("this problem", "the same question", "the main problem")', () => {
+    // Other, older rules may still route these to the documents (a short
+    // claimless fragment in a document mode looks the documents up); what this
+    // rule promises is only that a generic "problem"/"question" is not a TITLE.
+    for (const q of ['This problem is harder than it looks, why?', 'Is the same question going to come up again?', 'What is the main problem with my approach?', 'the first question', 'that other exercise']) {
+      assert.equal(namesTitledTask(q), false, q);
+    }
+    for (const q of ['the debounce problem', 'Solve the two-sum question', 'the rate-limiter exercise', 'this LRU task']) {
+      assert.equal(namesTitledTask(q), true, q);
+    }
+    const r = classify('Why is this problem harder than it looks when I run my code?', 'technical-interview', { hasAttachedDocuments: true, attachedFileNames: BANK });
+    assert.ok(!r.questionTypes.includes('DOCUMENT_FACT'), JSON.stringify(r.questionTypes));
+  });
+  test('without documents a titled task keeps the fast path', () => {
+    const r = classify('Implement the debounce problem.', 'general', { hasAttachedDocuments: false });
+    assert.equal(r.shouldRetrieve, false, r.reason);
   });
 });
 

@@ -49,17 +49,30 @@ function esc(s: string): string {
  * Priority (§18): evidence for REQUIRED claims first, then by source priority,
  * then by score. Ties broken by evidenceId so the order is total and stable.
  */
-function rank(evidence: EvidenceItem[], required: ClaimRequirement[]): EvidenceItem[] {
+function rank(evidence: EvidenceItem[], required: ClaimRequirement[], groupBySource = false): EvidenceItem[] {
   const requiredClaims = new Set(
     required.filter((c) => c.authority === 'PRIVATE_SOURCE_REQUIRED').map((c) => c.claimType),
   );
-  return [...evidence].sort((a, b) => {
+  const ranked = [...evidence].sort((a, b) => {
     const aReq = a.acceptedFor.some((c) => requiredClaims.has(c)) ? 1 : 0;
     const bReq = b.acceptedFor.some((c) => requiredClaims.has(c)) ? 1 : 0;
     if (aReq !== bReq) return bReq - aReq;
     if (b.finalScore !== a.finalScore) return b.finalScore - a.finalScore;
     return a.evidenceId.localeCompare(b.evidenceId);   // total order
   });
+  if (!groupBySource) return ranked;
+  // An exhaustive request is answered file by file (the composer says so), so
+  // the blocks are GROUPED by source in the order each source first appears in
+  // the ranking; order inside a group is the ranking. Measured 2026-09-07: with
+  // 18 blocks interleaved across six files the model listed 9 of ~20 values and
+  // skipped whole files it had been handed.
+  const groups = new Map<string, EvidenceItem[]>();
+  for (const e of ranked) {
+    const g = groups.get(e.sourceId);
+    if (g) g.push(e);
+    else groups.set(e.sourceId, [e]);
+  }
+  return [...groups.values()].flat();
 }
 
 function renderEvidence(e: EvidenceItem): string {
@@ -95,7 +108,7 @@ export function packContext(
   evidence: EvidenceItem[],
   budget: PackBudget,
 ): PackedContext {
-  const ordered = rank(evidence, decision.claimRequirements);
+  const ordered = rank(evidence, decision.claimRequirements, decision.retrievalPlan.exhaustive === true);
 
   const included: string[] = [];
   const dropped: string[] = [];

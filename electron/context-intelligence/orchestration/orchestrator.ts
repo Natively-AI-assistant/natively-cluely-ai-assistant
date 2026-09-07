@@ -207,9 +207,16 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
     usePreviousSourceContinuity: cls.questionTypes.includes('FOLLOW_UP'),
     retrieveAdjacentContext: cls.path === 'VERIFICATION',
     maximumAttempts: 2,
-    maximumCandidates: policy.retrievalPolicy.maximumCandidates,
-    maximumAcceptedEvidence: policy.retrievalPolicy.maximumAcceptedEvidence,
-    timeoutMs: 1200,
+    // An exhaustive request ("find every place…") is widened HERE, once: the
+    // ports read these two numbers, the packer reads the cap, and the composer
+    // reads the flag. ×2 candidates so the rerank pool has something to widen
+    // into; ×3 accepted evidence because the measured miss was 8 of ~20 values
+    // with the cap at 6 (2026-09-07). Latency is still bounded: the rerank
+    // budget is unchanged, only its pool grows.
+    maximumCandidates: policy.retrievalPolicy.maximumCandidates * (cls.exhaustive && cls.shouldRetrieve ? 2 : 1),
+    maximumAcceptedEvidence: policy.retrievalPolicy.maximumAcceptedEvidence * (cls.exhaustive && cls.shouldRetrieve ? 3 : 1),
+    timeoutMs: cls.exhaustive && cls.shouldRetrieve ? 2400 : 1200,
+    ...(cls.exhaustive && cls.shouldRetrieve ? { exhaustive: true } : {}),
   };
 
   return freezeTurnDecision({

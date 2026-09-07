@@ -11,6 +11,7 @@ import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, sel
 import { wordsOf } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
 import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
+import { buildRerankPool } from './rerankPool';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -1105,6 +1106,9 @@ export class ModeHybridRetriever {
          * started — see rerankBudgetFitsDeadline for the measured waste.
          */
         rerankDeadlineMs?: number;
+        /** Exhaustive request: rerank pool = the user's candidateCount × this,
+         *  capped at 2×RERANK_CANDIDATE_POOL. Absent/1 = the setting exactly. */
+        rerankPoolMultiplier?: number;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1116,6 +1120,7 @@ export class ModeHybridRetriever {
             forceDocumentGrounding = false,
             rerankSurface,
             rerankDeadlineMs,
+            rerankPoolMultiplier,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1507,7 +1512,7 @@ export class ModeHybridRetriever {
                 // default keeps the 1200ms that protects a first-useful token.
                 // See rerankBudget.ts for the measured case this fixes.
                 markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
-                const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
+                const rerankPromise = this.maybeRerankCandidates(queryText, candidates, rerankPoolMultiplier);
                 let rerankTimer: NodeJS.Timeout | undefined;
                 const raced = await Promise.race([
                     rerankPromise.then((value) => ({ value, timedOut: false })),
@@ -1642,6 +1647,7 @@ export class ModeHybridRetriever {
     private async maybeRerankCandidates(
         queryText: string,
         sorted: ChunkCandidate[],
+        poolMultiplier: number = 1,
     ): Promise<ChunkCandidate[] | null> {
         let enabled = false;
         try {
@@ -1715,8 +1721,14 @@ export class ModeHybridRetriever {
             // How many candidates the user chose to rerank. Until now this
             // setting was written by Settings > Reranker and read by nothing,
             // so the control looked live and did nothing.
-            const poolSize = resolveRerankPoolSize();
-            const pool = sorted.slice(0, poolSize);
+            // An exhaustive request (RetrievalPlan.exhaustive) widens the pool so
+            // the reranker can SEE the occurrences it is asked to surface; the
+            // 2× ceiling keeps the ONNX arena reasoning above intact.
+            const mult = Number.isFinite(poolMultiplier) && poolMultiplier > 1 ? Math.floor(poolMultiplier) : 1;
+            const poolSize = Math.min(2 * RERANK_CANDIDATE_POOL, resolveRerankPoolSize() * mult);
+            // Per-file floor before the global fill — see rerankPool.ts for the
+            // measured case (a padding file monopolised the whole pool).
+            const pool = buildRerankPool(sorted, poolSize, { balanced: mult > 1 });
             const poolTexts = pool.map((c: ChunkCandidate) => c.text);
             // Chunked inference — see RERANK_BATCH_SIZE for the crash-forensics
             // rationale. Each batch returns results with INDEXES RELATIVE TO THE
@@ -1802,9 +1814,11 @@ export class ModeHybridRetriever {
                 if (!used.has(i)) reordered.push({ ...pool[i] });
             }
             // Append the un-pooled tail unchanged so we never DROP candidates
-            // the budget step might still want.
-            for (let i = poolSize; i < sorted.length; i++) {
-                reordered.push(sorted[i]);
+            // the budget step might still want. The pool is no longer a prefix
+            // of `sorted` (per-file floor), so membership, not index, decides.
+            const pooled = new Set<ChunkCandidate>(pool);
+            for (const c of sorted) {
+                if (!pooled.has(c)) reordered.push(c);
             }
             return reordered;
         } catch (e) {
