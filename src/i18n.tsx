@@ -39,6 +39,17 @@ const RU: Record<string, string> = {
     'AI Providers': 'AI-провайдеры',
     'Skills': 'Навыки',
     'Calendar': 'Календарь',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        'Не удалось подключить Google Календарь. Повторите попытку или обратитесь в поддержку Natively.',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        'Этот аккаунт Google ещё не добавлен в список тестовых пользователей. Обратитесь в поддержку Natively и повторите попытку.',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Авторизация Google Календаря отменена. Подтвердите доступ в окне согласия и повторите попытку.',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        'Google Календарь не настроен в этой сборке. Добавьте действительный идентификатор OAuth-клиента и перезапустите Natively.',
+    'Google Calendar authorization timed out. Try again.':
+        'Время ожидания авторизации Google Календаря истекло. Повторите попытку.',
+    'Could not connect Google Calendar': 'Не удалось подключить Google Календарь',
     'Audio': 'Звук',
     'Keybinds': 'Горячие клавиши',
     'Sync': 'Синхронизация',
@@ -267,6 +278,17 @@ const ZH: Record<string, string> = {
     'Settings': '设置',
     'General': '通用',
     'Close': '关闭',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        '无法连接 Google 日历。请重试或联系 Natively 支持。',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        '此 Google 账号尚未获批为测试用户。请联系 Natively 支持后重试。',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Google 日历授权已取消。请批准同意请求后重试。',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        '此版本未配置 Google 日历。请添加有效的 OAuth 客户端 ID 并重启 Natively。',
+    'Google Calendar authorization timed out. Try again.':
+        'Google 日历授权超时。请重试。',
+    'Could not connect Google Calendar': '无法连接 Google 日历',
 };
 
 // Japanese — JA_GENERATED (parallel-agent output) spread first, then hand-authored
@@ -283,6 +305,17 @@ const JA: Record<string, string> = {
     'Settings': '設定',
     'General': '一般',
     'Close': '閉じる',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        'Google カレンダーに接続できませんでした。再試行するか、Natively サポートにお問い合わせください。',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        'この Google アカウントはまだテストユーザーとして承認されていません。Natively サポートに連絡してから再試行してください。',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Google カレンダーの認証がキャンセルされました。同意画面で許可してから再試行してください。',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        'このビルドでは Google カレンダーが設定されていません。有効な OAuth クライアント ID を追加して Natively を再起動してください。',
+    'Google Calendar authorization timed out. Try again.':
+        'Google カレンダーの認証がタイムアウトしました。再試行してください。',
+    'Could not connect Google Calendar': 'Google カレンダーに接続できませんでした',
 };
 
 // Spanish — ES_GENERATED spread first, then hand-authored overrides on any collision.
@@ -298,6 +331,17 @@ const ES: Record<string, string> = {
     'Settings': 'Ajustes',
     'General': 'General',
     'Close': 'Cerrar',
+    'Could not connect Google Calendar. Try again or contact Natively support.':
+        'No se pudo conectar Google Calendar. Inténtalo de nuevo o contacta con soporte de Natively.',
+    'This Google account is not an approved test user yet. Contact Natively support, then try again.':
+        'Esta cuenta de Google aún no es un usuario de prueba aprobado. Contacta con soporte de Natively y vuelve a intentarlo.',
+    'Google Calendar authorization was cancelled. Approve the consent prompt and try again.':
+        'Se canceló la autorización de Google Calendar. Aprueba la solicitud de consentimiento y vuelve a intentarlo.',
+    'Google Calendar is not configured for this build. Add a valid OAuth client ID and restart Natively.':
+        'Google Calendar no está configurado en esta compilación. Añade un ID de cliente OAuth válido y reinicia Natively.',
+    'Google Calendar authorization timed out. Try again.':
+        'La autorización de Google Calendar agotó el tiempo de espera. Vuelve a intentarlo.',
+    'Could not connect Google Calendar': 'No se pudo conectar Google Calendar',
 };
 
 // Per-language dictionary lookup. `en` always returns the source string (no
