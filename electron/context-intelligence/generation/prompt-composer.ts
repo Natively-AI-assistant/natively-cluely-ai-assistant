@@ -779,6 +779,25 @@ function privacyWithholdingNotice(scopes: readonly string[] | undefined, hasEvid
     + 'Providers > Privacy or the question asked again with a local provider.';
 }
 
+// An "exact value" ask (2026-09-07, measured with a teleprompter mode prompt
+// that itself said "do not invent exact low-level values"): asked for "the
+// exact backoff base and multiplier", with evidence that states only
+// "exponential backoff with jitter, maximum 5 attempts", the model produced
+// "a base of 100 milliseconds and a multiplier of 2" and then offered to
+// verify it. A constant that sounds right is the model's strongest prior; the
+// permanent rules forbid inventing experience and technologies but did not name
+// NUMBERS. This section fires only on that question shape, only with evidence.
+const EXACT_VALUE_ASK_RE = /\b(?:exact(?:ly)?|precise(?:ly)?|specific)\b[^.?!]{0,80}\b(?:values?|settings?|numbers?|constants?|thresholds?|timeouts?|base|multiplier|rates?|sizes?|limits?|config(?:uration)?s?|parameters?|figures?|versions?|counts?)\b|\b(?:what|which)\s+(?:exact|specific|precise)\b/i;
+
+function exactValueGuard(question: string, hasEvidence: boolean): string {
+  if (!hasEvidence || !EXACT_VALUE_ASK_RE.test(question)) return '';
+  return '# Exact value requested\nThe question asks for an exact setting or number. Give it ONLY if an evidence block '
+    + 'above states that figure, and quote it as stated. If no block states that exact figure, say so in one short '
+    + 'clause (for example "the exact base isn\'t in my notes"), then describe what the evidence DOES state about it, '
+    + 'and offer to confirm the precise value from the implementation. Never supply a plausible-sounding constant, '
+    + 'default or typical value in its place, even with a caveat.';
+}
+
 export function composePrompt(input: ComposeInput): ComposedPrompt {
   const { decision: d, policy, evidence } = input;
 
@@ -831,6 +850,7 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
         + 'retriever\'s widened selection, not the whole corpus: if it may not cover every file, say so '
         + 'in one closing sentence rather than presenting the list as complete.'
       : ''),
+    push('exact_value', exactValueGuard(d.resolvedQuestion, Boolean(packed.evidenceBlock))),
     push('capabilities', `# Capabilities\n${capabilityLines(policy)}`),
   ].filter((s) => s.trim()).join('\n\n');
 
