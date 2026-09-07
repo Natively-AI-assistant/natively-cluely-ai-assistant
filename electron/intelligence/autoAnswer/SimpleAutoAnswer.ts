@@ -551,8 +551,13 @@ export class SimpleAutoAnswerEngine {
                 // the sequence, and this branch exited with nothing — no
                 // telemetry, no log, no answer. A park was armed, so its death
                 // is an outcome and must be reported like every other one.
-                const wasParked = this.parkedAttempt !== null;
-                this.parkedAttempt = null;
+                // Identity, not mere presence: deliver() arms a new retry timer
+                // without clearing the previous one, so a stale attempt closure
+                // can still fire while a NEWER, still-valid dispatch holds the
+                // park. Nulling that one here would cost it its onEngineIdle
+                // fast-wake and mis-attribute the drop to the wrong question.
+                const wasParked = this.parkedAttempt === attempt;
+                if (wasParked) this.parkedAttempt = null;
                 if (wasParked) {
                     const reason = this.host.isMeetingActive() ? 'superseded_while_parked' : 'meeting_inactive';
                     this.host.log?.(`[AutoAnswer:simple] parked dispatch for ${id} dropped: ${reason}${reason === 'superseded_while_parked' ? ` (by ${this.judgeSeqCause ?? 'unknown'})` : ''}`);

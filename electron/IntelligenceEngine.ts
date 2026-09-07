@@ -1099,6 +1099,20 @@ export class IntelligenceEngine extends EventEmitter {
      */
     private revealSpeculativeAnswer(finished: SpeculativeAnswer, automatic: boolean): void {
         let text = finished.text;
+        // A speculative run is never `isCoding` (see runWhatShouldISay), so it
+        // gets neither the StreamingSpecStripper nor the live path's
+        // stripVerificationSpec — but the PROMPT still asks for the hidden
+        // <verification_spec> block whenever code verification is enabled
+        // (WhatToAnswerLLM passes isCodeVerificationEnabled() straight to
+        // formatAnswerPlanForPrompt, which does not know about isSpeculative).
+        // Discarding the text hid that; revealing it would put the raw block in
+        // the UI and the session record. No-op when the answer has none.
+        try {
+            const { stripVerificationSpec } = require('./llm/codingContract') as typeof import('./llm/codingContract');
+            text = stripVerificationSpec(text);
+        } catch (err) {
+            console.warn('[IntelligenceEngine] Prefetched answer spec strip failed:', err);
+        }
         try {
             const cleaned = cleanAnswerArtifacts(text);
             if (cleaned.trim().length >= 10) text = cleaned;
