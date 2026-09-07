@@ -5,7 +5,7 @@ import { attachNoActivate } from "./utils/windowsFocusPolicy"
 const isDev = process.env.NODE_ENV === "development"
 
 const startUrl = isDev
-    ? "http://localhost:5180"
+    ? "http://127.0.0.1:5180"
     : `file://${path.join(app.getAppPath(), "dist/index.html")}`
 
 import type { WindowHelper } from "./WindowHelper"
