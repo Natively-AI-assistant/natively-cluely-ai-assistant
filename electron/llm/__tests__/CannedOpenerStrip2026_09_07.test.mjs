@@ -67,3 +67,23 @@ describe('stripCannedTail (2026-09-08)', () => {
     assert.equal(stripCannedTail(s).text, s);
   });
 });
+
+describe('measured 2026-09-08: "I don\'t have that information." opener and "clarify what" tail', () => {
+  const { stripCannedOpener: so, stripCannedTail: st } = require(path.join(process.cwd(), 'dist-electron/electron/llm/cannedOpener.js'));
+  test('both ends stripped, the middle ships', () => {
+    const a = "I don't have that information. The \"Output\" isn't defined anywhere in the materials provided, so there's no postal code I can give you. Could you clarify what \"Output\" refers to here?";
+    const o = so(a); assert.equal(o.stripped.length, 1, JSON.stringify(o));
+    const t = st(o.text); assert.ok(t.stripped, 'tail');
+    assert.match(t.text, /^The "Output" isn't defined/); assert.ok(!/clarify/.test(t.text));
+  });
+});
+
+describe('measured 2026-09-08: "I need more context" and "I need to know which" openers', () => {
+  const { stripCannedOpener: so } = require(path.join(process.cwd(), 'dist-electron/electron/llm/cannedOpener.js'));
+  test('both are dropped when content follows', () => {
+    for (const a of [
+      'I need to know which question number you mean before I can repeat it. The material lists several: for 2024, question 2a (Green function, 12 marks) and 4b (method of characteristics, 8 marks).',
+      'I need more context to answer your question accurately. For the 2021 paper, question 2a is the Green function question and carries 12 marks.',
+    ]) { const r = so(a); assert.equal(r.stripped.length, 1, a); assert.ok(!/^I need/.test(r.text)); }
+  });
+});
