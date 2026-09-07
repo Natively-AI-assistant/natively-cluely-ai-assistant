@@ -66,6 +66,12 @@ export interface ModeRetrievalOptions {
      */
     rerankSurface?: 'live' | 'manual';
     /**
+     * The caller's own race deadline for the whole retrieval, in ms. A rerank
+     * whose budget cannot fit inside it is skipped rather than started and
+     * discarded (rerankBudget.ts → rerankBudgetFitsDeadline). Absent = not raced.
+     */
+    rerankDeadlineMs?: number;
+    /**
      * Follow-up referent hint (round-7 Failure-2). A short/anaphoric follow-up
      * ("What processor controls it?", "What throughput does that give?") loses
      * the subject — the bare query has no referent, so retrieval can't find the
@@ -1805,6 +1811,10 @@ export class ModeContextRetriever {
             // default 1800/6 — grounded answers were retrieving too small a window.
             forceDocumentGrounding: options.forceDocumentGrounding,
             rerankSurface: options.rerankSurface,
+            // The caller's race deadline (rerankBudget.ts → rerankBudgetFitsDeadline).
+            // Measured 2026-09-07: without this hop the recap's 1000ms race still
+            // started an 8000ms-budget hosted rerank and discarded it.
+            rerankDeadlineMs: options.rerankDeadlineMs,
         });
 
         diagLog('retrieveHybrid() return', { usedFallback: result.usedFallback, usedHybrid: result.usedHybrid, chunkCount: result.chunks?.length, hasContext: !!result.formattedContext });

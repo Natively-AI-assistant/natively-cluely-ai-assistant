@@ -61,6 +61,27 @@ export function resolveRerankBudgetMs(opts: {
         : SELECTED_RERANK_BUDGET_MS.live;
 }
 
+/**
+ * Whether a rerank with `budgetMs` is worth STARTING under a caller that stops
+ * waiting at `deadlineMs`.
+ *
+ * MEASURED 2026-09-07, real session, Voyage rerank-2.5-lite via OpenRouter as
+ * the selected reranker. The recap hotkey runs the legacy streamChat retrieval,
+ * which races the whole hybrid call against 1000ms. Inside it the rerank was
+ * handed the 8000ms manual budget, took 1388ms, was billed (the query was the
+ * entire transcript — 30x a normal turn's tokens) and its result was thrown
+ * away because the outer race had already fallen back to lexical. Twenty-two
+ * V3 turns in the same session reranked correctly; the waste is specific to a
+ * caller whose deadline is shorter than the rerank's own.
+ *
+ * No deadline, or a non-positive one, means "not raced" → always fits.
+ */
+export function rerankBudgetFitsDeadline(opts: { budgetMs: number; deadlineMs?: number | null }): boolean {
+    const d = opts.deadlineMs;
+    if (typeof d !== 'number' || !Number.isFinite(d) || d <= 0) return true;
+    return opts.budgetMs <= d;
+}
+
 /** What a measured Test Connection latency means for whether reranking runs. */
 export interface RerankLatencyFit {
     liveBudgetMs: number;
