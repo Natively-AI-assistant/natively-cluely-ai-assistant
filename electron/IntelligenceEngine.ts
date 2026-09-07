@@ -425,6 +425,17 @@ export class IntelligenceEngine extends EventEmitter {
      * speculativeText / expiry window, so adoption can reveal it instead.
      */
     private speculativeAnswer: SpeculativeAnswer | null = null;
+    /**
+     * The generation a dispatch adopted while it was STILL STREAMING. Adoption
+     * used to be recorded only through `automaticGenerationId`, which is set
+     * only for an `automatic` trigger — so a non-automatic adopter returned
+     * having "adopted" the stream and its completion then parked the text
+     * instead of revealing it, reproducing 13-q4 on that path. Confirmed in a
+     * live session (2026-09-07): the adoption logged "revealed at completion"
+     * and no answer ever reached the overlay. Latent for users — `__e2e__:ask`
+     * is the only non-automatic caller — but wrong on any caller.
+     */
+    private speculativeAdoptedGenerationId: number | null = null;
     // epoch ms after which speculativeText is stale; Infinity while stream is still running
     private speculativeTextExpiry: number = Infinity;
     private readonly SPECULATIVE_DEBOUNCE_MS = 350;
@@ -982,6 +993,7 @@ export class IntelligenceEngine extends EventEmitter {
                 this.speculativeQuestionId = null;
                 const finished = this.speculativeAnswer;
                 this.speculativeAnswer = null;
+                this.speculativeAdoptedGenerationId = null;
                 if (similarity >= this.SPECULATIVE_SIMILARITY_THRESHOLD) {
                     this.lastTriggerTime = Date.now();
                     this.lastTriggerQuestion = trigger.lastQuestion ?? null;
@@ -993,6 +1005,7 @@ export class IntelligenceEngine extends EventEmitter {
                         // The running speculative stream IS the automatic answer
                         // now. It never streamed to the UI, so completion reveals
                         // it (see the isSpeculative completion branch).
+                        this.speculativeAdoptedGenerationId = this.currentGenerationId;
                         if (trigger.automatic) this.automaticGenerationId = this.currentGenerationId;
                         return;
                     }
@@ -1012,6 +1025,7 @@ export class IntelligenceEngine extends EventEmitter {
                 this.speculativeText = null;
                 this.speculativeTextExpiry = Infinity;
                 this.speculativeAnswer = null;
+                this.speculativeAdoptedGenerationId = null;
             }
             // IMPORTANT: no await between this increment and runWhatShouldISay below —
             // the increment must be synchronous with the new stream launch to preserve generation-id ordering.
@@ -1115,7 +1129,8 @@ export class IntelligenceEngine extends EventEmitter {
         writeDecision: SessionWriteDecision | undefined,
     ): string {
         const finished: SpeculativeAnswer = { generationId, question: question || 'inferred', confidence, text, writeDecision };
-        const adoptedInFlight = this.automaticGenerationId === generationId && this.currentGenerationId === generationId;
+        const adoptedInFlight = this.speculativeAdoptedGenerationId === generationId && this.currentGenerationId === generationId;
+        if (this.speculativeAdoptedGenerationId === generationId) this.speculativeAdoptedGenerationId = null;
         if (adoptedInFlight) {
             this.speculativeText = null;
             this.speculativeTextExpiry = Infinity;
@@ -1126,7 +1141,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.speculativeTextExpiry = Date.now() + this.triggerCooldown + 500;
         }
         this.setMode('idle');
-        if (adoptedInFlight) this.revealSpeculativeAnswer(finished, true);
+        if (adoptedInFlight) this.revealSpeculativeAnswer(finished, this.automaticGenerationId === generationId);
         return text;
     }
 
@@ -1382,6 +1397,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.speculativeText = null;
             this.speculativeTextExpiry = Infinity;
             this.speculativeAnswer = null;
+            this.speculativeAdoptedGenerationId = null;
         }
 
         // Cooldown bypass: explicit images (user intent), speculative pre-fetch, or
@@ -1493,6 +1509,7 @@ export class IntelligenceEngine extends EventEmitter {
             this.speculativeText = question ?? null;
             this.speculativeTextExpiry = now + this.triggerCooldown + 5000;
             this.speculativeAnswer = null;
+            this.speculativeAdoptedGenerationId = null;
         }
 
         // ── Live-path latency trace (click → first useful token → render) ──
@@ -7199,6 +7216,7 @@ export class IntelligenceEngine extends EventEmitter {
         this.speculativeText = null;
         this.speculativeTextExpiry = Infinity;
         this.speculativeAnswer = null;
+        this.speculativeAdoptedGenerationId = null;
     }
 
     /**

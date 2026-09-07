@@ -77,6 +77,13 @@ function untilIdle(engine) {
     });
 }
 
+/** The `__e2e__:ask` shape: a real trigger with no `automatic` field. */
+function dispatchNonAutomatic(engine) {
+    return engine.handleSuggestionTrigger({
+        context: '', lastQuestion: QUESTION, confidence: 0.9, reuseSpeculative: true,
+    });
+}
+
 function dispatch(engine, id, reuseSpeculative = true) {
     return engine.runAutoAnswer({
         id, text: QUESTION, confidence: 0.9, answerability: 0.9, dialogueAct: 'technical_question',
@@ -157,5 +164,30 @@ test('an un-adopted prefetch stays hidden; a later manual press does not leak it
     await run;
     assert.equal(finals.filter((f) => f.answer === ANSWER && f.question === QUESTION).length, 0,
         'the prefetched answer is never shown under a different question');
+    engine.reset();
+});
+
+test('adoption of an IN-FLIGHT prefetch is not conditional on the trigger being automatic', async () => {
+    // Adoption used to be recorded only through automaticGenerationId, which
+    // `handleSuggestionTriggerInner` sets only when `trigger.automatic` is
+    // true. A non-automatic adopter therefore returned having adopted the
+    // stream while completion, seeing no marker, parked the text and showed
+    // nothing — 13-q4 again, on the other caller. `__e2e__:ask` is the only
+    // non-automatic caller today and it resets first, so this is
+    // correct-if-ever-wired hardening, not a live user-facing path.
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const { engine, finals } = await makeEngine({ chunks: [ANSWER.slice(0, 40), ANSWER.slice(40)], gate });
+    engine.prefetchAutoAnswer('q7', QUESTION);
+    await flush();
+    assert.equal(engine.getActiveMode(), 'what_to_say', 'the prefetch is in flight');
+
+    await dispatchNonAutomatic(engine);
+    release();
+    await untilIdle(engine);
+    await flush();
+    assert.equal(finals.length, 1, 'the adopted stream is revealed at completion for a non-automatic trigger too');
+    assert.equal(finals[0].answer, ANSWER);
+    assert.equal(engine.automaticGenerationId, null, 'but it is not marked automatic: nothing may barge-in-cancel it');
     engine.reset();
 });
