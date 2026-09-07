@@ -63,9 +63,20 @@ test('startStream() falls back from latest_long for unsupported languages', () =
     !/model\s*:\s*'latest_long'\s*,/.test(startStreamBody),
     "BUG: startStream() must not hardcode model: 'latest_long' — Mandarin (cmn-Hans-CN) only supports the 'default' and 'command_and_search' models in STT v1, and an unsupported model+language pair is a permanent gRPC code-3 error that disables STT for the whole session.",
   );
+  // The per-language choice was hoisted out of startStream() into resolveModel()
+  // when the runtime code-3 downgrade landed (see
+  // GoogleSttInvalidArgumentModelDowngrade.test.mjs, which asserts the resulting
+  // wire request end-to-end). Assert the guard exists SOMEWHERE in the class
+  // rather than inside one method body, so a refactor of where the decision
+  // lives cannot fail this test while the contract still holds.
   assert.ok(
-    /LANGUAGES_WITHOUT_LATEST_LONG\.has\s*\(\s*this\.languageCode\s*\)/.test(startStreamBody),
-    'BUG: startStream() must consult LANGUAGES_WITHOUT_LATEST_LONG to pick the model per language.',
+    /LANGUAGES_WITHOUT_LATEST_LONG\.has\s*\(\s*this\.languageCode\s*\)/.test(gSource),
+    'BUG: GoogleSTT must consult LANGUAGES_WITHOUT_LATEST_LONG to pick the model per language.',
+  );
+  assert.ok(
+    /model\s*:\s*this\.resolveModel\(\)/.test(startStreamBody),
+    'BUG: startStream() must take its model from resolveModel() — that is where both the static ' +
+    'allowlist and the runtime downgrade are applied.',
   );
   assert.ok(
     /'cmn-Hans-CN'/.test(gSource) && /LANGUAGES_WITHOUT_LATEST_LONG\s*=\s*new Set\(/.test(gSource),
