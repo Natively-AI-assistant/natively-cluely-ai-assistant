@@ -81,3 +81,10 @@ describe('"go ahead and finish the question" is a misfire (2026-09-08)', () => {
     assert.equal(r.isMisfire, true, JSON.stringify(r));
   });
 });
+
+describe('"I don\'t have the exact wording… Could you finish the question" (2026-09-08)', () => {
+  test('is a misfire', () => {
+    const r = detectAssistantVoiceMisfire("I don't have the exact wording of that question, since it cuts off partway. Could you finish the question, for example what you'd like to know about the finetuned OpenVLA-OFT model?");
+    assert.equal(r.isMisfire, true, JSON.stringify(r));
+  });
+});

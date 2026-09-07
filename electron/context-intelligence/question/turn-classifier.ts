@@ -98,14 +98,37 @@ export interface Classification {
 // "5 5") collapses to one.
 const FILLER_RE = /\b(?:um+|uh+|uhm|erm+|hmm+|hm+|arh+|ah+|er+|basically|you know|i mean)\b[,]?\s*/g;
 const STUTTER_RE = /\b(\w+)(?:\s+\1\b)+/g;
+// "right", "okay", "so", "like", "you know" are real words, so they are only
+// fillers when WEDGED between a function word and what it governs: "what is
+// right the annual discount pct", "for okay so proposal, what is the acv"
+// (2026-09-08, measured: the first went FAST and the sales persona invented a
+// 20 percent discount over a file that says 12).
+const MID_FILLER_RE = /\b(is|are|was|were|what|which|how|does|did|do|for|about|of|in|on|to|the)\s+(?:(?:right|okay|ok|so|like|you know|i mean)[,\s]+)+(?=[a-z0-9$])/gi;
+// Transcriber spellings of things people SAY as letters or symbols
+// (2026-09-08, measured): "queue two 2026" for Q2 2026, "p ninety five" for
+// p95, "n d c g" for nDCG. The files hold the written form; the model was told
+// "queue two" is not a term in any file. Canonicalised once, here.
+type SttReplacer = string | ((match: string, ...groups: string[]) => string);
+const QUARTER_WORDS: Record<string, string> = { one: '1', two: '2', three: '3', four: '4' };
+const STT_CANON: ReadonlyArray<[RegExp, SttReplacer]> = [
+  [/\bqueue\s+(one|two|three|four|1|2|3|4)\b/gi, (_m: string, n: string) => 'Q' + (QUARTER_WORDS[n.toLowerCase()] ?? n)],
+  [/\bp\s+(?:fifty|50)\b/gi, 'p50'], [/\bp\s+(?:ninety\s+five|95)\b/gi, 'p95'], [/\bp\s+(?:ninety\s+nine|99)\b/gi, 'p99'], [/\bp\s+(?:ninety|90)\b/gi, 'p90'],
+  [/\bn\s+d\s+c\s+g\b/gi, 'nDCG'], [/\bm\s+r\s+r\b/gi, 'MRR'], [/\bs\s+l\s+a\b/gi, 'SLA'], [/\ba\s+p\s+i\b/gi, 'API'], [/\ba\s+r\s+r\b/gi, 'ARR'],
+  [/\bg\s+p\s+u\b/gi, 'GPU'], [/\bo\s+k\s+r\b/gi, 'OKR'], [/\bs\s+o\s+w\b/gi, 'SOW'], [/\bj\s+d\b/gi, 'JD'], [/\bbat\s+na\b/gi, 'BATNA'], [/\bL\s+([3-7])\b/g, 'L$1'],
+];
+export const canonicalizeSttSpellings = (s: string): string => {
+  let out = s;
+  for (const [re, rep] of STT_CANON) out = typeof rep === 'string' ? out.replace(re, rep) : out.replace(re, rep);
+  return out;
+};
 export const normalizeSttQuestion = (s: string): string =>
-  s.toLowerCase().replace(FILLER_RE, ' ').replace(STUTTER_RE, '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
+  canonicalizeSttSpellings(s).toLowerCase().replace(FILLER_RE, ' ').replace(MID_FILLER_RE, '$1 ').replace(STUTTER_RE, '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
 /** Case-preserving variant for the question the model and the retriever see:
  *  "What is arh the discount pct?" reached the model verbatim and it answered
  *  about an "ARH percentage"; "what is arh so due for" became an "ARIS chart".
  *  Fillers are noise from the transcriber, never content. */
 export const stripSttFillers = (s: string): string =>
-  s.replace(new RegExp(FILLER_RE.source, 'gi'), ' ').replace(new RegExp(STUTTER_RE.source, 'gi'), '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
+  canonicalizeSttSpellings(s).replace(new RegExp(FILLER_RE.source, 'gi'), ' ').replace(new RegExp(MID_FILLER_RE.source, 'gi'), '$1 ').replace(new RegExp(STUTTER_RE.source, 'gi'), '$1').replace(/\s+([,.?!])/g, '$1').replace(/\s+/g, ' ').trim();
 const norm = (s: string) => normalizeSttQuestion(s);
 
 // ── signals ─────────────────────────────────────────────────────────────────

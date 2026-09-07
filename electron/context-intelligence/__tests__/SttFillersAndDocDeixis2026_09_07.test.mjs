@@ -31,6 +31,11 @@ describe('fillers and stutters do not change the route', () => {
     assert.equal(normalizeSttQuestion('remind me okay so step hmm 5 5 what was it'), 'remind me okay so step 5 what was it');
     assert.equal(normalizeSttQuestion('so the the migration thing, um, how long'), 'so the migration thing, how long');
   });
+  test('wedged "right"/"okay so"/"like" between a function word and its object are fillers (2026-09-08)', () => {
+    assert.equal(normalizeSttQuestion('what is right the the annual um discount you know pct'), 'what is the annual discount pct');
+    assert.equal(normalizeSttQuestion('For okay so proposal, what is erm the acv um usd?'), 'for proposal, what is the acv usd?');
+    const r = classify('what is right the annual discount pct'); assert.equal(r.shouldRetrieve, true, r.reason);
+  });
   test('"like", "so" and "right" survive (they are real words)', () => {
     assert.equal(normalizeSttQuestion('What do you like about the role, right?'), 'what do you like about the role, right?');
   });
@@ -107,5 +112,18 @@ describe('a reminder is a document lookup even when it contains a tech word (202
   test('without documents a reminder is unchanged', () => {
     const r = classifyTurn({ resolvedQuestion: 'Remind me, failures 1 error, what was it?', policy: MODE_POLICIES.general, isFollowUp: false, hasAttachedDocuments: false });
     assert.ok(!r.questionTypes.includes('DOCUMENT_FACT'), JSON.stringify(r.questionTypes));
+  });
+});
+
+const { canonicalizeSttSpellings, stripSttFillers } = await load('question/turn-classifier.js');
+describe('transcriber spellings are canonicalised (2026-09-08)', () => {
+  test('queue two → Q2, p ninety five → p95, n d c g → nDCG, bat na → BATNA', () => {
+    assert.equal(canonicalizeSttSpellings('the projected ARR for queue two 2026'), 'the projected ARR for Q2 2026');
+    assert.equal(stripSttFillers('what um was the p ninety five after the regression'), 'what was the p95 after the regression');
+    assert.equal(canonicalizeSttSpellings('the n d c g and the m r r for reranker A'), 'the nDCG and the MRR for reranker A');
+    assert.equal(canonicalizeSttSpellings('what is my bat na'), 'what is my BATNA');
+  });
+  test('ordinary words are untouched', () => {
+    assert.equal(canonicalizeSttSpellings('the queue depth alert and the p value'), 'the queue depth alert and the p value');
   });
 });

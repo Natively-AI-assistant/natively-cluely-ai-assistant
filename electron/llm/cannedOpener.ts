@@ -28,6 +28,9 @@ const OPENER_SENTENCE_RE = new RegExp(
     "(?:i(?:'m| am)\\s+)?not\\s+(?:quite\\s+)?sure\\s+(?:what|which)\\s+you(?:'re| are)\\s+(?:asking|referring\\s+to)\\b[^.!?\\n]{0,80}[.!?]",
     "(?:i\\s+)?(?:didn'?t|did\\s+not|couldn'?t)\\s+(?:catch|get|hear)\\s+(?:that|the\\s+(?:question|last\\s+part))[^.!?\\n]{0,60}[.!?]",
     "what\\s+is\\s+your\\s+question\\?",
+    "i\\s+need\\s+(?:a\\s+bit\\s+|a\\s+little\\s+|some\\s+)?more\\s+(?:context|information|info|details?)\\b[^.!?\\n]{0,80}[.!?]",
+    "i\\s+need\\s+to\\s+know\\s+(?:which|what|whether|if)\\b[^.!?\\n]{0,100}[.!?]",
+    "i\\s+(?:don'?t|do\\s+not)\\s+have\\s+(?:that|this|the)\\s+(?:information|info|detail|details|figure|number|data|context)(?:\\s+(?:here|on\\s+hand|in\\s+front\\s+of\\s+me|right\\s+now|yet))?[.!]",
   ].join('|') + ')\\s*',
   'i',
 );
@@ -75,7 +78,7 @@ export function shouldHoldForCannedOpener(buffer: string, maxHoldChars = 420): b
 // one you mean?" (measured 2026-09-08: "…the register lists three, R-3, R-7 and
 // R-9, so I'm not sure which one you mean as 'risks 2'. Could you clarify which
 // I should use?"). The information is already there; the question is noise.
-const TAIL_SENTENCE_RE = /(?:^|(?<=[.!?]["'”’)]?\s))(?:(?:so\s+)?(?:i(?:'m| am)\s+not\s+(?:quite\s+)?sure\s+which\s+(?:one\s+)?you\s+mean[^.!?]{0,60}[.!?]\s*)?(?:could|can|would)\s+you\s+(?:please\s+)?(?:clarify|specify|confirm|let\s+me\s+know)\s+which\b[^.!?]{0,120}\?)\s*$/i;
+const TAIL_SENTENCE_RE = /(?:^|(?<=[.!?]["'”’)]?\s))(?:(?:so\s+)?(?:i(?:'m| am)\s+not\s+(?:quite\s+)?sure\s+which\s+(?:one\s+)?you\s+mean[^.!?]{0,60}[.!?]\s*)?(?:could|can|would)\s+you\s+(?:please\s+)?(?:clarify|specify|confirm|let\s+me\s+know)\s+(?:which|what|whether|if)\b[^.!?]{0,120}\?)\s*$/i;
 
 export function stripCannedTail(text: string): { text: string; stripped: string | null } {
   const t = text ?? '';
