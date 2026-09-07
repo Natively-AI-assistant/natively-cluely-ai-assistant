@@ -75,6 +75,9 @@ const ANSWER_PANEL_INTENTS = new Set([
   'shorten',
 ]);
 
+const CHAT_INPUT_MIN_HEIGHT_PX = 42;
+const CHAT_INPUT_MAX_HEIGHT_PX = 112;
+
 const CardCopyButton = ({
   text,
   onCopy,
@@ -1614,7 +1617,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const pinAnswerPanelRef = useRef<() => void>(() => {});
   const [voiceInput, setVoiceInput] = useState(''); // Accumulated user voice input
   const voiceInputRef = useRef<string>(''); // Ref for capturing in async handlers
-  const textInputRef = useRef<HTMLInputElement>(null); // Ref for input focus
+  const textInputRef = useRef<HTMLTextAreaElement>(null); // Ref for input focus
   const isStealthRef = useRef<boolean>(false); // Tracks if the next expansion should be stealthy
   // Startup-flicker guards (restored from 2de1b62, reverted by 18b139b):
   //  - isExpandedEffectInitializedRef: skip the FIRST run of the visibility-sync
@@ -1968,6 +1971,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   const quickActionClass = 'overlay-chip-surface overlay-text-interactive';
   const inputClass = `aurora-focus overlay-input-surface overlay-input-text`;
   const controlSurfaceClass = 'overlay-control-surface overlay-text-interactive';
+
+  useLayoutEffect(() => {
+    const input = textInputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    const scrollHeight = input.scrollHeight;
+    const nextHeight = Math.min(
+      Math.max(scrollHeight, CHAT_INPUT_MIN_HEIGHT_PX),
+      CHAT_INPUT_MAX_HEIGHT_PX,
+    );
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = scrollHeight > CHAT_INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
+  }, [inputValue]);
 
   // PERF: hoist ReactMarkdown `components` maps for every streaming intent
   // into a single useMemo so their identity is stable across renders. Each
@@ -8874,13 +8890,13 @@ Provide only the answer, nothing else.`;
   // ── Input-click DOM-focus block ──
   //
   // When the user clicks the chat input, the browser tries to focus the
-  // <input> element. That focus promotes the NSPanel to key window —
+  // <textarea> element. That focus promotes the NSPanel to key window —
   // which fires window.onblur on whatever app was previously focused
   // (Zoom, browser, IDE). preventDefault() on mousedown blocks the focus
   // attempt entirely. The above mousedown listener has already fired
   // stealthTapStart() in capture phase, so by the time we get here, the
   // tap is engaging and DOM focus is no longer the typing path.
-  const blockInputFocus = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+  const blockInputFocus = useCallback((e: React.MouseEvent<HTMLTextAreaElement>) => {
     if (
       !shouldBlockStealthFocus({
         stealthAutoEngageOk: stealthAutoEngageOkRef.current,
@@ -10023,13 +10039,23 @@ Provide only the answer, nothing else.`;
                                     tap and break inputs in Settings/Model
                                     Selector windows. */}
                 <div className="relative group" data-stealth-engage="true">
-                  <input
+                  <textarea
                     ref={textInputRef}
                     data-testid="overlay-chat-input"
-                    type="text"
+                    rows={1}
                     value={inputValue}
                     onChange={(e) => { setInputValue(e.target.value); setSkillPickerIndex(0); }}
                     onKeyDown={(e) => {
+                      // Shift+Enter inserts a newline, IME Enter confirms composition,
+                      // and Cmd/Ctrl+Enter belongs to general:process-screenshots.
+                      // Let those events keep their native/bubbling behavior before
+                      // the skill picker gets a chance to consume Enter.
+                      if (
+                        e.key === 'Enter' &&
+                        (e.shiftKey || e.nativeEvent.isComposing || e.metaKey || e.ctrlKey)
+                      ) {
+                        return;
+                      }
                       if (filteredSkills.length > 0 && skillPickerQuery !== null) {
                         if (e.key === 'ArrowUp') {
                           e.preventDefault();
@@ -10046,19 +10072,16 @@ Provide only the answer, nothing else.`;
                           setInputValue('');
                           return;
                         }
-                        if (e.key === 'Tab' || (e.key === 'Enter' && !e.repeat)) {
+                        if (e.key === 'Tab' || e.key === 'Enter') {
                           e.preventDefault();
+                          if (e.key === 'Enter' && e.repeat) return;
                           selectSkill(filteredSkills[clampedPickerIndex]);
                           return;
                         }
                       }
-                      if (e.key !== 'Enter' || e.repeat) return;
-                      // Cmd/Ctrl+Enter belongs to general:process-screenshots.
-                      // Let it bubble to the window keydown handler instead of
-                      // submitting — handleManualSubmit silently returns on an
-                      // empty input, which is why the shortcut appeared dead.
-                      if (e.metaKey || e.ctrlKey) return;
+                      if (e.key !== 'Enter') return;
                       e.preventDefault();
+                      if (e.repeat) return;
                       handleManualSubmit();
                     }}
                     // Block native DOM focus on click — the panel becoming
@@ -10078,7 +10101,7 @@ Provide only the answer, nothing else.`;
                     // since every click there engages the stealth hook. Drive
                     // the same aurora glow with a class instead, and drop the
                     // green, so both platforms look identical on click.
-                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 text-[13px] leading-relaxed ${inputClass} ${stealthTapActive && isWindows ? 'aurora-focus-active' : ''} ${stealthTapActive && !isWindows ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
+                    className={`w-full border rounded-xl pl-3 pr-10 py-2.5 min-h-[42px] max-h-[112px] resize-none whitespace-pre-wrap break-words text-[13px] leading-relaxed ${inputClass} ${stealthTapActive && isWindows ? 'aurora-focus-active' : ''} ${stealthTapActive && !isWindows ? 'ring-2 ring-emerald-400/30 border-emerald-400/40 shadow-[0_0_12px_rgba(52,211,153,0.15)]' : ''}`}
                     style={appearance.inputStyle}
                   />
 
