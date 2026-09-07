@@ -27,6 +27,8 @@
  * see src/lib/__tests__/overlayCustomSize.test.mjs.
  */
 
+import { verticalScrollCap } from './overlayScrollBudget.mjs';
+
 /** The window's birth width. MUST equal WindowHelper.OVERLAY_DEFAULT_WIDTH. */
 export const OVERLAY_DEFAULT_WINDOW_WIDTH = 732;
 /** The panel's collapsed width at the DEFAULT window width. */
@@ -457,4 +459,81 @@ export function computeResizeFrame(params) {
       Math.max(heightFloor, maxHeight),
     ),
   };
+}
+
+// ── Hover gate hit-test ───────────────────────────────────────────────────
+/**
+ * Is the pointer over the PANEL — the painted card — as opposed to a
+ * transparent part of the window? The window can be wider than the panel
+ * (the collapsed 66px margins) AND taller than it (a pinned height the content
+ * has not filled yet, the OS clamping a restored size, a release still
+ * settling), so the test is the panel's actual rectangle on both axes — never
+ * X-margin arithmetic that silently assumes the panel fills the window's
+ * height. A pointer outside it makes the window click-through (forward:true),
+ * so what looks like desktop behaves like desktop.
+ *
+ * No rect (panel not mounted, or laid out at zero size) answers TRUE: the
+ * main-process default is interactive, and a latched click-through with no
+ * boundary left to cross has no recovery.
+ *
+ * `pad` inflates the rect so fast pointer travel cannot outrun the flip at the
+ * boundary — an over-inclusive edge costs a few interactive pixels, an
+ * under-inclusive one drops a click on the panel's rim.
+ */
+export function pointerOverPanel(point, rect, pad = 0) {
+  if (!rect) return true;
+  const { left, top, right, bottom } = rect;
+  if (![left, top, right, bottom].every(Number.isFinite)) return true;
+  if (right <= left || bottom <= top) return true;
+  const p = Number.isFinite(pad) ? pad : 0;
+  return (
+    point.x >= left - p && point.x <= right + p && point.y >= top - p && point.y <= bottom + p
+  );
+}
+
+// ── Pinned viewport budget: a pin is a LID for this answer, a FLOOR after ──
+
+/**
+ * The chat viewport's budget while a height is pinned.
+ *
+ * A pin has two lives, mirroring the width channel (a manual width applies to
+ * THIS answer; the next answer's first token restores auto behaviour):
+ *
+ *   pinIsCeiling  — right after the drag (and on restore): the chat scrolls
+ *                   INSIDE the chosen size. cap = room = pin − chrome, so the
+ *                   panel is exactly the pin. This is what lets a long chat be
+ *                   shrunk to 450 and stay there.
+ *   !pinIsCeiling — a NEW answer has started: the pin is only a floor. The
+ *                   viewport keeps the pinned room as its minimum but may grow
+ *                   with the content up to the AUTO cap (the unchanged display
+ *                   budget; the width-derived bound applies on top in the
+ *                   caller), so the overlay grows to show the answer instead of
+ *                   streaming it into a 30px slot the user reads as "no answer".
+ *
+ * Unpinned: the auto cap, no room. `room` is what min-height is bound to;
+ * `ceiling` tells the caller whether max-height is the pinned cap or auto.
+ */
+export function pinnedViewportBudget({ pinnedHeight, pinIsCeiling, chromeHeight, availHeight }) {
+  const autoCap = verticalScrollCap({ availHeight, chromeHeight });
+  if (!Number.isFinite(pinnedHeight) || pinnedHeight === null || pinnedHeight <= 0) {
+    return { cap: autoCap, room: 0, ceiling: false };
+  }
+  if (!Number.isFinite(chromeHeight) || chromeHeight < 0) {
+    return { cap: autoCap, room: 0, ceiling: false };
+  }
+  const grantable = Math.min(Math.round(pinnedHeight), maxWindowHeightFor(availHeight));
+  const room = Math.max(0, grantable - Math.ceil(chromeHeight));
+  if (pinIsCeiling) {
+    // No safety margin and no minimum viewport: the pin is the size the window
+    // was actually granted, and at the floor the honest viewport is zero.
+    const cap = verticalScrollCap({
+      availHeight: grantable,
+      chromeHeight,
+      budgetRatio: 1,
+      minScroll: 0,
+      safetyMargin: 0,
+    });
+    return { cap, room, ceiling: true };
+  }
+  return { cap: autoCap, room, ceiling: false };
 }

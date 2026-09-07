@@ -71,6 +71,23 @@ describe('overlayScrollBudget', () => {
         338,
       );
     });
+    test('pinned branch with safetyMargin 0 fills the pinned window EXACTLY', () => {
+      // The 8px default margin guards a display-budget estimate that can
+      // disagree with the main process. A pinned height is not an estimate —
+      // it is the size the window was granted (the release adopts the applied
+      // height) — so the viewport is pinned − chrome exactly. Anything less
+      // leaves a transparent strip under the panel that swallows clicks.
+      assert.equal(
+        verticalScrollCap({
+          availHeight: 500,
+          chromeHeight: 154,
+          budgetRatio: 1,
+          minScroll: 0,
+          safetyMargin: 0,
+        }),
+        346,
+      );
+    });
     test('never collapses below minScroll on a very short display', () => {
       // 500*0.9=450; -8=442; chrome 400 → 42, floored to minScroll 120
       assert.equal(

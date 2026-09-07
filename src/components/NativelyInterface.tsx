@@ -275,8 +275,6 @@ import {
 import { widthDerivedScrollMax, verticalScrollCap } from '../lib/overlayScrollBudget.mjs';
 import {
   OVERLAY_DEFAULT_WINDOW_WIDTH,
-  readCustomOverlaySize,
-  writeCustomOverlaySize,
   clearCustomOverlaySize,
   maxWindowWidthFor,
   maxWindowHeightFor,
@@ -284,11 +282,12 @@ import {
   pinsHeightFor,
   minWindowWidthFor,
   manualHeightFloorFor,
-  clampCustomOverlaySize,
   panelWidthFloorFor,
   releaseWindowWidthFor,
   OVERLAY_MIN_WINDOW_HEIGHT,
   computeResizeFrame,
+  pointerOverPanel,
+  pinnedViewportBudget,
   type OverlayResizeDirection,
 } from '../lib/overlayCustomSize.mjs';
 import { resolveChatStreamToken, resolveChatStreamDone, resolveLiveAnswerBatch, resolveChatStreamSurfaceError } from '../lib/chatStreamGuard.mjs';
@@ -2181,26 +2180,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // on every frame (correct at every in-between width — no clip/scale/transform).
   // Only HEIGHT flows to the OS, via the ResizeObserver / reportShellSize (and
   // a rate-limited channel during the tween).
-  // The user's persisted overlay size, read ONCE via a lazy initialiser — this
-  // component re-renders on every streaming token, so a bare localStorage read
-  // in the body would run thousands of times per answer for a value only the
-  // mount uses.
-  const [restoredOverlaySize] = useState(() => {
-    const stored = readCustomOverlaySize(
-      typeof window !== 'undefined' ? window.localStorage : null,
-    );
-    const availWidth = typeof window !== 'undefined' ? window.screen?.availWidth ?? 0 : 0;
-    const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
-    // A size persisted by an older build could sit under the old 360px width
-    // floor, and any size could come from a display larger than this one.
-    // No height FLOOR here on purpose: nothing is laid out at mount, so the
-    // natural height is not measurable yet — the drag applies it instead.
-    return clampCustomOverlaySize(stored, {
-      minWidth: minWindowWidthFor(availWidth),
-      maxWidth: maxWindowWidthFor(availWidth),
-      maxHeight: maxWindowHeightFor(availHeight),
-    });
-  });
+  // The overlay's size is NOT remembered across launches or meetings: every
+  // meeting starts in the default state (154 tall at rest, 732 wide), and a
+  // manual size lasts for the meeting it was made in. Evin (2026-09-07): "when
+  // a new session starts no need to remember last session's size". Older
+  // builds persisted it in localStorage; those keys are cleared once here so
+  // they cannot resurface if a later build reads them again.
+  const restoredOverlaySize: { width: number | null; height: number | null } = useState(() => {
+    clearCustomOverlaySize(typeof window !== 'undefined' ? window.localStorage : null);
+    return { width: null, height: null };
+  })[0];
   // ── Overlay window size ───────────────────────────────────────────────────
   // The OS window's width used to be a compile-time constant (732). It is now a
   // value the USER can change by dragging a resize handle — but it is still
@@ -2228,11 +2217,30 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     restoredOverlaySize.width,
   );
   const [appliedWindowWidth, setAppliedWindowWidth] = useState<number | null>(null);
-  // The pinned window HEIGHT is a ref, not state: nothing RENDERS from it (the
-  // scroll budget flows through the `verticalCap` motion value, and the size
-  // reporters read it imperatively), so holding it in state would only add a
-  // re-render of this whole component on every frame of a height drag.
+  // The pinned window HEIGHT is a ref, not state: nothing RENDERS from its
+  // VALUE (the scroll budget flows through the `verticalCap` motion value, and
+  // the size reporters read it imperatively), so holding it in state would only
+  // add a re-render of this whole component on every frame of a height drag.
   const customOverlayHeightRef = useRef<number | null>(restoredOverlaySize.height);
+  // WHETHER a height is pinned is state, because one thing does render from
+  // it: the chat viewport must be mounted to absorb a pinned height, even with
+  // no messages yet. It flips only on pin/unpin events (grab, reset, restore)
+  // — never per frame — so it costs no re-render during a drag.
+  const [heightPinned, setHeightPinned] = useState(restoredOverlaySize.height !== null);
+  // A pin has two lives, mirroring manualWidthOverrideRef: a LID for the
+  // answer it was taken on (the chat scrolls inside the chosen size, so a long
+  // chat can be shrunk and stay shrunk), and only a FLOOR once the NEXT answer
+  // starts — the overlay then grows to show that answer, with the unchanged
+  // auto budget, instead of streaming it into a slot the user reads as "no
+  // answer". True after a drag and on restore; false at the first token of a
+  // new stream (the same moment the width pin is relinquished).
+  const heightPinIsCeilingRef = useRef(restoredOverlaySize.height !== null);
+  // The stream (if any) that was live when the pin was taken. Tokens of THAT
+  // stream keep the ceiling (the user sized the overlay around the answer in
+  // progress); the first token of any OTHER stream relaxes it. Keyed on the
+  // id rather than on "id not yet reserved", because a typed question
+  // reserves its streaming id before its first token arrives.
+  const heightPinStreamIdRef = useRef<string | null>(null);
 
   // The panel fills the window when expanded; the collapsed width scales with
   // it. collapsedWidthFor(732) === 600 exactly, so with no custom size these
@@ -2287,6 +2295,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // that still swallowed clicks (the hover gate tests clientX only). When a
   // height is pinned, the measured cap is the only bound that should apply.
   const heightIsPinned = useMotionValue(0);
+  // The pinned slot (pin − chrome, ≥ 0): the viewport's min-height whenever a
+  // height is pinned, in BOTH of the pin's lives. In ceiling mode it equals
+  // the cap; in floor mode it is the minimum the content may grow above.
+  const pinnedRoom = useMotionValue(0);
   // scrollMaxH is the chat viewport's MAX-HEIGHT, derived from the LIVE
   // `shellWidth` motion value (the panel's actual animating width) mins'd against
   // the measured vertical budget cap. Binding it to the live width means the
@@ -2312,6 +2324,21 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             }),
             cap,
           ),
+  );
+  // A pinned height is a FLOOR on the viewport as well as a cap. The window is
+  // set to the pinned height by reportShellSize; without this the panel only
+  // grew when content overflowed, and everything under a short panel was
+  // window with nothing painted in it — it looked like the desktop and
+  // swallowed clicks. The panel and the window are one size, exactly as they
+  // are under auto expand/contract; the extra room is empty chat area. Unpinned
+  // the floor is 0 and the viewport is content-sized, bit-identical to before.
+  // A px STRING, not a number: framer-motion appends units only for the keys
+  // in motion-dom's number map, which has maxHeight but not minHeight — a bare
+  // number is set as `style.minHeight = 450`, which CSSOM rejects, leaving
+  // the previous value in place (verified live: the panel never grew).
+  const scrollMinH = useTransform(
+    [pinnedRoom],
+    ([room]: number[]) => (room > 0 ? `${Math.round(room)}px` : '0px'),
   );
   // NOTE: the resize toggle and the TopPill no longer render in this window at
   // all — each lives in its OWN tiny BrowserWindow (see
@@ -2599,12 +2626,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       shellWidth.set(wasExpanded ? width : collapsedWidthFor(width));
     }
     // Only reconcile the height when the user actually pinned one; otherwise
-    // the window is content-sized and there is nothing to hold.
+    // the window is content-sized and there is nothing to hold. And only
+    // DOWNWARD: a clamp (the restore-on-a-smaller-display case this exists
+    // for) can only ever shrink the request. An applied height ABOVE the pin
+    // is the window following a chrome that has outgrown the pin
+    // (reportShellSize sends max(pin, panel)); adopting it would silently
+    // lift the pin to the transcript's height and never return.
     if (
       typeof height === 'number' &&
       height > 0 &&
       customOverlayHeightRef.current !== null &&
-      height !== customOverlayHeightRef.current
+      height < customOverlayHeightRef.current
     ) {
       customOverlayHeightRef.current = height;
       measureVerticalCapRef.current?.();
@@ -2659,8 +2691,15 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     const width = requestedWindowWidthRef.current;
     // A user-pinned height wins over measured content: the chat scrolls inside
     // the chosen size rather than growing the window (measureVerticalCap has
-    // already bounded the scroll area to match).
-    const height = customOverlayHeightRef.current || contentRef.current.offsetHeight;
+    // already bounded the scroll area to match). But never BELOW the panel:
+    // the chrome can outgrow a pin after the fact (a rolling transcript or a
+    // status pill appearing over a pin taken at the empty floor), and the
+    // viewport can shrink only to zero — the panel is then taller than the
+    // pin, and holding the window at the pin cuts the footer off. The window
+    // follows the panel up and returns to the pin when the chrome recedes.
+    const measured = contentRef.current.offsetHeight;
+    const pinned = customOverlayHeightRef.current;
+    const height = pinned !== null ? Math.max(pinned, measured) : measured;
     if (process.env.NODE_ENV === 'development') {
       const scrollEl = scrollContainerRef.current;
       console.log('[overlay-resize] reportShellSize', {
@@ -2708,46 +2747,38 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     // No chat panel mounted → nothing to cap; let the width bound apply.
     if (!scrollEl || !contentEl) {
       verticalCap.set(Infinity);
+      heightIsPinned.set(0);
+      pinnedRoom.set(0);
       return;
     }
     const availHeight = typeof window !== 'undefined' ? window.screen?.availHeight ?? 0 : 0;
     const chromeHeight = contentEl.offsetHeight - scrollEl.clientHeight;
-    // When the user has pinned a window height, THAT is the vertical budget —
-    // not workArea*0.9. Passing budgetRatio 1 makes verticalScrollCap subtract
-    // the measured chrome from the pinned height, so the chat scrolls inside
-    // the size the user chose instead of overflowing it.
-    // A pinned height is still subject to the main-process clamp. Taking the
-    // min means a height restored from a taller display cannot size the scroll
-    // area for a window the OS will never grant — which would lay the
-    // overflow-hidden shell out taller than its window and clip the footer.
-    const pinnedHeight = customOverlayHeightRef.current;
-    const grantableHeight =
-      pinnedHeight !== null ? Math.min(pinnedHeight, maxWindowHeightFor(availHeight)) : null;
-    // minScroll: 0 on the pinned branch. The default 120px minimum exists to
-    // keep a usable viewport on a SHORT DISPLAY, where the alternative is a
-    // chat you cannot read. A pinned height is not that case — it is a size the
-    // user chose, and the overlay's own floor is now its chrome height (154),
-    // which leaves no room for a viewport at all. Demanding 120px there returns
-    // a cap LARGER than the window minus its chrome, laying the overflow-hidden
-    // shell out ~120px taller than its own window and slicing the footer off —
-    // exactly the clip verticalScrollCap exists to prevent. At the floor the
-    // honest answer is zero: the overlay becomes the compact bar it started as.
-    const nextCap = grantableHeight
-      ? verticalScrollCap({ availHeight: grantableHeight, chromeHeight, budgetRatio: 1, minScroll: 0 })
-      : verticalScrollCap({ availHeight, chromeHeight });
+    // A pinned height is the vertical budget while it is a ceiling (the chat
+    // scrolls inside the size the user chose); once a new answer has started
+    // it is only a floor and the AUTO budget applies above it. The pin is
+    // still subject to the main-process clamp: a height restored from a
+    // taller display cannot size the viewport for a window the OS will never
+    // grant. See pinnedViewportBudget for the rule and the numbers.
+    const budget = pinnedViewportBudget({
+      pinnedHeight: customOverlayHeightRef.current,
+      pinIsCeiling: heightPinIsCeilingRef.current,
+      chromeHeight,
+      availHeight,
+    });
     if (process.env.NODE_ENV === 'development') {
       console.log('[overlay-resize] measureVerticalCap', {
         availHeight,
         chromeHeight,
         contentOffsetHeight: contentEl.offsetHeight,
         scrollClientHeight: scrollEl.clientHeight,
-        nextCap,
+        budget,
         attachedContextCount: attachedContext.length,
       });
     }
-    verticalCap.set(nextCap);
-    heightIsPinned.set(grantableHeight !== null ? 1 : 0);
-  }, [attachedContext.length, verticalCap, heightIsPinned]);
+    verticalCap.set(budget.cap);
+    heightIsPinned.set(budget.ceiling ? 1 : 0);
+    pinnedRoom.set(budget.room);
+  }, [attachedContext.length, verticalCap, heightIsPinned, pinnedRoom]);
   measureVerticalCapRef.current = measureVerticalCap;
 
   // NOTE: the old per-frame "chase" subscriber that pushed the live shell width
@@ -2760,6 +2791,34 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // ResizeObserver: rAF-debounced so the spring can update height without
   useLayoutEffect(() => {
     if (!contentRef.current) return;
+
+    // Stream-end settle. The streaming branch below commits `content + 96px`
+    // of headroom, and the settle back to the exact height was left to "the
+    // next observer fire after streamingMsgIdRef goes null" — which for most
+    // answers never comes: the last size change lands while the stream is
+    // still live, so it takes the buffered branch, and the window then sits
+    // 96px taller than the panel (measured: 499 over a 403 panel). Arm a
+    // quiet-period timer on every streaming fire; when it fires with the
+    // stream over, report the real height once. While the stream is still
+    // live (a plateaued answer at its scroll cap), keep waiting.
+    const STREAM_SETTLE_MS = 400;
+    let streamSettleTimer: number | null = null;
+    const armStreamSettle = () => {
+      if (streamSettleTimer !== null) window.clearTimeout(streamSettleTimer);
+      streamSettleTimer = window.setTimeout(() => {
+        streamSettleTimer = null;
+        if (isResizingRef.current) return;
+        if (
+          streamingMsgIdRef.current !== null ||
+          Date.now() < heightReportSuppressedUntilRef.current
+        ) {
+          armStreamSettle();
+          return;
+        }
+        measureVerticalCap();
+        reportShellSize();
+      }, STREAM_SETTLE_MS);
+    };
 
     const observer = new ResizeObserver(() => {
       if (rafDimUpdateRef.current) cancelAnimationFrame(rafDimUpdateRef.current);
@@ -2801,6 +2860,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           if (contentRef.current && isExpandedRef.current) {
             driveStreamingHeightRef.current(contentRef.current.offsetHeight);
           }
+          armStreamSettle();
         } else {
           reportShellSize();
         }
@@ -2810,6 +2870,10 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     observer.observe(contentRef.current);
     return () => {
       observer.disconnect();
+      if (streamSettleTimer !== null) {
+        window.clearTimeout(streamSettleTimer);
+        streamSettleTimer = null;
+      }
       if (rafDimUpdateRef.current) {
         cancelAnimationFrame(rafDimUpdateRef.current);
         rafDimUpdateRef.current = null;
@@ -2871,7 +2935,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // this is constant, so the main process still sees widthDelta 0 and the
       // resize collapses to a pure height-only, top-anchored setBounds.
       const width = requestedWindowWidthRef.current;
-      const targetHeight = customOverlayHeightRef.current || height;
+      // Pinned: the chat scrolls inside the pin, so the streaming headroom is
+      // not wanted — but the window still may not sit below the panel (see
+      // reportShellSize: a chrome that outgrew the pin).
+      const pinned = customOverlayHeightRef.current;
+      const measured = contentRef.current?.offsetHeight ?? 0;
+      const targetHeight =
+        pinned === null
+          ? height
+          : heightPinIsCeilingRef.current
+            ? Math.max(pinned, measured)
+            : // Floor: the answer grows the window exactly as auto would
+              // (buffered headroom, settled at stream end), never below the pin.
+              Math.max(pinned, height);
       if (window.electronAPI?.updateContentDimensionsCentered) {
         void window.electronAPI
           .updateContentDimensionsCentered({ width, height: targetHeight })
@@ -3197,8 +3273,14 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // in the 16px strip the user grabbed, that offset to the edge holds for
       // the whole drag, so the edge moves exactly as far as the pointer does.
       const startWidth = Math.round(shellWidth.get());
+      // Where the window actually IS: the pin, or the panel when it stands
+      // taller than the pin (a floor-mode pin the answer has grown past, or a
+      // chrome that outgrew it).
       const startHeight = Math.round(
-        customOverlayHeightRef.current ?? contentEl?.offsetHeight ?? OVERLAY_MIN_WINDOW_HEIGHT,
+        Math.max(
+          customOverlayHeightRef.current ?? 0,
+          contentEl?.offsetHeight ?? OVERLAY_MIN_WINDOW_HEIGHT,
+        ),
       );
       // The panel's left inside the window (66 collapsed, 0 expanded), frozen
       // for the drag: only the edge under the pointer moves.
@@ -3208,6 +3290,8 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       const pinsHeight = pinsHeightFor(direction, customOverlayHeightRef.current !== null);
       const pinsWidth = customWindowWidth !== null || widthDriven;
       const previousManualOverride = manualWidthOverrideRef.current;
+      const previousPinIsCeiling = heightPinIsCeilingRef.current;
+      const previousPinStreamId = heightPinStreamIdRef.current;
 
       // Floors — the controlled range. Panel widths, in the numbers the user
       // sees; heights as the overlay would size itself right now. Both are
@@ -3234,6 +3318,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
 
       isResizingRef.current = true;
       dragPanelLeftRef.current = panelLeft;
+      // Mount the chat viewport before the first move so the panel can grow
+      // with the pointer (the drag renders in CSS through verticalCap), instead
+      // of the window growing under a panel that stays its chrome height.
+      if (pinsHeight) {
+        setHeightPinned(true);
+        // The drag renders through the pinned cap: the size under the pointer
+        // is the panel's size, exactly.
+        heightPinIsCeilingRef.current = true;
+        // Only a stream that has already SHOWN text keeps the ceiling: the
+        // user sized the overlay around an answer they can see. A question
+        // whose placeholder is reserved but has no tokens yet (the wait for
+        // the first token can run several seconds) must still grow the
+        // overlay when it arrives — otherwise a resize made while waiting
+        // reads as "no answer was produced".
+        heightPinStreamIdRef.current = streamingTextRef.current
+          ? streamingMsgIdRef.current
+          : null;
+      }
       // Pin the panel where it is: mx-auto would re-centre it the instant the
       // window grows to its envelope. Inline margins override the class; they
       // are cleared once the window has shrunk back to fit, when centring
@@ -3360,6 +3462,12 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
           // restored only once it has — mx-auto inside the envelope would
           // jump the panel for a frame.
           manualWidthOverrideRef.current = previousManualOverride;
+          heightPinIsCeilingRef.current = previousPinIsCeiling;
+          heightPinStreamIdRef.current = previousPinStreamId;
+          // The viewport was mounted at grab for a drag that never came:
+          // unmount it again unless a height was already pinned, or a bare
+          // click on the south handle leaves an empty padded viewport behind.
+          setHeightPinned(customOverlayHeightRef.current !== null);
           void finishEnvelope().catch(() => {}).finally(restoreCentering);
           return;
         }
@@ -3437,19 +3545,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
               customOverlayHeightRef.current = settledHeight;
             }
             measureVerticalCap();
-            if (
-              !writeCustomOverlaySize(
-                typeof window !== 'undefined' ? window.localStorage : null,
-                {
-                  width: pinsWidth ? settledWidth : null,
-                  height: pinsHeight ? settledHeight : null,
-                },
-              )
-            ) {
-              console.warn(
-                '[overlay-resize] custom overlay size could not be persisted — this size is session-only',
-              );
-            }
+            // Session-only by design: nothing is persisted (see restoredOverlaySize).
           })
           .catch(() => {
             /* the window went away mid-drag; local state is already correct */
@@ -3470,23 +3566,29 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   );
 
   // Double-click any handle to forget the custom size and return to
-  // auto-sizing. Without this the very first drag pins the overlay forever —
-  // the pin survives relaunches via localStorage, and nothing else clears it.
+  // auto-sizing for the rest of this meeting (a new meeting resets it anyway).
   const handleResizeReset = useCallback(() => {
     if (isResizingRef.current) return;
-    clearCustomOverlaySize(typeof window !== 'undefined' ? window.localStorage : null);
     customOverlayHeightRef.current = null;
+    heightPinIsCeilingRef.current = false;
+    heightPinStreamIdRef.current = null;
+    setHeightPinned(false);
     setCustomWindowWidth(null);
     setAppliedWindowWidth(null);
     manualWidthOverrideRef.current = null;
     shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
-    // No manual re-report needed: the sizing effect lists `customWindowWidth`
-    // in its deps, so clearing it re-runs that effect and reports the DEFAULT
-    // width. (reportShellSize's own identity no longer changes with the width —
-    // it reads a ref — so it is the effect dep, not the callback identity, that
-    // does this now.) Reporting here instead would send the stale width
-    // captured in this render's closure.
-  }, [shellWidth]);
+    // A WIDTH pin re-reports through the sizing effect (it lists
+    // `customWindowWidth` in its deps). A height-only pin has no such path:
+    // clearing a null width is not a state change, the content did not move
+    // so the ResizeObserver stays silent, and both the viewport floor
+    // (heightIsPinned → minHeight) and the window would keep the old pinned
+    // size with nothing left to clear them. Re-derive the cap now the ref is
+    // null — the viewport drops back to content height synchronously — then
+    // report that height so the window contracts with it. (The width these
+    // read is a ref, not this render's closure, so nothing stale is sent.)
+    measureVerticalCap();
+    reportShellSize();
+  }, [shellWidth, measureVerticalCap, reportShellSize]);
 
   // ── Aux-window bridge ─────────────────────────────────────────────────────
   // The TopPill and resize toggle live in their own BrowserWindows. Broadcast
@@ -3576,15 +3678,19 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
     return () => unsubscribe?.();
   }, []);
 
-  // Hover hit-test → margins click-through. The fixed window is wider than
-  // the collapsed panel (66px transparent margin each side); while the
-  // pointer is over a margin the main process flips the window to
-  // setIgnoreMouseEvents(true, {forward:true}) so clicks land on the app
-  // beneath. forward:true keeps mousemove streaming even while ignored, so
-  // crossing back over the panel re-arms interactivity BEFORE a click can
-  // happen. The default (main-process side) is interactive — the panel and
-  // its drag regions are never gated. PAD inflates the panel rect slightly so
-  // fast pointer travel can't outrun the flip at the boundary.
+  // Hover hit-test → everything outside the PANEL is click-through. The window
+  // is wider than the collapsed panel (66px transparent margin each side) and
+  // can be taller than it too (a pinned height still settling, a restore the
+  // OS clamped, the release slack), so the test is the panel's actual rect on
+  // BOTH axes — not X-margin arithmetic, which assumed the panel filled the
+  // window's height and left a dead strip under a short panel that looked like
+  // the desktop and ate clicks. While the pointer is outside the main process
+  // flips the window to setIgnoreMouseEvents(true, {forward:true}) so clicks
+  // land on the app beneath. forward:true keeps mousemove streaming even while
+  // ignored, so crossing back over the panel re-arms interactivity BEFORE a
+  // click can happen. The default (main-process side) is interactive — the
+  // panel and its drag regions are never gated. PAD inflates the panel rect
+  // slightly so fast pointer travel can't outrun the flip at the boundary.
   useEffect(() => {
     let interactive = true;
     // Handshake reset: this effect only sends on boundary CROSSINGS, so the
@@ -3601,16 +3707,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // click-through under a captured pointer. The drag forces interactive at
       // grab and owns the window until release.
       if (isResizingRef.current) return;
-      const windowWidth = overlayWindowWidthRef.current;
-      const margin = (windowWidth - shellWidth.get()) / 2;
-      const inside = e.clientX >= margin - PAD && e.clientX <= windowWidth - margin + PAD;
+      // The live rect: it follows the width spring, the release glide (the
+      // panel sliding home inside the still-oversized envelope) and a pinned
+      // height alike. Reading it forces layout only when layout is already
+      // dirty, and mousemove is delivered at most once per frame.
+      const inside = pointerOverPanel(
+        { x: e.clientX, y: e.clientY },
+        contentRef.current?.getBoundingClientRect() ?? null,
+        PAD,
+      );
       if (inside === interactive) return;
       interactive = inside;
       window.electronAPI?.setOverlayHoverInteractive?.(inside).catch(() => {});
     };
     window.addEventListener('mousemove', onMouseMove);
     return () => window.removeEventListener('mousemove', onMouseMove);
-  }, [shellWidth]);
+  }, []);
 
   // Derive the resize-button icon state from the live shell width. Subscribing
   // to the motion value (rather than tracking each startTransition caller)
@@ -4157,6 +4269,18 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // Forgetting this would silently disable code-expansion for the entire
       // next meeting if the user had manually collapsed in the previous one.
       manualWidthOverrideRef.current = null;
+      // The manual SIZE is per meeting too: a height or width the user dragged
+      // in the previous meeting must not carry over. Back to the default state
+      // — 154 tall at rest, 732 wide — so the new meeting looks like a fresh
+      // launch. Clearing the width state re-reports the default window width
+      // through the sizing effect; the height follows the cleared messages via
+      // the ResizeObserver.
+      customOverlayHeightRef.current = null;
+      heightPinIsCeilingRef.current = false;
+      heightPinStreamIdRef.current = null;
+      setHeightPinned(false);
+      setCustomWindowWidth(null);
+      setAppliedWindowWidth(null);
       if (stableVisibilityTimerRef.current) {
         clearTimeout(stableVisibilityTimerRef.current);
         stableVisibilityTimerRef.current = null;
@@ -4169,7 +4293,9 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       // to collapsed is a renderer-only width reset (content reflows once for
       // the fresh meeting) with no native resize and no sideways motion. The
       // toggle aux window follows via the shellWidth 'change' anchor stream.
-      shellWidth.set(SHELL_WIDTH_COLLAPSED);
+      // The DEFAULT collapsed width, not this render's SHELL_WIDTH_COLLAPSED,
+      // which would still reflect a width pinned in the previous meeting.
+      shellWidth.set(collapsedWidthFor(OVERLAY_DEFAULT_WINDOW_WIDTH));
       setInputValue('');
       setAttachedContext([]);
       setManualTranscript('');
@@ -5025,6 +5151,17 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
   // Only the FIRST token of a stream calls setMessages (to mount the bubble).
   // Subsequent tokens bypass React entirely — zero re-renders mid-stream.
   const queueToken = useCallback((intent: string, token: string) => {
+    // A token of a stream other than the one the height pin was taken in: the
+    // pin stops being a ceiling so this answer can grow the overlay (the auto
+    // budget, unchanged) — it stays a floor. The viewport's max-height flips
+    // to the auto cap before the token lays out, so the growth is one motion.
+    if (
+      heightPinIsCeilingRef.current &&
+      streamingMsgIdRef.current !== heightPinStreamIdRef.current
+    ) {
+      heightPinIsCeilingRef.current = false;
+      measureVerticalCapRef.current?.();
+    }
     // If a new stream intent arrives while one is active, flush the current
     // stream into React state so the rows don't bleed into each other.
     if (
@@ -9064,8 +9201,11 @@ Provide only the answer, nothing else.`;
     sttUserError,
     sttInterviewerError,
   );
-  const showAnswerPanel =
+  const hasChatContent =
     messages.length > 0 || isManualRecording || isProcessing || answerPanelPinned;
+  // `heightPinned`: a user-chosen height needs the viewport mounted to fill it,
+  // messages or not — otherwise the window is that tall and the panel is not.
+  const showAnswerPanel = hasChatContent || heightPinned;
   // Only surface the STT pill for genuine problems (config error, failed, or a
   // dropped-then-reconnecting channel). The neutral 'awaiting-audio' state
   // ("Listening for audio…") is intentionally suppressed — it added a pill on
@@ -9645,13 +9785,18 @@ Provide only the answer, nothing else.`;
                 />
               ) : null}
 
-              {/* Chat History - Only show if there are messages OR active states */}
+              {/* Chat History - Only show if there are messages OR active states,
+                  or a pinned height that needs a viewport to fill it. No padding
+                  while mounted for the pin alone: box-sizing keeps a padded box
+                  at its padding (32px) however small its max-height, which
+                  showed as a gap under the transcript and pushed the footer
+                  past the window once the chrome had outgrown the pin. */}
               {showAnswerPanel && (
                 <motion.div
                   ref={scrollContainerRef}
-                  className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3 no-drag isolate"
+                  className={`relative z-10 flex-1 overflow-y-auto overflow-x-hidden ${hasChatContent ? 'p-4 space-y-3' : 'p-0'} no-drag isolate`}
                   layout={false}
-                  style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH }}
+                  style={{ scrollbarWidth: 'none', maxHeight: scrollMaxH, minHeight: scrollMinH }}
                 >
                   {/* Every row spans the full inner width of the scroll
                                         container, which itself rides the shell's animated
