@@ -9360,7 +9360,7 @@ Provide only the answer, nothing else.`;
         // a11y-hidden subtree (a WCAG focus-trap violation if the input held
         // focus when Cmd+B fired). Only applied while collapsed.
         inert={!isExpanded}
-        className="flex flex-col items-center gap-2 w-full"
+        className="relative flex flex-col items-center gap-2 w-full"
       >
             <motion.div
               ref={shellRef}
@@ -10425,8 +10425,11 @@ Provide only the answer, nothing else.`;
                   )}
                 </div>
 
-                {/* Bottom Row */}
-                <div className="flex items-center justify-between mt-3 px-0.5 relative z-[60]">
+                {/* Bottom Row. pointer-events-none on the ROW: it is a full-width,
+                    30px box at z-[60], above the resize handles (z-50), so its
+                    empty span shadowed the south handle's top and the corner. Only
+                    its controls take the pointer. */}
+                <div className="flex items-center justify-between mt-3 px-0.5 relative z-[60] pointer-events-none [&>*]:pointer-events-auto">
                   <div className="flex items-center gap-1.5">
                     <button
                       data-model-selector-toggle="true"
@@ -10610,14 +10613,25 @@ Provide only the answer, nothing else.`;
                 onDoubleClick={handleResizeReset}
                 title={t('Drag to resize height · double-click to reset')}
               />
-              <div
-                data-resize-handle="se"
-                className="resize-handle resize-handle-se absolute bottom-0 right-0 z-50 h-9 w-9 no-drag touch-none"
-                onPointerDown={(e) => handleResizePointerDown('se', e)}
-                onDoubleClick={handleResizeReset}
-                title={t('Drag to resize · double-click to reset')}
-              />
             </motion.div>
+            {/* SE corner handle — OUTSIDE the card, which is overflow-hidden with a
+                24px radius: inside it the rounded corner clipped hit-testing, so
+                the outermost ~7px of the corner (exactly where a corner drag is
+                aimed) was dead, and the send button sits 12px from both edges.
+                Sitting above the card's stacking context it would cover that
+                button, so it is clipped to an L of 12px strips along the two
+                edges — the card's padding, which nothing else uses. */}
+            <div
+              data-resize-handle="se"
+              className="resize-handle resize-handle-se absolute bottom-0 right-0 z-50 h-9 w-9 no-drag touch-none"
+              style={{
+                clipPath:
+                  'polygon(100% 0, 100% 100%, 0 100%, 0 calc(100% - 12px), calc(100% - 12px) calc(100% - 12px), calc(100% - 12px) 0)',
+              }}
+              onPointerDown={(e) => handleResizePointerDown('se', e)}
+              onDoubleClick={handleResizeReset}
+              title={t('Drag to resize · double-click to reset')}
+            />
           </motion.div>
       {/* end always-mounted shell */}
     </div>
