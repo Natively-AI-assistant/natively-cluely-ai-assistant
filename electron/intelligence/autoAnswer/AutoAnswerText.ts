@@ -26,6 +26,13 @@ export function tokenContainment(needle: string, haystack: string): number {
 /**
  * Containment for MIC-ECHO detection, which `tokenContainment` cannot do.
  *
+ * RETIRED FROM PRODUCTION 2026-09-03: the user channel is inert, so nothing in
+ * the live pipeline detects mic echo any more (see SimpleAutoAnswer's header).
+ * Kept because it is not dead — `docs/triage/echo.mjs` loads it from the built
+ * bundle to re-measure containment against the recorded bled sessions, which is
+ * how the policy would be re-fitted if the decision is ever revisited. Do not
+ * wire it back into the hot path without that decision.
+ *
  * When the interviewer's audio bleeds into the microphone, the two STT
  * sessions segment the same speech at DIFFERENT boundaries, so the echoed
  * fragment routinely straddles two interviewer finals and its edge token is a
