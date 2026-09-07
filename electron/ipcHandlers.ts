@@ -5633,6 +5633,16 @@ export function initializeIpcHandlers(appState: AppState): void {
               liveMode: liveModeIdAtDoneEmit,
             });
           } else if (_chatStreamsBySender.get(senderId)?.streamId === myStreamId) {
+            // A canned opener followed by a real answer is thrown away on this
+            // surface too (cannedOpener.ts, 2026-09-07): the renderer replaces
+            // the streamed row with finalText, so the opener never survives.
+            try {
+              const { stripCannedOpener, stripCannedTail } = require('./llm/cannedOpener') as typeof import('./llm/cannedOpener');
+              const cleaned = stripCannedOpener(finalText ?? fullResponse);
+              if (cleaned.stripped.length) { finalText = cleaned.text; console.log('[ManualChat] canned opener stripped', { count: cleaned.stripped.length }); }
+              const tail = stripCannedTail(finalText ?? fullResponse);
+              if (tail.stripped) { finalText = tail.text; console.log('[ManualChat] canned tail stripped'); }
+            } catch { /* never block done */ }
             // finalText is set ONLY when repair changed the streamed answer — the
             // renderer replaces the streamed row in place (no double-render). When
             // the streamed answer was already valid, finalText is undefined and the

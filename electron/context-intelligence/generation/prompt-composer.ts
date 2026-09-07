@@ -136,6 +136,15 @@ const PERMANENT_RULES = [
     + 'and outcomes the evidence names for it. Never pad with typical-stack details (frameworks, '
     + 'databases, auth, payments, checkout) or generic process steps the evidence does not name.',
   'Never treat job-description requirements as the user\'s own experience.',
+  // Measured 2026-09-07 (sales mode, coach prompt "quote pricing exactly"):
+  // with no evidence packed, "for proposal, what is the ACV?" was answered
+  // "$135,000" — a figure that exists nowhere. The rules above forbid inventing
+  // experience and technologies; business figures about the user's OWN material
+  // had no rule and are the easiest thing to make sound authoritative.
+  'Never state a specific figure or fact — a price, discount, rate, date, count, quota, metric, error message, test name, status, owner, title or id — about the '
+    + 'user\'s own company, product, deals, documents, plans or meetings unless the evidence states it. '
+    + 'If no evidence for such a figure was provided, say plainly that it is not in the notes and describe '
+    + 'what is; a general-knowledge number must be labelled as general knowledge, never presented as theirs.',
   'Never present a generated suggestion as a fact from a source.',
   // Measured failure C-03: asked WHY the candidate built PriceX — a motivation
   // the resume never states — the model supplied a plausible one and presented
@@ -169,6 +178,13 @@ const PERMANENT_RULES = [
   // own number is never disclosure, and they decide what to say aloud.
   'Never ask the user to repeat, rephrase or clarify. When a request is ambiguous, state the most likely reading in one short clause and answer it; offer the alternative reading afterwards only if it changes the answer.',
   'When the other party asks for a value, name or fact that the evidence states — a salary band, a rate, a deadline, a target, a floor — give that value plainly first, then any coaching about whether or how to say it. The user reads this privately and decides what to disclose.',
+  // Measured 2026-09-08: asked for the key points of a six-chunk speaker-notes
+  // file, the model was handed its top two chunks and answered "the file
+  // contains only the heading and one section" / "the file itself contains no
+  // content". A retrieved selection is not the document.
+  'The evidence blocks are a retrieved SELECTION from the material, never a whole file. Never claim a file is empty, '
+    + 'short, incomplete, or lacks a section because a part of it was not shown to you: report what the shown blocks '
+    + 'contain, and if the question needs more, say the rest of that file was not retrieved for this turn.',
   'Distinguish direct evidence, inference, and general knowledge.',
   'Do not expose internal retrieval reasoning to the user.',
   'Produce one natural, speakable answer.',
@@ -841,8 +857,9 @@ export function composePrompt(input: ComposeInput): ComposedPrompt {
     push('secondary_source', secondarySourceGuidance(d)),
     push('evidence_coverage', weakEvidenceGuidance(d, input.fallbackUsed, Boolean(packed.evidenceBlock))),
     push('exhaustive', exhaustive && packed.evidenceBlock
-      ? '# Exhaustive request\nThe user asked for EVERY occurrence. Read every evidence block to its end '
-        + 'before answering, then list each matching item with its value, what it refers to, and the '
+      ? '# Exhaustive request\nThe user asked for EVERY occurrence. Every evidence block above is already '
+        + 'loaded for you: do not narrate reading, loading or checking anything — output the list directly. '
+        + 'List each matching item with its value, what it refers to, and the '
         + 'source_name and section attributes of the block it came from. Do not stop at the first block, '
         + 'do not summarise, and do not merge distinct occurrences into one line. The blocks are grouped '
         + 'by source_name: work through them file by file and finish one file before starting the next. '

@@ -1267,9 +1267,11 @@ The user triggered this action with a coding problem on screen and NO new questi
             if (isProviderFailure) {
                 yield "I couldn't reach the AI provider — this looks like an API key or rate-limit issue. Check your API keys / plan in Settings and try again.";
             } else {
-                // W6b: topic-aware graceful retry instead of the fixed canned line.
-                const { buildGracefulRetry } = require('./manualProfileIntelligence') as typeof import('./manualProfileIntelligence');
-                yield buildGracefulRetry(cleanedTranscript.split('\n').pop() || '');
+                // ALWAYS ANSWER (2026-09-07): yield NOTHING. The engine treats an
+                // empty stream as "regenerate once, then the honest
+                // buildGracefulRetry line". Yielding the line from here made it
+                // the answer and skipped the retry.
+                console.warn('[WhatToAnswerLLM] stream failed without a provider signal — leaving the answer empty so the engine retries');
             }
         }
     }

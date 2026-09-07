@@ -22,7 +22,7 @@ import { resolveModePolicy, generalKnowledgeAllowed, type ModePolicy } from '../
 import { resolveAnswerPolicy, type AnswerPolicy } from '../policies/answer-policy';
 import { CLAIM_AUTHORITY, claimAuthority } from '../policies/source-authority-policy';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
-import { classifyTurn, isBareFollowUp } from '../question/turn-classifier';
+import { classifyTurn, isBareFollowUp, stripSttFillers } from '../question/turn-classifier';
 import type { AnswerTrace, RetrievalAttemptTrace } from '../observability/answer-trace';
 
 export interface AnswerRequest {
@@ -91,7 +91,13 @@ export interface OrchestratorResult {
 /** Manual > transcript. Resolution happens ONCE (§12.2). */
 function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manual' | 'transcript'; confidence: number } {
   const manual = req.manualQuestion?.trim();
-  if (manual) return { resolved: manual, source: 'manual', confidence: 1 };
+  // Fillers and stutters are transcriber noise, never content (2026-09-07,
+  // measured in a 1,000-turn live campaign): "arh" became an "ARH number" in
+  // the answer, "arh so due" an "ARIS chart", and filler-laden value lookups
+  // routed FAST because the classifier could not see "what is the <noun>".
+  // Stripped here, once, so the classifier, the retrieval query and the
+  // model all see the same clean question. rawQuestion keeps the original.
+  if (manual) return { resolved: stripSttFillers(manual) || manual, source: 'manual', confidence: 1 };
   const t = req.transcriptQuestion?.trim() ?? '';
   if (!t) return { resolved: t, source: 'transcript', confidence: 0 };
   // Honour the extractor's own confidence when the caller supplied it; fall
@@ -99,7 +105,7 @@ function resolveQuestion(req: AnswerRequest): { resolved: string; source: 'manua
   const c = typeof req.questionConfidence === 'number' && Number.isFinite(req.questionConfidence)
     ? Math.max(0, Math.min(1, req.questionConfidence))
     : 0.7;
-  return { resolved: t, source: 'transcript', confidence: c };
+  return { resolved: stripSttFillers(t) || t, source: 'transcript', confidence: c };
 }
 
 function buildClaimRequirements(
