@@ -181,7 +181,7 @@ const PERSONAL_RE = /\b(your|your own|you have|have you|did you|do you|tell me a
 // 2026-09-07: "what was the latency you got on the FastAPI backend" carried
 // no second-person cue at all and planned document pools only, so the fact —
 // which lived in the profile résumé — was never retrieved.
-const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on|got|achieved|reached|hit|measured|reduced|improved|increased|cut|saw|used|optimi[sz]ed)\b/;
+const SECOND_PERSON_PAST_RE = /\byou (?:built|owned|designed|led|created|developed|implemented|shipped|wrote|architected|ran|managed|handled|delivered|deployed|migrated|debugged|tested|monitored|scaled|refactored|chose|picked|solved|fixed|added|removed|introduced|maintained|supported|integrated|automated|configured|launched|rolled out|worked on|got|achieved|reached|hit|measured|reduced|improved|increased|cut|saw|used|optimi[sz]ed|did|done|dealt with|faced|encountered|experienced|troubleshot|investigated|diagnosed|resolved|contributed|participated|helped|spent|took|joined)\b/;
 // FIRST person is personal too (2026-07-31): manual chat is the USER asking
 // about THEMSELF — "Do I have Kubernetes experience?", "Which required
 // languages do I not list?" — and a second/third-person-only pattern classified
@@ -747,8 +747,16 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
     // exact catch-all is what planned the résumé for a fan question. Whole-
     // question signal, because the artifact and the ask usually sit in
     // different clauses.
+    // The tech-self-talk veto must not fire on the very verb that made the
+    // clause second person (2026-09-07, measured with a teleprompter mode
+    // prompt): "Tell me about a real production failure you debugged" is a
+    // story ask about the candidate's history, but "debugged" matched
+    // TECH_SELF_TALK_RE and the clause went GENERAL_TECHNICAL → FAST, so the
+    // model denied a project the résumé states. Self-talk is FIRST-person
+    // ("why do I get a segfault"); a lexical second-person verb is the
+    // interviewer asking what YOU did, and the tech noun is its object.
     if (personal && !namedAnAspect && !deviceTroubleshoot
-        && !codingTask && !SYSTEM_DESIGN_RE.test(clause) && !TECH_SELF_TALK_RE.test(clause)) {
+        && !codingTask && !SYSTEM_DESIGN_RE.test(clause) && (!TECH_SELF_TALK_RE.test(clause) || secondPersonPast)) {
       types.add('PERSONAL_EXPERIENCE'); noteClaim('USER_EMPLOYMENT', clause);
     }
 
