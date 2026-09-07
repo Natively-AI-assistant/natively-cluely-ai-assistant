@@ -2913,9 +2913,16 @@ a,
    Pinned in both directions by tests/css/resize-handle-cursor.check.mjs, which
    resolves the real cascade in Electron rather than grepping for `!important`
    — reading the rule is what missed this the first time. */
-.resize-handle.resize-handle-e { cursor: ew-resize !important; }
-.resize-handle.resize-handle-s { cursor: ns-resize !important; }
-.resize-handle.resize-handle-se { cursor: nwse-resize !important; }
+/* Gated on undetectable mode (NativelyInterface mirrors it onto the root as
+   data-undetectable). Content protection keeps the window's PIXELS out of a
+   capture, but the pointer is drawn by the OS and captured regardless — a
+   resize cursor over apparently empty desktop is a tell. With the mode on the
+   handles keep the arrow; they still work, they just don't advertise.
+   `:root:not([data-undetectable="true"])` also lifts specificity to (0,4,0),
+   comfortably above every selector in the lock. */
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-e { cursor: ew-resize !important; }
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-s { cursor: ns-resize !important; }
+:root:not([data-undetectable="true"]) .resize-handle.resize-handle-se { cursor: nwse-resize !important; }
 /* @cursor-lock-exception:end */
 
 /* Restore keyboard focus rings that Tailwind preflight removes */

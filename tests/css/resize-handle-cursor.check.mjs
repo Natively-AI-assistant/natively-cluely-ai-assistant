@@ -23,9 +23,12 @@
 //
 // Run: npm run test:css:resize-handle
 //
-// The check asserts BOTH directions so it cannot silently rot:
+// The check asserts THREE directions so it cannot silently rot:
 //   1. with the shipped stylesheet    → each handle gets its resize cursor
-//   2. with the override block cut    → every handle falls back to `default`
+//   2. in undetectable mode           → every handle keeps the arrow (the
+//      pointer is captured even when the window is not — a resize cursor over
+//      "empty desktop" would betray the overlay)
+//   3. with the override block cut    → every handle falls back to `default`
 //      (proves the override is load-bearing, not decoration)
 import { app, BrowserWindow } from 'electron';
 import { readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
@@ -117,7 +120,23 @@ async function measureBoth() {
            getComputedStyle(document.getElementById('h-${h.id}')).cursor)));`,
       );
     }
-    return { rest, hovered };
+    // Undetectable mode: flip the root attribute the renderer mirrors and
+    // re-measure — every handle must fall back to the arrow. This is the
+    // stealth contract: the pointer is captured even when the window is not.
+    await win.webContents.executeJavaScript(
+      `document.documentElement.dataset.undetectable = 'true'`,
+    );
+    const undetectable = await win.webContents.executeJavaScript(`
+      new Promise(r => requestAnimationFrame(() => {
+        const out = {};
+        for (const id of ${JSON.stringify(ids)}) {
+          out[id] = getComputedStyle(document.getElementById('h-' + id)).cursor;
+        }
+        r(out);
+      }));
+    `);
+    await win.webContents.executeJavaScript(`delete document.documentElement.dataset.undetectable`);
+    return { rest, hovered, undetectable };
   };
   try {
     return { fixed: await load(true), baseline: await load(false) };
@@ -149,6 +168,11 @@ app.whenReady().then(async () => {
         `.${h.className.split(' ')[1]} resolved cursor "${fixed.hovered[h.id]}" while HOVERED, ` +
           `expected "${h.expected}" — \`*:hover\` in the cursor lock is winning`,
       );
+      check(
+        fixed.undetectable[h.id] === 'default',
+        `.${h.className.split(' ')[1]} resolved "${fixed.undetectable[h.id]}" in UNDETECTABLE mode, ` +
+          `expected "default" — the cursor would betray the overlay in a screen capture`,
+      );
       // Without the override the lock must reclaim the handle. If it does not,
       // the lock changed shape and the passing case above proves nothing.
       check(
@@ -168,7 +192,7 @@ app.whenReady().then(async () => {
     }
     console.log(
       `✓ resize-handle-cursor check passed (e/s/se resolve ew-/ns-/nwse-resize at rest and hovered, ` +
-        `baseline falls back to default, Electron ${process.versions.electron} / Chrome ${process.versions.chrome})`,
+        `arrow in undetectable mode, baseline falls back to default, Electron ${process.versions.electron} / Chrome ${process.versions.chrome})`,
     );
     app.exit(0);
   } catch (err) {

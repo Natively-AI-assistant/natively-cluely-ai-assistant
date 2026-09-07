@@ -90,7 +90,12 @@ export interface ElectronAPI {
   }) => Promise<void>
   isOverlayGroupDragManaged?: () => Promise<boolean>
   onOverlayUiAction?: (callback: (action: { type: string }) => void) => () => void
-  sendOverlayToggleAnchor?: (payload: { panelRight: number }) => Promise<void>
+  sendOverlayToggleAnchor?: (payload: { panelRight: number; panelLeft?: number }) => Promise<void>
+  overlayResizeEnvelope?: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => Promise<{ width: number; height: number } | undefined>
   setOverlayHoverInteractive?: (interactive: boolean) => Promise<void>
   dismissOverlayPopovers?: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>
   onToggleExpand: (callback: () => void) => () => void

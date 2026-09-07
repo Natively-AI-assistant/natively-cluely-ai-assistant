@@ -47,6 +47,30 @@ describe('overlayScrollBudget', () => {
       );
     });
 
+    test('minScroll 0 lets a window pinned at its own chrome height fit', () => {
+      // The overlay's resize floor is its chrome height (154 measured, the
+      // default state). At that size there is no room for a viewport at all.
+      // The DEFAULT 120px minimum returns a cap larger than the window minus
+      // its chrome, which lays the overflow-hidden shell out ~120px taller than
+      // its own window and slices the footer off — so measureVerticalCap passes
+      // minScroll: 0 on the pinned branch.
+      const pinned = { availHeight: 154, chromeHeight: 154, budgetRatio: 1 };
+      assert.equal(verticalScrollCap({ ...pinned, minScroll: 0 }), 0);
+      // Both directions: prove the default would actually have clipped, so this
+      // guard cannot quietly stop being load-bearing.
+      const withDefaultMin = verticalScrollCap(pinned);
+      assert.ok(
+        withDefaultMin + pinned.chromeHeight > pinned.availHeight,
+        `default minScroll produced a ${withDefaultMin}px viewport that fits inside ` +
+          `a ${pinned.availHeight}px window — the clip is no longer reproducible`,
+      );
+    });
+    test('minScroll 0 does not shrink a pinned height that has room', () => {
+      assert.equal(
+        verticalScrollCap({ availHeight: 500, chromeHeight: 154, budgetRatio: 1, minScroll: 0 }),
+        338,
+      );
+    });
     test('never collapses below minScroll on a very short display', () => {
       // 500*0.9=450; -8=442; chrome 400 → 42, floored to minScroll 120
       assert.equal(

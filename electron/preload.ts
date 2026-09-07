@@ -54,7 +54,12 @@ interface ElectronAPI {
   }) => Promise<{ width: number; height: number } | undefined>;
   sendOverlayUiState: (state: Record<string, unknown>) => Promise<void>;
   onOverlayUiState: (callback: (state: Record<string, unknown>) => void) => () => void;
-  sendOverlayToggleAnchor: (payload: { panelRight: number }) => Promise<void>;
+  sendOverlayToggleAnchor: (payload: { panelRight: number; panelLeft?: number }) => Promise<void>;
+  overlayResizeEnvelope: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => Promise<{ width: number; height: number } | undefined>;
   setOverlayHoverInteractive: (interactive: boolean) => Promise<void>;
   dismissOverlayPopovers: (opts?: { settings?: boolean; model?: boolean }) => Promise<void>;
   sendOverlayUiAction: (action: { type: string }) => Promise<void>;
@@ -1294,8 +1299,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   // Overlay renderer → main: live panel right edge (toggle window rides it).
-  sendOverlayToggleAnchor: (payload: { panelRight: number }) =>
+  sendOverlayToggleAnchor: (payload: { panelRight: number; panelLeft?: number }) =>
     ipcRenderer.invoke('overlay-toggle-anchor', payload),
+  // Overlay renderer → main: smooth-resize envelope (see WindowHelper).
+  overlayResizeEnvelope: (
+    payload:
+      | { phase: 'begin'; drag?: { direction: string; startWidth: number; startHeight: number; minWidth: number; minHeight: number; panelLeft: number } }
+      | { phase: 'end'; final?: { width: number; height: number } },
+  ) => ipcRenderer.invoke('overlay-resize-envelope', payload),
   // Overlay renderer → main: hover hit-test (margins click-through gate).
   setOverlayHoverInteractive: (interactive: boolean) =>
     ipcRenderer.invoke('overlay-hover-interactive', interactive),
