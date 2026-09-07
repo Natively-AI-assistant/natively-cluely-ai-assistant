@@ -26,6 +26,8 @@ import {
   releaseWindowWidthFor,
   manualHeightFloorFor,
   OVERLAY_CONTENT_MIN_WINDOW_HEIGHT,
+  pointerOverPanel,
+  pinnedViewportBudget,
 } from '../overlayCustomSize.mjs';
 
 /** Minimal in-memory localStorage stand-in. */
@@ -728,5 +730,108 @@ describe('overlayCustomSize — manualHeightFloorFor', () => {
       minHeight: manualHeightFloorFor({ hasContent: true, chromeHeight: 154, maxHeight: 830 }),
     });
     assert.equal(frame.height, 450);
+  });
+});
+
+// ── Hover gate: the pointer is tested against the PANEL'S RECT, both axes ──
+// The window can be taller than the panel (a pinned height the content does
+// not fill, the 8px release slack, a restore clamped by the OS) as well as
+// wider (the collapsed 66px margins). Every transparent pixel of the window
+// must be click-through, so the hit-test is the panel's actual rectangle —
+// never X-margin arithmetic that assumes the panel fills the window's height.
+describe('pointerOverPanel', () => {
+  const rect = { left: 66, top: 0, right: 666, bottom: 154 };
+
+  test('inside the panel → interactive', () => {
+    assert.equal(pointerOverPanel({ x: 300, y: 80 }, rect), true);
+    assert.equal(pointerOverPanel({ x: 66, y: 0 }, rect), true);
+    assert.equal(pointerOverPanel({ x: 666, y: 154 }, rect), true);
+  });
+
+  test('over the side margins → click-through (the pre-existing X gate)', () => {
+    assert.equal(pointerOverPanel({ x: 20, y: 80 }, rect), false);
+    assert.equal(pointerOverPanel({ x: 700, y: 80 }, rect), false);
+  });
+
+  test('BELOW the panel → click-through (the pinned-height dead strip)', () => {
+    // 732x454 window after a 300px south drag on the empty overlay: the panel
+    // stayed 600x154, and everything under y=154 looked like the desktop but
+    // swallowed clicks because the old gate tested clientX only.
+    assert.equal(pointerOverPanel({ x: 300, y: 300 }, rect), false);
+    assert.equal(pointerOverPanel({ x: 300, y: 155 }, rect), false);
+  });
+
+  test('pad inflates the rect on every side so fast travel cannot outrun the flip', () => {
+    assert.equal(pointerOverPanel({ x: 60, y: 80 }, rect, 8), true);
+    assert.equal(pointerOverPanel({ x: 300, y: 160 }, rect, 8), true);
+    assert.equal(pointerOverPanel({ x: 300, y: 163 }, rect, 8), false);
+    assert.equal(pointerOverPanel({ x: 57, y: 80 }, rect, 8), false);
+  });
+
+  test('no rect (panel not mounted) → interactive, the safe default', () => {
+    // The main-process default is interactive and a latched click-through
+    // state has no recovery when there is no boundary to cross; an unmounted
+    // panel must therefore never report "outside".
+    assert.equal(pointerOverPanel({ x: 300, y: 300 }, null), true);
+    assert.equal(pointerOverPanel({ x: 300, y: 300 }, undefined), true);
+  });
+
+  test('a zero-size rect (display:none) is treated as unmounted', () => {
+    assert.equal(
+      pointerOverPanel({ x: 300, y: 300 }, { left: 0, top: 0, right: 0, bottom: 0 }),
+      true,
+    );
+  });
+});
+
+// ── A pin is a lid for the current answer and a floor once a new one starts ──
+// Evin (2026-09-07): after changing the size, a new answer streamed into the
+// pinned slot and "nothing showed up". Auto sizing's values are untouched; a
+// pin merely stops being a ceiling when the next answer begins, exactly as a
+// manual width pin already does.
+describe('pinnedViewportBudget', () => {
+  const availHeight = 923; // auto budget: floor(923*0.9) − 8 = 822
+
+  test('unpinned → the auto cap, no room', () => {
+    assert.deepEqual(
+      pinnedViewportBudget({ pinnedHeight: null, pinIsCeiling: false, chromeHeight: 154, availHeight }),
+      { cap: 822 - 154, room: 0, ceiling: false },
+    );
+  });
+
+  test('ceiling mode: cap and room are both pin − chrome (the panel IS the pin)', () => {
+    assert.deepEqual(
+      pinnedViewportBudget({ pinnedHeight: 484, pinIsCeiling: true, chromeHeight: 154, availHeight }),
+      { cap: 330, room: 330, ceiling: true },
+    );
+  });
+
+  test('ceiling mode at the floor: zero viewport, never negative', () => {
+    // Pin taken at the empty floor, then the transcript grew the chrome past it.
+    assert.deepEqual(
+      pinnedViewportBudget({ pinnedHeight: 184, pinIsCeiling: true, chromeHeight: 274, availHeight }),
+      { cap: 0, room: 0, ceiling: true },
+    );
+  });
+
+  test('floor mode: room is the pinned slot, cap is the AUTO cap so content can grow', () => {
+    const b = pinnedViewportBudget({ pinnedHeight: 184, pinIsCeiling: false, chromeHeight: 154, availHeight });
+    assert.equal(b.room, 30);
+    assert.equal(b.cap, 822 - 154);
+    assert.equal(b.ceiling, false);
+  });
+
+  test('floor mode with a tall pin: room exceeds the auto cap and min-height wins in CSS', () => {
+    // 742 pin, collapsed panel: the width bound (320) is smaller than the room
+    // (588). min-height beats max-height, so the panel stays at the pin.
+    const b = pinnedViewportBudget({ pinnedHeight: 742, pinIsCeiling: false, chromeHeight: 154, availHeight });
+    assert.equal(b.room, 588);
+    assert.ok(b.room > 320);
+  });
+
+  test('a pin restored from a taller display is clamped to this display first', () => {
+    const b = pinnedViewportBudget({ pinnedHeight: 2000, pinIsCeiling: true, chromeHeight: 154, availHeight });
+    assert.equal(b.cap, 830 - 154);
+    assert.equal(b.room, 830 - 154);
   });
 });

@@ -104,3 +104,27 @@ export function pinsHeightFor(
 export function computeResizeFrame(
   params: ComputeResizeFrameParams,
 ): { width: number; height: number };
+
+export interface PanelRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+export function pointerOverPanel(
+  point: { x: number; y: number },
+  rect: PanelRect | null | undefined,
+  pad?: number,
+): boolean;
+
+export interface PinnedViewportBudgetParams {
+  pinnedHeight: number | null;
+  pinIsCeiling: boolean;
+  chromeHeight: number;
+  availHeight: number;
+}
+
+export function pinnedViewportBudget(
+  params: PinnedViewportBudgetParams,
+): { cap: number; room: number; ceiling: boolean };
