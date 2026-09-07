@@ -478,35 +478,16 @@ test('documentGroundedPrompt: shapeDocumentGroundedSystemPrompt returns base unc
 // 8. Safe fallback path — invalid regen → blockedFromSessionTracker
 // ---------------------------------------------------------------------------
 
-test('ipcHandlers: invalid regen emits pi_doc_grounded_safe_failure telemetry', () => {
-  assert.ok(
-    ipcHandlersSrc.includes('pi_doc_grounded_safe_failure'),
-    'Must emit pi_doc_grounded_safe_failure when regen produces invalid output',
-  );
+test('ipcHandlers: a failed regen keeps the streamed answer (always answer, 2026-09-07)', () => {
+  // The three tests this replaces pinned a "safe failure" line ("I couldn't
+  // find that in the uploaded material…") shipped when the regen did not
+  // cleanly improve on the streamed answer. The owner's direction is that the
+  // app answers regardless: the streamed answer stands and the verdict is
+  // logged (pi_doc_grounded_kept_original).
+  assert.ok(ipcHandlersSrc.includes('pi_doc_grounded_kept_original'), 'Must emit pi_doc_grounded_kept_original when regen does not improve');
+  assert.ok(!ipcHandlersSrc.includes("I couldn't find that in the uploaded material"), 'The canned safe-failure line must be gone');
+  assert.ok(!ipcHandlersSrc.includes('pi_doc_grounded_safe_failure'), 'No safe-failure path remains');
 });
-
-test('ipcHandlers: safe failure text references uploaded material, not the conversation or seminar', () => {
-  // The safe fallback line must reference "uploaded material" so the user knows
-  // WHERE to look, and must not reference "seminar" or "the conversation"
-  const safeIdx = ipcHandlersSrc.indexOf("I couldn't find that in the uploaded material");
-  assert.ok(safeIdx !== -1, 'Safe failure string must reference "uploaded material"');
-  const safeStr = ipcHandlersSrc.slice(safeIdx, safeIdx + 150);
-  assert.ok(!safeStr.toLowerCase().includes('seminar'), 'Safe failure must not reference seminar material');
-  assert.ok(!safeStr.toLowerCase().includes('conversation'), 'Safe failure must not reference "the conversation"');
-});
-
-test('ipcHandlers: safe failure sets blockedFromSessionTracker=true so invalid answer cannot poison next turn', () => {
-  // Both the assignment and the downstream guard must co-exist
-  assert.ok(
-    ipcHandlersSrc.includes('blockedFromSessionTracker = true'),
-    'Invalid-regen path must set blockedFromSessionTracker=true',
-  );
-  assert.ok(
-    ipcHandlersSrc.includes('!blockedFromSessionTracker'),
-    'SessionTracker update must be gated on !blockedFromSessionTracker',
-  );
-});
-
 test('ipcHandlers: regenValid check guards against regen that is itself a greeting', () => {
   // The regenValid predicate must exclude greetings — otherwise a bad model
   // could turn a false-refusal regen into a greeting loop.

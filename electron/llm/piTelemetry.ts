@@ -66,6 +66,7 @@ export type PiTelemetryEvent =
   | 'pi_doc_grounded_validation_failed'
   | 'pi_doc_grounded_regenerated'
   | 'pi_doc_grounded_safe_failure'
+  | 'pi_doc_grounded_kept_original'
   // Round-7 Failure-3: completeness re-ask kept the original (valid but partial) answer.
   | 'pi_doc_grounded_completeness_kept_original'
   // Root-cause fix (2026-07-23): a substantial original answer classified as a

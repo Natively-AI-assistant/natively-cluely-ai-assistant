@@ -91,7 +91,12 @@ const QUESTION_REQUEST = new RegExp(QUESTION_LEAD
     + String.raw`(tell me|explain|describe|walk (?:me|us) through|talk (?:me|us) through|show me|give me|let me know|help me|can you|could you|would you|will you|i'd like to (?:know|hear|see|understand)|i want to (?:know|hear|see|understand)|i'm curious|im curious|i wonder|wondering|any (?:thoughts|ideas|idea|questions|question)|what about|how about|remind me|clarify|elaborate|implement|write (?:a|an|the|some|me)|code (?:up|this|it)|optimi[sz]e|refactor|debug|fix (?:this|that|it|the)|summari[sz]e|recap|go over|run (?:me|us) through)\b`, 'i');
 const QUESTION_SHOULD = /\b(should (?:i|we|you|they|it)|shall (?:i|we))\b/i;
 const BRAINSTORM_PATTERN = /\b(brainstorm|options|strategy|ways to solve|possible solutions)\b/i;
-const CLARIFY_PATTERN = /\b(clarify|not clear|ambiguous|what do they mean|ask a follow|scope|constraints?)\b/i;
+// `scope` and `constraints?` were dropped 2026-09-07: they are ordinary
+// technical vocabulary, and "What constraint does the array problem place on
+// the input array?" — a plain interviewer question — was routed to the CLARIFY
+// action (generate clarifying questions) instead of being answered. Measured
+// through the real engine: runClarify ran, no answer was ever emitted.
+const CLARIFY_PATTERN = /\b(clarify|not clear|ambiguous|what do they mean|ask a follow)\b/i;
 const RESTATEMENT_PATTERN = /\b(sorry[,\s]+let me (?:restate|restart|say that again)|let me (?:restate|restart|say that again)|i(?:'| a)?m going to restate|that came out wrong|not what i meant)\b/i;
 const INCOMPLETE_TECHNICAL_PATTERN = /\b(the thing|unclear|not clear|missing|incomplete|ambiguous|contradictory|constraints? (?:are )?unclear|input unclear|output unclear|not sure|audio cut|didn(?:'|o)?t catch|garbled)\b/i;
 const RECAP_PATTERN = /\b(recap|summari[sz]e|catch me up|what happened|key points|takeaways)\b/i;

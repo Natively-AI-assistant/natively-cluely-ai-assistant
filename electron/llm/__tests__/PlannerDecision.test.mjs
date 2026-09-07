@@ -66,6 +66,19 @@ test('PlannerDecision routes clarify requests', async () => {
   assert.equal(decision.reason, 'clarify_request');
 });
 
+test('PlannerDecision answers ordinary questions that merely contain "constraint" or "scope" (2026-09-07)', async () => {
+  // Measured through the real engine: "constraint" alone routed this to the
+  // CLARIFY action (runClarify), and no answer was ever emitted.
+  for (const q of [
+    'What constraint does the array problem place on the input array?',
+    'What is the scope of the statement of work?',
+    'What are the constraints on the input size?',
+  ]) {
+    const decision = await decide({ triggerQuestion: q });
+    assert.equal(decision.kind, 'answer', `${q} → ${decision.kind}/${decision.reason}`);
+  }
+});
+
 test('PlannerDecision routes incomplete technical restatements to clarify', async () => {
   const decision = await decide({
     triggerQuestion: 'Sorry let me restate, given an array and the thing should return the output but constraints are unclear',

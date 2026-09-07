@@ -72,6 +72,34 @@ export interface LegacyPortDeps {
 // doc-grounded validator can reuse the same distillation instead of retrying
 // with the query text that just failed. Behaviour here is unchanged.
 
+// ── A mode's own attachment is always in scope for a document plan ──────────
+//
+// THE DEFECT (2026-09-07, measured in the user's General mode with a résumé PDF
+// and a JD PDF attached and nothing else): "What latency did the FastAPI
+// backend handle chatbot requests at?" traced as DOCUMENT_FACT, planned
+// [REFERENCE_FILE], candidates 1, admitted 1, EVIDENCE 0 — and the user was
+// told the records don't mention it. The same fact surfaced one turn later for
+// a second-person phrasing, because that turn planned CANDIDATE_FILE.
+//
+// Two correct rules collided. `sourceTypeForFile` types a résumé-shaped
+// attachment RESUME/CANDIDATE_FILE and a JD JOB_DESCRIPTION so claim authority
+// can keep a JD from evidencing the user's experience. And DOCUMENT_FACT
+// deliberately narrows RETRIEVAL to the document pools so a value lookup does
+// not fan out across the Profile Intelligence résumé/JD pools (deep-run 2,
+// issue 5). The narrowing is about identity POOLS. This port never reads one:
+// every chunk it returns with MODE_REFERENCE_FILE provenance is a file the
+// user put in this mode. For a plan that consults the document pools, such a
+// chunk is admissible whatever identity type the shape detector stamped on it.
+// Claim authority still runs afterwards, so a JD attachment still cannot
+// evidence a USER_* claim — only the planned-type gate is relaxed, and only for
+// the mode's own files.
+const DOCUMENT_POOL_TYPES: readonly SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
+
+function isAdmissibleModeAttachment(e: EvidenceItem, allowed: ReadonlySet<SourceType>): boolean {
+  if (e.provenance !== 'MODE_REFERENCE_FILE') return false;
+  return DOCUMENT_POOL_TYPES.some((t) => allowed.has(t));
+}
+
 export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
   const now = deps.now ?? (() => 0);
 
@@ -122,7 +150,7 @@ export function createLegacyRetrievalPort(deps: LegacyPortDeps): RetrievalPort {
           assumeInScopeWhenUnknown: deps.assumeInScopeWhenUnknown,
         });
 
-        const inScope = adapted.evidence.filter((e) => allowed.has(e.sourceType));
+        const inScope = adapted.evidence.filter((e) => allowed.has(e.sourceType) || isAdmissibleModeAttachment(e, allowed));
         const kept: EvidenceItem[] = neededClaims.size
           ? inScope.filter((e) => e.acceptedFor.some((c) => neededClaims.has(c)))
           : inScope;

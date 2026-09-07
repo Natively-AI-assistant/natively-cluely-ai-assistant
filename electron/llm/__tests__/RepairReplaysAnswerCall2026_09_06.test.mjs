@@ -193,19 +193,21 @@ describe('an image-bearing repair gets a window it can actually finish in', () =
 describe('every repair call site actually replays', () => {
   const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-  test('IntelligenceEngine routes all six repairs through repairCallArgs', () => {
+  test('IntelligenceEngine routes all seven repairs through repairCallArgs', () => {
     const src = strip(fs.readFileSync(path.join(root, 'electron/IntelligenceEngine.ts'), 'utf8'));
     const spread = (src.match(/\.\.\.this\.repairCallArgs\(/g) || []).length;
-    assert.equal(spread, 6, `expected 6 replayed repair sites, found ${spread}`);
+    // Seventh site added 2026-09-07: regenerateUsableAnswer (always-answer regen).
+    assert.equal(spread, 7, `expected 7 replayed repair sites, found ${spread}`);
     // None may still pass the old hand-written argument list.
     assert.equal(/streamChat\(\s*\n\s*\w+,\s*\n\s*undefined,\s*\n\s*undefined,/.test(src), false,
       'a repair site is still passing undefined for images and context');
   });
 
-  test('ipcHandlers routes all five repairs through repairCallArgs', () => {
+  test('ipcHandlers routes all six repairs through repairCallArgs', () => {
     const src = strip(fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8'));
     const n = (src.match(/repairCallArgs\(llmHelper,/g) || []).length;
-    assert.equal(n, 5, `expected 5 replayed repair sites, found ${n}`);
+    // Sixth site added 2026-09-07: the assistant-voice misfire regeneration.
+    assert.equal(n, 6, `expected 6 replayed repair sites, found ${n}`);
   });
 
   test('the answer paths remember, and only the answer paths', () => {
@@ -353,7 +355,9 @@ describe('a selected single provider now fails over — or retries itself in par
   const ipc = strip(fs.readFileSync(path.join(root, 'electron/ipcHandlers.ts'), 'utf8'));
 
   test('every single-rung CLOUD branch goes through the fallback engine', () => {
-    for (const id of ['custom', 'litellm', 'nvidia_nim', 'openai', 'claude', 'deepseek']) {
+    // antigravity added 2026-09-07: it was the last bare terminal rung, measured
+    // stalling past the live deadline and surfacing as a canned refusal.
+    for (const id of ['custom', 'litellm', 'nvidia_nim', 'openai', 'claude', 'deepseek', 'antigravity']) {
       assert.match(llm, new RegExp(`streamSelectedProviderWithFailover\\(\\{\\s*\\n?\\s*id: '${id}'`),
         `${id} is a single terminal rung and must get failover`);
     }

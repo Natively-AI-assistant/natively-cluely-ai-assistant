@@ -419,9 +419,16 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
       );
     }
 
-    const releaseSlot = await acquireOnnxSlot('normal');
-
+    // The slot is acquired INSIDE the load promise (2026-09-07). It used to be
+    // acquired before `loadingPromise` was assigned, so a burst of concurrent
+    // embed() calls (EmbeddingPipeline during ingest) each passed the
+    // `if (this.loadingPromise)` guard, each acquired a slot, and the second
+    // overwrote `slotRelease` — the first release was lost, the shared ONNX
+    // gate sat at capacity for the process lifetime, and every later local
+    // reranker / router load queued forever with no log. Assigning the promise
+    // first makes the guard hold for every concurrent caller.
     this.loadingPromise = (async () => {
+      const releaseSlot = await acquireOnnxSlot('normal');
       try {
         await this.postToWorker({ type: 'init', modelPath: this.modelPath }, WORKER_INIT_TIMEOUT_MS);
         this.loaded = true;

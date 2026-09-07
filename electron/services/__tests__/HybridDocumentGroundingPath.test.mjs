@@ -157,7 +157,10 @@ test('IntelligenceEngine wires document-grounded WTA validation and repair', () 
   assert.match(src, /validateDocumentGroundedAnswer/, 'WTA must call the document-grounded answer validator');
   assert.match(src, /completenessRegenFabricates/, 'WTA repair must reject fabricated numeric values');
   assert.match(src, /doc_grounded_repair_applied/, 'WTA must have a successful document-grounded repair path');
-  assert.match(src, /doc_grounded_safe_refusal_after_repair_reject/, 'WTA must fail closed when repair cannot be trusted');
+  // 2026-09-07 (always answer): a rejected repair keeps the streamed answer
+  // instead of failing closed to the canonical refusal.
+  assert.match(src, /doc_grounded_kept_original_over_refusal/, 'WTA must keep the streamed answer when the coverage check fails');
+  assert.doesNotMatch(src, /doc_grounded_safe_refusal_after_repair_reject/, 'the fail-closed refusal path must be gone');
 });
 
 test('IntelligenceEngine WTA repair has a non-regression length floor (root-cause fix, 2026-07-23)', () => {

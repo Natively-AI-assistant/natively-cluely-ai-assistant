@@ -73,9 +73,17 @@ export function packGovernsGeneration(input: {
   hasReferenceFiles?: boolean;
 }): boolean {
   if (input.answerPolicy !== 'refuse_insufficient_evidence') return true;
-  if (!sourceAuthorityPermitsRefusal(input.sourceAuthority)) return false;
-  if (input.sourceAuthority === 'transcript_only') return true;
-  return input.hasReferenceFiles === true;
+  // ALWAYS ANSWER (2026-09-07, owner's direction). A refusal pack used to
+  // govern generation for the four bounded-universe authorities (and only with
+  // files present), yielding "This is not directly mentioned in the uploaded
+  // material" WITHOUT calling the model. The owner's product decision is that
+  // the app answers regardless: the turn falls through to generation with
+  // whatever evidence was retrieved, and the composer's own absence framing
+  // (say what the material does not state, then answer from general knowledge,
+  // clearly marked) does the honest part. The authority classification below
+  // is kept exported because clarificationIsActionable and telemetry read it.
+  void sourceAuthorityPermitsRefusal;
+  return false;
 }
 
 /** The authorities whose universe is the mode's uploaded reference files. */

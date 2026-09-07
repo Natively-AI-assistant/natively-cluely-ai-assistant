@@ -1,0 +1,129 @@
+// ALWAYS ANSWER (2026-09-07, owner's direction): no surface may end a turn in a
+// canned "could not find / not enough context / repeat that" line when a model
+// answer exists, and the retrieval stack must actually use the reranker the
+// user selected. Source-level pins plus pure-function checks.
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const root = path.resolve(process.cwd());
+const src = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+const ie = src('electron/IntelligenceEngine.ts');
+const ipc = src('electron/ipcHandlers.ts');
+const dgp = src('electron/llm/documentGroundedPrompt.ts');
+const planner = src('electron/llm/AnswerPlanner.ts');
+const lep = src('electron/rag/providers/LocalEmbeddingProvider.ts');
+const lr = src('electron/rag/LocalReranker.ts');
+const { packGovernsGeneration } = require(path.join(root, 'dist-electron/electron/intelligence/context-os/refusalPolicy.js'));
+const { createModeRetrievalPort } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/context-intelligence/retrieval/mode-retrieval-port.js')).href);
+const { decide } = await import(pathToFileURL(path.join(root, 'dist-electron/electron/context-intelligence/orchestration/orchestrator.js')).href);
+
+describe('no post-stream site replaces a streamed answer with a canned refusal', () => {
+  test('IntelligenceEngine never assigns the canonical refusal to fullAnswer', () => {
+    assert.ok(!/fullAnswer = 'I could not find that in the retrieved sections of the document\.'/.test(ie), 'engine still overwrites with the canonical refusal');
+    assert.ok(ie.includes('doc_grounded_kept_original_over_refusal'));
+  });
+  test('ipcHandlers keeps the streamed answer when a regen does not improve', () => {
+    assert.ok(!ipc.includes("I couldn't find that in the uploaded material"));
+    assert.ok(ipc.includes('pi_doc_grounded_kept_original'));
+  });
+  test('the sentinel and misfire sites regenerate before any honest line', () => {
+    assert.ok(ie.includes('regenerateUsableAnswer('), 'engine helper missing');
+    assert.ok((ie.match(/this\.regenerateUsableAnswer\(\{/g) || []).length >= 2, 'both engine sites must call it');
+    assert.ok(/misfire regeneration skipped/.test(ipc), 'manual misfire site must regenerate');
+  });
+});
+
+describe('prompts never instruct the model to stop at "could not find"', () => {
+  test('document-grounded system/user prompts ask for a note plus a general-knowledge answer', () => {
+    assert.ok(!dgp.includes('say: "I could not find that in the retrieved sections of the document."'));
+    assert.ok(!dgp.includes('say so clearly ("I could not find that in the retrieved sections")'));
+    assert.ok(!/say exactly: "I could not find that in the retrieved sections of the document\."/.test(ie));
+    assert.ok(/then STILL answer the question as helpfully as you can from general knowledge/.test(dgp));
+  });
+  test('the absent-fact planner template answers from general knowledge after the note', () => {
+    const m = planner.match(/const DOCUMENT_ABSENT_FACT_TEMPLATE = `([^`]*)`/);
+    assert.ok(m, 'template missing');
+    assert.match(m[1], /general knowledge/);
+    assert.doesNotMatch(m[1], /Do not provide a plausible estimate or use general knowledge/);
+  });
+});
+
+describe('refusal packs never govern generation', () => {
+  const AUTH = ['reference_files_only', 'reference_files_primary', 'reference_files_plus_transcript', 'transcript_only', 'profile_only', 'profile_plus_transcript', 'general_mixed', 'ask_if_ambiguous', undefined, 'unknown_future_authority'];
+  test('refuse_insufficient_evidence → govern:false for every authority, files or not', () => {
+    for (const sourceAuthority of AUTH) for (const hasReferenceFiles of [true, false, undefined]) {
+      assert.equal(packGovernsGeneration({ answerPolicy: 'refuse_insufficient_evidence', sourceAuthority, hasReferenceFiles }), false, `${sourceAuthority}/${hasReferenceFiles}`);
+    }
+  });
+  test('answering packs still govern', () => {
+    for (const answerPolicy of ['answer', 'answer_with_uncertainty', 'ask_clarification']) {
+      assert.equal(packGovernsGeneration({ answerPolicy, sourceAuthority: 'reference_files_only', hasReferenceFiles: true }), true, answerPolicy);
+    }
+  });
+});
+
+describe('attached screenshots outrank the bare-follow-up clarification', () => {
+  test('manual gate checks imagePaths; live gate checks visual context', () => {
+    assert.ok(ipc.includes('!imagePaths?.length && isBareFollowUp(message)'));
+    assert.ok(ie.includes('fr.isClarification && fr.clarificationText && !isSpeculative && !_wtaHasVisualContext'));
+  });
+});
+
+describe('the selected reranker runs on the V3 retrieval path', () => {
+  const decision = decide({
+    requestId: 'r', requestSequence: 1, surface: 'manual_chat', modeId: 'seminar',
+    scope: { userId: 'u', modeId: 'seminar' }, sessionId: 's', manualQuestion: 'How many hours is milestone 2?', hasAttachedDocuments: true,
+  });
+  const portFor = (rerankSurface) => {
+    const calls = [];
+    const port = createModeRetrievalPort({
+      modesManager: { retrieveHybridRaw: async (_m, _f, opts) => { calls.push(opts); return { chunks: [] }; } },
+      modeInfo: { id: 'm' }, files: [{ id: 'f1', fileName: 'sow.txt', content: 'x' }],
+      allowedSourceTypes: ['REFERENCE_FILE'], tokenBudget: 3600, userId: 'u', ...(rerankSurface ? { rerankSurface } : {}),
+    });
+    return { port, calls };
+  };
+  test('allowRerank is true and the surface budget is forwarded', async () => {
+    const { port, calls } = portFor('manual');
+    await port.retrieve({ decision });
+    assert.ok(calls.length >= 1, 'retriever not called');
+    assert.equal(calls[0].allowRerank, true);
+    assert.equal(calls[0].rerankSurface, 'manual');
+  });
+  test('an unspecified surface defaults to the tighter live budget', async () => {
+    const { port, calls } = portFor(undefined);
+    await port.retrieve({ decision });
+    assert.equal(calls[0].allowRerank, true);
+    assert.equal(calls[0].rerankSurface, 'live');
+  });
+});
+
+describe('local model loaders assign loadingPromise before acquiring the shared ONNX slot', () => {
+  for (const [name, text] of [['LocalEmbeddingProvider', lep], ['LocalReranker', lr]]) {
+    test(name, () => {
+      const assign = text.indexOf('this.loadingPromise = (async () => {');
+      const acquire = text.indexOf("await acquireOnnxSlot('normal')");
+      assert.ok(assign >= 0 && acquire >= 0, 'expected markers missing');
+      assert.ok(acquire > assign, `${name}: the slot is acquired before loadingPromise is assigned — concurrent callers leak a slot`);
+    });
+  }
+});
+
+describe('a bare "I can\'t help with that" is a misfire, so it regenerates', () => {
+  const { detectAssistantVoiceMisfire } = require(path.join(root, 'dist-electron/electron/llm/ProfileOutputValidator.js'));
+  test('whole-answer refusals are flagged', () => {
+    for (const a of ["I'm sorry, but I can't help with that.", "I cannot help with that request.", "Sorry, I am unable to assist with this.", "I can't share that information."]) {
+      assert.equal(detectAssistantVoiceMisfire(a).isMisfire, true, a);
+    }
+  });
+  test('a real answer that mentions a refusal is not flagged', () => {
+    for (const a of ["Refunds are handled by billing; I can't help with the payment itself, but here is the process: open Settings, then Billing, then Request refund.", "The vendor said they can't help with that, so we escalated to the account manager and got the credit applied."]) {
+      assert.equal(detectAssistantVoiceMisfire(a).isMisfire, false, a);
+    }
+  });
+});

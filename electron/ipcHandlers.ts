@@ -1360,6 +1360,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               }
             } catch { /* debug identity only */ }
             const modePort = createModeRetrievalPort({
+              rerankSurface: 'manual',
               modesManager: mm,
               modeInfo,
               files,
@@ -2657,7 +2658,9 @@ export function initializeIpcHandlers(appState: AppState): void {
             }
           } catch { /* refinement recall never blocks the answer */ }
         }
-        if (!context && !autoContextSnapshot && isBareFollowUp(message)) {
+        // An attached screenshot IS the context (2026-09-07): "this" / "explain"
+        // with an image must reach the vision path, not the clarification.
+        if (!context && !autoContextSnapshot && !imagePaths?.length && isBareFollowUp(message)) {
           let clarSurface: 'manual' | 'lecture' | 'sales' = 'manual';
           try {
             const { ModesManager } = require('./services/ModesManager');
@@ -4560,10 +4563,38 @@ export function initializeIpcHandlers(appState: AppState): void {
                   : answerPlan.answerType === 'sales_answer'
                     ? "I don't have enough context on that yet — could you share a bit more?"
                     : "Could you give me a bit more to go on?";
-                piTelemetry.emit('pi_assistant_voice_misfire_repaired', { answerType: answerPlan.answerType, reason: misfire.reason });
-                console.warn('[ProfileIntelligence] assistant-voice identity/refusal misfire replaced with honest line', { answerType: answerPlan.answerType, reason: misfire.reason });
-                fullResponse = honest;
-                finalText = honest;
+                // ALWAYS ANSWER (2026-09-07): regenerate once before the honest
+                // line — mirrors IntelligenceEngine.regenerateUsableAnswer.
+                let regenerated: string | null = null;
+                try {
+                  const regenPrompt = [
+                    '<answer_instructions note="follow these; never repeat them">',
+                    'The user explicitly asked for an answer. Answer the question directly and concretely. Do NOT ask the user to repeat or share more, do NOT describe what context is missing, and do NOT identify yourself as an AI assistant. Use the evidence when it applies; otherwise answer from general knowledge, clearly marked as such.',
+                    '</answer_instructions>',
+                    (manualContextOsGeneration as any)?.retrievedBlockRaw ? `## EVIDENCE\n${String((manualContextOsGeneration as any).retrievedBlockRaw).trim()}` : '',
+                    context || autoContextSnapshot ? `## CONVERSATION\n${String(context || autoContextSnapshot).trim()}` : '',
+                    `## QUESTION\n${message}`,
+                    'Output ONLY the answer.',
+                  ].filter(Boolean).join('\n');
+                  let regen = '';
+                  const regenAbort = new AbortController();
+                  await raceStreamWithDeadline({
+                    stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal)) as AsyncGenerator<string>,
+                    firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
+                    isUsefulYet: () => regen.trim().length >= 5,
+                    shouldAbort: () => regen.length > 1800,
+                    onToken: (tok: string) => { regen += tok; },
+                    onCleanup: () => { try { regenAbort.abort(); } catch { /* best effort */ } },
+                  });
+                  const regenTrim = regen.trim();
+                  if (regenTrim.length >= 5 && !detectAssistantVoiceMisfire(regenTrim).isMisfire) regenerated = regenTrim;
+                } catch (regenErr: any) {
+                  console.warn('[ProfileIntelligence] misfire regeneration skipped:', regenErr?.message);
+                }
+                piTelemetry.emit('pi_assistant_voice_misfire_repaired', { answerType: answerPlan.answerType, reason: misfire.reason, regenerated: Boolean(regenerated) });
+                console.warn('[ProfileIntelligence] assistant-voice identity/refusal misfire', { answerType: answerPlan.answerType, reason: misfire.reason, regenerated: Boolean(regenerated) });
+                fullResponse = regenerated ?? honest;
+                finalText = regenerated ?? honest;
               }
             } catch (avErr: any) {
               console.warn('[ProfileIntelligence] assistant-voice guard skipped:', avErr?.message);
@@ -5292,7 +5323,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                         '(e.g. a different unit, a table row, or a synonym for the term the question uses).',
                         'If the SPECIFIC fact asked for is genuinely present (even if phrased differently), synthesize it directly in 2-4 natural sentences.',
                         'If, after a careful re-read, the specific fact asked for is still NOT actually present in these excerpts — even though the excerpts are',
-                        'from the right document/topic — say so honestly (e.g. "I could not find that specific detail in the retrieved sections").',
+                        'from the right document/topic — say so in one short clause, then still give the most useful general-knowledge answer, clearly marked as general knowledge (never as a fact from the document).',
                         'Do NOT invent, guess, or borrow a similar-sounding fact from an unrelated part of the excerpts (e.g. a different subsystem, model, or dataset)',
                         'to avoid saying it is absent — an honest "not found" is always better than an unrelated or fabricated answer.',
                         'Do not restate the question.',
@@ -5322,7 +5353,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     : [
                         'You are answering a question strictly from the uploaded reference material below.',
                         'Do NOT greet. Do NOT ask what the user wants. Answer the question directly from the material.',
-                        'If the material does not contain the answer, say so in one sentence and stop.',
+                        'If the material does not contain the answer, say so in one sentence, then answer from general knowledge, clearly marked as general knowledge.',
                         '',
                         docContextBlock || '(no retrieved material)',
                         '',
@@ -5521,15 +5552,14 @@ export function initializeIpcHandlers(appState: AppState): void {
                   piTelemetry.emit('pi_doc_grounded_false_refusal_kept_original', {});
                   console.warn('[DocGrounded] false-refusal regen did not cleanly improve on a substantial original — keeping original answer', { chars: trimmed.length });
                 } else {
-                  // Retry didn't help → ship a SAFE failure line (NOT a greeting),
-                  // referencing the uploaded material (not "the conversation"), and
-                  // BLOCK it from SessionTracker so it cannot poison the next turn.
-                  const safe = "I couldn't find that in the uploaded material. Try rephrasing, or ask about a specific section of the document.";
-                  fullResponse = safe;
-                  finalText = safe;
-                  blockedFromSessionTracker = true;
-                  piTelemetry.emit('pi_doc_grounded_safe_failure', { reason });
-                  console.warn('[DocGrounded] regeneration did not recover — shipping safe failure line, blocked from SessionTracker', { reason });
+                  // ALWAYS ANSWER (2026-09-07, owner's direction): the regen did
+                  // not cleanly improve on the streamed answer, so the streamed
+                  // answer stands. This used to ship "I couldn't find that in
+                  // the uploaded material. Try rephrasing…" — a canned line the
+                  // user cannot act on, replacing an answer the model produced
+                  // over the evidence it was given.
+                  piTelemetry.emit('pi_doc_grounded_kept_original', { reason });
+                  console.warn('[DocGrounded] regeneration did not recover — keeping the streamed answer', { reason });
                 }
               }
             } catch (dgErr: any) {
@@ -16269,7 +16299,7 @@ export function initializeIpcHandlers(appState: AppState): void {
 
     safeHandle('__e2e__:ask', async (
       _,
-      params: { question: string; context?: string; timeoutMs?: number; injectAsTranscript?: boolean; priorTurns?: Array<{ speaker: string; text: string }> },
+      params: { question: string; context?: string; timeoutMs?: number; injectAsTranscript?: boolean; priorTurns?: Array<{ speaker: string; text: string }>; hotkey?: boolean; imagePaths?: string[]; noReset?: boolean },
     ) => {
       const im = appState.getIntelligenceManager();
       const timeoutMs = params.timeoutMs ?? 60_000;
@@ -16279,7 +16309,9 @@ export function initializeIpcHandlers(appState: AppState): void {
       // Jaccard similarity, and similarly-worded questions in a session would
       // otherwise reuse a stale/empty prior result). Follow-ups pass priorTurns to
       // rebuild just their parent's context after the reset.
-      try { im.reset?.(); } catch { /* non-fatal */ }
+      // `noReset` (2026-09-07): keep the session so a chained follow-up ("why?")
+      // is asked against the engine's OWN prior answer, as in a real meeting.
+      if (!params.noReset) { try { im.reset?.(); } catch { /* non-fatal */ } }
       // Build REAL session state: replay any prior turns, then the interviewer's
       // question as a finalized transcript segment — exactly as the STT path would.
       // This gives runWhatShouldISay a real transcript so extractLatestQuestion +
@@ -16356,12 +16388,19 @@ export function initializeIpcHandlers(appState: AppState): void {
         try { im.on?.('recap_ready', onRecap as any); } catch {}
         try { im.on?.('follow_up_questions', onFollowUps as any); } catch {}
         // Drive the real pipeline. handleSuggestionTrigger → runWhatShouldISay.
+        // `hotkey: true` (2026-09-07) mirrors the manual Cmd+Enter press instead
+        // — the same runWhatShouldISay call ipcHandlers makes for the hotkey,
+        // with skipCooldown/forceFresh and optional screenshot paths — so the
+        // harness can exercise the surface users actually report on, not only
+        // the planner-routed auto-answer path.
         Promise.resolve(
-          im.handleSuggestionTrigger({
-            context: builtContext,
-            lastQuestion: params.question,
-            confidence: 0.9,
-          }),
+          params.hotkey
+            ? im.runWhatShouldISay(params.question, 0.9, params.imagePaths, { skipCooldown: true, forceFresh: true })
+            : im.handleSuggestionTrigger({
+              context: builtContext,
+              lastQuestion: params.question,
+              confidence: 0.9,
+            }),
         ).then(() => {
           // The trigger has fully decided. Give streamed tokens a brief window to
           // flush into a suggested_answer; if none arrives, settle on whatever we
@@ -16416,7 +16455,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     // IPC event through a synthetic sender that collects tokens.
     safeHandle('__e2e__:manual-ask', async (
       event,
-      params: { question: string; timeoutMs?: number },
+      params: { question: string; timeoutMs?: number; imagePaths?: string[] },
     ) => {
       const timeoutMs = params.timeoutMs ?? 45000;
       return await new Promise((resolve) => {
@@ -16440,7 +16479,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         const timer = setTimeout(() => { if (!done) { done = true; resolve({ success: false, timedOut: true, streamedTokens: tokens }); } }, timeoutMs);
         const handler = (globalThis as any).__nativelyGeminiChatStream;
         Promise.resolve()
-          .then(() => handler ? handler(synthEvent, params.question, undefined, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
+          .then(() => handler ? handler(synthEvent, params.question, params.imagePaths, undefined, undefined) : Promise.reject(new Error('gemini-chat-stream handler not captured')))
           .catch((e: any) => { if (!done) { done = true; resolve({ success: false, error: e?.message, streamedTokens: tokens }); } })
           .finally(() => clearTimeout(timer));
       });

@@ -457,9 +457,11 @@ class LocalRerankerImpl {
         // Acquire the shared slot. Held for the lifetime of this worker — the
         // release function is wired into worker `error`/`exit` handlers in
         // getWorker() so the slot frees automatically when the worker dies.
-        const releaseSlot = await acquireOnnxSlot('normal');
-
+        // Slot acquired INSIDE the load promise so the `loadingPromise` guard
+        // holds for concurrent callers — see LocalEmbeddingProvider.ensureLoaded
+        // (2026-09-07) for the leaked-slot failure this prevents.
         this.loadingPromise = (async () => {
+            const releaseSlot = await acquireOnnxSlot('normal');
             try {
                 await this.postToWorker({ type: 'init', ...this.workerConfig() }, WORKER_INIT_TIMEOUT_MS);
                 this.loaded = true;

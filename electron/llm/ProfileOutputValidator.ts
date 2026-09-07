@@ -559,7 +559,13 @@ export const ASSISTANT_VOICE_ANSWER_TYPES = new Set<AnswerType>([
 // ("I am an assistant coach, so I handle the drills") — code-review 2026-06-14
 // MEDIUM-1.
 const ASSISTANT_IDENTITY_MISFIRE_RE = /\bI(?:'m| am)\s+Natively\b|\bI(?:'m| am)\s+an?\s+(?:AI\s+)?(?:assistant|language model|chat\s?bot)(?=\s*(?:[.,!?;]|$|\s+(?:developed|created|made|built|designed|trained|here|created|that|who|which|to\b|and\s+I\b)))|\bI\s+was\s+developed\s+by\s+Evin\s+John\b|\bas\s+an\s+AI(?:\s+(?:language\s+)?model)?,?\s+I\b/i;
-const ASSISTANT_STOCK_REFUSAL_RE = /\bI\s+(?:cannot|can\s?not|can'?t)\s+share\s+that(?:\s+information)?\s*\.?\s*$/i;
+// Widened 2026-09-07 (always answer): a bare "I'm sorry, but I can't help with
+// that." — the whole answer — is the same misfire as "I can't share that".
+// Measured live in call-center: "How do I get a refund?" over two attached
+// documents produced exactly that line on the manual surface. Still gated on
+// the 240-char cap and the end-of-answer anchor, so a real answer that quotes
+// a refusal mid-sentence is never flagged.
+const ASSISTANT_STOCK_REFUSAL_RE = /\bI\s+(?:cannot|can\s?not|can'?t)\s+share\s+that(?:\s+information)?\s*\.?\s*$|^(?:(?:I(?:'m| am)\s+)?sorry,?\s+(?:but\s+)?)?I\s+(?:cannot|can\s?not|can'?t|am\s+unable\s+to|won'?t\s+be\s+able\s+to)\s+(?:help|assist)(?:\s+(?:you\s+)?with\s+(?:that|this)(?:\s+request)?)?\s*\.?\s*$/i;
 
 export interface AssistantVoiceSanitizeResult {
   /** True when the answer is a canned identity/refusal misfire (no real content). */

@@ -128,6 +128,16 @@ function buildClaimRequirements(
   });
 }
 
+/** See the `queries` note in decide(): a bare fragment borrows the attached file names as its retrieval subject. */
+export function bareFragmentQuery(resolved: string, attachedFileNames: readonly string[] | undefined): string | null {
+  if (!attachedFileNames?.length || !isBareFollowUp(resolved)) return null;
+  const words = attachedFileNames
+    .map((n) => String(n ?? '').replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[^a-z0-9]+/gi, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+  return words ? `${resolved} ${words}`.trim() : null;
+}
+
 /** Decide ONCE. The result is deep-frozen; nothing downstream may reinterpret it. */
 export function decide(req: AnswerRequest): Readonly<TurnDecision> {
   const basePolicy = resolveModePolicy(req.modeId);   // THROWS on unknown id — fails closed
@@ -181,7 +191,14 @@ export function decide(req: AnswerRequest): Readonly<TurnDecision> {
         : policy.allowedSourceTypes.filter((s) =>
           s === 'REFERENCE_FILE' || s === 'PROJECT_FILE' || s === 'CODING_SAMPLE' || s === 'MEETING_TRANSCRIPT'))
       : [],
-    queries: [q.resolved],
+    // A bare fragment with no referent ("explain", "why?", "more") retrieves
+    // NOTHING on its own text, so the composer had no material to apply it to
+    // and asked "what should I explain?" (2026-09-07, always-answer). When
+    // files are attached, the attachments are the only subject the fragment
+    // can be about: widen the retrieval query with their names so their
+    // chunks surface, and the follow-up guidance applies the fragment to them.
+    // The resolved question itself is unchanged — only the retrieval query.
+    queries: [bareFragmentQuery(q.resolved, req.attachedFileNames) ?? q.resolved],
     entities: [],
     useSemanticSearch: true,
     useKeywordSearch: true,

@@ -551,10 +551,21 @@ const RESPONSE_REQUEST_RE =
 // happens to pre-lower before calling while the orchestrator passes the raw
 // resolved question. The first external caller silently never matched "Why?" —
 // capital W — so the referent cap it guarded was dead on arrival.
+// Content-free imperative fragments (2026-09-07, always-answer): "explain",
+// "walk me through it", "elaborate", "summarize that". Measured: "explain" with
+// two files attached took GENERAL_TECH_RE ("explain") → GENERAL_TECHNICAL →
+// FAST → no retrieval, and "walk me through it" → AMBIGUOUS with retrieval
+// off; both surfaces then asked "what would you like me to explain?". A
+// fragment whose whole text is such a verb phrase has no subject of its own —
+// it is a follow-up, and the orchestrator lends it the attachments as subject.
+const BARE_VERB_FRAGMENT_RE =
+  /^(?:(?:please|ok(?:ay)?|so|and|just),?\s+)*(?:explain|elaborate|expand|continue|go on|keep going|say more|more|tell me more|(?:more|further) details?|details?|next|walk (?:me|us) through (?:it|that|this)|break (?:it|that|this) down|summari[sz]e(?: (?:it|that|this))?|clarify(?: (?:it|that|this))?|show me|(?:can|could) you (?:explain|elaborate|expand|clarify)(?: (?:it|that|this))?)(?:\s+(?:please|again))?$/;
+
 export const isBareFollowUp = (raw: string): boolean => {
   const q = String(raw).toLowerCase();
   if (RESPONSE_REQUEST_RE.test(q)) return true;
   if (isContinuationFragment(q)) return true;
+  if (BARE_VERB_FRAGMENT_RE.test(q.replace(/[?!.,]+$/, '').trim())) return true;
   return FOLLOW_UP_RE.test(q) && q.split(/\s+/).filter(Boolean).length <= FOLLOW_UP_MAX_WORDS;
 };
 
@@ -999,6 +1010,26 @@ function detectTypes(q: string, input: ClassificationInput): { types: QuestionTy
       && /\b(threshold\w*|frequenc\w*|rates?|formulas?|calculat\w*|weights?|coefficients?|detect\w*)\b/.test(q)) {
     types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
   }
+  // ── Attached-document deixis (2026-09-07) ─────────────────────────────────
+  //
+  // The question NAMES an attached file, or points at a document with a
+  // definite article ("in the error log", "the array problem", "the
+  // postmortem", "the attached spec"), while documents are attached. Measured
+  // in technical-interview with tech_error_log.txt attached: "Which function
+  // threw the uncaught exception in the error log?" — TECH_SELF_TALK_RE
+  // ("error", "exception") made it GENERAL_TECHNICAL → FAST → no retrieval, and
+  // the app answered "I cannot answer that without seeing the log" about a log
+  // it had indexed; on the manual surface it invented a function name.
+  //
+  // Runs BEFORE the claimless-techTask branch so a document-deictic question is
+  // a document question first: retrieval is cheap and the evidence gate still
+  // has the last word, whereas skipping retrieval here is unrecoverable. The
+  // generic-noun list is deliberately document-shaped (log/spec/notes/…); bare
+  // "this problem" stays coding self-talk unless an attached file is named.
+  if (modeHoldsDocuments && !isBareFollowUp(q)
+      && (mentionsAttachedFile(q, input.attachedFileNames) || DOC_DEIXIS_RE.test(q))) {
+    types.add('DOCUMENT_FACT'); noteWholeQ('DOCUMENT_FACT');
+  }
   // A technical/computational turn that produced NO claim at all is a
   // general-knowledge turn, and must SAY so (2026-08-02). Left claimless it
   // classified AMBIGUOUS → grounded-without-retrieval → answerability NONE,
@@ -1247,6 +1278,37 @@ const claimToSource = (claim: ClaimType, hasDocuments: boolean): SourceType[] =>
 // passed in Sales, whose plan held REFERENCE_FILE alone). Questions that point
 // at the résumé/JD claim those sides explicitly (deictic side-claims above).
 const DOCUMENT_FACT_RETRIEVAL_SOURCES: SourceType[] = ['REFERENCE_FILE', 'PROJECT_FILE', 'CODING_SAMPLE'];
+
+// Document nouns a definite/possessive determiner turns into a pointer at an
+// attached file. "problem"/"question"/"policy"/"contract" are NOT here on
+// purpose: "this problem" is coding self-talk and "your retry policy" is a
+// question about the user's practice, not a pointer at a document. An attached
+// problem statement, policy or contract is reached by NAME below.
+const DOC_DEIXIS_RE = /\b(?:the|this|that|my|our|your|attached|uploaded)\s+(?:[\w-]+\s+){0,2}(?:logs?|error\s+logs?|documents?|docs?|files?|notes|spec(?:ification)?s?|briefs?|reports?|post-?mortems?|checklists?|playbooks?|battlecards?|syllabus|syllabi|handbooks?|agendas?|sow|pdfs?|decks?|slides?|stack\s*traces?|readme|attachments?|write-?ups?|memos?)\b/i;
+
+const FILE_NAME_STOP = new Set(['the', 'and', 'for', 'with', 'from', 'copy', 'final', 'draft', 'new', 'old', 'sample', 'file', 'doc', 'docs', 'notes', 'tech', 'test', 'v1', 'v2', 'v3']);
+
+/**
+ * Does the question name one of the attached files? A run of two consecutive
+ * filename words ("error log", "array problem", "launch checklist") or one
+ * distinctive word of six+ letters ("postmortem", "battlecard", "syllabus").
+ * Filenames are the user's own labels for what they attached, so a match is a
+ * deterministic routing signal — the same reasoning as the glossary/formula
+ * routing above, generalised. Names only, never content.
+ */
+export function mentionsAttachedFile(question: string, fileNames: readonly string[] | undefined): boolean {
+  if (!fileNames?.length) return false;
+  const q = ` ${question.toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  for (const name of fileNames) {
+    const stem = String(name ?? '').toLowerCase().replace(/\.[a-z0-9]{1,5}$/i, '');
+    const words = stem.split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !FILE_NAME_STOP.has(w));
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].length >= 6 && q.includes(` ${words[i]} `)) return true;
+      if (i + 1 < words.length && q.includes(` ${words[i]} ${words[i + 1]} `)) return true;
+    }
+  }
+  return false;
+}
 
 export function classifyTurn(input: ClassificationInput): Classification {
   const q = norm(input.resolvedQuestion);
