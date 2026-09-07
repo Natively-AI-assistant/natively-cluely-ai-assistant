@@ -272,17 +272,37 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         // authority, scope and version filtering downstream.
         forceDocumentGrounding: true,
       });
-      return (res?.chunks ?? []).map((c: Record<string, unknown>) => {
+      const chunks = (res?.chunks ?? []) as Array<Record<string, unknown>>;
+      // THE RERANKER'S ORDER MUST SURVIVE THIS SEAM (2026-09-07). The retriever
+      // selects the pool by cross-encoder score when it reranked, but `score`
+      // stays the hybrid+answerability value (Context OS reads it as a
+      // confidence). Downstream V3 sorts evidence by `finalScore` — the legacy
+      // port's accepted-slice fill and the packer's rank() — so handing it the
+      // hybrid score silently undid the rerank: measured on a live session,
+      // every turn's evidence was ordered by lexical+vector while telemetry
+      // showed a billed, successful rerank. When the pool carries rerank
+      // scores, they ARE the final score; a chunk the reranker never saw (the
+      // un-pooled tail) sinks just below the lowest reranked one, exactly as
+      // the retriever's own rankScore(byRerank) orders it.
+      const rerankScores = chunks
+        .map((c) => c.rerankScore)
+        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+      const rerankedPool = rerankScores.length > 0;
+      const tailFloor = rerankedPool ? Math.min(...rerankScores) - 1 : 0;
+      return chunks.map((c) => {
         const sid = String(c.sourceId ?? '');
         const status = documentStatuses.get(sid);
+        const rerankScore = typeof c.rerankScore === 'number' ? c.rerankScore : undefined;
         return {
           sourceId: sid,
           fileName: c.fileName as string | undefined,
           text: String(c.text ?? ''),
           chunkIndex: c.chunkIndex as number | undefined,
-          score: c.score as number | undefined,
+          score: rerankedPool ? (rerankScore ?? tailFloor) : (c.score as number | undefined),
           ftsScore: c.ftsScore as number | undefined,
           vectorScore: c.vectorScore as number | undefined,
+          ...(rerankScore !== undefined ? { rerankScore } : {}),
+          ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
           // Provenance (issue 10 / Pattern D): everything this port reads is a
           // file the user attached to the MODE — whatever its name or content
           // claims to be. A reference file named like a transcript stays

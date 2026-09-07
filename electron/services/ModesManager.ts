@@ -1677,6 +1677,7 @@ export class ModesManager {
                         forceDocumentGrounding: true,
                         followUpReferentHint: retrievalOptions?.followUpReferentHint,
                         rerankSurface: retrievalOptions?.rerankSurface,
+                        rerankDeadlineMs: retrievalOptions?.rerankDeadlineMs,
                         ...(retrievalOptions?.relaxed ? { topK: retrievalOptions.topK, tokenBudget: tokenBudget ?? 5200 } : {}),
                     },
                 );

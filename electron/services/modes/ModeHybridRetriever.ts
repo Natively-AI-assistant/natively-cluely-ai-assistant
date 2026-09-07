@@ -10,7 +10,7 @@ import Database from 'better-sqlite3';
 import { buildDocumentMap, resolveTargetSections, sectionAwareChunksFromMap, selectTableOfContentsEntries, sentenceAwareWindows, tabularChunks } from './DocumentMap';
 import { wordsOf } from './lexicalTokens';
 import { CHUNKER_VERSION, semanticChunks } from './semanticChunker';
-import { resolveRerankBudgetMs, type RerankSurface } from '../reranking/rerankBudget';
+import { resolveRerankBudgetMs, rerankBudgetFitsDeadline, type RerankSurface } from '../reranking/rerankBudget';
 // Round-8 (seminar-fix-2): use the SHARED 6-clause evidence rule so the hybrid
 // (live) path gives the model the SAME completeness + off-topic-redirect guidance
 // as the lexical path. Previously formatContext had a stale 1-sentence copy.
@@ -35,6 +35,19 @@ export interface ModeRetrievedChunk {
     ftsScore: number;
     vectorScore: number;
     trustLevel: 'untrusted_reference';
+    /**
+     * Cross-encoder score when this pool was reranked; absent otherwise.
+     *
+     * CARRIED THROUGH SINCE 2026-09-07. It was computed, used to SELECT the
+     * pool, and dropped at this boundary — so every consumer that sorts
+     * evidence (the V3 legacy port, the context packer) re-ordered the
+     * reranker's picks by the hybrid score, and the debug event reported
+     * `rerankScore: null` on a turn whose telemetry showed a billed, HTTP 200
+     * rerank. Measured on a 23-turn live session with Voyage rerank-2.5-lite.
+     */
+    rerankScore?: number;
+    /** Structural/property answerability boost, same story as above. */
+    answerabilityScore?: number;
 }
 
 /**
@@ -1085,6 +1098,13 @@ export class ModeHybridRetriever {
          * itself must never be handed the manual budget on a live turn.
          */
         rerankSurface?: RerankSurface;
+        /**
+         * The CALLER's own deadline for the whole retrieval, when it races
+         * retrieval against a timer (the legacy streamChat path: 1000ms, 2000ms
+         * doc-grounded). A rerank whose budget cannot fit inside it is not
+         * started — see rerankBudgetFitsDeadline for the measured waste.
+         */
+        rerankDeadlineMs?: number;
     }): Promise<ModeRetrievedContext> {
         const {
             query,
@@ -1095,6 +1115,7 @@ export class ModeHybridRetriever {
             allowRerank = false,
             forceDocumentGrounding = false,
             rerankSurface,
+            rerankDeadlineMs,
         } = params;
         // Unsearchable placeholder files (deep-run 2, issue 12): an image-only
         // PDF's "[Page 1] [Page 2]" extraction is not evidence — served as a
@@ -1466,7 +1487,16 @@ export class ModeHybridRetriever {
                 lowConfidence, explicitlySelected, shouldRerank,
                 candidateCount: candidates.length, hasOverride: Boolean(this.rerankerOverride),
             });
-            if (shouldRerank) {
+            // The budget follows the CHOICE, not just the surface (rerankBudget.ts).
+            // Resolved BEFORE the gate below so a caller's deadline can be
+            // compared against it.
+            const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
+            if (shouldRerank && !rerankBudgetFitsDeadline({ budgetMs: RERANK_BUDGET_MS, deadlineMs: rerankDeadlineMs })) {
+                // The caller will have stopped waiting before this rerank's own
+                // budget elapses. Starting it anyway bills a hosted reranker for
+                // a result nobody reads (measured: the recap hotkey, 2026-09-07).
+                markH4HybridStage('rerank_skipped_deadline', { budgetMs: RERANK_BUDGET_MS, deadlineMs: rerankDeadlineMs, candidateCount: candidates.length });
+            } else if (shouldRerank) {
                 // A manual-chat answer has a fixed first-useful deadline. The local
                 // cross-encoder is optional ranking refinement, so it must never
                 // consume that whole deadline and prevent a lexical/evidence-pack
@@ -1476,7 +1506,6 @@ export class ModeHybridRetriever {
                 // the user selected gets time to finish, while the bundled
                 // default keeps the 1200ms that protects a first-useful token.
                 // See rerankBudget.ts for the measured case this fixes.
-                const RERANK_BUDGET_MS = resolveRerankBudgetMs({ explicitlySelected, surface: rerankSurface });
                 markH4HybridStage('rerank_enter', { candidateCount: candidates.length, budgetMs: RERANK_BUDGET_MS });
                 const rerankPromise = this.maybeRerankCandidates(queryText, candidates);
                 let rerankTimer: NodeJS.Timeout | undefined;
@@ -1566,6 +1595,8 @@ export class ModeHybridRetriever {
                     score: this.reportedDocGroundedScore(c),
                     ftsScore: c.ftsScore,
                     vectorScore: c.vectorScore,
+                    ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                    ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                     trustLevel: 'untrusted_reference',
                 })),
                 formattedContext: finalContext,
@@ -1584,6 +1615,8 @@ export class ModeHybridRetriever {
                 score: this.combinedScore(c.ftsScore, c.vectorScore, FTS_WEIGHT),
                 ftsScore: c.ftsScore,
                 vectorScore: c.vectorScore,
+                ...(typeof c.rerankScore === 'number' ? { rerankScore: c.rerankScore } : {}),
+                ...(typeof c.answerabilityScore === 'number' ? { answerabilityScore: c.answerabilityScore } : {}),
                 trustLevel: 'untrusted_reference'
             })),
             formattedContext,
