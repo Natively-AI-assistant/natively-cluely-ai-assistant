@@ -1716,3 +1716,32 @@ Pinned in `AutoAnswerSimple.test.mjs` (rewritten user-channel tests, loud park d
 `AutoAnswerPrefetchReveal2026_09_03.test.mjs` (finished prefetch revealed, in-flight prefetch adopted and
 revealed at completion, cooldown not stamped, manual press never leaks a prefetch). Auto Answer suites
 85/85, electron typecheck clean. Not yet run against a live call.
+
+## 2026-09-07 — in-flight adoption was conditional on the trigger being automatic
+
+Post-merge audit of the fixes above. Adoption of a STILL-STREAMING prefetch was recorded only through
+`automaticGenerationId`, which `handleSuggestionTriggerInner` sets only when `trigger.automatic` is true —
+and `completeSpeculativeRun` read that same field to decide whether to reveal. A **non-automatic** adopter
+therefore returned having "adopted" the live stream while completion, finding no marker, parked the text in
+`speculativeAnswer` and emitted nothing: `13-q4` reproduced on the other caller. The already-finished branch
+was never affected; it does not consult `automatic` at all.
+
+Confirmed live, not only in tests. Same signed-in session, same spoken question, same protocol (Auto Answer
+disabled the instant the speculative stream starts, so only the non-automatic `__e2e__:ask` can adopt):
+
+| build | engine trace | overlay |
+| --- | --- | --- |
+| before | `Speculative stream accepted (Jaccard=1.00) — continuing; revealed at completion`, then nothing | transcript + the idle placeholder; no answer |
+| after  | the same line, then `Revealing the prefetched answer (1772 chars, prefetch gen 7 → 8)` | the answer renders |
+
+**Fix:** a dedicated `speculativeAdoptedGenerationId`, set on adoption regardless of `automatic`, read by
+`completeSpeculativeRun`, and cleared wherever `speculativeAnswer` is. `automatic` is derived separately for
+the reveal (`this.automaticGenerationId === generationId`), so `revealSpeculativeAnswer` never nulls
+`automaticGenerationId` for a generation that is not its own — a non-automatic reveal must not look
+barge-in-cancellable.
+
+Latent for users: `__e2e__:ask` (the E2E/benchmark harness) is the only non-automatic caller and it resets
+first, so no shipped path reaches it. It still silently loses an answer whenever the harness does, which is
+how Auto Answer quality gets measured.
+
+Pinned by a seventh case in `AutoAnswerPrefetchReveal2026_09_03.test.mjs`, red against the pre-fix bundle.
