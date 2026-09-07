@@ -2806,9 +2806,10 @@ body {
   user-select: none;
   -webkit-user-select: none;
 }
-.resize-handle-e { cursor: ew-resize; }
-.resize-handle-s { cursor: ns-resize; }
-.resize-handle-se { cursor: nwse-resize; }
+/* The cursors themselves cannot live here: the global cursor lock further down
+   this file is `!important` on universal selectors, so it wins from anywhere
+   above it. They are declared as its one documented exception — search
+   `@cursor-lock-exception`. */
 
 .resize-handle-se::after {
   content: '';
@@ -2864,8 +2865,9 @@ a {
 
 /* ─── Global cursor lock ─────────────────────────────────────────────────
    This is a desktop Electron app — the only cursor we ever show is the
-   default arrow. No I-beam on inputs, no pointer on buttons, no resize
-   handles, no text-select carets. This rule overrides:
+   default arrow. No I-beam on inputs, no pointer on buttons, no text-select
+   carets. The overlay's resize handles are the ONE exception, carved out
+   immediately below. This rule overrides:
      - Browser UA defaults (input → text, button → pointer, link → pointer)
      - Tailwind `cursor-*` utility classes used throughout the codebase
      - Any inline `style="cursor: …"` set by libraries/components
@@ -2889,6 +2891,32 @@ a,
 [contenteditable="true"] {
   cursor: default !important;
 }
+
+/* @cursor-lock-exception:start */
+/* The overlay's resize handles — the single exception to the lock above.
+   These strips are invisible (see the .resize-handle block earlier in this
+   file); the cursor is their entire affordance, so a handle that resolves to
+   `default` is a handle no user can find.
+
+   Both details here are load-bearing, and one of them is why the handles
+   shipped dead in PR #499:
+
+   · TWO classes, not one. `.resize-handle-e` is (0,1,0) and so is `*:hover`
+     above — an equal-specificity tie that the lock wins on source order, even
+     with `!important` added. `.resize-handle.resize-handle-e` is (0,2,0) and
+     clears every selector in the lock outright.
+   · `!important`, because the lock has it, and an important declaration beats
+     a normal one no matter how specific the normal one is. PR #499 declared
+     `.resize-handle-e { cursor: ew-resize }` with neither, five months after
+     this lock landed, so it never once took effect in a shipped build.
+
+   Pinned in both directions by tests/css/resize-handle-cursor.check.mjs, which
+   resolves the real cascade in Electron rather than grepping for `!important`
+   — reading the rule is what missed this the first time. */
+.resize-handle.resize-handle-e { cursor: ew-resize !important; }
+.resize-handle.resize-handle-s { cursor: ns-resize !important; }
+.resize-handle.resize-handle-se { cursor: nwse-resize !important; }
+/* @cursor-lock-exception:end */
 
 /* Restore keyboard focus rings that Tailwind preflight removes */
 *:focus-visible {
