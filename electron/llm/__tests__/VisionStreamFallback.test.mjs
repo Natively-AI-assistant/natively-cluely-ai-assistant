@@ -295,6 +295,33 @@ describe('runStreamingVisionFallback — commit point + fallback', () => {
     assert.equal(b._calls, 0, 'must not switch providers after commit (would duplicate)');
   });
 
+  // A provider that yields one chunk then throws lands in the DRAIN loop's own
+  // catch, not the outer one (the outer catch only sees a throw from the FIRST
+  // `it.next()`, before commit). rethrowAfterCommit must be honoured on both
+  // paths — this is exactly the shape Task 6 drives (yield 'half', then throw,
+  // expecting a terminal error with partial:true).
+  test('rethrowAfterCommit=false (default): a post-commit drain failure ends the stream quietly', async () => {
+    const a = throwAfterFirst('openai', ['half'], 'drain broke');
+    const health = new Map();
+    const out = await collect(runStreamingVisionFallback([a], CFG, health, fastHooks()));
+    assert.deepEqual(out, ['half'], 'the chunk delivered before the drain failure is kept');
+  });
+
+  test('rethrowAfterCommit=true: a post-commit drain failure propagates instead of ending quietly', async () => {
+    const a = throwAfterFirst('openai', ['half'], 'drain broke');
+    const health = new Map();
+    const cfg = { ...CFG, rethrowAfterCommit: true };
+    const out = [];
+    await assert.rejects(
+      (async () => {
+        for await (const c of runStreamingVisionFallback([a], cfg, health, fastHooks())) out.push(c);
+      })(),
+      /drain broke/,
+      'the drain-loop error must propagate when the caller opted in',
+    );
+    assert.deepEqual(out, ['half'], 'the chunk delivered before commit is still yielded before the throw');
+  });
+
   test('empty-stream first provider → falls back', async () => {
     const a = okProvider('openai', []); // yields nothing → empty-stream
     const b = okProvider('claude', ['recovered']);

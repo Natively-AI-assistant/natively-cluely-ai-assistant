@@ -1,13 +1,16 @@
 // electron/llm/streamFallbackEngine.ts
 //
-// Pure, dependency-free core of the streaming vision-provider fallback chain.
-//
-// LLMHelper builds the concrete provider list (each `open()` wraps a real
-// streamWith* SDK call) and the config/health map, then delegates the
-// orchestration to runStreamingFallback() here. Keeping the state machine
-// free of SDK/Electron deps makes the fragile parts — the first-token "commit
-// point", retry classification, circuit breaking, and speed reordering — unit
-// testable with deterministic fake providers.
+// Pure, dependency-free core of a streaming provider-fallback chain. Provider-
+// neutral: a "provider" is just `{ id, name, priority, open(signal, attempt) }`,
+// so any caller can build its own concrete provider list (each `open()` wraps
+// a real streaming SDK call) and its own config/health map, then delegate the
+// orchestration to runStreamingFallback() here. `visionStreamFallback.ts` is
+// one binding of this engine — it re-exports these names under the vision-
+// flavoured names LLMHelper already calls, with vision-tuned config defaults.
+// `textStreamFallback.ts` is a second binding, for the text streaming path.
+// Keeping the state machine free of SDK/Electron deps makes the fragile parts
+// — the first-token "commit point", retry classification, circuit breaking,
+// and speed reordering — unit testable with deterministic fake providers.
 //
 // The "commit point" pattern (LiteLLM / OpenRouter / Vercel AI SDK):
 //   • Before the first content chunk is yielded, a provider error/timeout is
@@ -91,7 +94,11 @@ export interface FallbackConfig {
   /** Cooldown for structural incompatibilities (no_vision / payload too large). */
   incompatibleCooldownMs: number;
   /**
-   * Cooldown for a model id that upstream has retired. See the default.
+   * Cooldown for a model id that upstream has retired. Defaults to the
+   * exported `MODEL_GONE_COOLDOWN_MS` below when omitted — each binding's
+   * own default config (e.g. `DEFAULT_VISION_FALLBACK_CONFIG` in
+   * `visionStreamFallback.ts`) sets it explicitly from that same constant so
+   * the two cannot drift.
    * OPTIONAL because `textStreamFallback` reuses this config shape and has its
    * own defaults object; making it required broke that build. The use site
    * falls back to the same 24h constant, so an omitting caller still gets the
@@ -568,6 +575,12 @@ export async function* runStreamingFallback(
             next = await Promise.race([nextChunk, stall]);
           } catch (drainErr: any) {
             warn(`[${cfg.logPrefix}] ${provider.name} interrupted mid-stream after commit: ${drainErr?.message || drainErr}`);
+            // A caller that asked for post-commit errors gets them here too — this is
+            // where a provider that yielded a token and then died actually lands, and
+            // an interchunk stall with it. Default (false) keeps vision's behaviour:
+            // a partial answer is better than none, and never duplicate via another
+            // provider.
+            if (cfg.rethrowAfterCommit) throw drainErr;
             return; // partial answer already delivered; do not duplicate via another provider
           } finally {
             if (stallTimer) clearTimeout(stallTimer);
