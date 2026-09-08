@@ -45,11 +45,6 @@ interface UsageData {
   limits?: NativelyPlanLimits;
 }
 
-interface PricingProduct {
-  formattedPrice: string | null;
-  checkoutUrl: string;
-}
-
 const PLAN_STANDARD_URL = 'https://checkout.dodopayments.com/buy/pdt_0NbFixGmD8CSeawb5qvVl';
 const PLAN_PRO_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM6Aw0IWdspbsgUeCLA';
 const PLAN_MAX_URL = 'https://checkout.dodopayments.com/buy/pdt_0NcM7JElX4Af6LNVFS1Yf';
@@ -645,7 +640,6 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
   const [justActivatedPro, setJustActivatedPro] = useState(false);
   const [usageData, setUsageData] = useState<UsageData | null>(() => usageCache);
   const [isLoadingUsage, setIsLoadingUsage] = useState(false);
-  const [pricingProducts, setPricingProducts] = useState<Record<string, PricingProduct>>({});
   const [planCatalog, setPlanCatalog] = useState<Record<string, NativelyPlanLimits> | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('natively_api_pro_monthly');
   const [prevPlanId, setPrevPlanId] = useState<string>('natively_api_pro_monthly');
@@ -788,14 +782,6 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         if (res?.ok && res.plans) setPlanCatalog(res.plans);
       })
       .catch(() => { /* the cards fall back to their qualitative copy */ });
-  }, []);
-
-  useEffect(() => {
-    window.electronAPI?.getNativelyPricing?.()
-      .then((res) => {
-        if (res?.ok && res.products) setPricingProducts(res.products);
-      })
-      .catch(() => {});
   }, []);
 
   // ── Trial init + polling ──────────────────────────────────
@@ -1159,8 +1145,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           ] as const
         ).map((tab) => {
           const isSel = selectedPlanId === tab.id;
-          const liveProduct = pricingProducts[tab.id];
-          const displayPrice = liveProduct?.formattedPrice || tab.price;
+          // The price is the literal above, full stop. It used to prefer a
+          // `formattedPrice` from getNativelyPricing, whose /v1/pricing route
+          // was never built on the server — three months of a call that always
+          // 404'd and a fallback that always won. /v1/plans (planCatalog) is
+          // the live source that does exist, and it agrees with these figures.
+          const displayPrice = tab.price;
           return (
             <button
               key={tab.id}
@@ -1195,10 +1185,13 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const direction = currentIndex >= prevIndex ? 1 : -1;
 
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
-        const liveProduct = pricingProducts[plan.id];
         const limits = planCatalog?.[plan.planKey];
-        const price = liveProduct?.formattedPrice || plan.price;
-        const checkoutUrl = liveProduct?.checkoutUrl || plan.url;
+        const price = plan.price;
+        // A verified-live Dodo link (all four checked 2026-09-08). These were
+        // the fallback behind getNativelyPricing; with that call removed they
+        // are simply the source, and changing a checkout link is now an app
+        // release. That was already the truth — it just looked otherwise.
+        const checkoutUrl = plan.url;
         const currentPlan = usageData?.plan?.toLowerCase();
         const rowPlan = plan.name.toLowerCase();
         const isActive =

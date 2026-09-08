@@ -190,10 +190,11 @@ export const PlansSettings: React.FC<PlansSettingsProps> = ({
     // It has to live in the child, not here, for two hard reasons: every
     // `.pricing-*` rule in index.css is scoped under
     // [data-interface-theme="…"], an attribute NativelyProSettings sets on
-    // its own root and this component never sets; and the live prices come
-    // from the `getNativelyPricing` fetch that only NativelyProSettings
-    // makes, so summarising them here would mean either a second IPC call
-    // site or a second copy of the hardcoded price fallbacks.
+    // its own root and this component never sets; and the prices are literals
+    // owned by NativelyProSettings, so summarising them here would mean a
+    // second copy of them. (They were briefly meant to come from a
+    // `getNativelyPricing` fetch; its /v1/pricing route was never built on the
+    // server and the call has been removed.)
     const collapseProSection = !isPremium;
 
     const proSection = (
