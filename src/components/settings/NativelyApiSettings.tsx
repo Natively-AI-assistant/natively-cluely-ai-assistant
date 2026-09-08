@@ -341,11 +341,16 @@ function ResourceMeter({
 /**
  * Knowledge Usage: one meter over two.
  *
- * The headline is the server's `knowledge.percent`, which is
- * max(embedding, reranker) — never lower than an exhausted half. It is NOT a
- * ratio of summed tokens: reranker allowances are ~2.5x the embedding ones, so
- * a customer who had spent every embedding token would have read ~29% here, on
- * the exact screen they opened to find out why indexing had just failed.
+ * The headline is the server's `knowledge.percent`: an even 50/50 blend of the
+ * two halves' percentages, so each capability has equal say. It is NOT a ratio
+ * of summed tokens — reranker allowances are ~2.5x the embedding ones, so that
+ * would have read ~29% for a customer who had spent every embedding token.
+ *
+ * The blend has its own blind spot, which is why the warning colour reads
+ * `max_half_percent` instead: 100% embeddings with reranking untouched blends
+ * to a mid-range 50%, and since the halves are enforced independently that
+ * customer's indexing is already dead. The number says how much is used; the
+ * colour says whether anything is blocked. The breakdown below says which.
  *
  * The breakdown is a disclosure rather than two more top-level rows: embeddings
  * and reranking are one product concept to the person paying for them, and
@@ -356,7 +361,16 @@ function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: Nativel
   const [open, setOpen] = useState(false);
   if (!knowledge) return null;
   const pct = Number.isFinite(knowledge.percent) ? knowledge.percent : 0;
-  const isHigh = pct >= 80;
+  // The WORST half drives the warning, the blend drives the number. They answer
+  // different questions: "how much have I used" vs "is anything already
+  // blocked". Embeddings at 100% with reranking untouched blends to 50%, and
+  // the halves are enforced independently — so indexing is dead while the
+  // headline reads mid-range. Colouring on the blend would hide exactly the
+  // state someone opens this panel to diagnose.
+  const worstHalf = Number.isFinite(knowledge.max_half_percent as number)
+    ? (knowledge.max_half_percent as number)
+    : pct;
+  const isHigh = worstHalf >= 80;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -385,7 +399,7 @@ function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: Nativel
       <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none ${
-            pct > 100 ? 'bg-red-500' : isHigh ? 'bg-amber-500' : 'bg-accent-primary'
+            worstHalf > 100 ? 'bg-red-500' : isHigh ? 'bg-amber-500' : 'bg-accent-primary'
           }`}
           style={{ width: `${Math.min(100, Math.max(0, knowledge.visual_percent ?? 0))}%` }}
         />
