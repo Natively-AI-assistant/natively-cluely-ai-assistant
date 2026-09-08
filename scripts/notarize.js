@@ -55,9 +55,17 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Decide which credential strategy is configured, if any. Returns null if none. */
-function resolveCredentials() {
-  const env = process.env;
+/**
+ * Decide which credential strategy is configured, if any. Returns null if none.
+ *
+ * `env` is a parameter (defaulting to the real environment, so the call site below
+ * is unchanged) purely so scripts/preflight-notary.cjs can ask THIS function — the
+ * one the build actually obeys — which strategy a build would pick, ~20 minutes
+ * before it gets there. A second copy of this precedence would be free to drift,
+ * and a preflight that validates a strategy the build does not use is worse than
+ * no preflight: it reports green and the build still dies at the notary call.
+ */
+function resolveCredentials(env = process.env) {
 
   // App Store Connect API key. APPLE_API_ISSUER is REQUIRED for Team keys but must be
   // OMITTED for Individual keys (passing it yields a 401), so we only require key+id and
@@ -246,3 +254,7 @@ module.exports = async function notarizeHook(context) {
     throw err;
   }
 };
+
+// Exposed for scripts/preflight-notary.cjs (see resolveCredentials above). electron-builder
+// calls module.exports itself, so hanging a property off it changes nothing for the hook.
+module.exports.resolveCredentials = resolveCredentials;
