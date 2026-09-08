@@ -79,7 +79,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Direct Assist</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Sends the last three minutes of conversation and your full reference files straight to the model, skipping retrieval entirely. Off by default — turn it on in AI Providers.
+                                    The model sees your last three minutes of conversation and your reference files verbatim — no retrieval, no summarising in between. Off by default; enable it in AI Providers.
                                 </p>
                             </div>
                         </div>
@@ -94,7 +94,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Bring Your Own Reranker</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Pick the model that decides which of your material an answer is built from — hosted through Jina AI or OpenRouter, or run locally. Installs straight from Hugging Face in Settings › Reranker.
+                                    Choose what picks the material behind your answers — hosted through Jina AI or OpenRouter, or run locally. Installs from Hugging Face in Settings › Reranker.
                                 </p>
                             </div>
                         </div>
@@ -109,7 +109,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Providers That Fail Over</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    A provider that stalled instead of failing went unnoticed until the whole answer timed out. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or retry in parallel. Local models are untouched.
+                                    A stalled provider no longer costs you the answer. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or retry in parallel. Local models are untouched.
                                 </p>
                             </div>
                         </div>
@@ -124,7 +124,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Lighter and Faster</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Every window was loading the whole app — the tiny overlay toggle started the Markdown and maths renderers just to draw a button. Memory use is down about a quarter, and windows open faster.
+                                    Around a quarter less memory, and windows open faster. Each used to load the entire app — the tiny overlay toggle booted the Markdown and maths renderers just to draw a button.
                                 </p>
                             </div>
                         </div>
@@ -139,7 +139,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Choose Your Embedding Model</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Settings › Embeddings gives retrieval its own panel — Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint — with a Test that sends one live request.
+                                    Set what finds your material: Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint, each with a live Test. In Settings › Embeddings.
                                 </p>
                             </div>
                         </div>
