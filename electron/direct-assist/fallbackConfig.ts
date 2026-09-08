@@ -17,10 +17,37 @@ import { MODEL_GONE_COOLDOWN_MS } from '../llm/streamFallbackEngine';
  * DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS = 2: a vision selection burns 2 x 30s on
  * the adapter's connect ceiling, leaving 30s for a fallback rung to answer.
  * Short enough to still be a bounded wait.
- * Checked BEFORE a rung is opened, so an exhausted budget ends the ladder
- * rather than starting a rung that cannot finish inside it.
+ *
+ * Checked BEFORE a rung is opened, against elapsed time PLUS
+ * DIRECT_ASSIST_MIN_VIABLE_TTFT_MS, not elapsed alone. Elapsed-alone would let
+ * a rung open with, say, 100ms left on the clock — provably unable to reach a
+ * first token before the ceiling — and the ladder would sit silent until
+ * whichever guard fires next, which defeats the point of a ceiling that is
+ * supposed to end the ladder promptly.
+ *
+ * That margin is MIN_VIABLE_TTFT (a realistic floor, ~5s), deliberately NOT a
+ * rung's full configured ttftTimeoutMs (35s). Checking against the full
+ * ttftTimeoutMs was tried first and rejected: at the worst-case point two
+ * paragraphs up — elapsed ~60s after 2 x 30s on the selected rung — 60s + 35s
+ * exceeds 90s, so that check would refuse the very fallback rung this budget
+ * exists to let open, making the feature inert for precisely the vision-selection
+ * case DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS's comment describes. A healthy
+ * provider's first token lands in 2-5s (same comment), so a rung with at least
+ * MIN_VIABLE_TTFT of budget left can plausibly still answer; a rung with less
+ * cannot, and only that second case is what the ceiling refuses to open.
  */
 export const DIRECT_ASSIST_TOTAL_BUDGET_MS = 90_000;
+
+/**
+ * The realistic floor on "can this rung plausibly still answer", used by
+ * DIRECT_ASSIST_TOTAL_BUDGET_MS's pre-open check — see that constant's
+ * comment for why this is a small floor and not a rung's full ttftTimeoutMs.
+ * ~5s, the upper end of "a healthy provider's first token is 2-5s" (see
+ * DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS's comment): below this, opening a rung
+ * is not offering it a real chance, so the budget refuses rather than opening
+ * something that would almost certainly still time out.
+ */
+export const DIRECT_ASSIST_MIN_VIABLE_TTFT_MS = 5_000;
 
 /**
  * Attempts on the SELECTED provider before the ladder moves on.
