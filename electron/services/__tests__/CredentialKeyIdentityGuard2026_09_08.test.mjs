@@ -60,8 +60,10 @@ test('the mismatch is detected BEFORE anything can be written', () => {
 test('both write gates refuse on a proven key mismatch, and both honour re-entry', () => {
   // saveCredentials and refuseWriteWhileDegraded must agree, or a setter would
   // reject a mutation the save would have accepted (or worse, the reverse).
-  assert.match(src, /if \(this\.keyIdentityMismatch && !this\.reentryRequired\) \{/);
-  assert.match(src, /if \(!this\.keyringUnreadable && !this\.keyIdentityMismatch\) return false;/);
+  // The PREDICATE, not the raw flag — see the upgrade-safety test below for why
+  // a different key on its own must not refuse a write.
+  assert.match(src, /if \(this\.keyMismatchWouldDestroy\(\) && !this\.reentryRequired\) \{/);
+  assert.match(src, /if \(!this\.keyringUnreadable && !this\.keyMismatchWouldDestroy\(\)\) return false;/);
   // reentryRequired is the escape hatch: once the store is classified
   // unrecoverable, refusing writes leaves the user unable to use the app at all.
   const gate = src.slice(src.indexOf('private refuseWriteWhileDegraded'));
@@ -82,4 +84,35 @@ test('credential telemetry reports key IDENTITY, not just availability', () => {
   const tel = src.slice(src.indexOf('storesAmbiguous: this.credentialStoresAmbiguous,'));
   assert.match(tel.slice(0, 900), /keyIdentity: this\.probeKeyIdentity\(\)/);
   assert.match(tel.slice(0, 900), /keyIdentityMismatch: this\.keyIdentityMismatch/);
+});
+
+// ── UPGRADE SAFETY ──────────────────────────────────────────────────────────
+// Every existing install has a credential file written before the canary
+// existed. None of them may be locked out of saving.
+
+test('an existing store written before the canary existed is never treated as a mismatch', () => {
+  // probeKeyIdentity returns 'unknown' with no canary, and ONLY 'different'
+  // latches. An upgrading user therefore keeps saving exactly as before, and the
+  // first save stamps a canary for future launches.
+  const load = src.slice(src.indexOf('private loadCredentials'));
+  assert.match(load, /this\.probeKeyIdentity\(\) === 'different'/);
+  assert.doesNotMatch(load, /probeKeyIdentity\(\) !== 'same'/,
+    "must not latch on 'unknown' — that would lock out every pre-canary install");
+});
+
+test('a different key alone does NOT refuse writes — only a write that would destroy does', () => {
+  // A session can legitimately hold a different key and still have a good
+  // credential set: the app-managed fallback exists for that, and
+  // preferFallbackThisLoad (keyring read SKIPPED because the fallback is newer)
+  // reaches write time with keyringUnreadable false and writes ALLOWED.
+  // Refusing on the raw flag would have broken those sessions.
+  assert.match(
+    src,
+    /private keyMismatchWouldDestroy\(\): boolean \{\s*\n\s*return this\.keyIdentityMismatch && Object\.keys\(this\.credentials\)\.length === 0;/,
+  );
+  // Both write gates use the PREDICATE, never the raw flag.
+  assert.match(src, /if \(this\.keyMismatchWouldDestroy\(\) && !this\.reentryRequired\) \{/);
+  assert.match(src, /if \(!this\.keyringUnreadable && !this\.keyMismatchWouldDestroy\(\)\) return false;/);
+  // And the user-facing "is the store degraded" answer follows the same rule.
+  assert.equal((src.match(/return this\.keyringUnreadable \|\| this\.keyMismatchWouldDestroy\(\);/g) ?? []).length, 2);
 });
