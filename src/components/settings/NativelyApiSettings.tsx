@@ -252,30 +252,42 @@ const cardContainerVariants = {
 // thing and put a third and fourth hue on a surface that should carry one
 // accent. Colour here now means exactly one thing — amber = running low.
 /**
- * One usage meter: label, the used/limit pair, and a bar.
+ * One usage meter: label, a figure, and a bar.
  *
- * ── WHY THE FIGURES ARE BACK ────────────────────────────────────────────────
+ * ── TWO READINGS, AND WHY BOTH EXIST ────────────────────────────────────────
  *
- * This showed "45% left" and nothing else, deliberately: a plan-agnostic number
- * that reads the same on Standard and Ultra, and one that let the server retune
- * allowances without a copy change. The first reason survives (the percentage is
- * still here, and still the emphasis); the second no longer applies, because the
- * limit now arrives with the usage instead of being compiled into the app. And
- * a percentage alone cannot answer the question people actually open this panel
- * with — "can I index this repo?" — which needs the number of tokens left, not
- * a proportion of an allowance they were never shown.
+ * `percentOnly` shows "63%"; the default shows "4.1M / 6.5M · 63%".
+ *
+ * The pair answers "can I index this repo?", which a proportion cannot — that
+ * needs tokens remaining, not a fraction of an allowance. But it also prints the
+ * plan's exact allowance on screen, and on the monthly panel Evin does not want
+ * the entitlement spelled out; the percentage carries the same "am I running
+ * low?" signal without it.
+ *
+ * So the trial panel keeps the figures (a trial's allowance is public, and a
+ * trial user is precisely the person deciding whether a task will fit), and the
+ * monthly panel takes the percentage. The two never render together — trial and
+ * saved-key states are mutually exclusive in practice — so this is one style per
+ * screen, not two on one.
+ *
+ * Note this is the shape KnowledgeUsage's headline already had, so the monthly
+ * card is now internally consistent rather than one bare percentage among three
+ * used/limit pairs.
  */
 function ResourceMeter({
   label,
   icon: Icon,
   meter,
   sub = false,
+  percentOnly = false,
 }: {
   label: string;
   icon?: React.ElementType;
   meter: UsageMeter | undefined;
   /** Rendered smaller and unlabelled by icon, for the Knowledge breakdown. */
   sub?: boolean;
+  /** Show only the percentage, never the plan's allowance. */
+  percentOnly?: boolean;
 }) {
   // An absent meter is not zero usage — it is a response this build does not
   // understand, or one that has not arrived. Render nothing rather than a
@@ -299,9 +311,18 @@ function ResourceMeter({
             isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'
           }`}
         >
-          {formatMeter(meter)}
-          {meter.limit != null && (
-            <span className="opacity-60"> · {Math.round(real)}%</span>
+          {/* An unmetered resource has no percentage to show, so it says
+              "Unlimited" in both readings rather than rendering an empty slot
+              or a misleading 0%. */}
+          {percentOnly ? (
+            meter.limit == null ? 'Unlimited' : `${Math.round(real)}%`
+          ) : (
+            <>
+              {formatMeter(meter)}
+              {meter.limit != null && (
+                <span className="opacity-60"> · {Math.round(real)}%</span>
+              )}
+            </>
           )}
         </span>
       </div>
@@ -331,7 +352,7 @@ function ResourceMeter({
  * promoting both to peers of "AI Usage" implies four independent things to
  * budget instead of three.
  */
-function KnowledgeUsage({ knowledge }: { knowledge: NativelyQuota['knowledge'] | undefined }) {
+function KnowledgeUsage({ knowledge, percentOnly = false }: { knowledge: NativelyQuota['knowledge'] | undefined; percentOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!knowledge) return null;
   const pct = Number.isFinite(knowledge.percent) ? knowledge.percent : 0;
@@ -380,8 +401,8 @@ function KnowledgeUsage({ knowledge }: { knowledge: NativelyQuota['knowledge'] |
             style={{ overflow: 'hidden' }}
           >
             <div className="pl-5 pt-1 space-y-2.5">
-              <ResourceMeter label="Embeddings" meter={knowledge.embedding} sub />
-              <ResourceMeter label="Reranking" meter={knowledge.reranker} sub />
+              <ResourceMeter label="Embeddings" meter={knowledge.embedding} sub percentOnly={percentOnly} />
+              <ResourceMeter label="Reranking" meter={knowledge.reranker} sub percentOnly={percentOnly} />
             </div>
           </motion.div>
         )}
@@ -1770,13 +1791,16 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
               {/* The four product categories, in the order they cost money.
                   Names are the customer's, not the implementation's: "Voice
                   Usage" rather than STT, "Research" rather than web searches.
-                  Every number here — used, limit and percentage alike — comes
-                  from the server response, so there is nothing in this file for
-                  a plan change to make stale. */}
-              <ResourceMeter label="AI Usage" icon={Brain} meter={usageData.quota.ai} />
-              <KnowledgeUsage knowledge={usageData.quota.knowledge} />
-              <ResourceMeter label="Voice Usage" icon={Mic} meter={usageData.quota.voice} />
-              <ResourceMeter label="Research" icon={Search} meter={usageData.quota.research} />
+                  Every figure comes from the server response, so there is
+                  nothing in this file for a plan change to make stale.
+
+                  percentOnly: the monthly panel reports how much of the
+                  allowance is gone, not what the allowance IS. See ResourceMeter
+                  for why the trial panel above still shows the pair. */}
+              <ResourceMeter label="AI Usage" icon={Brain} meter={usageData.quota.ai} percentOnly />
+              <KnowledgeUsage knowledge={usageData.quota.knowledge} percentOnly />
+              <ResourceMeter label="Voice Usage" icon={Mic} meter={usageData.quota.voice} percentOnly />
+              <ResourceMeter label="Research" icon={Search} meter={usageData.quota.research} percentOnly />
             </div>
           </Card>
         </motion.div>
