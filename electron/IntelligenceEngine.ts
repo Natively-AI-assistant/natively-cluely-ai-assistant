@@ -1213,6 +1213,26 @@ export class IntelligenceEngine extends EventEmitter {
         this.session.addAssistantMessage(text, finished.writeDecision, 'what_to_answer');
         if (finished.writeDecision?.policy !== 'do_not_store') {
             this.session.pushUsage({ type: 'assist', timestamp: Date.now(), question: finished.question, answer: text });
+            // THE ADOPTED ANSWER'S ONLY RECORDING POINT.
+            //
+            // recordLiveTurn has exactly three call sites — the runWhatShouldISay,
+            // runAssistMode and runManualAnswer wrappers — and BOTH adoption
+            // branches in handleSuggestionTriggerInner `return` before reaching
+            // runWhatShouldISay. So the answer the user actually sees, on the most
+            // common Auto Answer path, never entered the conversation ring: the
+            // wrapper's "a draft the user never saw is not part of the
+            // conversation" reasoning is true for a DISCARDED prefetch and false
+            // for an adopted one.
+            //
+            // This method is where an adopted answer becomes user-visible (its
+            // only two callers are the two adoption paths), so it is the one
+            // place that cannot be bypassed. Gated on the same do_not_store
+            // decision as the session write directly above: a turn the session
+            // declined to store must not reach the ring either.
+            //
+            // No imagePaths: a speculative run is always started with
+            // `undefined` for them, so there is no screen to transcribe.
+            this.recordLiveTurn(text, undefined, finished.question, 0);
         } else {
             console.warn(`[IntelligenceEngine] Prefetched answer revealed but not stored (${finished.writeDecision.reason ?? 'do_not_store'})`);
         }

@@ -297,7 +297,11 @@ test('no V3 surface reads the conversation ring without also writing to it', asy
     + (ipc.match(/recordAnswerSummary\(\n/g) ?? []).length;
 
   assert.equal(readers, 4, 'a buildV3Prompt call site was added or removed — check it has a writer');
-  assert.equal(writers, readers,
+  // NOT equality. Writers legitimately OUTNUMBER readers: revealSpeculativeAnswer
+  // records an adopted Auto Answer draft without being a buildV3Prompt reader at
+  // all. The invariant is that no reader lacks a writer, and equality asserted a
+  // coincidence — it broke the moment a real gap was closed.
+  assert.ok(writers >= readers,
     `${readers} surfaces read the ring but only ${writers} write it; a reader without a writer renders an empty history forever`);
 });
 
