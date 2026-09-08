@@ -30,6 +30,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {
   PROFILE_SCHEMA_VERSION,
+  PROFILE_STALE_AFTER_MS,
   confidenceFor,
   emptyReliability,
   isLatencyAdmissible,
@@ -362,6 +363,72 @@ export class ProviderPerformanceStore {
 
     this.profiles.set(key, base);
     this.scheduleSave();
+  }
+
+  /**
+   * Fold one CONNECT observation (request start → response headers).
+   *
+   * Separate from `record` because it is a different measurement with a
+   * different lifetime: the connect phase completes long before the stream
+   * does, and only one provider path currently exposes it. A sample arrives
+   * here whether or not the stream that followed succeeded — a connect that
+   * completed is evidence about the network even if the generation then failed.
+   */
+  recordConnect(
+    providerId: string,
+    modelId: string,
+    networkProfileId: string,
+    route: RouteKind,
+    ms: number,
+    generation?: number,
+  ): void {
+    if (!Number.isFinite(ms) || ms < 0) return;
+    this.load();
+    // Same wipe guard `record` has. Without it a request already in flight when
+    // the user pressed "forget" re-creates the row it just erased — and the
+    // Settings panel calls load() immediately after forget(), so the
+    // resurrected row is visible before the button's animation finishes.
+    if (generation !== undefined && generation !== this.generation) return;
+    const key = profileKey(providerId, modelId, networkProfileId);
+    const existing = this.profiles.get(key)
+      ?? newProfile(providerId, modelId, networkProfileId, route, this.now());
+    this.profiles.set(key, {
+      ...existing,
+      connect: foldLatency(existing.connect, ms),
+      // `connectUpdatedAt`, NOT `lastUpdated`. See the field's comment: touching
+      // lastUpdated here would make a connect measurement resurrect months-old
+      // latency evidence past isStale(), and would let a connect-only row
+      // outrank a 50-sample row in the eviction sort.
+      connectUpdatedAt: this.now(),
+    });
+    this.scheduleSave();
+  }
+
+  /**
+   * The connect evidence for ONE exact identity, or null.
+   *
+   * Deliberately NOT `lookup()`. That walks the ladder to a sibling network when
+   * the exact row has no latency samples, which is right for latency — a sibling
+   * model on the same provider is a reasonable prior — and wrong for connect:
+   * a handshake time is a property of THIS network, and serving another
+   * network's is worse than serving none. It also does not gate on
+   * `sampleCount`, which counts LATENCY samples: a profile can legitimately hold
+   * connect evidence and no committed turns yet, and gating on sampleCount made
+   * a fresh identity's connect widening dead until an unrelated turn happened
+   * to bump it.
+   */
+  connectEvidence(
+    providerId: string,
+    modelId: string,
+    networkProfileId: string,
+  ): ProviderPerformanceProfile | null {
+    this.load();
+    const p = this.profiles.get(profileKey(providerId, modelId, networkProfileId));
+    if (!p?.connect || p.connect.count <= 0) return null;
+    // Connect evidence ages on its own clock, for the same reason it is written
+    // on one.
+    const age = this.now() - (p.connectUpdatedAt ?? 0);
+    return age > PROFILE_STALE_AFTER_MS ? null : p;
   }
 
   /**

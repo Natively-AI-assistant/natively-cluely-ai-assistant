@@ -15528,10 +15528,11 @@ export function initializeIpcHandlers(appState: AppState): void {
       const {
         getProviderPerformanceStore, performanceGrade, getRuntimeSignals, confidenceFor,
         streamIdleTimeoutMs, projectLargeContext, largeContextReliabilityWarning,
-        verdictFrom, secondaryStreamTallies, isStale,
+        verdictFrom, secondaryStreamTallies, isStale, rankProvidersFor, ttftQuantiles,
       } = require('./llm/performance');
       const network = getRuntimeSignals().network();
-      const profiles = getProviderPerformanceStore().all().map((p: any) => {
+      const all = getProviderPerformanceStore().all();
+      const profiles = all.map((p: any) => {
         const large = p.workloads?.large;
         const largeAttempts = large
           ? Object.values(large.reliability as Record<string, number>).reduce((a, b) => a + b, 0)
@@ -15561,6 +15562,17 @@ export function initializeIpcHandlers(appState: AppState): void {
           // The live stall guard for this identity, and where the number came
           // from. This is the field that answers "why did my stream get cut?".
           streamIdle: streamIdleTimeoutMs(p.route, p),
+          // TRUE quantiles, and null until there are 50+ samples to support one.
+          // Phase 7's "do not claim a real P95 with n=5", enforced by the
+          // absence of a number rather than by a caveat next to one. Diagnostics
+          // only — no deadline is sized from a quantile; that is the decaying
+          // max's job.
+          quantiles: {
+            small: ttftQuantiles(p, 'small'),
+            medium: ttftQuantiles(p, 'medium'),
+            large: ttftQuantiles(p, 'large'),
+            vision: ttftQuantiles(p, 'vision'),
+          },
           // 100K is a size we deliberately never benchmark. This is the estimate
           // that replaces doing so, and it carries its own error — `actionable`
           // is false when the fit explains less than it invents.
@@ -15579,6 +15591,17 @@ export function initializeIpcHandlers(appState: AppState): void {
         ok: true,
         network: { id: network.id, interfaceClass: network.interfaceClass, offline: network.offline },
         profiles,
+        // Phase 19 readiness, surfaced read-only. This is what the profile can
+        // already answer about routing — "which provider is best for a large
+        // request / for vision" — WITHOUT being wired into the fallback engine.
+        // It is not wired because the engine orders rungs by id and those ids
+        // are coarser than a profile key (two gateways share 'custom'), so
+        // there is no sound rung → profile mapping to seed from yet.
+        rankings: {
+          small: rankProvidersFor(all, 'small'),
+          large: rankProvidersFor(all, 'large'),
+          vision: rankProvidersFor(all, 'vision'),
+        },
         // Repairs and regenerations, tallied separately because they reach no
         // profile. A repair window that expires before the provider's first
         // token can never land, and that failure is otherwise silent — the user
@@ -15588,6 +15611,32 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (err: any) {
       // A diagnostics read must never be able to look like an app failure.
       return { ok: false, error: String(err?.message ?? err), profiles: [] };
+    }
+  });
+
+  /**
+   * Run calibration. THE ONLY BILLABLE ENTRY POINT IN THIS FEATURE.
+   *
+   * Manual trigger only — there is deliberately no provider-add hook, no app
+   * launch hook and no staleness auto-run, because anything that fires on its
+   * own is what "silently spend the user's money" means. Both flags default
+   * OFF, so a user who has not opted in gets `skippedReason: 'flag_off'` and
+   * zero requests. A 24h per-identity cooldown bounds repeated presses, and the
+   * engine caps one invocation at 3 text + 1 image request.
+   */
+  safeHandle('provider-performance:calibrate', async () => {
+    try {
+      const { runCalibration } = require('./llm/performance/calibration');
+      const helper = appState.processingHelper?.getLLMHelper?.();
+      const result = await runCalibration(helper as any);
+      console.log('[Perf] calibration finished', {
+        provider: result.providerId, model: result.modelId,
+        requests: result.requestsIssued, vision: result.vision,
+        skipped: result.skippedReason ?? null,
+      });
+      return { ok: true, result };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
     }
   });
 

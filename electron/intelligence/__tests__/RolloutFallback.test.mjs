@@ -58,6 +58,8 @@ const DEFAULT_ON_KEYS = new Set([
   'adaptiveStreamIdle',
   'adaptiveTtft',
   'providerPerformanceDiagnostics',
+  // Widen-only, so ON can only ever buy a slow network more room.
+  'adaptiveConnectTimeout',
   // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
   // both are pure shadow-observation side channels (divergence logging only,
   // zero change to any real return value), so there is no risk to running

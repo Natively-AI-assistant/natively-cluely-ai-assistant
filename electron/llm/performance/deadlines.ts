@@ -28,6 +28,9 @@ import {
   STREAM_IDLE_MIN_SAMPLES_TO_NARROW,
   STREAM_IDLE_ADAPTIVE_ROUTES,
   TTFT_ADAPTIVE_ROUTES,
+  CONNECT_MIN_TIMEOUT_MS,
+  CONNECT_MAX_TIMEOUT_MS,
+  CONNECT_MARGIN_MULTIPLIER,
 } from './priors';
 import { quantile } from './estimators';
 import {
@@ -356,4 +359,127 @@ export function ttftQuantiles(
   const p50 = quantile(samples, 0.5, MIN_SAMPLES_FOR_QUANTILE);
   const p95 = quantile(samples, 0.95, MIN_SAMPLES_FOR_QUANTILE);
   return p50 != null && p95 != null ? { p50, p95 } : null;
+}
+
+
+/**
+ * The connection timeout — the fourth and last of Phase 11's independent limits.
+ *
+ * WIDEN-ONLY, floored at the shipped 4000ms. The direction matters more here
+ * than anywhere else in this file: a connect phase is DNS + TCP + TLS on
+ * whatever network the user is on, and this app has already shipped a defect
+ * where a 4s connect timer killed a working vision request by a 6ms margin.
+ * Narrowing it to "detect a dead connect faster" would trade a rare, cheap
+ * failure (waiting 4s to learn a host is unreachable) for a common, expensive
+ * one (killing a handshake that was about to succeed).
+ *
+ * So evidence can only ever buy a slow network more room, and only up to the
+ * tightest route ceiling — a connect allowance above 8000ms could consume a
+ * whole default-provider turn before a first token was even possible.
+ */
+export function connectTimeoutMs(
+  profile: ProviderPerformanceProfile | null,
+  shippedMs: number = CONNECT_MIN_TIMEOUT_MS,
+): DeadlineDecision {
+  const connect = profile?.connect;
+  const count = connect?.count ?? 0;
+  const confidence = confidenceFor(count);
+  const floor = Math.max(CONNECT_MIN_TIMEOUT_MS, shippedMs);
+
+  if (!connect || count <= 0 || !Number.isFinite(connect.maxMs) || connect.maxMs <= 0) {
+    return { valueMs: floor, source: 'shipped_prior', rawMs: null, sampleCount: 0, confidence };
+  }
+  const raw = Math.round(connect.maxMs * CONNECT_MARGIN_MULTIPLIER);
+  const widened = Math.max(floor, raw);
+  const clamped = Math.min(widened, Math.max(CONNECT_MAX_TIMEOUT_MS, floor));
+  const source: DeadlineSource = clamped === floor
+    ? 'clamped_floor'
+    : clamped === raw ? 'profile' : 'clamped_ceiling';
+  return { valueMs: clamped, source, rawMs: raw, sampleCount: count, confidence };
+}
+
+
+// ─── routing readiness (Phase 19) ─────────────────────────────────────────
+//
+// Phase 19: "design the profile so it can LATER answer: Provider A — normal
+// workload excellent, large context poor; Provider B — normal average, large
+// context excellent; Provider C — vision excellent. This should be possible
+// without redesigning the profile."
+//
+// That is a claim about the DATA MODEL, and the function below is what makes it
+// checkable rather than asserted. It ranks the profiles the store already holds,
+// per workload, using the evidence already collected.
+//
+// IT IS NOT WIRED INTO THE FALLBACK ENGINE, and the reason is a concrete
+// blocker rather than caution. That engine orders rungs by id, and the ids are
+// COARSER than a profile key: `LLMHelper.answerLatency`'s own comment records
+// that "two different gateways both land on the id 'custom'" — harmless for
+// ordering, but it means there is no sound mapping from a rung back to the
+// provider|model|network a profile is keyed by. Seeding the rung 'custom' from
+// one specific gateway's profile would reorder a chain using another gateway's
+// evidence, which is the exact confusion that comment exists to prevent. The
+// shipped ordering already handles the cold case deliberately ("never demote an
+// UNMEASURED provider behind a measured-but-slow one"), so there is nothing
+// broken to fix here — only a mapping that would have to be built first.
+
+export interface ProviderRanking {
+  providerId: string;
+  modelId: string;
+  networkProfileId: string;
+  workload: WorkloadClass;
+  grade: PerformanceGrade;
+  /** Decaying-max TTFT for this workload, or null when unmeasured. */
+  ttftMaxMs: number | null;
+  /** Successes over attempts for this workload, or null when unattempted. */
+  successRate: number | null;
+  sampleCount: number;
+  confidence: ReturnType<typeof confidenceFor>;
+}
+
+/**
+ * Rank what we know, for one workload. Best first.
+ *
+ * "Best" is reliability first, then latency — a provider that answers in 900ms
+ * and fails a fifth of the time is not the one to route to, and ordering by
+ * latency alone would pick exactly that. Unmeasured profiles sort last rather
+ * than being dropped: "we have no evidence" is a different answer from "it is
+ * slow", and a caller deciding a fallback order needs to see the difference.
+ */
+export function rankProvidersFor(
+  profiles: ProviderPerformanceProfile[],
+  workload: WorkloadClass,
+): ProviderRanking[] {
+  const rows: ProviderRanking[] = profiles.map((p) => {
+    const w = p.workloads?.[workload];
+    const r = w?.reliability;
+    const attempts = r
+      ? r.ok + r.timeout + r.stall + r.rateLimit + r.serverError + r.clientError + r.connectionFailure
+      : 0;
+    return {
+      providerId: p.providerId,
+      modelId: p.modelId,
+      networkProfileId: p.networkProfileId,
+      workload,
+      grade: performanceGrade(p),
+      ttftMaxMs: w && w.ttft.count > 0 ? w.ttft.maxMs : null,
+      successRate: attempts > 0 ? (r!.ok / attempts) : null,
+      sampleCount: w?.ttft.count ?? 0,
+      confidence: confidenceFor(w?.ttft.count ?? 0),
+    };
+  });
+
+  return rows.sort((a, b) => {
+    // Unmeasured last — but as a group, not interleaved by a latency we do
+    // not have.
+    const aKnown = a.ttftMaxMs != null;
+    const bKnown = b.ttftMaxMs != null;
+    if (aKnown !== bKnown) return aKnown ? -1 : 1;
+    if (!aKnown) return 0;
+    // Reliability first, in coarse bands. Comparing raw rates would let 0.98
+    // outrank 0.97 on noise; a band only fires when the difference is real.
+    const band = (x: number | null) => (x == null ? 1 : x >= 0.95 ? 2 : x >= 0.8 ? 1 : 0);
+    const rb = band(b.successRate) - band(a.successRate);
+    if (rb !== 0) return rb;
+    return (a.ttftMaxMs ?? 0) - (b.ttftMaxMs ?? 0);
+  });
 }

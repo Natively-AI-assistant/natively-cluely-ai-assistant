@@ -113,6 +113,17 @@ const ALL_FLAG_KEYS = [
   'adaptiveStreamIdle',
   'adaptiveTtft',
   'providerPerformanceDiagnostics',
+  // The two BILLABLE flags (2026-09-08), default OFF — deliberately unlike the
+  // four above, which default ON because nothing they do can spend money.
+  'calibration',
+  'capabilityProbe',
+  // Provider performance, second wave (2026-09-08).
+  //   adaptiveConnectTimeout  widen-only connect timeout; its own flag so it is
+  //                           not coupled to adaptiveTtft. Default ON.
+  //   adaptiveImageQuality    the only adaptive consumer that visibly DEGRADES
+  //                           output, so unlike the rest it defaults OFF.
+  'adaptiveConnectTimeout',
+  'adaptiveImageQuality',
 ];
 
 const DEFAULT_ON_KEYS = new Set([
@@ -163,6 +174,8 @@ const DEFAULT_ON_KEYS = new Set([
   'adaptiveStreamIdle',
   'adaptiveTtft',
   'providerPerformanceDiagnostics',
+  // Widen-only, so ON can only ever buy a slow network more room.
+  'adaptiveConnectTimeout',
   // Promoted to unconditional `true` (2026-08-30, dev/prod parity audit):
   // both are pure shadow-observation side channels (divergence logging only,
   // zero change to any real return value), so there is no risk to running

@@ -4844,7 +4844,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (imagePath) {
       try {
         const optimized = await getImageOptimizer().optimize(imagePath, {
-          profile: 'balanced',
+          profile: this.imageProfileFor('balanced', userMessage?.length ?? 0),
           provider: 'custom',
           cacheKey: imagePath,
         });
@@ -5076,7 +5076,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (imagePath) {
       try {
         const optimized = await getImageOptimizer().optimize(imagePath, {
-          profile: 'balanced',
+          profile: this.imageProfileFor('balanced', rawUserMessage?.length ?? 0),
           provider: 'custom',
           cacheKey: imagePath,
         });
@@ -8604,6 +8604,18 @@ let isMultimodal = !!(imagePaths?.length);
       if (images.length) body.images = images;
     }
 
+    // WIDEN-ONLY. Returns `connectTimeoutMs` unchanged unless this network has
+    // been measured to need longer — a 4s connect timer has already killed a
+    // working vision request in this app by a 6ms margin, so evidence may only
+    // ever buy a slow network more room, never less.
+    const effectiveConnectTimeoutMs = (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { applyAdaptiveConnectTimeout } = require('./llm/performance/wiring');
+        return applyAdaptiveConnectTimeout(connectTimeoutMs, { llmHelper: this });
+      } catch { return connectTimeoutMs; }
+    })();
+
     const endpointUrl = `${NATIVELY_API_URL}/v1/chat`;
     const requestId = makeRequestId('nat_stream');
     const streamStartedAt = nowMs();
@@ -8653,8 +8665,8 @@ let isMultimodal = !!(imagePaths?.length);
     // connect timeout to the connect phase only.
     const streamController = new AbortController();
     let connectTimer: NodeJS.Timeout | null = setTimeout(
-      () => streamController.abort(new Error(`Natively API connect timeout (${Math.round(connectTimeoutMs / 1000)}s)`)),
-      connectTimeoutMs,
+      () => streamController.abort(new Error(`Natively API connect timeout (${Math.round(effectiveConnectTimeoutMs / 1000)}s)`)),
+      effectiveConnectTimeoutMs,
     );
     const onCallerAbort = () => {
       try { streamController.abort(abortSignal?.reason); } catch { /* already aborted */ }
@@ -8682,8 +8694,17 @@ let isMultimodal = !!(imagePaths?.length);
         e?.cause?.code === 'ENOTFOUND' || e?.cause?.code === 'EAI_AGAIN';
 
       let lastErr: unknown;
+      // The connect measurement is per-ATTEMPT, not since the loop began.
+      // `streamStartedAt` is captured once above, so folding
+      // `responseStartedAt - streamStartedAt` into the connect estimate would
+      // charge a failed attempt-0 DNS lookup plus its backoff to the attempt
+      // that actually succeeded — which is not "request start → response
+      // headers" as the field claims, and pushes connect.maxMs toward its
+      // ceiling on exactly the flaky resolvers the retry exists to survive.
+      let attemptStartedAt = streamStartedAt;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (streamController.signal.aborted) break;
+        attemptStartedAt = nowMs();
         try {
           const serializedBody = JSON.stringify(body);
           if (!directMode) {
@@ -8701,6 +8722,16 @@ let isMultimodal = !!(imagePaths?.length);
             signal: streamController.signal,
           });
           responseStartedAt = nowMs();
+          // The CONNECT phase, measured: request start → response headers. This
+          // is the one provider path that exposes it; every other adapter hands
+          // us a generator and nothing about the socket underneath, which is
+          // why the adaptive connect timeout is deliberately narrow rather than
+          // a number invented for all of them.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { recordConnectLatency } = require('./llm/performance/wiring');
+            recordConnectLatency({ llmHelper: this, ms: responseStartedAt - attemptStartedAt });
+          } catch { /* measurement must never break a request */ }
           responseStatus = response.status;
           serverRequestId = response.headers.get('x-request-id');
           lastErr = undefined;
@@ -8716,7 +8747,7 @@ let isMultimodal = !!(imagePaths?.length);
               stage: streamController.signal.aborted ? 'connect_timeout_or_abort' : 'pre_response',
               model: this.currentModelId,
               provider: 'natively',
-              connectTimeoutMs,
+              connectTimeoutMs: effectiveConnectTimeoutMs,
               durationMs,
               error: directMode ? '[omitted for Direct Assist]' : summarizeFetchError(fetchErr),
               aborted: streamController.signal.aborted,
@@ -8733,7 +8764,7 @@ let isMultimodal = !!(imagePaths?.length);
               }
               throw new DirectAssistError('PROVIDER_ERROR', 'The selected provider could not start the stream.', true);
             }
-            throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${connectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
+            throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${effectiveConnectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
           }
           console.warn(`[streamWithNatively] DNS failure req=${requestId} (${fetchErr.cause?.code ?? fetchErr.code}), retry ${attempt + 1}/2 in 500ms`);
           await new Promise<void>(r => setTimeout(r, 500));
@@ -8767,7 +8798,7 @@ let isMultimodal = !!(imagePaths?.length);
         statusText: directMode ? undefined : response.statusText,
         model: this.currentModelId,
         provider: 'natively',
-        connectTimeoutMs,
+        connectTimeoutMs: effectiveConnectTimeoutMs,
         durationMs: Math.round(nowMs() - streamStartedAt),
         responseBody: directMode ? '[omitted for Direct Assist]' : errText.slice(0, 1000),
       });
@@ -8833,7 +8864,7 @@ let isMultimodal = !!(imagePaths?.length);
               model: this.currentModelId,
               provider: 'natively',
               serverModel: providerModel,
-              connectTimeoutMs,
+              connectTimeoutMs: effectiveConnectTimeoutMs,
               tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
               durationMs: Math.round(nowMs() - streamStartedAt),
               error: directMode ? '[omitted for Direct Assist]' : chunk.error,
@@ -8867,7 +8898,7 @@ let isMultimodal = !!(imagePaths?.length);
         model: this.currentModelId,
         provider: 'natively',
         serverModel: providerModel,
-        connectTimeoutMs,
+        connectTimeoutMs: effectiveConnectTimeoutMs,
         tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
         durationMs: Math.round(nowMs() - streamStartedAt),
         tokens: tokenCount,
@@ -8899,7 +8930,7 @@ let isMultimodal = !!(imagePaths?.length);
           provider: 'natively',
           serverModel: providerModel,
           fallbackUsed: false,
-          connectTimeoutMs,
+          connectTimeoutMs: effectiveConnectTimeoutMs,
           responseHeaderMs: responseStartedAt ? Math.round(responseStartedAt - streamStartedAt) : null,
           tfftMs: firstTokenAt ? Math.round(firstTokenAt - streamStartedAt) : null,
           totalStreamMs: Math.round(totalMs),
@@ -9848,7 +9879,7 @@ let isMultimodal = !!(imagePaths?.length);
         // wire payload stays under the 10 MB Anthropic per-image limit.
         // Use the first image for custom providers (they typically only support one).
         const optimized = await getImageOptimizer().optimize(sourcePath, {
-          profile: 'balanced',
+          profile: this.imageProfileFor('balanced', 0),
           provider: 'custom',
           cacheKey: sourcePath,
         });
@@ -10238,6 +10269,40 @@ let isMultimodal = !!(imagePaths?.length);
   public isUsingUserEndpoint(): boolean {
     if (this.customProvider || this.activeCurlProvider) return true;
     return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId);
+  }
+
+  /**
+   * The image-optimisation preset this vision turn should use.
+   *
+   * Normally the caller's own choice, verbatim. Downgraded to `fast` only when
+   * the Provider Performance Profile predicts this turn will blow its urgency
+   * budget — Phase 18's "the profile says this workload is likely to be too slow
+   * and an EXISTING mechanism responds". The mechanism is ImageOptimizer's
+   * preset table, which already ships and which every vision call site already
+   * passes a value from.
+   *
+   * Fails open to the requested preset on any error: a latency hint must never
+   * be able to stop an image being sent.
+   */
+  private imageProfileFor(
+    requested: 'fast' | 'balanced' | 'technical' | 'best',
+    approxInputChars: number,
+  ): 'fast' | 'balanced' | 'technical' | 'best' {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { imageProfileForTurn } = require('./llm/performance/wiring');
+      return imageProfileForTurn(requested, {
+        llmHelper: this,
+        inputTokens: Math.ceil(Math.max(0, approxInputChars) / 4),
+        // These three sites serve both live and manual turns and cannot tell
+        // which from here. `manual_chat_stream` is the CONSERVATIVE label: its
+        // 20s budget is twice the live one, so a turn is only ever downgraded
+        // when it would blow the more generous of the two.
+        streamRoute: 'manual_chat_stream',
+      });
+    } catch {
+      return requested;
+    }
   }
 
   /**

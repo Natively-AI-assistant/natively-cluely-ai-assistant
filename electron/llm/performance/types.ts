@@ -279,6 +279,28 @@ export interface ProviderPerformanceProfile {
 
   capability: CapabilityFacts;
   workloads: Partial<Record<WorkloadClass, WorkloadEvidence>>;
+  /**
+   * Time from request start to RESPONSE HEADERS — the connect phase.
+   *
+   * Profile-level rather than per-workload, deliberately: a TLS handshake and a
+   * DNS lookup do not care how many tokens the prompt has, so bucketing it by
+   * workload would split one population four ways for no gain.
+   *
+   * Optional so a profile persisted before this existed still loads.
+   */
+  connect?: LatencyEstimate;
+  /**
+   * When `connect` was last written, SEPARATE from `lastUpdated`.
+   *
+   * Two timestamps because there are two kinds of evidence with different
+   * lifetimes, and conflating them was a real defect: `lastUpdated` is what
+   * `isStale()` and the eviction sort read, so letting a connect measurement
+   * touch it would resurrect a profile holding months-old LATENCY samples and
+   * let them size a live deadline — and would let a connect-only row with zero
+   * latency samples outrank a 50-sample row in eviction. A handshake time says
+   * nothing about how fresh a TTFT population is.
+   */
+  connectUpdatedAt?: number;
   stream: StreamGapEstimate;
   /** Fit over the workload buckets' (meanInputTokens, ttft.maxMs) points. */
   contextScaling: ContextScalingModel | null;

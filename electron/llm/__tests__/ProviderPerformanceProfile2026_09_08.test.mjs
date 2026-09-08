@@ -1268,3 +1268,321 @@ describe('generation rate, true quantiles, and the too-slow signal', () => {
       'the projection must never be wired into a deadline');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('the connect timeout — the fourth of Phase 11’s four limits', () => {
+  const { connectTimeoutMs, CONNECT_MIN_TIMEOUT_MS, CONNECT_MAX_TIMEOUT_MS, imageProfileForTurn } = M;
+
+  test('with no evidence it is exactly the shipped 4s', () => {
+    const d = connectTimeoutMs(null);
+    assert.equal(d.valueMs, CONNECT_MIN_TIMEOUT_MS);
+    assert.equal(d.source, 'shipped_prior');
+  });
+
+  test('it may only WIDEN — a fast network never shortens it', () => {
+    // The direction matters more here than anywhere else in the feature: this
+    // app has already shipped a defect where a 4s connect timer killed a working
+    // vision request by a 6ms margin. Narrowing trades a rare cheap failure
+    // (waiting 4s to learn a host is unreachable) for a common expensive one.
+    const fast = connectTimeoutMs({ connect: { maxMs: 120, p50Ms: 100, count: 200 } });
+    assert.equal(fast.valueMs, CONNECT_MIN_TIMEOUT_MS, 'a 120ms connect must not shorten the timer');
+    assert.equal(fast.source, 'clamped_floor');
+  });
+
+  test('a slow network DOES buy more room', () => {
+    const slow = connectTimeoutMs({ connect: { maxMs: 3_000, p50Ms: 1_500, count: 20 } });
+    assert.equal(slow.valueMs, 6_000, '2x the observed worst connect');
+    assert.equal(slow.source, 'profile');
+  });
+
+  test('it can never eat the tightest route budget', () => {
+    // A connect allowance above the 8000ms default-provider ceiling could
+    // consume a whole turn before a first token was even possible.
+    const awful = connectTimeoutMs({ connect: { maxMs: 60_000, p50Ms: 40_000, count: 20 } });
+    assert.equal(awful.valueMs, CONNECT_MAX_TIMEOUT_MS);
+    assert.equal(awful.source, 'clamped_ceiling');
+  });
+
+  test('a caller with a LARGER shipped value keeps it', () => {
+    // The floor is max(4000, shipped) — this filter must never shorten a call
+    // site that deliberately asked for longer.
+    assert.equal(connectTimeoutMs(null, 12_000).valueMs, 12_000);
+    assert.equal(connectTimeoutMs({ connect: { maxMs: 100, p50Ms: 90, count: 50 } }, 12_000).valueMs, 12_000);
+  });
+
+  test('the store folds connect samples independently of workload', () => {
+    // DNS + TCP + TLS does not care how many tokens the prompt has, so
+    // bucketing it by workload would split one population four ways for nothing.
+    const s = store();
+    s.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', 800);
+    s.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', 2_400);
+    const p = s.getExact('custom', 'gw/m', 'net1');
+    assert.equal(p.connect.count, 2);
+    assert.equal(p.connect.maxMs, 2_400);
+    assert.equal(connectTimeoutMs(p).valueMs, 4_800);
+  });
+
+  test('a garbage connect measurement is ignored', () => {
+    const s = store();
+    s.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', NaN);
+    s.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', -5);
+    assert.equal(s.getExact('custom', 'gw/m', 'net1'), null, 'nothing valid, nothing stored');
+  });
+});
+
+describe('the image-compression responder (Phase 18)', () => {
+  const { imageProfileForTurn, __setProviderPerformanceStore, __setRuntimeSignals, RuntimeSignals } = M;
+
+  function withSlowVisionProvider(fn) {
+    const prev = process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE;
+    const prevImg = process.env.NATIVELY_ADAPTIVE_IMAGE_QUALITY;
+    process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE = '1';
+    // This responder has its OWN flag, default OFF — it is the only adaptive
+    // consumer that visibly degrades output rather than being bounded so that
+    // ON is safer or equal, so it has to be asked for.
+    process.env.NATIVELY_ADAPTIVE_IMAGE_QUALITY = '1';
+    const s = store();
+    // A vision provider measured at 9s TTFT and 8 tokens/sec: a 400-token
+    // answer needs ~50s more, far past any interactive budget.
+    for (let i = 0; i < 3; i++) {
+      s.record(sample({ providerId: 'custom', modelId: 'gw/m', networkProfileId: 'n',
+        route: 'vision', workload: 'vision', ttftMs: 9_000, generationRateTps: 8 }));
+    }
+    __setProviderPerformanceStore(s);
+    __setRuntimeSignals(new RuntimeSignals({ readNetwork: () => ({ id: 'n', interfaceClass: 'wifi', offline: false }) }));
+    try { return fn(); } finally {
+      __setProviderPerformanceStore(null);
+      __setRuntimeSignals(null);
+      if (prev === undefined) delete process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE;
+      else process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE = prev;
+      if (prevImg === undefined) delete process.env.NATIVELY_ADAPTIVE_IMAGE_QUALITY;
+      else process.env.NATIVELY_ADAPTIVE_IMAGE_QUALITY = prevImg;
+    }
+  }
+
+  const helper = { performanceIdentity: () => ({ providerId: 'custom', modelId: 'gw/m', route: 'vision', isOllama: false }) };
+
+  test('with its flag OFF (the default) nothing is ever downgraded', () => {
+    // The kill switch a user seeing blurrier screenshots needs.
+    const prev = process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE;
+    process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE = '1';
+    delete process.env.NATIVELY_ADAPTIVE_IMAGE_QUALITY;
+    const s = store();
+    for (let i = 0; i < 3; i++) {
+      s.record(sample({ providerId: 'custom', modelId: 'gw/m', networkProfileId: 'n',
+        route: 'vision', workload: 'vision', ttftMs: 9_000, generationRateTps: 8 }));
+    }
+    __setProviderPerformanceStore(s);
+    __setRuntimeSignals(new RuntimeSignals({ readNetwork: () => ({ id: 'n', interfaceClass: 'wifi', offline: false }) }));
+    assert.equal(imageProfileForTurn('balanced', { llmHelper: helper, inputTokens: 2000 }), 'balanced');
+    __setProviderPerformanceStore(null);
+    __setRuntimeSignals(null);
+    if (prev === undefined) delete process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE;
+    else process.env.NATIVELY_PROVIDER_PERFORMANCE_PROFILE = prev;
+  });
+
+  test('a slow vision provider downgrades balanced → fast', () => {
+    withSlowVisionProvider(() => {
+      assert.equal(imageProfileForTurn('balanced', { llmHelper: helper, inputTokens: 2000 }), 'fast');
+    });
+  });
+
+  test('a TECHNICAL screenshot is never downgraded, however slow', () => {
+    // A code screenshot is sent BECAUSE the text must be readable. Trading its
+    // legibility for latency answers a different question than the user asked.
+    withSlowVisionProvider(() => {
+      assert.equal(imageProfileForTurn('technical', { llmHelper: helper, inputTokens: 2000 }), 'technical');
+    });
+  });
+
+  test('with no evidence the caller’s own choice is returned unchanged', () => {
+    for (const p of ['fast', 'balanced', 'technical', 'best']) {
+      assert.equal(imageProfileForTurn(p, { llmHelper: helper, inputTokens: 2000 }), p);
+      assert.equal(imageProfileForTurn(p, { llmHelper: null, inputTokens: 2000 }), p);
+    }
+  });
+
+  test('a broken helper fails open to the requested profile', () => {
+    const bad = { performanceIdentity: () => { throw new Error('boom'); } };
+    assert.equal(imageProfileForTurn('best', { llmHelper: bad, inputTokens: 100 }), 'best');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('routing readiness (Phase 19) — the profile can answer, without being wired', () => {
+  const { rankProvidersFor } = M;
+
+  // Phase 19's own example, built as data:
+  //   Provider A — normal workload excellent, large context poor
+  //   Provider B — normal average,            large context excellent
+  //   Provider C — vision excellent
+  function scenario() {
+    const s = store();
+    const put = (providerId, workload, ttftMs, ok, bad) => {
+      for (let i = 0; i < ok; i++) {
+        s.record(sample({ providerId, modelId: 'm', networkProfileId: 'n', workload, ttftMs }));
+      }
+      for (let i = 0; i < bad; i++) {
+        s.record(sample({ providerId, modelId: 'm', networkProfileId: 'n', workload,
+          sampleClass: 'timeout', ttftMs: null, totalMs: null, maxGapMs: null, p50GapMs: null }));
+      }
+    };
+    put('A', 'small', 400, 20, 0);      // excellent small
+    put('A', 'large', 9_000, 3, 9);     // poor large: slow AND failing
+    put('B', 'small', 2_200, 20, 0);    // average small
+    put('B', 'large', 1_500, 20, 0);    // excellent large
+    put('C', 'vision', 700, 20, 0);     // excellent vision
+    return s.all();
+  }
+
+  test('it answers "who is best for a SMALL request"', () => {
+    const ranked = rankProvidersFor(scenario(), 'small');
+    assert.equal(ranked[0].providerId, 'A', 'A is excellent on small');
+    assert.ok(ranked.findIndex((r) => r.providerId === 'B') > 0);
+  });
+
+  test('it answers "who is best for a LARGE request" — and it is a different provider', () => {
+    // The whole point of the phase: the answer must be able to DIFFER by
+    // workload, or the profile cannot inform routing at all.
+    const ranked = rankProvidersFor(scenario(), 'large');
+    assert.equal(ranked[0].providerId, 'B', 'B is excellent on large');
+    const a = ranked.find((r) => r.providerId === 'A');
+    assert.ok(a.successRate < 0.5, `A's large-context reliability is poor: ${a.successRate}`);
+    assert.ok(ranked.indexOf(a) > 0, 'A must not lead the large ranking');
+  });
+
+  test('it answers "who is best for VISION"', () => {
+    const ranked = rankProvidersFor(scenario(), 'vision');
+    assert.equal(ranked[0].providerId, 'C');
+    assert.equal(ranked[0].ttftMaxMs, 700);
+  });
+
+  test('reliability outranks latency — a fast, flaky provider does not lead', () => {
+    const s = store();
+    for (let i = 0; i < 20; i++) s.record(sample({ providerId: 'flaky', modelId: 'm', networkProfileId: 'n', ttftMs: 300 }));
+    for (let i = 0; i < 20; i++) s.record(sample({ providerId: 'flaky', modelId: 'm', networkProfileId: 'n',
+      sampleClass: 'server_error', ttftMs: null, totalMs: null, maxGapMs: null, p50GapMs: null }));
+    for (let i = 0; i < 20; i++) s.record(sample({ providerId: 'steady', modelId: 'm', networkProfileId: 'n', ttftMs: 1_500 }));
+    const ranked = rankProvidersFor(s.all(), 'small');
+    assert.equal(ranked[0].providerId, 'steady',
+      'a provider that answers in 300ms and fails half the time must not lead');
+  });
+
+  test('unmeasured providers sort LAST as a group, and are not dropped', () => {
+    // "We have no evidence" is a different answer from "it is slow", and a
+    // caller choosing a fallback order needs to see the difference.
+    const s = store();
+    for (let i = 0; i < 5; i++) s.record(sample({ providerId: 'known', modelId: 'm', networkProfileId: 'n', ttftMs: 800 }));
+    s.setCapabilities('unknown', 'm', 'n', { streaming: true, vision: 'unknown', tools: 'unknown',
+      structuredOutput: 'unknown', contextWindowTokens: 0, source: 'unknown' });
+    const ranked = rankProvidersFor(s.all(), 'small');
+    assert.equal(ranked.length, 2, 'the unmeasured provider is still listed');
+    assert.equal(ranked[0].providerId, 'known');
+    assert.equal(ranked[1].ttftMaxMs, null);
+  });
+
+  test('the ranking is NOT wired into the fallback engine, and the reason is recorded', async () => {
+    // Phase 19 asks that the profile be ABLE to answer routing questions, not
+    // that routing be built. The blocker is concrete: the engine orders rungs by
+    // id, and 'custom' is shared by two different gateways, so there is no sound
+    // rung → profile mapping to seed from.
+    const fs = await import('node:fs');
+    const deadlines = fs.readFileSync(new URL('../performance/deadlines.ts', import.meta.url), 'utf8');
+    assert.match(deadlines, /NOT WIRED INTO THE FALLBACK ENGINE/);
+    const vision = fs.readFileSync(new URL('../visionStreamFallback.ts', import.meta.url), 'utf8');
+    assert.ok(!/performance\//.test(vision), 'the fallback engine must not import the profile layer');
+    const text = fs.readFileSync(new URL('../textStreamFallback.ts', import.meta.url), 'utf8');
+    assert.ok(!/performance\//.test(text), 'the text fallback wrapper must not either');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('connect evidence END TO END — the seam the pure-function tests missed', () => {
+  // The earlier connect tests exercise connectTimeoutMs as a pure function over
+  // an INJECTED profile. They never run recordConnect → read → widen, and never
+  // round-trip through disk, which is precisely where three real defects lived.
+  const { connectTimeoutMs, CONNECT_MIN_TIMEOUT_MS, PROFILE_STALE_AFTER_MS } = M;
+  const fsp = fs;
+
+  test('a connect sample written is a connect sample READ, on a fresh identity', () => {
+    // The bug: lookup() gates on sampleCount > 0, which counts LATENCY samples.
+    // A brand-new identity with connect evidence and no committed turns failed
+    // that gate, so the widening was dead until some unrelated turn bumped it.
+    const s = store();
+    for (let i = 0; i < 3; i++) s.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', 3_000);
+    assert.equal(s.getExact('custom', 'gw/m', 'net1').sampleCount, 0, 'no latency samples yet');
+    const ev = s.connectEvidence('custom', 'gw/m', 'net1');
+    assert.ok(ev, 'connect evidence must be readable without any latency sample');
+    assert.equal(connectTimeoutMs(ev).valueMs, 6_000);
+  });
+
+  test('connect NEVER falls back to another network', () => {
+    // A handshake time is a property of THIS network. Serving a sibling's is
+    // worse than serving none — and lookup()'s ladder would have done exactly
+    // that once any sibling row existed.
+    const s = store();
+    for (let i = 0; i < 3; i++) s.recordConnect('custom', 'gw/m', 'fast-office', 'user_endpoint', 100);
+    assert.equal(s.connectEvidence('custom', 'gw/m', 'slow-hotel'), null,
+      'an unmeasured network must not inherit another network’s connect time');
+    assert.equal(connectTimeoutMs(s.connectEvidence('custom', 'gw/m', 'slow-hotel')).valueMs,
+      CONNECT_MIN_TIMEOUT_MS, 'it falls back to the shipped value, not to a sibling');
+  });
+
+  test('a connect sample does NOT resurrect months-old latency evidence', () => {
+    // The bug: recordConnect refreshed `lastUpdated`, which isStale() reads. One
+    // handshake made a 200-day-old profile look fresh, and adaptiveTtft /
+    // streamIdle then sized live deadlines from 200-day-old samples.
+    let now = 1_000_000_000;
+    const s = store({ now: () => now });
+    for (let i = 0; i < 10; i++) s.record(sample({ ttftMs: 11_000 }));
+    assert.ok(s.lookup('custom', 'gw/model-a', 'net1'), 'fresh while fresh');
+
+    now += PROFILE_STALE_AFTER_MS + 1;
+    assert.equal(s.lookup('custom', 'gw/model-a', 'net1'), null, 'stale latency is not a deadline source');
+
+    s.recordConnect('custom', 'gw/model-a', 'net1', 'user_endpoint', 200);
+    assert.equal(s.lookup('custom', 'gw/model-a', 'net1'), null,
+      'a connect measurement must NOT make stale latency evidence usable again');
+    // …but the connect evidence it just wrote IS usable, on its own clock.
+    assert.ok(s.connectEvidence('custom', 'gw/model-a', 'net1'), 'connect ages on its own clock');
+  });
+
+  test('eviction still discards the profile with the stalest EVIDENCE', () => {
+    // The bug: a connect-only row (sampleCount 0) bumped lastUpdated and so
+    // outranked a 50-sample row, breaking MAX_PROFILES' documented contract.
+    let now = 1_000;
+    const s = store({ now: () => now });
+    for (let i = 0; i < 50; i++) s.record(sample({ modelId: 'valuable', ttftMs: 900 }));
+    const valuableStamp = s.getExact('custom', 'valuable', 'net1').lastUpdated;
+    now += 10_000;
+    s.recordConnect('custom', 'worthless', 'net1', 'user_endpoint', 100);
+    const worthlessStamp = s.getExact('custom', 'worthless', 'net1').lastUpdated;
+    assert.ok(worthlessStamp <= valuableStamp + 10_000);
+    // The connect-only row must not have a NEWER lastUpdated than the 50-sample
+    // row purely by virtue of one handshake.
+    s.recordConnect('custom', 'valuable', 'net1', 'user_endpoint', 100);
+    assert.equal(s.getExact('custom', 'valuable', 'net1').lastUpdated, valuableStamp,
+      'a connect write must not move the latency-evidence timestamp');
+  });
+
+  test('a wipe drops a connect sample from a request already in flight', () => {
+    const s = store();
+    s.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', 3_000);
+    assert.ok(s.connectEvidence('custom', 'gw/m', 'net1'));
+    s.clear();
+    assert.equal(s.connectEvidence('custom', 'gw/m', 'net1'), null, 'forget means forget');
+  });
+
+  test('connect evidence survives a restart, through the real file', () => {
+    const dir = fsp.mkdtempSync(path.join(os.tmpdir(), 'perf-connect-'));
+    const a = new ProviderPerformanceStore({ storageDir: dir });
+    for (let i = 0; i < 4; i++) a.recordConnect('custom', 'gw/m', 'net1', 'user_endpoint', 2_800);
+    a.dispose();
+
+    const b = new ProviderPerformanceStore({ storageDir: dir });
+    const ev = b.connectEvidence('custom', 'gw/m', 'net1');
+    assert.ok(ev, 'the optional connect field must persist with no schema bump');
+    assert.equal(ev.connect.count, 4);
+    assert.equal(connectTimeoutMs(ev).valueMs, 5_600, 'and still widen after a restart');
+  });
+});
