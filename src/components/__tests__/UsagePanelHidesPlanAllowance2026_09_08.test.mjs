@@ -73,3 +73,36 @@ test('the Knowledge breakdown inherits the parent panel\'s reading', () => {
   assert.match(SRC, /label="Embeddings"[^>]*percentOnly=\{percentOnly\}/)
   assert.match(SRC, /label="Reranking"[^>]*percentOnly=\{percentOnly\}/)
 })
+
+/**
+ * Knowledge Usage is a 50/50 blend, and the blend must not hide a blocked half.
+ */
+test('the Knowledge warning colour reads the worst half, not the blend', () => {
+  // 100% embeddings + 0% reranking blends to 50%. The halves are enforced
+  // independently, so that customer's indexing is already dead — colouring on
+  // the blend would show a calm mid-range bar on the panel they opened to find
+  // out why.
+  assert.match(SRC, /const worstHalf = Number\.isFinite\(knowledge\.max_half_percent/,
+    'KnowledgeUsage must derive a worst-half figure')
+  assert.match(SRC, /const isHigh = worstHalf >= 80;/,
+    'the amber threshold must read the worst half')
+  assert.match(SRC, /worstHalf > 100 \? 'bg-red-500'/,
+    'the over-limit red must read the worst half too')
+  assert.doesNotMatch(SRC, /const isHigh = pct >= 80;[\s\S]{0,400}knowledge\.embedding/,
+    'the Knowledge row must not fall back to colouring on the blend')
+})
+
+test('the worst half falls back to percent for a server that predates the blend', () => {
+  // Older servers sent percent = max(halves) and no max_half_percent. Treating
+  // the absent field as 0 would disarm the warning against exactly those.
+  const TYPES = readFileSync(join(__dirname, '../../types/nativelyUsage.ts'), 'utf8')
+  assert.match(TYPES, /max_half_percent: q\.knowledge\?\.max_half_percent\s*\n\s*\?\? q\.knowledge\?\.percent/,
+    'fall back to percent, which WAS the max on those servers')
+})
+
+test('an unmetered half is excluded from the client-side blend', () => {
+  const TYPES = readFileSync(join(__dirname, '../../types/nativelyUsage.ts'), 'utf8')
+  assert.match(TYPES, /function meanOfMetered/)
+  assert.match(TYPES, /h\.limit != null/,
+    'averaging against an unmetered half\'s 0 would report half the true figure')
+})

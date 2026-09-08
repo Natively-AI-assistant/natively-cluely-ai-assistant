@@ -39,9 +39,22 @@ export interface UsageMeter {
 
 /** Knowledge Usage: one headline over two independently enforced meters. */
 export interface KnowledgeMeter {
-  /** max(embedding, reranker) — never reads low while either half is spent. */
+  /**
+   * An even 50/50 blend of the two halves' PERCENTAGES — each capability gets
+   * equal say, regardless of how large its allowance is. Not a token ratio:
+   * reranker allowances are ~2.5x the embedding ones (~12.5x on trial), so
+   * summing tokens is dominated by whichever half is bigger.
+   */
   percent: number;
   visual_percent: number;
+  /**
+   * The further-along half. The blend can read mid-range while one capability
+   * is completely blocked — 100% embeddings and 0% reranking averages to 50% —
+   * and the halves are enforced INDEPENDENTLY, so this is what the warning
+   * state reads. Absent from servers predating the blend, where `percent` was
+   * itself the max and is the correct fallback.
+   */
+  max_half_percent?: number;
   embedding: UsageMeter;
   reranker: UsageMeter;
 }
@@ -227,6 +240,20 @@ export function formatMeter(m: Pick<UsageMeter, 'used' | 'limit' | 'unit'> | und
  * The new server needs none of this — it sends every field, and the branches
  * below are all no-ops. That is the intended steady state.
  */
+/**
+ * The mean of the halves that are actually METERED.
+ *
+ * An unmetered meter reports percent 0 by convention, and averaging a real
+ * number against that 0 halves it — an under-report on a usage screen. Mirrors
+ * knowledgeMeter in natively-api/lib/resourceUsage.js; it exists here only for
+ * servers that send no `knowledge` block.
+ */
+function meanOfMetered(...halves: (UsageMeter | undefined)[]): number {
+  const metered = halves.filter((h): h is UsageMeter => !!h && h.limit != null);
+  if (metered.length === 0) return 0;
+  return metered.reduce((sum, h) => sum + (h.percent ?? 0), 0) / metered.length;
+}
+
 export function normalizeQuota(raw: unknown): NativelyQuota | null {
   const q = raw as Partial<NativelyQuota> & Record<string, unknown>;
   if (!q || typeof q !== 'object') return null;
@@ -284,8 +311,18 @@ export function normalizeQuota(raw: unknown): NativelyQuota | null {
     research: research as ResearchMeter,
     knowledge: embedding
       ? {
-        percent: q.knowledge?.percent ?? Math.max(embedding.percent, reranker?.percent ?? 0),
-        visual_percent: q.knowledge?.visual_percent ?? Math.min(100, Math.max(embedding.visual_percent, reranker?.visual_percent ?? 0)),
+        // An old server sends no `knowledge` block at all. Reconstruct the blend
+        // the way the server now computes it — the mean of the METERED halves,
+        // so a build talking to a pre-reranker server does not report half the
+        // true figure by averaging against an absent half's 0.
+        percent: q.knowledge?.percent ?? meanOfMetered(embedding, reranker),
+        visual_percent: q.knowledge?.visual_percent
+          ?? Math.min(100, Math.max(0, meanOfMetered(embedding, reranker))),
+        // `percent` is the right fallback for a server that predates the blend:
+        // there, `percent` WAS the max.
+        max_half_percent: q.knowledge?.max_half_percent
+          ?? q.knowledge?.percent
+          ?? Math.max(embedding.percent, reranker?.percent ?? 0),
         embedding,
         // Absent, not zero: an old server never metered reranking, and a meter
         // reading "0 / 0" would claim an allowance that does not exist.
