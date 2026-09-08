@@ -900,6 +900,9 @@ export interface ElectronAPI {
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
+  getDirectAssistFallbackEnabled: () => Promise<boolean>;
+  setDirectAssistFallbackEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;

@@ -6817,6 +6817,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-direct-assist-fallback-enabled', async () => {
+    return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
+  });
+
+  safeHandle('set-direct-assist-fallback-enabled', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_type' };
+    }
+    const settings = SettingsManager.getInstance();
+    if (!settings.set('directAssistFallbackEnabled', enabled)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    const effective = settings.getDirectAssistFallbackEnabled();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('direct-assist-fallback-enabled-changed', effective);
+    });
+    return { success: true };
+  });
+
   safeHandle('direct-assist-stream', async (event, rawRequest: unknown) => {
     const normalized = normalizeDirectAssistRequest(rawRequest);
     if (normalized.error || !normalized.request) {
