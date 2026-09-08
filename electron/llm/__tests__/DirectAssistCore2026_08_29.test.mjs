@@ -1506,16 +1506,29 @@ test('a MULTI-image turn is transcribed as one set, and none of its bytes are re
 test('normalizeDirectAssistError unwraps an engine aggregate to the first rung error', async () => {
   const { normalizeDirectAssistError, DirectAssistError } = await loadDirectAssist();
 
-  const first = new DirectAssistError('CONNECT_TIMEOUT', 'The selected provider timed out.', true);
-  const aggregate = new Error('All providers failed: Natively attempt 3/3: timeout | Gemini attempt 1/2: auth');
-  aggregate.cause = first;
+  // The aggregate's message must contain NO word the pre-existing keyword
+  // classifier already matches — no "timeout", "rate limit", "not configured",
+  // "model not found". Otherwise this test passes against the OLD code and
+  // proves nothing: the classifier would match the SENTENCE and never reach
+  // the unwrap. Without the unwrap this fixture is PROVIDER_ERROR.
+  const first = new DirectAssistError('RATE_LIMITED', 'The selected provider is rate limited.', true);
+  const aggregate = new Error('All providers failed: rung natively | rung gemini');
   aggregate.firstProviderError = first;
 
   const normalized = normalizeDirectAssistError(aggregate);
-  assert.equal(normalized.code, 'CONNECT_TIMEOUT');
+  assert.equal(normalized.code, 'RATE_LIMITED');
   assert.equal(normalized.retryable, true);
   // The aggregate's prose names providers and must never reach the renderer.
-  assert.ok(!normalized.message.includes('Gemini'));
+  assert.ok(!normalized.message.includes('gemini'));
+});
+
+test('normalizeDirectAssistError does NOT follow a bare .cause', async () => {
+  const { normalizeDirectAssistError } = await loadDirectAssist();
+  // Node's fetch sets .cause on TypeError; following it would discard the
+  // correct top-level classification carried by .status.
+  const inner = new Error('socket hang up');
+  const outer = Object.assign(new Error('fetch failed'), { status: 429, cause: inner });
+  assert.equal(normalizeDirectAssistError(outer).code, 'RATE_LIMITED');
 });
 
 test('normalizeDirectAssistError still handles a bare provider error', async () => {
@@ -1525,13 +1538,23 @@ test('normalizeDirectAssistError still handles a bare provider error', async () 
 });
 
 test('direct assist fallback config never hedges', async () => {
-  const { DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  const {
+    DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
+    DIRECT_ASSIST_TOTAL_BUDGET_MS,
+    DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
+    DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS,
+    DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS,
+  } = await loadDirectAssist();
   // Hedging bills two providers per turn. Direct Assist is the path chosen for
   // provider determinism, so this must stay off.
   assert.equal(DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG.hedgeEnabled, false);
   assert.equal(DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG.logPrefix, 'DirectAssist');
-  // The ladder must not outlive the per-attempt idle windows it contains.
-  assert.ok(DIRECT_ASSIST_TOTAL_BUDGET_MS >= 45_000 * 2);
+  // The budget must be AT LEAST two full idle windows — a lower bound, not an
+  // upper bound: the ladder must not be able to outlive the per-attempt idle
+  // windows it contains.
+  assert.ok(DIRECT_ASSIST_TOTAL_BUDGET_MS >= DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS * 2);
+  // Depth on the user's choice, breadth after it fails — see the constants' docs.
+  assert.ok(DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS > DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS);
 });
 
 // ── Task 4: listDirectAssistRungs — the ladder is a FILTER, never a refusal ─

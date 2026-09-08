@@ -13,22 +13,44 @@ import { MODEL_GONE_COOLDOWN_MS } from '../llm/streamFallbackEngine';
  * outside (electron/llm/liveDeadlines.ts:127); Direct Assist has no equivalent,
  * and until now the single idle watchdog WAS its ceiling.
  *
- * 90s == two full idle windows: enough for a selected provider to fail slowly
- * and one fallback to answer, and short enough to still be a bounded wait.
+ * 90s == two full idle windows. Worst realistic case with
+ * DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS = 2: a vision selection burns 2 x 30s on
+ * the adapter's connect ceiling, leaving 30s for a fallback rung to answer.
+ * Short enough to still be a bounded wait.
  * Checked BEFORE a rung is opened, so an exhausted budget ends the ladder
  * rather than starting a rung that cannot finish inside it.
  */
 export const DIRECT_ASSIST_TOTAL_BUDGET_MS = 90_000;
 
-/** The selected provider is the one the user asked for — try it hardest. */
-export const DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS = 3;
+/**
+ * Attempts on the SELECTED provider before the ladder moves on.
+ *
+ * TWO, not three, and the budget is why. The adapters' own connect ceilings
+ * are 15s (text) and 30s (vision) — LLMHelper.ts:193-194 — so three attempts
+ * on a failing VISION selection would burn 3 x 30s = 90s, which is the entire
+ * DIRECT_ASSIST_TOTAL_BUDGET_MS. The ladder would exhaust its budget inside
+ * the selected rung and never open a fallback at all, leaving this feature
+ * inert for precisely the case it was built for: a screenshot turn whose
+ * provider times out. At two, the worst vision case is 60s and a fallback rung
+ * still has 30s to answer in — a healthy provider's first token is 2-5s.
+ *
+ * Raising the budget instead was rejected: 90s of silence is already a long
+ * wait, and a third attempt on a provider that has failed twice is worth less
+ * than a first attempt on one that has not.
+ */
+export const DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS = 2;
 
 /**
- * Fallback rungs get fewer. Three attempts against a rate-limited fallback
- * spends backoff to reach a provider that is already known to be second
- * choice; two reaches a WORKING provider sooner.
+ * ONE attempt per fallback rung: breadth, not depth.
+ *
+ * Once the user's chosen provider has failed twice, the goal stops being "make
+ * this provider work" and becomes "find ANY provider that answers". Within the
+ * ~30s the budget has left after a failing vision selection, one attempt each
+ * across three different providers is a far better bet than two attempts on
+ * one — a second try only helps if the SAME provider was transiently unlucky,
+ * which is the case the selected rung's own retry already covered.
  */
-export const DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS = 2;
+export const DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS = 1;
 
 /**
  * Direct Assist's own engine tuning, deliberately NOT the vision config.

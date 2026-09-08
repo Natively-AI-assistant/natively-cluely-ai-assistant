@@ -210,6 +210,11 @@ export interface DirectAssistTransport {
    * or when nothing else qualifies. Providers rejected by a credential,
    * capability or privacy boundary are ABSENT — never returned and then
    * refused at dispatch.
+   *
+   * OPTIONAL on this interface: a transport that omits it supports no
+   * fallback ladder at all, and a caller must not assume its presence — check
+   * for it before relying on ladder behavior, rather than reading only this
+   * doc comment.
    */
   listDirectAssistRungs?(request: DirectAssistDispatchRequest): readonly DirectAssistRung[];
 
