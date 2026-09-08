@@ -255,6 +255,15 @@ export interface AppSettings {
     sttMaxSampleRate?: number;
     sttMaxChannels?: number;
     sttAllowDualStream?: boolean;
+    // ── Provider Performance Profile ─────────────────────────────────────
+    // Persisted opt-ins for the intelligenceFlags entries of the same name.
+    // The flag registry documents each one's default and precedence; these keys
+    // exist so the Settings UI has somewhere to write, exactly as
+    // `hindsightMemoryEnabled` does for the `hindsightMemory` flag.
+    providerPerformanceProfileEnabled?: boolean;
+    adaptiveStreamIdleEnabled?: boolean;
+    adaptiveTtftEnabled?: boolean;
+    providerPerformanceDiagnosticsEnabled?: boolean;
 }
 
 export const VALID_CONTEXT_DEBUG_LEVELS = ['off', 'standard', 'verbose'] as const;

@@ -37,6 +37,8 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
+import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
+import { estimateTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
 import { deriveRetrievalQuery } from './llm/retrievalQueryPolicy';
 import { buildGracefulRetry } from './llm/manualProfileIntelligence';
@@ -301,6 +303,7 @@ export class IntelligenceEngine extends EventEmitter {
         let out = '';
         try {
             await raceStreamWithDeadline({
+                observe: secondaryStreamObserver('regeneration'),
                 stream: this.llmHelper.streamChat(...this.repairCallArgs(opts.turnKey, prompt, opts.signal)) as AsyncGenerator<string>,
                 firstUsefulDeadlineMs: this.repairFirstUsefulMs(7000, opts.turnKey),
                 interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
@@ -3875,13 +3878,28 @@ export class IntelligenceEngine extends EventEmitter {
                 && typeof (this.llmHelper as any).observedAnswerLatency === 'function'
                 ? (this.llmHelper as any).observedAnswerLatency()
                 : null;
-            const firstUsefulDeadline = totalHardTimeoutMs({
-                isLocal: usingLocalLlm,
-                isVisionTurn,
-                viaServerCascade,
-                isUserEndpoint,
-                observedUserEndpointLatency,
-            });
+            // The shipped route table decides first, and a POST-FILTER may then
+            // move it — never the other way round. Written this way so deleting
+            // the applyAdaptiveTtft call restores today's behaviour with no
+            // other edit, which is the rollback story the flag exists for.
+            //
+            // With `adaptiveTtft` off (its default) this is the identity
+            // function. With it on it only moves routes the table marks
+            // adaptive — today just user endpoints — and its value is backed by
+            // the PERSISTED profile, so a gateway measured last week no longer
+            // has to be re-learned from scratch after a restart. That is the
+            // one thing observedUserEndpointLatency above cannot do: its map
+            // dies with the process.
+            const firstUsefulDeadline = applyAdaptiveTtft(
+                totalHardTimeoutMs({
+                    isLocal: usingLocalLlm,
+                    isVisionTurn,
+                    viaServerCascade,
+                    isUserEndpoint,
+                    observedUserEndpointLatency,
+                }),
+                { llmHelper: this.llmHelper as any, hasImages: isVisionTurn, inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`) },
+            );
             // Time-to-first-token for THIS turn, recorded only if it commits —
             // see LLMHelper.recordAnswerFirstToken for why an aborted turn must
             // not teach the budget.
@@ -3935,10 +3953,39 @@ export class IntelligenceEngine extends EventEmitter {
             // iterator.return()` blocks if the generator is stuck in an await, so
             // the driver fire-and-forgets cleanup. This is the no-10s-wait / no-134s
             // guarantee (Issue 1, P0).
+            // ── Provider Performance Profile ───────────────────────────────
+            // One call, spread into the driver below. With every flag at its
+            // default this changes nothing: `observe` only records, and
+            // `interTokenStallMs` returns LIVE_INTER_TOKEN_STALL_MS until the
+            // adaptiveStreamIdle flag is on AND the profile has enough healthy
+            // streams to move it. See electron/llm/performance/wiring.ts.
+            //
+            // `hasImages` must match the value that picked the deadline above
+            // (isVisionTurn) — passing a different one here would file a vision
+            // turn's evidence under the text route, and the route is the thing
+            // the whole table is keyed on.
+            const perf = performanceHooks({
+                llmHelper: this.llmHelper as any,
+                hasImages: isVisionTurn,
+                // A proxy, not a count. The providers that report real usage do
+                // so only at the END of a stream, and this is needed at the
+                // start to pick a workload bucket. estimateTokens is the same
+                // estimator the context budgets already fit prompts with, so a
+                // bucket boundary here means what it means there.
+                inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`),
+                isUserCancelled: () => whatToAnswerCancellationToken.signal.aborted || isWtaSuperseded(),
+                onDiagnostics: (record) => {
+                    if (record.terminationReason === 'done') return;
+                    // Only the failures are logged. A line per healthy turn would
+                    // bury the one case this record exists to explain.
+                    console.log('[Perf] wta turn ended early', record);
+                },
+            });
             const raceOutcome = await raceStreamWithDeadline({
                 stream: stream as AsyncGenerator<string>,
                 firstUsefulDeadlineMs: firstUsefulDeadline,
-                interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
+                interTokenStallMs: perf.interTokenStallMs,
+                observe: perf.observe,
                 isSpeculative,
                 // "Useful" = the provider has actually delivered real content (raw
                 // arrival), NOT the gate's emit threshold — otherwise a coding
@@ -4127,6 +4174,7 @@ export class IntelligenceEngine extends EventEmitter {
                             pendingFirstTokenMs = null;
                             try {
                                 await raceStreamWithDeadline({
+                                    observe: secondaryStreamObserver('regeneration'),
                                     stream: this.llmHelper.streamChat(...(retryArgs as Parameters<LLMHelper['streamChat']>)) as AsyncGenerator<string>,
                                     firstUsefulDeadlineMs: regenBudget,
                                     interTokenStallMs: LIVE_INTER_TOKEN_STALL_MS,
@@ -4638,6 +4686,7 @@ export class IntelligenceEngine extends EventEmitter {
                     let scaffoldRepaired = '';
                     try {
                         await raceStreamWithDeadline({
+                            observe: secondaryStreamObserver('repair'),
                             stream: this.llmHelper.streamChat(
                                 ...this.repairCallArgs(
                                     whatToAnswerCancellationToken.signal,
@@ -4956,6 +5005,7 @@ export class IntelligenceEngine extends EventEmitter {
                                 let repaired = '';
                                 try {
                                     await raceStreamWithDeadline({
+                                        observe: secondaryStreamObserver('repair'),
                                         stream: this.llmHelper.streamChat(
                                             ...this.repairCallArgs(
                                                 whatToAnswerCancellationToken.signal,
@@ -5172,6 +5222,7 @@ export class IntelligenceEngine extends EventEmitter {
                         // `await iterator.return()` anti-pattern.
                         try {
                             await raceStreamWithDeadline({
+                                observe: secondaryStreamObserver('regeneration'),
                                 stream: this.llmHelper.streamChat(
                                     ...this.repairCallArgs(
                                         whatToAnswerCancellationToken.signal,
@@ -5603,6 +5654,7 @@ export class IntelligenceEngine extends EventEmitter {
                         let clauseAddition = '';
                         try {
                             await raceStreamWithDeadline({
+                                observe: secondaryStreamObserver('repair'),
                                 stream: this.llmHelper.streamChat(
                                     ...this.repairCallArgs(
                                         whatToAnswerCancellationToken.signal,
@@ -5816,6 +5868,7 @@ export class IntelligenceEngine extends EventEmitter {
                             let repaired = '';
                             try {
                                 await raceStreamWithDeadline({
+                                    observe: secondaryStreamObserver('repair'),
                                     stream: this.llmHelper.streamChat(
                                         ...this.repairCallArgs(
                                             whatToAnswerCancellationToken.signal,
@@ -6221,6 +6274,7 @@ export class IntelligenceEngine extends EventEmitter {
                     // 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                     let fixed = '';
                     await raceStreamWithDeadline({
+                        observe: secondaryStreamObserver('verification'),
                         stream: this.llmHelper.streamChat(
                             ...this.repairCallArgs(
                                 abortSignal,

@@ -92,6 +92,8 @@ function repairFirstUsefulMs(llmHelper: any, minMs: number = 7000, turnKey?: obj
   });
 }
 import { stripPriorAssistantTurns } from './llm/conversationHistoryPolicy';
+import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
+import { estimateTokens as _estimatePerfTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
 import type { StreamRouteOptions } from './llm/streamContextPolicy';
 import { buildProfileJitPrompt } from './llm/ProfileJitPromptBuilder';
@@ -4035,8 +4037,26 @@ export function initializeIpcHandlers(appState: AppState): void {
           };
           let manualFirstUseful = false;
           let manualSuperseded = false;
+          // ── Provider Performance Profile ─────────────────────────────────
+          // The twin of the WTA wiring in IntelligenceEngine. These two surfaces
+          // have drifted apart before — the vision deadline was fixed on WTA in
+          // e079cd4a and "this site had been left on the text deadline" (see the
+          // comment on firstUsefulDeadlineMs below) — so they take the same
+          // helper with the same inputs rather than each assembling their own.
+          const manualPerf = performanceHooks({
+            llmHelper: llmHelper as any,
+            hasImages: (imagePaths?.length ?? 0) > 0,
+            inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
+            isUserCancelled: () => manualSuperseded || myController?.signal.aborted === true,
+            onDiagnostics: (record) => {
+              if (record.terminationReason === 'done') return;
+              console.log('[Perf] manual chat turn ended early', record);
+            },
+          });
           await raceStreamWithDeadline({
             stream: stream as AsyncGenerator<string>,
+            observe: manualPerf.observe,
+            interTokenStallMs: manualPerf.interTokenStallMs,
             // A screenshot turn is served by the vision chain, whose measured
             // first-token p50 is 5.6s and max 11.6s; the 7000ms text deadline
             // aborted roughly half of healthy vision turns on this surface
@@ -4044,9 +4064,16 @@ export function initializeIpcHandlers(appState: AppState): void {
             // e079cd4a; this site had been left on the text deadline. Non-vision
             // turns take the route table's answer-type deadline, which is now
             // user-endpoint aware and measurement-aware.
-            firstUsefulDeadlineMs: (imagePaths?.length ?? 0) > 0
-              ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
-              : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
+            // Post-filter, identical to the WTA site. Identity while the
+            // adaptiveTtft flag is off; persisted-profile-backed when it is on.
+            // The two surfaces read the same route table, so they take the same
+            // post-filter — a divergence here is invisible from either one.
+            firstUsefulDeadlineMs: applyAdaptiveTtft(
+              (imagePaths?.length ?? 0) > 0
+                ? totalHardTimeoutMs({ isLocal: usingLocalLlm, isVisionTurn: true, viaServerCascade })
+                : firstUsefulDeadlineMs(answerPlan.answerType, usingLocalLlm, viaServerCascade, usingUserEndpoint, observedUserEndpointLatency),
+              { llmHelper: llmHelper as any, hasImages: (imagePaths?.length ?? 0) > 0, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+            ),
             isUsefulYet: () => manualFirstUseful,
             shouldAbort: () => {
               if (_chatStreamsBySender.get(senderId)?.streamId !== myStreamId) {
@@ -4201,6 +4228,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 let regen = '';
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
+                    observe: secondaryStreamObserver('regeneration'),
                   stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
                   firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
@@ -4310,6 +4338,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // silently no-op'd at runtime AND failed the typecheck.)
                 const regenAbort = new AbortController();
                 await raceStreamWithDeadline({
+                    observe: secondaryStreamObserver('regeneration'),
                   stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal, codingPriorProblemBlock || undefined)) as AsyncGenerator<string>,
                   firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                   isUsefulYet: () => regen.length >= 10,
@@ -4427,6 +4456,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   // (was 4s) clears MiniMax's 4-6s first-token when it's the fallback.
                   // Local model: longer budget for the same cold-load reason as above.
                   await raceStreamWithDeadline({
+                      observe: secondaryStreamObserver('repair'),
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                     isUsefulYet: () => repaired.length >= 5,
@@ -4649,6 +4679,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                   let regen = '';
                   const regenAbort = new AbortController();
                   await raceStreamWithDeadline({
+                      observe: secondaryStreamObserver('regeneration'),
                     stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, regenPrompt, regenAbort.signal)) as AsyncGenerator<string>,
                     firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 8000, myController?.signal),
                     isUsefulYet: () => regen.trim().length >= 5,
@@ -5463,6 +5494,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                     });
                   } catch { regenSystemPrompt = undefined; }
                   await raceStreamWithDeadline({
+                      observe: secondaryStreamObserver('regeneration'),
                     // Pass regenAbort.signal so streamChat/_streamChatInner can
                     // abort the underlying provider fetch when onCleanup fires.
                     // streamChat() finds AbortSignal instances by instanceof scan
@@ -5933,6 +5965,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                       // (was 6s) clears MiniMax's 4-6s first-token when it's the fallback.
                       let fixed = '';
                       await raceStreamWithDeadline({
+                          observe: secondaryStreamObserver('verification'),
                         stream: llmHelper.streamChat(...repairCallArgs(llmHelper, myController?.signal, repairPrompt, undefined)) as AsyncGenerator<string>,
                         firstUsefulDeadlineMs: repairFirstUsefulMs(llmHelper, 7000, myController?.signal),
                         isUsefulYet: () => fixed.length >= 5,
@@ -15461,6 +15494,102 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
+  /**
+   * Provider performance diagnostics — READ-ONLY.
+   *
+   * Phase 20 asks for a subtle status ("Fast", "Calibrated", "Large-context
+   * reliability is poor"), not a wall of numbers, and Phase 27 asks for enough
+   * detail to answer "why did this request time out?". Both are served from one
+   * handler: `grade` and `confidence` are the words a settings pane shows, and
+   * the raw profile beside them is what an advanced diagnostics view or a bug
+   * report needs.
+   *
+   * Nothing here can leak request content — a profile is durations, counts and
+   * ids by construction. The network id IS returned, because this never leaves
+   * the machine; the telemetry path deliberately sends only the coarse
+   * interface class instead.
+   */
+  safeHandle('provider-performance:get-diagnostics', async () => {
+    try {
+      const {
+        getProviderPerformanceStore, performanceGrade, getRuntimeSignals, confidenceFor,
+        streamIdleTimeoutMs, projectLargeContext, largeContextReliabilityWarning,
+        verdictFrom, secondaryStreamTallies, isStale,
+      } = require('./llm/performance');
+      const network = getRuntimeSignals().network();
+      const profiles = getProviderPerformanceStore().all().map((p: any) => {
+        const large = p.workloads?.large;
+        const largeAttempts = large
+          ? Object.values(large.reliability as Record<string, number>).reduce((a, b) => a + b, 0)
+          : 0;
+        const largeFailures = large
+          ? largeAttempts - (large.reliability.ok ?? 0)
+          : 0;
+        return {
+          providerId: p.providerId,
+          modelId: p.modelId,
+          networkProfileId: p.networkProfileId,
+          route: p.route,
+          // The words the UI shows. Phase 20 rules out surfacing a fabricated
+          // "P95 = 83.274s"; a grade and a confidence say what is actually known.
+          grade: performanceGrade(p),
+          confidence: confidenceFor(p.sampleCount),
+          sampleCount: p.sampleCount,
+          lastUpdated: p.lastUpdated,
+          stale: isStale(p),
+          // Capability FACTS, read from the existing registries — never inferred
+          // from any latency on this record. The verdict vocabulary keeps
+          // "we did not establish this" distinct from "unsupported".
+          capability: {
+            ...p.capability,
+            visionVerdict: verdictFrom(p.capability?.vision ?? 'unknown'),
+          },
+          // The live stall guard for this identity, and where the number came
+          // from. This is the field that answers "why did my stream get cut?".
+          streamIdle: streamIdleTimeoutMs(p.route, p),
+          // 100K is a size we deliberately never benchmark. This is the estimate
+          // that replaces doing so, and it carries its own error — `actionable`
+          // is false when the fit explains less than it invents.
+          projected100k: projectLargeContext(p, 100_000),
+          largeContextWarning: largeContextReliabilityWarning({
+            attempts: largeAttempts,
+            failures: largeFailures,
+          }),
+          contextScaling: p.contextScaling,
+          stream: p.stream,
+          workloads: p.workloads,
+          isCurrentNetwork: p.networkProfileId === network.id,
+        };
+      });
+      return {
+        ok: true,
+        network: { id: network.id, interfaceClass: network.interfaceClass, offline: network.offline },
+        profiles,
+        // Repairs and regenerations, tallied separately because they reach no
+        // profile. A repair window that expires before the provider's first
+        // token can never land, and that failure is otherwise silent — the user
+        // simply never sees their answer improve.
+        secondaryStreams: secondaryStreamTallies(),
+      };
+    } catch (err: any) {
+      // A diagnostics read must never be able to look like an app failure.
+      return { ok: false, error: String(err?.message ?? err), profiles: [] };
+    }
+  });
+
+  /** Forget everything measured for one provider — the manual "recalibrate". */
+  safeHandle('provider-performance:reset', async (_: any, providerId?: string) => {
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance');
+      const store = getProviderPerformanceStore();
+      if (providerId) store.invalidateProvider(providerId); else store.clear();
+      store.flush();
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  });
+
   safeHandle('knowledge:get-card-history', async (_, cardId: string) => {
     try {
       const { isOkfUserEditableCardsEnabled } = require('./intelligence/intelligenceFlags');
@@ -16184,9 +16313,29 @@ export function initializeIpcHandlers(appState: AppState): void {
           phoneRecordedFirstToken = true;
           try { llmHelper.recordAnswerFirstToken?.(Date.now() - phoneStreamStartedAt); } catch { /* never break the answer */ }
         };
+        // The THIRD primary answer surface. WTA and manual chat are the other
+        // two; a phone-mirror turn is a real answer a real person is waiting on,
+        // so it feeds the profile exactly like they do. Leaving it out would
+        // make one provider's evidence depend on which screen the user asked
+        // from, which is the silent-divergence failure this area keeps producing.
+        const phonePerf = performanceHooks({
+          llmHelper: llmHelper as any,
+          hasImages: false,
+          inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`),
+          isUserCancelled: () => phoneSuperseded,
+          onDiagnostics: (record) => {
+            if (record.terminationReason === 'done') return;
+            console.log('[Perf] phone-mirror turn ended early', record);
+          },
+        });
         await raceStreamWithDeadline({
           stream: stream as AsyncGenerator<string>,
-          firstUsefulDeadlineMs: firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
+          observe: phonePerf.observe,
+          interTokenStallMs: phonePerf.interTokenStallMs,
+          firstUsefulDeadlineMs: applyAdaptiveTtft(
+            firstUsefulDeadlineMs('general_meeting_answer', phoneUsingLocalLlm, phoneViaServerCascade, phoneUsingUserEndpoint, phoneObservedLatency),
+            { llmHelper: llmHelper as any, hasImages: false, inputTokens: _estimatePerfTokens(`${message ?? ''}${context ?? ''}`) },
+          ),
           isUsefulYet: () => full.trim().length >= 5,
           shouldAbort: () => {
             if (_phoneChatLatestId !== myPhoneId) {

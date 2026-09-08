@@ -417,6 +417,12 @@ export interface ElectronAPI {
   knowledgeApproveCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
   knowledgeRejectCard: (cardId: string) => Promise<{ success: boolean; card?: any; error?: string }>
   knowledgeRestoreCardVersion: (params: { cardId: string; versionId: string }) => Promise<{ success: boolean; card?: any; error?: string }>
+  // Provider Performance Profile — read-only diagnostics, plus the manual
+  // "forget what you measured" reset. There is deliberately no "start
+  // calibration" call: calibration is passive, so nothing can be billed.
+  providerPerformanceGetDiagnostics?: () => Promise<any>;
+  providerPerformanceReset?: (providerId?: string) => Promise<any>;
+
   knowledgeGetCardHistory: (cardId: string) => Promise<{ success: boolean; versions: any[]; error?: string }>
   modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>
   modesAddNoteSection: (modeId: string, title: string, description: string) => Promise<{ success: boolean; section?: any; error?: string }>

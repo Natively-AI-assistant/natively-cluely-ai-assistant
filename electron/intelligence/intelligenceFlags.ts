@@ -389,7 +389,44 @@ export type IntelligenceFlagKey =
   //
   // Default ON via a literal, never isInternalDevTestContext.
   // See docs/retrieval-handoff/01-ROOT-CAUSES.md RC7(b).
-  | 'docGroundedValidatorUsesSentEvidence';
+  | 'docGroundedValidatorUsesSentEvidence'
+  // ── Provider Performance Profile (docs/PROVIDER_PERFORMANCE_PROFILE_ARCHITECTURE.md)
+  //
+  // Staged deliberately (Phase 28/29): each flag turns on ONE consumer of the
+  // profile, and every one of them is independently revertible to the shipped
+  // constant. The evidence layer is separated from the things that act on it so
+  // that collecting data is never the same decision as changing a deadline.
+  //
+  // Observe-only. Records TTFT, inter-chunk gaps and termination reasons into
+  // the profile store. Changes NO deadline and NO answer. Default ON because it
+  // is the input everything else needs and it cannot alter behaviour — the
+  // observer is wrapped in its own try and the driver ignores its result.
+  | 'providerPerformanceProfile'
+  // Derive the inter-token STALL guard from observed healthy gaps instead of the
+  // flat LIVE_INTER_TOKEN_STALL_MS. Default ON.
+  //
+  // It IS a real behaviour change, and these are the guards that make it a safe
+  // one. The value is clamped to [2500, 8000] — it can never exceed today's
+  // constant, so no stream waits LONGER than it does now. Narrowing needs 5
+  // healthy streams, each of which must have contained at least 3 chunk
+  // intervals, and the input is a decaying MAXIMUM, so one genuine multi-second
+  // pause widens the guard immediately and ages out slowly. The `local` route is
+  // excluded entirely (STREAM_IDLE_ADAPTIVE_ROUTES) because an on-device model
+  // competing for the machine's own GPU can stall for reasons a hosted one
+  // cannot. And when it does fire, the partial answer is KEPT — unlike a TTFT
+  // deadline, which discards the turn.
+  | 'adaptiveStreamIdle'
+  // Let the profile move the first-token ceiling on routes the route table marks
+  // adaptive (today: user endpoints only). Default ON.
+  //
+  // Safe by construction rather than by tuning: this filter may only WIDEN what
+  // the shipped route table produced (see adaptiveTtftCeilingMs), so the worst
+  // case is that a slow gateway gets more room than it does today — which is the
+  // direction every defect in this area has needed.
+  | 'adaptiveTtft'
+  // Surface calibration/performance state in Settings and in the diagnostics
+  // dump. Read-only; no request behaviour attached. Default ON.
+  | 'providerPerformanceDiagnostics';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -700,6 +737,11 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   // Literal `true`, NOT isInternalDevTestContext — see the union member's note.
   wtaGovernanceYieldsToV3: { env: 'NATIVELY_WTA_GOVERNANCE_YIELDS_TO_V3', setting: 'wtaGovernanceYieldsToV3Enabled', default: true },
   docGroundedValidatorUsesSentEvidence: { env: 'NATIVELY_DOC_GROUNDED_VALIDATOR_SENT_EVIDENCE', setting: 'docGroundedValidatorUsesSentEvidenceEnabled', default: true },
+  // ── Provider Performance Profile ─────────────────────────────────────────
+  providerPerformanceProfile: { env: 'NATIVELY_PROVIDER_PERFORMANCE_PROFILE', setting: 'providerPerformanceProfileEnabled', default: true },
+  adaptiveStreamIdle: { env: 'NATIVELY_ADAPTIVE_STREAM_IDLE', setting: 'adaptiveStreamIdleEnabled', default: true },
+  adaptiveTtft: { env: 'NATIVELY_ADAPTIVE_TTFT', setting: 'adaptiveTtftEnabled', default: true },
+  providerPerformanceDiagnostics: { env: 'NATIVELY_PROVIDER_PERFORMANCE_DIAGNOSTICS', setting: 'providerPerformanceDiagnosticsEnabled', default: true },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);
