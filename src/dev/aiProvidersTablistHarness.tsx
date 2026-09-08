@@ -37,6 +37,19 @@ const SIGNED_IN = new URLSearchParams(location.search).get('signedIn') === '1';
 
 const OVERRIDES: Record<string, () => Promise<any>> = {
     getAmbiguousCredentialStores: async () => null,
+    // `?embedWarn=1` renders the lightweight-embedding notice, which is
+    // otherwise unreachable here: the default stub answers `[]`, so
+    // `s?.shouldWarn` is undefined and the card never mounts. Off by default —
+    // this harness's other users are looking at the tablist, not at an
+    // advisory that only some installs ever see.
+    getEmbeddingStatus: async () =>
+        new URLSearchParams(location.search).get('embedWarn') === '1'
+            ? {
+                shouldWarn: true,
+                scopeAllowsCloud: true,
+                active: { configured: true, provider: 'local', model: 'Xenova/all-MiniLM-L6-v2', dimensions: 384, location: 'on-device', lightweight: true },
+            }
+            : { shouldWarn: false },
     antigravityStatus: async () => ({
         signedIn: SIGNED_IN, inProgress: false,
         expiresAt: SIGNED_IN ? Date.now() + 3_600_000 : undefined,

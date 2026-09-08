@@ -290,6 +290,41 @@ export const AIP_CSS = `
 .aip-skeleton   { background: var(--aip-btn-bg); border-radius: var(--aip-r-sm);
                   animation: aip-shimmer 1.4s ease-in-out infinite; }
 
+/* ── Dismissal. A one-shot card that disappears on click, without the rest of
+      the panel snapping up into the hole it left.
+
+      grid-template-rows 1fr -> 0fr is the only way to transition to a content
+      height CSS never had to compute — "height: auto" is not an animatable
+      value, and a hardcoded max-height would be either a clip or a stall
+      depending on how a translation wrapped. The child needs min-height:0 (grid
+      items floor at min-content otherwise, and nothing moves) and
+      overflow:hidden (so the content is clipped by the shrinking track rather
+      than spilling past it).
+
+      The grid ITEM must be a bare div — no padding, no border. min-height:0
+      lets its CONTENT reach zero, but its own padding and border box cannot
+      shrink, so putting the card (p-5, 1px border) directly in the track floors
+      the collapse at 42px. Measured, not assumed: the first version of this
+      stopped dead at exactly 20+20+2.
+
+      The card's LEADING gap rides inside the track too, as padding on a child
+      of that bare item, rather than as the space-y margin it would otherwise
+      inherit — a margin outside the track survives the collapse and lands as a
+      20px jump at unmount. The TRAILING gap is left to the next sibling's
+      space-y margin, which is exactly the gap that should remain once this card
+      is gone.
+
+      One duration for both properties, ease-out, 160ms — an exit is the system
+      responding, not the user deciding, so it is the panel's fast state
+      duration rather than its travel duration. The reduced-motion block above
+      already squashes this to 0.01ms; the caller drops its unmount timer to
+      match, so the card leaves at once rather than sitting invisible. */
+.aip-dismissable { display:grid; grid-template-rows:1fr;
+                   transition: grid-template-rows var(--aip-dur-state) var(--aip-ease-out),
+                               opacity var(--aip-dur-state) var(--aip-ease-out); }
+.aip-dismissable > * { min-height:0; overflow:hidden; }
+.aip-dismissable[data-leaving='true'] { grid-template-rows:0fr; opacity:0; }
+
 /* ── Surfaces. The container is rounded-xl + --bg-item-surface +
       --border-subtle, which is the pair every card in this panel carried at
       3e8ea9fa, restored verbatim.
@@ -2045,53 +2080,166 @@ export const AmbiguousCredentialStoresCard = AmbiguousStoresCard;
  */
 const LightweightEmbeddingNotice: React.FC<{ onOpenEmbeddings?: () => void }> = ({ onOpenEmbeddings }) => {
     const t = useT();
-    const [state, setState] = React.useState<{ show: boolean; model?: string | null }>({ show: false });
+    const reduceMotion = useReducedMotion();
+    const [state, setState] = React.useState<{
+        show: boolean;
+        model?: string | null;
+        dimensions?: number | null;
+        location?: 'on-device' | 'cloud' | 'unknown';
+        cloudAllowed: boolean;
+    }>({ show: false, cloudAllowed: true });
+    // Dismissal is two steps: play the collapse, THEN unmount. Without the
+    // second state the card would vanish on click and the panel would snap up
+    // into the hole.
+    const [leaving, setLeaving] = React.useState(false);
+    const leaveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
                 const s = await window.electronAPI.getEmbeddingStatus?.();
-                if (!cancelled && s?.shouldWarn) setState({ show: true, model: s.active?.model });
+                if (!cancelled && s?.shouldWarn) setState({
+                    show: true,
+                    model: s.active?.model,
+                    dimensions: s.active?.dimensions,
+                    location: s.active?.location,
+                    // Never dangle a managed cloud key at someone whose scope
+                    // forbids cloud embeddings — for them the only real advice
+                    // is a stronger LOCAL model.
+                    cloudAllowed: s.scopeAllowsCloud !== false,
+                });
             } catch { /* best-effort notice */ }
         })();
         return () => { cancelled = true; };
     }, []);
 
+    React.useEffect(() => () => { if (leaveTimer.current) clearTimeout(leaveTimer.current); }, []);
+
     if (!state.show) return null;
 
+    const dismiss = async () => {
+        // Persist FIRST: the animation is decoration, the acknowledgement is the
+        // thing that must survive a close mid-transition.
+        await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
+        // Reduced motion squashes the transition to 0.01ms panel-wide, so a
+        // 160ms timer would just leave an invisible card holding its space.
+        if (reduceMotion) { setState(s => ({ ...s, show: false })); return; }
+        setLeaving(true);
+        leaveTimer.current = setTimeout(() => setState(s => ({ ...s, show: false })), 170);
+    };
+
+    const detail = [
+        // "-d" is a unit, not prose: it stays out of the translation catalogue.
+        state.dimensions ? `${state.dimensions}-d` : null,
+        state.location === 'on-device' ? t('On-device') : state.location === 'cloud' ? t('Cloud') : null,
+    ].filter(Boolean).join(' · ');
+
     return (
-        <div className="aip-card p-5 space-y-3">
-            <div className="flex items-start gap-3">
-                {/* One status primitive, as everywhere else in this panel. */}
-                <AipBadge tone="warn" label={t('Embeddings')} />
-                <div className="min-w-0">
-                    <p className="text-xs aip-hero font-medium">
-                        {t('Your AI provider is configured, but retrieval still uses a lightweight embedding model')}
-                    </p>
-                    <p className="text-[11px] aip-muted mt-1 leading-relaxed">
-                        {t('Natively embeds your files with')} <span className="aip-mono">{state.model || 'MiniLM'}</span>{t('. It may give weaker code and project retrieval than newer embedding models, which can affect answer quality even when your AI provider is excellent.')}
-                    </p>
-                    <p className="text-[11px] aip-muted mt-1 leading-relaxed">
-                        {t('For better results, choose a stronger local embedding model, or use a Natively API key, which includes managed embeddings.')}
-                    </p>
+        // Three nested boxes, each load-bearing: the grid wrapper animates,
+        // the bare item is the only thing that can actually reach zero height
+        // (see .aip-dismissable), and pt-5 inside it puts the card's leading gap
+        // INSIDE the collapsing track. The inline margin opts the wrapper out of
+        // the parent space-y, whose margin would survive the collapse and land
+        // as a 20px jump at unmount.
+        //
+        // Measured consequence, accepted: the header's own 8px bottom margin
+        // (the subtitle's mb-2) escapes and collapses against this wrapper's
+        // zero margin, so the gap ABOVE the card reads 28px where every other
+        // card gap is 20px. A grid container never self-collapses, so no
+        // arrangement of margins here can be both jump-free on exit and exactly
+        // 20px at rest — and 8px of extra air before an interruption is the
+        // cheaper of the two errors.
+        <div
+            className="aip-dismissable"
+            data-leaving={leaving ? 'true' : 'false'}
+            style={{ marginTop: 0 }}
+        >
+          {/* Bare grid item: anything with padding or a border here floors the
+              collapse at that box's own height. */}
+          <div>
+            <div className="pt-5">
+            {/* No entrance animation of its own. This wrapper is a direct child
+                of `[data-settings-stagger]`, so `settings-stagger-in` (220ms,
+                the same ease-out) already plays when the card is inserted —
+                which is the moment that matters here, since the card mounts a
+                beat after the panel does, on an IPC round-trip. Adding
+                `.aip-panel-fade` underneath would be two entrances for one
+                arrival. */}
+            <div className="aip-card p-5 space-y-3">
+                {/* Provider-card anatomy, verbatim: 26px tile, 13px title, one
+                    status badge, 11px description hanging off the tile gutter.
+                    That shape is what makes a card in this panel look like it
+                    belongs to this panel. `.aip-tile--mark` is the NEUTRAL tile
+                    (button fill, hairline border, currentColor glyph) rather
+                    than the brand-tinted monogram — there is no brand here. */}
+                <div className="flex items-start gap-3">
+                    <span className="aip-tile aip-tile--mark" aria-hidden="true">
+                        <Boxes size={16} strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className="aip-card-title">{t('Retrieval still uses a lightweight model')}</p>
+                            {/* One status primitive, as everywhere else here. */}
+                            <AipBadge tone="warn" label={t('Embeddings')} />
+                        </div>
+                        {/* Two plain sentences: the stake first, then the fix.
+                            No em-dash aside — a parenthetical inside an 11px
+                            line is a speed bump, and it was carrying the part
+                            the reader most needs.
+                            It also no longer sells the Natively key. Embeddings
+                            run on any provider in the catalogue (OpenAI, Gemini,
+                            Voyage, OpenRouter, Ollama, a custom endpoint), so
+                            naming one of them here was both a plug and wrong. */}
+                        <p className="aip-meta mt-1">
+                            {state.cloudAllowed
+                                ? t('Every answer is built on what retrieval finds. A stronger embedding model finds your code and documents more accurately, locally or through any provider you have set up.')
+                                : t('Every answer is built on what retrieval finds. A stronger local embedding model finds your code and documents more accurately.')}
+                        </p>
+                    </div>
+                </div>
+                {/* The model as a well, not as prose. It is the evidence behind
+                    the word "lightweight", so it gets the panel's recessed
+                    surface and its real numbers — 384 dimensions is what makes
+                    the claim checkable instead of an assertion. */}
+                <div className="aip-well px-3 py-2 flex items-center justify-between gap-3">
+                    <span className="aip-mono truncate">{state.model || 'MiniLM'}</span>
+                    {detail && <span className="aip-count shrink-0">{detail}</span>}
+                </div>
+                {/* The Antigravity/Codex action bar, verbatim: `flex-1` +
+                    data-size="row" on the action, `shrink-0` + the same row
+                    height beside it. Two auto-width pills left-aligned under a
+                    576px card left half the row empty and read as leftovers;
+                    a filled 34px bar reads as the card's footer, and it is the
+                    shape this panel already uses for a card's primary action.
+                    NEUTRAL, like every button here. Not data-variant="accent":
+                    the accent tint is periwinkle in this panel's token scope,
+                    and both sign-in bars refuse it for exactly that reason.
+                    `ghost` is not the answer for the dismiss either: no border,
+                    no fill, and this dismissal is permanent, so an escape hatch
+                    that reads as a caption is an unstoppable warning from the
+                    other side. Width and order carry the hierarchy. */}
+                <div className="aip-provider-row">
+                    <button
+                        type="button"
+                        className="aip-btn flex-1"
+                        data-size="row"
+                        onClick={() => onOpenEmbeddings?.()}
+                    >
+                        {t('Choose an embedding model')}
+                    </button>
+                    <button
+                        type="button"
+                        className="aip-btn shrink-0"
+                        data-size="row"
+                        onClick={dismiss}
+                    >
+                        {t('Keep MiniLM')}
+                    </button>
                 </div>
             </div>
-            <div className="flex flex-wrap gap-2 pl-1">
-                <button type="button" className="aip-btn" onClick={() => onOpenEmbeddings?.()}>
-                    {t('Configure embedding model')}
-                </button>
-                <button
-                    type="button"
-                    className="aip-btn"
-                    onClick={async () => {
-                        await window.electronAPI.acknowledgeLightweightEmbeddings?.(true);
-                        setState({ show: false });
-                    }}
-                >
-                    {t('Continue with MiniLM')}
-                </button>
             </div>
+          </div>
         </div>
     );
 };
@@ -3074,13 +3222,26 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         try {
             // @ts-ignore
             const models = await window.electronAPI?.getAvailableOllamaModels?.();
-            if (models && models.length > 0) {
-                setOllamaModels(models);
+            const usable = Array.isArray(models) ? models : [];
+            setOllamaModels(usable);
+
+            if (usable.length > 0) {
                 setOllamaStatus('detected');
             } else {
-                // Silent failure on background checks
-                // Only set not-found if we haven't detected it yet
-                if (ollamaStatus !== 'detected') {
+                // An empty list is NOT proof the daemon is missing. This handler
+                // answers with generation-capable models, and Natively itself
+                // pulls nomic-embed-text for retrieval — so a perfectly healthy
+                // Ollama holding only that embedder lands here. Reporting "Not
+                // found" would offer Auto-Fix, whose force-restart path can
+                // `kill -9` an app-managed daemon that is working fine.
+                // Ask the daemon directly instead; 'detected' with an empty list
+                // already has its own copy ("running but no models found").
+                let reachable = false;
+                try { reachable = Boolean(await window.electronAPI?.isOllamaReachable?.()); } catch { /* treated as unreachable */ }
+                if (reachable) {
+                    setOllamaStatus('detected');
+                } else if (ollamaStatus !== 'detected') {
+                    // Only set not-found if we haven't detected it yet
                     setOllamaStatus('not-found');
                 }
             }
@@ -3533,7 +3694,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         // in-tab panel switch. `.aip-root`'s own reduced-motion guard (~line 841)
         // already neutralises both.
         <div className="aip-root space-y-5 pb-10" data-theme={theme} data-settings-stagger>
-            <LightweightEmbeddingNotice onOpenEmbeddings={onNavigate ? () => onNavigate('embedding') : undefined} />
             <AmbiguousStoresCard />
             {confirmCopy && (
                 <ConfirmDialog
@@ -3555,6 +3715,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     {t('Pick a default model and connect the cloud, local, or custom providers you want available.')}
                 </p>
             </header>
+
+            {/* Below the header, not above it. This is an advisory about one
+                setting, and rendering it first opened the whole panel on a
+                yellow warning with no title above it. AmbiguousStoresCard stays
+                at the top on purpose: a credential-store conflict is an alarm
+                about what the panel is showing you, not advice about a setting
+                inside it. */}
+            <LightweightEmbeddingNotice onOpenEmbeddings={onNavigate ? () => onNavigate('embedding') : undefined} />
 
             <div className="aip-card p-5 flex items-center justify-between gap-4">
                     <div className="min-w-0">
@@ -3667,10 +3835,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     title={!canUseFastMode ? t("Requires Groq, Natively API, or Codex CLI to be configured") : ""}
                 >
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                            <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
-                            {!canUseFastMode && <AipBadge tone="warn" label={t('Needs Groq')} />}
-                        </div>
+                        {/* No "Needs Groq" badge. It named ONE of the three
+                            providers that satisfy canUseFastMode (Groq, Natively
+                            API, Codex CLI), so it read as a hard Groq dependency
+                            that does not exist — and the line below already
+                            states the real requirement in full, as does the
+                            card's title. A badge carries only what no other
+                            control already says. */}
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fast Response Mode')}</label>
                         <p className="text-[10px] aip-muted mt-0.5">{t('Uses the fastest available provider instead of your selected model.')}</p>
                         {!canUseFastMode && (
                             <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Groq, Natively API, or Codex CLI to be configured.')}</p>
@@ -4395,8 +4567,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         </div>
                     )}
                     {ollamaStatus === 'detected' && ollamaModels.length === 0 && (
-                        <div className="text-xs aip-muted">
-                            {t('Ollama is running but no models found. Run `ollama pull llama3` to get started.')}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <AipBadge tone="ok" label={t('Running')} />
+                                <span className="text-xs aip-muted">{t('Ollama connected')}</span>
+                            </div>
+                            {/* "no models found" was true of the old raw list and
+                                is not true now: this list is generation-capable
+                                models, and a fresh install can hold exactly the
+                                nomic-embed-text Natively pulled for retrieval.
+                                Telling that user nothing is installed sends them
+                                to fix something that is not broken. */}
+                            <div className="text-xs aip-muted">
+                                {t('No model here can generate text yet. Embedding models, such as the one Natively uses for retrieval, cannot chat. Run `ollama pull qwen2.5:3b` to add one.')}
+                            </div>
                         </div>
                     )}
                 </div>
