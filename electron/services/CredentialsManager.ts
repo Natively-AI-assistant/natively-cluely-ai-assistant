@@ -372,7 +372,7 @@ export class CredentialsManager {
      * rather than user-intended.
      */
     public wasExistingStoreUnreadable(): boolean {
-        return this.keyringUnreadable || this.keyIdentityMismatch;
+        return this.keyringUnreadable || this.keyMismatchWouldDestroy();
     }
 
     /**
@@ -1903,7 +1903,7 @@ export class CredentialsManager {
         // not it ever attempted a decrypt. reentryRequired is honoured here too —
         // once the store is classified unrecoverable, refusing writes only leaves
         // the user with no way to use the app.
-        if (this.keyIdentityMismatch && !this.reentryRequired) {
+        if (this.keyMismatchWouldDestroy() && !this.reentryRequired) {
             console.error(
                 '[CredentialsManager] Refusing to save: this session holds a different encryption key than the one '
                 + 'that wrote the stored credentials, so saving would replace a file this session could never have '
@@ -1951,8 +1951,28 @@ export class CredentialsManager {
      * what keeps memory and disk in agreement on every path, including the ones
      * that cannot report a failure.
      */
+    /**
+     * The canary refuses a write ONLY when this session also has nothing loaded.
+     *
+     * The flag says "my key is not the key that wrote the file". On its own that
+     * is not a reason to refuse: a session can legitimately hold a different key
+     * and still have a perfectly good credential set — the app-managed fallback
+     * exists for exactly that, and `preferFallbackThisLoad` (keyring read SKIPPED
+     * because the fallback is newer) reaches write time with keyringUnreadable
+     * false and writes allowed. Blanket-refusing on the flag alone would have
+     * broken those sessions, which is a worse bug than the one being fixed.
+     *
+     * What must never happen is replacing a file this session could not read with
+     * an EMPTY set. That is the conjunction below, and it is also exactly the
+     * shape of the observed outage: keyring unreadable, no fallback, credentials
+     * empty, and a startup token-write about to overwrite it.
+     */
+    private keyMismatchWouldDestroy(): boolean {
+        return this.keyIdentityMismatch && Object.keys(this.credentials).length === 0;
+    }
+
     private refuseWriteWhileDegraded(op: string): boolean {
-        if (!this.keyringUnreadable && !this.keyIdentityMismatch) return false;
+        if (!this.keyringUnreadable && !this.keyMismatchWouldDestroy()) return false;
         // Permanent failure: the user is re-entering by hand and must be allowed
         // to. Mirrors the same escape hatch in saveCredentials() — the two have to
         // agree or the setter would reject a mutation the save would have accepted.
@@ -1962,7 +1982,7 @@ export class CredentialsManager {
         // this launch a different key — the user has to start the app the way it
         // was started when the credentials were saved.
         console.error(
-            this.keyIdentityMismatch
+            this.keyMismatchWouldDestroy()
                 ? `[CredentialsManager] Refusing "${op}": this session holds a different encryption key than the `
                   + 'one that wrote the stored credentials, so the change was NOT applied and the stored file is '
                   + 'untouched. RECOVERY: start the app the same way it was started when the credentials were '
@@ -2139,7 +2159,7 @@ export class CredentialsManager {
 
     /** True when the credential store could not be read this session and writes are being refused. */
     public isCredentialStoreDegraded(): boolean {
-        return this.keyringUnreadable || this.keyIdentityMismatch;
+        return this.keyringUnreadable || this.keyMismatchWouldDestroy();
     }
 
     private loadCredentials(): void {
