@@ -455,6 +455,25 @@ export class IntelligenceEngine extends EventEmitter {
     // active meeting, so detectAndEmitDynamicActions becomes a no-op safely.
     private dynamicActionEngine: DynamicActionEngine | null = null;
     private currentSessionId: string | null = null;
+
+    /**
+     * THE conversation-ring key for every surface, computed in one place.
+     *
+     * Exposed because ipcHandlers has to WRITE the same ring this engine READS,
+     * and the two previously derived their key independently — typed chat off a
+     * webContents id, what-to-answer off the meeting id — so each surface built
+     * a history the other could not see. A public accessor is the cheapest way
+     * to make that class of drift impossible rather than merely fixed once.
+     */
+    public conversationSessionId(): string {
+        const meetingMarker = this.currentSessionId
+            ?? (this.session.getMeetingMetadata?.()?.calendarEventId)
+            ?? undefined;
+        const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
+        const { resolveConversationSessionId } =
+            require('./context-intelligence/question/conversation-state-store');
+        return resolveConversationSessionId(meetingId ?? meetingMarker, meetingMarker);
+    }
     private currentDynamicActionModeId: string | null = null;
     private currentDynamicActionTemplateType: string | null = null;
     // Latency trace for the most recent live request (manual/WTA). Exposed via
@@ -1317,6 +1336,14 @@ export class IntelligenceEngine extends EventEmitter {
      * Low-priority observational insights
      */
     async runAssistMode(): Promise<string | null> {
+        // 'assist' is the third V3 surface (engine-bridge reads the ring for it
+        // at the buildV3Prompt call below) and it had no writer either.
+        const insight = await this.runAssistModeInner();
+        this.recordLiveTurn(insight);
+        return insight;
+    }
+
+    private async runAssistModeInner(): Promise<string | null> {
         if (this.activeMode !== 'idle' && this.activeMode !== 'assist') {
             return null;
         }
@@ -1375,7 +1402,80 @@ export class IntelligenceEngine extends EventEmitter {
      * Manual trigger - uses clean transcript pipeline for question inference
      * NEVER returns null - always provides a usable response
      */
+    /**
+     * Records a completed live exchange into the V3 conversation ring.
+     *
+     * WHY THIS IS A WRAPPER, NOT A LINE AT THE END OF EACH METHOD
+     * runWhatShouldISay is ~3,300 lines with many terminal returns, and the
+     * callers that matter most do not go through the IPC layer at all: Auto
+     * Answer calls `this.runWhatShouldISay(...)` directly (three call sites
+     * above), so a writer placed in the `generate-what-to-say` handler only
+     * ever recorded a MANUAL button press. Every automatic answer — the common
+     * case in a live meeting — was missing from the history, and so was every
+     * screenshot attached to one. Wrapping is the only placement that cannot
+     * miss a caller or an exit path.
+     *
+     * Speculative pre-fetches are deliberately excluded: a draft the user never
+     * saw is not part of the conversation, and recording it would make the ring
+     * describe an exchange that did not happen.
+     */
+    private recordLiveTurn(
+        answer: string | null, screenContext?: unknown, question?: string,
+        /** How many screenshots the turn carried, INDEPENDENT of whether any of
+         *  them could be transcribed. See SCREEN_NOT_TRANSCRIBED. */
+        imageCount = 0,
+        /** The turn's attachments, transcribed for the record AFTER the answer. */
+        imagePaths?: readonly string[],
+    ): void {
+        if (!answer) return;
+        void (async () => {
+        try {
+            const { recordAnswerSummary } =
+                require('./context-intelligence/question/conversation-state-store');
+            const { SCREEN_NOT_TRANSCRIBED } = require('./services/screen/screenDescription');
+            // A DEDICATED transcription, not the answering call's output. The
+            // answering call is asked to answer concisely; measured live, its
+            // text for a build-failure screen was "Your build failed because
+            // you've run out of disk quota" — no error code, no ticket
+            // reference, which is precisely what the follow-up then asked for.
+            // Awaited here, not before the answer: the user already has their
+            // answer by this point, so this costs them nothing.
+            let screenText = '';
+            if (imagePaths?.length) {
+                const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
+                screenText = await transcribeScreenForMemory(imagePaths, question);
+            }
+            recordAnswerSummary(
+                this.conversationSessionId(),
+                answer,
+                // A failed transcription still records that a screen was THERE.
+                // Recording nothing is what let a follow-up deny the screenshot
+                // ever existed, which is a worse answer than "I can't read it".
+                screenText || (imageCount > 0 ? SCREEN_NOT_TRANSCRIBED : undefined),
+                // Seeds state for a turn that never reached orchestrate() (V3
+                // off, or a legacy route). runAssistMode deliberately passes
+                // nothing: an unprompted insight has no question, and a
+                // question-less turn is one appendTurn refuses anyway.
+                question,
+            );
+        } catch (error: any) {
+            // NEVER silent: a lost turn leaves the next follow-up with no
+            // antecedent, which is indistinguishable from a bad answer.
+            console.warn('[Intelligence] conversation ring write failed — this turn will not be in history:',
+                error?.message ?? error);
+        }
+        })();
+    }
+
     async runWhatShouldISay(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean }): Promise<string | null> {
+        const answer = await this.runWhatShouldISayInner(question, confidence, imagePaths, options);
+        if (!options?.speculative) {
+            this.recordLiveTurn(answer, options?.screenContext, question, imagePaths?.length ?? 0, imagePaths);
+        }
+        return answer;
+    }
+
+    private async runWhatShouldISayInner(question?: string, confidence: number = 0.8, imagePaths?: string[], options?: { speculative?: boolean; skipCooldown?: boolean; screenContext?: ScreenContext; promptInstruction?: string; activeSkill?: { id: string; name: string; promptBlock: string }; domContext?: string; forceFresh?: boolean }): Promise<string | null> {
         const now = Date.now();
         // Intelligence OS observe-only trace (Phase 1). Zero-cost NO-OP unless
         // intelligence_trace_enabled is on. Committed at the primary final-answer emit
@@ -3410,7 +3510,11 @@ export class IntelligenceEngine extends EventEmitter {
                         // WTA turn across every meeting shared one key.
                         scope: {
                             meetingId: _ctx.meetingId ?? meetingMarker ?? undefined,
-                            sessionId: _ctx.meetingId ?? meetingMarker ?? undefined,
+                            // ONE key across surfaces (resolveConversationSessionId).
+                            // Typed chat keyed the same ring off its senderId, so
+                            // the two surfaces kept separate histories and neither
+                            // could read the other's screenshot descriptions.
+                            sessionId: this.conversationSessionId(),
                         },
                         requestId: trace.requestId,
                         requestSequence: generationId,
@@ -6363,7 +6467,10 @@ export class IntelligenceEngine extends EventEmitter {
                 resolvedProfileSources: ctx.resolvedProfileSources,
                 extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],
                 requestSequence: this.currentGenerationId,
-                scope: { meetingId: ctx.meetingId ?? undefined, sessionId: ctx.meetingId ?? undefined },
+                scope: {
+                    meetingId: ctx.meetingId ?? undefined,
+                    sessionId: this.conversationSessionId(),
+                },
                 // This question came out of live speech via question-resolver,
                 // not from the user's keyboard, so it must not be stamped
                 // manual/1.0. The resolver's own confidence is already gated at
@@ -6762,6 +6869,15 @@ export class IntelligenceEngine extends EventEmitter {
      * Explicit bypass when auto-detection fails
      */
     async runManualAnswer(question: string): Promise<string | null> {
+        // The FOURTH V3 surface ('manual-chat' via pathTag 'engine'). It reads
+        // the ring at the buildV3Prompt call below and, like the other two live
+        // surfaces, had no writer — so its own answers never became history.
+        const manualAnswer = await this.runManualAnswerInner(question);
+        this.recordLiveTurn(manualAnswer, undefined, question);
+        return manualAnswer;
+    }
+
+    private async runManualAnswerInner(question: string): Promise<string | null> {
         this.emit('manual_answer_started');
         this.setMode('manual');
 

@@ -43,7 +43,20 @@ export type UserAction =
   | 'shortcut'
   | 'code_hint'
   | 'brainstorm'
-  | 'what_to_say';
+  | 'what_to_say'
+  /**
+   * Transcribe the screen for MEMORY, not to answer this turn.
+   *
+   * Every other action routes to a prompt that asks the model to "answer
+   * concisely", which is right for the turn in front of the user and useless as
+   * a record: verified live, the text stored for a build-failure screenshot was
+   * "Your build failed because you've run out of disk quota" — second person,
+   * paraphrased, with the error code and ticket reference the user later asked
+   * about nowhere in it. Before this, STRUCTURED_EXTRACTION_SYSTEM_PROMPT had NO
+   * caller at all: every call site passed `manual_use_screen` or `what_to_say`,
+   * both of which take the direct-answer branch.
+   */
+  | 'transcribe';
 
 export type QualityMode = 'fast' | 'balanced' | 'best' | 'private';
 
@@ -136,6 +149,18 @@ export class ScreenUnderstandingService {
   private imageHashService: ImageHashService;
   private optimizer: ImageOptimizer;
   private lastResult: ScreenUnderstandingResult | null = null;
+  /**
+   * What was ASKED of the cached image, not just which image it was.
+   *
+   * cacheLookup keyed on the image alone, and the prompt varies by userAction:
+   * 'what_to_say' produces a concise ANSWER, 'transcribe' produces a full
+   * transcription. Same screen, deliberately different results. Verified live:
+   * the transcription request that follows an answer on the same screenshot got
+   * handed the ANSWER back, so the conversation record stored "Your build failed
+   * because you've run out of disk quota" instead of the screen's text, and a
+   * follow-up asking for the error code could never be answered.
+   */
+  private lastResultKind: string | null = null;
   private readonly STALE_THRESHOLD_MS = 5 * 60 * 1000;
   /**
    * Per-rung failure memory, held on the singleton so it survives across turns
@@ -224,9 +249,10 @@ export class ScreenUnderstandingService {
       }
     }
 
-    // Cache lookup — same image within 5 min → reuse.
+    // Cache lookup — same image AND same question-kind within 5 min → reuse.
+    const resultKind = request.userAction === 'transcribe' ? 'transcribe' : 'answer';
     if (imageHash) {
-      const cached = this.cacheLookup(imageHash);
+      const cached = this.cacheLookup(imageHash, resultKind);
       if (cached) return cached;
     }
 
@@ -318,6 +344,7 @@ export class ScreenUnderstandingService {
       isTechnical,
     });
     this.lastResult = out;
+    this.lastResultKind = resultKind;
     return out;
   }
 
@@ -359,8 +386,11 @@ export class ScreenUnderstandingService {
     return helper.takeScreenshot();
   }
 
-  private cacheLookup(imageHash: string): ScreenUnderstandingResult | null {
+  private cacheLookup(imageHash: string, resultKind: string): ScreenUnderstandingResult | null {
     if (!this.lastResult || this.lastResult.imageHash !== imageHash) return null;
+    // An answer is not a transcription. Serving one for the other is what made
+    // the conversation record a paraphrase of the screen instead of its text.
+    if (this.lastResultKind !== resultKind) return null;
     const age = Date.now() - this.lastResult.capturedAt;
     if (age < this.STALE_THRESHOLD_MS) return { ...this.lastResult };
     return null;

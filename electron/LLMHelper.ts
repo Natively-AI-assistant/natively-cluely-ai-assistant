@@ -10595,6 +10595,20 @@ let isMultimodal = !!(imagePaths?.length);
         throw new DirectAssistError('INVALID_ATTACHMENT', 'An image attachment is no longer available.');
       }
     }
+    // Screenshots re-attached from earlier turns are optional context, so every
+    // check below DROPS them where the current turn's own attachments would
+    // hard-fail. The alternative — one evicted file, an image-less model or a
+    // privacy setting failing an ordinary typed question that merely happens to
+    // follow a screenshot — would make follow-up questions worse than the
+    // no-memory behaviour this replaces. The <recent_transcript> breadcrumb
+    // still tells the model a screenshot existed and is not in this request.
+    let carriedImagePaths = [...(request.historyImagePaths ?? [])].filter((imagePath) => {
+      try {
+        return fs.statSync(imagePath).isFile();
+      } catch {
+        return false;
+      }
+    });
     const disabledFamily = provider === 'codex-cli'
       ? 'codex-cli'
       : provider === 'curl' || provider === 'custom'
@@ -10603,17 +10617,25 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isProviderDisabled(disabledFamily)) {
       throw new ProviderDisabledError(provider);
     }
-    if (imagePaths.length && !this.directSelectionSupportsImages(request.selection, custom, curl)) {
-      throw new DirectAssistError(
-        'MODEL_DOES_NOT_SUPPORT_IMAGES',
-        `The selected ${model} model does not support image input.`,
-      );
+    if (!this.directSelectionSupportsImages(request.selection, custom, curl)) {
+      // Cleared BEFORE the throw below so a text-only turn on a text-only model
+      // still answers instead of failing on an image the user did not attach.
+      carriedImagePaths = [];
+      if (imagePaths.length) {
+        throw new DirectAssistError(
+          'MODEL_DOES_NOT_SUPPORT_IMAGES',
+          `The selected ${model} model does not support image input.`,
+        );
+      }
     }
-    if ((provider === 'custom' || provider === 'curl') && imagePaths.length > 1) {
-      throw new DirectAssistError(
-        'INVALID_ATTACHMENT',
-        'The selected custom provider accepts at most one image per request.',
-      );
+    if (provider === 'custom' || provider === 'curl') {
+      if (imagePaths.length > 1) {
+        throw new DirectAssistError(
+          'INVALID_ATTACHMENT',
+          'The selected custom provider accepts at most one image per request.',
+        );
+      }
+      carriedImagePaths = carriedImagePaths.slice(0, Math.max(0, 1 - imagePaths.length));
     }
 
     // Direct Assist bypasses the legacy context assembler, so enforce the
@@ -10669,6 +10691,25 @@ let isMultimodal = !!(imagePaths?.length);
         'Transcript data is disabled for cloud providers, so this request was not sent.',
       );
     }
+    if (carriedImagePaths.length) {
+      // 'transcript' strips <recent_transcript>, and that block holds the ONLY
+      // text binding each carried screenshot to the turn it came from. Sending
+      // the images without it hands the model unexplained pictures of a screen
+      // from several turns ago, which it will answer from with confidence —
+      // strictly worse than sending nothing.
+      if (deniedScopes.includes('transcript') || deniedScopes.includes('screenshots')) {
+        carriedImagePaths = [];
+      } else if (!directProviderIsLocal) {
+        // The current turn's images already passed this above; this covers a
+        // turn that carries earlier ones and attaches none of its own.
+        try {
+          this.assertOutboundImagesAllowed(provider, true);
+        } catch {
+          carriedImagePaths = [];
+        }
+      }
+    }
+    if (carriedImagePaths.length) imagePaths.push(...carriedImagePaths);
     const directUserPrompt = deniedScopes.length
       ? this.stripDeniedScopedBlocksFromMessage(request.userPrompt, deniedScopes)
       : request.userPrompt;

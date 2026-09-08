@@ -239,3 +239,35 @@ test('the question card distinguishes context that was shortened from context th
     'a start event carrying only shortenedFields must still stamp the card',
   );
 });
+
+test('the history write records the screenshots the turn was sent with, after the tray is cleared', () => {
+  // beginDirectAssist snapshots the paths onto the in-flight request because
+  // every submit handler calls setAttachedContext([]) immediately after
+  // dispatch — by the time the done branch runs, component state has none.
+  assert.match(interfaceSource, /interface ActiveDirectAssistRequest \{[\s\S]{0,400}?imagePaths: string\[\];/);
+  assert.match(interfaceSource, /imagePaths: imagePaths \? \[\.\.\.imagePaths\] : \[\],/);
+  assert.match(interfaceSource, /interface DirectAssistHistoryTurn \{[\s\S]{0,500}?imagePaths\?: string\[\];/);
+
+  const doneBranch = section("const completedTurns: DirectAssistHistoryTurn[]", 'directAssistHistoryRef.current = completedTurns');
+  assert.match(doneBranch, /role: 'user',\s*content: active\.currentRequest,\s*\.\.\.\(active\.imagePaths\.length \? \{ imagePaths: active\.imagePaths \} : \{\}\)/);
+
+  // Still the only history write, and still only on a successful terminal.
+  assert.equal((interfaceSource.match(/directAssistHistoryRef\.current = completedTurns/g) ?? []).length, 1);
+});
+
+test('every Direct surface hands beginDirectAssist its attachments, or that surface loses screenshots', () => {
+  // The history write can only record what the caller passed. A surface that
+  // omits imagePaths still dispatches the screenshot on ITS turn and looks
+  // fine, then silently cannot answer about it two turns later — the exact
+  // failure this contract exists to prevent, and one no builder-level test
+  // can see. Typed submit, What-to-Say, and the STT/screenshot path.
+  const callSites = interfaceSource.match(/await beginDirectAssist\(\{[\s\S]*?\n\s*\}\);/g) ?? [];
+  assert.equal(callSites.length, 3, 'a new Direct surface must be added to this check');
+  for (const callSite of callSites) {
+    assert.match(
+      callSite,
+      /imagePaths: currentAttachments\.map\(\(attachment\) => attachment\.path\)/,
+      `a beginDirectAssist call site does not forward its attachments:\n${callSite}`,
+    );
+  }
+});

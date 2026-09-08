@@ -1755,6 +1755,43 @@ export class DatabaseManager {
             }
         }
 
+        if (version < 31) {
+            console.log('[DatabaseManager] Applying migration v30 → v31: screenshot description cache');
+            try {
+                // A screenshot's text transcription, keyed by the EXACT bytes of
+                // the image. Describing a screen costs a vision call with a
+                // multi-second budget, and the same screen is re-attached
+                // constantly (re-captures of one window, one slide, one error
+                // dialog), so this is a cache before it is storage.
+                //
+                // The key is a sha256 of the file, deliberately NOT
+                // ImageHashService.computeHash — that is a 16x16 grayscale
+                // average hash built for CHANGE DETECTION, and it collides
+                // across screens that merely look alike at that resolution.
+                // Serving one screen's transcription for another is a
+                // confidently wrong answer about an error code the user can see
+                // with their own eyes, which is worse than no cache at all.
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS screenshot_descriptions (
+                        image_sha256 TEXT PRIMARY KEY,
+                        description  TEXT NOT NULL,
+                        provider     TEXT NOT NULL DEFAULT '',
+                        model        TEXT NOT NULL DEFAULT '',
+                        created_at   INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_screenshot_descriptions_created
+                        ON screenshot_descriptions(created_at);
+                `);
+                this.db.pragma('user_version = 31');
+            } catch (e) {
+                console.error('[DatabaseManager] v31 screenshot description cache failed (leaving version at 30 to retry next launch):', e);
+                // Same rule as v28/v29/v30 above: stop rather than fall through,
+                // so a later migration cannot stamp user_version past a v31 that
+                // never applied and make `version < 31` false forever.
+                return;
+            }
+        }
+
         console.log('[DatabaseManager] Migrations completed.');
     }
 

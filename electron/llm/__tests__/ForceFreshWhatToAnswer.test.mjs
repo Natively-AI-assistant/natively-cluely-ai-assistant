@@ -73,8 +73,13 @@ describe('source: engine honors forceFresh option', () => {
   test('runWhatShouldISay clears speculativeText when forceFresh && !isSpeculative', () => {
     // The fix: at the start of the method, when forceFresh is true and the
     // call is NOT speculative, reset speculativeText and speculativeTextExpiry.
-    const methodBody = extractMethodBody(engineSrc, 'runWhatShouldISay');
-    assert.ok(methodBody, 'runWhatShouldISay method body must be locatable');
+    // The implementation lives in runWhatShouldISayInner: the public
+    // runWhatShouldISay is now a thin wrapper that records the completed turn
+    // into the V3 conversation ring (2026-09-08). Auto Answer calls the public
+    // method directly, so the ring writer had to sit here rather than in the
+    // IPC handler — see IntelligenceEngine.recordLiveTurn.
+    const methodBody = extractMethodBody(engineSrc, 'runWhatShouldISayInner');
+    assert.ok(methodBody, 'runWhatShouldISayInner method body must be locatable');
     assert.match(
       methodBody,
       /if\s*\(\s*forceFresh\s*&&\s*!isSpeculative\s*\)\s*\{/,

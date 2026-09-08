@@ -56,6 +56,45 @@ export interface DirectAssistPageContext {
 export interface DirectAssistHistoryTurn {
   readonly role: DirectAssistHistoryRole;
   readonly content: string;
+  /**
+   * Screenshots the user attached to THIS turn, still on disk. Without them a
+   * screenshot was reachable only on the turn it was sent: the renderer clears
+   * its attachment tray immediately after dispatch, so "what was the error code
+   * in the screenshot I sent?" two turns later reached the model as bare text
+   * with no image and no hint that one had ever existed.
+   */
+  readonly imagePaths?: readonly string[];
+  /**
+   * How many the user actually attached, which is NOT `imagePaths.length` once
+   * the screenshot queue has evicted and unlinked a file (ScreenshotHelper keeps
+   * 5). The difference is what lets the prompt announce a screenshot it is not
+   * sending, instead of leaving the model to invent what was in a picture it
+   * cannot see.
+   */
+  readonly imageCount?: number;
+  /**
+   * The turn's screenshots as text, from the shared ScreenshotDescriptionStore.
+   *
+   * ONE string for the whole attachment set, not one per image: a single
+   * `understand()` call over N images returns ONE result about all of them, so
+   * there is no honest way to attribute it to any single screenshot. The
+   * earlier positionally-aligned array had to be padded, could silently
+   * mis-pair, and made a multi-image turn uncacheable in both directions.
+   *
+   * Text is strictly better than bytes for an OLD turn: a fraction of the
+   * tokens, and it survives the file being unlinked, a text-only model, and a
+   * provider that may not receive images. When it is present the bytes are not
+   * carried at all.
+   */
+  readonly imageDescription?: string;
+}
+
+/** Post-normalization form: both attachment fields are always populated. */
+export interface DirectAssistNormalizedHistoryTurn extends DirectAssistHistoryTurn {
+  readonly imagePaths: readonly string[];
+  readonly imageCount: number;
+  /** '' when nothing has transcribed this turn's screenshots. */
+  readonly imageDescription: string;
 }
 
 /** Serializable input accepted at the main-process boundary. */
@@ -102,7 +141,7 @@ export interface DirectAssistRequest {
   readonly referenceContext: string;
   readonly referenceFiles: readonly DirectAssistReferenceFile[];
   readonly pageContext: DirectAssistPageContext | null;
-  readonly history: readonly DirectAssistHistoryTurn[];
+  readonly history: readonly DirectAssistNormalizedHistoryTurn[];
   readonly transcript: string;
   readonly meetingTranscript: string;
   readonly imagePaths: readonly string[];
@@ -124,6 +163,7 @@ export interface DirectAssistPreparedPrompt {
    * provider that block is stripped, and these have to go with it or the model
    * receives unexplained pictures of a stale screen and answers from them.
    */
+  readonly historyImagePaths: readonly string[];
   /** Field names only. Safe for diagnostics because no user content is stored. */
   readonly trimmedFields: readonly string[];
   /** Fields kept but reduced to fit (reference files re-shared across the
@@ -139,6 +179,9 @@ export interface DirectAssistDispatchRequest {
   readonly systemPrompt: string;
   readonly userPrompt: string;
   readonly imagePaths: readonly string[];
+  /** Earlier turns' screenshots. Optional so an older caller still type-checks;
+   *  absent is treated as "none carried". See DirectAssistPreparedPrompt. */
+  readonly historyImagePaths?: readonly string[];
 }
 
 export interface DirectAssistTransport {

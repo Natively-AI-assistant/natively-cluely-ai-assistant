@@ -170,7 +170,16 @@ interface DirectAssistRendererRequest {
     url?: string;
     title?: string;
   } | null;
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history?: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    /** Validated survivors only — an evicted screenshot is skipped, not fatal. */
+    imagePaths?: string[];
+    /** What the user attached, so the prompt can name what is missing. */
+    imageCount?: number;
+    /** The turn's cached transcription, for its whole attachment set. */
+    imageDescription?: string;
+  }>;
   transcript?: string;
   imagePaths?: string[];
   requestedLanguage?: string;
@@ -203,6 +212,30 @@ const DIRECT_ASSIST_IMAGE_MIMES: Readonly<Record<string, string>> = Object.freez
  * the host platform's path rules, including case-insensitive root comparison
  * on Windows. An alternate drive/UNC root remains absolute and is rejected.
  */
+/**
+ * The V3 conversation-ring key for a main-process surface.
+ *
+ * Delegates to the engine so typed chat and what-to-answer land in the SAME
+ * ring. They previously derived it independently — typed chat off a webContents
+ * id, what-to-answer off the meeting id — so each surface built a history the
+ * other could not read, and a screenshot described on one was invisible to the
+ * other. `fallbackKey` covers a turn with no engine at all, where nothing else
+ * is going to read the ring either.
+ */
+function v3ConversationSessionId(appState: AppState, fallbackKey: string | number): string {
+  const {
+    resolveConversationSessionId,
+  } = require('./context-intelligence/question/conversation-state-store') as
+    typeof import('./context-intelligence/question/conversation-state-store');
+  try {
+    const manager = appState.getIntelligenceManager?.() as
+      { conversationSessionId?: () => string } | undefined;
+    const key = manager?.conversationSessionId?.();
+    if (key) return key;
+  } catch { /* no engine on this turn — fall through */ }
+  return resolveConversationSessionId(null, fallbackKey);
+}
+
 function isDirectAssistCanonicalPathInsideRoot(root: string, candidate: string): boolean {
   const relative = path.relative(root, candidate);
   return relative !== '..'
@@ -1450,6 +1483,20 @@ export function initializeIpcHandlers(appState: AppState): void {
             let v3ScreenDescription = '';
             if (imagePaths?.length) {
               try {
+                const screenStore = require('./services/screen/ScreenshotDescriptionStore') as
+                  typeof import('./services/screen/ScreenshotDescriptionStore');
+                // CACHE READ. This path consumes the description as TEXT only
+                // (createScreenRetrievalPort below takes `description`), so a
+                // hit can skip the whole vision pre-pass — seconds off a turn
+                // whenever a user re-attaches a screen they already asked about.
+                // Keyed on the exact image bytes; see the store for why a
+                // perceptual hash would be wrong here.
+                // Keyed on the whole attachment set, so a multi-image turn
+                // caches and hits exactly like a single-image one.
+                const cacheKey = screenStore.hashImageSet(imagePaths);
+                if (cacheKey) {
+                  v3ScreenDescription = screenStore.getScreenshotDescription(cacheKey)?.description ?? '';
+                }
                 const {
                   getScreenUnderstandingService,
                 } = require('./services/screen/ScreenUnderstandingService');
@@ -1458,7 +1505,7 @@ export function initializeIpcHandlers(appState: AppState): void {
                 const credentials = CredentialsManager.getInstance();
                 const providerScopes = settings.get('providerDataScopes') || {};
                 const localVisionAvailable = credentials.anyLocalVisionProviderConfigured?.() ?? false;
-                const sur = await getScreenUnderstandingService().understand({
+                const sur = v3ScreenDescription ? null : await getScreenUnderstandingService().understand({
                   modeId: modeId,
                   transcript: v3Question,
                   userAction: 'manual_use_screen',
@@ -1477,13 +1524,18 @@ export function initializeIpcHandlers(appState: AppState): void {
                     localVisionAvailable,
                   },
                 });
-                if (sur?.status === 'available') {
-                  v3ScreenDescription = [
-                    sur.visibleSummary,
-                    sur.extractedText,
-                    ...(sur.codeBlocks ?? []),
-                    ...(sur.tables ?? []).map((t: any) => t.markdown).filter(Boolean),
-                  ].filter((part: unknown) => typeof part === 'string' && part.trim()).join('\n\n');
+                if (sur) {
+                  // Shared assembler, not an inline list: the inline version here
+                  // omitted `sur.errors` entirely, so the extraction schema's own
+                  // error-line field never reached the ring and "what was the
+                  // error code in that screenshot?" had nothing to read.
+                  v3ScreenDescription = require('./services/screen/screenDescription')
+                    .composeScreenDescription(sur);
+                  // Not written back either — same reason as the what-to-say
+                  // site above: this is the answering call's output, not a
+                  // transcription. The READ above is still correct, because
+                  // what the cache holds IS a transcription.
+                  void cacheKey;
                 }
               } catch (screenErr: any) {
                 // NEVER silent (§22.1): degrading to bytes-only is a real
@@ -1572,7 +1624,11 @@ export function initializeIpcHandlers(appState: AppState): void {
               // a u:local|s:<sender> turn.
               scope: {
                 userId: V3_USER_ID,
-                sessionId: String(senderId),
+                // ONE key across surfaces (see resolveConversationSessionId).
+                // This was String(senderId) while what-to-answer read the ring
+                // under the meeting id, so the two surfaces kept separate
+                // histories and neither could see the other's screenshots.
+                sessionId: v3ConversationSessionId(appState, senderId),
                 ...(v3MeetingId ? { meetingId: v3MeetingId } : {}),
               },
               retrieval: port,
@@ -1860,11 +1916,19 @@ export function initializeIpcHandlers(appState: AppState): void {
               // ── ANSWER-SIDE SINKS (skipped when truncated) ──────────────
               if (!v3Truncated) {
                 try {
-                  const { recordAnswerSummary } = require('./context-intelligence/question/conversation-state-store');
+                  const {
+                    recordAnswerSummary,
+                  } = require('./context-intelligence/question/conversation-state-store');
                   // Third argument is what makes a screenshot survive its own
                   // turn: the description enters the conversation ring, so a
                   // later "what was in that screenshot?" has something to read.
-                  recordAnswerSummary(String(senderId), finalText, v3ScreenDescription || undefined);
+                  // The key MUST match the one the scope above was built with,
+                  // or this writes a ring nothing ever reads.
+                  recordAnswerSummary(
+                    v3ConversationSessionId(appState, senderId),
+                    finalText,
+                    v3ScreenDescription || undefined,
+                  );
                 } catch { /* continuity only */ }
                 try {
                   // The user/answer PAIR is the antecedent unit for follow-up
@@ -1957,7 +2021,11 @@ export function initializeIpcHandlers(appState: AppState): void {
             event.sender?.once?.('destroyed', () => {
               _convoCleanupRegistered.delete(senderId);
               try { _manualConversationMemory.clearSession(String(senderId)); } catch { /* noop */ }
-              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(String(senderId)); } catch { /* noop */ }
+              // MUST be the same key the writers use. This was String(senderId)
+              // while writes moved to v3ConversationSessionId, which would have
+              // left "clear" deleting an empty bucket and the real ring — the
+              // user's screenshots included — alive behind it.
+              try { require('./context-intelligence/question/conversation-state-store').clearConversationState(v3ConversationSessionId(appState, senderId)); } catch { /* noop */ }
             });
           }
         } catch { /* noop */ }
@@ -6357,6 +6425,46 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   };
 
+  /**
+   * The single Direct Assist attachment boundary. Callers decide what a
+   * rejection MEANS: the current turn's attachments fail the request, earlier
+   * turns' carried screenshots are skipped.
+   */
+  const resolveDirectAssistImagePath = (
+    rendererPath: string,
+    userDataDir: string,
+    canonicalUserDataDir: string,
+  ): { ok: true; canonicalPath: string } | { ok: false; rejection: string } => {
+    const { validateImagePath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
+    try {
+      // Do not trust validateImagePath's original-path fallback: a path can
+      // look allowlisted while a symlink/junction resolves outside userData.
+      // Canonical containment is the authoritative Direct Assist boundary.
+      const canonicalPath = fs.realpathSync.native(rendererPath);
+      if (!isDirectAssistCanonicalPathInsideRoot(canonicalUserDataDir, canonicalPath)) {
+        return { ok: false, rejection: 'An image attachment was rejected.' };
+      }
+      const validation = validateImagePath(rendererPath, userDataDir);
+      if (!validation.isValid) {
+        return { ok: false, rejection: 'An image attachment was rejected.' };
+      }
+      const stat = fs.statSync(canonicalPath);
+      if (!stat.isFile() || stat.size <= 0 || stat.size > DIRECT_ASSIST_MAX_IMAGE_BYTES) {
+        return { ok: false, rejection: 'An image attachment has an invalid size or type.' };
+      }
+      const detectedMime = sniffDirectAssistImage(canonicalPath);
+      if (
+        !detectedMime
+        || DIRECT_ASSIST_IMAGE_MIMES[path.extname(canonicalPath).toLowerCase()] !== detectedMime
+      ) {
+        return { ok: false, rejection: 'An attachment is not a supported image.' };
+      }
+      return { ok: true, canonicalPath };
+    } catch {
+      return { ok: false, rejection: 'An image attachment is unavailable.' };
+    }
+  };
+
   const normalizeDirectAssistRequest = (
     raw: unknown,
   ): { request?: DirectAssistRendererRequest; error?: DirectAssistIpcError; requestId: string } => {
@@ -6459,12 +6567,29 @@ export function initializeIpcHandlers(appState: AppState): void {
       pageContext = null;
     }
 
+    // Resolved at most once per request, and only if something actually carries
+    // an attachment — an unreadable userData root must not fail a plain typed
+    // question that has no images at all.
+    const userDataDir = app.getPath('userData');
+    let canonicalUserDataDirCache: string | null | undefined;
+    const getCanonicalUserDataDir = (): string | null => {
+      if (canonicalUserDataDirCache !== undefined) return canonicalUserDataDirCache;
+      let resolved: string | null;
+      try {
+        resolved = fs.realpathSync.native(userDataDir);
+      } catch {
+        resolved = null;
+      }
+      canonicalUserDataDirCache = resolved;
+      return resolved;
+    };
+
     let history: DirectAssistRendererRequest['history'];
     if (candidate.history !== undefined) {
       if (!Array.isArray(candidate.history) || candidate.history.length > DIRECT_ASSIST_MAX_HISTORY_TURNS) {
         return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist history is invalid.') };
       }
-      history = [];
+      const rawTurns: { role: 'user' | 'assistant'; content: string; imagePaths: string[] }[] = [];
       let historyChars = 0;
       for (const rawTurn of candidate.history) {
         if (
@@ -6479,11 +6604,84 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (historyChars > DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS) {
           return { requestId, error: directAssistError('CONTEXT_TOO_LARGE', 'Direct Assist history is too large.') };
         }
-        history.push(Object.freeze({
+        const rawImagePaths = (rawTurn as any).imagePaths;
+        if (rawImagePaths !== undefined) {
+          // Shape is still strict — only AVAILABILITY is forgiving below.
+          if (
+            !Array.isArray(rawImagePaths)
+            || rawImagePaths.length > DIRECT_ASSIST_MAX_IMAGES
+            || rawImagePaths.some((value: unknown) => typeof value !== 'string' || value.trim().length === 0)
+          ) {
+            return { requestId, error: directAssistError('INVALID_REQUEST', 'Direct Assist history contains an invalid turn.') };
+          }
+        }
+        rawTurns.push({
           role: (rawTurn as any).role,
           content: (rawTurn as any).content,
-        }));
+          imagePaths: Array.isArray(rawImagePaths) ? [...rawImagePaths] as string[] : [],
+        });
       }
+
+      // Validating every turn's attachments would be up to
+      // DIRECT_ASSIST_MAX_HISTORY_TURNS x DIRECT_ASSIST_MAX_IMAGES synchronous
+      // realpath+stat+header-read triples on the main process, per Direct Assist
+      // turn. Only DIRECT_ASSIST_MAX_IMAGES of them can ever be dispatched, so
+      // walk newest-first and stop at that many — the same set
+      // selectCarriedHistoryImages would pick.
+      const validated = new Map<string, string | null>();
+      // Free payload slots only: the current turn's own attachments always win
+      // them, so anything beyond this could never be dispatched anyway.
+      let validationBudget = Math.max(0, DIRECT_ASSIST_MAX_IMAGES - (
+        Array.isArray(candidate.imagePaths)
+          ? Math.min(candidate.imagePaths.length, DIRECT_ASSIST_MAX_IMAGES)
+          : 0
+      ));
+      for (let i = rawTurns.length - 1; i >= 0 && validationBudget > 0; i -= 1) {
+        const turnImagePaths = rawTurns[i].imagePaths;
+        for (let j = turnImagePaths.length - 1; j >= 0 && validationBudget > 0; j -= 1) {
+          const rendererPath = turnImagePaths[j];
+          if (validated.has(rendererPath)) continue;
+          validationBudget -= 1;
+          const canonicalUserDataDir = getCanonicalUserDataDir();
+          if (!canonicalUserDataDir) {
+            validated.set(rendererPath, null);
+            continue;
+          }
+          const resolved = resolveDirectAssistImagePath(rendererPath, userDataDir, canonicalUserDataDir);
+          // A screenshot the queue has since unlinked is the EXPECTED case, not
+          // an attack: skip it and let imageCount tell the prompt one is gone.
+          validated.set(rendererPath, resolved.ok ? resolved.canonicalPath : null);
+        }
+      }
+
+      // The shared transcription cache, populated by the main live path. Direct
+      // Assist never describes a screen itself, so this is opportunistic reuse:
+      // a screenshot the live path has already transcribed reaches a Direct
+      // follow-up as text, which is cheaper than the bytes and outlives them.
+      const screenStore = require('./services/screen/ScreenshotDescriptionStore') as
+        typeof import('./services/screen/ScreenshotDescriptionStore');
+      history = rawTurns.map((turn) => {
+        const canonicalPaths = turn.imagePaths
+          .map((rendererPath) => validated.get(rendererPath) ?? null)
+          .filter((canonicalPath): canonicalPath is string => Boolean(canonicalPath));
+        return Object.freeze({
+          role: turn.role,
+          content: turn.content,
+          imagePaths: Object.freeze(canonicalPaths) as string[],
+          imageCount: turn.imagePaths.length,
+          // ONE lookup per turn, keyed on the turn's whole attachment set —
+          // which is what a description actually describes.
+          imageDescription: (() => {
+            try {
+              return canonicalPaths.length
+                ? screenStore.getDescriptionForImageSet(canonicalPaths) ?? ''
+                : '';
+            } catch {
+              return '';
+            }
+          })(),
+        });
+      });
       Object.freeze(history);
     }
 
@@ -6496,43 +6694,17 @@ export function initializeIpcHandlers(appState: AppState): void {
       ) {
         return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'Image attachment payload is invalid.') };
       }
-      const { validateImagePath } = require('./utils/curlUtils') as typeof import('./utils/curlUtils');
-      const userDataDir = app.getPath('userData');
-      let canonicalUserDataDir: string;
-      try {
-        canonicalUserDataDir = fs.realpathSync.native(userDataDir);
-      } catch {
+      const canonicalUserDataDir = getCanonicalUserDataDir();
+      if (!canonicalUserDataDir) {
         return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'The app attachment directory is unavailable.') };
       }
       imagePaths = [];
       for (const rendererPath of candidate.imagePaths as string[]) {
-        try {
-          // Do not trust validateImagePath's original-path fallback: a path can
-          // look allowlisted while a symlink/junction resolves outside userData.
-          // Canonical containment is the authoritative Direct Assist boundary.
-          const canonicalPath = fs.realpathSync.native(rendererPath);
-          if (!isDirectAssistCanonicalPathInsideRoot(canonicalUserDataDir, canonicalPath)) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment was rejected.') };
-          }
-          const validation = validateImagePath(rendererPath, userDataDir);
-          if (!validation.isValid) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment was rejected.') };
-          }
-          const stat = fs.statSync(canonicalPath);
-          if (!stat.isFile() || stat.size <= 0 || stat.size > DIRECT_ASSIST_MAX_IMAGE_BYTES) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment has an invalid size or type.') };
-          }
-          const detectedMime = sniffDirectAssistImage(canonicalPath);
-          if (
-            !detectedMime
-            || DIRECT_ASSIST_IMAGE_MIMES[path.extname(canonicalPath).toLowerCase()] !== detectedMime
-          ) {
-            return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An attachment is not a supported image.') };
-          }
-          imagePaths.push(canonicalPath);
-        } catch {
-          return { requestId, error: directAssistError('INVALID_ATTACHMENT', 'An image attachment is unavailable.') };
+        const resolved = resolveDirectAssistImagePath(rendererPath, userDataDir, canonicalUserDataDir);
+        if (!resolved.ok) {
+          return { requestId, error: directAssistError('INVALID_ATTACHMENT', resolved.rejection) };
         }
+        imagePaths.push(resolved.canonicalPath);
       }
       Object.freeze(imagePaths);
     }
@@ -6846,6 +7018,23 @@ export function initializeIpcHandlers(appState: AppState): void {
           lastSequence = Math.max(lastSequence, streamEvent.sequence);
           if (streamEvent.type === 'done') {
             sendTerminal({ ...streamEvent, fullText } as DirectAssistStreamEvent);
+            // ── TRANSCRIBE THIS TURN'S SCREENSHOT, AFTER the answer ─────────
+            // Direct Assist deliberately has no vision pre-pass: it is one
+            // dispatch with nothing in front of it, and a 6-second
+            // ScreenUnderstandingService call before the answer would undo the
+            // whole point of the path. So it runs AFTER the terminal event —
+            // the user already has their answer and is reading it — purely so
+            // that a follow-up two turns from now has text to read once the
+            // image is gone. Without this, Direct Assist could only ever carry
+            // BYTES forward, which die when ScreenshotHelper unlinks the file
+            // past its 5-deep queue.
+            //
+            // Fire-and-forget and fully guarded: nothing below may affect the
+            // answer that has already been delivered.
+            if (request.imagePaths?.length) {
+              void require('./services/screen/screenTranscription')
+                .transcribeScreenForMemory(request.imagePaths, request.currentRequest);
+            }
           } else {
             sendTerminal(streamEvent);
           }
@@ -8144,6 +8333,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       provider,
       openrouterModel: stored.openrouterModel ?? null,
       jinaModel: stored.jinaModel ?? null,
+      nativelyModel: stored.nativelyModel ?? null,
       hostedModel,
       candidateCount: stored.candidateCount ?? null,
       fallbackToLocal: stored.fallbackToLocal === true,
@@ -8160,9 +8350,10 @@ export function initializeIpcHandlers(appState: AppState): void {
   });
 
   safeHandle('reranker:set-config', async (_evt, next: {
-    provider?: 'local' | 'openrouter' | 'jina';
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
     openrouterModel?: string;
     jinaModel?: string;
+    nativelyModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => {
@@ -8171,11 +8362,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     const current = (settings.get('reranker') as any) || {};
 
     const merged: any = { ...current };
-    if (next.provider === 'local' || next.provider === 'openrouter' || next.provider === 'jina') {
+    if (next.provider === 'local' || next.provider === 'natively' || next.provider === 'openrouter' || next.provider === 'jina') {
       merged.provider = next.provider;
     }
     if (typeof next.openrouterModel === 'string') merged.openrouterModel = next.openrouterModel.trim() || undefined;
     if (typeof next.jinaModel === 'string') merged.jinaModel = next.jinaModel.trim() || undefined;
+    if (typeof next.nativelyModel === 'string') merged.nativelyModel = next.nativelyModel.trim() || undefined;
     if (typeof next.fallbackToLocal === 'boolean') merged.fallbackToLocal = next.fallbackToLocal;
     // Clamp rather than reject: a nonsensical depth should not be storable, and
     // silently keeping the old value is less confusing than an error toast.
@@ -12403,6 +12595,16 @@ export function initializeIpcHandlers(appState: AppState): void {
             });
 
             screenContext = sur.status === 'available' ? sur : undefined;
+            // NO write-through here, deliberately. `screenContext` is the
+            // ANSWERING call's result — "analyze and answer concisely" — and
+            // writing it into the transcription cache poisoned that cache:
+            // transcribeScreenForMemory found a hit and never ran, so the stored
+            // text stayed a paraphrase ("Your build failed because you've
+            // exceeded your disk quota") with the error code the user later
+            // asked for nowhere in it. Verified live, twice.
+            //
+            // ONLY transcribeScreenForMemory writes this cache. One writer is
+            // what keeps "a cached description is a transcription" true.
             screenContextStatus =
               sur.status === 'available'
                 ? 'available'
@@ -12488,6 +12690,13 @@ export function initializeIpcHandlers(appState: AppState): void {
           },
         );
         if (answer) {
+          // The conversation-ring write lives in IntelligenceEngine.runWhatShouldISay
+          // now, not here. Placed at this IPC handler it only ever recorded a
+          // MANUAL press: Auto Answer calls runWhatShouldISay directly and never
+          // reaches this file, so every automatic answer — the common case in a
+          // live meeting — was missing from the history along with any
+          // screenshot attached to it. `screenContext` computed above is passed
+          // into runWhatShouldISay, so the engine records the screen text too.
           try {
             PhoneMirrorService.getInstance().publishAssistantMessage(
               crypto.randomUUID(),

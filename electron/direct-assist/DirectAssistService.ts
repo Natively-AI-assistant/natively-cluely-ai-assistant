@@ -119,6 +119,7 @@ export class DirectAssistService {
         systemPrompt: prepared.systemPrompt,
         userPrompt: prepared.userPrompt,
         imagePaths: prepared.imagePaths,
+        historyImagePaths: prepared.historyImagePaths,
       }), dispatchController.signal);
       providerIterator = providerStream[Symbol.asyncIterator]();
 
