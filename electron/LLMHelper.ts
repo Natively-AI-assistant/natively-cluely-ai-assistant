@@ -22,6 +22,7 @@ import {
 } from "./llm/tinyPrompts"
 import { getModelCapabilities, selectPromptTier, estimateTokens, truncateTranscriptToFit, getOpenAiMaxOutput, getOpenAiReasoningEffort, type OpenAiReasoningEffort, type PromptTier, type ModelCapabilities } from "./llm/modelCapabilities"
 import { GeminiPromptCache } from "./llm/GeminiPromptCache"
+import { filterOllamaGenerationModels } from "./llm/ollamaGenerationModels"
 import {
   runStreamingVisionFallback,
   orderVisionByHealth,
@@ -2491,7 +2492,10 @@ export class LLMHelper {
     // user asked not to have.
     if (this.isProviderDisabled('ollama')) return { ok: false };
     try {
-      const availableModels = await this.getOllamaModels();
+      // Generation-capable only: a machine holding just the bootstrapped
+      // nomic-embed-text has no local text model, and answering ok:true here
+      // would route a turn to a model that cannot answer it.
+      const availableModels = await this.getOllamaGenerationModels();
       if (availableModels.length === 0) return { ok: false };
       const model = (this.ollamaModel && availableModels.includes(this.ollamaModel))
         ? this.ollamaModel
@@ -2542,9 +2546,16 @@ export class LLMHelper {
 
   private async initializeOllamaModel(): Promise<void> {
     try {
-      const availableModels = await this.getOllamaModels()
+      const availableModels = await this.getOllamaGenerationModels()
       if (availableModels.length === 0) {
-        const msg = `No Ollama models installed. Run "ollama pull <model>" (e.g. ollama pull qwen2.5:4b) and restart.`;
+        // Two different situations, two different instructions. Natively pulls
+        // nomic-embed-text itself for retrieval, so "you have models, none of
+        // them can chat" is a state a fresh install lands in — telling that user
+        // nothing is installed sends them to fix something that is not broken.
+        const installed = await this.getOllamaModels();
+        const msg = installed.length > 0
+          ? `Ollama has ${installed.length} model(s) installed, but none can generate text (embedding models such as nomic-embed-text cannot). Run "ollama pull <model>" (e.g. ollama pull qwen2.5:4b) and restart.`
+          : `No Ollama models installed. Run "ollama pull <model>" (e.g. ollama pull qwen2.5:4b) and restart.`;
         console.warn(`[LLMHelper] ${msg}`);
         this.notifyRendererOllamaError(msg);
         return
@@ -2573,7 +2584,7 @@ export class LLMHelper {
     } catch (error: any) {
       console.error(`[LLMHelper] Failed to initialize Ollama model: ${error?.message}`);
       try {
-        const models = await this.getOllamaModels()
+        const models = await this.getOllamaGenerationModels()
         if (models.length > 0) {
           this.ollamaModel = models[0]
           console.log(`[LLMHelper] Fallback to first installed model: ${this.ollamaModel}`)
@@ -10252,6 +10263,27 @@ let isMultimodal = !!(imagePaths?.length);
       // Connection refused/timeout — OllamaManager logs startup status.
       return [];
     }
+  }
+
+  /**
+   * Installed models that can actually GENERATE — getOllamaModels() minus the
+   * embedding-only ones.
+   *
+   * Kept separate rather than folded into getOllamaModels() on purpose. That
+   * method's empty array already carries two meanings ("daemon down" and "daemon
+   * up, nothing pulled"), and callers of the destructive restart path key off
+   * them (see the comment below and forceRestartOllama's guard). Filtering in
+   * place would add a THIRD meaning — "daemon up, models pulled, none can
+   * generate" — to the same value, which is exactly the collapse that comment
+   * exists to prevent: on a machine holding only the bootstrapped
+   * nomic-embed-text, a healthy user-visible daemon would have read as missing.
+   *
+   * So: this is for callers PICKING a model to generate with. Liveness and
+   * "is anything installed" keep asking getOllamaModels().
+   */
+  public async getOllamaGenerationModels(): Promise<string[]> {
+    const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
+    return filterOllamaGenerationModels(baseUrl, await this.getOllamaModels());
   }
 
   /**

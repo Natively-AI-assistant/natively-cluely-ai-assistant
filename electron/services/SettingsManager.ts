@@ -187,7 +187,7 @@ export interface AppSettings {
      */
     customEmbeddingEndpoint?: string;
     /**
-     * The user chose "Continue with MiniLM". Suppresses the lightweight-embedding
+     * The user chose "Keep MiniLM". Suppresses the lightweight-embedding
      * warning permanently — an unstoppable warning is worse than none, and this
      * one must not become something to click past.
      */

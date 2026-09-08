@@ -8904,10 +8904,16 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { ok: result.ok, entries: result.entries };
   });
 
+  // Every renderer consumer of this handler is a model PICKER, so it answers
+  // with generation-capable models only — an embedding model such as the
+  // nomic-embed-text Natively pulls for retrieval is not something you can chat
+  // with, and offering it produced a failure at generation time far from the
+  // setting that caused it. Liveness is a different question and has its own
+  // handler ('is-ollama-reachable'); do not re-derive it from this list.
   safeHandle('get-available-ollama-models', async () => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
-      const models = await llmHelper.getOllamaModels();
+      const models = await llmHelper.getOllamaGenerationModels();
       return models;
     } catch (error: any) {
       // console.error("Error getting Ollama models:", error);
