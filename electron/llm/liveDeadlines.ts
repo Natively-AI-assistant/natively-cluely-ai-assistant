@@ -649,6 +649,19 @@ export interface StreamObservation {
   interChunkGapsMs: number[];
   /** Chunks yielded. */
   chunkCount: number;
+  /**
+   * Total characters yielded.
+   *
+   * CHARACTERS, NOT TOKENS, and the distinction is load-bearing. No provider in
+   * this codebase surfaces a usage count to the streaming caller — Gemini's
+   * usageMetadata arrives on a terminal chunk the generators do not forward, and
+   * the OpenAI-compatible paths never request `stream_options.include_usage`.
+   * So an output-token figure derived from this is an ESTIMATE, and every field
+   * downstream that carries one says `estimated` in its name. A reader who
+   * compares it against a provider's bill must be able to see, from the name
+   * alone, why it will not match.
+   */
+  outputChars: number;
   reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error';
   /**
    * The error that ended the stream, when `reason` is 'error'.
@@ -730,6 +743,7 @@ export async function raceStreamWithDeadline(opts: {
   // off "inter-chunk latency" quietly inherit the provider's prefill cost.
   let firstTokenAt: number | null = null;
   let chunkCount = 0;
+  let outputChars = 0;
   const interChunkGapsMs: number[] = [];
   // Fire-and-forget cleanup. A generator stuck in `await sleep()` (a hung
   // provider) will NOT honor iterator.return() until its await unblocks, so we
@@ -750,6 +764,7 @@ export async function raceStreamWithDeadline(opts: {
         totalMs: Date.now() - start,
         interChunkGapsMs,
         chunkCount,
+        outputChars,
         reason,
         error,
         firstUsefulBudgetMs: fuMs,
@@ -798,6 +813,7 @@ export async function raceStreamWithDeadline(opts: {
       if (firstTokenAt == null) firstTokenAt = now;
       else interChunkGapsMs.push(now - lastTokenAt);
       chunkCount += 1;
+      outputChars += typeof res.value === 'string' ? res.value.length : 0;
       lastTokenAt = now;
       await onToken(res.value);
       if (!useful) useful = isUsefulYet();
