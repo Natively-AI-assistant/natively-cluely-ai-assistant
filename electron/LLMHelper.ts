@@ -10238,6 +10238,57 @@ let isMultimodal = !!(imagePaths?.length);
     return this.isLiteLLMModel(this.currentModelId) || this.isNvidiaNimModel(this.currentModelId);
   }
 
+  /**
+   * Who is answering this turn, for the Provider Performance Profile.
+   *
+   * ADDITIVE AND READ-ONLY. It touches no instance state and changes no
+   * decision — it exists so the deadline driver's `observe` hook can label a
+   * measurement without every call site re-deriving the route from four
+   * predicates (which is how WTA and manual chat came to disagree about the
+   * same turn before the route table existed).
+   *
+   * The route is resolved in the SAME ORDER as `totalHardTimeoutMs`'s table,
+   * and that ordering is load-bearing rather than stylistic: local first so a
+   * local rung is never reclassified by another flag, then vision, then the
+   * server cascade as an explicit branch rather than a fallthrough. A profile
+   * keyed by a route resolved in a different order would file one route's
+   * evidence under another's name, which is the exact failure the route table
+   * was introduced to end.
+   *
+   * `providerId` is the coarse transport (`getCurrentProvider()`), NOT the
+   * endpoint URL: the profile's network dimension already separates two
+   * gateways, and putting a base URL in a profile key would put a user-supplied
+   * address in a persisted file for no gain.
+   */
+  public performanceIdentity(hasImages: boolean = false): {
+    providerId: string;
+    modelId: string;
+    route: 'local' | 'vision' | 'server_cascade' | 'user_endpoint' | 'default_provider';
+    /**
+     * Reported SEPARATELY from `route`, because the two are not the same
+     * question. `route === 'local'` covers Ollama AND Codex CLI, while
+     * `getModelCapabilities(id, isOllama)` needs to know specifically whether
+     * this is an Ollama model — passing `false` for one returns the wrong
+     * context window and the wrong vision answer. Inferring one from the other
+     * is exactly the conflation that made a LiteLLM model report
+     * `supportsImages: false`.
+     */
+    isOllama: boolean;
+  } {
+    const modelId = this.currentModelId || 'unknown';
+    const providerId = (() => {
+      try { return this.getCurrentProvider(); } catch { return 'unknown'; }
+    })();
+    const route = (() => {
+      if (this.isUsingOllama() || this.isUsingCodexCli()) return 'local' as const;
+      if (hasImages && !this.isUsingNativelyServerCascade()) return 'vision' as const;
+      if (this.isUsingNativelyServerCascade()) return 'server_cascade' as const;
+      if (this.isUsingUserEndpoint()) return 'user_endpoint' as const;
+      return 'default_provider' as const;
+    })();
+    return { providerId, modelId, route, isOllama: this.isUsingOllama() };
+  }
+
   public async getOllamaModels(): Promise<string[]> {
     const baseUrl = (this.ollamaUrl || "http://127.0.0.1:11434").replace('localhost', '127.0.0.1');
 

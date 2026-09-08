@@ -8791,6 +8791,20 @@ if (process.env.THINKING_MATRIX === '1') {
     const { powerMonitor } = require('electron') as typeof import('electron');
     powerMonitor.on('resume', () => {
       console.log('[Main] powerMonitor: system resumed from sleep.');
+      // Tell the Provider Performance Profile that the next few turns are not
+      // representative: a machine coming back from sleep re-associates Wi-Fi,
+      // re-opens TLS sessions and re-warms DNS, and a first-token measurement
+      // taken across that would teach the deadline that this provider is slow.
+      // Deliberately hung off the EXISTING subscription rather than a second
+      // powerMonitor listener — two listeners on the same event is how two
+      // subsystems come to disagree about whether a resume happened.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { getRuntimeSignals } = require('./llm/performance/runtimeSignals');
+        getRuntimeSignals().noteSystemResumed();
+      } catch (err) {
+        console.warn('[Main] performance profile resume note failed (non-fatal):', err);
+      }
       appState.restartCapturesAfterResume().catch((err) =>
         console.error('[Main] restartCapturesAfterResume threw:', err)
       );
@@ -9081,6 +9095,15 @@ if (process.env.THINKING_MATRIX === '1') {
     // Only the graceful path emits this. SIGTERM/SIGINT call app.exit(), which
     // bypasses will-quit — so a killed app records no shutdown, which is the
     // honest outcome rather than a fabricated one.
+    // Flush the Provider Performance Profile before anything else touches the
+    // disk. Its writes are debounced and the timer is unref'd (a cache must
+    // never hold the event loop open), so without this the last few turns of a
+    // session are lost on every graceful quit — which is precisely the turns a
+    // user just told us about by quitting after them.
+    try {
+      const { getProviderPerformanceStore } = require('./llm/performance/ProviderPerformanceStore');
+      getProviderPerformanceStore().dispose();
+    } catch { /* a cache that cannot flush is not a reason to block quit */ }
     try {
       const { recordAppShutdown } = require('./services/usageInstrumentation');
       recordAppShutdown();

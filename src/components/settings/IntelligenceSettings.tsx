@@ -5,6 +5,7 @@ import { useT } from '../../i18n';
 import { Disclosure, DisclosureChevron } from '../ui/AccordionSection';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SettingsToggle } from './SettingsToggle';
+import { ProviderPerformanceSettings } from './ProviderPerformanceSettings';
 
 // Label + one-line description + group + TIER for each USER-FACING Intelligence OS flag.
 // Keyed by flag key.
@@ -1135,6 +1136,13 @@ export const IntelligenceSettings: React.FC = () => {
           </button>
         </div>
         <TryResult out={tryOut} />
+      </section>
+
+      {/* What Natively has learned about each provider's speed, and what it does
+          with it. Lives here rather than in AI Providers because it is a
+          DIAGNOSTIC read-out, not configuration — there is nothing to set. */}
+      <section className="space-y-3 border-t border-border-subtle pt-6">
+        <ProviderPerformanceSettings />
       </section>
     </div>
   );

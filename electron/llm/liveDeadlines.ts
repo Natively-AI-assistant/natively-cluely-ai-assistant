@@ -620,6 +620,58 @@ export function totalHardTimeoutMs(opts: {
 const DEADLINE = Symbol('deadline');
 
 /**
+ * What one driven stream actually did, handed to `observe` exactly once when the
+ * loop ends.
+ *
+ * WHY IT LIVES HERE. This driver is the single chokepoint every live answer
+ * stream passes through — WTA, manual chat, phone mirror, repairs and
+ * regenerations, on every route including vision and local — and it ALREADY
+ * tracks `start`, `lastTokenAt` and the termination reason in order to do its
+ * job. Measuring anywhere else would mean either instrumenting ~18 call sites
+ * or re-deriving numbers this loop already holds. So the measurement is a
+ * by-product of the deadline it is measuring, which is also what stops the two
+ * disagreeing about when a turn began.
+ *
+ * DELIBERATELY CONTENT-FREE. Durations and counts only — nothing here can carry
+ * a prompt, a transcript, a filename or an image. Callers attach the provider
+ * identity themselves; this module knows nothing about providers and must not
+ * start to, or it stops being importable from the benchmark runners.
+ */
+export interface StreamObservation {
+  /** ms from loop start to the first chunk that arrived. Null if none did. */
+  ttftMs: number | null;
+  /** ms from loop start to the end of the loop, whatever ended it. */
+  totalMs: number;
+  /**
+   * Gaps between consecutive chunks, ms. Excludes the first gap (that is TTFT,
+   * a different measurement of a different thing — prefill, not generation).
+   */
+  interChunkGapsMs: number[];
+  /** Chunks yielded. */
+  chunkCount: number;
+  reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error';
+  /**
+   * The error that ended the stream, when `reason` is 'error'.
+   *
+   * TRANSIENT AND CONSUMED, NEVER STORED. The observer classifies it (a 429 is
+   * a rate limit, an ENOTFOUND is a connection failure, a 401 is a client
+   * error) and keeps only the resulting class — the error object itself reaches
+   * no profile, no file and no telemetry property, because a provider's error
+   * message can quote the request that produced it.
+   *
+   * Passed as `unknown` on purpose: this module stays free of the provider error
+   * classifier, so it can keep being imported by the benchmark runners.
+   */
+  error?: unknown;
+  /** The first-useful budget this stream actually ran under. */
+  firstUsefulBudgetMs: number;
+  /** The stall budget this stream actually ran under. */
+  interTokenStallMs: number;
+  /** True when the deadline was disabled (prefetch) and nothing could fire. */
+  speculative: boolean;
+}
+
+/**
  * Drive an async stream with the live deadline contract. Races each next()
  * against the active budget:
  *   • before the first useful token — the first-useful deadline (abort→fallback)
@@ -653,22 +705,58 @@ export async function raceStreamWithDeadline(opts: {
    * must not throw.
    */
   onCleanup?: (reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error') => void;
+  /**
+   * Called EXACTLY ONCE when the loop ends, with what the stream did.
+   *
+   * Optional and fire-and-forget: a caller that does not pass it gets today's
+   * behaviour byte for byte, and a caller whose observer throws still gets its
+   * answer (the call is wrapped, like onCleanup's, because measurement must
+   * never be able to break a turn).
+   */
+  observe?: (observation: StreamObservation) => void;
 }): Promise<'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted'> {
   const {
     stream, firstUsefulDeadlineMs: fuMs, interTokenStallMs = LIVE_INTER_TOKEN_STALL_MS,
     isSpeculative = false, onToken, isUsefulYet, onFirstUsefulTimeout, onStallTimeout, shouldAbort, onCleanup,
+    observe,
   } = opts;
   const iterator = (stream as AsyncIterable<string>)[Symbol.asyncIterator]();
   const start = Date.now();
   let lastTokenAt = start;
   let useful = false;
+  // Instrumentation state. `firstTokenAt` is separate from `lastTokenAt`
+  // because the first interval is TTFT (prefill) and every later one is a
+  // generation gap; averaging them together is what makes a stall guard sized
+  // off "inter-chunk latency" quietly inherit the provider's prefill cost.
+  let firstTokenAt: number | null = null;
+  let chunkCount = 0;
+  const interChunkGapsMs: number[] = [];
   // Fire-and-forget cleanup. A generator stuck in `await sleep()` (a hung
   // provider) will NOT honor iterator.return() until its await unblocks, so we
   // must NOT `await` the cleanup on the deadline path — that would re-introduce
   // the multi-second hang we're guarding against. The underlying SDK stream
   // closes when the generator next checks its abort signal / yields.
-  const cleanup = (reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error') => {
+  const cleanup = (
+    reason: 'done' | 'first_useful_timeout' | 'stall_timeout' | 'aborted' | 'error',
+    error?: unknown,
+  ) => {
     try { onCleanup?.(reason); } catch { /* abort callback must not break cleanup */ }
+    // AFTER onCleanup, so the observation is never taken on a turn the caller
+    // has not finished tearing down — and inside its own try for the same
+    // reason onCleanup has one.
+    try {
+      observe?.({
+        ttftMs: firstTokenAt == null ? null : firstTokenAt - start,
+        totalMs: Date.now() - start,
+        interChunkGapsMs,
+        chunkCount,
+        reason,
+        error,
+        firstUsefulBudgetMs: fuMs,
+        interTokenStallMs,
+        speculative: isSpeculative,
+      });
+    } catch { /* measurement must never break a turn */ }
     try { const p = iterator.return?.(undefined); if (p && typeof (p as any).then === 'function') (p as Promise<unknown>).catch(() => {}); } catch { /* already closed */ }
   };
   try {
@@ -706,12 +794,16 @@ export async function raceStreamWithDeadline(opts: {
         res = await iterator.next();
       }
       if (res.done) { cleanup('done'); return 'done'; }
-      lastTokenAt = Date.now();
+      const now = Date.now();
+      if (firstTokenAt == null) firstTokenAt = now;
+      else interChunkGapsMs.push(now - lastTokenAt);
+      chunkCount += 1;
+      lastTokenAt = now;
       await onToken(res.value);
       if (!useful) useful = isUsefulYet();
     }
   } catch (e) {
-    cleanup('error');
+    cleanup('error', e);
     throw e;
   }
 }
