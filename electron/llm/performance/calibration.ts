@@ -39,7 +39,7 @@
 // request path no user ever takes.
 
 import { raceStreamWithDeadline, type StreamObservation } from '../liveDeadlines';
-import { CALIBRATION_LADDER_TOKENS, calibrationPrompt, TINY_PNG_DATA_URI, VISION_PROBE_PROMPT } from './fixtures';
+import { CALIBRATION_LADDER_TOKENS, calibrationPrompt, visionProbeImagePath, VISION_PROBE_PROMPT } from './fixtures';
 import { getProviderPerformanceStore, type ProviderPerformanceStore } from './ProviderPerformanceStore';
 import { getRuntimeSignals } from './runtimeSignals';
 import { classifyStreamError, estimateOutputTokens } from './recorder';
@@ -193,20 +193,19 @@ function recordCalibrationSample(
 ): void {
   const completed = observation.reason === 'done';
   const estimatedOutputTokens = estimateOutputTokens(observation.outputChars);
-  // A calibration run opens a COLD connection with a synthetic prompt. Recording
-  // it as `normal` would put it in the same population as warm production turns
-  // and drag the median the repair exclusion was written to protect. `cold_start`
-  // is the honest class: it counts toward reliability (it really did succeed or
-  // fail) and is excluded from the latency estimators — so calibration
-  // establishes the CONTEXT-SCALING points and the capability facts, and
-  // production remains the authority on steady-state latency.
+  // `calibration` is its own class, and it IS latency-admissible — see the class
+  // doc in types.ts. These rungs were first recorded as `cold_start`, which
+  // excluded them from the estimators and, as a live run proved, left the
+  // medium/large buckets empty after three successful measured rungs. Those
+  // buckets' ttft and meanInputTokens are the context fit's coordinates, so the
+  // ladder was running, costing money, and producing nothing.
   const sample: PerformanceSample = {
     providerId: identity.providerId,
     modelId: identity.modelId,
     networkProfileId,
     route: identity.route,
     workload: classifyWorkload(inputTokens, hasImages),
-    sampleClass: completed ? 'cold_start' : (classifyStreamError(observation.error) ?? 'timeout'),
+    sampleClass: completed ? 'calibration' : (classifyStreamError(observation.error) ?? 'timeout'),
     ttftMs: observation.ttftMs,
     totalMs: completed ? observation.totalMs : null,
     maxGapMs: null,
@@ -216,6 +215,9 @@ function recordCalibrationSample(
     generationRateTps: completed
       ? generationRateTps({ estimatedOutputTokens, ttftMs: observation.ttftMs, totalMs: observation.totalMs })
       : null,
+    // Calibration issues exactly one request per rung and never retries, so the
+    // honest value is 0 rather than whatever the shared bank happens to hold.
+    retryCount: 0,
   };
   store.record(sample);
 }
@@ -235,11 +237,50 @@ function recordCalibrationSample(
  * evidence about the moment. A slow network must never be able to write
  * "your model does not support images" into a profile.
  */
+/**
+ * What a successful vision probe must say back.
+ *
+ * The probe prompt asks for exactly this word. Matching on SUCCESS rather than
+ * on failure is the only robust test: we control what success looks like, and
+ * we cannot enumerate every shape a failure might arrive in.
+ */
+export const VISION_PROBE_EXPECTED = /\bseen\b/i;
+
 export function verdictFromProbe(
   observation: StreamObservation,
   text: string,
 ): { verdict: CapabilityVerdict; failure?: string } {
   if (observation.reason === 'done' && text.trim().length > 0) {
+    // SUPPORTED requires the ANSWER WE ASKED FOR, not merely "some text".
+    //
+    // This is what the deterministic prompt is for, and it took two live runs to
+    // get right. First attempt: "completed with non-empty text" — wrong, because
+    // an adapter yields its error as content. Second: pattern-match error
+    // phrasings — still wrong, because an exhausted vision chain yields a
+    // polished user-facing sentence that reads nothing like an error.
+    //
+    // Both attempts were guesses about what FAILURE looks like. The reliable
+    // question is what SUCCESS looks like, and we specified that ourselves: the
+    // prompt asks for one specific word. Anything else is not a vision answer,
+    // whatever it is, and falls through to FAILED_TEMPORARILY — never
+    // UNSUPPORTED, because "we did not get our word back" is not evidence the
+    // model cannot see (rule 16).
+    if (!VISION_PROBE_EXPECTED.test(text)) {
+      return { verdict: 'FAILED_TEMPORARILY', failure: 'unexpected_answer' };
+    }
+    // "Completed with SOME text" is not enough, and the gap is not theoretical:
+    // run against a real text-only model, the vision chain declined, the adapter
+    // yielded "Error streaming from custom provider." AS ANSWER TEXT, the stream
+    // completed normally — and this returned SUPPORTED for a model that cannot
+    // see images at all. A capability verdict written from an error message is
+    // the worst possible output of a capability probe, because it is durable.
+    //
+    // This is why the probe prompt is deterministic: it asks for one specific
+    // word, so "did we get an answer" is a checkable question rather than a
+    // guess about arbitrary prose.
+    if (looksLikeProviderError(text)) {
+      return { verdict: 'FAILED_TEMPORARILY', failure: 'error_as_text' };
+    }
     return { verdict: 'SUPPORTED' };
   }
   if (observation.reason === 'error') {
@@ -268,6 +309,23 @@ export function verdictFromProbe(
   // Timeout, stall, abort, or an empty completion. None is evidence about
   // capability. This is rule 16 in its most direct form.
   return { verdict: 'FAILED_TEMPORARILY', failure: observation.reason };
+}
+
+/**
+ * Does this "answer" look like an adapter's error message rather than a reply?
+ *
+ * Necessary because several adapters yield failures as content instead of
+ * throwing — `streamWithCustom`'s non-strict path is the one that caught this
+ * live. Deliberately narrow: it matches the shapes those adapters actually
+ * emit, not anything that merely mentions trouble, so a model legitimately
+ * answering a question ABOUT an error is not misread as having failed.
+ */
+export function looksLikeProviderError(text: string): boolean {
+  const t = (text ?? '').trim();
+  if (!t || t.length > 300) return false;
+  return /^(?:error\b|failed\b|\[error\]|an error occurred)/i.test(t)
+    || /error (?:streaming|calling|from) /i.test(t)
+    || /^no (?:vision-capable |ai )?provider/i.test(t);
 }
 
 /**
@@ -359,14 +417,20 @@ export async function runCalibration(
       if (requestsIssued >= MAX_CALIBRATION_REQUESTS) break;
       requestsIssued += 1;
       try {
-        const { observation } = await runOne(helper, calibrationPrompt(inputTokens), undefined, CALIBRATION_TIMEOUT_MS);
+        const { observation, text } = await runOne(helper, calibrationPrompt(inputTokens), undefined, CALIBRATION_TIMEOUT_MS);
         recordCalibrationSample(store, identity, networkProfileId, observation, inputTokens, false);
+        // Same guard as the probe: a rung that "completed" carrying an adapter's
+        // error string measured nothing, and recording it as ok would put a
+        // fake sub-millisecond point into the context-scaling fit — which is
+        // the input to every large-context projection.
+        const erroredAsText = observation.reason === 'done' && looksLikeProviderError(text);
         rungs.push({
           inputTokens,
           ttftMs: observation.ttftMs,
           totalMs: observation.totalMs,
-          ok: observation.reason === 'done',
-          failure: observation.reason === 'done' ? undefined : observation.reason,
+          ok: observation.reason === 'done' && !erroredAsText,
+          failure: erroredAsText ? 'error_as_text'
+            : (observation.reason === 'done' ? undefined : observation.reason),
         });
       } catch (err) {
         // Never the provider's message — it can quote the request.
@@ -378,14 +442,29 @@ export async function runCalibration(
   let vision: CapabilityVerdict = 'UNKNOWN';
   if (probeEnabled) {
     let probes = 0;
-    if (probes < MAX_PROBE_REQUESTS) {
+    // If the image cannot be written we DECLINE to probe rather than sending a
+    // text-only request and calling the result a vision verdict. Probing nothing
+    // and recording SUPPORTED is strictly worse than not probing.
+    const probeImage = visionProbeImagePath();
+    if (!probeImage) {
+      vision = 'UNKNOWN';
+    } else if (probes < MAX_PROBE_REQUESTS) {
       probes += 1;
       requestsIssued += 1;
       try {
-        const { observation, text } = await runOne(helper, VISION_PROBE_PROMPT, [TINY_PNG_DATA_URI], CALIBRATION_TIMEOUT_MS);
+        const { observation, text } = await runOne(helper, VISION_PROBE_PROMPT, [probeImage], CALIBRATION_TIMEOUT_MS);
         vision = verdictFromProbe(observation, text).verdict;
-        const visionIdentity = helper.performanceIdentity(true);
-        recordCalibrationSample(store, visionIdentity, networkProfileId, observation, 20, true);
+        // RECORD THE VERDICT, NOT MERELY THE STREAM'S OUTCOME. Caught on real
+        // traffic: the chain answered 404 "No endpoints found that support image
+        // input", the verdict correctly said FAILED_TEMPORARILY — and the
+        // profile still gained `vision ok=1` at 258ms, because the generator had
+        // "completed" (carrying a fallback message). That is a vision latency
+        // sample for a request that never reached a vision model, and it would
+        // make an image-refusing provider look like the fastest one we have.
+        if (vision === 'SUPPORTED') {
+          const visionIdentity = helper.performanceIdentity(true);
+          recordCalibrationSample(store, visionIdentity, networkProfileId, observation, 20, true);
+        }
       } catch (err) {
         // A THROW is not automatically an UNSUPPORTED. Route it through the same
         // rule the non-throwing path uses, so the two cannot disagree about the

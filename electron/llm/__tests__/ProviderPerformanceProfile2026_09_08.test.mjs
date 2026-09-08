@@ -1586,3 +1586,82 @@ describe('connect evidence END TO END — the seam the pure-function tests misse
     assert.equal(connectTimeoutMs(ev).valueMs, 5_600, 'and still widen after a restart');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('retry counting (Phase 6 / 27)', () => {
+  const { noteTransportRetry, __resetTransportRetries, recordStreamObservation } = M;
+  const obs = (over = {}) => ({
+    ttftMs: 700, totalMs: 2500, interChunkGapsMs: [30, 30, 30], chunkCount: 4, outputChars: 400,
+    reason: 'done', firstUsefulBudgetMs: 8000, interTokenStallMs: 8000, speculative: false, ...over,
+  });
+  const ident = (over = {}) => ({
+    providerId: 'natively', modelId: 'natively', route: 'server_cascade', inputTokens: 2000,
+    outputTokens: 0, hasImages: false, startedAt: 0, coldStart: false, userCancelled: false, ...over,
+  });
+  const sig = { contaminatedSince: () => null };
+
+  test('a banked transport retry lands on the next sample for that identity', () => {
+    __resetTransportRetries();
+    const s = store();
+    noteTransportRetry('natively', 'natively');
+    noteTransportRetry('natively', 'natively');
+    const written = recordStreamObservation(obs(), ident(), { store: s, signals: sig, networkProfileId: 'n' });
+    assert.equal(written.retryCount, 2);
+    assert.equal(s.getExact('natively', 'natively', 'n').workloads.small.reliability.retries, 2);
+  });
+
+  test('retries are DRAINED, so one retry is never counted twice', () => {
+    __resetTransportRetries();
+    const s = store();
+    noteTransportRetry('natively', 'natively');
+    recordStreamObservation(obs(), ident(), { store: s, signals: sig, networkProfileId: 'n' });
+    const second = recordStreamObservation(obs(), ident(), { store: s, signals: sig, networkProfileId: 'n' });
+    assert.equal(second.retryCount, 0, 'the bank is emptied by the first sample');
+    assert.equal(s.getExact('natively', 'natively', 'n').workloads.small.reliability.retries, 1);
+  });
+
+  test('a retry on ONE identity does not leak onto another', () => {
+    __resetTransportRetries();
+    const s = store();
+    noteTransportRetry('natively', 'natively');
+    const other = recordStreamObservation(obs(), ident({ providerId: 'gemini', modelId: 'gemini-3.7-flash' }),
+      { store: s, signals: sig, networkProfileId: 'n' });
+    assert.equal(other.retryCount, 0);
+    __resetTransportRetries();
+  });
+
+  test('a SUCCESSFUL turn still records its retries', () => {
+    // The case this counter exists for: a provider that always works on attempt
+    // three looks perfect by `ok` and feels slow. Gating retries on failure
+    // would hide precisely that.
+    __resetTransportRetries();
+    const s = store();
+    noteTransportRetry('natively', 'natively');
+    noteTransportRetry('natively', 'natively');
+    recordStreamObservation(obs({ reason: 'done' }), ident(), { store: s, signals: sig, networkProfileId: 'n' });
+    const r = s.getExact('natively', 'natively', 'n').workloads.small.reliability;
+    assert.equal(r.ok, 1, 'the turn succeeded');
+    assert.equal(r.retries, 2, 'and it took three attempts to do so');
+  });
+
+  test('a caller that knows exactly overrides the bank', () => {
+    // Calibration owns its own loop and never retries, so it says 0 rather than
+    // inheriting whatever the shared bank happens to hold.
+    __resetTransportRetries();
+    const s = store();
+    noteTransportRetry('natively', 'natively');
+    const w = recordStreamObservation(obs(), ident({ retryCount: 0 }), { store: s, signals: sig, networkProfileId: 'n' });
+    assert.equal(w.retryCount, 0);
+    __resetTransportRetries();
+  });
+
+  test('a user cancellation banks nothing against the provider', () => {
+    __resetTransportRetries();
+    const s = store();
+    noteTransportRetry('natively', 'natively');
+    recordStreamObservation(obs({ reason: 'aborted' }), ident(), { store: s, signals: sig, networkProfileId: 'n' });
+    assert.equal(s.getExact('natively', 'natively', 'n').workloads.small.reliability.retries, 0,
+      'a turn the user stopped is not the provider working hard');
+    __resetTransportRetries();
+  });
+});

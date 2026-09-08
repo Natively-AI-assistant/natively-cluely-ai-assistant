@@ -15604,6 +15604,10 @@ export function initializeIpcHandlers(appState: AppState): void {
           // that replaces doing so, and it carries its own error — `actionable`
           // is false when the fit explains less than it invents.
           projected100k: projectLargeContext(p, 100_000),
+          // Transport retries banked from the adapters. A success rate alone
+          // hides a provider that always works on its third attempt.
+          retries: Object.values(p.workloads ?? {})
+            .reduce((n: number, w: any) => n + (w?.reliability?.retries ?? 0), 0),
           largeContextWarning: largeContextReliabilityWarning({
             attempts: largeAttempts,
             failures: largeFailures,

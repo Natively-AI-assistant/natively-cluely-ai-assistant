@@ -162,6 +162,75 @@ export function __resetSecondaryStreamTallies(): void {
 export const MIN_GAPS_FOR_EVIDENCE = 3;
 
 /**
+ * The fastest a REMOTE first token can plausibly be.
+ *
+ * Found by running this system against a real provider. `streamWithCustom`'s
+ * non-strict path yields its error message AS ANSWER TEXT — "Error streaming
+ * from custom provider." arrives as content, the generator completes, and the
+ * deadline driver sees an ordinary `done`. Four failed calls were therefore
+ * recorded as four healthy samples with a 1ms TTFT, which is not merely wrong
+ * but wrong in the most damaging direction: it teaches the profile that a
+ * broken endpoint is the fastest one it has ever seen, and a decaying MAX takes
+ * a long time to forget a floor.
+ *
+ * 25ms is below any real network round trip — loopback to a local process is
+ * ~1ms, and a TLS session to a hosted provider cannot beat it — while being far
+ * above the sub-millisecond timing of a generator that never left the process.
+ * A LOCAL route is exempt: an on-device model genuinely can emit its first
+ * token in microseconds once warm.
+ */
+export const MIN_PLAUSIBLE_REMOTE_TTFT_MS = 25;
+
+/**
+ * Did this stream actually go over the network?
+ *
+ * A sample that fails this is not counted as a failure either — we do not know
+ * that the provider misbehaved, only that what we measured was not a request.
+ * It is dropped from the profile entirely.
+ */
+export function isPlausibleRemoteSample(route: RouteKind, ttftMs: number | null): boolean {
+  if (route === 'local') return true;
+  if (ttftMs == null) return true;
+  return ttftMs >= MIN_PLAUSIBLE_REMOTE_TTFT_MS;
+}
+
+/**
+ * Transport retries seen since the last sample for an identity.
+ *
+ * ATTRIBUTION IS PER-IDENTITY, NOT PER-TURN, and that limitation is real rather
+ * than glossed. An adapter deep inside a retry loop has no handle on the turn
+ * that started it — the loop lives below `streamChat`, and threading a turn
+ * token down through every provider path would be a large change to reach a
+ * diagnostic counter. So retries are banked against `provider|model` and drained
+ * by the next sample for that identity.
+ *
+ * What that costs: two turns running CONCURRENTLY on the same provider and model
+ * can have one's retries attributed to the other. What it does not cost: any
+ * deadline. This number is never an estimator input — it exists so a diagnostics
+ * dump can answer "is this endpoint making us work for its answers?", which a
+ * success rate hides (a provider that always succeeds on attempt three looks
+ * perfect by `ok`, and feels slow).
+ */
+const pendingRetries = new Map<string, number>();
+
+export function noteTransportRetry(providerId: string, modelId: string): void {
+  const key = `${providerId}|${modelId}`;
+  pendingRetries.set(key, (pendingRetries.get(key) ?? 0) + 1);
+}
+
+function drainRetries(providerId: string, modelId: string): number {
+  const key = `${providerId}|${modelId}`;
+  const n = pendingRetries.get(key) ?? 0;
+  if (n > 0) pendingRetries.delete(key);
+  return n;
+}
+
+/** Test helper. */
+export function __resetTransportRetries(): void {
+  pendingRetries.clear();
+}
+
+/**
  * Characters → tokens, using the estimator the context budgets already use.
  *
  * Kept as its own named function rather than an inline call so that the one
@@ -195,6 +264,12 @@ export interface TurnIdentity {
   userCancelled: boolean;
   /** Provider error class, when the turn ended in a thrown provider error. */
   errorClass?: 'rate_limit' | 'server_error' | 'client_error' | 'connection_failure';
+  /**
+   * Transport retries for this turn, when the caller knows exactly (calibration
+   * owns its own loop). Omitted on the production path, where the count is
+   * drained from the per-identity bank instead.
+   */
+  retryCount?: number;
 }
 
 /**
@@ -310,7 +385,14 @@ export function recordStreamObservation(
       generationRateTps: completed
         ? generationRateTps({ estimatedOutputTokens, ttftMs: observation.ttftMs, totalMs: observation.totalMs })
         : null,
+      // Drained, so each retry is counted once. An explicit value from the call
+      // site wins — calibration owns its own loop and knows exactly.
+      retryCount: identity.retryCount ?? drainRetries(identity.providerId, identity.modelId),
     };
+    // A "completed" stream whose first token arrived faster than the network
+    // allows did not come from the network. Recording it would let a provider
+    // error that arrives as answer text set this endpoint's floor.
+    if (!isPlausibleRemoteSample(sample.route, sample.ttftMs)) return null;
     store.record(sample, deps.generation);
     return sample;
   } catch {

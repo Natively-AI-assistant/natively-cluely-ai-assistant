@@ -8767,6 +8767,15 @@ let isMultimodal = !!(imagePaths?.length);
             throw new Error(`Natively API stream request failed before response requestId=${requestId} endpoint=${endpointUrl} method=POST timeoutMs=${effectiveConnectTimeoutMs} durationMs=${durationMs} ${formatFetchError(fetchErr)}`);
           }
           console.warn(`[streamWithNatively] DNS failure req=${requestId} (${fetchErr.cause?.code ?? fetchErr.code}), retry ${attempt + 1}/2 in 500ms`);
+          // Bank the retry for the profile. A provider that always succeeds on
+          // attempt three looks perfect by its success rate and feels slow —
+          // this counter is the only thing that makes that visible.
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { noteTransportRetry } = require('./llm/performance/recorder');
+            const _pid = this.performanceIdentity(false);
+            noteTransportRetry(_pid.providerId, _pid.modelId);
+          } catch { /* a diagnostic counter must never break a retry */ }
           await new Promise<void>(r => setTimeout(r, 500));
         }
       }
@@ -9968,6 +9977,13 @@ let isMultimodal = !!(imagePaths?.length);
       clearTimeout(streamTimeout);
       return;
     }
+    // The connect phase of the USER-ENDPOINT route — the one route whose
+    // deadlines actually adapt, so the one where a measured handshake is worth
+    // most. Same measurement streamWithNatively takes: request issued → response
+    // headers. (For an SSE response that is also the first body byte, so Phase
+    // 6's "first byte" and this are the same instant; TTFT, measured by the
+    // deadline driver, is the first PARSED event and is a separate number.)
+    const customConnectStartedAt = Date.now();
     try {
       const response = await fetch(url, {
         method: requestConfig.method || 'POST',
@@ -9981,6 +9997,11 @@ let isMultimodal = !!(imagePaths?.length);
         redirect: 'manual',
       });
       clearTimeout(streamTimeout);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { recordConnectLatency } = require('./llm/performance/wiring');
+        recordConnectLatency({ llmHelper: this, ms: Date.now() - customConnectStartedAt });
+      } catch { /* measurement must never break a request */ }
 
       if (!response.ok) {
         // strictErrors callers keep main's exact early throw, message shape and
@@ -10342,7 +10363,16 @@ let isMultimodal = !!(imagePaths?.length);
      */
     isOllama: boolean;
   } {
-    const modelId = this.currentModelId || 'unknown';
+    // A Custom Provider's model is NOT `currentModelId`. That field holds the
+    // selected-model id, which for a custom provider is whatever was selected
+    // before/alongside it — measured live, a provider actually calling
+    // `mistralai/mistral-nemo` was profiled under `gemini-3.8-flash`, so every
+    // sample landed on a model that was never called. The model lives on the
+    // provider record; fall back to its id, then to the selected id.
+    const custom: any = this.customProvider ?? this.activeCurlProvider;
+    const modelId = (custom
+      ? (custom.model || custom.id || this.currentModelId)
+      : this.currentModelId) || 'unknown';
     const providerId = (() => {
       try { return this.getCurrentProvider(); } catch { return 'unknown'; }
     })();
