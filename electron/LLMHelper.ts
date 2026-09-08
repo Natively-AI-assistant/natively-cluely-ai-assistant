@@ -10806,9 +10806,14 @@ let isMultimodal = !!(imagePaths?.length);
       // still answers instead of failing on an image the user did not attach.
       carriedImagePaths = [];
       if (imagePaths.length) {
+        // The capability CHECK stays on `model` — the rung actually about to
+        // be dispatched, fallback or not. The message names
+        // request.selection.model instead: on a fallback rung `model` is a
+        // provider the user never picked, and telling them THAT model
+        // rejected their image would name something they never selected.
         throw new DirectAssistError(
           'MODEL_DOES_NOT_SUPPORT_IMAGES',
-          `The selected ${model} model does not support image input.`,
+          `The selected ${request.selection.model} model does not support image input.`,
         );
       }
     }

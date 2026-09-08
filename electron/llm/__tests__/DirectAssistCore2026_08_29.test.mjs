@@ -1778,6 +1778,77 @@ test('the selected rung gets its full attempt budget and a fallback rung gets it
   assert.ok(DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS > DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS);
 });
 
+/**
+ * Mirrors exactly what LLMHelper.listDirectAssistRungs() returns for a
+ * ladder-ineligible selection (codex-cli/curl): ONE rung, priority 0,
+ * isFallback: FALSE — see electron/LLMHelper.ts's `selectedRung` /
+ * DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS early-return. `ladderTransport`
+ * above can't stand in for this: it hardcodes its rung names to
+ * natively/gemini regardless of what the caller selected, so it can never
+ * produce the isFallback:false + ladder-ineligible-provider combination the
+ * bug lives in. Counts DISPATCHES (transport.calls.length), not rungs — the
+ * regression this guards against passed a rung-count assertion while still
+ * dispatching twice.
+ */
+function singleIneligibleRungTransport(provider, model) {
+  const calls = [];
+  return {
+    calls,
+    listDirectAssistRungs: () => [{ provider, model, priority: 0, isFallback: false }],
+    async *streamDirectAssist() {
+      calls.push({ provider, model });
+      throw timeoutErr();
+    },
+  };
+}
+
+test('a ladder-ineligible codex-cli selection is dispatched exactly ONCE, never retried', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = singleIneligibleRungTransport('codex-cli', 'gpt-5');
+  const { result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput({
+    selection: { provider: 'codex-cli', model: 'gpt-5' },
+  })));
+  assert.equal(result.state, 'failed');
+  // A blocking, non-streaming call has no commit point: a retry cannot know
+  // how much of the first call completed, so it would duplicate the whole
+  // request, its bill, and the child-process spawn. This is the dispatch
+  // count a fix that only changes rung COUNT cannot make pass.
+  assert.equal(transport.calls.length, 1);
+});
+
+test('a ladder-ineligible curl selection is dispatched exactly ONCE, never retried', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = singleIneligibleRungTransport('curl', 'curl-1');
+  const { result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput({
+    selection: { provider: 'curl', model: 'curl-1' },
+  })));
+  assert.equal(result.state, 'failed');
+  assert.equal(transport.calls.length, 1);
+});
+
+// Same defect, the OTHER code path: a transport with no listDirectAssistRungs
+// at all falls back to the synthetic single rung built inline in
+// DirectAssistService.stream() (priority: 0, isFallback: false) — the "the
+// synthetic fallback rung ... has the same defect" case from the review. That
+// rung is unconditionally isFallback:false regardless of provider, so a
+// codex-cli selection reaching this path is exactly as retry-prone as the
+// listDirectAssistRungs path above unless the maxAttempts fix also covers it.
+test('a codex-cli selection with NO listDirectAssistRungs (synthetic single rung) is still dispatched exactly ONCE', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const calls = [];
+  const transport = {
+    async *streamDirectAssist() {
+      calls.push(1);
+      throw timeoutErr();
+    },
+  };
+  const { result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput({
+    selection: { provider: 'codex-cli', model: 'gpt-5' },
+  })));
+  assert.equal(result.state, 'failed');
+  assert.equal(calls.length, 1);
+});
+
 test('an exhausted rung walks to the next and announces the switch', async () => {
   const { DirectAssistService } = await loadDirectAssist();
   const transport = ladderTransport([[timeoutErr()], [['answer']]]);
@@ -1830,6 +1901,59 @@ test('the whole-ladder budget stops the ladder instead of opening another rung',
   assert.equal(events.find((e) => e.type === 'error').error.code, 'CONNECT_TIMEOUT');
 });
 
+test('a rung that cannot finish inside the remaining budget is refused, not opened', async () => {
+  const { DirectAssistService, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  // 1ms of budget left, not 0: the OLD check (`elapsed < BUDGET`) treats this
+  // as "not exhausted" and opens the next rung anyway — the exact bug. The
+  // FIXED check (`elapsed + DIRECT_ASSIST_MIN_VIABLE_TTFT_MS > BUDGET`)
+  // refuses it, because a rung with only 1ms left cannot plausibly reach a
+  // first token before the ceiling even in the realistic (2-5s) case.
+  let clock = 0;
+  const transport = ladderTransport([[timeoutErr()], [['late answer']]]);
+  const svc = new DirectAssistService(transport, {
+    ...svcOpts(),
+    now: () => clock,
+    sleep: async () => { clock = DIRECT_ASSIST_TOTAL_BUDGET_MS - 1; },
+  });
+  const { events, result } = await collect(svc.stream(baseInput()));
+  assert.equal(result.state, 'failed');
+  assert.equal(events.find((e) => e.type === 'error').error.code, 'CONNECT_TIMEOUT');
+  // Neither a doomed retry of rung 0 nor an opened rung 1 should reach the
+  // transport once essentially no budget remains — this is the assertion the
+  // OLD `elapsed < BUDGET` arithmetic cannot satisfy: it would let rung 1
+  // open (and, in this synchronous mock, even "succeed"), turning a call the
+  // real 90s ceiling was built to refuse into a reported success.
+  assert.ok(!transport.calls.some((c) => c.rung === 1));
+});
+
+// The companion to the test above: the FIX must not overcorrect. fallbackConfig.ts's
+// own worked example (DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS's comment) is elapsed
+// ~60s after the selected rung burns 2 x 30s on the vision connect ceiling,
+// leaving "30s for a fallback rung to answer" — and that fallback rung's own
+// configured ttftTimeoutMs (35s, the config default) is LARGER than the 30s
+// actually left. A check against the rung's full ttftTimeoutMs
+// (`elapsed + ttftTimeoutMs > BUDGET`, the first version of this fix) would
+// refuse to open it (60000 + 35000 > 90000), silently re-breaking the exact
+// scenario DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS was written to keep alive. The
+// shipped fix checks against DIRECT_ASSIST_MIN_VIABLE_TTFT_MS (~5s, "a healthy
+// provider's first token") instead, which this elapsed point clears with room
+// to spare (60000 + 5000 <= 90000).
+test('the designed worst case (elapsed ~60s, 30s nominally left) still opens the fallback rung', async () => {
+  const { DirectAssistService, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  let clock = 0;
+  const transport = ladderTransport([[timeoutErr()], [['late but healthy answer']]]);
+  const svc = new DirectAssistService(transport, {
+    ...svcOpts(),
+    now: () => clock,
+    // One backoff sleep occurs between rung 0's two attempts; land it at the
+    // documented worst-case elapsed point (60s), with 30s nominally left.
+    sleep: async () => { clock = DIRECT_ASSIST_TOTAL_BUDGET_MS - 30_000; },
+  });
+  const { result } = await collect(svc.stream(baseInput()));
+  assert.equal(result.state, 'complete');
+  assert.ok(transport.calls.some((c) => c.rung === 1), 'the fallback rung must still be opened');
+});
+
 test('an exhausted ladder reports the FIRST rung error, not the last', async () => {
   const { DirectAssistService } = await loadDirectAssist();
   const authErr = Object.assign(new Error('bad key'), { status: 401 });
@@ -1841,7 +1965,7 @@ test('an exhausted ladder reports the FIRST rung error, not the last', async () 
   assert.ok(!err.error.message.includes('gemini'));
 });
 
-test('each service instance keeps its own provider health, never a shared map', async () => {
+test('each service instance keeps its own provider health map, structurally isolated but write-only — no shared map, no read-back', async () => {
   const { DirectAssistService } = await loadDirectAssist();
   // The earlier version of this test read a `visionHealthForTest` accessor that
   // LLMHelper does not export, so BOTH sides were 0 and it could not fail. And

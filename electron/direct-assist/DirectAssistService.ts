@@ -2,12 +2,14 @@ import { DirectAssistError, normalizeDirectAssistError } from './errors';
 import {
   DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
   DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS,
+  DIRECT_ASSIST_MIN_VIABLE_TTFT_MS,
   DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
   DIRECT_ASSIST_TOTAL_BUDGET_MS,
 } from './fallbackConfig';
 import { prepareDirectAssistPrompt } from './requestBuilder';
 import type { FallbackConfig, HealthEntry, StreamProvider } from '../llm/streamFallbackEngine';
 import { runStreamingFallback } from '../llm/streamFallbackEngine';
+import { DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS } from './types';
 import type {
   DirectAssistDispatchRequest,
   DirectAssistErrorCode,
@@ -80,11 +82,25 @@ export class DirectAssistService {
    * breaker on the live answer path — and the reverse — coupling two
    * subsystems whose whole point is that they fail independently.
    *
-   * The isolation is STRUCTURAL, not behavioural: this is a per-instance field,
-   * so there is no shared map to leak through and no test that could observe a
-   * leak by running the ladder. What a test CAN observe is that two instances
-   * hold two different maps and that this one is populated by the engine — see
-   * "each service instance keeps its own provider health".
+   * The isolation from visionHealth IS real and structural: this is a
+   * per-instance field, so there is no shared map for a leak to cross, and a
+   * new DirectAssistService is constructed per request (ipcHandlers.ts:6898).
+   *
+   * But do not read "isolation" as "the breaker protects anything". This map
+   * is currently WRITE-ONLY: runStreamingFallback populates it (markUnhealthy
+   * on a failed attempt) but nothing ever reads it back. The ladder passes
+   * `rungs` straight through in priority order and never calls
+   * `orderByHealth` — that helper is exported for, and only called by, the
+   * vision path (LLMHelper.ts:6295/6307) — and `hedgeEnabled` is pinned false
+   * here, so the engine's other health read (the hedge-partner breaker check)
+   * is dead code on this path too. A provider marked unhealthy on attempt 1 of
+   * this request is tried again exactly as if it were healthy, both later in
+   * THIS ladder and on the next request against a fresh instance. For the
+   * breaker to mean anything, this service would need to (a) survive across
+   * requests — a lifecycle decision, not a bug fix — and (b) actually call
+   * `orderByHealth` (or an equivalent check) before opening a rung. Neither is
+   * done here; see "each service instance keeps its own provider health map,
+   * structurally isolated but write-only — no shared map, no read-back".
    */
   private readonly health = new Map<string, HealthEntry>();
 
@@ -228,6 +244,22 @@ export class DirectAssistService {
         return 'PROVIDER_ERROR';
       };
 
+      // Both of these are pinned AFTER the spread because they are contract,
+      // not configuration, and `Partial<FallbackConfig>` is broad enough to
+      // reach either. `rethrowAfterCommit` is the commit-point invariant: a
+      // cut-off answer must surface as an error with partial: true, never as
+      // a silently-ended stream. `hedgeEnabled` false is a hard constraint of
+      // this feature, not a default — hedging duplicates the request and
+      // bills two providers to shave tail latency, which is exactly the wrong
+      // trade on a path the user chose for provider determinism.
+      //
+      const engineConfig: FallbackConfig = {
+        ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
+        ...this.fallbackConfigOverrides,
+        hedgeEnabled: false,
+        rethrowAfterCommit: true,
+      };
+
       // The whole-ladder ceiling, expressed as a signal so the engine — which
       // already honours abortSignal between attempts and before each rung —
       // enforces it without a second timing mechanism.
@@ -239,10 +271,18 @@ export class DirectAssistService {
       // above it (the engine's 15s inter-chunk stall and this service's 45s
       // idle watchdog); the budget's only job is to refuse to OPEN work that
       // cannot finish inside it — see DIRECT_ASSIST_TOTAL_BUDGET_MS.
+      //
+      // "Cannot finish inside it" is checked as elapsed PLUS
+      // DIRECT_ASSIST_MIN_VIABLE_TTFT_MS, not elapsed alone, and deliberately
+      // NOT a rung's full ttftTimeoutMs either — see that constant's comment
+      // and DIRECT_ASSIST_TOTAL_BUDGET_MS's for why the full per-attempt
+      // guard would make the designed 2x30s-then-fallback worst case inert.
       const budgetController = new AbortController();
       const budgetExhausted = (): boolean => {
         if (budgetExpired) return true;
-        if (this.now() - ladderStartedAt < DIRECT_ASSIST_TOTAL_BUDGET_MS) return false;
+        if (this.now() - ladderStartedAt + DIRECT_ASSIST_MIN_VIABLE_TTFT_MS <= DIRECT_ASSIST_TOTAL_BUDGET_MS) {
+          return false;
+        }
         budgetExpired = true;
         if (!budgetController.signal.aborted) {
           budgetController.abort(new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true));
@@ -257,8 +297,17 @@ export class DirectAssistService {
         isLocal: false,
         priority: rung.priority,
         // The selected provider is worth trying harder than a fallback; a
-        // fallback rung buys breadth, not depth.
-        maxAttempts: rung.isFallback
+        // fallback rung buys breadth, not depth. A ladder-ineligible provider
+        // (codex-cli, curl) gets the fallback (1) budget even when it IS the
+        // selected rung: both reach the model through a blocking,
+        // non-streaming call with no commit point, so a retry cannot know how
+        // much of the first call completed and would duplicate the whole
+        // request and its bill — and for codex-cli, spawn the child process a
+        // second time. listDirectAssistRungs() already keeps these providers
+        // off the ladder entirely; this is what keeps them off the RETRY path
+        // too, including the synthetic one-rung fallback built above when a
+        // transport has no listDirectAssistRungs at all.
+        maxAttempts: rung.isFallback || DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(rung.provider)
           ? DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS
           : DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
         open: async function* (signal: AbortSignal): AsyncGenerator<string, void, unknown> {
@@ -310,33 +359,24 @@ export class DirectAssistService {
 
       const providerStream = runStreamingFallback(
         engineRungs,
-        // Both of these are pinned AFTER the spread because they are contract,
-        // not configuration, and `Partial<FallbackConfig>` is broad enough to
-        // reach either. `rethrowAfterCommit` is the commit-point invariant: a
-        // cut-off answer must surface as an error with partial: true, never as
-        // a silently-ended stream. `hedgeEnabled` false is a hard constraint of
-        // this feature, not a default — hedging duplicates the request and
-        // bills two providers to shave tail latency, which is exactly the wrong
-        // trade on a path the user chose for provider determinism.
-        {
-          ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
-          ...this.fallbackConfigOverrides,
-          hedgeEnabled: false,
-          rethrowAfterCommit: true,
-        },
+        engineConfig,
         this.health,
         {
           now: this.now,
           sleep: async (ms: number, signal?: AbortSignal) => {
             await this.sleep(ms, signal);
             // Backoff is the one place the ladder spends time without opening
-            // anything, so re-check the ceiling on the way out.
+            // anything, so re-check the ceiling on the way out — the next
+            // rung's own open() re-checks again immediately after regardless.
             budgetExhausted();
           },
           onRungOpen: (providerId: string, attempt: number) => {
             if (attempt !== 1) return;                 // a retry is not a switch
             const next = rungs.find((candidate) => rungIdOf(candidate) === providerId);
-            if (!next || next.priority === activeRung.priority) return;
+            // Identity (provider + model), not priority: priorities happen to
+            // be unique by construction today, but rungIdOf is free and
+            // doesn't lean on that invariant to detect a genuine switch.
+            if (!next || rungIdOf(next) === rungIdOf(activeRung)) return;
             pendingSwitches.push(Object.freeze({
               type: 'provider_switch',
               requestId: dispatchRequest.requestId,
