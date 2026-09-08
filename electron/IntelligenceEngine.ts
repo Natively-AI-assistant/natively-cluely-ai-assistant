@@ -7056,7 +7056,16 @@ export class IntelligenceEngine extends EventEmitter {
                         // 'engine', so every session on this surface shared one
                         // continuity slot -- one user's activeTopic resolving another
                         // turn's "that project". A one-line omission, not a design.
-                        scope: { meetingId: _ctx.meetingId ?? undefined, sessionId: _ctx.meetingId ?? undefined },
+                        scope: {
+                            meetingId: _ctx.meetingId ?? undefined,
+                            // THE resolver, like every other surface. This read the
+                            // BARE meeting id while its own writer (recordLiveTurn ->
+                            // conversationSessionId) stored under `m:<id>`, so with a
+                            // meeting active manual-chat wrote a bucket it never read.
+                            // Invisible without a meeting, where both collapse to
+                            // 'engine' — which is why the parity test passed.
+                            sessionId: this.conversationSessionId(),
+                        },
                         retrieval: _ctx.port as any,
                     });
                 } catch { return null; }

@@ -9,6 +9,8 @@
 // See docs/superpowers/specs/2026-09-08-screenshot-memory-design.md
 
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -453,4 +455,29 @@ test('credential getters fall back to the env vars ProcessingHelper already uses
   // The gate must agree with the getters, or it reports "no vision" while the
   // chain has rungs.
   assert.match(cm, /anyVisionProviderConfigured\(\): boolean \{[\s\S]{0,400}?this\.getGeminiApiKey\(\)/);
+});
+
+test('EVERY ring reader derives its key from the shared resolver', () => {
+  const fsmod = require('node:fs');
+  const pathmod = require('node:path');
+  const engine = fsmod.readFileSync(pathmod.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
+  const ipc = fsmod.readFileSync(pathmod.resolve(process.cwd(), 'electron/ipcHandlers.ts'), 'utf8');
+
+  // THE invariant the earlier parity test missed. Counting readers and writers
+  // says nothing about whether they agree on the KEY — and they did not:
+  // manual-chat read `sessionId: _ctx.meetingId` (bare) while its writer stored
+  // `m:<id>`, so with a meeting active it wrote a bucket it never read. Without
+  // a meeting both collapse to 'engine' and the mismatch is invisible, which is
+  // exactly why counting passed.
+  const engineScopes = [...engine.matchAll(/sessionId: ([^\n]+)/g)]
+    .map(m => m[1].trim().replace(/,$/, ''));
+  const ringScopes = engineScopes.filter(v => /meetingId|conversationSessionId/.test(v));
+  assert.ok(ringScopes.length >= 3, 'expected the engine ring readers to be found');
+  for (const v of ringScopes) {
+    assert.equal(v, 'this.conversationSessionId()',
+      `a ring reader derives its own key (${v}) instead of using the shared resolver`);
+  }
+  // ipcHandlers' reader and writer must both go through its helper.
+  assert.match(ipc, /sessionId: v3ConversationSessionId\(appState, senderId\)/);
+  assert.match(ipc, /recordAnswerSummary\(\s*\n\s*v3ConversationSessionId\(appState, senderId\)/);
 });
