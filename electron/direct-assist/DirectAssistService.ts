@@ -1,7 +1,18 @@
 import { DirectAssistError, normalizeDirectAssistError } from './errors';
+import {
+  DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
+  DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS,
+  DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
+  DIRECT_ASSIST_TOTAL_BUDGET_MS,
+} from './fallbackConfig';
 import { prepareDirectAssistPrompt } from './requestBuilder';
+import type { HealthEntry, StreamProvider } from '../llm/streamFallbackEngine';
+import { runStreamingFallback } from '../llm/streamFallbackEngine';
 import type {
+  DirectAssistDispatchRequest,
+  DirectAssistErrorCode,
   DirectAssistRequestInput,
+  DirectAssistRung,
   DirectAssistStreamEvent,
   DirectAssistTerminalOutcome,
   DirectAssistTransport,
@@ -18,6 +29,10 @@ export interface DirectAssistServiceOptions {
   readonly streamIdleTimeoutMs?: number;
   /** Injectable only so timeout/reset behavior can be tested without real sleeps. */
   readonly timerScheduler?: DirectAssistTimerScheduler;
+  /** Injectable clock for the whole-ladder budget. */
+  readonly now?: () => number;
+  /** Injectable backoff sleeper, handed straight to the engine. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 const SYSTEM_TIMER_SCHEDULER: DirectAssistTimerScheduler = Object.freeze({
@@ -25,10 +40,37 @@ const SYSTEM_TIMER_SCHEDULER: DirectAssistTimerScheduler = Object.freeze({
   clear: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 });
 
-/** Thin lifecycle wrapper around exactly one selected-provider dispatch. */
+const SYSTEM_SLEEP = (ms: number, signal?: AbortSignal): Promise<void> => new Promise<void>((resolve) => {
+  const onAbort = () => { clearTimeout(timer); resolve(); };
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+  signal?.addEventListener('abort', onAbort, { once: true });
+});
+
+/** Engine rung id. Stable and content-free — provider family plus model id. */
+const rungIdOf = (rung: DirectAssistRung): string => `${rung.provider}:${rung.model}`;
+
+/**
+ * Lifecycle wrapper around ONE prompt walked down a provider ladder.
+ *
+ * The retry/fallback loop is NOT here: it is `runStreamingFallback`, the same
+ * engine the vision and text paths use. This class builds the rung list, hands
+ * it over, and narrates the walk. Re-deriving that loop would also re-derive
+ * the bugs its comments record (a hedged-401 misclassification, a 410-vs-404
+ * demotion, a leaked socket on an untimely abort).
+ */
 export class DirectAssistService {
   private readonly streamIdleTimeoutMs: number;
   private readonly timerScheduler: DirectAssistTimerScheduler;
+  private readonly now: () => number;
+  private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+
+  /**
+   * Direct Assist's OWN provider health, deliberately not LLMHelper's
+   * visionHealth. Sharing it would let a Direct Assist timeout open a circuit
+   * breaker on the live answer path — and the reverse — coupling two
+   * subsystems whose whole point is that they fail independently.
+   */
+  private readonly health = new Map<string, HealthEntry>();
 
   constructor(
     private readonly transport: DirectAssistTransport,
@@ -39,6 +81,8 @@ export class DirectAssistService {
       ? Math.floor(Number(configuredTimeout))
       : DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS;
     this.timerScheduler = options.timerScheduler ?? SYSTEM_TIMER_SCHEDULER;
+    this.now = options.now ?? Date.now;
+    this.sleep = options.sleep ?? SYSTEM_SLEEP;
   }
 
   public async *stream(
@@ -54,6 +98,9 @@ export class DirectAssistService {
     let idleTimedOut = false;
     let onExternalAbort: (() => void) | null = null;
     let onDispatchAbort: (() => void) | null = null;
+    // Hoisted: the catch has to distinguish an exhausted ladder budget from an
+    // ordinary provider failure.
+    let budgetExpired = false;
 
     if (abortSignal?.aborted) {
       terminalSent = true;
@@ -72,8 +119,6 @@ export class DirectAssistService {
         shortenedFields: prepared.shortenedFields,
       });
 
-      // This is the only transport call in the service. There is no retry,
-      // provider race, model ladder, legacy planner, RAG, validator or repair.
       dispatchController = new AbortController();
       let rejectDispatchAbort: (reason: unknown) => void = () => {};
       const dispatchAbortPromise = new Promise<never>((_resolve, reject) => {
@@ -113,14 +158,137 @@ export class DirectAssistService {
       };
       armIdleWatchdog();
 
-      const providerStream = this.transport.streamDirectAssist(Object.freeze({
+      // ONE prompt for the whole ladder: prepareDirectAssistPrompt and the
+      // single `start` event stay outside it, so every rung answers the exact
+      // same question.
+      const dispatchRequest: DirectAssistDispatchRequest = Object.freeze({
         requestId: prepared.request.requestId,
         selection: prepared.request.selection,
         systemPrompt: prepared.systemPrompt,
         userPrompt: prepared.userPrompt,
         imagePaths: prepared.imagePaths,
         historyImagePaths: prepared.historyImagePaths,
-      }), dispatchController.signal);
+      });
+
+      // OPTIONAL on the transport interface: a transport without it supports no
+      // ladder, and must still work as the single-dispatch service it was.
+      const listed = this.transport.listDirectAssistRungs?.(dispatchRequest);
+      const rungs: readonly DirectAssistRung[] = listed && listed.length > 0
+        ? listed
+        : [Object.freeze({
+            provider: dispatchRequest.selection.provider,
+            model: dispatchRequest.selection.model,
+            priority: 0,
+            isFallback: false,
+          })];
+
+      const ladderStartedAt = this.now();
+      let activeRung: DirectAssistRung = rungs[0];
+      // A QUEUE, not a slot: a three-rung walk makes two hops, and a slot would
+      // keep only the last, reporting the wrong `from`.
+      const pendingSwitches: DirectAssistStreamEvent[] = [];
+      let lastReason: DirectAssistErrorCode = 'PROVIDER_ERROR';
+
+      // The whole-ladder ceiling, expressed as a signal so the engine — which
+      // already honours abortSignal between attempts and before each rung —
+      // enforces it without a second timing mechanism.
+      //
+      // ELAPSED-checked, NOT a wall-clock timer. A timer firing on this signal
+      // would also be honoured by the engine's post-commit drain loop, which
+      // would truncate a perfectly healthy answer that simply took longer than
+      // 90s to stream. Post-commit silence is already owned by the two guards
+      // above it (the engine's 15s inter-chunk stall and this service's 45s
+      // idle watchdog); the budget's only job is to refuse to OPEN work that
+      // cannot finish inside it — see DIRECT_ASSIST_TOTAL_BUDGET_MS.
+      const budgetController = new AbortController();
+      const budgetExhausted = (): boolean => {
+        if (budgetExpired) return true;
+        if (this.now() - ladderStartedAt < DIRECT_ASSIST_TOTAL_BUDGET_MS) return false;
+        budgetExpired = true;
+        if (!budgetController.signal.aborted) {
+          budgetController.abort(new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true));
+        }
+        return true;
+      };
+
+      const transport = this.transport;
+      const engineRungs: StreamProvider[] = rungs.map((rung) => ({
+        id: rungIdOf(rung),
+        name: rung.provider,
+        isLocal: false,
+        priority: rung.priority,
+        // The selected provider is worth trying harder than a fallback; a
+        // fallback rung buys breadth, not depth.
+        maxAttempts: rung.isFallback
+          ? DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS
+          : DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
+        open: async function* (signal: AbortSignal): AsyncGenerator<string, void, unknown> {
+          if (budgetExhausted()) {
+            // The engine sees its abortSignal aborted and ends the ladder
+            // quietly rather than classifying this as a provider failure.
+            throw new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true);
+          }
+          // Reset per rung so a stale reason from the PREVIOUS rung can never
+          // be attributed to this one's switch event.
+          lastReason = 'PROVIDER_ERROR';
+          let delivered = false;
+          try {
+            for await (const chunk of transport.streamDirectAssist(dispatchRequest, signal, rung)) {
+              if (typeof chunk === 'string' && chunk.length > 0) delivered = true;
+              yield chunk;
+            }
+          } catch (error) {
+            lastReason = normalizeDirectAssistError(error).code;
+            throw error;
+          }
+          if (!delivered) {
+            // Raise the service's own INCOMPLETE_STREAM rather than letting the
+            // engine's internal `empty-stream` sentinel reach the user as a
+            // generic PROVIDER_ERROR. Thrown, not returned, so an empty rung is
+            // retried and then walked past like any other pre-commit failure.
+            const empty = new DirectAssistError(
+              'INCOMPLETE_STREAM',
+              'The selected provider ended the stream without returning an answer.',
+              true,
+            );
+            lastReason = empty.code;
+            throw empty;
+          }
+        },
+      }));
+
+      const providerStream = runStreamingFallback(
+        engineRungs,
+        { ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG, rethrowAfterCommit: true },
+        this.health,
+        {
+          now: this.now,
+          sleep: async (ms: number, signal?: AbortSignal) => {
+            await this.sleep(ms, signal);
+            // Backoff is the one place the ladder spends time without opening
+            // anything, so re-check the ceiling on the way out.
+            budgetExhausted();
+          },
+          onRungOpen: (providerId: string, attempt: number) => {
+            if (attempt !== 1) return;                 // a retry is not a switch
+            const next = rungs.find((candidate) => rungIdOf(candidate) === providerId);
+            if (!next || next.priority === activeRung.priority) return;
+            pendingSwitches.push(Object.freeze({
+              type: 'provider_switch',
+              requestId: dispatchRequest.requestId,
+              // SNAPSHOT. Pre-commit by construction, so always 0, and it must
+              // not consume a delta slot — `sequence` doubles as the terminal
+              // `chunks` and the `partial` test.
+              sequence,
+              from: { provider: activeRung.provider, model: activeRung.model },
+              to: { provider: next.provider, model: next.model },
+              reason: lastReason,
+            }));
+            activeRung = next;
+          },
+        },
+        AbortSignal.any([budgetController.signal, dispatchController.signal]),
+      );
       providerIterator = providerStream[Symbol.asyncIterator]();
 
       while (true) {
@@ -148,6 +316,13 @@ export class DirectAssistService {
         const text = item.value;
         if (abortSignal?.aborted) break;
         if (typeof text !== 'string' || text.length === 0) continue;
+        // Announce the walk only once the new rung has actually produced a
+        // token. `onRungOpen` fires BEFORE open() runs, so flushing any earlier
+        // could announce a provider that the budget then refused to open.
+        while (pendingSwitches.length > 0) {
+          const switchEvent = pendingSwitches.shift() as DirectAssistStreamEvent;
+          yield switchEvent;
+        }
         sequence += 1;
         // A useful provider delta is the sole heartbeat. Empty chunks do not
         // extend a stream indefinitely.
@@ -175,17 +350,19 @@ export class DirectAssistService {
       }
 
       terminalSent = true;
+      // The rung that ACTUALLY answered, not the selection: a consumer that
+      // ignores provider_switch still ends up attributing the answer correctly.
       yield Object.freeze({
         type: 'done',
         requestId: prepared.request.requestId,
         sequence,
-        provider: prepared.request.selection.provider,
-        model: prepared.request.selection.model,
+        provider: activeRung.provider,
+        model: activeRung.model,
       });
       return Object.freeze({
         state: 'complete',
-        provider: prepared.request.selection.provider,
-        model: prepared.request.selection.model,
+        provider: activeRung.provider,
+        model: activeRung.model,
         chunks: sequence,
       });
     } catch (error) {
@@ -197,7 +374,11 @@ export class DirectAssistService {
         yield Object.freeze({ type: 'cancel', requestId, sequence });
         return Object.freeze({ state: 'cancelled', chunks: sequence });
       }
-      const normalized = normalizeDirectAssistError(error);
+      // An exhausted whole-ladder budget surfaces as itself, not as the
+      // INCOMPLETE_STREAM the empty engine stream would otherwise produce.
+      const normalized = budgetExpired && sequence === 0
+        ? new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true)
+        : normalizeDirectAssistError(error);
       if (normalized.code === 'CANCELLED') {
         yield Object.freeze({ type: 'cancel', requestId, sequence });
         return Object.freeze({ state: 'cancelled', chunks: sequence });
