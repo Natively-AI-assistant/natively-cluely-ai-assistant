@@ -5604,6 +5604,16 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
 
+      // LATENT TRAP: everything past this point treats an unrecognized
+      // event.type as terminal — it falls through 'done' / 'error' into the
+      // bare settleDirectAssistIncomplete(active, 'Request cancelled.') at
+      // the bottom of this callback. That is correct for today's actual
+      // terminal types, but it is NOT "unknown ⇒ ignore": a future
+      // non-terminal event added without its own branch ABOVE this guard
+      // (next to 'start'/'delta'/'provider_switch') will read as a stale-or-
+      // fresh terminal event and settle the request as cancelled, exactly
+      // like provider_switch would have without its branch above.
+      //
       // Terminal events carry the last emitted delta sequence, not the next
       // sequence. Accept equality so start -> delta(1) -> done(1) seals; only a
       // genuinely older terminal event is stale.

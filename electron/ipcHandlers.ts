@@ -7026,6 +7026,15 @@ export function initializeIpcHandlers(appState: AppState): void {
             sendDirectAssistEvent(event.sender, streamEvent);
             continue;
           }
+          // LATENT TRAP: everything past this line treats an unrecognized
+          // streamEvent.type as terminal — it falls into the 'done' branch or
+          // the bare `else { sendTerminal(streamEvent) }` below and ends the
+          // stream. That is correct for today's actual terminal types
+          // ('done', 'cancel', 'error'), but it is NOT "unknown ⇒ ignore": a
+          // future non-terminal event added without its own branch ABOVE this
+          // line (next to 'start'/'delta'/'provider_switch') will be sent to
+          // the renderer as a terminal event and silently kill the stream,
+          // exactly like provider_switch would have without its branch above.
           lastSequence = Math.max(lastSequence, streamEvent.sequence);
           if (streamEvent.type === 'done') {
             sendTerminal({ ...streamEvent, fullText } as DirectAssistStreamEvent);
