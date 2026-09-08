@@ -267,21 +267,21 @@ function ChooseState({ usage, plans, error, reduced, onPro, onMax, onUltra, onSt
 
         <HeroCard
           title="Natively Pro" price="$15" period="/mo" icon={Zap}
-          spec={spec('pro', true, 'Everything for daily work · Pro App included')}
+          spec="1,000 AI answers · 500 min live STT · 100 searches · Pro App included"
           accent="violet" reduced={reduced} onClick={onPro}
         />
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
           <TierCard title="Max"   price="$25" period="/mo" icon={Brain}
-            spec={spec('max', true, 'Higher volume · Pro App included')}
+            spec="2,000 AI · 1,000 min · 200 searches · Pro App included"
             badge="Best value" accent="indigo" onClick={onMax} />
           <TierCard title="Ultra" price="$35" period="/mo" icon={Flame}
-            spec={spec('ultra', true, 'Maximum usage, all day · Pro App included')}
+            spec="3,000 AI · 2,000 min · 300 searches · Pro App included"
             badge="Power" accent="amber" onClick={onUltra} />
         </div>
 
         <TierCard title="Standard" price="$8" period="/mo" icon={Mic}
-            spec={spec('standard', false, 'The essentials, without the Pro App')}
+            spec="500 AI · 200 min · 20 searches"
             badge="No Pro App" badgeWarn accent="slate" onClick={onStandard} />
       </div>
 

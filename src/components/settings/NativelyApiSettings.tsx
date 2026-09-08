@@ -1131,11 +1131,7 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
         const plan = PLANS.find((p) => p.id === selectedPlanId)!;
         const liveProduct = pricingProducts[plan.id];
         const limits = planCatalog?.[plan.planKey];
-        // Three sources, most authoritative first: the live Dodo product (which
-        // knows about currency and coupons), then the plan catalog (which is
-        // what billing actually charges), then the literal in this file (which
-        // is only ever right by luck).
-        const price = liveProduct?.formattedPrice || (limits ? `$${limits.price_usd}` : plan.price);
+        const price = liveProduct?.formattedPrice || plan.price;
         const checkoutUrl = liveProduct?.checkoutUrl || plan.url;
         const currentPlan = usageData?.plan?.toLowerCase();
         const rowPlan = plan.name.toLowerCase();
@@ -1257,7 +1253,6 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                           );
                         })}
                       </ul>
-                      <PlanAllowances limits={limits} />
                       <p className="natively-api-on-fill-dim mt-auto pt-3 text-[10px] leading-snug opacity-80">
                         {plan.note}
                       </p>
