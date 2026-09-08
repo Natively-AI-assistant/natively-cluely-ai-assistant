@@ -52,6 +52,13 @@ test('preload and renderer declarations expose one correlated Direct Assist brid
     // in sync while preload.ts's own local duplicate was missed — no compile
     // error, since onDirectAssistEvent forwards the raw IPC object untouched.
     assert.match(source, /type: 'start'[\s\S]{0,140}trimmedFields: string\[\]/);
+    // provider_switch mirrors electron/direct-assist/types.ts field for field
+    // (from/to/reason), so the renderer is told which provider actually
+    // answered whenever the ladder fails over mid-request.
+    assert.match(
+      source,
+      /type: 'provider_switch'[\s\S]{0,220}from: \{ provider: string; model: string \}[\s\S]{0,80}to: \{ provider: string; model: string \}[\s\S]{0,80}reason: string/,
+    );
   }
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-stream', request\)/);
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-cancel', requestId, source\)/);
@@ -88,6 +95,27 @@ test('stream relay enforces correlation, monotonic deltas, and one terminal even
   assert.match(streamBlock, /terminalSent = true/);
   assert.match(streamBlock, /INCOMPLETE_STREAM/);
   assert.match(streamBlock, /controller\.signal\.aborted/);
+});
+
+test('provider_switch is forwarded in order without being swallowed into the terminal fall-through', () => {
+  // Before this, any streamEvent.type other than 'start'/'delta' fell through
+  // to `lastSequence = Math.max(...)` and then sendTerminal — so a
+  // provider_switch (a mid-stream event, not an end-of-stream one) would have
+  // been sent as a TERMINAL event and killed the stream the moment a rung
+  // failed over. The forward + continue branch must sit strictly between the
+  // 'delta' branch and that generic Math.max/terminal fall-through.
+  const deltaAt = streamBlock.indexOf("if (streamEvent.type === 'delta') {");
+  const switchAt = streamBlock.indexOf("if (streamEvent.type === 'provider_switch') {");
+  const fallThroughAt = streamBlock.indexOf('lastSequence = Math.max(lastSequence, streamEvent.sequence);');
+  assert.ok(deltaAt >= 0 && switchAt > deltaAt, 'provider_switch branch must follow the delta branch');
+  assert.ok(fallThroughAt > switchAt, 'provider_switch branch must precede the terminal fall-through');
+
+  const switchBlock = streamBlock.slice(switchAt, fallThroughAt);
+  assert.match(switchBlock, /sendDirectAssistEvent\(event\.sender, streamEvent\)/);
+  assert.match(switchBlock, /continue;/);
+  // It must never touch lastSequence: a switch's sequence is a snapshot of
+  // the delta counter (always 0), not a slot of its own.
+  assert.doesNotMatch(switchBlock, /lastSequence\s*=/);
 });
 
 test('main resolves and strips enabled skills, including underscore IDs', () => {

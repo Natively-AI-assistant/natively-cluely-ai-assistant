@@ -7015,6 +7015,17 @@ export function initializeIpcHandlers(appState: AppState): void {
             sendDirectAssistEvent(event.sender, streamEvent);
             continue;
           }
+          if (streamEvent.type === 'provider_switch') {
+            // NOT terminal — a rung failing over is not the end of the
+            // stream, it is what lets the stream continue. Its `sequence` is
+            // a SNAPSHOT of the delta counter, never a slot of its own (always
+            // 0, pre-commit only), so it must never reach the generic
+            // sequence accounting below: doing so would let this event fall
+            // through to the terminal branch and kill the stream the moment
+            // a fallback fired.
+            sendDirectAssistEvent(event.sender, streamEvent);
+            continue;
+          }
           lastSequence = Math.max(lastSequence, streamEvent.sequence);
           if (streamEvent.type === 'done') {
             sendTerminal({ ...streamEvent, fullText } as DirectAssistStreamEvent);
