@@ -37,8 +37,9 @@ export interface DirectAssistServiceOptions {
    * Engine tuning overrides. Injectable ONLY so a test can drive the engine's
    * own per-attempt guards (ttftTimeoutMs, interChunkTimeoutMs, cleanupTimeoutMs)
    * without waiting 35 real seconds. Production passes nothing and gets
-   * DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG. `rethrowAfterCommit` is applied after
-   * this and cannot be overridden.
+   * DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG. `rethrowAfterCommit` and
+   * `hedgeEnabled` are pinned after this spread and cannot be overridden — they
+   * are this feature's contract, not tuning.
    */
   readonly fallbackConfigOverrides?: Partial<FallbackConfig>;
 }
@@ -309,9 +310,20 @@ export class DirectAssistService {
 
       const providerStream = runStreamingFallback(
         engineRungs,
-        // rethrowAfterCommit LAST: it is a commit-point invariant, not tuning,
-        // and an override must not be able to switch it off.
-        { ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG, ...this.fallbackConfigOverrides, rethrowAfterCommit: true },
+        // Both of these are pinned AFTER the spread because they are contract,
+        // not configuration, and `Partial<FallbackConfig>` is broad enough to
+        // reach either. `rethrowAfterCommit` is the commit-point invariant: a
+        // cut-off answer must surface as an error with partial: true, never as
+        // a silently-ended stream. `hedgeEnabled` false is a hard constraint of
+        // this feature, not a default — hedging duplicates the request and
+        // bills two providers to shave tail latency, which is exactly the wrong
+        // trade on a path the user chose for provider determinism.
+        {
+          ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
+          ...this.fallbackConfigOverrides,
+          hedgeEnabled: false,
+          rethrowAfterCommit: true,
+        },
         this.health,
         {
           now: this.now,
