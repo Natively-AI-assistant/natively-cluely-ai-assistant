@@ -764,6 +764,21 @@ export class CredentialsManager {
     private storedOrEnv(stored: string | undefined, envKey: string): string | undefined {
         const value = (stored ?? '').trim();
         if (value) return value;
+        // DEVELOPMENT ONLY. The fallback exists because ProcessingHelper builds
+        // LLMHelper from process.env — a dev-time mechanism (a repo .env), and the
+        // reason the two subsystems disagreed. It must not reach a packaged user:
+        //
+        //   * "cleared by the user" and "never set" are the same empty value here,
+        //     so in a packaged build this resurrected a key someone had just
+        //     deleted in Settings to stop sending data to that provider. The key
+        //     stayed active and invisible — Settings cannot show or remove it.
+        //   * On Windows, user-level environment variables are inherited by
+        //     GUI-launched apps, so an OPENAI_API_KEY set for any other tool would
+        //     silently become an active Natively credential.
+        //
+        // A packaged install configures keys in Settings, where CredentialsManager
+        // is already the source of truth, so nothing there needs this.
+        if (app.isPackaged) return undefined;
         const fromEnv = (process.env[envKey] ?? '').trim();
         return fromEnv || undefined;
     }
