@@ -42,7 +42,14 @@ export interface DirectAssistRequest {
   manualContext?: string
   referenceContext?: string
   pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  history?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    /** Screenshots that turn was sent with, so a follow-up question can still
+     *  see them. Main re-validates each path and silently skips any the
+     *  screenshot queue has unlinked. */
+    imagePaths?: string[]
+  }>
   transcript?: string
   imagePaths?: string[]
   requestedLanguage?: string
@@ -500,9 +507,10 @@ export interface ElectronAPI {
     error?: string
   }>
   setRerankerConfig: (next: {
-    provider?: 'local' | 'openrouter' | 'jina'
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina'
     openrouterModel?: string
     jinaModel?: string
+    nativelyModel?: string
     candidateCount?: number
     fallbackToLocal?: boolean
   }) => Promise<{ success: boolean; reranker?: unknown; error?: string }>

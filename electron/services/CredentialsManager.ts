@@ -657,27 +657,59 @@ export class CredentialsManager {
     // Getters
     // =========================================================================
 
+    /**
+     * The stored key, falling back to the SAME environment variable
+     * ProcessingHelper already builds LLMHelper from.
+     *
+     * TWO SUBSYSTEMS, TWO KEY SOURCES — verified live, on a real profile.
+     * ProcessingHelper reads `process.env.GEMINI_API_KEY` (and siblings) at
+     * construction; this class read the encrypted store and NOTHING else. On any
+     * machine whose keys arrive through the environment rather than Settings —
+     * every developer with a .env, which injects them at boot — the answering
+     * path had working providers while VisionProviderRegistry, which builds its
+     * chain from these getters, reported `no_vision_provider` with all twelve
+     * rungs `skipped(not_configured)`.
+     *
+     * The user-visible effect was silent and specific: a screenshot turn still
+     * answered correctly, because the raw image bytes reach the answering model
+     * on a separate path, so nothing looked wrong. But ScreenUnderstandingService
+     * produced nothing, so no screen text was ever recorded, and every follow-up
+     * about that screenshot failed.
+     *
+     * The STORE STILL WINS. This is a fallback for a key that is otherwise
+     * absent, not an override: a key entered in Settings is never shadowed by a
+     * stale shell variable.
+     */
+    private storedOrEnv(stored: string | undefined, envKey: string): string | undefined {
+        const value = (stored ?? '').trim();
+        if (value) return value;
+        const fromEnv = (process.env[envKey] ?? '').trim();
+        return fromEnv || undefined;
+    }
+
     public getGeminiApiKey(): string | undefined {
-        return this.credentials.geminiApiKey;
+        return this.storedOrEnv(this.credentials.geminiApiKey, 'GEMINI_API_KEY');
     }
 
     public getGroqApiKey(): string | undefined {
-        return this.credentials.groqApiKey;
+        return this.storedOrEnv(this.credentials.groqApiKey, 'GROQ_API_KEY');
     }
 
     public getOpenaiApiKey(): string | undefined {
-        return this.credentials.openaiApiKey;
+        return this.storedOrEnv(this.credentials.openaiApiKey, 'OPENAI_API_KEY');
     }
 
     public getClaudeApiKey(): string | undefined {
-        return this.credentials.claudeApiKey;
+        return this.storedOrEnv(this.credentials.claudeApiKey, 'CLAUDE_API_KEY');
     }
 
     public getDeepseekApiKey(): string | undefined {
-        return this.credentials.deepseekApiKey;
+        return this.storedOrEnv(this.credentials.deepseekApiKey, 'DEEPSEEK_API_KEY');
     }
 
-    public getNvidiaNimApiKey(): string | undefined { return this.credentials.nvidiaNimApiKey; }
+    public getNvidiaNimApiKey(): string | undefined {
+        return this.storedOrEnv(this.credentials.nvidiaNimApiKey, 'NVIDIA_NIM_API_KEY');
+    }
 
     /** Persisted loopback-scoped companion-extension token (stable across restarts). */
     public getPhoneMirrorToken(): string | undefined {
@@ -1008,11 +1040,11 @@ export class CredentialsManager {
      * Used by ScreenUnderstandingService to gate vision_only / decide fallback.
      */
     public anyVisionProviderConfigured(): boolean {
-        if (this.credentials.nativelyApiKey) return true;       // Natively API supports vision
-        if (this.credentials.openaiApiKey) return true;          // gpt-4o / gpt-5 vision
-        if (this.credentials.claudeApiKey) return true;          // Claude vision
-        if (this.credentials.geminiApiKey) return true;          // Gemini vision
-        if (this.credentials.groqApiKey) return true;            // Groq qwen3.6-27b vision
+        if (this.getNativelyApiKey()) return true;              // Natively API supports vision
+        if (this.getOpenaiApiKey()) return true;                 // gpt-4o / gpt-5 vision
+        if (this.getClaudeApiKey()) return true;                 // Claude vision
+        if (this.getGeminiApiKey()) return true;                 // Gemini vision
+        if (this.getGroqApiKey()) return true;                   // Groq qwen3.6-27b vision
         // Custom providers. TWO fixes over the previous `customProviders.some(
         // p => p.multimodal === true)`:
         //   • getAllCustomProviders() — the old read missed the store the
@@ -1351,8 +1383,8 @@ export class CredentialsManager {
      * Returns what actually changed so a caller can re-sync the runtime (LLMHelper
      * model, STT pipeline) instead of guessing.
      */
-    private applyNativelyAutoDefaultRevert(reason: string): { defaultModel?: string; sttProvider?: string } {
-        const changed: { defaultModel?: string; sttProvider?: string } = {};
+    private applyNativelyAutoDefaultRevert(reason: string): { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } {
+        const changed: { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } = {};
         if (this.credentials.defaultModel === 'natively') {
             this.credentials.defaultModel = 'gemini-3.1-flash-lite';
             changed.defaultModel = this.credentials.defaultModel;
@@ -1363,7 +1395,71 @@ export class CredentialsManager {
             changed.sttProvider = 'none';
             console.log(`[CredentialsManager] ${reason} — reset STT provider to none`);
         }
+        // The reranker lives in SettingsManager, not in credentials, so this
+        // reaches across. It has to: this same function is what runs when a key
+        // is CLEARED and when the server REFUSES one, and leaving a user pointed
+        // at a managed reranker they cannot authenticate to would fail every
+        // rerank silently (a failed rerank keeps the existing order, so there is
+        // no symptom to notice).
+        if (this.setRerankerProviderIfManaged('local', reason)) {
+            changed.rerankerProvider = 'local';
+        }
         return changed;
+    }
+
+    /**
+     * Move the reranker between 'local' and 'natively', and ONLY between those.
+     *
+     * Returns whether anything changed. Never throws: a settings store that
+     * cannot be read must not take down key storage, and the reranker falling
+     * back to 'local' is already the safe outcome.
+     *
+     * `to: 'natively'` promotes only from an auto-default ('local' or unset).
+     * `to: 'local'` reverts only from 'natively'.
+     *
+     * An explicit 'openrouter' or 'jina' is a DELIBERATE CHOICE and is never
+     * touched. See AUTO_ASSIGNED_MODEL_IDS below for the same bug being fixed
+     * once already on the model side — a user's explicit pick was silently
+     * replaced the moment they added a key.
+     */
+    private setRerankerProviderIfManaged(to: 'natively' | 'local', reason: string): boolean {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const { SettingsManager } = require('./SettingsManager');
+            const settings = SettingsManager.getInstance();
+            const current = (settings.get('reranker') as { provider?: string } | undefined) ?? {};
+            const provider = current.provider;
+
+            if (to === 'natively') {
+                const isAutoDefault = !provider || provider === 'local';
+                if (!isAutoDefault) return false;
+                // A hosted reranker sends RETRIEVED DOCUMENT TEXT off this
+                // machine, and unlike the model and STT promotions it does so
+                // without the user invoking anything — the next background query
+                // ships file contents. So this promotion, alone among the three,
+                // asks the privacy policy first.
+                //
+                // Skipping when the scope is denied is not just belt-and-braces:
+                // the runtime gate would make the selection inert today, and then
+                // ARM IT the moment the user allowed the scope for some unrelated
+                // reason — a change they never consented to and would not connect
+                // to a key they pasted weeks earlier.
+                const scopes = settings.get('providerDataScopes') as { reference_files?: boolean } | undefined;
+                if (scopes?.reference_files === false) {
+                    console.log(`[CredentialsManager] ${reason} — reranker NOT promoted: reference-file content may not leave this device`);
+                    return false;
+                }
+            } else if (provider !== 'natively') {
+                return false;
+            }
+
+            settings.set('reranker', { ...current, provider: to });
+            console.log(`[CredentialsManager] ${reason} — reranker provider set to ${to}`);
+            return true;
+        } catch (err: any) {
+            console.warn(`[CredentialsManager] reranker provider not updated (${reason}):`, err?.message);
+            return false;
+        }
     }
 
     /**
@@ -1381,9 +1477,12 @@ export class CredentialsManager {
      * state. Falling back to the same safe defaults the key-cleared path uses
      * always lands somewhere that can actually serve a request.
      */
-    public revertNativelyAutoDefaults(reason: string): { defaultModel?: string; sttProvider?: string } {
+    public revertNativelyAutoDefaults(reason: string): { defaultModel?: string; sttProvider?: string; rerankerProvider?: string } {
         if (this.refuseWriteWhileDegraded('revert natively auto defaults')) return {};
         const changed = this.applyNativelyAutoDefaultRevert(reason);
+        // rerankerProvider is deliberately NOT part of this condition: it lives
+        // in SettingsManager and has already persisted itself. Adding it here
+        // would write the credentials file for a change that is not in it.
         if (changed.defaultModel || changed.sttProvider) this.saveCredentials();
         return changed;
     }
@@ -1426,6 +1525,14 @@ export class CredentialsManager {
                 this.credentials.sttProvider = 'natively';
                 console.log('[CredentialsManager] Auto-set STT provider to natively');
             }
+
+            // Same promotion for the managed reranker, so a pasted key makes
+            // Natively the active provider for generation, speech, embeddings
+            // and reranking alike. (Embeddings need nothing here — the resolver
+            // already probes Natively FIRST whenever a key exists, and pinning
+            // embeddingMode:'manual' would replace that preference with "Natively
+            // or nothing", deleting the fallback chain.)
+            this.setRerankerProviderIfManaged('natively', 'Natively key stored');
         } else {
             // Key cleared — revert natively-auto-set defaults back to safe fallbacks
             this.applyNativelyAutoDefaultRevert('Natively key cleared');

@@ -223,3 +223,73 @@ test('referenceContext and meetingTranscript are always server-populated, ignori
   assert.match(streamBlock, /getFormattedContext\??\.?\(180\)/);
   assert.match(streamBlock, /\n\s*meetingTranscript,\n/);
 });
+
+test('history attachments are validated by the SAME boundary, but a missing one is skipped instead of rejecting the turn', () => {
+  // One resolver, so the containment rules can never diverge between the
+  // current turn's attachments and the ones carried from earlier turns.
+  const resolverStart = ipc.indexOf('const resolveDirectAssistImagePath =');
+  assert.ok(resolverStart >= 0, 'the shared attachment resolver must exist');
+  const resolverEnd = ipc.indexOf('const normalizeDirectAssistRequest =', resolverStart);
+  const resolver = ipc.slice(resolverStart, resolverEnd);
+  assert.match(resolver, /fs\.realpathSync\.native\(rendererPath\)/);
+  assert.match(resolver, /isDirectAssistCanonicalPathInsideRoot\(canonicalUserDataDir, canonicalPath\)/);
+  assert.match(resolver, /validateImagePath\(rendererPath, userDataDir\)/);
+  assert.match(resolver, /sniffDirectAssistImage\(canonicalPath\)/);
+
+  // The current turn still fails the whole request on a bad attachment...
+  assert.match(
+    normalizeBlock,
+    /resolveDirectAssistImagePath\(rendererPath, userDataDir, canonicalUserDataDir\)[\s\S]{0,200}?if \(!resolved\.ok\)[\s\S]{0,120}?directAssistError\('INVALID_ATTACHMENT', resolved\.rejection\)/,
+  );
+  // ...while a carried one is recorded as absent. An evicted screenshot is the
+  // EXPECTED case (ScreenshotHelper unlinks past its 5-deep queue), so failing
+  // the request would make follow-up questions worse, not safer.
+  assert.match(normalizeBlock, /validated\.set\(rendererPath, resolved\.ok \? resolved\.canonicalPath : null\)/);
+  assert.match(normalizeBlock, /imageCount: turn\.imagePaths\.length/);
+
+  // Bounded sync IO: main must not walk 64 turns x 5 images of realpath +
+  // stat + header read when only DIRECT_ASSIST_MAX_IMAGES can be dispatched.
+  assert.match(normalizeBlock, /let validationBudget = Math\.max\(0, DIRECT_ASSIST_MAX_IMAGES - \(/);
+  assert.match(normalizeBlock, /for \(let i = rawTurns\.length - 1; i >= 0 && validationBudget > 0; i -= 1\)/);
+});
+
+test('carried screenshots travel as their own dispatch field, never merged into the current turn', () => {
+  const builder = read('electron/direct-assist/requestBuilder.ts');
+  const service = read('electron/direct-assist/DirectAssistService.ts');
+  const llm = read('electron/LLMHelper.ts');
+
+  // Separate field end to end: the text that explains each carried image lives
+  // in <recent_transcript>, and LLMHelper strips that block when the transcript
+  // scope is denied — merging the images in the builder would leave them behind.
+  assert.match(builder, /historyImagePaths: Object\.freeze\(\s*selectCarriedHistoryImages\(parts\.history, request\.imagePaths\.length\)\.paths,\s*\)/);
+  assert.match(service, /historyImagePaths: prepared\.historyImagePaths/);
+  assert.match(llm, /deniedScopes\.includes\('transcript'\) \|\| deniedScopes\.includes\('screenshots'\)[\s\S]{0,120}carriedImagePaths = \[\]/);
+});
+
+test('Direct Assist transcribes its own screenshot AFTER the answer, never before it', () => {
+  // Direct Assist has no vision pre-pass by design — one dispatch with nothing
+  // in front of it. So the transcription runs off the terminal event: the user
+  // already has their answer, and this exists purely so a follow-up two turns
+  // later has text to read once ScreenshotHelper has unlinked the image.
+  // Without it Direct Assist could only carry BYTES, which die with the file.
+  const doneAt = streamBlock.indexOf("if (streamEvent.type === 'done')");
+  const sendAt = streamBlock.indexOf('sendTerminal(', doneAt);
+  const describeAt = streamBlock.indexOf('transcribeScreenForMemory', doneAt);
+  assert.ok(doneAt >= 0 && sendAt > doneAt, 'terminal event must be reachable');
+  assert.ok(describeAt > sendAt,
+    'the transcription must run AFTER sendTerminal, or it delays the answer it exists to outlive');
+
+  // The SHARED helper, not a fourth inline copy — Direct Assist, what-to-answer
+  // and the typed path all transcribe the same way or they drift.
+  const helper = read('electron/services/screen/screenTranscription.ts');
+  // Skipped entirely when these exact bytes are already described. The cache is
+  // the point: a re-captured screen costs nothing.
+  assert.match(helper, /if \(cached\?\.description\) return cached\.description;/);
+  // Reaches the extraction prompt. Every pre-existing call site passed an action
+  // that took the "answer concisely" branch instead.
+  assert.match(helper, /userAction: 'transcribe'/);
+  // ONE policy, never a third policy: a transcription is still a screenshot
+  // leaving the device.
+  assert.match(helper, /localOnly: settings\.getScreenUnderstandingMode\(\) === 'private_vision'/);
+  assert.match(helper, /allowScreenshots: providerScopes\.screenshots !== false/);
+});

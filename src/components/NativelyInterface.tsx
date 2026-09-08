@@ -466,12 +466,21 @@ type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
 interface DirectAssistHistoryTurn {
   role: 'user' | 'assistant';
   content: string;
+  /** Screenshots this turn was sent with. The attachment tray is cleared the
+   *  instant a turn dispatches, so without this a screenshot only ever existed
+   *  for the one turn that carried it and "what was in the screenshot I sent?"
+   *  two turns later reached the model as bare text. Main re-validates every
+   *  path and skips the ones the screenshot queue has since unlinked. */
+  imagePaths?: string[];
 }
 
 interface ActiveDirectAssistRequest {
   requestId: string;
   source: DirectAssistSource;
   currentRequest: string;
+  /** Retained for the history write below, which runs after the tray is
+   *  cleared and so cannot read the attachments back off component state. */
+  imagePaths: string[];
   placeholderId: string;
   /** The user-role question card this request answers, so a 'start' event's
    *  trimmedFields can be stamped onto the right card. */
@@ -5575,7 +5584,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // a successful terminal event, then bounded by completed turns.
         const completedTurns: DirectAssistHistoryTurn[] = [
           ...directAssistHistoryRef.current,
-          { role: 'user', content: active.currentRequest },
+          {
+            role: 'user',
+            content: active.currentRequest,
+            ...(active.imagePaths.length ? { imagePaths: active.imagePaths } : {}),
+          },
           { role: 'assistant', content: answer },
         ];
         directAssistHistoryRef.current = completedTurns.slice(-24);
@@ -5660,6 +5673,7 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       requestId,
       source,
       currentRequest,
+      imagePaths: imagePaths ? [...imagePaths] : [],
       placeholderId,
       userMessageId,
       lastSequence: -1,

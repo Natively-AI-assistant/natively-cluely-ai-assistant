@@ -24,7 +24,14 @@ interface DirectAssistRequest {
   manualContext?: string;
   referenceContext?: string;
   pageContext?: { dom?: string; ocr?: string; url?: string; title?: string } | null;
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    /** Screenshots that turn was sent with, so a follow-up question can still
+     *  see them. Main re-validates each path and silently skips any the
+     *  screenshot queue has unlinked. */
+    imagePaths?: string[]
+  }>;
   transcript?: string;
   imagePaths?: string[];
   requestedLanguage?: string;
@@ -1997,8 +2004,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getRerankerStatus: () => ipcRenderer.invoke('reranker:get-status'),
   getRerankerCatalog: (opts?: { refresh?: boolean }) => ipcRenderer.invoke('reranker:get-catalog', opts),
   setRerankerConfig: (next: {
-    provider?: 'local' | 'openrouter';
+    // Was 'local' | 'openrouter' — already missing 'jina' before this change.
+    // The object is forwarded opaquely so the omission never failed at runtime,
+    // which is exactly why it went unnoticed; kept in step with the handler now.
+    provider?: 'local' | 'natively' | 'openrouter' | 'jina';
     openrouterModel?: string;
+    jinaModel?: string;
+    nativelyModel?: string;
     candidateCount?: number;
     fallbackToLocal?: boolean;
   }) => ipcRenderer.invoke('reranker:set-config', next),

@@ -121,6 +121,29 @@ export const MAX_HISTORY_TURNS = 10;
  *  which truncated a screenshot description mid-sentence and dropped the
  *  details every follow-up then asked about. */
 export const MAX_TURN_ANSWER_CHARS = 1200;
+/** Per-turn cap on the SCREEN transcription, separate from the answer cap.
+ *
+ *  They were the same constant, and that was wrong in kind rather than in
+ *  degree. An answer summary degrades gracefully under truncation — the first
+ *  sentences carry the gist. A screen transcription does not: what a follow-up
+ *  asks about is an error code, a filename, an identifier, and those sit
+ *  wherever they sat on the screen. Cutting the tail deletes the answer while
+ *  leaving text that still reads complete. This constant's predecessor already
+ *  moved 280 -> 1200 for exactly that reason; 1200 is the same defect at a
+ *  larger radius.
+ *
+ *  8000, not 4000: STRUCTURED_EXTRACTION_SYSTEM_PROMPT now asks for a full
+ *  verbatim transcription rather than "key visible text", so a dense screen
+ *  produces considerably more than the 2-4k the summarizing prompt did. Sizing
+ *  this against the old prompt's output would have quietly re-imposed the
+ *  summary the transcription was written to replace. ~2k tokens per screen. */
+export const MAX_TURN_SCREEN_CHARS = 8000;
+/** Appended when a screen transcription IS cut, so the model knows the screen
+ *  continued rather than that it has seen all of it. Without this a truncated
+ *  transcription is indistinguishable from a short screen, and the model
+ *  answers "that is everything that was shown" about a page it half saw. */
+export const SCREEN_TRUNCATION_MARKER =
+  '\n[TRUNCATED: the rest of this screen transcription is NOT available. Do not infer or extrapolate anything from the missing part.]';
 
 /** Append a completed exchange, oldest-evicted. Pure; never mutates `turns`. */
 export function appendTurn(
@@ -129,7 +152,10 @@ export function appendTurn(
   const question = String(q ?? '').slice(0, MAX_SUMMARY_CHARS);
   const answer = String(a ?? '').slice(0, MAX_TURN_ANSWER_CHARS);
   if (!question.trim() || !answer.trim()) return [...turns];
-  const shot = String(screen ?? '').trim().slice(0, MAX_TURN_ANSWER_CHARS);
+  const rawShot = String(screen ?? '').trim();
+  const shot = rawShot.length > MAX_TURN_SCREEN_CHARS
+    ? rawShot.slice(0, MAX_TURN_SCREEN_CHARS) + SCREEN_TRUNCATION_MARKER
+    : rawShot;
   return [...turns, { q: question, a: answer, ...(shot ? { screen: shot } : {}) }]
     .slice(-MAX_HISTORY_TURNS);
 }

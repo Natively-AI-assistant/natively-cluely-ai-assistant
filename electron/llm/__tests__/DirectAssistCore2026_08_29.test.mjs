@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1202,4 +1203,302 @@ test('a totalChars smaller than the content it arrives with is ignored, not trus
     referenceFiles: [{ fileName: 'odd.md', content: 'Y'.repeat(300_000), totalChars: 12 }],
   }));
   assert.match(prepared.userPrompt, /The file is 300000 characters long/);
+});
+
+test('a screenshot sent two turns ago is re-attached and named, not silently lost', async (t) => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const [shot] = screenshotFixtures(t, 1);
+
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    currentRequest: 'What was the error code in the screenshot I sent?',
+    history: [
+      { role: 'user', content: 'Analyze the attached screenshot.', imagePaths: [shot] },
+      { role: 'assistant', content: 'The screen shows a build log.' },
+      { role: 'user', content: 'Which step failed?' },
+      { role: 'assistant', content: 'The link step.' },
+    ],
+  }));
+
+  assert.deepEqual([...prepared.historyImagePaths], [shot]);
+  // The breadcrumb has to bind the image to the turn it came from, or the model
+  // receives a picture with no idea which question it belongs to.
+  assert.match(prepared.userPrompt, /USER \[attached 1 screenshot: re-sent here as earlier screenshot 1\]: Analyze the attached screenshot\./);
+  assert.match(prepared.userPrompt, /earlier screenshot 1/);
+  // A turn with no attachment keeps the plain, unannotated form.
+  assert.match(prepared.userPrompt, /USER: Which step failed\?/);
+});
+
+test('an earlier screenshot that is not being sent is still announced, so the model cannot invent it', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+
+  // imageCount without imagePaths is exactly what main produces once the
+  // screenshot queue has unlinked the file (ScreenshotHelper keeps 5).
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    currentRequest: 'What was the error code in that screenshot?',
+    history: [
+      { role: 'user', content: 'Analyze this.', imagePaths: [], imageCount: 2 },
+      { role: 'assistant', content: 'A build log.' },
+    ],
+  }));
+
+  assert.deepEqual([...prepared.historyImagePaths], []);
+  assert.match(prepared.userPrompt, /USER \[attached 2 screenshots: 2 not included in this request\]: Analyze this\./);
+});
+
+test('the current turn wins the payload cap, and earlier screenshots take only what is left', async (t) => {
+  const { prepareDirectAssistPrompt, DIRECT_ASSIST_MAX_DISPATCH_IMAGES } = await loadDirectAssist();
+  assert.equal(DIRECT_ASSIST_MAX_DISPATCH_IMAGES, 5);
+  const shots = screenshotFixtures(t, 6);
+  const [current1, current2, old1, old2, old3, old4] = shots;
+
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    currentRequest: 'Compare these with the ones from before.',
+    imagePaths: [current1, current2],
+    history: [
+      { role: 'user', content: 'First batch.', imagePaths: [old1, old2] },
+      { role: 'assistant', content: 'Seen.' },
+      { role: 'user', content: 'Second batch.', imagePaths: [old3, old4] },
+      { role: 'assistant', content: 'Seen.' },
+    ],
+  }));
+
+  // 5 - 2 current = 3 free slots, filled newest-first but emitted in history
+  // order so the "earlier screenshot N" numbering matches what the model reads.
+  assert.deepEqual([...prepared.imagePaths], [current1, current2]);
+  assert.deepEqual([...prepared.historyImagePaths], [old2, old3, old4]);
+  assert.match(prepared.userPrompt, /USER \[attached 2 screenshots: re-sent here as earlier screenshot 1; 1 not included in this request\]: First batch\./);
+  assert.match(prepared.userPrompt, /USER \[attached 2 screenshots: re-sent here as earlier screenshot 2, 3\]: Second batch\./);
+  assert.match(prepared.userPrompt, /2 current image attachments accompanies this request\. 3 screenshots from earlier turns follow them/);
+});
+
+test('history shed for budget takes its carried screenshots with it, so no image outlives its breadcrumb', async (t) => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const [shot] = screenshotFixtures(t, 1);
+
+  const history = [
+    { role: 'user', content: `old turn ${'x'.repeat(6_000)}`, imagePaths: [shot] },
+    { role: 'assistant', content: 'ok' },
+  ];
+
+  const roomy = prepareDirectAssistPrompt(baseInput({ history }));
+  assert.deepEqual([...roomy.historyImagePaths], [shot], 'precondition: it is carried when it fits');
+
+  // stt/screenshot requests drop `history` FIRST, so this is the realistic
+  // shape of the failure: the turn is gone but its image would still ship.
+  const squeezed = prepareDirectAssistPrompt(baseInput({
+    source: 'stt',
+    history,
+    maxContextChars: 4_000,
+  }));
+  // Shedding the oldest turns is reported as a shortening; either way the turn
+  // that carried the image is gone from the prompt.
+  assert.ok(
+    squeezed.shortenedFields.includes('history') || squeezed.trimmedFields.includes('history'),
+    'precondition: history was shed',
+  );
+  assert.doesNotMatch(squeezed.userPrompt, /old turn/, 'precondition: the attaching turn is gone');
+  assert.deepEqual([...squeezed.historyImagePaths], []);
+  assert.doesNotMatch(squeezed.userPrompt, /earlier screenshot/);
+});
+
+/** Drives the REAL streamDirectAssistFrozen boundary on a bare prototype: only
+ *  the provider call and the two policy lookups are stubbed, so the actual
+ *  ordering of the image checks is what runs. Returns what the provider was
+ *  handed. */
+async function dispatchDirect(request, { deniedScopes = [], imagesAllowed = true } = {}) {
+  const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
+  const self = Object.create(LLMHelper.prototype);
+  const seen = { imagePaths: null, userPrompt: null };
+  self.isLocalOnlyMode = false;
+  self.isProviderDisabled = () => false;
+  self.assertOutboundImagesAllowed = () => {
+    if (!imagesAllowed) throw new Error('private_vision');
+  };
+  self.getDeniedOutboundScopes = () => deniedScopes;
+  const record = async function* (userPrompt, imagePaths) {
+    seen.userPrompt = userPrompt;
+    seen.imagePaths = imagePaths ? [...imagePaths] : [];
+    yield 'ok';
+  };
+  self.streamWithGeminiModel = (userPrompt, _model, imagePaths) => record(userPrompt, imagePaths);
+  self.streamWithDeepseek = (userPrompt) => record(userPrompt, []);
+
+  const chunks = [];
+  for await (const chunk of LLMHelper.prototype.streamDirectAssistFrozen.call(
+    self, request, null, null, undefined,
+  )) {
+    chunks.push(chunk);
+  }
+  return { ...seen, chunks };
+}
+
+test('carried screenshots reach the provider appended after the current turn own attachments', async (t) => {
+  const [current, older] = screenshotFixtures(t, 2);
+  const seen = await dispatchDirect({
+    requestId: 'direct-carry-1',
+    selection: { provider: 'gemini', model: 'gemini-3.7-flash' },
+    systemPrompt: 'system',
+    userPrompt: '<recent_transcript>\nUSER [attached 1 screenshot: re-sent here as earlier screenshot 1]: earlier\n</recent_transcript>\n\n[CURRENT REQUEST - HIGHEST AUTHORITY]\nread it\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+    imagePaths: [current],
+    historyImagePaths: [older],
+  });
+  assert.deepEqual(seen.imagePaths, [current, older]);
+});
+
+test('a denied transcript scope drops the carried screenshots with the block that explains them', async (t) => {
+  const [older] = screenshotFixtures(t, 1);
+  const seen = await dispatchDirect(
+    {
+      requestId: 'direct-carry-2',
+      selection: { provider: 'gemini', model: 'gemini-3.7-flash' },
+      systemPrompt: 'system',
+      userPrompt: '<recent_transcript>\nUSER [attached 1 screenshot: re-sent here as earlier screenshot 1]: earlier\n</recent_transcript>\n\n[CURRENT REQUEST - HIGHEST AUTHORITY]\nwhat did I show you\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+      imagePaths: [],
+      historyImagePaths: [older],
+    },
+    { deniedScopes: ['transcript'] },
+  );
+  // The breadcrumb is stripped, so the image must go too — otherwise the model
+  // gets an unexplained picture of a stale screen and answers from it.
+  assert.doesNotMatch(seen.userPrompt, /recent_transcript|earlier screenshot/);
+  assert.deepEqual(seen.imagePaths, []);
+  assert.deepEqual(seen.chunks, ['ok'], 'and the request still answers');
+});
+
+test('private vision drops carried screenshots rather than failing a turn that attached none', async (t) => {
+  const [older] = screenshotFixtures(t, 1);
+  const seen = await dispatchDirect(
+    {
+      requestId: 'direct-carry-3',
+      selection: { provider: 'gemini', model: 'gemini-3.7-flash' },
+      systemPrompt: 'system',
+      userPrompt: '<recent_transcript>\nUSER [attached 1 screenshot: re-sent here as earlier screenshot 1]: earlier\n</recent_transcript>\n\n[CURRENT REQUEST - HIGHEST AUTHORITY]\nsummarize\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+      imagePaths: [],
+      historyImagePaths: [older],
+    },
+    { imagesAllowed: false },
+  );
+  assert.deepEqual(seen.imagePaths, []);
+  assert.deepEqual(seen.chunks, ['ok']);
+});
+
+test('a text-only model drops carried screenshots instead of failing the follow-up question', async (t) => {
+  const [older] = screenshotFixtures(t, 1);
+  const seen = await dispatchDirect({
+    requestId: 'direct-carry-4',
+    selection: { provider: 'deepseek', model: 'deepseek-chat' },
+    systemPrompt: 'system',
+    userPrompt: '[CURRENT REQUEST - HIGHEST AUTHORITY]\nsummarize\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+    imagePaths: [],
+    historyImagePaths: [older],
+  });
+  assert.deepEqual(seen.chunks, ['ok']);
+
+  // The current turn's OWN attachment still hard-fails on the same model.
+  await assert.rejects(
+    dispatchDirect({
+      requestId: 'direct-carry-5',
+      selection: { provider: 'deepseek', model: 'deepseek-chat' },
+      systemPrompt: 'system',
+      userPrompt: '[CURRENT REQUEST - HIGHEST AUTHORITY]\nread this\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+      imagePaths: [older],
+      historyImagePaths: [],
+    }),
+    /does not support image input/,
+  );
+});
+
+test('a carried screenshot the queue has already unlinked is skipped, not fatal', async (t) => {
+  const [current, older] = screenshotFixtures(t, 2);
+  fs.rmSync(older);
+  const seen = await dispatchDirect({
+    requestId: 'direct-carry-6',
+    selection: { provider: 'gemini', model: 'gemini-3.7-flash' },
+    systemPrompt: 'system',
+    userPrompt: '[CURRENT REQUEST - HIGHEST AUTHORITY]\nread this\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+    imagePaths: [current],
+    historyImagePaths: [older],
+  });
+  assert.deepEqual(seen.imagePaths, [current]);
+  assert.deepEqual(seen.chunks, ['ok']);
+});
+
+test('a transcribed screenshot reaches a later turn as TEXT, and its bytes are not re-sent', async (t) => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const [shot] = screenshotFixtures(t, 1);
+
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    currentRequest: 'what was the error code in the screenshot I sent?',
+    history: [
+      {
+        role: 'user',
+        content: 'Analyze the attached screenshot.',
+        imagePaths: [shot],
+        imageDescription: 'Errors on screen:\nerror LNK2019: unresolved external symbol _main',
+      },
+      { role: 'assistant', content: 'The link step failed.' },
+      { role: 'user', content: 'Which step failed?' },
+      { role: 'assistant', content: 'The link step.' },
+    ],
+  }));
+
+  // The transcription answers the same question for a fraction of the tokens,
+  // and unlike the image it survives a text-only model, a provider that may not
+  // receive images, and the file being unlinked. Bytes are for screens nothing
+  // has described yet.
+  assert.match(prepared.userPrompt, /\[screen attached that turn\] Errors on screen:/);
+  assert.match(prepared.userPrompt, /LNK2019/);
+  assert.deepEqual([...prepared.historyImagePaths], []);
+
+  // "Transcribed below" and "not included" are different things to a reader
+  // judging an answer: telling the model to disclaim a screen whose full text
+  // is directly underneath is worse than saying nothing.
+  assert.match(prepared.userPrompt, /USER \[attached 1 screenshot: transcribed below\]/);
+  assert.doesNotMatch(prepared.userPrompt, /not included in this request/);
+});
+
+test('an undescribed screenshot still falls back to carrying its bytes', async (t) => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const [described, undescribed] = screenshotFixtures(t, 2);
+
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    currentRequest: 'compare those two screens',
+    history: [
+      { role: 'user', content: 'First.', imagePaths: [described], imageDescription: 'a build log' },
+      { role: 'assistant', content: 'Seen.' },
+      { role: 'user', content: 'Second.', imagePaths: [undescribed] },
+      { role: 'assistant', content: 'Seen.' },
+    ],
+  }));
+
+  // Only the one nothing has transcribed costs image tokens.
+  assert.deepEqual([...prepared.historyImagePaths], [undescribed]);
+  assert.match(prepared.userPrompt, /USER \[attached 1 screenshot: transcribed below\]: First\./);
+  assert.match(prepared.userPrompt, /USER \[attached 1 screenshot: re-sent here as earlier screenshot 1\]: Second\./);
+});
+
+test('a MULTI-image turn is transcribed as one set, and none of its bytes are re-sent', async (t) => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  const shots = screenshotFixtures(t, 3);
+
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    currentRequest: 'what were those three screens showing?',
+    history: [
+      {
+        role: 'user',
+        content: 'Look at these.',
+        imagePaths: shots,
+        // ONE description for the SET. A single understand() call over N images
+        // returns one result about all of them, so per-image attribution was
+        // never honest — and it made a multi-image turn uncacheable in BOTH
+        // directions, since it could not be written it was never read either.
+        imageDescription: 'Three terminal windows; the middle one shows error LNK2019.',
+      },
+      { role: 'assistant', content: 'Seen.' },
+    ],
+  }));
+
+  assert.deepEqual([...prepared.historyImagePaths], [], 'three images of bytes replaced by one string');
+  assert.match(prepared.userPrompt, /USER \[attached 3 screenshots: transcribed below\]: Look at these\./);
+  assert.match(prepared.userPrompt, /\[screen attached that turn\] Three terminal windows/);
 });

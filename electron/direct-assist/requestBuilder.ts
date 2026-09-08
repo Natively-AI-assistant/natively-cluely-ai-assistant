@@ -3,6 +3,7 @@ import { DIRECT_ASSIST_PROVIDERS } from './types';
 import { getModelCapabilities } from '../llm/modelCapabilities';
 import type {
   DirectAssistHistoryTurn,
+  DirectAssistNormalizedHistoryTurn,
   DirectAssistReferenceFile,
   DirectAssistPageContext,
   DirectAssistPreparedPrompt,
@@ -328,7 +329,9 @@ export function detectRequestedFormat(currentRequest: string): string | null {
   return detectLatest(currentRequest, FORMAT_PATTERNS);
 }
 
-function freezeHistory(history: readonly DirectAssistHistoryTurn[] | undefined): readonly DirectAssistHistoryTurn[] {
+function freezeHistory(
+  history: readonly DirectAssistHistoryTurn[] | undefined,
+): readonly DirectAssistNormalizedHistoryTurn[] {
   const turns = Array.isArray(history) ? history : [];
   return Object.freeze(turns
     .filter((turn): turn is DirectAssistHistoryTurn => Boolean(
@@ -336,7 +339,81 @@ function freezeHistory(history: readonly DirectAssistHistoryTurn[] | undefined):
       && (turn.role === 'user' || turn.role === 'assistant')
       && typeof turn.content === 'string',
     ))
-    .map((turn) => Object.freeze({ role: turn.role, content: turn.content })));
+    .map((turn) => {
+      // Object.freeze is shallow, so the array has to be frozen in its own
+      // right — the rest of this file deep-freezes deliberately and a mutable
+      // array hanging off a "frozen" turn would be the one hole in it.
+      const imagePaths = Object.freeze(
+        (Array.isArray(turn.imagePaths) ? turn.imagePaths : [])
+          .filter((imagePath): imagePath is string => typeof imagePath === 'string' && Boolean(imagePath)),
+      );
+      // Default rather than require: a caller that knows nothing about evicted
+      // files (every test that builds history by hand, and the renderer) means
+      // "all of them are still here", not "none were ever attached". Never
+      // below imagePaths.length, or the prompt would claim fewer screenshots
+      // than it is actually sending.
+      const declared = typeof turn.imageCount === 'number' && Number.isFinite(turn.imageCount)
+        ? Math.max(0, Math.floor(turn.imageCount))
+        : imagePaths.length;
+      return Object.freeze({
+        role: turn.role,
+        content: turn.content,
+        imagePaths,
+        imageCount: Math.max(declared, imagePaths.length),
+        // One transcription for the whole set — see DirectAssistHistoryTurn.
+        imageDescription: typeof turn.imageDescription === 'string' ? turn.imageDescription.trim() : '',
+      });
+    }));
+}
+
+/** Which earlier screenshots this request will actually carry, and where each
+ *  one lands in the payload so the history block can name it.
+ *
+ *  PURE in (history, currentImageCount) by design: it is called once per
+ *  renderUserPrompt so the breadcrumbs always describe the CURRENT surviving
+ *  history, and once more after the drop loop to produce the dispatch list.
+ *  Recomputing instead of caching is what stops the two from disagreeing —
+ *  under budget pressure the drop loop sheds history turns (oldest first, and
+ *  for stt/screenshot requests history is the FIRST field it sheds), so a list
+ *  captured before the loop would dispatch images whose breadcrumb had just
+ *  been deleted. */
+interface CarriedHistoryImages {
+  /** Dispatch order, oldest turn first. Appended after the current turn's own. */
+  readonly paths: readonly string[];
+  /** History index -> 1-based positions within `paths` carried for that turn. */
+  readonly positionsByTurn: ReadonlyMap<number, readonly number[]>;
+}
+
+function selectCarriedHistoryImages(
+  history: readonly DirectAssistNormalizedHistoryTurn[],
+  currentImageCount: number,
+): CarriedHistoryImages {
+  const room = DIRECT_ASSIST_MAX_DISPATCH_IMAGES - currentImageCount;
+  if (room <= 0) return { paths: [], positionsByTurn: new Map() };
+  // Newest first so the most recent screen wins the last free slot; the result
+  // is reversed back to history order because that is the order the model reads
+  // the turns in, and numbering them any other way makes the breadcrumbs lie.
+  const picked: { turnIndex: number; path: string }[] = [];
+  for (let i = history.length - 1; i >= 0 && picked.length < room; i -= 1) {
+    // A transcribed turn does not need ANY of its bytes re-sent. The text
+    // answers the same questions for a fraction of the tokens, and unlike the
+    // image it survives a text-only model, a provider that may not receive
+    // images, and the file being unlinked. Bytes are the fallback for a turn
+    // nothing has transcribed yet.
+    if (history[i].imageDescription) continue;
+    const turnImages = history[i].imagePaths;
+    for (let j = turnImages.length - 1; j >= 0 && picked.length < room; j -= 1) {
+      picked.push({ turnIndex: i, path: turnImages[j] });
+    }
+  }
+  picked.reverse();
+  const positionsByTurn = new Map<number, number[]>();
+  picked.forEach((entry, index) => {
+    const positions = positionsByTurn.get(entry.turnIndex);
+    if (positions) positions.push(index + 1);
+    else positionsByTurn.set(entry.turnIndex, [index + 1]);
+  });
+  return { paths: picked.map((entry) => entry.path), positionsByTurn };
 }
 
 function freezePageContext(page: DirectAssistPageContext | null | undefined): DirectAssistPageContext | null {
@@ -456,15 +533,59 @@ function renderPage(page: DirectAssistPageContext | null): string {
   ].filter(Boolean).join('\n\n');
 }
 
-function renderHistory(history: readonly DirectAssistHistoryTurn[]): string {
-  return history.map((turn) => `${turn.role.toUpperCase()}: ${turn.content}`).join('\n\n');
+/** The prefix that binds a past turn to the screenshots it was sent with.
+ *  A screenshot that is NOT in this payload is still announced: telling the
+ *  model an image existed and is not here is what makes it answer "I can't see
+ *  that screenshot any more" instead of inventing what was in a picture it
+ *  never received. One wording covers every reason it is absent (the queue
+ *  unlinked the file, the payload cap was reached, the model takes no images),
+ *  because none of them changes what the model should do about it. */
+function historyTurnPrefix(
+  turn: DirectAssistNormalizedHistoryTurn,
+  positions: readonly number[],
+): string {
+  const role = turn.role.toUpperCase();
+  if (turn.imageCount <= 0) return `${role}: `;
+  // Transcribed, carried and absent are three different things to a reader
+  // judging an answer. Collapsing "transcribed below" into "not included" would
+  // tell the model to disclaim a screen whose full text is right underneath.
+  // A transcription covers the whole set, so nothing is absent when it exists.
+  const transcribed = Boolean(turn.imageDescription);
+  const absent = transcribed ? 0 : Math.max(0, turn.imageCount - positions.length);
+  const notes = [
+    positions.length ? `re-sent here as earlier screenshot ${positions.join(', ')}` : '',
+    transcribed ? 'transcribed below' : '',
+    absent > 0 ? `${absent} not included in this request` : '',
+  ].filter(Boolean).join('; ');
+  const noun = turn.imageCount === 1 ? 'screenshot' : 'screenshots';
+  return `${role} [attached ${turn.imageCount} ${noun}: ${notes}]: `;
+}
+
+/** The screenshots' text transcriptions for one turn, labelled so the model
+ *  reads them as an observation of the user's screen rather than as prose the
+ *  assistant once wrote. */
+function historyTurnScreenText(turn: DirectAssistNormalizedHistoryTurn): string {
+  return turn.imageDescription ? `[screen attached that turn] ${turn.imageDescription}` : '';
+}
+
+function renderHistory(
+  history: readonly DirectAssistNormalizedHistoryTurn[],
+  carried: CarriedHistoryImages,
+): string {
+  return history
+    .map((turn, index) => {
+      const line = `${historyTurnPrefix(turn, carried.positionsByTurn.get(index) ?? [])}${turn.content}`;
+      const screenText = historyTurnScreenText(turn);
+      return screenText ? `${line}\n${screenText}` : line;
+    })
+    .join('\n\n');
 }
 
 interface MutablePromptParts {
   manualContext: string;
   pageContext: string;
   referenceContext: string;
-  history: DirectAssistHistoryTurn[];
+  history: DirectAssistNormalizedHistoryTurn[];
   currentTurnSpeech: string;
   transcript: string;
   meetingTranscript: string;
@@ -475,9 +596,18 @@ function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptPart
     request.requestedLanguage ? `Programming language: ${request.requestedLanguage}` : '',
     request.requestedFormat ? `Response format: ${request.requestedFormat}` : '',
   ].filter(Boolean).join('\n');
-  const attachmentNotice = request.imagePaths.length
-    ? `${request.imagePaths.length} current image attachment${request.imagePaths.length === 1 ? '' : 's'} accompanies this request.`
-    : '';
+  // Recomputed here, not passed in: see selectCarriedHistoryImages.
+  const carried = selectCarriedHistoryImages(parts.history, request.imagePaths.length);
+  const attachmentNotice = [
+    request.imagePaths.length
+      ? `${request.imagePaths.length} current image attachment${request.imagePaths.length === 1 ? '' : 's'} accompanies this request.`
+      : '',
+    carried.paths.length
+      ? `${carried.paths.length} screenshot${carried.paths.length === 1 ? '' : 's'} from earlier turns follow${carried.paths.length === 1 ? 's' : ''} them, numbered "earlier screenshot 1"`
+        + `${carried.paths.length > 1 ? ` to "earlier screenshot ${carried.paths.length}"` : ''} in that order. `
+        + 'The recent transcript below names which turn each one came from.'
+      : '',
+  ].filter(Boolean).join(' ');
 
   return [
     request.skill ? scopedBlock('active_mode_custom_instructions', request.skill.instructions) : '',
@@ -486,7 +616,7 @@ function renderUserPrompt(request: DirectAssistRequest, parts: MutablePromptPart
     parts.pageContext ? scopedBlock('evidence', parts.pageContext, ' source_type="SCREEN_CONTEXT"') : '',
     attachmentNotice ? section('CURRENT ATTACHMENTS', attachmentNotice) : '',
     parts.referenceContext ? scopedBlock('reference_file', parts.referenceContext) : '',
-    parts.history.length ? scopedBlock('recent_transcript', renderHistory(parts.history)) : '',
+    parts.history.length ? scopedBlock('recent_transcript', renderHistory(parts.history, carried)) : '',
     parts.transcript ? scopedBlock('transcript', parts.transcript) : '',
     parts.currentTurnSpeech
       ? scopedBlock('transcript', `${DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER}\n${parts.currentTurnSpeech}`)
@@ -794,6 +924,12 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
     systemPrompt: DIRECT_ASSIST_SYSTEM_PROMPT,
     userPrompt,
     imagePaths: request.imagePaths,
+    // Off the SURVIVING history, not request.history: the loop above may have
+    // shed the very turns these came from, and an image with no breadcrumb is
+    // a picture of a stale screen the model cannot place.
+    historyImagePaths: Object.freeze(
+      selectCarriedHistoryImages(parts.history, request.imagePaths.length).paths,
+    ),
     trimmedFields: Object.freeze(trimmedFields),
     shortenedFields: Object.freeze(shortenedFields),
   });

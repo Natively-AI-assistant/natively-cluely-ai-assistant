@@ -42,6 +42,31 @@ export function getConversationState(sessionId: string): ConversationState | nul
   return store().get(sessionId) ?? null;
 }
 
+/**
+ * THE session key for V3 conversation state. Every writer and every reader must
+ * derive its key from here.
+ *
+ * It exists because they did not. Typed chat wrote the ring under
+ * `String(senderId)` (a webContents id) while what-to-answer read it under
+ * `meetingId ?? meetingMarker` — two namespaces, so a screenshot described in
+ * typed chat was invisible to the spoken surface and vice versa, and neither
+ * surface's history could ever contain the other's. The bug is invisible in
+ * isolation: each surface is internally consistent and passes its own tests.
+ *
+ * The meeting wins when there is one, because THAT is the conversation a user
+ * means; the sender/session id is only a fallback for chat outside a meeting.
+ * Prefixed so a meeting id can never collide with a sender id.
+ */
+export function resolveConversationSessionId(
+  meetingId: string | null | undefined,
+  fallback: string | number | null | undefined,
+): string {
+  const meeting = typeof meetingId === 'string' ? meetingId.trim() : '';
+  if (meeting) return `m:${meeting}`;
+  const key = fallback === null || fallback === undefined ? '' : String(fallback).trim();
+  return key ? `s:${key}` : 'engine';
+}
+
 export interface AdvanceTurnInput {
   sessionId: string;
   scope: EvidenceScope;
@@ -94,9 +119,18 @@ export function advanceConversationState(input: AdvanceTurnInput): ConversationS
  */
 export function recordAnswerSummary(
   sessionId: string, answerText: string, screenContext?: string,
+  /** Seeds state when the turn never went through orchestrate() — a legacy or
+   *  V3-off turn, whose answer would otherwise leave no antecedent at all.
+   *  Only passed by callers that HAVE a question: `appendTurn` refuses a
+   *  question-less turn, and seeding one with '' would create a permanently
+   *  unappendable state rather than fixing anything. */
+  question?: string,
 ): void {
   const s = store();
-  const cur = s.get(sessionId);
+  let cur = s.get(sessionId);
+  if (!cur && question?.trim()) {
+    cur = { previousQuestion: question.trim(), turns: [] } as unknown as ConversationState;
+  }
   if (!cur) return;
   const text = String(answerText ?? '');
   s.set(sessionId, {
