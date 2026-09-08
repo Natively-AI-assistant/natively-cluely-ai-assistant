@@ -6668,6 +6668,32 @@ export function initializeIpcHandlers(appState: AppState): void {
       // turn. Only DIRECT_ASSIST_MAX_IMAGES of them can ever be dispatched, so
       // walk newest-first and stop at that many — the same set
       // selectCarriedHistoryImages would pick.
+      // DESCRIPTIONS FIRST — a transcribed turn needs no bytes at all.
+      //
+      // selectCarriedHistoryImages skips every turn that has a description
+      // (text beats bytes), but the budget below was description-blind, so when
+      // history held more images than the budget and the NEWEST turns were
+      // already transcribed, the whole budget was spent validating images that
+      // would never be dispatched — and the older, untranscribed turn, the only
+      // one whose bytes were actually needed, arrived with no imagePaths and was
+      // silently uncarried. The comment claiming the two select "the same set"
+      // was only true when nothing was transcribed.
+      //
+      // Looked up on the renderer paths: the store keys on the FILE BYTES, so
+      // this is the same hash the canonical paths would produce, and it is a
+      // read-only cache probe — every actual dispatch still goes through the
+      // full validation below.
+      const describedByTurn = new Map<number, string>();
+      const screenStorePre = require('./services/screen/ScreenshotDescriptionStore') as
+        typeof import('./services/screen/ScreenshotDescriptionStore');
+      for (let i = rawTurns.length - 1; i >= 0; i -= 1) {
+        if (!rawTurns[i].imagePaths.length) continue;
+        try {
+          const described = screenStorePre.getDescriptionForImageSet(rawTurns[i].imagePaths);
+          if (described) describedByTurn.set(i, described);
+        } catch { /* a cache miss is the normal case */ }
+      }
+
       const validated = new Map<string, string | null>();
       // Free payload slots only: the current turn's own attachments always win
       // them, so anything beyond this could never be dispatched anyway.
@@ -6677,6 +6703,9 @@ export function initializeIpcHandlers(appState: AppState): void {
           : 0
       ));
       for (let i = rawTurns.length - 1; i >= 0 && validationBudget > 0; i -= 1) {
+        // Already transcribed: its bytes are never carried, so spending budget
+        // here is what starved the older turn that actually needed it.
+        if (describedByTurn.has(i)) continue;
         const turnImagePaths = rawTurns[i].imagePaths;
         for (let j = turnImagePaths.length - 1; j >= 0 && validationBudget > 0; j -= 1) {
           const rendererPath = turnImagePaths[j];
@@ -6694,13 +6723,11 @@ export function initializeIpcHandlers(appState: AppState): void {
         }
       }
 
-      // The shared transcription cache, populated by the main live path. Direct
-      // Assist never describes a screen itself, so this is opportunistic reuse:
-      // a screenshot the live path has already transcribed reaches a Direct
-      // follow-up as text, which is cheaper than the bytes and outlives them.
-      const screenStore = require('./services/screen/ScreenshotDescriptionStore') as
-        typeof import('./services/screen/ScreenshotDescriptionStore');
-      history = rawTurns.map((turn) => {
+      // Descriptions come from the pre-pass above (screenStorePre), which is the
+      // shared transcription cache the main live path populates: a screenshot it
+      // has already transcribed reaches a Direct follow-up as text, cheaper than
+      // the bytes and outliving them.
+      history = rawTurns.map((turn, index) => {
         const canonicalPaths = turn.imagePaths
           .map((rendererPath) => validated.get(rendererPath) ?? null)
           .filter((canonicalPath): canonicalPath is string => Boolean(canonicalPath));
@@ -6711,15 +6738,8 @@ export function initializeIpcHandlers(appState: AppState): void {
           imageCount: turn.imagePaths.length,
           // ONE lookup per turn, keyed on the turn's whole attachment set —
           // which is what a description actually describes.
-          imageDescription: (() => {
-            try {
-              return canonicalPaths.length
-                ? screenStore.getDescriptionForImageSet(canonicalPaths) ?? ''
-                : '';
-            } catch {
-              return '';
-            }
-          })(),
+          // Reuses the pre-pass result rather than hashing the same files again.
+          imageDescription: describedByTurn.get(index) ?? '',
         });
       });
       Object.freeze(history);

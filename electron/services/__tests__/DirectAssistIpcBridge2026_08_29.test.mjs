@@ -305,7 +305,12 @@ test('carried screenshots travel as their own dispatch field, never merged into 
   // scope is denied — merging the images in the builder would leave them behind.
   assert.match(builder, /historyImagePaths: Object\.freeze\(\s*selectCarriedHistoryImages\(parts\.history, request\.imagePaths\.length\)\.paths,\s*\)/);
   assert.match(service, /historyImagePaths: prepared\.historyImagePaths/);
-  assert.match(llm, /deniedScopes\.includes\('transcript'\) \|\| deniedScopes\.includes\('screenshots'\)[\s\S]{0,120}carriedImagePaths = \[\]/);
+  // A denied transcript scope strips the breadcrumb, so the images go with it.
+  assert.match(llm, /if \(deniedScopes\.includes\('transcript'\)\) \{[\s\S]{0,80}carriedImagePaths = \[\];/);
+  // And the screenshots scope is re-evaluated with the carried images IN the
+  // set — scopesForPayload only tags 'screenshots' when imagePaths is non-empty,
+  // so the current-turn decision could not see them.
+  assert.match(llm, /const deniedWithCarried = this\.getDeniedOutboundScopes\(\s*\n\s*request\.userPrompt, \[\.\.\.imagePaths, \.\.\.carriedImagePaths\], directScopes,/);
 });
 
 test('Direct Assist transcribes its own screenshot AFTER the answer, never before it', () => {
@@ -470,4 +475,19 @@ test('directAssistFallbackEnabled really defaults to true and really honours an 
   } finally {
     fs.rmSync(userData, { recursive: true, force: true });
   }
+});
+
+test('a transcribed history turn does not consume the image-validation budget', () => {
+  // selectCarriedHistoryImages skips every turn that has a description, but the
+  // budget was description-blind. With more images than the budget and the
+  // NEWEST turns transcribed, the whole budget went on images that would never
+  // be dispatched, and the older untranscribed turn — the only one whose bytes
+  // were needed — arrived with no imagePaths and was silently uncarried.
+  const preAt = normalizeBlock.indexOf('const describedByTurn = new Map<number, string>()');
+  const budgetAt = normalizeBlock.indexOf('let validationBudget');
+  assert.ok(preAt >= 0, 'the description pre-pass must exist');
+  assert.ok(preAt < budgetAt, 'descriptions must be resolved BEFORE the budget is spent');
+  assert.match(normalizeBlock, /if \(describedByTurn\.has\(i\)\) continue;/);
+  // And the per-turn record reuses that result rather than hashing again.
+  assert.match(normalizeBlock, /imageDescription: describedByTurn\.get\(index\) \?\? '',/);
 });
