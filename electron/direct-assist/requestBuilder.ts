@@ -104,12 +104,18 @@ function normalizeReferenceFiles(
 ): DirectAssistReferenceFile[] {
   if (!Array.isArray(files)) return [];
   return files
-    .map((file) => Object.freeze({
-      fileName: typeof file?.fileName === 'string' && file.fileName.trim()
-        ? file.fileName.trim()
-        : 'reference file',
-      content: typeof file?.content === 'string' ? file.content.trim() : '',
-    }))
+    .map((file) => {
+      const content = typeof file?.content === 'string' ? file.content.trim() : '';
+      return Object.freeze({
+        fileName: typeof file?.fileName === 'string' && file.fileName.trim()
+          ? file.fileName.trim()
+          : 'reference file',
+        content,
+        totalChars: typeof (file as { totalChars?: unknown })?.totalChars === 'number'
+          ? (file as { totalChars: number }).totalChars
+          : content.length,
+      });
+    })
     .filter((file) => file.content.length > 0);
 }
 
@@ -162,7 +168,19 @@ export function allocateDirectAssistReferenceFiles(
   files: readonly { fileName?: unknown; content?: unknown }[],
   maxChars: number,
 ): DirectAssistReferenceAllocation {
-  const usable = normalizeReferenceFiles(files);
+  return allocateNormalizedReferenceFiles(normalizeReferenceFiles(files), maxChars);
+}
+
+/**
+ * The allocator proper. Takes files that are ALREADY normalized, because
+ * prepareDirectAssistPrompt calls this up to eleven times per request while
+ * fitting the budget, and re-running `.trim()` over every attachment on each
+ * pass is work the Electron main process pays for with UI latency.
+ */
+function allocateNormalizedReferenceFiles(
+  usable: readonly DirectAssistReferenceFile[],
+  maxChars: number,
+): DirectAssistReferenceAllocation {
   const totalFiles = usable.length;
   const empty = Object.freeze({ text: '', totalFiles, includedFiles: 0, truncatedFiles: 0 });
   if (!totalFiles || !Number.isFinite(maxChars) || maxChars <= 0) return empty;
@@ -170,19 +188,24 @@ export function allocateDirectAssistReferenceFiles(
   // Every section costs its header, and every gap costs a separator. Shed
   // trailing files only when even MIN_REFERENCE_BODY_CHARS each cannot fit —
   // with any realistic budget this loop never runs.
-  const fixedCost = (list: readonly DirectAssistReferenceFile[]): number =>
-    list.reduce((sum, file) => sum + referenceSectionHeader(file.fileName).length, 0)
-    + REFERENCE_SECTION_SEPARATOR.length * Math.max(0, list.length - 1);
-  const worstCaseMarker = (list: readonly DirectAssistReferenceFile[]): number =>
-    list.reduce((max, file) => Math.max(max, truncationMarker(file.fileName, file.content.length).length), 0);
+  const worstCaseMarker = usable.reduce(
+    (max, file) => Math.max(max, truncationMarker(file.fileName, file.totalChars ?? file.content.length).length),
+    0,
+  );
+  const perFileFloor = MIN_REFERENCE_BODY_CHARS + worstCaseMarker;
+  // Shed the tail in ONE pass, carrying a running cost, rather than recomputing
+  // the whole fixed cost per removal — that was quadratic in the file count.
   const included = [...usable];
-  const perFileFloor = MIN_REFERENCE_BODY_CHARS + worstCaseMarker(usable);
-  while (included.length > 1
-    && fixedCost(included) + included.length * perFileFloor > maxChars) {
-    included.pop();
+  let fixedCost = included.reduce(
+    (sum, file) => sum + referenceSectionHeader(file.fileName).length,
+    REFERENCE_SECTION_SEPARATOR.length * Math.max(0, included.length - 1),
+  );
+  while (included.length > 1 && fixedCost + included.length * perFileFloor > maxChars) {
+    const dropped = included.pop()!;
+    fixedCost -= referenceSectionHeader(dropped.fileName).length + REFERENCE_SECTION_SEPARATOR.length;
   }
 
-  const bodyBudget = maxChars - fixedCost(included);
+  const bodyBudget = maxChars - fixedCost;
   if (bodyBudget <= 0) return empty;
 
   const take = maxMinShares(included.map((file) => file.content.length), bodyBudget);
@@ -197,7 +220,7 @@ export function allocateDirectAssistReferenceFiles(
     }
     // The marker's length depends only on the file name and its total size,
     // both known before slicing, so the section still fits its allocation.
-    const marker = truncationMarker(file.fileName, file.content.length);
+    const marker = truncationMarker(file.fileName, file.totalChars ?? file.content.length);
     const room = allocated - marker.length;
     if (room < MIN_REFERENCE_BODY_CHARS) return; // reported as omitted, not stubbed
     truncatedFiles += 1;
@@ -261,6 +284,36 @@ function truncateToFit(text: string, maxChars: number): string {
   return room > MIN_REFERENCE_BODY_CHARS
     ? `${text.slice(0, room)}${REFERENCE_CONTEXT_TRUNCATION_MARKER}`
     : '';
+}
+
+/**
+ * Normalize the attached files once, and bound what the allocator can be asked
+ * to walk. Neither bound changes a single character of output:
+ *  - no one file can ever be given more than the whole prompt budget, so
+ *    keeping more than `maxChars` of any file is content the allocator would
+ *    never reach;
+ *  - past `maxChars / MIN_REFERENCE_BODY_CHARS` files the allocator sheds the
+ *    tail anyway, because there is no longer a useful share left to give.
+ *
+ * Without them a mode holding many multi-megabyte attachments made every Direct
+ * Assist request re-walk all of it on the Electron main process.
+ */
+function boundReferenceFiles(
+  files: readonly { fileName?: unknown; content?: unknown }[] | undefined,
+  maxChars: number,
+): readonly DirectAssistReferenceFile[] {
+  const maxFiles = Math.max(1, Math.floor(maxChars / MIN_REFERENCE_BODY_CHARS));
+  const bounded = normalizeReferenceFiles(files)
+    .slice(0, maxFiles)
+    .map((file) => (file.content.length <= maxChars
+      ? file
+      : Object.freeze({
+          fileName: file.fileName,
+          content: file.content.slice(0, maxChars),
+          // The bound must not change what the TRUNCATED notice tells the model.
+          totalChars: file.totalChars ?? file.content.length,
+        })));
+  return Object.freeze(bounded);
 }
 
 export function detectRequestedLanguage(currentRequest: string): string | null {
@@ -361,7 +414,7 @@ export function buildDirectAssistRequest(input: DirectAssistRequestInput): Direc
     skill,
     manualContext: typeof input.manualContext === 'string' ? input.manualContext : '',
     referenceContext: typeof input.referenceContext === 'string' ? input.referenceContext : '',
-    referenceFiles: Object.freeze(normalizeReferenceFiles(input.referenceFiles)),
+    referenceFiles: boundReferenceFiles(input.referenceFiles, maxContextChars),
     pageContext: freezePageContext(input.pageContext),
     history: freezeHistory(input.history),
     transcript: typeof input.transcript === 'string' ? input.transcript : '',
@@ -573,15 +626,18 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
     const referenceShare = fairReferenceShare < MIN_SHRUNK_FIELD_CHARS ? referenceWant : fairReferenceShare;
     const meetingShare = fairMeetingShare < MIN_SHRUNK_FIELD_CHARS ? meetingWant : fairMeetingShare;
     initialReference = request.referenceFiles.length
-      ? allocateDirectAssistReferenceFiles(request.referenceFiles, referenceShare)
+      ? allocateNormalizedReferenceFiles(request.referenceFiles, referenceShare)
       : null;
     parts.referenceContext = initialReference
       ? initialReference.text
       : truncateToFit(request.referenceContext, referenceShare);
     parts.meetingTranscript = tailTranscriptToFit(request.meetingTranscript, meetingShare);
-    // Nothing was held back — an overflow here is not an escaping overshoot and
-    // re-aiming cannot help, so report it as fitting and let the drop order run.
-    if (referenceShare >= referenceWant && meetingShare >= meetingWant) return 0;
+    // ALWAYS measured against the rendered prompt, never against the raw share.
+    // Returning early when both fields fit by raw character count skipped the
+    // one case escaping actually bites: content that fits unescaped and does
+    // not once `<`, `>` and `&` are expanded. The drop-order loop would then
+    // resolve it, and for a typed request that means losing the meeting
+    // transcript to markup in an unrelated attachment.
     return renderUserPrompt(request, parts).length - request.maxContextChars;
   };
 
@@ -601,7 +657,11 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
   let fittingBudget = 0;
   let overflowingBudget = sharedBudget + 1;
   let budget = sharedBudget;
-  for (let attempt = 0; attempt < SHARED_BUDGET_ATTEMPTS; attempt += 1) {
+  // With `sharedBudget <= 0` the prompt is already over without either field,
+  // so shrinking them cannot fix it — leave them whole and let the drop-order
+  // loop own it, rather than emptying two fields that were not the cause.
+  const attempts = sharedBudget > 0 ? SHARED_BUDGET_ATTEMPTS : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const overflow = applySharedBudget(budget);
     if (overflow <= 0) {
       fittingBudget = budget;
@@ -657,7 +717,7 @@ export function prepareDirectAssistPrompt(input: DirectAssistRequestInput | Dire
   const shrink = (field: 'referenceContext' | 'meetingTranscript', target: number): string => {
     if (field === 'meetingTranscript') return tailTranscriptToFit(request.meetingTranscript, target);
     return request.referenceFiles.length
-      ? allocateDirectAssistReferenceFiles(request.referenceFiles, target).text
+      ? allocateNormalizedReferenceFiles(request.referenceFiles, target).text
       : truncateToFit(request.referenceContext, target);
   };
 

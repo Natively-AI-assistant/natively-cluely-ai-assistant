@@ -34,6 +34,10 @@ export interface DirectAssistSelection {
 export interface DirectAssistReferenceFile {
   readonly fileName: string;
   readonly content: string;
+  /** The file's true size, which survives the processing bound applied before
+   *  allocation. The TRUNCATED notice quotes it, and quoting the bounded length
+   *  instead would tell the model a smaller file was cut than actually was. */
+  readonly totalChars?: number;
 }
 
 export interface DirectAssistSkill {

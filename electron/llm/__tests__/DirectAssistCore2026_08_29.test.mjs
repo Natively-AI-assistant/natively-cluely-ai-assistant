@@ -1117,3 +1117,67 @@ function screenshotFixtures(t, count) {
     return file;
   });
 }
+
+test('content that fits raw but not once escaped is re-aimed, not paid for by the transcript', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  // Both fields fit by RAW character count, so the shared-budget pass used to
+  // report "fits" without ever rendering. Escaping then pushed the real prompt
+  // over, and the drop-order loop resolved it the only way it can for a typed
+  // request: by taking the meeting transcript — over markup in an attachment
+  // that has nothing to do with the question.
+  const angly = '<a href="x">&amp;</a> '.repeat(1_400);   // ~30k raw, ~2x escaped
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    source: 'typed',
+    referenceFiles: [{ fileName: 'markup.md', content: angly }],
+    meetingTranscript: '[INTERVIEWER]: the launch codeword is ORCHID-77.',
+    maxContextChars: 40_000,
+  }));
+
+  assert.ok(angly.length < 40_000, 'the fixture must fit unescaped, or it tests the wrong branch');
+  assert.deepEqual(prepared.trimmedFields, []);
+  assert.match(prepared.userPrompt, /ORCHID-77/, 'the transcript must not pay for the escaping');
+  assert.match(prepared.userPrompt, /# markup\.md/);
+  assert.ok(
+    prepared.userPrompt.length <= 40_000,
+    `escaped prompt must respect the budget, was ${prepared.userPrompt.length}`,
+  );
+});
+
+test('a mode with many large attachments is bounded before any fitting work', async () => {
+  const { prepareDirectAssistPrompt, buildDirectAssistRequest } = await loadDirectAssist();
+  // 400 files x 1 MB. Unbounded, prompt fitting re-walked all 400 MB on the
+  // main process for every request. Neither bound can change the output: no one
+  // file can be given more than the budget, and past budget/MIN_REFERENCE_BODY
+  // files there is no useful share left to hand out.
+  const many = Array.from({ length: 400 }, (_, i) => ({
+    fileName: `bulk-${i}.md`,
+    content: `FACT-${i}: value ${i}. ${'z'.repeat(1_000_000)}`,
+  }));
+  const request = buildDirectAssistRequest(baseInput({ referenceFiles: many }));
+  assert.ok(request.referenceFiles.length <= 320, `kept ${request.referenceFiles.length} files`);
+  for (const file of request.referenceFiles) {
+    assert.ok(file.content.length <= request.maxContextChars, `${file.fileName} kept ${file.content.length} chars`);
+  }
+
+  const started = Date.now();
+  const prepared = prepareDirectAssistPrompt(baseInput({ referenceFiles: many }));
+  const elapsed = Date.now() - started;
+  assert.ok(prepared.userPrompt.length <= 64_000);
+  assert.deepEqual(prepared.shortenedFields, ['referenceContext']);
+  assert.match(prepared.userPrompt, /# bulk-0\.md/, 'the first file still arrives');
+  assert.ok(elapsed < 4_000, `prompt fitting took ${elapsed}ms for 400 x 1MB attachments`);
+});
+
+test('the TRUNCATED notice quotes the file\'s real size, not the size after the processing bound', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  // The bound keeps at most one budget's worth of any file. If the notice then
+  // quoted the BOUNDED length it would tell the model a 900 KB attachment was
+  // 64 000 characters long — understating what is missing, which is the exact
+  // thing the notice exists to prevent.
+  const real = 'Z'.repeat(900_000);
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    referenceFiles: [{ fileName: 'huge.md', content: real }],
+  }));
+  assert.match(prepared.userPrompt, new RegExp(`The file is ${real.length} characters long`));
+  assert.doesNotMatch(prepared.userPrompt, /The file is 64000 characters long/);
+});
