@@ -79,7 +79,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Direct Assist</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Answers now carry the last three minutes of what was actually said, plus the full text of every reference file you've attached — handed to the model as-is, with no retrieval in between. If something has to be dropped to fit, the question card says so. Off by default — turn it on in AI Providers.
+                                    Sends the last three minutes of conversation and your full reference files straight to the model, skipping retrieval entirely. Off by default — turn it on in AI Providers.
                                 </p>
                             </div>
                         </div>
@@ -94,7 +94,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Bring Your Own Reranker</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Settings › Reranker now lets you choose the model that decides which of your material an answer is built from — hosted through Jina AI or OpenRouter, or run locally. Models install straight from Hugging Face with no extension to stage, and each one is tried on a real query before it goes active.
+                                    Pick the model that decides which of your material an answer is built from — hosted through Jina AI or OpenRouter, or run locally. Installs straight from Hugging Face in Settings › Reranker.
                                 </p>
                             </div>
                         </div>
@@ -109,7 +109,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Providers That Fail Over</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Picking your own provider used to mean a single attempt — one that went quiet instead of failing was never noticed until the whole answer timed out. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or race a second copy of themselves when there is no spare. Local models are left out on purpose, so nothing leaves your machine.
+                                    A provider that stalled instead of failing went unnoticed until the whole answer timed out. OpenAI, Claude, DeepSeek, LiteLLM, NVIDIA NIM and custom endpoints now switch to a spare, or retry in parallel. Local models are untouched.
                                 </p>
                             </div>
                         </div>
@@ -124,7 +124,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Lighter and Faster</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    Every window was quietly loading the whole application — the small overlay toggle was starting up the Markdown and maths renderers just to draw a button. Memory use is down by roughly a quarter, windows open faster, and a local reranker no longer reserves gigabytes it never uses.
+                                    Every window was loading the whole app — the tiny overlay toggle started the Markdown and maths renderers just to draw a button. Memory use is down about a quarter, and windows open faster.
                                 </p>
                             </div>
                         </div>
@@ -139,7 +139,7 @@ export const AboutSection: React.FC<AboutSectionProps> = () => {
                             <div>
                                 <h5 className="text-sm font-bold text-text-primary mb-1">Choose Your Embedding Model</h5>
                                 <p className="text-xs text-text-secondary leading-relaxed">
-                                    How well Natively finds your material sets the ceiling on every answer, and until now that model was invisible. Settings › Embeddings gives it a panel — Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint — with its vector width measured from a real request rather than taken on trust, and a Test that sends one live call.
+                                    Settings › Embeddings gives retrieval its own panel — Gemini, OpenAI, Voyage AI, OpenRouter, Ollama or any OpenAI-compatible endpoint — with a Test that sends one live request.
                                 </p>
                             </div>
                         </div>
