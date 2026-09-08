@@ -1615,8 +1615,26 @@ test('a ladder-ineligible selection gets exactly one rung', async () => {
   assert.equal(rungs[0].provider, 'codex-cli');
 });
 
+// directFallbackCandidates() never structurally yields codex-cli/curl/deepseek,
+// so a naive absence assertion against the real candidate list would still
+// pass with the DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS / image-capability
+// guards inside eligible() deleted outright — false assurance. Shadowing
+// directFallbackCandidates (same technique as the isProviderDisabled shadow
+// above) forces the candidates the guard is actually supposed to reject to
+// reach eligible(), so the assertion depends on the guard, not on the
+// candidate list omitting them.
 test('codex-cli and curl never appear as fallback rungs', async () => {
-  const rungs = rungCaller()(directAssistTextRequest);
+  const rungs = rungCaller({
+    directFallbackCandidates: () => [
+      { provider: 'codex-cli', model: 'gpt-5' },
+      { provider: 'curl', model: 'curl-1' },
+    ],
+    // directProviderHasCredential's switch has no case for codex-cli/curl and
+    // defaults to false, which would ALSO exclude them and mask the guard
+    // under test. Force credentials "present" so the only thing that can
+    // still remove these two is DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.
+    directProviderHasCredential: () => true,
+  })(directAssistTextRequest);
   assert.ok(!rungs.some((r) => r.isFallback && (r.provider === 'codex-cli' || r.provider === 'curl')));
 });
 
@@ -1626,8 +1644,42 @@ test('a disabled provider family is absent, not merely refused', async () => {
 });
 
 test('an image request drops providers that cannot take images', async () => {
-  const rungs = rungCaller()({ ...directAssistTextRequest, imagePaths: ['/tmp/shot.png'] });
+  const rungs = rungCaller({
+    directFallbackCandidates: () => [{ provider: 'deepseek', model: 'deepseek-chat' }],
+    // deepseek has no client stubbed (_deepseekClient is unset), so
+    // directProviderHasCredential would ALSO exclude it and mask the guard
+    // under test. Force credentials "present" so the only thing that can
+    // still remove it is directSelectionSupportsImages's deepseek: false case.
+    directProviderHasCredential: () => true,
+  })({ ...directAssistTextRequest, imagePaths: ['/tmp/shot.png'] });
   assert.ok(!rungs.some((r) => r.provider === 'deepseek'));
+});
+
+// The single area flagged for the hardest review scrutiny: private_vision.
+// assertOutboundImagesAllowed is shadowed to throw exactly the way the real
+// VisionPolicyError throw does on a refused cloud provider, proving eligible()
+// actually catches it and drops the rung — a LOCAL rung (ollama) is exempt
+// from the same call in the real code and must survive.
+test('a privacy refusal on images removes cloud rungs but spares a local one', async () => {
+  const rungs = rungCaller({
+    useOllama: true,
+    directFallbackCandidates: () => [
+      { provider: 'gemini', model: 'gemini-3.8-flash' },
+      { provider: 'ollama', model: 'llama3' },
+    ],
+    // Capability is not what this test is about — always allow images so the
+    // only thing that can remove a rung is the privacy guard below.
+    directSelectionSupportsImages: () => true,
+    assertOutboundImagesAllowed: (provider, hasImages) => {
+      if (hasImages && provider !== 'ollama') {
+        const err = new Error('private_vision refuses this provider');
+        err.name = 'VisionPolicyError';
+        throw err;
+      }
+    },
+  })({ ...directAssistTextRequest, imagePaths: ['/tmp/shot.png'] });
+  assert.ok(!rungs.some((r) => r.provider === 'gemini'));
+  assert.ok(rungs.some((r) => r.provider === 'ollama'));
 });
 
 test('fallback disabled yields the selected rung alone', async () => {
