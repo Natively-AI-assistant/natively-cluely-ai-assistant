@@ -25,10 +25,17 @@ import { shouldReviveExhaustedReconnect, DEFAULT_REVIVE_COOLDOWN_MS } from './st
 const SONIOX_WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
-// Cap reconnect attempts so a flapping network can't drive an indefinite WS
+// Cap reconnect attempts so a flapping network can't drive a tight WS
 // open-loop against Soniox (storm risk + per-key rate-limit risk). After the
 // cap, emit 'error' so the orchestrator can surface a UI prompt; a
 // user-triggered restart via stop()/start() resets the counter to 0.
+// NOTE: since the resumed-audio revival below, the cap bounds each BURST,
+// not the session: an exhausted-but-active session that keeps receiving
+// audio re-arms the ladder once per DEFAULT_REVIVE_COOLDOWN_MS, so a
+// permanently dead endpoint sees ~11 handshakes per ~3.5 min for the life
+// of the meeting. That is deliberate and matches NativelyProSTT, which
+// retries indefinitely at its 30s ceiling on the same 'streaming STT is
+// meeting-critical' rationale.
 const RECONNECT_MAX_ATTEMPTS = 10;
 const KEEPALIVE_INTERVAL_MS = 5000;
 

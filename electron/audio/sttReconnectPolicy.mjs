@@ -21,7 +21,8 @@
  * exhaustion, so a genuinely-dead endpoint can't be re-stormed on every chunk.
  *
  * These functions are pure so they can be unit-tested without a WebSocket,
- * network, or Electron. See sttReconnectPolicy.test.mjs.
+ * network, or Electron. See __tests__/SttReconnectRevival.test.mjs (decision
+ * table) and __tests__/SonioxReviveWiring.test.mjs (wiring into write()).
  */
 
 /** Default gap after exhaustion before resumed audio may trigger a revival. */
