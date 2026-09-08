@@ -69,6 +69,7 @@ export class DirectAssistService {
         provider: prepared.request.selection.provider,
         model: prepared.request.selection.model,
         trimmedFields: prepared.trimmedFields,
+        shortenedFields: prepared.shortenedFields,
       });
 
       // This is the only transport call in the service. There is no retry,

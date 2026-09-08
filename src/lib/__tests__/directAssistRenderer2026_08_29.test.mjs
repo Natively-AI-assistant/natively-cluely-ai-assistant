@@ -220,3 +220,22 @@ test('Direct history is appended only in the successful done branch', () => {
   assert.doesNotMatch(listener.slice(errorStart), /directAssistHistoryRef\.current\s*=/);
   assert.match(interfaceSource, /directAssistHistoryRef\.current = \[\]/, 'explicit chat reset must clear Direct history');
 });
+
+test('the question card distinguishes context that was shortened from context that was dropped', () => {
+  // "reference files omitted" and "reference files shortened to fit" mean very
+  // different things to someone judging whether an answer used their document.
+  assert.match(interfaceSource, /shortenedFields\?: string\[\]/);
+  assert.match(
+    interfaceSource,
+    /type: 'start';[^}]*trimmedFields: string\[\]; shortenedFields\?: string\[\]/,
+  );
+  const notice = section("{t('Context trimmed')}", '</div>');
+  assert.match(notice, /msg\.shortenedFields/);
+  assert.match(notice, /shortened to fit/);
+  assert.match(notice, /omitted \(over context limit\)/);
+  assert.match(
+    interfaceSource,
+    /event\.trimmedFields\?\.length \|\| event\.shortenedFields\?\.length/,
+    'a start event carrying only shortenedFields must still stamp the card',
+  );
+});
