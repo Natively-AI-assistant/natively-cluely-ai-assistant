@@ -369,9 +369,9 @@ today; `voyage-4` window 32,000 tokens (Voyage truncates silently at it — a
 | 4, 5 — semantic chunking | **Already implemented**, measured. Reuse. |
 | 8, 9 — durable job system | Exists for meetings (`embedding_queue`). **Missing for documents.** |
 | 10 — idempotency/dedup | **Already implemented** (content hash + space + chunker version). |
-| 11, 35 — cross-user fairness | **Not applicable** — no server-side ingestion. Server rate limiter already isolates keys. |
-| 12, 13 — concurrency/token limits | Partial: bounded batches yes, token-aware and cross-file no. → GAP-3, GAP-4 |
-| 14 — adaptive concurrency | Not present. Low priority given per-key rate limiting. |
+| 11, 35 — cross-user fairness | **Was wrong in this audit; now implemented.** The server limiter isolates keys by REQUEST count (120/min), and the providers meter TOKENS account-wide — so one key's large rerank could still drain the shared minute-budget and 429 everyone else. Closed by the per-route token limiter (`lib/tokenLimiter.js`). |
+| 12, 13 — concurrency/token limits | Client: bounded batches + cross-file gate (GAP-3/4, done). Server: outbound traffic is now token-aware per route (`lib/tokenLimiter.js`). |
+| 14 — adaptive concurrency | Not present. Lower priority now that outbound traffic is token-paced per route rather than only request-capped. |
 | 15, 16 — retries/breaker | **Already implemented** both sides. |
 | 17, 18 — large files | Works; capped. GAP-1 makes large files *silently partial*. |
 | 19 — progress UI | Blocked on GAP-5 (no durable embedded-count). |

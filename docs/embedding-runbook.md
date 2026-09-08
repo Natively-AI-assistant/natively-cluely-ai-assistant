@@ -70,6 +70,50 @@ Server: `OPENROUTER_API_KEY` (**required**), `OPENROUTER_BASE_URL`,
 `OPENROUTER_TIMEOUT_MS`, `VOYAGE_INPUT_CHAR_CAP`, `RERANK_CHAR_CAP`,
 `RERANK_TOTAL_CHAR_BUDGET`, `RATE_LIMIT_MAX`.
 
+Outbound token budgets: `VOYAGE_DIRECT_TPM` (3,000,000), `OPENROUTER_TPM`
+(8,000,000), `VOYAGE_PER_KEY_SHARE` (0.5), `VOYAGE_LIMITER_WAIT_MS` (15,000).
+
+## Outbound token limiter
+
+`RATE_LIMIT_MAX` caps **requests** per key (120/min). The providers cap
+**tokens**, account-wide. Only the first was enforced, which is why a rerank of
+58 documents could 429 in 700ms while 50 and 60 succeeded — nothing knew how much
+a request was about to spend. `lib/tokenLimiter.js` gives each route a token
+bucket and reserves against it before every upstream call.
+
+**`OPENROUTER_TPM` is derived from measurement** (~12,000,000/min observed);
+the default sits under it, because a limiter set AT a ceiling still lets bursts
+reach it.
+
+**`VOYAGE_DIRECT_TPM` IS A GUESS.** Voyage publishes rate limits only behind an
+account login and they vary by tier. Tune it from evidence:
+
+    curl -H "x-admin-secret: $ADMIN_SECRET" $API/admin/health-detail \
+      | jq .embedding.managed.outbound_budget
+
+* `utilisation` near 1.0 with **no** upstream 429s → the ceiling is higher than
+  configured. Raise it.
+* Upstream 429s (`provider_rate_limited` in logs) while utilisation is below 1.0
+  → the real ceiling is lower. Lower it.
+* `refusedDeadline` rising → clients are being shed by **us**. They receive
+  `429 outbound_budget_exhausted`, which is retryable and carries a Retry-After.
+* `refusedProbe` rising is **normal and not shedding** — it counts the
+  non-blocking "budget right now?" question the route loop asks each route, and
+  those usually end in a successful failover to the other route.
+* `waitedMs / waited` is the latency the pacing costs, in ms per waiting request.
+
+A squeeze on one route is a **failover**, not an error: the loop asks each route
+without waiting, and only waits when every route is dry. `VOYAGE_LIMITER_WAIT_MS`
+bounds that wait and must stay below the desktop client's 25s request timeout —
+waiting past it spends budget on a response nobody is listening for.
+
+One worst-case rerank is **2,000,000 tokens** (`MAX_SINGLE_REQUEST_TOKENS`: the
+estimator charges the query once per document, so a capped query costs 200x).
+The limiter raises a key's share to admit one of those; if it could not, such a
+request would wait out its whole deadline for room nothing could free. If you
+lower `VOYAGE_DIRECT_TPM` below that, those reranks are refused outright and the
+server logs it loudly at startup of the first request on that route.
+
 Client: `NATIVELY_MODE_INDEX_EMBED_BATCH` (100, clamped to the provider's 32),
 `..._LOCAL` (16 — higher SIGTRAPs the ONNX arena), `..._BATCH_CHARS` (24,000),
 `..._MAX_CONCURRENT_FILES` (2), `..._BATCH_RETRIES` (2), `NATIVELY_API_URL`.
@@ -82,6 +126,9 @@ Client: `NATIVELY_MODE_INDEX_EMBED_BATCH` (100, clamped to the provider's 32),
    the committed copy and reports a false green while a new lib is untracked.
 3. Migrations applied (015 is current; the Voyage work added none).
 4. After deploy, confirm `embedding.managed.configured: true`.
+5. Watch `embedding.managed.outbound_budget` for a day and tune
+   `VOYAGE_DIRECT_TPM` per the section above — the shipped default is a
+   conservative guess, not this account's measured ceiling.
 
 ## Cost
 
