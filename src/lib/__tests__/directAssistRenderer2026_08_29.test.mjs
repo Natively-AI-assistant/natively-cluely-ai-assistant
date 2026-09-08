@@ -221,6 +221,49 @@ test('Direct history is appended only in the successful done branch', () => {
   assert.match(interfaceSource, /directAssistHistoryRef\.current = \[\]/, 'explicit chat reset must clear Direct history');
 });
 
+test('provider_switch is handled before the terminal-sequence guard and relabels the answer card verbatim', () => {
+  // The provider_switch member must exist locally (mirroring
+  // electron/direct-assist/types.ts, preload.ts and src/types/electron.d.ts
+  // field for field) or the listener switch below is dead code.
+  assert.match(
+    interfaceSource,
+    /type: 'provider_switch';[\s\S]{0,220}from: \{ provider: string; model: string \};[\s\S]{0,80}to: \{ provider: string; model: string \};[\s\S]{0,80}reason: string;/,
+  );
+
+  const listener = section(
+    'window.electronAPI.onDirectAssistEvent((event: DirectAssistRendererEvent) => {',
+    'const beginDirectAssist = useCallback(async ({',
+  );
+  const deltaStart = listener.indexOf("if (event.type === 'delta') {");
+  const switchStart = listener.indexOf("if (event.type === 'provider_switch') {");
+  const terminalGuard = listener.indexOf('if (event.sequence < active.lastSequence) return;');
+  assert.ok(deltaStart >= 0 && switchStart > deltaStart, 'provider_switch must be handled after delta');
+  assert.ok(terminalGuard > switchStart, 'provider_switch must be handled BEFORE the terminal-sequence guard');
+
+  const switchBlock = listener.slice(switchStart, terminalGuard);
+  // Not terminal, and its sequence (always 0, pre-commit only) must never
+  // reach active.lastSequence — a delta-counter snapshot is not a slot of
+  // its own. Reaching the terminal guard below with sequence 0 would read as
+  // a stale terminal event against the -1 initial value and settle the
+  // whole request as "Request cancelled."
+  assert.doesNotMatch(switchBlock, /active\.lastSequence\s*=/);
+  // No provider-label mapping table: render the ids verbatim.
+  assert.match(switchBlock, /event\.from\.provider/);
+  assert.match(switchBlock, /event\.to\.provider/);
+  assert.doesNotMatch(switchBlock, /providerLabel\(/);
+  // Lands on the answer card (active.placeholderId), not the question card —
+  // the label the user is reading must be the provider that actually
+  // answered.
+  assert.match(switchBlock, /message\.id === placeholderId/);
+  assert.match(switchBlock, /fallbackNotice: noticeText/);
+
+  assert.match(interfaceSource, /fallbackNotice\?: string;/);
+  assert.match(
+    interfaceSource,
+    /msg\.role === 'system' && msg\.fallbackNotice[\s\S]{0,320}\{msg\.fallbackNotice\}/,
+  );
+});
+
 test('the question card distinguishes context that was shortened from context that was dropped', () => {
   // "reference files omitted" and "reference files shortened to fit" mean very
   // different things to someone judging whether an answer used their document.

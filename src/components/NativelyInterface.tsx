@@ -440,6 +440,11 @@ interface Message {
   // recent turns). Reported separately from trimmedFields because "shortened"
   // and "gone" are different things to a reader judging an answer.
   shortenedFields?: string[];
+  // Set when the ladder answered with a DIFFERENT provider than the one the
+  // user selected (a fallback rung fired). Verbatim provider ids, never a
+  // mapping table — the point is telling the user which provider actually
+  // received their request and got billed, not a pretty label.
+  fallbackNotice?: string;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -493,6 +498,15 @@ interface ActiveDirectAssistRequest {
 type DirectAssistRendererEvent =
   | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields?: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch';
+      requestId: string;
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number;
+      from: { provider: string; model: string };
+      to: { provider: string; model: string };
+      reason: string;
+    }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
   | { type: 'cancel'; requestId: string; sequence: number };
@@ -1161,6 +1175,15 @@ const MessageRow = React.memo(
                 </span>
               </div>
             ) : null}
+            {/* The ladder answered with a different provider than the one the
+                user selected — the label above must never lie about who
+                actually received the request and got billed. */}
+            {msg.role === 'system' && msg.fallbackNotice && (
+              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
+                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate max-w-[260px]">{msg.fallbackNotice}</span>
+              </div>
+            )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
               <div className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-green-500" title={`Ran ${msg.codeVerified.total} test case(s) successfully`}>
@@ -5560,6 +5583,24 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         if (!event.text) return;
         active.answerText += event.text;
         queueToken('chat', event.text);
+        return;
+      }
+
+      if (event.type === 'provider_switch') {
+        // NOT terminal, and its sequence is a snapshot of the delta counter,
+        // never a slot of its own — it must never advance active.lastSequence
+        // (a switch always carries 0, which would otherwise be read as a
+        // stale/older terminal event by the guard below and settle the
+        // request as cancelled). The label shown to the user must always be
+        // the provider that actually answered, so it lands on the answer
+        // card, not the question card.
+        const placeholderId = active.placeholderId;
+        const noticeText = `${event.from.provider} failed — answered by ${event.to.provider}.`;
+        setMessages((prev) => prev.map((message) =>
+          message.id === placeholderId
+            ? { ...message, fallbackNotice: noticeText }
+            : message,
+        ));
         return;
       }
 
