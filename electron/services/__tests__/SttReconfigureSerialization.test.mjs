@@ -183,7 +183,12 @@ describe('Fix #2: renderer no longer double-fires; server compensates the UI ref
     // provider after a key save/clear.
     const start = ipcSrc.indexOf("safeHandle('set-natively-api-key'");
     assert.ok(start >= 0, 'set-natively-api-key handler must exist');
-    const end = ipcSrc.indexOf("safeHandle('get-natively-pricing'", start);
+    // Anchored on whatever handler follows set-natively-api-key, so the slice
+    // is that handler and nothing else. It was 'get-natively-pricing' until
+    // that handler was deleted (its /v1/pricing route never existed); an
+    // indexOf that misses falls back to a 4000-char window, which would have
+    // kept these assertions green while silently testing a different region.
+    const end = ipcSrc.indexOf("safeHandle('get-natively-plans'", start);
     const handlerBody = ipcSrc.slice(start, end > start ? end : start + 4000);
     // Accept either the direct call or the shared broadcastCredentialsChanged()
     // helper it was later refactored into — assert the helper itself really
@@ -214,7 +219,12 @@ describe('Fix #3: Pro license activation stays awaited inline (no detached billi
   it('activateWithApiKey is awaited inline, not detached in a fire-and-forget IIFE', () => {
     const start = ipcSrc.indexOf("safeHandle('set-natively-api-key'");
     assert.ok(start >= 0, 'set-natively-api-key handler must exist');
-    const end = ipcSrc.indexOf("safeHandle('get-natively-pricing'", start);
+    // Anchored on whatever handler follows set-natively-api-key, so the slice
+    // is that handler and nothing else. It was 'get-natively-pricing' until
+    // that handler was deleted (its /v1/pricing route never existed); an
+    // indexOf that misses falls back to a 4000-char window, which would have
+    // kept these assertions green while silently testing a different region.
+    const end = ipcSrc.indexOf("safeHandle('get-natively-plans'", start);
     const handlerBody = ipcSrc.slice(start, end > start ? end : start + 4000);
 
     // The inline await is the backpressure that serializes rapid set→clear:

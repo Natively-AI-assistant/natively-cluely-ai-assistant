@@ -9533,13 +9533,11 @@ export function initializeIpcHandlers(appState: AppState): void {
   // surface where "does the UI show what the server enforces?" needs answering
   // before a release, not after.
   const NATIVELY_API_BASE = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
-  const _pricingCache = new Map<string, { data: any; ts: number }>();
   // The plan catalog. Unauthenticated and identical for every user, so it is
   // cached per PROCESS rather than per key, and for far longer than usage —
   // allowances change on a deploy, not on a request.
   const _plansCache = new Map<string, { data: any; ts: number }>();
   const PLANS_CACHE_TTL_MS = 15 * 60_000;
-  const PRICING_CACHE_TTL_MS = 5 * 60_000;
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
     // Set when the server REFUSES the key, so the handler can report the real
@@ -9707,29 +9705,6 @@ export function initializeIpcHandlers(appState: AppState): void {
     } finally {
       // Always bust the cache when the key changes so the next usage fetch is fresh
       _usageCache?.clear();
-    }
-  });
-
-  safeHandle('get-natively-pricing', async () => {
-    try {
-      const cached = _pricingCache.get('pricing');
-      if (cached && Date.now() - cached.ts < PRICING_CACHE_TTL_MS) {
-        return cached.data;
-      }
-
-      const res = await fetch(`${NATIVELY_API_BASE}/v1/pricing`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as any;
-        return { ok: false, error: body.error || 'request_failed', status: res.status };
-      }
-      const data = (await res.json()) as any;
-      const result = { ok: true, ...data };
-      _pricingCache.set('pricing', { data: result, ts: Date.now() });
-      return result;
-    } catch (error: any) {
-      return { ok: false, error: error.message || 'network_error' };
     }
   });
 

@@ -204,25 +204,6 @@ interface ElectronAPI {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => Promise<{ ok: boolean; error?: string; status?: number }>;
-  getNativelyPricing: () => Promise<{
-    ok: boolean;
-    currency?: string;
-    fetchedAt?: string;
-    stale?: boolean;
-    products?: Record<string, {
-      id: string;
-      dodoProductId: string;
-      name: string;
-      amount: number | null;
-      currency: string;
-      formattedPrice: string | null;
-      interval: 'month' | 'year' | 'lifetime';
-      checkoutUrl: string;
-      coupon: { code: string; eligible: boolean; discountPercent: number; reason?: string };
-    }>;
-    error?: string;
-    status?: number;
-  }>;
   // Shape imported, not restated. This used to be written out here AND in
   // src/types/electron.d.ts, so the resource model would have had to be
   // remembered in three places.
@@ -1630,7 +1611,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     can_use_publicly: boolean;
     display_name_publicly: boolean;
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
-  getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
   getNativelyPlans: () => ipcRenderer.invoke('get-natively-plans'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
