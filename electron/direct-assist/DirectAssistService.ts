@@ -6,7 +6,7 @@ import {
   DIRECT_ASSIST_TOTAL_BUDGET_MS,
 } from './fallbackConfig';
 import { prepareDirectAssistPrompt } from './requestBuilder';
-import type { HealthEntry, StreamProvider } from '../llm/streamFallbackEngine';
+import type { FallbackConfig, HealthEntry, StreamProvider } from '../llm/streamFallbackEngine';
 import { runStreamingFallback } from '../llm/streamFallbackEngine';
 import type {
   DirectAssistDispatchRequest,
@@ -33,6 +33,14 @@ export interface DirectAssistServiceOptions {
   readonly now?: () => number;
   /** Injectable backoff sleeper, handed straight to the engine. */
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /**
+   * Engine tuning overrides. Injectable ONLY so a test can drive the engine's
+   * own per-attempt guards (ttftTimeoutMs, interChunkTimeoutMs, cleanupTimeoutMs)
+   * without waiting 35 real seconds. Production passes nothing and gets
+   * DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG. `rethrowAfterCommit` is applied after
+   * this and cannot be overridden.
+   */
+  readonly fallbackConfigOverrides?: Partial<FallbackConfig>;
 }
 
 const SYSTEM_TIMER_SCHEDULER: DirectAssistTimerScheduler = Object.freeze({
@@ -63,12 +71,19 @@ export class DirectAssistService {
   private readonly timerScheduler: DirectAssistTimerScheduler;
   private readonly now: () => number;
   private readonly sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+  private readonly fallbackConfigOverrides: Partial<FallbackConfig>;
 
   /**
    * Direct Assist's OWN provider health, deliberately not LLMHelper's
    * visionHealth. Sharing it would let a Direct Assist timeout open a circuit
    * breaker on the live answer path — and the reverse — coupling two
    * subsystems whose whole point is that they fail independently.
+   *
+   * The isolation is STRUCTURAL, not behavioural: this is a per-instance field,
+   * so there is no shared map to leak through and no test that could observe a
+   * leak by running the ladder. What a test CAN observe is that two instances
+   * hold two different maps and that this one is populated by the engine — see
+   * "each service instance keeps its own provider health".
    */
   private readonly health = new Map<string, HealthEntry>();
 
@@ -83,6 +98,7 @@ export class DirectAssistService {
     this.timerScheduler = options.timerScheduler ?? SYSTEM_TIMER_SCHEDULER;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? SYSTEM_SLEEP;
+    this.fallbackConfigOverrides = options.fallbackConfigOverrides ?? {};
   }
 
   public async *stream(
@@ -149,12 +165,18 @@ export class DirectAssistService {
           idleTimer = this.timerScheduler.set(() => {
             idleTimedOut = true;
             // Reject the local race even if an adapter ignores AbortSignal, and
-            // abort the sole provider request so cooperative adapters release
-            // their socket/process immediately. No retry or fallback follows.
+            // abort the in-flight provider request so cooperative adapters
+            // release their socket/process immediately.
             reject(idleError);
             if (!dispatchController?.signal.aborted) dispatchController?.abort(idleError);
           }, this.streamIdleTimeoutMs);
         });
+        // DEFUSE. A re-arm now happens mid-await (on rung open), so the read
+        // loop's in-flight race may still be holding the PREVIOUS promise when
+        // this one rejects. The dispatch abort above still ends that race, but
+        // this promise would have no handler at rejection time and would
+        // surface as an unhandledRejection — fatal in Electron main.
+        idlePromise.catch(() => { /* loser of the race — defused */ });
       };
       armIdleWatchdog();
 
@@ -187,7 +209,23 @@ export class DirectAssistService {
       // A QUEUE, not a slot: a three-rung walk makes two hops, and a slot would
       // keep only the last, reporting the wrong `from`.
       const pendingSwitches: DirectAssistStreamEvent[] = [];
-      let lastReason: DirectAssistErrorCode = 'PROVIDER_ERROR';
+      // Why the PREVIOUS rung was abandoned, for provider_switch.reason.
+      // `reasonFromThrow` is null whenever the attempt ended without the rung's
+      // own generator throwing — see switchReason().
+      let reasonFromThrow: DirectAssistErrorCode | null = null;
+      let lastAttemptSignal: AbortSignal | null = null;
+      const switchReason = (): DirectAssistErrorCode => {
+        if (reasonFromThrow !== null) return reasonFromThrow;
+        // The engine's own TTFT / inter-chunk guard aborts the attempt's signal
+        // and tears the rung's generator down with .return(), which runs
+        // `finally` but never `catch` — and an uncooperative transport may
+        // never resume to observe it at all. Read the signal rather than
+        // waiting for a throw that will not come: a connect timeout is the
+        // likeliest fallback trigger there is, and it used to report a generic
+        // PROVIDER_ERROR.
+        if (lastAttemptSignal?.aborted) return 'CONNECT_TIMEOUT';
+        return 'PROVIDER_ERROR';
+      };
 
       // The whole-ladder ceiling, expressed as a signal so the engine — which
       // already honours abortSignal between attempts and before each rung —
@@ -228,38 +266,52 @@ export class DirectAssistService {
             // quietly rather than classifying this as a provider failure.
             throw new DirectAssistError('CONNECT_TIMEOUT', 'No provider answered in time.', true);
           }
-          // Reset per rung so a stale reason from the PREVIOUS rung can never
-          // be attributed to this one's switch event.
-          lastReason = 'PROVIDER_ERROR';
+          // Reset per ATTEMPT so a stale reason from the previous rung can
+          // never be attributed to this one's switch event.
+          reasonFromThrow = null;
+          lastAttemptSignal = signal;
+          // Re-arm the outer silence guard on every rung AND every retry. It is
+          // armed once before the ladder starts, and re-arming only on a delta
+          // made it cap the whole pre-first-token WALK rather than one attempt:
+          // two 30s vision connect ceilings exceed the 45s window, so it fired
+          // and the ladder never opened rung 1 — inert for precisely the case
+          // fallbackConfig.ts says this feature exists to fix. Pre-commit
+          // silence is the engine's ttftTimeoutMs (35s); this is the 45s
+          // post-commit silence guard the deadline hierarchy intends.
+          armIdleWatchdog();
           let delivered = false;
           try {
             for await (const chunk of transport.streamDirectAssist(dispatchRequest, signal, rung)) {
               if (typeof chunk === 'string' && chunk.length > 0) delivered = true;
               yield chunk;
             }
+            if (!delivered) {
+              // Raise the service's own INCOMPLETE_STREAM rather than letting
+              // the engine's internal `empty-stream` sentinel reach the user as
+              // a generic PROVIDER_ERROR. Thrown, not returned, so an empty rung
+              // is retried and walked past like any other pre-commit failure.
+              throw new DirectAssistError(
+                'INCOMPLETE_STREAM',
+                'The selected provider ended the stream without returning an answer.',
+                true,
+              );
+            }
           } catch (error) {
-            lastReason = normalizeDirectAssistError(error).code;
+            // An ABORTED attempt was ended by the engine's own per-attempt
+            // guard, not by the provider, and whatever the generator throws on
+            // its way out of that abort is debris. Leave those to
+            // switchReason(), which reads the signal instead.
+            if (!signal.aborted) reasonFromThrow = normalizeDirectAssistError(error).code;
             throw error;
-          }
-          if (!delivered) {
-            // Raise the service's own INCOMPLETE_STREAM rather than letting the
-            // engine's internal `empty-stream` sentinel reach the user as a
-            // generic PROVIDER_ERROR. Thrown, not returned, so an empty rung is
-            // retried and then walked past like any other pre-commit failure.
-            const empty = new DirectAssistError(
-              'INCOMPLETE_STREAM',
-              'The selected provider ended the stream without returning an answer.',
-              true,
-            );
-            lastReason = empty.code;
-            throw empty;
           }
         },
       }));
 
       const providerStream = runStreamingFallback(
         engineRungs,
-        { ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG, rethrowAfterCommit: true },
+        // rethrowAfterCommit LAST: it is a commit-point invariant, not tuning,
+        // and an override must not be able to switch it off.
+        { ...DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG, ...this.fallbackConfigOverrides, rethrowAfterCommit: true },
         this.health,
         {
           now: this.now,
@@ -282,7 +334,7 @@ export class DirectAssistService {
               sequence,
               from: { provider: activeRung.provider, model: activeRung.model },
               to: { provider: next.provider, model: next.model },
-              reason: lastReason,
+              reason: switchReason(),
             }));
             activeRung = next;
           },

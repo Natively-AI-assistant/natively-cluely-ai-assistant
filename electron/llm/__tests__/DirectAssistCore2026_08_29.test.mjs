@@ -1841,22 +1841,151 @@ test('an exhausted ladder reports the FIRST rung error, not the last', async () 
   assert.ok(!err.error.message.includes('gemini'));
 });
 
-test('direct assist failures never touch the vision health map', async () => {
+test('each service instance keeps its own provider health, never a shared map', async () => {
   const { DirectAssistService } = await loadDirectAssist();
-  const { visionHealthForTest } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
-  const before = visionHealthForTest ? visionHealthForTest().size : 0;
-  const transport = ladderTransport([[timeoutErr()], [timeoutErr()]]);
-  await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput()));
-  const after = visionHealthForTest ? visionHealthForTest().size : 0;
-  assert.equal(after, before);
+  // The earlier version of this test read a `visionHealthForTest` accessor that
+  // LLMHelper does not export, so BOTH sides were 0 and it could not fail. And
+  // no behavioural probe can fail either: the engine never gates the primary
+  // rung on `health` (it is read only by the ordering helper and by hedging,
+  // and hedgeEnabled is false), so a shared map would change no observable
+  // outcome. What IS observable — and what the requirement actually rests on —
+  // is that the map is a per-INSTANCE field the engine really writes into.
+  const first = new DirectAssistService(ladderTransport([[timeoutErr()], [timeoutErr()]]), svcOpts());
+  const second = new DirectAssistService(ladderTransport([[timeoutErr()], [timeoutErr()]]), svcOpts());
 
-  // LLMHelper exposes no visionHealth accessor, so the assertion above is
-  // vacuous on its own. The weaker-but-real property the spec cares about is
-  // that breaker state is per-service: run the SAME failing ladder on a second
-  // instance and it must still make the full attempt count rather than
-  // inheriting an open circuit.
-  const second = ladderTransport([[timeoutErr()], [timeoutErr()]]);
-  await collect(new DirectAssistService(second, svcOpts()).stream(baseInput()));
-  assert.deepEqual(second.calls, transport.calls);
-  assert.ok(second.calls.length >= 2);
+  assert.ok(first.health instanceof Map);
+  assert.notEqual(first.health, second.health, 'two instances must not share one health map');
+  assert.equal(first.health.size, 0);
+
+  await collect(first.stream(baseInput()));
+  // The engine really did record breaker state for both failed rungs...
+  assert.deepEqual([...first.health.keys()].sort(), ['gemini:gemini-3.7-flash', 'natively:natively']);
+  // ...and none of it reached the other instance.
+  assert.equal(second.health.size, 0);
+
+  // ...and the service must not be reaching into LLMHelper's vision health at
+  // all. `visionHealth` may appear ONLY in the comment that explains why it is
+  // not used; any code line mentioning it would be the coupling this forbids.
+  const source = fs.readFileSync(path.resolve(root, 'electron/direct-assist/DirectAssistService.ts'), 'utf8');
+  const visionHealthCodeLines = source.split('\n')
+    .filter((line) => line.includes('visionHealth') && !/^\s*(\*|\/\/)/.test(line));
+  assert.deepEqual(visionHealthCodeLines, []);
+  assert.doesNotMatch(source, /from '\.\.\/LLMHelper'/);
+  assert.match(source, /private readonly health = new Map<string, HealthEntry>\(\)/);
+});
+
+test('the idle watchdog no longer caps the whole pre-first-token walk', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // REAL timers, scaled 1000x down from production: a 60ms silence window with
+  // two 40ms attempts on rung 0 is the shape of a 45s window with two 30s
+  // vision connect ceilings. Armed once before the ladder and re-armed only on
+  // a delta, the watchdog fires at 60ms — mid-walk, before rung 1 is ever
+  // opened — which made DIRECT_ASSIST_TOTAL_BUDGET_MS unreachable in
+  // production and the whole feature inert for its motivating case.
+  const opened = [];
+  const transport = {
+    listDirectAssistRungs: () => ([
+      { provider: 'natively', model: 'natively', priority: 0, isFallback: false },
+      { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+    ]),
+    async *streamDirectAssist(_request, _signal, rung) {
+      opened.push(rung.priority);
+      if (rung.priority === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        throw timeoutErr();
+      }
+      yield 'answer';
+    },
+  };
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    streamIdleTimeoutMs: 60,
+    sleep: async () => {},
+  }).stream(baseInput()));
+
+  assert.deepEqual(opened, [0, 0, 1], 'the walk must survive longer than one silence window');
+  assert.equal(result.state, 'complete');
+  assert.equal(result.provider, 'gemini');
+  assert.ok(!events.some((e) => e.type === 'error'));
+});
+
+test('the idle watchdog still fires when ONE attempt goes silent for its whole window', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The re-arm must not have turned the guard off: a single attempt that says
+  // nothing for longer than the window is still STREAM_IDLE_TIMEOUT.
+  const service = new DirectAssistService({
+    streamDirectAssist(_request, signal) {
+      return (async function* () {
+        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+      })();
+    },
+  }, { streamIdleTimeoutMs: 25, sleep: async () => {} });
+  const { events, result } = await collect(service.stream(baseInput()));
+  assert.equal(result.state, 'failed');
+  assert.equal(events.at(-1).error.code, 'STREAM_IDLE_TIMEOUT');
+});
+
+test('a switch forced by the engine own TTFT guard reports CONNECT_TIMEOUT, not a generic PROVIDER_ERROR', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The transport never throws here: the ENGINE's ttft timer ends the attempt,
+  // aborts its signal and tears the rung's generator down. That teardown runs
+  // `finally` but never `catch`, which is why a reason captured only in the
+  // wrapper's catch reported PROVIDER_ERROR for the likeliest fallback trigger
+  // there is. ladderTransport cannot reach this path — it throws.
+  const opened = [];
+  const transport = {
+    listDirectAssistRungs: () => ([
+      { provider: 'natively', model: 'natively', priority: 0, isFallback: false },
+      { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+    ]),
+    async *streamDirectAssist(_request, signal, rung) {
+      opened.push(rung.priority);
+      if (rung.priority === 0) {
+        // Cooperative: wakes on abort and returns without a token.
+        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+        return;
+      }
+      yield 'answer';
+    },
+  };
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    sleep: async () => {},
+    fallbackConfigOverrides: { ttftTimeoutMs: 20 },
+  }).stream(baseInput()));
+
+  assert.deepEqual(opened, [0, 0, 1]);
+  assert.equal(result.provider, 'gemini');
+  const switches = events.filter((e) => e.type === 'provider_switch');
+  assert.equal(switches.length, 1);
+  assert.equal(switches[0].reason, 'CONNECT_TIMEOUT');
+});
+
+test('an UNCOOPERATIVE rung that never observes the abort still reports CONNECT_TIMEOUT', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The harder half of the same defect: this transport ignores the signal
+  // entirely, so the rung's generator never resumes and neither its catch NOR
+  // its finally ever runs. The reason therefore cannot come from a throw at
+  // all — it is read off the aborted attempt signal.
+  const opened = [];
+  const transport = {
+    listDirectAssistRungs: () => ([
+      { provider: 'natively', model: 'natively', priority: 0, isFallback: false },
+      { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+    ]),
+    async *streamDirectAssist(_request, _signal, rung) {
+      opened.push(rung.priority);
+      if (rung.priority === 0) {
+        await new Promise(() => {});   // never settles, never observes the abort
+        return;
+      }
+      yield 'answer';
+    },
+  };
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    sleep: async () => {},
+    fallbackConfigOverrides: { ttftTimeoutMs: 20, cleanupTimeoutMs: 10 },
+  }).stream(baseInput()));
+
+  assert.deepEqual(opened, [0, 0, 1]);
+  assert.equal(result.provider, 'gemini');
+  assert.equal(events.filter((e) => e.type === 'provider_switch')[0].reason, 'CONNECT_TIMEOUT');
 });
