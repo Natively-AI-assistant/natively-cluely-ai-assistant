@@ -48,6 +48,14 @@ export type TextFallbackHooks = VisionFallbackHooks;
  *   maxAttempts: 2         — per provider (tier retry); the chain has many providers
  */
 export const DEFAULT_TEXT_FALLBACK_CONFIG: VisionFallbackConfig = {
+  // Task 1 (2026-09-08) generalised the shared engine's log prefix out of a
+  // hardcoded "[Vision]" into cfg.logPrefix. This module already ran text
+  // traffic through the vision-named engine before that change, so its log
+  // lines have always read "[Vision] committed to ..." even for a text
+  // provider. Keeping logPrefix: 'Vision' here preserves that exact (if
+  // mislabeled) log text — genuinely relabeling it to "Text" is a real,
+  // user-visible behavior change and out of scope for a pure extraction.
+  logPrefix: 'Vision',
   maxAttempts: 2,
   ttftTimeoutMs: 2_500,
   interChunkTimeoutMs: 20_000,
