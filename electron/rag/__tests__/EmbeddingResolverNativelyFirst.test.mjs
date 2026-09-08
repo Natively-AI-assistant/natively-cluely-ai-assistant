@@ -69,10 +69,14 @@ describe('candidate ordering', () => {
 });
 
 describe('space identity', () => {
-  test('the Natively candidate carries its own space, distinct from direct Gemini', () => {
+  test('the Natively candidate carries its own space, distinct from direct Voyage', () => {
+    // Same model as the direct-Voyage provider now, but a different transport
+    // with its own caps and formatting — so still its own space key, and still
+    // not one any other provider can produce.
     const [natively] = EmbeddingProviderResolver.buildCandidates({ nativelyApiKey: 'nk_live' });
-    assert.equal(natively.space, 'natively:gemini-embedding-2:3072');
-    assert.equal(natively.dimensions, 3072);
+    assert.equal(natively.space, 'natively:voyage-4:2048');
+    assert.equal(natively.dimensions, 2048);
+    assert.notEqual(natively.space, 'voyage:voyage-4:2048');
   });
 });
 

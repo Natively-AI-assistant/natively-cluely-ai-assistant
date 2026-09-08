@@ -1,6 +1,6 @@
 // electron/rag/__tests__/NativelyEmbeddingProvider.test.mjs
 //
-// The Natively-managed embedding provider (POST /v1/embed → gemini-embedding-2).
+// The Natively-managed embedding provider (POST /v1/embed → voyage-4).
 // Drives a real local HTTP stub rather than mocking fetch, so the request shape,
 // headers and response parsing are all exercised as they will run in production.
 //
@@ -11,9 +11,14 @@
 //   • Trial users authenticate with x-trial-token, NOT x-natively-key — the
 //     sentinel key is not a real credential.
 //   • A response served by a DIFFERENT model than this provider declares must
-//     throw. gemini-embedding-2 and -001 are both 768d, so a silent breaker flip
-//     would otherwise write vectors from an incompatible space into the index
-//     under this provider's space key, undetectable by any dimension check.
+//     throw. /v1/embed serves more than one model, and two models of the same
+//     width are not interchangeable — so without this check vectors from an
+//     incompatible space get written into the index under this provider's space
+//     key, undetectable by any dimension check.
+//   • The model is named on EVERY request, and a query is embedded as a query.
+//     Both are what keep this provider correct: the server picks Gemini for any
+//     request that names no model (that is what pre-2.9 builds send), and Voyage
+//     projects queries and documents differently.
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,7 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const modPath = path.resolve(__dirname, '../../../dist-electron/electron/rag/providers/NativelyEmbeddingProvider.js');
 const { NativelyEmbeddingProvider } = await import(pathToFileURL(modPath).href);
 
-const DIMS = 3072;
+const DIMS = 2048;
 const vec = (seed) => Array.from({ length: DIMS }, (_, i) => (i === 0 ? seed : 0.01));
 
 let server, baseUrl, requests = [];
@@ -41,8 +46,8 @@ before(async () => {
       if (respond) return respond(req, res, parsed);
       const texts = Array.isArray(parsed.input) ? parsed.input : [parsed.text ?? parsed.input];
       const payload = Array.isArray(parsed.input)
-        ? { embeddings: texts.map((t, i) => vec(i + 1)), model: 'gemini-embedding-2', dimensions: DIMS }
-        : { embedding: vec(1), model: 'gemini-embedding-2', dimensions: DIMS };
+        ? { embeddings: texts.map((t, i) => vec(i + 1)), model: 'voyage-4', dimensions: DIMS }
+        : { embedding: vec(1), model: 'voyage-4', dimensions: DIMS };
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(payload));
     });
@@ -59,16 +64,24 @@ describe('identity', () => {
   test('declares the space it actually stores vectors in', () => {
     const p = make();
     assert.equal(p.name, 'natively');
-    assert.equal(p.model, 'gemini-embedding-2');
+    assert.equal(p.model, 'voyage-4');
     assert.equal(p.dimensions, DIMS);
-    assert.equal(p.space, 'natively:gemini-embedding-2:3072');
+    assert.equal(p.space, 'natively:voyage-4:2048');
   });
 
-  test('does NOT share a space key with the direct-Gemini provider', () => {
+  test('does NOT share a space key with the direct-Voyage provider', () => {
     // Same underlying model, but a different transport with its own truncation
     // cap and formatting. Sharing the key would create an invariant spanning two
     // repos with no test able to fail when either side drifts.
-    assert.notEqual(make().space, 'gemini:gemini-embedding-2:3072');
+    assert.notEqual(make().space, 'voyage:voyage-4:2048');
+  });
+
+  test('the space differs from the 2.8.x one, which is what triggers a re-index', () => {
+    // Vectors stored by an older build are in natively:gemini-embedding-2:3072
+    // and cannot be reproduced at this width. EmbeddingPipeline compares the
+    // active space against last_embedding_space at startup and re-embeds what
+    // does not match; that only happens because these two strings differ.
+    assert.notEqual(make().space, 'natively:gemini-embedding-2:3072');
   });
 });
 
@@ -150,7 +163,7 @@ describe('vector-space safety', () => {
   test('a wrong-length vector is rejected', async () => {
     respond = (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ embedding: [1, 2, 3], model: 'gemini-embedding-2', dimensions: 3 }));
+      res.end(JSON.stringify({ embedding: [1, 2, 3], model: 'voyage-4', dimensions: 3 }));
     };
     try {
       await assert.rejects(() => make().embed('short'), /dimension/i);
@@ -196,5 +209,50 @@ describe('availability', () => {
 
   test('isAvailable() is true when the endpoint answers', async () => {
     assert.equal(await make().isAvailable(), true);
+  });
+});
+
+describe('request contract with /v1/embed', () => {
+  // These two facts are the whole reason the 2.9 switch is safe, and both fail
+  // SILENTLY: naming no model gets Gemini vectors this provider then rejects on
+  // every call, and embedding a query as a document costs retrieval quality with
+  // nothing logged anywhere. Neither is visible without asserting the wire.
+
+  test('names the model on every request — a request that does not gets Gemini', async () => {
+    requests.length = 0;
+    const p = make();
+    await p.embed('a document');
+    await p.embedQuery('a query');
+    await p.embedBatch(['x', 'y']);
+    assert.equal(requests.length, 3);
+    for (const r of requests) {
+      assert.equal(r.body.model, 'voyage-4', `missing/incorrect model on ${JSON.stringify(r.body).slice(0, 80)}`);
+    }
+  });
+
+  test('embedQuery sends input_type:query; embed and embedBatch send document', async () => {
+    requests.length = 0;
+    const p = make();
+    await p.embed('stored chunk');
+    await p.embedQuery('user question');
+    await p.embedBatch(['chunk one', 'chunk two']);
+    assert.deepEqual(
+      requests.map(r => r.body.input_type),
+      ['document', 'query', 'document'],
+    );
+  });
+
+  test('every batch slice carries the asymmetry, not just the first', async () => {
+    // A 70-item batch splits across the server cap. An input_type set once
+    // outside the loop would leave later slices unlabelled — and the server
+    // defaults unlabelled input to 'document', so this would still have been
+    // correct here and wrong the moment the default changed.
+    requests.length = 0;
+    await make().embedBatch(Array.from({ length: 70 }, (_, i) => `chunk ${i}`));
+    assert.ok(requests.length > 1, 'expected the batch to split across the server cap');
+    for (const r of requests) {
+      assert.equal(r.body.input_type, 'document');
+      assert.equal(r.body.model, 'voyage-4');
+    }
   });
 });

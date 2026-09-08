@@ -11,15 +11,39 @@ import { TRIAL_SENTINEL_KEY } from '../../config/constants';
  * Ollama or the bundled MiniLM model and got the weakest retrieval in the app.
  */
 
-/** The model the server runs as its embedding primary (natively-api EMBED_PRIMARY_MODEL). */
-const MODEL = 'gemini-embedding-2';
+/**
+ * The managed embedding model, requested BY NAME on every call.
+ *
+ * Naming it is what makes the server's rollout safe. `/v1/embed` serves two
+ * incompatible vector spaces now, and it picks between them from the request:
+ * a body with no `model` gets the old Gemini waterfall, because that is what
+ * every build up to 2.8.8 sends and those builds pin gemini-embedding-2 at 3072
+ * dimensions. Asking for voyage-4 by name PROVES this build knows its width;
+ * a version header would only have asserted it. See natively-api
+ * lib/managedModels.js for the other half of the rule.
+ *
+ * Changing this constant changes `space` below, which the pipeline treats as a
+ * re-index trigger — see the note on DIMENSIONS.
+ */
+const MODEL = 'voyage-4';
 
 /**
- * natively-api EMBED_DIMS. Every model there is requested at this width.
- * MUST match the server: the client declares this in its space key, and a
- * mismatch would stamp the wrong width over the vectors.
+ * The width the server serves voyage-4 at (natively-api VOYAGE_EMBED_DIMENSIONS).
+ * voyage-4 emits 256/512/1024/2048 on request; 2048 is what Natively asks for.
+ *
+ * MUST match the server. It is half the identity of `space`, so a mismatch is
+ * not a formatting difference — it is a different vector space wearing the same
+ * name. validate() below refuses rather than storing one.
+ *
+ * NOTE ON UPGRADING FROM 2.8.x: this pair changes `space` from
+ * `natively:gemini-embedding-2:3072` to `natively:voyage-4:2048`, so vectors
+ * embedded by an older build are in a space this one cannot reproduce. That is
+ * handled, not ignored — EmbeddingPipeline compares the active space against
+ * `last_embedding_space` at startup and RAGManager.scheduleAutoReindex()
+ * re-embeds what does not match. The re-index is the designed response to
+ * exactly this change; nothing needs to be migrated by hand.
  */
-const DIMENSIONS = 3072;
+const DIMENSIONS = 2048;
 
 /**
  * Server-side per-request batch cap (natively-api DEFAULT_MAX_BATCH). Larger
@@ -29,7 +53,33 @@ const DIMENSIONS = 3072;
  */
 const SERVER_MAX_BATCH = 32;
 
-const REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Voyage embeds a query and a document into DIFFERENT projections of the same
+ * space. Measured on voyage-4 through the Natively server, the same sentence
+ * embedded both ways comes back at cosine ~0.79 — clearly not the same vector.
+ *
+ * That is an ENCODING distance, not a demonstrated retrieval gain, and the two
+ * are not the same claim: a 12-query probe with same-topic near-miss
+ * distractors could not separate query/document from sending nothing at all.
+ * This path sends the asymmetry because it is Voyage's documented usage and
+ * because the space key changed anyway, so it costs nothing here — NOT because
+ * a quality delta has been measured.
+ *
+ * embedQuery() sends 'query'; embed()/embedBatch() send 'document'.
+ */
+type EmbedInputType = 'query' | 'document';
+
+/**
+ * Per-HTTP-request timeout.
+ *
+ * MUST stay strictly below EmbeddingPipeline's EMBED_TIMEOUT_MS (30s), which
+ * wraps the WHOLE embedBatch() call. When the two were equal, a single slow
+ * request could only ever fail by exhausting the outer deadline first — so the
+ * caller got the pipeline's generic "batch timed out" instead of this
+ * transport's specific error, and the whole batch was discarded with no
+ * indication of which request stalled. Inner budgets belong inside outer ones.
+ */
+const REQUEST_TIMEOUT_MS = 25_000;
 
 export interface NativelyEmbeddingOptions {
   baseUrl?: string;
@@ -42,6 +92,13 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
   readonly model = MODEL;
   readonly dimensions = DIMENSIONS;
   readonly space: string;
+  /**
+   * The server refuses batches above DEFAULT_MAX_BATCH (natively-api
+   * lib/embeddingQuota.js). embedBatch() splits larger arrays into sequential
+   * requests; declaring the ceiling lets callers size their batches so that
+   * split never happens and one caller-level batch is exactly one round trip.
+   */
+  readonly maxBatchSize = SERVER_MAX_BATCH;
 
   private readonly baseUrl: string;
   private readonly trialToken?: string;
@@ -95,17 +152,33 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
     }
 
     if (!res.ok) {
-      const err: any = new Error(`Natively embedding failed: ${res.status} ${res.statusText}`);
+      // The server classifies its own failures (`retryable`, `retry_after`,
+      // `upstream_status`). Read the body BEFORE deciding anything, because a
+      // status-only heuristic gets two cases wrong: it calls a 502
+      // `provider_rejected_request` retryable when the server has said it is
+      // permanently not, and it cannot distinguish a provider rate limit from a
+      // quota refusal — both of which arrive as 429.
+      const detail: any = await res.json().catch(() => ({}));
+      const err: any = new Error(
+        `Natively embedding failed: ${res.status} ${res.statusText}${detail?.error ? ` (${detail.error})` : ''}`
+      );
       err.status = res.status;
       err.provider = this.name;
+      err.serverError = typeof detail?.error === 'string' ? detail.error : undefined;
+      err.upstreamStatus = detail?.upstream_status ?? undefined;
       // 401/403 are structural (revoked/absent key): let the resolver demote
       // immediately instead of retrying a key that will never work.
       err.permanentAuthFailure = res.status === 401 || res.status === 403;
-      // Surfaced so EmbeddingPipeline.retryAfterMs() can honour the server's own
-      // backoff instead of guessing — a quota 429 has a real reset time.
-      const retryAfter = res.headers.get('retry-after');
+      // Prefer the header, fall back to the body. EmbeddingPipeline.retryAfterMs()
+      // honours whichever is present rather than guessing a backoff.
+      const retryAfter = res.headers.get('retry-after')
+        ?? (typeof detail?.retry_after === 'number' ? String(detail.retry_after) : null);
       if (retryAfter != null) err.retryAfter = retryAfter;
-      err.retryable = !err.permanentAuthFailure;
+      // The server's explicit verdict WINS. Retrying something it has told us is
+      // permanent only spends quota to fail the same way.
+      err.retryable = typeof detail?.retryable === 'boolean'
+        ? detail.retryable
+        : !err.permanentAuthFailure;
       throw err;
     }
 
@@ -117,10 +190,15 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
    * nothing downstream would notice.
    */
   private validate(values: unknown, model: unknown): number[] {
-    // The server falls back gemini-embedding-2 → gemini-embedding-001 behind a
-    // circuit breaker. BOTH RETURN 768 DIMENSIONS, so a dimension check cannot
-    // catch it — but they are incompatible vector spaces, and these vectors are
-    // about to be persisted under THIS provider's space key. Refuse.
+    // The server can serve more than one embedding model, and models of the SAME
+    // WIDTH are not interchangeable — a dimension check alone cannot catch a
+    // substitution. These vectors are about to be persisted under THIS
+    // provider's space key, so anything but the model we asked for is refused.
+    //
+    // This is also the guard that catches a server misconfiguration: if
+    // /v1/embed could not route voyage-4 it answers 503 rather than quietly
+    // serving Gemini, but were that ever to change, this is what stops 3072-dim
+    // Gemini vectors from being stored as `natively:voyage-4:2048`.
     //
     // Marked retryable and NOT a permanent auth failure on purpose: a drift is a
     // transient server-side breaker state, and EmbeddingPipeline only promotes
@@ -162,18 +240,25 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
     }
   }
 
-  async embed(text: string): Promise<number[]> {
-    const data = await this.post({ text });
+  private async embedOne(text: string, inputType: EmbedInputType): Promise<number[]> {
+    const data = await this.post({ text, model: this.model, input_type: inputType });
     return this.validate(data?.embedding, data?.model);
   }
 
+  async embed(text: string): Promise<number[]> {
+    return this.embedOne(text, 'document');
+  }
+
   /**
-   * The server applies no query/document asymmetry (POST /v1/embed takes no task
-   * hint), so a query embeds exactly like a document. Kept explicit so it is
-   * clear this is the server's contract rather than an oversight here.
+   * A query, embedded AS a query.
+   *
+   * IEmbeddingProvider already draws this distinction by METHOD — embed() is
+   * "for storage", embedQuery() is "a search query" — so the asymmetry needs no
+   * new parameter, only a provider that stops treating the two as identical.
+   * See EmbedInputType for what is and is not established about the effect.
    */
   async embedQuery(text: string): Promise<number[]> {
-    return this.embed(text);
+    return this.embedOne(text, 'query');
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
@@ -184,7 +269,7 @@ export class NativelyEmbeddingProvider implements IEmbeddingProvider {
       const slice = texts.slice(i, i + SERVER_MAX_BATCH);
       // ONE request per slice, not one per text: /v1/embed bills per request, so
       // a per-item loop would multiply both latency and cost.
-      const data = await this.post({ input: slice });
+      const data = await this.post({ input: slice, model: this.model, input_type: 'document' });
       const vectors = data?.embeddings;
       if (!Array.isArray(vectors) || vectors.length !== slice.length) {
         const err: any = new Error(

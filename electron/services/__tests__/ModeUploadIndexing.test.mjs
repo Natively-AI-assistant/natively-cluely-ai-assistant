@@ -101,7 +101,11 @@ describe('W3: indexFile persistence', () => {
         assert.ok(chunks[0].embedding instanceof Buffer, 'vector persisted as BLOB');
         assert.equal(chunks[0].embedding_space, SPACE_A);
 
-        assert.deepEqual(r.getFileIndexStatus('f1'), { status: 'ready', chunkCount: chunks.length });
+        // embeddedChunkCount is asserted, not ignored: it is what distinguishes a
+        // COMPLETE index from a partially embedded one that still reports 'ready',
+        // and a file where it lags chunkCount is one nothing would ever finish.
+        assert.deepEqual(r.getFileIndexStatus('f1'),
+            { status: 'ready', chunkCount: chunks.length, embeddedChunkCount: chunks.length });
     });
 
     test('unchanged hash + same space → second indexFile is a no-op (no re-embed)', async () => {
@@ -179,8 +183,14 @@ describe('W3: hot-path retrieval', () => {
         // Status reporting from B's perspective is 'pending' (state row says
         // ready-in-space-A, which is unusable for B) — until the background
         // re-index lands, after which it flips to ready-in-space-B.
+        // 'indexing' belongs here too. The background re-index this comment
+        // describes goes pending -> indexing -> ready, and which of the three is
+        // observed is a race with when the assertion runs. It became likelier
+        // once indexFile started acquiring a process-wide concurrency permit
+        // (one extra await before the work begins), but it was always reachable —
+        // the state was written by this path long before that.
         const status = rB.getFileIndexStatus('f1').status;
-        assert.ok(status === 'pending' || status === 'ready', `status=${status}`);
+        assert.ok(['pending', 'indexing', 'ready'].includes(status), `status=${status}`);
     });
 
     test('cold DB (never indexed) still retrieves via ephemeral embed (no regression)', async () => {
@@ -211,7 +221,8 @@ describe('W3: fallback promotion (MEDIUM #5)', () => {
 
         // indexFile must route through the fallback-aware path exactly once.
         assert.equal(pipeline.calls.fallback, 1, 'fallback path used once');
-        assert.deepEqual(r.getFileIndexStatus('f1'), { status: 'ready', chunkCount: chunks.length });
+        assert.deepEqual(r.getFileIndexStatus('f1'),
+            { status: 'ready', chunkCount: chunks.length, embeddedChunkCount: chunks.length });
     });
 
     test('promoted-space file is queryable in the fallback space (no cross-space skip)', async () => {

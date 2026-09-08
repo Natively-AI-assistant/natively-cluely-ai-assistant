@@ -311,6 +311,19 @@ export class EmbeddingPipeline {
     /**
      * Get the currently active provider name (used for dimension safety checks)
      */
+    /**
+     * The active provider's upstream per-request batch ceiling, if it has one.
+     *
+     * Exposed so an indexing caller can size its sub-batches to ONE upstream
+     * round trip. Without it a caller picks a batch size blind, the provider
+     * silently splits it into N sequential requests, and the caller's single
+     * deadline has to cover all N — which is how one 429 discarded a 100-chunk
+     * batch instead of the 32 that actually failed.
+     */
+    getActiveProviderMaxBatch(): number | undefined {
+        return this.provider?.maxBatchSize;
+    }
+
     getActiveProviderName(): string | undefined {
         return this.provider?.name;
     }

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { SkillUploadPayload } from './services/skills/SkillValidator';
+import type { NativelyUsageResponse, NativelyPlansResponse } from '../src/types/nativelyUsage';
 import { PAGE_CAPTURE_FALLBACK_CHANNEL, PAGE_CAPTURE_STARTED_CHANNEL, type PageCaptureFallbackNotice } from './services/pageCaptureFallback';
 
 /**
@@ -222,19 +223,13 @@ interface ElectronAPI {
     error?: string;
     status?: number;
   }>;
-  getNativelyUsage: (force?: boolean) => Promise<{
-    ok: boolean;
-    plan?: string;
-    quota?: {
-      transcription: { used: number; limit: number; remaining: number };
-      ai: { used: number; limit: number; remaining: number };
-      search: { used: number; limit: number; remaining: number };
-      resets_at: string;
-    };
-    member_since?: string;
-    error?: string;
-    status?: number;
-  }>;
+  // Shape imported, not restated. This used to be written out here AND in
+  // src/types/electron.d.ts, so the resource model would have had to be
+  // remembered in three places.
+  getNativelyUsage: (force?: boolean) => Promise<NativelyUsageResponse>;
+  /** The plan catalog — allowances and prices, straight from the server, so the
+   *  plan table never carries its own copy of numbers the server enforces. */
+  getNativelyPlans: () => Promise<NativelyPlansResponse>;
   getStoredCredentials: () => Promise<{
     hasGeminiKey: boolean;
     hasGroqKey: boolean;
@@ -1637,6 +1632,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }) => ipcRenderer.invoke('review:update-testimonial', payload),
   getNativelyPricing: () => ipcRenderer.invoke('get-natively-pricing'),
   getNativelyUsage: (force?: boolean) => ipcRenderer.invoke('get-natively-usage', force ? { force: true } : undefined),
+  getNativelyPlans: () => ipcRenderer.invoke('get-natively-plans'),
   getStoredCredentials: () => ipcRenderer.invoke('get-stored-credentials'),
   // R-10 resolution flow: ambiguous credential stores (names + last-4 only).
   getAmbiguousCredentialStores: () => ipcRenderer.invoke('credentials:get-ambiguous-stores'),

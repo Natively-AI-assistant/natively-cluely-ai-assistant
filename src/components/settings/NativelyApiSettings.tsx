@@ -529,6 +529,31 @@ function SectionLabel({ children, aside }: { children: React.ReactNode; aside?: 
   );
 }
 
+// ─── Trial meter ─────────────────────────────────────────────
+// A trial's counters arrive as raw used/limit pairs from /v1/trial/status,
+// while ResourceMeter speaks the /v1/usage `UsageMeter` shape. This converts,
+// so both usage tables are literally the same component rather than a
+// look-alike written twice.
+//
+// `percent` is the real one and may exceed 100 (AI bills after a stream
+// completes); `visual_percent` is clamped, because a bar wider than its track
+// is a layout bug, not information. Same split the server applies for paid
+// plans — see buildResourceQuota in the API's lib/plans.js.
+function trialMeter(used: number, limit: number, unit: UsageMeter['unit']): UsageMeter {
+  const safeUsed = Number.isFinite(used) && used > 0 ? used : 0;
+  // A zero or missing limit would make percent Infinity/NaN and blank the row.
+  const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 0;
+  const percent = safeLimit > 0 ? (safeUsed / safeLimit) * 100 : 0;
+  return {
+    used: safeUsed,
+    limit: safeLimit > 0 ? safeLimit : null,
+    remaining: safeLimit > 0 ? Math.max(0, safeLimit - safeUsed) : null,
+    percent: Number(percent.toFixed(1)),
+    visual_percent: Math.min(100, Math.max(0, Number(percent.toFixed(1)))),
+    unit,
+  };
+}
+
 // ─── Price ───────────────────────────────────────────────────
 // The dominant element on a plan row: visibly larger and heavier than the
 // plan name (19px semibold vs 13px medium). It previously sat at 17px bold
@@ -828,6 +853,18 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
     setTrialError(null);
     try {
       const res = await window.electronAPI?.startTrial?.();
+      // A trial that started but could not be written to disk is the failure
+      // behind "I pressed Start and got nothing": the server has spent this
+      // machine's one-per-hwid row either way, so say what happened rather
+      // than showing a card that looks untouched. The trial IS live for this
+      // session; only a restart loses it, and pressing Start again from a
+      // healthy session re-issues the same one (the API is idempotent).
+      if (res?.ok && res.persisted === false) {
+        setTrialError(
+          'Trial started, but it could not be saved — your credential store is locked, so it will end when you quit. '
+          + 'Reopen the app with your keychain unlocked and press Start again to keep it.',
+        );
+      }
       if (!res?.ok) {
         if (res?.error === 'trial_ip_limit' || res?.error === 'trial_start_rate_limited') {
           localStorage.setItem('natively_trial_claimed', 'true');
@@ -1367,26 +1404,87 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           }
 
           return (
-            <Card>
-              <div className="px-4 py-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
-                      Try the Natively API free
-                    </p>
-                    <p className="text-[12px] text-text-secondary mt-1 leading-snug">
-                      30 min · {formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens)} AI tokens · {TRIAL_FALLBACK_LIMITS.stt_minutes} min voice · {TRIAL_FALLBACK_LIMITS.search_requests} searches. No account needed
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleStartTrial}
-                    disabled={trialLoading || isClaimed}
-                    className={`shrink-0 flex items-center justify-center gap-2 px-4 h-9 rounded-full text-[13px] font-medium transition-[background-color,transform] duration-150 ease-out motion-reduce:transition-none ${
-                      isClaimed
-                        ? 'bg-bg-input text-text-tertiary cursor-not-allowed'
-                        : 'bg-accent-primary hover:bg-accent-hover text-on-accent active:scale-[0.985] cursor-pointer'
-                    }`}
-                  >
+            /* Built from this tab's OWN parts, not its own set. It used to be
+               the one container here with no section label, on a plain Card,
+               with a small right-aligned pill in flat `bg-accent-primary` —
+               the only unmaterialised saturated control on a screen where
+               every other CTA is clay (specular inset, darkened foot, lift on
+               hover). Beside the key plaque below and the pricing cards under
+               that, it read as a different product's component.
+               Now it is the key card's structure exactly: section label as the
+               heading, `natively-key-card` material, the brand mark on a 12px
+               explainer line, and one full-width `natively-key-cta`. Its own
+               ACTIVE state ("Free trial active", ~line 1301) already had this
+               shape; the two halves of one feature no longer disagree. */
+            <div>
+              <SectionLabel>Free trial</SectionLabel>
+              <Card className="natively-key-card">
+                <div className="px-4 py-4 space-y-3">
+                  {/* The ORIGINAL shape: offer on the left, one compact action
+                      on the right, a single row. It reads as an offer rather
+                      than as a form, and it keeps the card to the height of its
+                      own text — a full-width CTA under two short lines made a
+                      three-row block out of a one-line proposition.
+                      What is NOT reverted is the paint: the plaque material,
+                      the mark, the section label and the clay CTA all stay, so
+                      the shape is the old one and the language is this tab's.
+                      `items-center` because the button is the visual anchor of
+                      the row; `min-w-0 flex-1` on the text so a long
+                      translation wraps instead of shoving the button off. */}
+                  {/* No mark. The key card earns one — it is the card you go
+                      to to hand Natively a credential, and the logo is what
+                      tells you WHOSE key it wants. This card is an offer, its
+                      section label already says FREE TRIAL, and a second copy of
+                      the same logo two rows apart just repeated the brand at
+                      the reader. Losing it also puts the offer back on the
+                      card's own left edge, which is the shape this had
+                      originally. */}
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      {/* The OFFER, at title weight. This line spent one
+                          revision as `natively-key-sub` — the 12px muted role
+                          the key card uses for an explainer — which is right
+                          for "Activate with a key or a license" (a caption
+                          under a section label that already says NATIVELY KEY)
+                          and wrong here: FREE TRIAL does not tell you what you
+                          get, so this line is the heading, not a footnote, and
+                          it was disappearing.
+                          30 is a literal: the real duration is
+                          TrialLimits.duration_ms, which only arrives from
+                          /v1/trial/status once a trial EXISTS — there is
+                          nothing to read before you start one. Same reason the
+                          allowances come from TRIAL_FALLBACK_LIMITS. */}
+                      <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
+                        Try the Natively API free for 30 minutes
+                      </p>
+                      {/* Allowances at the description weight the rest of this
+                          tab uses for a card's second line, not the 11px
+                          tertiary of a footnote — they are what the reader
+                          compares against the plans below. Tabular figures so
+                          the digits line up with the usage and price rows. */}
+                      <p className="text-[12px] text-text-secondary mt-1 leading-snug tabular-nums">
+                        {formatCompact(TRIAL_FALLBACK_LIMITS.ai_tokens)} AI tokens
+                        {' · '}{TRIAL_FALLBACK_LIMITS.stt_minutes} min voice
+                        {/* "research", not "searches": that is what the usage
+                            pill, the usage table and the plan copy all call
+                            this meter. One name per meter. */}
+                        {' · '}{TRIAL_FALLBACK_LIMITS.search_requests} research
+                      </p>
+                    </div>
+
+                    {/* Same control as Activate — same class, same states on the
+                        same `data-state` attribute — just sized to its label
+                        instead of the card. `ready` is saturated only because
+                        Activate is idle until you type: one primary on screen,
+                        which is the rule this section already follows. */}
+                    <button
+                      onClick={handleStartTrial}
+                      disabled={trialLoading || isClaimed}
+                      data-state={trialLoading ? 'saving' : isClaimed ? 'idle' : 'ready'}
+                      className={`natively-key-cta shrink-0 h-9 px-5 text-[13px] font-medium select-none flex items-center justify-center gap-2 ${
+                        trialLoading ? 'cursor-wait' : isClaimed ? 'cursor-not-allowed' : 'cursor-pointer'
+                      }`}
+                    >
                     {trialLoading ? (
                       <>
                         <Loader2 size={13} className="animate-spin" /> Starting…
@@ -1396,18 +1494,19 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
                     ) : (
                       'Start free trial'
                     )}
-                  </button>
-                </div>
-
-                {/* Error Handling */}
-                {trialError && !isClaimed && (
-                  <div className="flex items-center gap-2 mt-3">
-                    <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
-                    <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
+                    </button>
                   </div>
-                )}
-              </div>
-            </Card>
+
+                  {/* Error Handling */}
+                  {trialError && !isClaimed && (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={13} className="text-[var(--text-danger)] shrink-0" strokeWidth={2} />
+                      <p className="text-[12px] text-[var(--text-danger)]">{trialError}</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
           );
         })()}
 
@@ -1612,6 +1711,38 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
           both in the same tick made this unmount instantly no matter what it was
           wrapped in. The inner guard keeps the null-safety for the case where a
           saved key simply has no valid plan. */}
+      {/* ── Usage, for a TRIAL ────────────────────────────────────
+          A trial user never reached the section below: it is gated on
+          `usageData`, which comes from /v1/usage authenticated with a real
+          key, and a trial authenticates with `x-trial-token` against the
+          sentinel `__trial__` — so the whole usage table was simply absent
+          for exactly the people with the tightest allowances and the most
+          reason to watch them. The pills on the trial card show progress
+          bars; they do not show used-against-limit numbers.
+
+          Same ResourceMeter rows as the paid table, so the two read
+          identically. "this trial", not "this month": a trial does not
+          reset, it ends — the countdown for that is on the card above. */}
+      {trialState?.active && !trialState.expired && (
+        <div>
+          <SectionLabel>Usage this trial</SectionLabel>
+          <Card>
+            <div className="px-4 py-4 space-y-4">
+              <ResourceMeter label="AI Usage" icon={Brain} meter={trialMeter(trialState.usage.ai_tokens ?? 0, trialState.limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens, 'tokens')} />
+              <ResourceMeter label="Voice Usage" icon={Mic} meter={trialMeter(Math.round(trialState.usage.stt_seconds / 60), trialState.limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes, 'minutes')} />
+              <ResourceMeter label="Research" icon={Search} meter={trialMeter(trialState.usage.search, trialState.limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests, 'requests')} />
+              {/* Knowledge only when the server actually reported it: an
+                  absent counter is an older API, not zero usage, and
+                  ResourceMeter's own rule is to render nothing rather than a
+                  confident 0%. */}
+              {trialState.usage.embedding_tokens !== undefined && trialState.limits?.embedding_tokens ? (
+                <ResourceMeter label="Knowledge Usage" icon={Layers} meter={trialMeter(trialState.usage.embedding_tokens, trialState.limits.embedding_tokens, 'tokens')} />
+              ) : null}
+            </div>
+          </Card>
+        </div>
+      )}
+
       <AnimatePresence mode="popLayout" initial={false} onExitComplete={() => setUsageData(null)}>
       {isSaved && usageData && (
         <motion.div

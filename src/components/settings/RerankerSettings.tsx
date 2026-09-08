@@ -86,7 +86,7 @@ const PlatformMark: React.FC = () => (
     </span>
 );
 
-type RerankerProvider = 'local' | 'openrouter' | 'jina';
+type RerankerProvider = 'local' | 'natively' | 'openrouter' | 'jina';
 type ModelGroup = 'recommended' | 'quality' | 'fast' | 'multimodal' | 'other';
 
 interface CatalogModel {
@@ -105,6 +105,7 @@ interface RerankerStatus {
     provider: RerankerProvider;
     openrouterModel: string | null;
     jinaModel: string | null;
+    nativelyModel: string | null;
     /** The model id for whichever hosted provider is selected. */
     hostedModel: string | null;
     candidateCount: number | null;
@@ -115,7 +116,7 @@ interface RerankerStatus {
     ineligibleMessage: string | null;
     builtIn: { id: string; name: string; bundled: boolean; cached?: boolean; available?: boolean };
     selectedLocal: { id: string; name: string } | null;
-    effective: { kind: 'local' | 'extension' | 'openrouter' | 'jina'; id: string | null };
+    effective: { kind: 'local' | 'extension' | 'natively' | 'openrouter' | 'jina'; id: string | null };
     lastTest: { at: string; model: string; latencyMs: number; ok: boolean; failure?: string } | null;
 }
 
@@ -450,6 +451,7 @@ const INITIAL_STATUS: RerankerStatus = {
     provider: 'local',
     openrouterModel: null,
     jinaModel: null,
+    nativelyModel: null,
     hostedModel: null,
     candidateCount: null,
     fallbackToLocal: false,
@@ -495,7 +497,7 @@ export const RerankerSettings: React.FC = () => {
     const [busyCatalogId, setBusyCatalogId] = useState<string | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
     const [hostedProviders, setHostedProviders] = useState<Array<{
-        id: 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
+        id: 'natively' | 'openrouter' | 'jina'; name: string; keyUrl: string; keyPlaceholder: string;
         staticCatalogue: boolean; hasApiKey: boolean;
         models: Array<{ id: string; label: string; note?: string; recommended?: boolean }>;
     }>>([]);
@@ -526,6 +528,14 @@ export const RerankerSettings: React.FC = () => {
         // switch that governs both. Models stay empty on this path — a name and
         // a key field is the useful degradation; the catalogue is not.
         setHostedProviders(cur => (cur.length ? cur : [{
+            // Natively is listed here for the same reason Jina is: leaving a
+            // provider out of THIS list is what makes its card vanish when
+            // discovery degrades, and the managed reranker is the one a customer
+            // can use without going and getting a second account.
+            id: 'natively', name: 'Natively',
+            keyUrl: 'https://natively.software', keyPlaceholder: 'natively_sk_…',
+            staticCatalogue: true, hasApiKey: false, models: [],
+        }, {
             id: 'openrouter', name: 'OpenRouter',
             keyUrl: 'https://openrouter.ai/keys', keyPlaceholder: 'sk-or-v1-…',
             staticCatalogue: false, hasApiKey: false, models: [],
@@ -638,7 +648,9 @@ export const RerankerSettings: React.FC = () => {
     }, [status?.builtIn.name, status?.hasApiKey, catalogModels, extensions, catalog, hostedProviders, t]);
 
     const activeOptionId = useMemo(() => {
-        if (status?.effective.kind === 'openrouter' || status?.effective.kind === 'jina') {
+        if (status?.effective.kind === 'natively'
+            || status?.effective.kind === 'openrouter'
+            || status?.effective.kind === 'jina') {
             return `${status.effective.kind}::${status.effective.id ?? ''}`;
         }
         if (status?.effective.kind === 'extension') return `extension::${status.effective.id ?? ''}`;
@@ -652,7 +664,13 @@ export const RerankerSettings: React.FC = () => {
         setBusyCatalogId(optionId);
         setCatalogError(null);
         try {
-            if (kind === 'openrouter') {
+            if (kind === 'natively') {
+                // Its own arm, not the trailing `else`. Without one, picking the
+                // managed reranker fell through to the local branch and silently
+                // set provider:'local' — the picker would show a selection the
+                // app was not using.
+                await window.electronAPI.setRerankerConfig?.({ provider: 'natively', nativelyModel: id });
+            } else if (kind === 'openrouter') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'openrouter', openrouterModel: id });
             } else if (kind === 'jina') {
                 await window.electronAPI.setRerankerConfig?.({ provider: 'jina', jinaModel: id });
@@ -682,7 +700,13 @@ export const RerankerSettings: React.FC = () => {
         if (!status) return '';
         const parts: string[] = [];
 
-        if (status.effective.kind === 'openrouter') {
+        if (status.effective.kind === 'natively') {
+            // Says where the text goes and what it costs, because both are the
+            // questions this option raises: it is hosted like the BYOK ones, but
+            // billed against the plan the user already pays for.
+            parts.push(t('Hosted'), t('Document text is sent to Natively'), t('Uses your plan\u2019s Knowledge allowance'));
+            if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
+        } else if (status.effective.kind === 'openrouter') {
             parts.push(t('Hosted'), t('Document text is sent to OpenRouter'));
             if (status.lastTest?.ok) parts.push(`${Math.round(status.lastTest.latencyMs)} ms ${t('last test')}`);
         } else if (status.effective.kind === 'extension') {
@@ -1386,7 +1410,14 @@ export const RerankerSettings: React.FC = () => {
                 const draft = keyDrafts[p.id] ?? '';
                 const saving = savingKeyFor === p.id;
                 const saved = savedKeyFor === p.id;
-                const selectedModel = p.id === 'jina' ? status.jinaModel : status.openrouterModel;
+                const selectedModel = p.id === 'natively'
+                    ? status.nativelyModel
+                    : p.id === 'jina' ? status.jinaModel : status.openrouterModel;
+                // Natively runs on the API key the user already configured, so
+                // this card must not offer a key field. Rendering one would
+                // invite a paste that reranker:set-hosted-key now refuses
+                // ('not_byok'), and a Remove button that would delete nothing.
+                const byok = p.id !== 'natively';
                 // A live catalogue arrives from OpenRouter; a static one ships
                 // with the app and is listed even before a key exists, so the
                 // user can see what a key would buy them.
@@ -1403,21 +1434,36 @@ export const RerankerSettings: React.FC = () => {
                             <div className="ml-auto flex items-center gap-2 shrink-0">
                                 <AipBadge tone={hasKey ? 'ok' : 'warn'} label={hasKey ? t('Key set') : t('No key')} />
 
-                                <button
-                                    type="button"
-                                    className="aip-btn"
-                                    data-size="sm"
-                                    data-variant="ghost"
-                                    onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
-                                    title={`Get ${p.name} API Key`}
-                                >
-                                    <span className="uppercase tracking-wide">{t('Get Key')}</span>
-                                    <ExternalLink size={12} strokeWidth={1.75} />
-                                </button>
+                                {byok && (
+                                    <button
+                                        type="button"
+                                        className="aip-btn"
+                                        data-size="sm"
+                                        data-variant="ghost"
+                                        onClick={() => window.electronAPI.openExternal?.(p.keyUrl)}
+                                        title={`Get ${p.name} API Key`}
+                                    >
+                                        <span className="uppercase tracking-wide">{t('Get Key')}</span>
+                                        <ExternalLink size={12} strokeWidth={1.75} />
+                                    </button>
+                                )}
                             </div>
                         </div>
 
+                        {/* Not BYOK: say which key it uses and where that lives, rather
+                            than showing an input for a credential this card does not own. */}
+                        {!byok && (
+                            <div className="aip-provider-row">
+                                <p className="text-[11px] text-white/45 leading-relaxed">
+                                    {hasKey
+                                        ? t('Runs on your Natively API key. Reranking counts toward your plan\u2019s Knowledge allowance.')
+                                        : t('Requires a Natively API key. Add one in the Natively API section to use the managed reranker.')}
+                                </p>
+                            </div>
+                        )}
+
                         {/* API Key Credential Row matching EmbeddingSettings */}
+                        {byok && (
                         <div className="aip-provider-row">
                             <div className="aip-provider-field">
                                 <div className="aip-field">
@@ -1465,6 +1511,7 @@ export const RerankerSettings: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                        )}
 
                         {/* Action Row: Test Connection & Model List Selector matching EmbeddingSettings */}
                         {(hasKey || models.length > 0) && (
