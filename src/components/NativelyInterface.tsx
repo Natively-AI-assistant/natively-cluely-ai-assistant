@@ -493,6 +493,13 @@ interface ActiveDirectAssistRequest {
   lastSequence: number;
   answerText: string;
   completed?: boolean;
+  /** Provider the user actually selected, from the 'start' event. Kept so a
+   *  later provider_switch/done can word the notice against the ORIGINAL
+   *  choice even after an A -> B -> C walk overwrites who is "current". */
+  originalProvider?: string;
+  /** True once at least one provider_switch has fired for this request, so
+   *  'done' knows whether to surface a fallback notice at all. */
+  hasSwitched?: boolean;
 }
 
 type DirectAssistRendererEvent =
@@ -5560,6 +5567,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (active.completed) return;
 
       if (event.type === 'start') {
+        // Remember the provider the user actually selected. provider_switch
+        // and done fire later and must word their notice against THIS
+        // original choice, not whatever rung happens to be open at the time.
+        active.originalProvider = event.provider;
+
         // Stamp which fields Direct Assist dropped to fit the context window
         // onto the question card, so a thin-looking answer isn't a silent
         // mystery. userMessageId is only set for surfaces that create a
@@ -5591,11 +5603,20 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // never a slot of its own — it must never advance active.lastSequence
         // (a switch always carries 0, which would otherwise be read as a
         // stale/older terminal event by the guard below and settle the
-        // request as cancelled). The label shown to the user must always be
-        // the provider that actually answered, so it lands on the answer
-        // card, not the question card.
+        // request as cancelled). The notice lands on the answer card, not
+        // the question card.
+        //
+        // provider_switch fires when a rung is OPENED, before it has
+        // produced a single token — and on an A -> B -> C walk, main queues
+        // switches and drains them back to back just before the first
+        // delta, so the renderer can see switch(A->B) then switch(B->C) with
+        // B never having answered anything. Word this as an ATTEMPT, never
+        // an outcome, so it stays accurate at every intermediate step and
+        // even if the ladder later fails entirely. 'done' (below) is the
+        // only place that upgrades this to "answered by".
+        active.hasSwitched = true;
         const placeholderId = active.placeholderId;
-        const noticeText = `${event.from.provider} failed — answered by ${event.to.provider}.`;
+        const noticeText = `${event.from.provider} didn't respond — trying ${event.to.provider}…`;
         setMessages((prev) => prev.map((message) =>
           message.id === placeholderId
             ? { ...message, fallbackNotice: noticeText }
@@ -5629,6 +5650,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
           );
           return;
+        }
+
+        // Content actually arrived: if any provider_switch fired for this
+        // request, this is where — and only where — the attempt-worded
+        // notice upgrades to an outcome. Name the ORIGINAL selection and the
+        // provider that actually answered (event.provider, from done, not
+        // whichever rung a queued switch last opened). If the ladder never
+        // switched, leave fallbackNotice untouched (absent).
+        if (active.hasSwitched && active.originalProvider) {
+          const finalNoticeText = `${active.originalProvider} didn't respond — answered by ${event.provider}.`;
+          const finalPlaceholderId = active.placeholderId;
+          setMessages((prev) => prev.map((message) =>
+            message.id === finalPlaceholderId
+              ? { ...message, fallbackNotice: finalNoticeText }
+              : message,
+          ));
         }
 
         // The ONLY Direct history write. Both rows are appended atomically after
