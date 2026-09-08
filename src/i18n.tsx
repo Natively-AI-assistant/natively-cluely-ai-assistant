@@ -160,7 +160,10 @@ const RU: Record<string, string> = {
     // ── About ──
     'About Natively': 'О программе Natively',
     'Designed to be invisible, intelligent, and trusted.': 'Создано быть незаметным, умным и надёжным.',
-    "What's New in v2.8": 'Что нового в v2.8',
+    // Version-free stem: the version is appended at the call site, so this key
+    // survives every release instead of going stale (and orphaning itself) the
+    // way "What's New in v2.8" / "What's New in 2.8" both did.
+    "What's New in": 'Что нового в',
     'How Natively Works': 'Как работает Natively',
     'Privacy & Data': 'Приватность и данные',
     'Stealth & Control': 'Скрытность и контроль',
