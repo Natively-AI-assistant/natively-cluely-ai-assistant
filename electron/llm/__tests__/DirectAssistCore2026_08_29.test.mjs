@@ -1989,3 +1989,57 @@ test('an UNCOOPERATIVE rung that never observes the abort still reports CONNECT_
   assert.equal(result.provider, 'gemini');
   assert.equal(events.filter((e) => e.type === 'provider_switch')[0].reason, 'CONNECT_TIMEOUT');
 });
+
+test('the rethrowAfterCommit pin survives a caller that tries to override it', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // rethrowAfterCommit is the commit-point invariant, not tuning: a cut-off
+  // answer must surface as an error with partial: true, never as a stream that
+  // ends quietly and reports `complete`. It is pinned AFTER the override
+  // spread, so this override must have no effect at all.
+  const transport = ladderTransport([
+    [(async function* () { yield 'half'; throw timeoutErr(); })()],
+    [['should never run']],
+  ]);
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    ...svcOpts(),
+    fallbackConfigOverrides: { rethrowAfterCommit: false },
+  }).stream(baseInput()));
+
+  assert.equal(result.state, 'failed');
+  assert.equal(events.find((e) => e.type === 'error').partial, true);
+  assert.ok(!transport.calls.some((c) => c.rung === 1));
+});
+
+test('the hedgeEnabled pin survives a caller that tries to override it', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // Hedging duplicates the request and bills two providers to shave tail
+  // latency — the wrong trade on a path the user chose for determinism.
+  const transport = ladderTransport([[timeoutErr(), ['answer']]]);
+  const { result } = await collect(new DirectAssistService(transport, {
+    ...svcOpts(),
+    fallbackConfigOverrides: { hedgeEnabled: true },
+  }).stream(baseInput()));
+
+  // One dispatch per attempt, never two in parallel.
+  assert.equal(result.state, 'complete');
+  assert.deepEqual(transport.calls, [{ rung: 0, attempt: 1 }, { rung: 0, attempt: 2 }]);
+
+  // BE HONEST ABOUT THAT ASSERTION: it cannot currently fail. The engine only
+  // hedges a provider that declares `hedgeWith` (streamFallbackEngine:
+  // `cfg.hedgeEnabled && provider.hedgeWith != null`), and this service builds
+  // no rung with one — a second, independent layer of protection, and the
+  // reason the solo check above is a regression guard for the day someone adds
+  // hedge partners rather than proof of the pin today.
+  //
+  // What proves the pin is where it sits: BOTH contract fields must be applied
+  // AFTER the override spread. A refactor that moves the spread below them, or
+  // drops a line, silently re-opens the override — which is exactly the shape
+  // of drift this plan has already shipped several times.
+  const source = fs.readFileSync(path.resolve(root, 'electron/direct-assist/DirectAssistService.ts'), 'utf8');
+  const spreadAt = source.indexOf('...this.fallbackConfigOverrides');
+  const hedgePinAt = source.indexOf('hedgeEnabled: false');
+  const rethrowPinAt = source.indexOf('rethrowAfterCommit: true');
+  assert.ok(spreadAt > 0, 'the override spread must exist');
+  assert.ok(hedgePinAt > spreadAt, 'hedgeEnabled: false must be pinned AFTER the override spread');
+  assert.ok(rethrowPinAt > spreadAt, 'rethrowAfterCommit: true must be pinned AFTER the override spread');
+});
