@@ -70,8 +70,9 @@ Server: `OPENROUTER_API_KEY` (**required**), `OPENROUTER_BASE_URL`,
 `OPENROUTER_TIMEOUT_MS`, `VOYAGE_INPUT_CHAR_CAP`, `RERANK_CHAR_CAP`,
 `RERANK_TOTAL_CHAR_BUDGET`, `RATE_LIMIT_MAX`.
 
-Outbound token budgets: `VOYAGE_DIRECT_TPM` (3,000,000), `OPENROUTER_TPM`
-(8,000,000), `VOYAGE_PER_KEY_SHARE` (0.5), `VOYAGE_LIMITER_WAIT_MS` (15,000).
+Outbound token budgets: `VOYAGE_DIRECT_EMBED_TPM` (6,000,000),
+`VOYAGE_DIRECT_RERANK_TPM` (3,000,000), `OPENROUTER_TPM` (8,000,000),
+`VOYAGE_PER_KEY_SHARE` (0.5), `VOYAGE_LIMITER_WAIT_MS` (15,000).
 
 ## Outbound token limiter
 
@@ -81,18 +82,38 @@ Outbound token budgets: `VOYAGE_DIRECT_TPM` (3,000,000), `OPENROUTER_TPM`
 a request was about to spend. `lib/tokenLimiter.js` gives each route a token
 bucket and reserves against it before every upstream call.
 
-**`OPENROUTER_TPM` is derived from measurement** (~12,000,000/min observed);
-the default sits under it, because a limiter set AT a ceiling still lets bursts
-reach it.
+### The upstream's real limits (Voyage Tier 1, confirmed 2026-09-08)
 
-**`VOYAGE_DIRECT_TPM` IS A GUESS.** Voyage publishes rate limits only behind an
-account login and they vary by tier. Tune it from evidence:
+|                   | RPM   | TPM       | max/request          | other |
+|-------------------|-------|-----------|----------------------|-------|
+| `voyage-4`        | 2,000 | 8,000,000 | 320,000 tokens       | 1,000 inputs, 32K context, dims 256/512/1024/2048 (**default 1024**) |
+| `rerank-2.5-lite` | 2,000 | 4,000,000 | 600,000 processed    | 1,000 docs, query ≤ 8,000 tok, query + any one doc ≤ 32,000 tok |
+
+Tier 1 is "payment method on file". **Tier 2 (≥ $100 paid) doubles TPM** to
+16M/8M; Tier 3 (≥ $1,000) reaches 24M. This account is Tier 1 — raising the
+budgets past the table above needs a tier change, not a config change.
+
+**The two models have DIFFERENT ceilings, so they get different buckets.** Voyage
+meters per model; OpenRouter meters the project. That is why `budgetScope` exists
+on the route: one bucket for Voyage would have to be sized at rerank's lower
+ceiling (wasting half the embedding budget) or at embedding's (letting rerank run
+to twice its own limit), and two buckets for OpenRouter would sum to twice the
+one project limit that exists.
+
+Defaults sit at ~75% of each ceiling, because a limiter set AT a ceiling still
+lets bursts reach it. `OPENROUTER_TPM` is against a measured ~12,000,000/min.
+
+`voyage-4`'s **default dimension is 1024** — which is exactly why an OpenRouter
+request that silently ignored `output_dimension` returned a 1024-wide vector
+with a 200 rather than an error.
+
+### Tuning
 
     curl -H "x-admin-secret: $ADMIN_SECRET" $API/admin/health-detail \
       | jq .embedding.managed.outbound_budget
 
-* `utilisation` near 1.0 with **no** upstream 429s → the ceiling is higher than
-  configured. Raise it.
+* `utilisation` near 1.0 with **no** upstream 429s → there is room under the
+  tier ceiling. Raise it, up to the table above.
 * Upstream 429s (`provider_rate_limited` in logs) while utilisation is below 1.0
   → the real ceiling is lower. Lower it.
 * `refusedDeadline` rising → clients are being shed by **us**. They receive
@@ -107,12 +128,18 @@ without waiting, and only waits when every route is dry. `VOYAGE_LIMITER_WAIT_MS
 bounds that wait and must stay below the desktop client's 25s request timeout —
 waiting past it spends budget on a response nobody is listening for.
 
-One worst-case rerank is **2,000,000 tokens** (`MAX_SINGLE_REQUEST_TOKENS`: the
-estimator charges the query once per document, so a capped query costs 200x).
-The limiter raises a key's share to admit one of those; if it could not, such a
-request would wait out its whole deadline for room nothing could free. If you
-lower `VOYAGE_DIRECT_TPM` below that, those reranks are refused outright and the
-server logs it loudly at startup of the first request on that route.
+One worst-case rerank is **500,000 tokens** (`MAX_SINGLE_REQUEST_TOKENS`: the
+estimator charges the query once per document, so the query cap is a 200x
+multiplier); a worst-case embed is 256,000. Both are DERIVED from the input caps
+and both are asserted to stay inside Voyage's per-request ceilings above, so
+raising an input cap fails a test rather than producing a 400 in production.
+
+The limiter raises a key's share to admit one largest request; if it could not,
+such a request would wait out its whole deadline for room nothing could free.
+Lower a bucket below that and those requests are refused outright — the server
+logs both conditions loudly on the first request through that bucket. Read the
+log after a config change; that warning is the only sign the per-key fairness
+guarantee has been weakened.
 
 Client: `NATIVELY_MODE_INDEX_EMBED_BATCH` (100, clamped to the provider's 32),
 `..._LOCAL` (16 — higher SIGTRAPs the ONNX arena), `..._BATCH_CHARS` (24,000),
@@ -126,9 +153,13 @@ Client: `NATIVELY_MODE_INDEX_EMBED_BATCH` (100, clamped to the provider's 32),
    the committed copy and reports a false green while a new lib is untracked.
 3. Migrations applied (015 is current; the Voyage work added none).
 4. After deploy, confirm `embedding.managed.configured: true`.
-5. Watch `embedding.managed.outbound_budget` for a day and tune
-   `VOYAGE_DIRECT_TPM` per the section above — the shipped default is a
-   conservative guess, not this account's measured ceiling.
+5. Watch `embedding.managed.outbound_budget` for a day. The defaults are ~75%
+   of the Tier 1 ceilings above; raise them only if utilisation runs near 1.0
+   without upstream 429s.
+6. **Credit balance is a separate limit from rate.** The account holds ~$10, so
+   `out_of_credits` is a likelier failure than a rate limit. It is handled the
+   same way — cool the route, fail over to OpenRouter — but no limiter setting
+   prevents it; only topping up does.
 
 ## Cost
 
