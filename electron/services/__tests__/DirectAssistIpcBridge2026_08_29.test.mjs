@@ -204,11 +204,19 @@ test('referenceContext and meetingTranscript are always server-populated, ignori
   // chunking, embedding, or ranking involved.
   assert.doesNotMatch(
     streamBlock,
-    /referenceContext: request\.referenceContext/,
-    'referenceContext must be server-computed, not passed through from the renderer',
+    /referenceFiles: request\.referenceFiles/,
+    'reference files must be server-computed, not passed through from the renderer',
   );
-  assert.match(streamBlock, /ModesManager\.getInstance\(\)[\s\S]{0,20}\.getReferenceFiles\(/);
-  assert.match(streamBlock, /\n\s*referenceContext,\n/);
+  assert.match(streamBlock, /ModesManager\.getInstance\(\)[\s\S]{0,400}\.getReferenceFiles\(/);
+  // STRUCTURED, not pre-rendered: the per-file budget share happens downstream
+  // against the real prompt limit, so one oversized attachment cannot starve
+  // the rest (allocateDirectAssistReferenceFiles).
+  assert.match(streamBlock, /\n\s*referenceFiles,\n/);
+  assert.doesNotMatch(
+    streamBlock,
+    /buildDirectAssistReferenceContext\(/,
+    'flattening the files here would re-introduce the first-file-wins starvation',
+  );
   assert.match(streamBlock, /getFormattedContext\??\.?\(180\)/);
   assert.match(streamBlock, /\n\s*meetingTranscript,\n/);
 });

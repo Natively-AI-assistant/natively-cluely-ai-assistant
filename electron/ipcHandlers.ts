@@ -151,7 +151,6 @@ import { detectIncompleteNumericAnswer, completenessRegenFabricates, isDocGround
 import { mergeProviderDataScopes } from './llm/ProviderRouter';
 import {
   DirectAssistService,
-  buildDirectAssistReferenceContext,
   type DirectAssistRequestInput,
   type DirectAssistStreamEvent,
 } from './direct-assist';
@@ -6731,14 +6730,14 @@ export function initializeIpcHandlers(appState: AppState): void {
     const onSenderDestroyed = (): void => controller.abort();
     event.sender.once?.('destroyed', onSenderDestroyed);
 
-    // referenceContext and meetingTranscript are always server-computed, not
+    // referenceFiles and meetingTranscript are always server-computed, not
     // taken from the renderer (which never sends either): raw, unchunked,
-    // unranked — every attached reference file's full text (capped only by a
-    // total-size safety ceiling, see buildDirectAssistReferenceContext), and
-    // the live session's last 180s of transcript (the same window the legacy
-    // live auto-answer path already reads via getFormattedContext). Direct
-    // Assist has no retrieval step of its own; this is the entire "evidence",
-    // left for the model to read itself.
+    // unranked — every attached reference file's full text, and the live
+    // session's last 180s of transcript (the same window the legacy live
+    // auto-answer path already reads via getFormattedContext). Direct Assist
+    // has no retrieval step of its own; this is the entire "evidence", left
+    // for the model to read itself. Sizing happens once, downstream, against
+    // the real prompt budget.
     //
     // Both catches fail closed to '' (getActiveModeInfo() has a documented
     // real throw case — see the FAIL-CLOSED comment ~line 3182 above) rather
@@ -6748,12 +6747,26 @@ export function initializeIpcHandlers(appState: AppState): void {
     // "nothing to include" — exactly the silent-mystery gap this feature's
     // trimmedFields notice exists to close, so a load failure should not be
     // invisible to both the notice AND the logs.
-    let referenceContext = '';
+    let referenceFiles: { fileName: string; content: string }[] = [];
     try {
       const { ModesManager } = require('./services/ModesManager');
       const activeModeId = ModesManager.getInstance().getActiveModeInfo()?.id;
       if (activeModeId) {
-        referenceContext = buildDirectAssistReferenceContext(ModesManager.getInstance().getReferenceFiles(activeModeId));
+        // Handed over STRUCTURED, not pre-rendered: prepareDirectAssistPrompt
+        // shares the real prompt budget across the files (see
+        // allocateDirectAssistReferenceFiles). Flattening here first is what
+        // used to let the oldest attachment consume the whole ceiling and
+        // starve every other file, resume included, with no notice anywhere.
+        // Each file is still bounded so one corrupt row cannot balloon main.
+        referenceFiles = (ModesManager.getInstance().getReferenceFiles(activeModeId) as {
+          fileName?: string;
+          content?: string;
+        }[]).map((file) => ({
+          fileName: typeof file?.fileName === 'string' ? file.fileName : 'reference file',
+          content: typeof file?.content === 'string'
+            ? file.content.slice(0, DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS)
+            : '',
+        }));
       }
     } catch (error) {
       console.warn('[direct-assist] reference files unavailable, proceeding without them:', (error as Error)?.message);
@@ -6773,7 +6786,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       currentRequest: resolvedSkill.currentRequest,
       skill: resolvedSkill.skill ?? null,
       manualContext: request.manualContext,
-      referenceContext,
+      referenceFiles,
       pageContext: request.pageContext,
       history: request.history,
       transcript: request.transcript,
