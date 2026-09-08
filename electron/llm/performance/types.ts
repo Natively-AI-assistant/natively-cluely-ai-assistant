@@ -99,6 +99,26 @@ export function classifyWorkload(inputTokens: number, hasImages: boolean): Workl
  */
 export type SampleClass =
   | 'normal'            // a committed turn on a warm path — the only true latency signal
+  /**
+   * A CALIBRATION rung: synthetic prompt, cold connection, deliberate size.
+   *
+   * Latency-admissible, and that is a correction made from real data. These
+   * were first classified `cold_start` to keep a cold synthetic request out of
+   * the warm production median — but a live run showed what that actually cost:
+   * the `medium` and `large` buckets stayed at n=0 even after three successful
+   * rungs measured 1026ms / 1755ms / 3664ms, because excluded samples populate
+   * neither `ttft` nor `meanInputTokens`. Those two fields ARE the
+   * context-scaling fit's coordinates, and in practice calibration is the only
+   * thing that ever fills the large bucket — a user rarely sends 32K by hand.
+   * So excluding it made Phase 14's whole purpose unreachable: the ladder ran,
+   * cost money, and produced no fit.
+   *
+   * The contamination worry it was guarding against is real but narrow: it
+   * applies to the SMALL bucket, where warm production samples already exist.
+   * `source: 'calibration'` on the profile records the provenance so a reader
+   * can tell measured-from-traffic from measured-on-purpose.
+   */
+  | 'calibration'
   | 'cold_start'        // first call to this provider this session (or after a long idle)
   | 'network_switch'    // the network profile changed within this turn's lifetime
   | 'app_resumed'       // powerMonitor reported a resume inside this turn
@@ -123,7 +143,7 @@ export type SampleClass =
  * than an adaptive number.
  */
 export function isLatencyAdmissible(cls: SampleClass): boolean {
-  return cls === 'normal';
+  return cls === 'normal' || cls === 'calibration';
 }
 
 /** Does this sample belong in the RELIABILITY counters? */
@@ -180,10 +200,21 @@ export interface ReliabilityCounters {
   serverError: number;
   clientError: number;
   connectionFailure: number;
+  /**
+   * TRANSPORT retries folded in from the adapters — a DNS re-resolve, a
+   * reconnect — not turn-level regenerations, which are secondary streams and
+   * reach no profile at all.
+   *
+   * A DIAGNOSTIC counter, never a deadline input. It answers "is this endpoint
+   * making us work for its answers?", which a success rate alone hides: a
+   * provider that succeeds every time on its third attempt looks perfect by
+   * `ok`, and feels slow.
+   */
+  retries: number;
 }
 
 export function emptyReliability(): ReliabilityCounters {
-  return { ok: 0, timeout: 0, stall: 0, rateLimit: 0, serverError: 0, clientError: 0, connectionFailure: 0 };
+  return { ok: 0, timeout: 0, stall: 0, rateLimit: 0, serverError: 0, clientError: 0, connectionFailure: 0, retries: 0 };
 }
 
 /** Per-workload evidence. */
@@ -331,6 +362,33 @@ export function isStale(profile: ProviderPerformanceProfile, now: number = Date.
   return now - profile.lastUpdated > PROFILE_STALE_AFTER_MS;
 }
 
+/**
+ * WHERE PHASE 6'S TIMING VOCABULARY LANDS, so a reader can tell what is
+ * measured from what is merely named:
+ *
+ *   connection start / request start  the instant the adapter issues its fetch
+ *   first byte                        response headers — `connect`. For an SSE
+ *                                     response the headers and the first body
+ *                                     bytes arrive together, so these are one
+ *                                     measurement, not two
+ *   first semantic streaming event    `ttft`, taken by the deadline driver at
+ *                                     the first PARSED chunk
+ *   inter-chunk gaps                  `stream`
+ *   generation duration               total - ttft, the denominator of
+ *                                     `generationRate`
+ *   total duration                    `total`
+ *   input / output tokens             `inputTokens` / `outputTokens`, both
+ *                                     ESTIMATED — no provider here reports a
+ *                                     usage count to the streaming caller
+ *   success / error classification    `sampleClass`
+ *   retry count                       `retryCount`
+ *
+ * NOT measured, and not faked: "first complete token". A stream chunk is not a
+ * token — a provider may split one token across two chunks or pack several into
+ * one — so the first complete token is not observable at this layer. Reporting
+ * the first chunk under that name would be a fiction.
+ */
+
 /** One observation, as handed to the store. */
 export interface PerformanceSample {
   providerId: string;
@@ -357,4 +415,6 @@ export interface PerformanceSample {
   outputTokens: number;
   /** Generation-window rate, when it could be measured. */
   generationRateTps: number | null;
+  /** Transport retries attributed to this turn. See ReliabilityCounters.retries. */
+  retryCount: number;
 }

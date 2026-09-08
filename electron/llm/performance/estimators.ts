@@ -58,7 +58,15 @@ export function foldLatency(prev: LatencyEstimate | undefined, ms: number): Late
   // and a log line, and a decaying float grows an unreadable fractional tail.
   const maxMs = Math.round(Math.max(ms, prev.maxMs * MAX_DECAY));
   const spread = Math.max(1, Math.abs(ms - prev.p50Ms));
-  const p50Ms = Math.round(prev.p50Ms + Math.sign(ms - prev.p50Ms) * spread * P50_STEP);
+  const nudged = Math.round(prev.p50Ms + Math.sign(ms - prev.p50Ms) * spread * P50_STEP);
+  // CLAMPED TO THE MAX. Caught on real traffic: six live turns produced
+  // `p50=1797ms` against `max=1477ms`, which is incoherent — a median cannot
+  // exceed a maximum. The two estimators move on different clocks (the max
+  // DECAYS by MAX_DECAY on every sample, the median only steps toward the
+  // newest one), so a decaying max can slide underneath a median that has not
+  // caught up. Clamping keeps the pair readable; the max stays authoritative
+  // because it is the one a deadline is sized from.
+  const p50Ms = Math.min(nudged, maxMs);
   return { maxMs, p50Ms, count: prev.count + 1, samplesMs: pushSample(prev.samplesMs, ms) };
 }
 

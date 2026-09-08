@@ -85,6 +85,44 @@ export const TINY_PNG_BASE64 =
 export const TINY_PNG_DATA_URI = `data:image/png;base64,${TINY_PNG_BASE64}`;
 
 /**
+ * Materialise the probe image as a real FILE and return its path.
+ *
+ * REQUIRED, and the reason is a defect this feature shipped with until it was
+ * run against a live provider. `imagePaths` throughout LLMHelper are filesystem
+ * paths — every adapter does `fs.existsSync(p)` and silently SKIPS anything that
+ * is not a readable file. Passing TINY_PNG_DATA_URI therefore sent no image at
+ * all: the probe degraded into a plain text request, and a model that answered
+ * it was recorded as vision-SUPPORTED having never been shown a picture.
+ *
+ * A wrong capability verdict is the worst possible output of a capability probe
+ * because it is durable — it persists, and the answer path reads it. So the
+ * probe now writes a real file, and {@link visionProbeImagePath} returns null
+ * rather than a data URI if it cannot, so the caller can decline to probe
+ * instead of probing nothing.
+ */
+export function visionProbeImagePath(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('node:fs');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const os = require('node:os');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const path = require('node:path');
+    const dir = path.join(os.tmpdir(), 'natively-capability-probe');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'probe-8x8.png');
+    // Content-addressed by construction (the fixture is a constant), so a
+    // rewrite is only needed when the file is missing or truncated.
+    if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
+      fs.writeFileSync(file, Buffer.from(TINY_PNG_BASE64, 'base64'));
+    }
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The vision probe's question.
  *
  * Deliberately does NOT ask what colour the image is. A model that cannot see

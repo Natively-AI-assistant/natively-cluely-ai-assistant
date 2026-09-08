@@ -319,6 +319,13 @@ export class ProviderPerformanceStore {
 
     if (isReliabilitySignal(sample.sampleClass)) {
       bumpReliability(workload, sample.sampleClass);
+      // Retries are counted for every reliability-bearing sample, including a
+      // turn that ultimately SUCCEEDED — a provider that always works on its
+      // third attempt is the case this counter exists to make visible, and
+      // gating it on failure would hide exactly that.
+      if (Number.isFinite(sample.retryCount) && sample.retryCount > 0) {
+        workload.reliability.retries += sample.retryCount;
+      }
     }
 
     if (isLatencyAdmissible(sample.sampleClass)) {
@@ -353,13 +360,28 @@ export class ProviderPerformanceStore {
       if (sample.maxGapMs != null && sample.p50GapMs != null) {
         base.stream = foldGaps(base.stream, sample.maxGapMs, sample.p50GapMs);
       }
-      base.source = base.source === 'shipped_prior' ? 'production' : base.source;
+      base.source = sample.sampleClass === 'calibration'
+        ? 'calibration'
+        : (base.source === 'shipped_prior' ? 'production' : base.source);
     }
 
     base.workloads[sample.workload] = workload;
     base.contextScaling = refitContextScaling(base);
     base.lastUpdated = now;
-    base.route = sample.route;
+    // ROUTE IS NOT OVERWRITTEN BY A VISION SAMPLE. Caught on real traffic: the
+    // calibration vision probe shares this provider+model, so it shares the
+    // profile KEY, and writing its route flipped the row to 'vision'. That is
+    // not in TTFT_ADAPTIVE_ROUTES, so a profile that had been adapting its text
+    // ceiling silently stopped — the ceiling went from a measured 6477ms back
+    // to the shipped prior on the very turn calibration was supposed to improve.
+    //
+    // Vision-ness is already carried by the WORKLOAD dimension, which is where
+    // it belongs; `route` describes the transport the text path takes. So a
+    // non-vision sample may set it, and a vision sample may only set it on a
+    // row that has nothing better.
+    if (sample.workload !== 'vision' || base.route === 'vision') {
+      base.route = sample.route;
+    }
 
     this.profiles.set(key, base);
     this.scheduleSave();
@@ -481,6 +503,7 @@ function bumpReliability(workload: WorkloadEvidence, cls: PerformanceSample['sam
     // are made by two different predicates.
     case 'normal':
     case 'cold_start':
+    case 'calibration':
       r.ok += 1; break;
     case 'timeout': r.timeout += 1; break;
     case 'stall': r.stall += 1; break;
