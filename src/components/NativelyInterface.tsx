@@ -440,6 +440,11 @@ interface Message {
   // recent turns). Reported separately from trimmedFields because "shortened"
   // and "gone" are different things to a reader judging an answer.
   shortenedFields?: string[];
+  // Set when the ladder answered with a DIFFERENT provider than the one the
+  // user selected (a fallback rung fired). Verbatim provider ids, never a
+  // mapping table — the point is telling the user which provider actually
+  // received their request and got billed, not a pretty label.
+  fallbackNotice?: string;
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -488,11 +493,27 @@ interface ActiveDirectAssistRequest {
   lastSequence: number;
   answerText: string;
   completed?: boolean;
+  /** Provider the user actually selected, from the 'start' event. Kept so a
+   *  later provider_switch/done can word the notice against the ORIGINAL
+   *  choice even after an A -> B -> C walk overwrites who is "current". */
+  originalProvider?: string;
+  /** True once at least one provider_switch has fired for this request, so
+   *  'done' knows whether to surface a fallback notice at all. */
+  hasSwitched?: boolean;
 }
 
 type DirectAssistRendererEvent =
   | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields?: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch';
+      requestId: string;
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number;
+      from: { provider: string; model: string };
+      to: { provider: string; model: string };
+      reason: string;
+    }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
   | { type: 'cancel'; requestId: string; sequence: number };
@@ -1161,6 +1182,15 @@ const MessageRow = React.memo(
                 </span>
               </div>
             ) : null}
+            {/* The ladder answered with a different provider than the one the
+                user selected — the label above must never lie about who
+                actually received the request and got billed. */}
+            {msg.role === 'system' && msg.fallbackNotice && (
+              <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
+                <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate max-w-[260px]">{msg.fallbackNotice}</span>
+              </div>
+            )}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
               <div className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-green-500" title={`Ran ${msg.codeVerified.total} test case(s) successfully`}>
@@ -5537,6 +5567,11 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
       if (active.completed) return;
 
       if (event.type === 'start') {
+        // Remember the provider the user actually selected. provider_switch
+        // and done fire later and must word their notice against THIS
+        // original choice, not whatever rung happens to be open at the time.
+        active.originalProvider = event.provider;
+
         // Stamp which fields Direct Assist dropped to fit the context window
         // onto the question card, so a thin-looking answer isn't a silent
         // mystery. userMessageId is only set for surfaces that create a
@@ -5563,6 +5598,43 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         return;
       }
 
+      if (event.type === 'provider_switch') {
+        // NOT terminal, and its sequence is a snapshot of the delta counter,
+        // never a slot of its own — it must never advance active.lastSequence
+        // (a switch always carries 0, which would otherwise be read as a
+        // stale/older terminal event by the guard below and settle the
+        // request as cancelled). The notice lands on the answer card, not
+        // the question card.
+        //
+        // provider_switch fires when a rung is OPENED, before it has
+        // produced a single token — and on an A -> B -> C walk, main queues
+        // switches and drains them back to back just before the first
+        // delta, so the renderer can see switch(A->B) then switch(B->C) with
+        // B never having answered anything. Word this as an ATTEMPT, never
+        // an outcome, so it stays accurate at every intermediate step and
+        // even if the ladder later fails entirely. 'done' (below) is the
+        // only place that upgrades this to "answered by".
+        active.hasSwitched = true;
+        const placeholderId = active.placeholderId;
+        const noticeText = `${event.from.provider} didn't respond — trying ${event.to.provider}…`;
+        setMessages((prev) => prev.map((message) =>
+          message.id === placeholderId
+            ? { ...message, fallbackNotice: noticeText }
+            : message,
+        ));
+        return;
+      }
+
+      // LATENT TRAP: everything past this point treats an unrecognized
+      // event.type as terminal — it falls through 'done' / 'error' into the
+      // bare settleDirectAssistIncomplete(active, 'Request cancelled.') at
+      // the bottom of this callback. That is correct for today's actual
+      // terminal types, but it is NOT "unknown ⇒ ignore": a future
+      // non-terminal event added without its own branch ABOVE this guard
+      // (next to 'start'/'delta'/'provider_switch') will read as a stale-or-
+      // fresh terminal event and settle the request as cancelled, exactly
+      // like provider_switch would have without its branch above.
+      //
       // Terminal events carry the last emitted delta sequence, not the next
       // sequence. Accept equality so start -> delta(1) -> done(1) seals; only a
       // genuinely older terminal event is stale.
@@ -5578,6 +5650,22 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
             directAssistErrorText('INCOMPLETE_STREAM', 'The model returned no answer.'),
           );
           return;
+        }
+
+        // Content actually arrived: if any provider_switch fired for this
+        // request, this is where — and only where — the attempt-worded
+        // notice upgrades to an outcome. Name the ORIGINAL selection and the
+        // provider that actually answered (event.provider, from done, not
+        // whichever rung a queued switch last opened). If the ladder never
+        // switched, leave fallbackNotice untouched (absent).
+        if (active.hasSwitched && active.originalProvider) {
+          const finalNoticeText = `${active.originalProvider} didn't respond — answered by ${event.provider}.`;
+          const finalPlaceholderId = active.placeholderId;
+          setMessages((prev) => prev.map((message) =>
+            message.id === finalPlaceholderId
+              ? { ...message, fallbackNotice: finalNoticeText }
+              : message,
+          ));
         }
 
         // The ONLY Direct history write. Both rows are appended atomically after

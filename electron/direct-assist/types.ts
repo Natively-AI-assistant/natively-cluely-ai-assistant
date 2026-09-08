@@ -24,6 +24,25 @@ export type DirectAssistProvider = typeof DIRECT_ASSIST_PROVIDERS[number];
 export type DirectAssistSource = 'typed' | 'stt' | 'screenshot';
 export type DirectAssistHistoryRole = 'user' | 'assistant';
 
+/**
+ * Providers that may be SELECTED but never appear as a fallback rung, and are
+ * never retried. Both reach the model through a blocking, non-streaming call,
+ * so there is no first token and therefore no commit point: a retry cannot
+ * know how much work the first call completed, and would duplicate the whole
+ * request and its bill.
+ */
+export const DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS: readonly DirectAssistProvider[] =
+  Object.freeze(['codex-cli', 'curl']);
+
+/** One rung of the Direct Assist ladder. `priority` 0 is the selected provider. */
+export interface DirectAssistRung {
+  readonly provider: DirectAssistProvider;
+  readonly model: string;
+  readonly priority: number;
+  /** False for the selected rung; true for anything the ladder added. */
+  readonly isFallback: boolean;
+}
+
 export interface DirectAssistSelection {
   readonly provider: DirectAssistProvider;
   readonly model: string;
@@ -185,9 +204,24 @@ export interface DirectAssistDispatchRequest {
 }
 
 export interface DirectAssistTransport {
+  /**
+   * The eligible ladder for this request, selected provider first. Returns a
+   * single rung when fallback is off, when the selection is ladder-ineligible,
+   * or when nothing else qualifies. Providers rejected by a credential,
+   * capability or privacy boundary are ABSENT — never returned and then
+   * refused at dispatch.
+   *
+   * OPTIONAL on this interface: a transport that omits it supports no
+   * fallback ladder at all, and a caller must not assume its presence — check
+   * for it before relying on ladder behavior, rather than reading only this
+   * doc comment.
+   */
+  listDirectAssistRungs?(request: DirectAssistDispatchRequest): readonly DirectAssistRung[];
+
   streamDirectAssist(
     request: DirectAssistDispatchRequest,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown>;
 }
 
@@ -235,6 +269,19 @@ export type DirectAssistStreamEvent =
       readonly requestId: string;
       readonly sequence: number;
       readonly text: string;
+    }
+  | {
+      readonly type: 'provider_switch';
+      readonly requestId: string;
+      /** SNAPSHOT of the delta counter, never a slot of its own. A switch can
+       *  only happen pre-commit, so this is always 0 — asserted in the tests as
+       *  a second guard on the commit-point rule. */
+      readonly sequence: number;
+      readonly from: { readonly provider: DirectAssistProvider; readonly model: string };
+      readonly to: { readonly provider: DirectAssistProvider; readonly model: string };
+      /** Why the previous rung was abandoned. Content-free, like every other
+       *  field on this contract. */
+      readonly reason: DirectAssistErrorCode;
     }
   | {
       readonly type: 'done';

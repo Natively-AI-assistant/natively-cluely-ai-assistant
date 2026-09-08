@@ -497,7 +497,12 @@ test('service dispatches exactly once to the frozen provider/model and preserves
   const controller = new AbortController();
   const transport = {
     streamDirectAssist(request, signal) {
-      calls.push({ request, signal });
+      // Capture `aborted` AT CALL TIME. The shared fallback engine aborts its
+      // per-attempt controller in a `finally` on every exit path — including a
+      // clean finish — so reading `signal.aborted` after the stream has ended
+      // now says true for a request that was never cancelled. The property
+      // under test is that the provider is handed a live, non-caller signal.
+      calls.push({ request, signal, abortedAtCall: signal.aborted });
       return (async function* () {
         yield 'raw ';
         yield 'provider output';
@@ -512,7 +517,7 @@ test('service dispatches exactly once to the frozen provider/model and preserves
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].request.selection, { provider: 'openai', model: 'gpt-5.4' });
   assert.notEqual(calls[0].signal, controller.signal);
-  assert.equal(calls[0].signal.aborted, false);
+  assert.equal(calls[0].abortedAtCall, false);
   assert.equal(Object.isFrozen(calls[0].request), true);
   assert.equal(Object.isFrozen(calls[0].request.selection), true);
   assert.deepEqual(events.map((event) => event.type), ['start', 'delta', 'delta', 'done']);
@@ -1501,4 +1506,664 @@ test('a MULTI-image turn is transcribed as one set, and none of its bytes are re
   assert.deepEqual([...prepared.historyImagePaths], [], 'three images of bytes replaced by one string');
   assert.match(prepared.userPrompt, /USER \[attached 3 screenshots: transcribed below\]: Look at these\./);
   assert.match(prepared.userPrompt, /\[screen attached that turn\] Three terminal windows/);
+});
+
+test('normalizeDirectAssistError unwraps an engine aggregate to the first rung error', async () => {
+  const { normalizeDirectAssistError, DirectAssistError } = await loadDirectAssist();
+
+  // The aggregate's message must contain NO word the pre-existing keyword
+  // classifier already matches — no "timeout", "rate limit", "not configured",
+  // "model not found". Otherwise this test passes against the OLD code and
+  // proves nothing: the classifier would match the SENTENCE and never reach
+  // the unwrap. Without the unwrap this fixture is PROVIDER_ERROR.
+  const first = new DirectAssistError('RATE_LIMITED', 'The selected provider is rate limited.', true);
+  const aggregate = new Error('All providers failed: rung natively | rung gemini');
+  aggregate.firstProviderError = first;
+
+  const normalized = normalizeDirectAssistError(aggregate);
+  assert.equal(normalized.code, 'RATE_LIMITED');
+  assert.equal(normalized.retryable, true);
+  // The aggregate's prose names providers and must never reach the renderer.
+  assert.ok(!normalized.message.includes('gemini'));
+});
+
+test('normalizeDirectAssistError does NOT follow a bare .cause', async () => {
+  const { normalizeDirectAssistError } = await loadDirectAssist();
+  // Node's fetch sets .cause on TypeError; following it would discard the
+  // correct top-level classification carried by .status.
+  const inner = new Error('socket hang up');
+  const outer = Object.assign(new Error('fetch failed'), { status: 429, cause: inner });
+  assert.equal(normalizeDirectAssistError(outer).code, 'RATE_LIMITED');
+});
+
+test('normalizeDirectAssistError still handles a bare provider error', async () => {
+  const { normalizeDirectAssistError } = await loadDirectAssist();
+  const normalized = normalizeDirectAssistError(Object.assign(new Error('nope'), { status: 429 }));
+  assert.equal(normalized.code, 'RATE_LIMITED');
+});
+
+test('direct assist fallback config never hedges', async () => {
+  const {
+    DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG,
+    DIRECT_ASSIST_TOTAL_BUDGET_MS,
+    DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
+    DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS,
+    DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS,
+  } = await loadDirectAssist();
+  // Hedging bills two providers per turn. Direct Assist is the path chosen for
+  // provider determinism, so this must stay off.
+  assert.equal(DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG.hedgeEnabled, false);
+  assert.equal(DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG.logPrefix, 'DirectAssist');
+  // The budget must be AT LEAST two full idle windows — a lower bound, not an
+  // upper bound: the ladder must not be able to outlive the per-attempt idle
+  // windows it contains.
+  assert.ok(DIRECT_ASSIST_TOTAL_BUDGET_MS >= DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS * 2);
+  // Depth on the user's choice, breadth after it fails — see the constants' docs.
+  assert.ok(DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS > DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS);
+});
+
+// ── Task 4: listDirectAssistRungs — the ladder is a FILTER, never a refusal ─
+//
+// Every case asserts a provider's ABSENCE from the returned ladder, never
+// that some later call threw. `rungCaller` builds a bare LLMHelper instance
+// (prototype methods only, matching llmHelperCaller() above) with just enough
+// stubbed state to drive the filter chain.
+//
+// isProviderDisabled is shadowed rather than left to the real implementation:
+// the real isProviderDisabled() reads CredentialsManager, whose MODULE BODY
+// calls Electron's app.getPath() at import time — that throws outside a real
+// Electron process, so getDisabledProviderFamilies() silently fails open and
+// the real check would never see `disabledProviders` below. Own-property
+// shadowing (the same mechanism note 5 uses for directAssistFallbackEnabled)
+// is what makes the family-disable test exercise the actual code path.
+function rungCaller(overrides = {}) {
+  const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
+  const self = Object.create(LLMHelper.prototype);
+  Object.assign(self, {
+    isLocalOnlyMode: false,
+    _client: {}, _groqClient: {}, _openaiClient: {}, _claudeClient: {},
+    disabledProviders: new Set(),
+    isProviderDisabled: (family) => self.disabledProviders.has(family),
+    // A FUNCTION, not a boolean: listDirectAssistRungs calls
+    // this.directAssistFallbackEnabled(). An own boolean property would shadow
+    // the prototype method and throw "not a function".
+    directAssistFallbackEnabled: () => true,
+    ...overrides,
+  });
+  return (request) => LLMHelper.prototype.listDirectAssistRungs.call(self, request);
+}
+
+const directAssistTextRequest = {
+  requestId: 'r1',
+  selection: { provider: 'natively', model: 'natively' },
+  systemPrompt: 's', userPrompt: 'u', imagePaths: [], historyImagePaths: [],
+};
+
+test('the selected provider is always rung 0', async () => {
+  const rungs = rungCaller()(directAssistTextRequest);
+  assert.equal(rungs[0].provider, 'natively');
+  assert.equal(rungs[0].priority, 0);
+  assert.equal(rungs[0].isFallback, false);
+});
+
+test('local-only mode leaves no cloud rung on the ladder', async () => {
+  const rungs = rungCaller({ isLocalOnlyMode: true })({
+    ...directAssistTextRequest,
+    selection: { provider: 'ollama', model: 'llama3' },
+  });
+  assert.deepEqual(rungs.map((r) => r.provider), ['ollama']);
+});
+
+test('a ladder-ineligible selection gets exactly one rung', async () => {
+  const rungs = rungCaller()({ ...directAssistTextRequest, selection: { provider: 'codex-cli', model: 'gpt-5' } });
+  assert.equal(rungs.length, 1);
+  assert.equal(rungs[0].provider, 'codex-cli');
+});
+
+// directFallbackCandidates() never structurally yields codex-cli/curl/deepseek,
+// so a naive absence assertion against the real candidate list would still
+// pass with the DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS / image-capability
+// guards inside eligible() deleted outright — false assurance. Shadowing
+// directFallbackCandidates (same technique as the isProviderDisabled shadow
+// above) forces the candidates the guard is actually supposed to reject to
+// reach eligible(), so the assertion depends on the guard, not on the
+// candidate list omitting them.
+test('codex-cli and curl never appear as fallback rungs', async () => {
+  const rungs = rungCaller({
+    directFallbackCandidates: () => [
+      { provider: 'codex-cli', model: 'gpt-5' },
+      { provider: 'curl', model: 'curl-1' },
+    ],
+    // directProviderHasCredential's switch has no case for codex-cli/curl and
+    // defaults to false, which would ALSO exclude them and mask the guard
+    // under test. Force credentials "present" so the only thing that can
+    // still remove these two is DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.
+    directProviderHasCredential: () => true,
+  })(directAssistTextRequest);
+  assert.ok(!rungs.some((r) => r.isFallback && (r.provider === 'codex-cli' || r.provider === 'curl')));
+});
+
+test('a disabled provider family is absent, not merely refused', async () => {
+  const rungs = rungCaller({ disabledProviders: new Set(['groq']) })(directAssistTextRequest);
+  assert.ok(!rungs.some((r) => r.provider === 'groq'));
+});
+
+test('an image request drops providers that cannot take images', async () => {
+  const rungs = rungCaller({
+    directFallbackCandidates: () => [{ provider: 'deepseek', model: 'deepseek-chat' }],
+    // deepseek has no client stubbed (_deepseekClient is unset), so
+    // directProviderHasCredential would ALSO exclude it and mask the guard
+    // under test. Force credentials "present" so the only thing that can
+    // still remove it is directSelectionSupportsImages's deepseek: false case.
+    directProviderHasCredential: () => true,
+  })({ ...directAssistTextRequest, imagePaths: ['/tmp/shot.png'] });
+  assert.ok(!rungs.some((r) => r.provider === 'deepseek'));
+});
+
+// The single area flagged for the hardest review scrutiny: private_vision.
+// assertOutboundImagesAllowed is shadowed to throw exactly the way the real
+// VisionPolicyError throw does on a refused cloud provider, proving eligible()
+// actually catches it and drops the rung — a LOCAL rung (ollama) is exempt
+// from the same call in the real code and must survive.
+test('a privacy refusal on images removes cloud rungs but spares a local one', async () => {
+  const rungs = rungCaller({
+    useOllama: true,
+    directFallbackCandidates: () => [
+      { provider: 'gemini', model: 'gemini-3.8-flash' },
+      { provider: 'ollama', model: 'llama3' },
+    ],
+    // Capability is not what this test is about — always allow images so the
+    // only thing that can remove a rung is the privacy guard below.
+    directSelectionSupportsImages: () => true,
+    assertOutboundImagesAllowed: (provider, hasImages) => {
+      if (hasImages && provider !== 'ollama') {
+        const err = new Error('private_vision refuses this provider');
+        err.name = 'VisionPolicyError';
+        throw err;
+      }
+    },
+  })({ ...directAssistTextRequest, imagePaths: ['/tmp/shot.png'] });
+  assert.ok(!rungs.some((r) => r.provider === 'gemini'));
+  assert.ok(rungs.some((r) => r.provider === 'ollama'));
+});
+
+test('fallback disabled yields the selected rung alone', async () => {
+  const rungs = rungCaller({ directAssistFallbackEnabled: () => false })(directAssistTextRequest);
+  assert.equal(rungs.length, 1);
+  assert.equal(rungs[0].provider, 'natively');
+});
+
+// ── Task 5: streamDirectAssist dispatches the SUPPLIED rung, not the selection ─
+
+test('streamDirectAssist honours the rung over request.selection', async () => {
+  const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
+  const self = Object.create(LLMHelper.prototype);
+  let dispatched = null;
+  Object.assign(self, {
+    isLocalOnlyMode: false,
+    streamWithGeminiModel: async function* (_u, model) { dispatched = { provider: 'gemini', model }; yield 'ok'; },
+  });
+  const gen = LLMHelper.prototype.streamDirectAssist.call(
+    self,
+    { ...directAssistTextRequest, selection: { provider: 'natively', model: 'natively' } },
+    undefined,
+    { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+  );
+  for await (const _ of gen) { /* drain */ }
+  assert.deepEqual(dispatched, { provider: 'gemini', model: 'gemini-3.7-flash' });
+});
+
+// ── Task 6: the service walks the shared fallback engine's ladder ────────────
+
+/**
+ * script[i] is rung i's behaviour per attempt: a string[] to yield, an async
+ * iterable to delegate to, or an Error to throw. The last entry repeats if the
+ * attempts exceed the list.
+ */
+function ladderTransport(script) {
+  const calls = [];
+  const attempts = new Map();
+  return {
+    calls,
+    listDirectAssistRungs: () => script.map((_, i) => ({
+      provider: i === 0 ? 'natively' : 'gemini',
+      model: i === 0 ? 'natively' : 'gemini-3.7-flash',
+      priority: i,
+      isFallback: i > 0,
+    })),
+    async *streamDirectAssist(_request, _signal, rung) {
+      const idx = rung ? rung.priority : 0;
+      const n = attempts.get(idx) ?? 0;
+      attempts.set(idx, n + 1);
+      calls.push({ rung: idx, attempt: n + 1 });
+      const behaviour = script[idx][Math.min(n, script[idx].length - 1)];
+      if (behaviour instanceof Error) throw behaviour;
+      // A behaviour may be a live async generator (used to yield a token and
+      // THEN fail); a plain array is the common case. `for (const c of gen)`
+      // — as first drafted — throws TypeError on the async form.
+      if (behaviour != null && typeof behaviour[Symbol.asyncIterator] === 'function') {
+        yield* behaviour;
+        return;
+      }
+      for (const chunk of behaviour) yield chunk;
+    },
+  };
+}
+
+const timeoutErr = () => Object.assign(new Error('connect timeout'), { code: 'CONNECT_TIMEOUT' });
+const svcOpts = () => ({ timerScheduler: createFakeTimerScheduler().scheduler, sleep: async () => {} });
+
+test('a solo rung is retried rather than failing on the first error', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = ladderTransport([[timeoutErr(), ['answer']]]);
+  const { events, result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput()));
+  assert.equal(result.state, 'complete');
+  assert.deepEqual(transport.calls, [{ rung: 0, attempt: 1 }, { rung: 0, attempt: 2 }]);
+  assert.ok(!events.some((e) => e.type === 'provider_switch'));
+});
+
+test('the selected rung gets its full attempt budget and a fallback rung gets its smaller one', async () => {
+  const {
+    DirectAssistService,
+    DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS,
+    DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS,
+  } = await loadDirectAssist();
+  const transport = ladderTransport([[timeoutErr()], [timeoutErr()]]);
+  await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput()));
+  // Read from the constants, not from literals: the brief's draft asserted
+  // 3 and 2 against constants that are 2 and 1, so the numbers could only ever
+  // be right by accident.
+  assert.equal(transport.calls.filter((c) => c.rung === 0).length, DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS);
+  assert.equal(transport.calls.filter((c) => c.rung === 1).length, DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS);
+  assert.ok(DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS > DIRECT_ASSIST_FALLBACK_MAX_ATTEMPTS);
+});
+
+/**
+ * Mirrors exactly what LLMHelper.listDirectAssistRungs() returns for a
+ * ladder-ineligible selection (codex-cli/curl): ONE rung, priority 0,
+ * isFallback: FALSE — see electron/LLMHelper.ts's `selectedRung` /
+ * DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS early-return. `ladderTransport`
+ * above can't stand in for this: it hardcodes its rung names to
+ * natively/gemini regardless of what the caller selected, so it can never
+ * produce the isFallback:false + ladder-ineligible-provider combination the
+ * bug lives in. Counts DISPATCHES (transport.calls.length), not rungs — the
+ * regression this guards against passed a rung-count assertion while still
+ * dispatching twice.
+ */
+function singleIneligibleRungTransport(provider, model) {
+  const calls = [];
+  return {
+    calls,
+    listDirectAssistRungs: () => [{ provider, model, priority: 0, isFallback: false }],
+    async *streamDirectAssist() {
+      calls.push({ provider, model });
+      throw timeoutErr();
+    },
+  };
+}
+
+test('a ladder-ineligible codex-cli selection is dispatched exactly ONCE, never retried', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = singleIneligibleRungTransport('codex-cli', 'gpt-5');
+  const { result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput({
+    selection: { provider: 'codex-cli', model: 'gpt-5' },
+  })));
+  assert.equal(result.state, 'failed');
+  // A blocking, non-streaming call has no commit point: a retry cannot know
+  // how much of the first call completed, so it would duplicate the whole
+  // request, its bill, and the child-process spawn. This is the dispatch
+  // count a fix that only changes rung COUNT cannot make pass.
+  assert.equal(transport.calls.length, 1);
+});
+
+test('a ladder-ineligible curl selection is dispatched exactly ONCE, never retried', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = singleIneligibleRungTransport('curl', 'curl-1');
+  const { result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput({
+    selection: { provider: 'curl', model: 'curl-1' },
+  })));
+  assert.equal(result.state, 'failed');
+  assert.equal(transport.calls.length, 1);
+});
+
+// Same defect, the OTHER code path: a transport with no listDirectAssistRungs
+// at all falls back to the synthetic single rung built inline in
+// DirectAssistService.stream() (priority: 0, isFallback: false) — the "the
+// synthetic fallback rung ... has the same defect" case from the review. That
+// rung is unconditionally isFallback:false regardless of provider, so a
+// codex-cli selection reaching this path is exactly as retry-prone as the
+// listDirectAssistRungs path above unless the maxAttempts fix also covers it.
+test('a codex-cli selection with NO listDirectAssistRungs (synthetic single rung) is still dispatched exactly ONCE', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const calls = [];
+  const transport = {
+    async *streamDirectAssist() {
+      calls.push(1);
+      throw timeoutErr();
+    },
+  };
+  const { result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput({
+    selection: { provider: 'codex-cli', model: 'gpt-5' },
+  })));
+  assert.equal(result.state, 'failed');
+  assert.equal(calls.length, 1);
+});
+
+test('an exhausted rung walks to the next and announces the switch', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = ladderTransport([[timeoutErr()], [['answer']]]);
+  const { events, result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput()));
+  assert.equal(result.state, 'complete');
+  assert.equal(result.provider, 'gemini');
+  assert.equal(events.find((e) => e.type === 'done').provider, 'gemini');
+  const switches = events.filter((e) => e.type === 'provider_switch');
+  assert.equal(switches.length, 1);
+  assert.equal(switches[0].from.provider, 'natively');
+  assert.equal(switches[0].to.provider, 'gemini');
+  assert.equal(switches[0].reason, 'CONNECT_TIMEOUT');
+  // Snapshot, never a slot: a switch is pre-commit by construction.
+  assert.equal(switches[0].sequence, 0);
+  // ...and it must arrive BEFORE the first delta.
+  assert.ok(events.findIndex((e) => e.type === 'provider_switch') < events.findIndex((e) => e.type === 'delta'));
+  // The delta counter is unaffected by the switch.
+  assert.deepEqual(events.filter((e) => e.type === 'delta').map((e) => e.sequence), [1]);
+});
+
+test('no switch and no retry once a delta has been emitted', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const transport = ladderTransport([
+    [(async function* () { yield 'half'; throw timeoutErr(); })()],
+    [['should never run']],
+  ]);
+  const { events, result } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput()));
+  assert.equal(result.state, 'failed');
+  assert.equal(events.find((e) => e.type === 'error').partial, true);
+  assert.ok(!events.some((e) => e.type === 'provider_switch'));
+  assert.ok(!transport.calls.some((c) => c.rung === 1));
+  assert.equal(transport.calls.filter((c) => c.rung === 0).length, 1, 'a committed rung is not retried either');
+});
+
+test('the whole-ladder budget stops the ladder instead of opening another rung', async () => {
+  const { DirectAssistService, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  // A clock the TEST advances, not one that advances on every read: the engine
+  // also calls now() for TTFT measurement, and a self-advancing clock would
+  // corrupt those readings instead of testing the budget.
+  let clock = 0;
+  const transport = ladderTransport([[timeoutErr()], [['late answer']]]);
+  const svc = new DirectAssistService(transport, {
+    ...svcOpts(),
+    now: () => clock,
+    sleep: async () => { clock += DIRECT_ASSIST_TOTAL_BUDGET_MS; },
+  });
+  const { events, result } = await collect(svc.stream(baseInput()));
+  assert.equal(result.state, 'failed');
+  assert.ok(!transport.calls.some((c) => c.rung === 1));
+  assert.equal(events.find((e) => e.type === 'error').error.code, 'CONNECT_TIMEOUT');
+});
+
+test('a rung that cannot finish inside the remaining budget is refused, not opened', async () => {
+  const { DirectAssistService, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  // 1ms of budget left, not 0: the OLD check (`elapsed < BUDGET`) treats this
+  // as "not exhausted" and opens the next rung anyway — the exact bug. The
+  // FIXED check (`elapsed + DIRECT_ASSIST_MIN_VIABLE_TTFT_MS > BUDGET`)
+  // refuses it, because a rung with only 1ms left cannot plausibly reach a
+  // first token before the ceiling even in the realistic (2-5s) case.
+  let clock = 0;
+  const transport = ladderTransport([[timeoutErr()], [['late answer']]]);
+  const svc = new DirectAssistService(transport, {
+    ...svcOpts(),
+    now: () => clock,
+    sleep: async () => { clock = DIRECT_ASSIST_TOTAL_BUDGET_MS - 1; },
+  });
+  const { events, result } = await collect(svc.stream(baseInput()));
+  assert.equal(result.state, 'failed');
+  assert.equal(events.find((e) => e.type === 'error').error.code, 'CONNECT_TIMEOUT');
+  // Neither a doomed retry of rung 0 nor an opened rung 1 should reach the
+  // transport once essentially no budget remains — this is the assertion the
+  // OLD `elapsed < BUDGET` arithmetic cannot satisfy: it would let rung 1
+  // open (and, in this synchronous mock, even "succeed"), turning a call the
+  // real 90s ceiling was built to refuse into a reported success.
+  assert.ok(!transport.calls.some((c) => c.rung === 1));
+});
+
+// The companion to the test above: the FIX must not overcorrect. fallbackConfig.ts's
+// own worked example (DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS's comment) is elapsed
+// ~60s after the selected rung burns 2 x 30s on the vision connect ceiling,
+// leaving "30s for a fallback rung to answer" — and that fallback rung's own
+// configured ttftTimeoutMs (35s, the config default) is LARGER than the 30s
+// actually left. A check against the rung's full ttftTimeoutMs
+// (`elapsed + ttftTimeoutMs > BUDGET`, the first version of this fix) would
+// refuse to open it (60000 + 35000 > 90000), silently re-breaking the exact
+// scenario DIRECT_ASSIST_SELECTED_MAX_ATTEMPTS was written to keep alive. The
+// shipped fix checks against DIRECT_ASSIST_MIN_VIABLE_TTFT_MS (~5s, "a healthy
+// provider's first token") instead, which this elapsed point clears with room
+// to spare (60000 + 5000 <= 90000).
+test('the designed worst case (elapsed ~60s, 30s nominally left) still opens the fallback rung', async () => {
+  const { DirectAssistService, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  let clock = 0;
+  const transport = ladderTransport([[timeoutErr()], [['late but healthy answer']]]);
+  const svc = new DirectAssistService(transport, {
+    ...svcOpts(),
+    now: () => clock,
+    // One backoff sleep occurs between rung 0's two attempts; land it at the
+    // documented worst-case elapsed point (60s), with 30s nominally left.
+    sleep: async () => { clock = DIRECT_ASSIST_TOTAL_BUDGET_MS - 30_000; },
+  });
+  const { result } = await collect(svc.stream(baseInput()));
+  assert.equal(result.state, 'complete');
+  assert.ok(transport.calls.some((c) => c.rung === 1), 'the fallback rung must still be opened');
+});
+
+test('an exhausted ladder reports the FIRST rung error, not the last', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  const authErr = Object.assign(new Error('bad key'), { status: 401 });
+  const transport = ladderTransport([[timeoutErr()], [authErr]]);
+  const { events } = await collect(new DirectAssistService(transport, svcOpts()).stream(baseInput()));
+  const err = events.find((e) => e.type === 'error');
+  assert.equal(err.error.code, 'CONNECT_TIMEOUT');
+  // The engine's aggregate names every provider tried; none of it may leak.
+  assert.ok(!err.error.message.includes('gemini'));
+});
+
+test('each service instance keeps its own provider health map, structurally isolated but write-only — no shared map, no read-back', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The earlier version of this test read a `visionHealthForTest` accessor that
+  // LLMHelper does not export, so BOTH sides were 0 and it could not fail. And
+  // no behavioural probe can fail either: the engine never gates the primary
+  // rung on `health` (it is read only by the ordering helper and by hedging,
+  // and hedgeEnabled is false), so a shared map would change no observable
+  // outcome. What IS observable — and what the requirement actually rests on —
+  // is that the map is a per-INSTANCE field the engine really writes into.
+  const first = new DirectAssistService(ladderTransport([[timeoutErr()], [timeoutErr()]]), svcOpts());
+  const second = new DirectAssistService(ladderTransport([[timeoutErr()], [timeoutErr()]]), svcOpts());
+
+  assert.ok(first.health instanceof Map);
+  assert.notEqual(first.health, second.health, 'two instances must not share one health map');
+  assert.equal(first.health.size, 0);
+
+  await collect(first.stream(baseInput()));
+  // The engine really did record breaker state for both failed rungs...
+  assert.deepEqual([...first.health.keys()].sort(), ['gemini:gemini-3.7-flash', 'natively:natively']);
+  // ...and none of it reached the other instance.
+  assert.equal(second.health.size, 0);
+
+  // ...and the service must not be reaching into LLMHelper's vision health at
+  // all. `visionHealth` may appear ONLY in the comment that explains why it is
+  // not used; any code line mentioning it would be the coupling this forbids.
+  const source = fs.readFileSync(path.resolve(root, 'electron/direct-assist/DirectAssistService.ts'), 'utf8');
+  const visionHealthCodeLines = source.split('\n')
+    .filter((line) => line.includes('visionHealth') && !/^\s*(\*|\/\/)/.test(line));
+  assert.deepEqual(visionHealthCodeLines, []);
+  assert.doesNotMatch(source, /from '\.\.\/LLMHelper'/);
+  assert.match(source, /private readonly health = new Map<string, HealthEntry>\(\)/);
+});
+
+test('the idle watchdog no longer caps the whole pre-first-token walk', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // REAL timers, scaled 1000x down from production: a 60ms silence window with
+  // two 40ms attempts on rung 0 is the shape of a 45s window with two 30s
+  // vision connect ceilings. Armed once before the ladder and re-armed only on
+  // a delta, the watchdog fires at 60ms — mid-walk, before rung 1 is ever
+  // opened — which made DIRECT_ASSIST_TOTAL_BUDGET_MS unreachable in
+  // production and the whole feature inert for its motivating case.
+  const opened = [];
+  const transport = {
+    listDirectAssistRungs: () => ([
+      { provider: 'natively', model: 'natively', priority: 0, isFallback: false },
+      { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+    ]),
+    async *streamDirectAssist(_request, _signal, rung) {
+      opened.push(rung.priority);
+      if (rung.priority === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        throw timeoutErr();
+      }
+      yield 'answer';
+    },
+  };
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    streamIdleTimeoutMs: 60,
+    sleep: async () => {},
+  }).stream(baseInput()));
+
+  assert.deepEqual(opened, [0, 0, 1], 'the walk must survive longer than one silence window');
+  assert.equal(result.state, 'complete');
+  assert.equal(result.provider, 'gemini');
+  assert.ok(!events.some((e) => e.type === 'error'));
+});
+
+test('the idle watchdog still fires when ONE attempt goes silent for its whole window', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The re-arm must not have turned the guard off: a single attempt that says
+  // nothing for longer than the window is still STREAM_IDLE_TIMEOUT.
+  const service = new DirectAssistService({
+    streamDirectAssist(_request, signal) {
+      return (async function* () {
+        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+      })();
+    },
+  }, { streamIdleTimeoutMs: 25, sleep: async () => {} });
+  const { events, result } = await collect(service.stream(baseInput()));
+  assert.equal(result.state, 'failed');
+  assert.equal(events.at(-1).error.code, 'STREAM_IDLE_TIMEOUT');
+});
+
+test('a switch forced by the engine own TTFT guard reports CONNECT_TIMEOUT, not a generic PROVIDER_ERROR', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The transport never throws here: the ENGINE's ttft timer ends the attempt,
+  // aborts its signal and tears the rung's generator down. That teardown runs
+  // `finally` but never `catch`, which is why a reason captured only in the
+  // wrapper's catch reported PROVIDER_ERROR for the likeliest fallback trigger
+  // there is. ladderTransport cannot reach this path — it throws.
+  const opened = [];
+  const transport = {
+    listDirectAssistRungs: () => ([
+      { provider: 'natively', model: 'natively', priority: 0, isFallback: false },
+      { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+    ]),
+    async *streamDirectAssist(_request, signal, rung) {
+      opened.push(rung.priority);
+      if (rung.priority === 0) {
+        // Cooperative: wakes on abort and returns without a token.
+        await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+        return;
+      }
+      yield 'answer';
+    },
+  };
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    sleep: async () => {},
+    fallbackConfigOverrides: { ttftTimeoutMs: 20 },
+  }).stream(baseInput()));
+
+  assert.deepEqual(opened, [0, 0, 1]);
+  assert.equal(result.provider, 'gemini');
+  const switches = events.filter((e) => e.type === 'provider_switch');
+  assert.equal(switches.length, 1);
+  assert.equal(switches[0].reason, 'CONNECT_TIMEOUT');
+});
+
+test('an UNCOOPERATIVE rung that never observes the abort still reports CONNECT_TIMEOUT', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // The harder half of the same defect: this transport ignores the signal
+  // entirely, so the rung's generator never resumes and neither its catch NOR
+  // its finally ever runs. The reason therefore cannot come from a throw at
+  // all — it is read off the aborted attempt signal.
+  const opened = [];
+  const transport = {
+    listDirectAssistRungs: () => ([
+      { provider: 'natively', model: 'natively', priority: 0, isFallback: false },
+      { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+    ]),
+    async *streamDirectAssist(_request, _signal, rung) {
+      opened.push(rung.priority);
+      if (rung.priority === 0) {
+        await new Promise(() => {});   // never settles, never observes the abort
+        return;
+      }
+      yield 'answer';
+    },
+  };
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    sleep: async () => {},
+    fallbackConfigOverrides: { ttftTimeoutMs: 20, cleanupTimeoutMs: 10 },
+  }).stream(baseInput()));
+
+  assert.deepEqual(opened, [0, 0, 1]);
+  assert.equal(result.provider, 'gemini');
+  assert.equal(events.filter((e) => e.type === 'provider_switch')[0].reason, 'CONNECT_TIMEOUT');
+});
+
+test('the rethrowAfterCommit pin survives a caller that tries to override it', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // rethrowAfterCommit is the commit-point invariant, not tuning: a cut-off
+  // answer must surface as an error with partial: true, never as a stream that
+  // ends quietly and reports `complete`. It is pinned AFTER the override
+  // spread, so this override must have no effect at all.
+  const transport = ladderTransport([
+    [(async function* () { yield 'half'; throw timeoutErr(); })()],
+    [['should never run']],
+  ]);
+  const { events, result } = await collect(new DirectAssistService(transport, {
+    ...svcOpts(),
+    fallbackConfigOverrides: { rethrowAfterCommit: false },
+  }).stream(baseInput()));
+
+  assert.equal(result.state, 'failed');
+  assert.equal(events.find((e) => e.type === 'error').partial, true);
+  assert.ok(!transport.calls.some((c) => c.rung === 1));
+});
+
+test('the hedgeEnabled pin survives a caller that tries to override it', async () => {
+  const { DirectAssistService } = await loadDirectAssist();
+  // Hedging duplicates the request and bills two providers to shave tail
+  // latency — the wrong trade on a path the user chose for determinism.
+  const transport = ladderTransport([[timeoutErr(), ['answer']]]);
+  const { result } = await collect(new DirectAssistService(transport, {
+    ...svcOpts(),
+    fallbackConfigOverrides: { hedgeEnabled: true },
+  }).stream(baseInput()));
+
+  // One dispatch per attempt, never two in parallel.
+  assert.equal(result.state, 'complete');
+  assert.deepEqual(transport.calls, [{ rung: 0, attempt: 1 }, { rung: 0, attempt: 2 }]);
+
+  // BE HONEST ABOUT THAT ASSERTION: it cannot currently fail. The engine only
+  // hedges a provider that declares `hedgeWith` (streamFallbackEngine:
+  // `cfg.hedgeEnabled && provider.hedgeWith != null`), and this service builds
+  // no rung with one — a second, independent layer of protection, and the
+  // reason the solo check above is a regression guard for the day someone adds
+  // hedge partners rather than proof of the pin today.
+  //
+  // What proves the pin is where it sits: BOTH contract fields must be applied
+  // AFTER the override spread. A refactor that moves the spread below them, or
+  // drops a line, silently re-opens the override — which is exactly the shape
+  // of drift this plan has already shipped several times.
+  const source = fs.readFileSync(path.resolve(root, 'electron/direct-assist/DirectAssistService.ts'), 'utf8');
+  const spreadAt = source.indexOf('...this.fallbackConfigOverrides');
+  const hedgePinAt = source.indexOf('hedgeEnabled: false');
+  const rethrowPinAt = source.indexOf('rethrowAfterCommit: true');
+  assert.ok(spreadAt > 0, 'the override spread must exist');
+  assert.ok(hedgePinAt > spreadAt, 'hedgeEnabled: false must be pinned AFTER the override spread');
+  assert.ok(rethrowPinAt > spreadAt, 'rethrowAfterCommit: true must be pinned AFTER the override spread');
 });

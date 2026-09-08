@@ -66,6 +66,15 @@ export interface DirectAssistError {
 export type DirectAssistEvent =
   | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch'
+      requestId: string
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number
+      from: { provider: string; model: string }
+      to: { provider: string; model: string }
+      reason: string
+    }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
   | { type: 'cancel'; requestId: string; sequence: number }
@@ -900,6 +909,9 @@ export interface ElectronAPI {
   getDirectAssistEnabled: () => Promise<boolean>;
   setDirectAssistEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
   onDirectAssistEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
+  getDirectAssistFallbackEnabled: () => Promise<boolean>;
+  setDirectAssistFallbackEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>;
+  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => () => void;
 
   getCodeVerification: () => Promise<boolean>;
   setCodeVerification: (enabled: boolean) => Promise<{ success: boolean }>;
