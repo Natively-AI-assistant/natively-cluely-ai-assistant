@@ -4,10 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
+const require = createRequire(import.meta.url);
 
 const ipc = read('electron/ipcHandlers.ts');
 const preload = read('electron/preload.ts');
@@ -52,6 +54,13 @@ test('preload and renderer declarations expose one correlated Direct Assist brid
     // in sync while preload.ts's own local duplicate was missed — no compile
     // error, since onDirectAssistEvent forwards the raw IPC object untouched.
     assert.match(source, /type: 'start'[\s\S]{0,140}trimmedFields: string\[\]/);
+    // provider_switch mirrors electron/direct-assist/types.ts field for field
+    // (from/to/reason), so the renderer is told which provider actually
+    // answered whenever the ladder fails over mid-request.
+    assert.match(
+      source,
+      /type: 'provider_switch'[\s\S]{0,220}from: \{ provider: string; model: string \}[\s\S]{0,80}to: \{ provider: string; model: string \}[\s\S]{0,80}reason: string/,
+    );
   }
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-stream', request\)/);
   assert.match(preload, /ipcRenderer\.invoke\('direct-assist-cancel', requestId, source\)/);
@@ -88,6 +97,39 @@ test('stream relay enforces correlation, monotonic deltas, and one terminal even
   assert.match(streamBlock, /terminalSent = true/);
   assert.match(streamBlock, /INCOMPLETE_STREAM/);
   assert.match(streamBlock, /controller\.signal\.aborted/);
+});
+
+test('provider_switch is forwarded in order without being swallowed into the terminal fall-through', () => {
+  // Before this, any streamEvent.type other than 'start'/'delta' fell through
+  // to `lastSequence = Math.max(...)` and then sendTerminal — so a
+  // provider_switch (a mid-stream event, not an end-of-stream one) would have
+  // been sent as a TERMINAL event and killed the stream the moment a rung
+  // failed over. The forward + continue branch must sit strictly between the
+  // 'delta' branch and that generic Math.max/terminal fall-through.
+  const deltaAt = streamBlock.indexOf("if (streamEvent.type === 'delta') {");
+  const switchAt = streamBlock.indexOf("if (streamEvent.type === 'provider_switch') {");
+  const fallThroughAt = streamBlock.indexOf('lastSequence = Math.max(lastSequence, streamEvent.sequence);');
+  assert.ok(deltaAt >= 0 && switchAt > deltaAt, 'provider_switch branch must follow the delta branch');
+  assert.ok(fallThroughAt > switchAt, 'provider_switch branch must precede the terminal fall-through');
+
+  const switchBlock = streamBlock.slice(switchAt, fallThroughAt);
+  assert.match(switchBlock, /sendDirectAssistEvent\(event\.sender, streamEvent\)/);
+  assert.match(switchBlock, /continue;/);
+  // It must never touch lastSequence: a switch's sequence is a snapshot of
+  // the delta counter (always 0), not a slot of its own.
+  assert.doesNotMatch(switchBlock, /lastSequence\s*=/);
+  // The branch must forward streamEvent ITSELF, not a reconstructed object
+  // literal — the 'start' event's trimmedFields field (see the comment above,
+  // ~line 49-53) drifted undetected once before precisely because a copy
+  // diverged from the source shape. Passing streamEvent wholesale makes field
+  // preservation structural: `from`/`to` cannot be silently dropped or
+  // renamed without rewriting this call into an object literal, and that
+  // rewrite is exactly what this assertion catches.
+  assert.doesNotMatch(
+    switchBlock,
+    /sendDirectAssistEvent\([^)]*\{/,
+    'provider_switch must forward the streamEvent object itself, not a hand-rebuilt payload',
+  );
 });
 
 test('main resolves and strips enabled skills, including underscore IDs', () => {
@@ -292,4 +334,140 @@ test('Direct Assist transcribes its own screenshot AFTER the answer, never befor
   // leaving the device.
   assert.match(helper, /localOnly: settings\.getScreenUnderstandingMode\(\) === 'private_vision'/);
   assert.match(helper, /allowScreenshots: providerScopes\.screenshots !== false/);
+});
+
+// ── Task 8: directAssistFallbackEnabled ──────────────────────────────────
+//
+// Task 4 already added the interface field and getDirectAssistFallbackEnabled()
+// (listDirectAssistRungs calls it). This task adds only the IPC setter and the
+// UI toggle, so these tests cover: the setter handler mirrors the existing
+// directAssistEnabled handler's shape, the preload/renderer-type bridge is
+// wired, and — the real behavioural proof, not just a text match — a fresh
+// SettingsManager instance actually defaults the accessor to true and honours
+// an explicit false.
+
+test('the fallback setting is present without duplicating a second accessor for it', () => {
+  assert.match(settings, /directAssistFallbackEnabled\?: boolean/);
+  assert.match(
+    settings,
+    /getDirectAssistFallbackEnabled\(\): boolean \{\s*return this\.settings\.directAssistFallbackEnabled !== false;\s*\}/,
+  );
+  // Exactly one interface field and one accessor — Task 8 must not add a
+  // second competing definition alongside Task 4's.
+  assert.equal((settings.match(/directAssistFallbackEnabled\?: boolean/g) ?? []).length, 1);
+  assert.equal((settings.match(/getDirectAssistFallbackEnabled\(\): boolean/g) ?? []).length, 1);
+});
+
+test('set-direct-assist-fallback-enabled mirrors the set-direct-assist-enabled handler shape', () => {
+  const getStart = ipc.indexOf("safeHandle('get-direct-assist-fallback-enabled'");
+  const setStart = ipc.indexOf("safeHandle('set-direct-assist-fallback-enabled'", getStart);
+  assert.ok(getStart >= 0, 'get-direct-assist-fallback-enabled handler must exist');
+  assert.ok(setStart > getStart, 'set-direct-assist-fallback-enabled handler must follow the getter');
+
+  const setEnd = ipc.indexOf('\n  safeHandle(', setStart + 1);
+  const setBlock = ipc.slice(setStart, setEnd);
+
+  assert.match(ipc.slice(getStart, setStart), /getDirectAssistFallbackEnabled\(\)/);
+  assert.match(setBlock, /typeof enabled !== 'boolean'/);
+  assert.match(setBlock, /error: 'invalid_type'/);
+  assert.match(setBlock, /settings\.set\('directAssistFallbackEnabled', enabled\)/);
+  assert.match(setBlock, /error: 'settings_store_degraded'/);
+  assert.match(setBlock, /getDirectAssistFallbackEnabled\(\)/);
+  assert.match(setBlock, /direct-assist-fallback-enabled-changed/);
+  assert.match(setBlock, /return \{ success: true \};/);
+
+  // Unlike directAssistEnabled, there is no operator kill switch for the
+  // fallback preference and no in-flight requests to abort when it is turned
+  // off — flipping it only changes eligibility for the NEXT failure, so it
+  // must not reach into activeDirectAssistByRequest.
+  assert.doesNotMatch(setBlock, /isDirectAssistKilledByOperator/);
+  assert.doesNotMatch(setBlock, /activeDirectAssistByRequest/);
+});
+
+test('preload and renderer declarations expose the fallback bridge', () => {
+  for (const source of [preload, rendererTypes]) {
+    assert.match(source, /getDirectAssistFallbackEnabled/);
+    assert.match(source, /setDirectAssistFallbackEnabled/);
+    assert.match(source, /onDirectAssistFallbackEnabledChanged/);
+  }
+  assert.match(preload, /ipcRenderer\.invoke\('get-direct-assist-fallback-enabled'\)/);
+  assert.match(preload, /ipcRenderer\.invoke\('set-direct-assist-fallback-enabled', enabled\)/);
+  assert.match(preload, /ipcRenderer\.on\('direct-assist-fallback-enabled-changed', subscription\)/);
+});
+
+test('the UI toggle is disabled whenever Direct Assist itself is off', () => {
+  const uiSource = read('src/components/settings/AIProvidersSettings.tsx');
+  assert.match(uiSource, /Fall back to another provider/);
+  const cardStart = uiSource.indexOf('Fall back to another provider');
+  const cardEnd = uiSource.indexOf('AipSwitch', cardStart);
+  const switchStart = cardEnd;
+  const switchEnd = uiSource.indexOf('/>', switchStart);
+  const switchBlock = uiSource.slice(switchStart, switchEnd);
+  assert.match(switchBlock, /checked=\{directAssistFallbackEnabled\}/);
+  assert.match(switchBlock, /disabled=\{directAssistFallbackBusy \|\| !directAssistEnabled\}/);
+  assert.match(uiSource, /setDirectAssistFallbackEnabled\?\.\(next\)/);
+});
+
+test('directAssistFallbackEnabled really defaults to true and really honours an explicit false', (t) => {
+  // Instantiate the REAL, built SettingsManager against a temp profile, the
+  // same way SettingsDegradedStoreMutators2026_08_22.test.mjs does — a plain
+  // regex match on the source can't tell a correct `!== false` from an
+  // inverted `=== true` that happens to appear near the right words.
+  const distPath = path.join(root, 'dist-electron/electron/services/SettingsManager.js');
+  if (!fs.existsSync(distPath)) {
+    t.skip('dist-electron build not present; run npm run build:electron first');
+    return;
+  }
+
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'da-fallback-settings-'));
+  try {
+    const electronPath = require.resolve('electron');
+    const previousCacheEntry = require.cache[electronPath];
+    require.cache[electronPath] = {
+      id: electronPath, filename: electronPath, loaded: true,
+      exports: {
+        app: { isReady: () => true, getPath: () => userData, getVersion: () => '0.0.0-test' },
+        safeStorage: { isEncryptionAvailable: () => false },
+      },
+    };
+
+    // Force a fresh module load so this test doesn't inherit another test
+    // file's cached class/singleton.
+    delete require.cache[require.resolve(distPath)];
+    const { SettingsManager } = require(distPath);
+    const SLOT = '__nativelySettingsManagerV1__';
+    delete globalThis[SLOT];
+    SettingsManager.instance = undefined;
+    const freshSettingsManager = () => {
+      delete globalThis[SLOT];
+      SettingsManager.instance = undefined;
+      return SettingsManager.getInstance();
+    };
+
+    try {
+      const settingsManager = freshSettingsManager();
+      assert.equal(
+        settingsManager.getDirectAssistFallbackEnabled(),
+        true,
+        'a profile that has never seen the key must default to fallback ON',
+      );
+      const setResult = settingsManager.set('directAssistFallbackEnabled', false);
+      assert.equal(setResult, true, 'the write itself must succeed against a healthy store');
+      assert.equal(
+        settingsManager.getDirectAssistFallbackEnabled(),
+        false,
+        'an explicit false must be honoured, not coerced back to the default',
+      );
+    } finally {
+      delete globalThis[SLOT];
+      SettingsManager.instance = undefined;
+      if (previousCacheEntry) {
+        require.cache[electronPath] = previousCacheEntry;
+      } else {
+        delete require.cache[electronPath];
+      }
+    }
+  } finally {
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
 });

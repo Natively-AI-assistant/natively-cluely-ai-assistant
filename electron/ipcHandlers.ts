@@ -6850,6 +6850,25 @@ export function initializeIpcHandlers(appState: AppState): void {
     return { success: true };
   });
 
+  safeHandle('get-direct-assist-fallback-enabled', async () => {
+    return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
+  });
+
+  safeHandle('set-direct-assist-fallback-enabled', async (_, enabled: unknown) => {
+    if (typeof enabled !== 'boolean') {
+      return { success: false, error: 'invalid_type' };
+    }
+    const settings = SettingsManager.getInstance();
+    if (!settings.set('directAssistFallbackEnabled', enabled)) {
+      return { success: false, error: 'settings_store_degraded' };
+    }
+    const effective = settings.getDirectAssistFallbackEnabled();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('direct-assist-fallback-enabled-changed', effective);
+    });
+    return { success: true };
+  });
+
   safeHandle('direct-assist-stream', async (event, rawRequest: unknown) => {
     const normalized = normalizeDirectAssistRequest(rawRequest);
     if (normalized.error || !normalized.request) {
@@ -7048,6 +7067,26 @@ export function initializeIpcHandlers(appState: AppState): void {
             sendDirectAssistEvent(event.sender, streamEvent);
             continue;
           }
+          if (streamEvent.type === 'provider_switch') {
+            // NOT terminal — a rung failing over is not the end of the
+            // stream, it is what lets the stream continue. Its `sequence` is
+            // a SNAPSHOT of the delta counter, never a slot of its own (always
+            // 0, pre-commit only), so it must never reach the generic
+            // sequence accounting below: doing so would let this event fall
+            // through to the terminal branch and kill the stream the moment
+            // a fallback fired.
+            sendDirectAssistEvent(event.sender, streamEvent);
+            continue;
+          }
+          // LATENT TRAP: everything past this line treats an unrecognized
+          // streamEvent.type as terminal — it falls into the 'done' branch or
+          // the bare `else { sendTerminal(streamEvent) }` below and ends the
+          // stream. That is correct for today's actual terminal types
+          // ('done', 'cancel', 'error'), but it is NOT "unknown ⇒ ignore": a
+          // future non-terminal event added without its own branch ABOVE this
+          // line (next to 'start'/'delta'/'provider_switch') will be sent to
+          // the renderer as a terminal event and silently kill the stream,
+          // exactly like provider_switch would have without its branch above.
           lastSequence = Math.max(lastSequence, streamEvent.sequence);
           if (streamEvent.type === 'done') {
             sendTerminal({ ...streamEvent, fullText } as DirectAssistStreamEvent);

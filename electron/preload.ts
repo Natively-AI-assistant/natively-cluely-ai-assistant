@@ -49,6 +49,15 @@ interface DirectAssistError {
 type DirectAssistEvent =
   | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
+  | {
+      type: 'provider_switch';
+      requestId: string;
+      /** SNAPSHOT of the delta counter, never a slot of its own — always 0. */
+      sequence: number;
+      from: { provider: string; model: string };
+      to: { provider: string; model: string };
+      reason: string;
+    }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; partial: boolean; error: DirectAssistError }
   | { type: 'cancel'; requestId: string; sequence: number };
@@ -2811,6 +2820,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('direct-assist-enabled-changed', subscription);
     return () => {
       ipcRenderer.removeListener('direct-assist-enabled-changed', subscription);
+    };
+  },
+  getDirectAssistFallbackEnabled: () => ipcRenderer.invoke('get-direct-assist-fallback-enabled'),
+  setDirectAssistFallbackEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('set-direct-assist-fallback-enabled', enabled),
+  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('direct-assist-fallback-enabled-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('direct-assist-fallback-enabled-changed', subscription);
     };
   },
   getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),

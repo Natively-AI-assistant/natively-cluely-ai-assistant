@@ -73,9 +73,11 @@ import { AntigravityService } from './services/AntigravityService';
 import { GROQ_PRIMARY_MODEL, groqFallbackFor, isGroqModelGone, groqReasoningParams } from './llm/groqModels';
 import { DirectAssistError } from './direct-assist/errors';
 import { DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER } from './direct-assist/requestBuilder';
+import { DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS } from './direct-assist/types';
 import type {
   DirectAssistDispatchRequest,
   DirectAssistProvider,
+  DirectAssistRung,
   DirectAssistSelection,
 } from './direct-assist/types';
 const execAsync = promisify(exec);
@@ -10590,6 +10592,145 @@ let isMultimodal = !!(imagePaths?.length);
   }
 
   /**
+   * Plan the Direct Assist ladder.
+   *
+   * Every credential, capability and privacy boundary is applied HERE, as a
+   * filter. A provider that fails one is absent from the returned list — it is
+   * never opened and then refused at dispatch, because a rung that is going to
+   * throw still costs an attempt, a backoff and a circuit-breaker mark.
+   *
+   * The adapters keep their own assertOutboundScopes call. This is not a
+   * replacement for that backstop; it is the reason the backstop should never
+   * fire on this path.
+   */
+  public listDirectAssistRungs(request: DirectAssistDispatchRequest): readonly DirectAssistRung[] {
+    const selected = request.selection;
+    const hasImages = (request.imagePaths?.length ?? 0) > 0;
+    const selectedRung: DirectAssistRung = {
+      provider: selected.provider,
+      model: selected.model,
+      priority: 0,
+      isFallback: false,
+    };
+
+    // A blocking, non-streaming selection has no commit point: it gets no
+    // ladder and no retry, exactly as before this feature existed.
+    if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(selected.provider)) {
+      return Object.freeze([selectedRung]);
+    }
+    if (!this.directAssistFallbackEnabled()) return Object.freeze([selectedRung]);
+
+    const eligible = (provider: DirectAssistProvider, model: string): boolean => {
+      if (DIRECT_ASSIST_LADDER_INELIGIBLE_PROVIDERS.includes(provider)) return false;
+      if (provider === selected.provider) return false; // already rung 0
+      const family = LLMHelper.PROVIDER_LABEL_FAMILY[provider] ?? provider;
+      if (this.isProviderDisabled(family)) return false;
+      if (!this.directProviderHasCredential(provider)) return false;
+      // Third arg is `CurlProvider | null`, NOT optional — pass null, not
+      // undefined. `custom`/`curl` are never fallback candidates, so neither
+      // provider argument can matter here.
+      if (hasImages && !this.directSelectionSupportsImages({ provider, model }, null, null)) {
+        return false;
+      }
+      // Privacy boundaries, evaluated rather than caught. Both throw on
+      // refusal, which is the contract they were written for.
+      try {
+        this.assertOutboundImagesAllowed(provider, hasImages);
+      } catch {
+        return false;
+      }
+      if (this.isLocalOnlyMode && !isLocalVisionProvider(provider, {
+        customProviderIsLocal: customProviderIsLocal(this.customProvider),
+      })) {
+        return false;
+      }
+      // Outbound scopes: mirror the dispatcher's TWO HARD-FAIL branches only.
+      // `getDeniedOutboundScopes` takes no provider, so calling it bare would
+      // filter every rung identically — and worse, most denied scopes are
+      // handled by STRIPPING the block and proceeding, not by refusing. Only
+      // these two end a request, so only these two disqualify a rung:
+      //   • `screenshots` denied while the request carries images
+      //   • `transcript` denied while the prompt carries the current turn's
+      //     speech (that IS the question; answering without it answers a
+      //     different, incomplete one)
+      // A LOCAL rung is exempt, exactly as directProviderIsLocal makes it
+      // exempt in the dispatcher.
+      const rungIsLocal = provider === 'ollama'
+        || (provider === 'custom' && customProviderIsLocal(this.customProvider));
+      if (!rungIsLocal) {
+        const denied = this.getDeniedOutboundScopes(
+          request.userPrompt,
+          [...(request.imagePaths ?? [])],
+          this.inferEmbeddedMessageScopes(request.userPrompt),
+        );
+        if (hasImages && denied.includes('screenshots')) return false;
+        if (denied.includes('transcript')
+          && request.userPrompt.includes(DIRECT_ASSIST_CURRENT_TURN_SPEECH_MARKER)) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const rungs: DirectAssistRung[] = [selectedRung];
+    let priority = 1;
+    for (const { provider, model } of this.directFallbackCandidates()) {
+      if (!eligible(provider, model)) continue;
+      rungs.push({ provider, model, priority: priority++, isFallback: true });
+    }
+    return Object.freeze(rungs);
+  }
+
+  /**
+   * Fallback preference order, mirroring the live cloud chain's priorities.
+   * Every id is the module constant this file already uses for that family —
+   * do NOT introduce new default-model accessors, and do not hardcode strings.
+   */
+  private directFallbackCandidates(): { provider: DirectAssistProvider; model: string }[] {
+    const candidates: { provider: DirectAssistProvider; model: string }[] = [
+      { provider: 'natively', model: 'natively' },
+      { provider: 'gemini', model: GEMINI_FLASH_MODEL },
+      { provider: 'openai', model: OPENAI_MODEL },
+      { provider: 'claude', model: CLAUDE_MODEL },
+      { provider: 'groq', model: GROQ_MODEL },
+      { provider: 'antigravity', model: this.antigravityFallbackModel() || '' },
+      // Instance field, empty when Ollama is on auto-detect — the filter below
+      // then drops the rung rather than dispatching to a nameless model. Read
+      // defensively: a bare-prototype caller (see the ladder test harness)
+      // never ran the constructor, so the field initializer never set this.
+      { provider: 'ollama', model: this.ollamaModel ?? '' },
+    ];
+    return candidates.filter((c) => c.model.length > 0);
+  }
+
+  private directProviderHasCredential(provider: DirectAssistProvider): boolean {
+    switch (provider) {
+      case 'natively': return this.hasNatively();
+      case 'gemini': return !!this.client;
+      case 'openai': return !!this.openaiClient;
+      case 'claude': return !!this.claudeClient;
+      case 'groq': return !!this.groqClient;
+      case 'deepseek': return !!this.deepseekClient;
+      case 'nvidia_nim': return !!this.nvidiaNimClient;
+      case 'litellm': return !!this.litellmClient;
+      case 'ollama': return this.useOllama;
+      case 'antigravity': return !!this.antigravityFallbackModel();
+      default: return false;
+    }
+  }
+
+  private directAssistFallbackEnabled(): boolean {
+    try {
+      const { SettingsManager } = require('./services/SettingsManager');
+      return SettingsManager.getInstance().getDirectAssistFallbackEnabled();
+    } catch {
+      // A settings store that cannot be read must not silently disable
+      // recovery — default to the shipped behaviour, which is ON.
+      return true;
+    }
+  }
+
+  /**
    * Direct Assist provider boundary. The request is copied synchronously so a
    * later Settings/model change cannot alter an in-flight dispatch. The
    * returned generator invokes exactly one adapter and contains no fallback.
@@ -10597,6 +10738,7 @@ let isMultimodal = !!(imagePaths?.length);
   public streamDirectAssist(
     request: DirectAssistDispatchRequest,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown> {
     if (!request?.selection?.provider || !request.selection.model) {
       throw new DirectAssistError('NO_PROVIDER_CONFIGURED', 'Direct Assist requires a selected provider and model.');
@@ -10612,14 +10754,19 @@ let isMultimodal = !!(imagePaths?.length);
       userPrompt: request.userPrompt,
       imagePaths: Object.freeze([...request.imagePaths]),
     });
-    const custom = request.selection.provider === 'custom'
-      ? this.snapshotDirectCustomProvider(request.selection.model)
+    // The ladder decides WHO answers; request.selection stays the record of who
+    // the user picked (the `done` event and the terminal outcome still report
+    // the rung that actually answered, supplied by the caller).
+    const provider = rung?.provider ?? request.selection.provider;
+    const model = rung?.model ?? request.selection.model;
+    const custom = provider === 'custom'
+      ? this.snapshotDirectCustomProvider(model)
       : null;
-    const curl = request.selection.provider === 'curl' && this.activeCurlProvider?.id === request.selection.model
+    const curl = provider === 'curl' && this.activeCurlProvider?.id === model
       ? Object.freeze({ ...this.activeCurlProvider })
       : null;
 
-    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal);
+    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal, rung);
   }
 
   private snapshotDirectCustomProvider(modelId: string): CustomProvider | null {
@@ -10666,10 +10813,15 @@ let isMultimodal = !!(imagePaths?.length);
     custom: CustomProvider | null,
     curl: CurlProvider | null,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown> {
     if (abortSignal?.aborted) return;
 
-    const { provider, model } = request.selection;
+    // The ladder decides WHO answers; request.selection stays the record of who
+    // the user picked (the `done` event and the terminal outcome still report
+    // the rung that actually answered, supplied by the caller).
+    const provider = rung?.provider ?? request.selection.provider;
+    const model = rung?.model ?? request.selection.model;
     const imagePaths = [...request.imagePaths];
     for (const imagePath of imagePaths) {
       try {
@@ -10700,14 +10852,19 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isProviderDisabled(disabledFamily)) {
       throw new ProviderDisabledError(provider);
     }
-    if (!this.directSelectionSupportsImages(request.selection, custom, curl)) {
+    if (!this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
       // Cleared BEFORE the throw below so a text-only turn on a text-only model
       // still answers instead of failing on an image the user did not attach.
       carriedImagePaths = [];
       if (imagePaths.length) {
+        // The capability CHECK stays on `model` — the rung actually about to
+        // be dispatched, fallback or not. The message names
+        // request.selection.model instead: on a fallback rung `model` is a
+        // provider the user never picked, and telling them THAT model
+        // rejected their image would name something they never selected.
         throw new DirectAssistError(
           'MODEL_DOES_NOT_SUPPORT_IMAGES',
-          `The selected ${model} model does not support image input.`,
+          `The selected ${request.selection.model} model does not support image input.`,
         );
       }
     }
