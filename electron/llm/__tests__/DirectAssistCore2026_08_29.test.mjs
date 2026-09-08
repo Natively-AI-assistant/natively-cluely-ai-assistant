@@ -1533,3 +1533,82 @@ test('direct assist fallback config never hedges', async () => {
   // The ladder must not outlive the per-attempt idle windows it contains.
   assert.ok(DIRECT_ASSIST_TOTAL_BUDGET_MS >= 45_000 * 2);
 });
+
+// ── Task 4: listDirectAssistRungs — the ladder is a FILTER, never a refusal ─
+//
+// Every case asserts a provider's ABSENCE from the returned ladder, never
+// that some later call threw. `rungCaller` builds a bare LLMHelper instance
+// (prototype methods only, matching llmHelperCaller() above) with just enough
+// stubbed state to drive the filter chain.
+//
+// isProviderDisabled is shadowed rather than left to the real implementation:
+// the real isProviderDisabled() reads CredentialsManager, whose MODULE BODY
+// calls Electron's app.getPath() at import time — that throws outside a real
+// Electron process, so getDisabledProviderFamilies() silently fails open and
+// the real check would never see `disabledProviders` below. Own-property
+// shadowing (the same mechanism note 5 uses for directAssistFallbackEnabled)
+// is what makes the family-disable test exercise the actual code path.
+function rungCaller(overrides = {}) {
+  const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
+  const self = Object.create(LLMHelper.prototype);
+  Object.assign(self, {
+    isLocalOnlyMode: false,
+    _client: {}, _groqClient: {}, _openaiClient: {}, _claudeClient: {},
+    disabledProviders: new Set(),
+    isProviderDisabled: (family) => self.disabledProviders.has(family),
+    // A FUNCTION, not a boolean: listDirectAssistRungs calls
+    // this.directAssistFallbackEnabled(). An own boolean property would shadow
+    // the prototype method and throw "not a function".
+    directAssistFallbackEnabled: () => true,
+    ...overrides,
+  });
+  return (request) => LLMHelper.prototype.listDirectAssistRungs.call(self, request);
+}
+
+const directAssistTextRequest = {
+  requestId: 'r1',
+  selection: { provider: 'natively', model: 'natively' },
+  systemPrompt: 's', userPrompt: 'u', imagePaths: [], historyImagePaths: [],
+};
+
+test('the selected provider is always rung 0', async () => {
+  const rungs = rungCaller()(directAssistTextRequest);
+  assert.equal(rungs[0].provider, 'natively');
+  assert.equal(rungs[0].priority, 0);
+  assert.equal(rungs[0].isFallback, false);
+});
+
+test('local-only mode leaves no cloud rung on the ladder', async () => {
+  const rungs = rungCaller({ isLocalOnlyMode: true })({
+    ...directAssistTextRequest,
+    selection: { provider: 'ollama', model: 'llama3' },
+  });
+  assert.deepEqual(rungs.map((r) => r.provider), ['ollama']);
+});
+
+test('a ladder-ineligible selection gets exactly one rung', async () => {
+  const rungs = rungCaller()({ ...directAssistTextRequest, selection: { provider: 'codex-cli', model: 'gpt-5' } });
+  assert.equal(rungs.length, 1);
+  assert.equal(rungs[0].provider, 'codex-cli');
+});
+
+test('codex-cli and curl never appear as fallback rungs', async () => {
+  const rungs = rungCaller()(directAssistTextRequest);
+  assert.ok(!rungs.some((r) => r.isFallback && (r.provider === 'codex-cli' || r.provider === 'curl')));
+});
+
+test('a disabled provider family is absent, not merely refused', async () => {
+  const rungs = rungCaller({ disabledProviders: new Set(['groq']) })(directAssistTextRequest);
+  assert.ok(!rungs.some((r) => r.provider === 'groq'));
+});
+
+test('an image request drops providers that cannot take images', async () => {
+  const rungs = rungCaller()({ ...directAssistTextRequest, imagePaths: ['/tmp/shot.png'] });
+  assert.ok(!rungs.some((r) => r.provider === 'deepseek'));
+});
+
+test('fallback disabled yields the selected rung alone', async () => {
+  const rungs = rungCaller({ directAssistFallbackEnabled: () => false })(directAssistTextRequest);
+  assert.equal(rungs.length, 1);
+  assert.equal(rungs[0].provider, 'natively');
+});
