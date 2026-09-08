@@ -32,7 +32,7 @@ import {
   CONNECT_MAX_TIMEOUT_MS,
   CONNECT_MARGIN_MULTIPLIER,
 } from './priors';
-import { quantile } from './estimators';
+import { quantile, MIN_POINTS_FOR_TRUSTED_FIT } from './estimators';
 import {
   confidenceFor,
   type ProviderPerformanceProfile,
@@ -206,10 +206,17 @@ export function projectLargeContext(
 ): LargeContextProjection | null {
   const projected = projectTtft(profile?.contextScaling ?? null, inputTokens);
   if (!projected) return null;
+  const points = profile?.contextScaling?.points ?? 0;
   return {
     predictedTtftMs: projected.ttftMs,
     rmseMs: projected.rmseMs,
-    actionable: projected.ttftMs > 0 && projected.rmseMs < projected.ttftMs * 0.5,
+    // Needs BOTH enough points for the error to mean anything, and a small
+    // enough error. The points test is not redundant with the error test — it
+    // is what stops the error test being vacuous, since two points always fit
+    // a line exactly and so always report zero error.
+    actionable: points >= MIN_POINTS_FOR_TRUSTED_FIT
+      && projected.ttftMs > 0
+      && projected.rmseMs < projected.ttftMs * 0.5,
     inputTokens,
   };
 }
