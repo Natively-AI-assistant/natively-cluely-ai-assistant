@@ -3854,9 +3854,6 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                         <p className="text-[10px] aip-muted mt-0.5">
                             {t('If a Direct Assist provider fails, automatically retry with another configured provider instead of showing an error. Every switch is shown in the UI.')}
                         </p>
-                        {!directAssistEnabled && (
-                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Direct Assist to be enabled.')}</p>
-                        )}
                         {directAssistFallbackError && (
                             <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistFallbackError}</p>
                         )}
