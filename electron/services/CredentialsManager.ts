@@ -35,6 +35,25 @@ const DECRYPT_FAIL_PATH = path.join(app.getPath('userData'), 'credentials.decryp
 // install last wrote to each. It is the only way to tell a store we wrote from
 // one we merely found — see the recovery re-key decision in loadCredentials().
 const PROVENANCE_PATH = path.join(app.getPath('userData'), 'credentials.provenance.json');
+/**
+ * Plaintext of the KEY CANARY stored in provenance beside the credential hash.
+ *
+ * safeStorage can hand two different launches two different KEYS while reporting
+ * isEncryptionAvailable() === true to both, so the app has no way to notice it is
+ * holding the wrong key until a decrypt fails — and a path that writes before it
+ * reads never finds out at all. Reproduced 2026-09-08 on macOS: a blob written
+ * under an automated (Playwright-driven) launch could not be decrypted by a
+ * normal `electron .` launch, and vice versa, with the Keychain item untouched.
+ * Chromium's OSCrypt falls back to a well-known key when the Keychain item is not
+ * reachable by the calling process; both keys are stable, so each launcher
+ * happily reads its OWN writes and silently cannot read the other's.
+ *
+ * The canary makes that difference observable BEFORE anything is overwritten:
+ * whoever writes the credential file also writes this string encrypted with the
+ * key it used, and a later session that cannot decrypt it back is provably
+ * holding a different key.
+ */
+const KEY_CANARY_PLAINTEXT = 'natively.safe-storage.key-canary.v1';
 const DECRYPT_FAIL_PERMANENT_THRESHOLD = 3;
 
 export interface CustomProvider {
@@ -266,6 +285,15 @@ export class CredentialsManager {
      * `needsCredentialReentry`).
      */
     private keyringUnreadable = false;
+    /**
+     * True when the provenance canary proves this session's safeStorage key is
+     * NOT the key that wrote the stored credential file. Distinct from
+     * `keyringUnreadable`, which is only reached when a decrypt is actually
+     * ATTEMPTED and fails — this latches even on a path that would have written
+     * first, which is how a credential file gets replaced by a session that
+     * could never have read it.
+     */
+    private keyIdentityMismatch = false;
 
     /**
      * True once DECRYPT_FAIL_PERMANENT_THRESHOLD distinct cold starts have each
@@ -344,7 +372,7 @@ export class CredentialsManager {
      * rather than user-intended.
      */
     public wasExistingStoreUnreadable(): boolean {
-        return this.keyringUnreadable;
+        return this.keyringUnreadable || this.keyIdentityMismatch;
     }
 
     /**
@@ -543,6 +571,52 @@ export class CredentialsManager {
         this.writeProvenance(next);
     }
 
+    /** Stamp the canary with the key THIS session holds. Always paired with an
+     *  'enc' stamp, so the record can never describe a different write. */
+    private stampKeyCanary(): void {
+        try {
+            const next = this.readProvenance();
+            next.keyCanary = safeStorage.encryptString(KEY_CANARY_PLAINTEXT).toString('base64');
+            this.writeProvenance(next);
+        } catch {
+            // Best-effort, exactly like the hash stamp: a missing canary reads as
+            // UNKNOWN below, which is the conservative branch, never the
+            // destructive one.
+        }
+    }
+
+    /**
+     * Is this session's safeStorage key the one that wrote the stored file?
+     *
+     *   'same'      — the canary decrypts to its known plaintext.
+     *   'different' — a canary exists and does NOT come back. Provable mismatch.
+     *   'unknown'   — no canary (a store written before this existed), or
+     *                 safeStorage is unavailable so the question is meaningless.
+     *
+     * 'unknown' must never be treated as 'different': a legacy store predates the
+     * canary through no fault of its own, and blocking those users from saving
+     * would be a worse bug than the one this prevents.
+     */
+    private probeKeyIdentity(): 'same' | 'different' | 'unknown' {
+        let canary: string | undefined;
+        try {
+            if (!safeStorage.isEncryptionAvailable()) return 'unknown';
+            canary = this.readProvenance().keyCanary;
+        } catch {
+            return 'unknown';
+        }
+        if (typeof canary !== 'string' || !canary) return 'unknown';
+        try {
+            return safeStorage.decryptString(Buffer.from(canary, 'base64')) === KEY_CANARY_PLAINTEXT
+                ? 'same'
+                : 'different';
+        } catch {
+            // A canary that will not decrypt is the whole point: this session holds
+            // a different key. It is NOT 'unknown' — something did write one.
+            return 'different';
+        }
+    }
+
     private clearProvenance(key: 'enc' | 'fallback'): void {
         const next = this.readProvenance();
         if (key in next) {
@@ -633,6 +707,13 @@ export class CredentialsManager {
                 mode: this.credentialStoresAmbiguous ? 'fallback' : (available ? 'keyring' : 'fallback'),
                 usedFallback: !available || this.credentialStoresAmbiguous,
                 storesAmbiguous: this.credentialStoresAmbiguous,
+                // The gap this event had. It reported available:true, mode:'keyring'
+                // on every startup of an outage where safeStorage handed the session
+                // the WRONG key — true and useless. `available` says a key exists;
+                // this says whether it is the RIGHT one.
+                keyIdentity: this.probeKeyIdentity(),
+                keyIdentityMismatch: this.keyIdentityMismatch,
+                keyringUnreadable: this.keyringUnreadable,
             };
 
             // Linux is the only platform where the backend enum is meaningful and
@@ -1817,6 +1898,19 @@ export class CredentialsManager {
         // launch" has stopped being advice and become a dead end. At that point
         // refusing the write leaves the user with no way to use the app at all,
         // which is strictly worse than overwriting a file nothing can read.
+        // Same contract as keyringUnreadable, on the earlier signal: a session
+        // provably holding a different key must not replace the file, whether or
+        // not it ever attempted a decrypt. reentryRequired is honoured here too —
+        // once the store is classified unrecoverable, refusing writes only leaves
+        // the user with no way to use the app.
+        if (this.keyIdentityMismatch && !this.reentryRequired) {
+            console.error(
+                '[CredentialsManager] Refusing to save: this session holds a different encryption key than the one '
+                + 'that wrote the stored credentials, so saving would replace a file this session could never have '
+                + 'read. RECOVERY: start the app the same way it was started when the credentials were saved.',
+            );
+            return false;
+        }
         if (this.keyringUnreadable && !this.reentryRequired) {
             console.error(
                 '[CredentialsManager] Refusing to save: the stored credential file could not be read this '
@@ -1833,6 +1927,7 @@ export class CredentialsManager {
             // Clear the degraded state so the rest of the session behaves normally
             // and the banner drops immediately rather than after a restart.
             this.keyringUnreadable = false;
+            this.keyIdentityMismatch = false;
             this.clearDecryptFailCount();
             console.log('[CredentialsManager] Re-entered credentials persisted — degraded state cleared');
         }
@@ -1857,16 +1952,25 @@ export class CredentialsManager {
      * that cannot report a failure.
      */
     private refuseWriteWhileDegraded(op: string): boolean {
-        if (!this.keyringUnreadable) return false;
+        if (!this.keyringUnreadable && !this.keyIdentityMismatch) return false;
         // Permanent failure: the user is re-entering by hand and must be allowed
         // to. Mirrors the same escape hatch in saveCredentials() — the two have to
         // agree or the setter would reject a mutation the save would have accepted.
         if (this.reentryRequired) return false;
+        // The two degraded states need DIFFERENT recovery advice. "Unlock your
+        // keychain" is useless when the keychain is unlocked and simply handed
+        // this launch a different key — the user has to start the app the way it
+        // was started when the credentials were saved.
         console.error(
-            `[CredentialsManager] Refusing "${op}": the stored credential file could not be read this session. `
-            + 'The change was NOT applied in memory either, so what you see still matches what is on disk. '
-            + 'RECOVERY: quit and reopen the app with your keychain unlocked (on Windows, signed in to the '
-            + 'profile that saved the keys).',
+            this.keyIdentityMismatch
+                ? `[CredentialsManager] Refusing "${op}": this session holds a different encryption key than the `
+                  + 'one that wrote the stored credentials, so the change was NOT applied and the stored file is '
+                  + 'untouched. RECOVERY: start the app the same way it was started when the credentials were '
+                  + 'saved (an automated/test launcher and a normal launch do not share a key).'
+                : `[CredentialsManager] Refusing "${op}": the stored credential file could not be read this session. `
+                  + 'The change was NOT applied in memory either, so what you see still matches what is on disk. '
+                  + 'RECOVERY: quit and reopen the app with your keychain unlocked (on Windows, signed in to the '
+                  + 'profile that saved the keys).',
         );
         return true;
     }
@@ -1897,6 +2001,10 @@ export class CredentialsManager {
                 // Record that these exact bytes are OURS, so a later unreadable
                 // load can tell a transient decrypt failure from a foreign file.
                 this.stampProvenance('enc', Buffer.from(encrypted));
+                // Paired with the hash above so the canary always describes the key
+                // that wrote THIS file — that pairing is what makes the mismatch
+                // check below trustworthy.
+                this.stampKeyCanary();
                 // Keyring is the source of truth now — drop any stale fallback file.
                 //
                 // EXCEPT during a recovery re-key. There, the keyring item we just
@@ -2011,15 +2119,27 @@ export class CredentialsManager {
      * shows up in the wild — a Settings banner explaining why saving is off.
      */
     public resetDegradedCredentialStore(): void {
-        if (!this.keyringUnreadable) return;
+        // BOTH signals, or the reset is a half-reset: clearing keyringUnreadable
+        // while leaving keyIdentityMismatch latched left writes refused after an
+        // explicit user request to discard the file — caught by the existing
+        // degraded-store guard test, which is exactly what it is there for.
+        if (!this.keyringUnreadable && !this.keyIdentityMismatch) return;
         console.warn('[CredentialsManager] Discarding the unreadable keyring file at explicit user request');
         this.removeKeyringFile();
         this.keyringUnreadable = false;
+        // The discarded file's canary described a key we are deliberately walking
+        // away from; keeping it would re-latch the mismatch on the next load.
+        this.keyIdentityMismatch = false;
+        try {
+            const prov = this.readProvenance();
+            delete prov.keyCanary;
+            this.writeProvenance(prov);
+        } catch { /* best-effort, same as every other provenance write */ }
     }
 
     /** True when the credential store could not be read this session and writes are being refused. */
     public isCredentialStoreDegraded(): boolean {
-        return this.keyringUnreadable;
+        return this.keyringUnreadable || this.keyIdentityMismatch;
     }
 
     private loadCredentials(): void {
@@ -2032,6 +2152,27 @@ export class CredentialsManager {
         // Recomputed from scratch on every load (init() may run more than once).
         this.keyringUnreadable = false;
         this.credentialStoresAmbiguous = false;
+        // KEY IDENTITY, checked BEFORE anything can be written.
+        //
+        // Every other protection here reacts to a decrypt that was attempted and
+        // failed. That is one step too late for a session which writes before it
+        // reads — setPhoneMirrorToken on startup, for instance — because by then
+        // the file it could never have read has already been replaced. The canary
+        // answers "is my key the key that wrote this?" without needing to touch
+        // the credential file at all.
+        this.keyIdentityMismatch = false;
+        try {
+            if (fs.existsSync(CREDENTIALS_PATH) && this.probeKeyIdentity() === 'different') {
+                this.keyIdentityMismatch = true;
+                console.warn(
+                    '[CredentialsManager] This session\'s encryption key is NOT the key that wrote the stored '
+                    + 'credential file — saves are DISABLED so it cannot be overwritten. The file is intact and a '
+                    + 'launch holding the original key will read it normally. This is usually the app being started '
+                    + 'a different way than it was when the credentials were saved (an automated/test launcher, a '
+                    + 'different signing context, or a second copy of the app).',
+                );
+            }
+        } catch { /* probe is advisory; never let it break a load */ }
         // R-10: prefer the newer fallback for THIS load without deleting anything.
         let preferFallbackThisLoad = false;
         try {
