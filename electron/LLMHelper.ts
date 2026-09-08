@@ -175,6 +175,23 @@ const CLAUDE_MAX_OUTPUT_TOKENS = 64000
 // connect that then prefills slowly. Override per-call for non-interactive use.
 const INTERACTIVE_CONNECT_TIMEOUT_MS = 4_000;
 
+// Direct Assist connect budgets. The 4s ceiling above is calibrated for the
+// LIVE path, where a connect that stalls is HANDED OFF — the ladder tries the
+// next provider. Direct Assist has no retry, no model ladder and no
+// cross-provider failover by design, so a deadline that fires there is a
+// user-visible hard failure with nothing behind it.
+//
+// Measured on the shipping default (`natively`, auto-selected by
+// CredentialsManager.setNativelyApiKey for anyone who has not deliberately
+// picked another model): text time-to-first-byte 1.2-2.0s, but a vision
+// request carrying a compressed screenshot lands at 2.1-4.0s — straddling the
+// 4s line, so screenshot answers failed intermittently with CONNECT_TIMEOUT
+// (one measured success cleared it by 6ms). These budgets stay inside
+// DEFAULT_DIRECT_ASSIST_STREAM_IDLE_TIMEOUT_MS (45s) so a genuinely dead
+// connection still ends promptly with a specific error.
+const DIRECT_ASSIST_CONNECT_TIMEOUT_MS = 15_000;
+const DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS = 30_000;
+
 // First-useful-token budget for the Natively gateway on the TEXT path. Larger than
 // the shared 2.5s text default because the gateway's server-side fallback chain can
 // land on MiniMax (first token 3.3-7.7s); a 2.5s cap aborts it before it speaks.
@@ -10680,7 +10697,9 @@ let isMultimodal = !!(imagePaths?.length);
           request.systemPrompt,
           imagePaths,
           abortSignal,
-          INTERACTIVE_CONNECT_TIMEOUT_MS,
+          imagePaths.length
+            ? DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS
+            : DIRECT_ASSIST_CONNECT_TIMEOUT_MS,
           true,
         );
         return;

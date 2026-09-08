@@ -29,6 +29,17 @@ export interface DirectAssistSelection {
   readonly model: string;
 }
 
+/** One attached mode reference file, kept structured so overflow can share the
+ *  budget across files instead of letting the first file consume all of it. */
+export interface DirectAssistReferenceFile {
+  readonly fileName: string;
+  readonly content: string;
+  /** The file's true size, which survives the processing bound applied before
+   *  allocation. The TRUNCATED notice quotes it, and quoting the bounded length
+   *  instead would tell the model a smaller file was cut than actually was. */
+  readonly totalChars?: number;
+}
+
 export interface DirectAssistSkill {
   readonly id?: string;
   readonly name?: string;
@@ -55,7 +66,13 @@ export interface DirectAssistRequestInput {
   readonly currentRequest: string;
   readonly skill?: DirectAssistSkill | null;
   readonly manualContext?: string;
+  /** Legacy pre-rendered form. Prefer `referenceFiles`: a flat string cannot be
+   *  re-fitted per file when the budget is tight, so it can only be truncated
+   *  from the front (which starves later files) or dropped whole. */
   readonly referenceContext?: string;
+  /** Server-populated structured form. When present it is authoritative and
+   *  `referenceContext` is ignored. */
+  readonly referenceFiles?: readonly DirectAssistReferenceFile[];
   readonly pageContext?: DirectAssistPageContext | null;
   readonly history?: readonly DirectAssistHistoryTurn[];
   readonly transcript?: string;
@@ -83,6 +100,7 @@ export interface DirectAssistRequest {
   readonly skill: DirectAssistSkill | null;
   readonly manualContext: string;
   readonly referenceContext: string;
+  readonly referenceFiles: readonly DirectAssistReferenceFile[];
   readonly pageContext: DirectAssistPageContext | null;
   readonly history: readonly DirectAssistHistoryTurn[];
   readonly transcript: string;
@@ -98,8 +116,20 @@ export interface DirectAssistPreparedPrompt {
   readonly systemPrompt: string;
   readonly userPrompt: string;
   readonly imagePaths: readonly string[];
+  /**
+   * Screenshots re-attached from earlier turns, appended AFTER `imagePaths` in
+   * the provider payload. Kept as its own field rather than concatenated here
+   * because the text that binds each one to its turn lives in the
+   * <recent_transcript> block: when the transcript scope is denied for a cloud
+   * provider that block is stripped, and these have to go with it or the model
+   * receives unexplained pictures of a stale screen and answers from them.
+   */
   /** Field names only. Safe for diagnostics because no user content is stored. */
   readonly trimmedFields: readonly string[];
+  /** Fields kept but reduced to fit (reference files re-shared across the
+   *  budget, meeting transcript cut back to its most recent part). Distinct
+   *  from `trimmedFields`, which means the field is gone entirely. */
+  readonly shortenedFields: readonly string[];
 }
 
 /** The only payload LLMHelper accepts for Direct Assist provider dispatch. */
@@ -154,6 +184,8 @@ export type DirectAssistStreamEvent =
       /** Field names dropped by prepareDirectAssistPrompt to fit the context
        *  window. Safe for the renderer: no user content, just field names. */
       readonly trimmedFields: readonly string[];
+      /** Field names kept but reduced to fit. Also safe: names only. */
+      readonly shortenedFields: readonly string[];
     }
   | {
       readonly type: 'delta';

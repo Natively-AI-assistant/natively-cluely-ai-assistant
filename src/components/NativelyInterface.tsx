@@ -435,6 +435,11 @@ interface Message {
   // name. Renders a small "context trimmed" notice on the question card so an
   // incomplete-seeming answer isn't a silent mystery.
   trimmedFields?: string[];
+  // Field names Direct Assist kept but REDUCED to fit (reference files
+  // re-shared across the budget, meeting transcript cut back to its most
+  // recent turns). Reported separately from trimmedFields because "shortened"
+  // and "gone" are different things to a reader judging an answer.
+  shortenedFields?: string[];
   isCode?: boolean;
   intent?: string;
   // Verified code execution: set when the code in this message passed N executed
@@ -477,7 +482,7 @@ interface ActiveDirectAssistRequest {
 }
 
 type DirectAssistRendererEvent =
-  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[] }
+  | { type: 'start'; requestId: string; provider: string; model: string; trimmedFields: string[]; shortenedFields?: string[] }
   | { type: 'delta'; requestId: string; sequence: number; text: string }
   | { type: 'done'; requestId: string; sequence: number; provider: string; model: string; fullText?: string }
   | { type: 'error'; requestId: string; sequence: number; error: { code: string; message: string; retryable: boolean } }
@@ -1130,18 +1135,23 @@ const MessageRow = React.memo(
                 model's context window (see requestBuilder's per-source drop
                 order) — surfaced so a thin-looking answer isn't a silent
                 mystery. Field names only, never the dropped content. */}
-            {msg.role === 'user' && msg.trimmedFields && msg.trimmedFields.length > 0 && (
+            {msg.role === 'user' && (msg.trimmedFields?.length || msg.shortenedFields?.length) ? (
               <div className="flex items-center gap-1 mt-1.5 text-[10px] opacity-60">
                 <HelpCircle className="w-2.5 h-2.5 flex-shrink-0" />
                 <span className="truncate max-w-[260px]">
                   {t('Context trimmed')}
                   {' · '}
-                  {msg.trimmedFields.map((field) => t(directAssistTrimmedFieldLabel(field))).join(', ')}
-                  {' '}
-                  {t('omitted (over context limit)')}
+                  {[
+                    msg.shortenedFields?.length
+                      ? `${msg.shortenedFields.map((field) => t(directAssistTrimmedFieldLabel(field))).join(', ')} ${t('shortened to fit')}`
+                      : '',
+                    msg.trimmedFields?.length
+                      ? `${msg.trimmedFields.map((field) => t(directAssistTrimmedFieldLabel(field))).join(', ')} ${t('omitted (over context limit)')}`
+                      : '',
+                  ].filter(Boolean).join(', ')}
                 </span>
               </div>
-            )}
+            ) : null}
             {/* Verified badge: the code in this message passed executed tests. */}
             {msg.role === 'system' && msg.codeVerified && (
               <div className="flex items-center gap-1 mt-1.5 text-[10px] font-medium text-green-500" title={`Ran ${msg.codeVerified.total} test case(s) successfully`}>
@@ -5522,11 +5532,13 @@ const NativelyInterface: React.FC<NativelyInterfaceProps> = ({
         // onto the question card, so a thin-looking answer isn't a silent
         // mystery. userMessageId is only set for surfaces that create a
         // distinct question card (all current callers do).
-        if (event.trimmedFields?.length && active.userMessageId) {
+        if ((event.trimmedFields?.length || event.shortenedFields?.length) && active.userMessageId) {
           const userMessageId = active.userMessageId;
+          const trimmed = [...(event.trimmedFields ?? [])];
+          const shortened = [...(event.shortenedFields ?? [])];
           setMessages((prev) => prev.map((message) =>
             message.id === userMessageId
-              ? { ...message, trimmedFields: [...event.trimmedFields] }
+              ? { ...message, trimmedFields: trimmed, shortenedFields: shortened }
               : message,
           ));
         }
