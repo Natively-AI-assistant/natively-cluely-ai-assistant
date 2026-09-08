@@ -1359,11 +1359,17 @@ export class IntelligenceEngine extends EventEmitter {
      * Low-priority observational insights
      */
     async runAssistMode(): Promise<string | null> {
-        // 'assist' is the third V3 surface (engine-bridge reads the ring for it
-        // at the buildV3Prompt call below) and it had no writer either.
-        const insight = await this.runAssistModeInner();
-        this.recordLiveTurn(insight);
-        return insight;
+        // 'assist' READS the ring (engine-bridge does so at its buildV3Prompt
+        // call below) but deliberately does not WRITE to it.
+        //
+        // An assist insight is unprompted — there is no question it answers. It
+        // was being appended under whatever question happened to be in
+        // previousQuestion, so the user's earlier question was recorded as
+        // having been answered by an insight they never asked for, and the next
+        // "explain that" resolved against it. A surface with no question has no
+        // exchange to contribute; it still reads the exchanges other surfaces
+        // record, which is what it needs.
+        return await this.runAssistModeInner();
     }
 
     private async runAssistModeInner(): Promise<string | null> {
