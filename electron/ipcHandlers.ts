@@ -226,14 +226,21 @@ const DIRECT_ASSIST_IMAGE_MIMES: Readonly<Record<string, string>> = Object.freez
  */
 function v3ConversationSessionId(appState: AppState, fallbackKey: string | number): string {
   const {
-    resolveConversationSessionId,
+    resolveConversationSessionId, NO_CONVERSATION_SCOPE,
   } = require('./context-intelligence/question/conversation-state-store') as
     typeof import('./context-intelligence/question/conversation-state-store');
   try {
     const manager = appState.getIntelligenceManager?.() as
       { conversationSessionId?: () => string } | undefined;
     const key = manager?.conversationSessionId?.();
-    if (key) return key;
+    // `NO_CONVERSATION_SCOPE` means the engine has no meeting and no session, so
+    // its key is a shared bucket rather than an identity. Returning it here was
+    // truthy, so the per-sender fallback below was unreachable and every window
+    // — typed chat, what-to-answer, assist — collapsed into one ring. That is
+    // the failure the comment at IntelligenceEngine.conversationSessionId
+    // documents, and it made the renderer-destroyed clear below wipe the live
+    // ring that what-to-answer and assist were using.
+    if (key && key !== NO_CONVERSATION_SCOPE) return key;
   } catch { /* no engine on this turn — fall through */ }
   return resolveConversationSessionId(null, fallbackKey);
 }

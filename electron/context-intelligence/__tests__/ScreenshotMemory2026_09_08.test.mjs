@@ -533,3 +533,23 @@ test('each recorded turn uses ITS OWN question, not the first one forever', asyn
   recordAnswerSummary(SID2, 'a2');
   assert.equal(getConversationState(SID2).turns.at(-1).q, 'SEEDED');
 });
+
+test('the no-scope sentinel never shadows a per-sender key', async () => {
+  const { resolveConversationSessionId, NO_CONVERSATION_SCOPE } =
+    await import(dist('context-intelligence/question/conversation-state-store.js'));
+  const fsmod = (await import('node:fs')).default;
+  const ipc = fsmod.readFileSync(path.resolve(process.cwd(), 'electron/ipcHandlers.ts'), 'utf8');
+
+  // 'engine' means "no meeting and no session" — a shared bucket, not an
+  // identity. v3ConversationSessionId returned it because it is truthy, so the
+  // per-sender fallback was unreachable and every window collapsed into one
+  // ring. The renderer-destroyed handler then cleared THAT key, wiping the live
+  // ring what-to-answer and assist were using.
+  assert.equal(resolveConversationSessionId(null, null), NO_CONVERSATION_SCOPE);
+  assert.notEqual(resolveConversationSessionId(null, 7), NO_CONVERSATION_SCOPE);
+  assert.notEqual(resolveConversationSessionId(null, 7), resolveConversationSessionId(null, 9));
+  // A real meeting still unifies every surface — that is the whole point.
+  assert.equal(resolveConversationSessionId('m1', 7), resolveConversationSessionId('m1', 9));
+
+  assert.match(ipc, /if \(key && key !== NO_CONVERSATION_SCOPE\) return key;/);
+});

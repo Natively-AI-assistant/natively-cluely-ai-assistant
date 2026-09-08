@@ -57,6 +57,13 @@ export function getConversationState(sessionId: string): ConversationState | nul
  * means; the sender/session id is only a fallback for chat outside a meeting.
  * Prefixed so a meeting id can never collide with a sender id.
  */
+/**
+ * The key returned when there is NO real conversation scope — no meeting and no
+ * session. It is a shared bucket by construction, so a caller that has its own
+ * scope (a webContents id, say) must prefer that instead of collapsing into it.
+ */
+export const NO_CONVERSATION_SCOPE = 'engine';
+
 export function resolveConversationSessionId(
   meetingId: string | null | undefined,
   fallback: string | number | null | undefined,
@@ -64,7 +71,7 @@ export function resolveConversationSessionId(
   const meeting = typeof meetingId === 'string' ? meetingId.trim() : '';
   if (meeting) return `m:${meeting}`;
   const key = fallback === null || fallback === undefined ? '' : String(fallback).trim();
-  return key ? `s:${key}` : 'engine';
+  return key ? `s:${key}` : NO_CONVERSATION_SCOPE;
 }
 
 export interface AdvanceTurnInput {
