@@ -133,8 +133,24 @@ export function fitContextScaling(
     den += (xs[i] - meanX) ** 2;
   }
   if (den === 0) return null;
-  const slope = num / den;
-  const intercept = meanY - slope * meanX;
+  const rawSlope = num / den;
+  const rawIntercept = meanY - rawSlope * meanX;
+
+  // CLAMP FIRST, THEN MEASURE THE ERROR OF WHAT WE WILL ACTUALLY USE.
+  //
+  // A negative slope means bigger requests measured faster, which is noise, not
+  // a discovered efficiency — a projection must never predict that a 100K
+  // request beats a 4K one. A negative intercept is likewise impossible: a
+  // zero-token request cannot have negative latency.
+  //
+  // But the error has to describe the CLAMPED line. Live run: two points
+  // (40 tok -> 10643ms, 32000 tok -> 4610ms) produced a negative slope that was
+  // clamped to 0, while `rmseMs` was still computed from the unclamped fit and
+  // reported 0. The flat line actually used has a ~6000ms residual at the large
+  // point. Reporting 0 there is precisely the misleading precision the
+  // `actionable` gate exists to prevent, handed to the gate as its input.
+  const slope = Math.max(0, rawSlope);
+  const intercept = Math.max(0, rawIntercept);
 
   let sse = 0;
   for (let i = 0; i < n; i++) {
@@ -145,14 +161,23 @@ export function fitContextScaling(
 
   return {
     interceptMs: Math.round(intercept),
-    // A NEGATIVE slope means bigger requests measured faster, which is noise,
-    // not a discovered efficiency. Clamp at zero so a projection can never
-    // predict that a 100K request beats a 4K one.
-    slopeMsPerKToken: Math.round(Math.max(0, slope)),
+    slopeMsPerKToken: Math.round(slope),
     rmseMs: Math.round(rmse),
     points: distinctX.size,
   };
 }
+
+/**
+ * Points below which a fit's error is structurally meaningless.
+ *
+ * TWO POINTS ALWAYS FIT A LINE EXACTLY, so `rmseMs` is 0 by construction at
+ * n=2 regardless of how little the data supports the line. Any gate that reads
+ * the error is therefore vacuously satisfied at exactly the sample count where
+ * the fit deserves the least trust — which is how a two-rung calibration came
+ * to advertise a confident 100K projection built on one successful measurement
+ * and one 40-token production turn.
+ */
+export const MIN_POINTS_FOR_TRUSTED_FIT = 3;
 
 /**
  * Predicted TTFT at a given input size, with the fit's own error attached.

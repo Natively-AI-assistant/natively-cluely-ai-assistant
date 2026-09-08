@@ -1665,3 +1665,52 @@ describe('retry counting (Phase 6 / 27)', () => {
     __resetTransportRetries();
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('the context fit cannot claim precision it does not have', () => {
+  const { fitContextScaling, projectLargeContext, MIN_POINTS_FOR_TRUSTED_FIT } = M;
+
+  test('the reported error describes the CLAMPED line, not the raw one', () => {
+    // Live: two points (40 tok -> 10643ms, 32000 tok -> 4610ms) gave a negative
+    // slope, clamped to 0 — while rmseMs was computed from the unclamped fit and
+    // reported 0. The flat line actually used has a ~6000ms residual at the
+    // large point. Reporting 0 hands the `actionable` gate a fabricated input.
+    const m = fitContextScaling([{ inputTokens: 40, ttftMs: 10_643 }, { inputTokens: 32_000, ttftMs: 4_610 }]);
+    assert.equal(m.slopeMsPerKToken, 0, 'a negative slope is still clamped');
+    assert.ok(m.rmseMs > 1_000, `the error must describe the flat line actually used, got ${m.rmseMs}`);
+  });
+
+  test('a negative intercept is impossible and is clamped', () => {
+    // A zero-token request cannot take negative time.
+    const m = fitContextScaling([{ inputTokens: 4_000, ttftMs: 1_000 }, { inputTokens: 12_000, ttftMs: 9_999 }]);
+    assert.ok(m.interceptMs >= 0, `got ${m.interceptMs}`);
+    assert.ok(m.rmseMs > 0, 'and the clamp must show up in the error');
+  });
+
+  test('a TWO-point fit is never actionable, however small its error looks', () => {
+    // Two points always fit a line exactly, so rmse is 0 by construction — the
+    // error gate is vacuous at exactly the sample count that deserves least
+    // trust. This is how a two-rung calibration came to advertise a confident
+    // 100K projection off one successful rung and one 40-token production turn.
+    const s = store();
+    for (let i = 0; i < 3; i++) s.record(sample({ workload: 'small', inputTokens: 4_000, ttftMs: 900 }));
+    for (let i = 0; i < 3; i++) s.record(sample({ workload: 'large', inputTokens: 32_000, ttftMs: 3_000 }));
+    const p = s.lookup('custom', 'gw/model-a', 'net1');
+    assert.equal(p.contextScaling.points, 2);
+    const proj = projectLargeContext(p, 100_000);
+    assert.ok(proj, 'a projection is still offered');
+    assert.equal(proj.actionable, false, 'but it must not be trusted at two points');
+  });
+
+  test('three points CAN be actionable when the fit is genuinely tight', () => {
+    const s = store();
+    for (let i = 0; i < 3; i++) s.record(sample({ workload: 'small', inputTokens: 4_000, ttftMs: 1_000 }));
+    for (let i = 0; i < 3; i++) s.record(sample({ workload: 'medium', inputTokens: 12_000, ttftMs: 1_800 }));
+    for (let i = 0; i < 3; i++) s.record(sample({ workload: 'large', inputTokens: 32_000, ttftMs: 3_800 }));
+    const p = s.lookup('custom', 'gw/model-a', 'net1');
+    assert.equal(p.contextScaling.points, MIN_POINTS_FOR_TRUSTED_FIT);
+    const proj = projectLargeContext(p, 100_000);
+    assert.equal(proj.actionable, true);
+    assert.ok(proj.predictedTtftMs > 3_800, 'and it must extrapolate beyond the largest measured point');
+  });
+});
