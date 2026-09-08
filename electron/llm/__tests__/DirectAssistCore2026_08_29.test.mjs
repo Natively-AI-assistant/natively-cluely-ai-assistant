@@ -1310,7 +1310,7 @@ test('history shed for budget takes its carried screenshots with it, so no image
  *  the provider call and the two policy lookups are stubbed, so the actual
  *  ordering of the image checks is what runs. Returns what the provider was
  *  handed. */
-async function dispatchDirect(request, { deniedScopes = [], imagesAllowed = true } = {}) {
+async function dispatchDirect(request, { deniedScopes = [], imagesAllowed = true, realScopes = false } = {}) {
   const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
   const self = Object.create(LLMHelper.prototype);
   const seen = { imagePaths: null, userPrompt: null };
@@ -1319,7 +1319,10 @@ async function dispatchDirect(request, { deniedScopes = [], imagesAllowed = true
   self.assertOutboundImagesAllowed = () => {
     if (!imagesAllowed) throw new Error('private_vision');
   };
-  self.getDeniedOutboundScopes = () => deniedScopes;
+  // realScopes: leave the REAL implementation in place, so a test can exercise
+  // the provider-scope policy itself. Stubbing it hid the carried-image scope
+  // gap — the stub answered the re-evaluation too.
+  if (!realScopes) self.getDeniedOutboundScopes = () => deniedScopes;
   const record = async function* (userPrompt, imagePaths) {
     seen.userPrompt = userPrompt;
     seen.imagePaths = imagePaths ? [...imagePaths] : [];
@@ -2166,4 +2169,28 @@ test('the hedgeEnabled pin survives a caller that tries to override it', async (
   assert.ok(spreadAt > 0, 'the override spread must exist');
   assert.ok(hedgePinAt > spreadAt, 'hedgeEnabled: false must be pinned AFTER the override spread');
   assert.ok(rethrowPinAt > spreadAt, 'rethrowAfterCommit: true must be pinned AFTER the override spread');
+});
+
+test('a denied screenshots scope drops carried images instead of failing the turn', async (t) => {
+  const { DENY_PROVIDER_SCOPES_ENV } = require(path.resolve(root,
+    'dist-electron/electron/context-intelligence/policies/provider-scope-policy.js'));
+  const [older] = screenshotFixtures(t, 1);
+  process.env[DENY_PROVIDER_SCOPES_ENV] = 'screenshots';
+  t.after(() => { delete process.env[DENY_PROVIDER_SCOPES_ENV]; });
+
+  // A TEXT-ONLY follow-up that carries an earlier screenshot. deniedScopes is
+  // computed from the current-turn images, and scopesForPayload only tags
+  // 'screenshots' when that array is non-empty — so before the fix the guard saw
+  // [] , pushed the image, and the per-streamer assertOutboundScopes threw,
+  // turning an ordinary typed question into a hard failure.
+  const seen = await dispatchDirect({
+    requestId: 'direct-scope-carry',
+    selection: { provider: 'gemini', model: 'gemini-3.7-flash' },
+    systemPrompt: 'system',
+    userPrompt: '<recent_transcript>\nUSER [attached 1 screenshot: re-sent here as earlier screenshot 1]: earlier\n</recent_transcript>\n\n[CURRENT REQUEST - HIGHEST AUTHORITY]\nwhat did that show?\n[/CURRENT REQUEST - HIGHEST AUTHORITY]',
+    imagePaths: [],
+    historyImagePaths: [older],
+  }, { realScopes: true });
+  assert.deepEqual(seen.imagePaths, [], 'the carried image must be dropped, not sent');
+  assert.deepEqual(seen.chunks, ['ok'], 'and the turn must still answer — drop, never fail');
 });
