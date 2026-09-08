@@ -163,7 +163,7 @@ describe('the engine stops retrying a retired model (behavioural)', () => {
 
 describe('the live vision path can actually tell the version manager', () => {
   const helperSrc = fs.readFileSync(path.resolve(__dirname, '../../LLMHelper.ts'), 'utf8');
-  const engineSrc = fs.readFileSync(path.resolve(__dirname, '../visionStreamFallback.ts'), 'utf8');
+  const engineSrc = fs.readFileSync(path.resolve(__dirname, '../streamFallbackEngine.ts'), 'utf8');
 
   test('the engine invokes the hook, it is not merely declared', () => {
     // An optional hook nobody calls is the same silent no-op class as an
@@ -190,9 +190,9 @@ describe('the live vision path can actually tell the version manager', () => {
     const imports = engineSrc.match(/^\s*import\s.+$/gm) || [];
     const requires = engineSrc.match(/\brequire\(['"][^'"]+['"]\)/g) || [];
     assert.deepEqual(imports, [],
-      `visionStreamFallback must stay dependency-free; found: ${imports.join(' | ')}`);
+      `streamFallbackEngine must stay dependency-free; found: ${imports.join(' | ')}`);
     assert.deepEqual(requires, [],
-      `visionStreamFallback must stay dependency-free; found: ${requires.join(' | ')}`);
+      `streamFallbackEngine must stay dependency-free; found: ${requires.join(' | ')}`);
   });
 });
 
