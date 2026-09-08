@@ -36,14 +36,23 @@ export function normalizeDirectAssistError(error: unknown): DirectAssistError {
   if (error instanceof DirectAssistError) return error;
 
   // The shared fallback engine throws an AGGREGATE when a multi-rung ladder is
-  // exhausted, and hangs the first rung's real error on `cause` /
-  // `firstProviderError` (streamFallbackEngine, "Carry the first error
-  // through"). Recurse into that instead of classifying the aggregate's prose:
-  // the sentence names every provider tried, which is exactly what this
-  // function exists to keep off the IPC contract, and its wording would fall
-  // through to a generic PROVIDER_ERROR. The FIRST rung is the right one to
-  // report — it is the provider the user actually selected.
-  const wrapped = (error as any)?.firstProviderError ?? (error as any)?.cause;
+  // exhausted, and hangs the first rung's real error on `firstProviderError`
+  // (streamFallbackEngine, "Carry the first error through"). Unwrap that
+  // instead of classifying the aggregate's prose: the sentence names every
+  // provider tried, which is exactly what this function exists to keep off
+  // the IPC contract, and its wording would fall through to a generic
+  // PROVIDER_ERROR. The FIRST rung is the right one to report — it is the
+  // provider the user actually selected.
+  //
+  // Keyed on `firstProviderError` ALONE, and deliberately NOT on `.cause`.
+  // Node's own fetch sets `.cause` on a TypeError, and plenty of SDKs set it
+  // for unrelated wrapping — following it would let an inner error discard a
+  // correct top-level classification (a real `.status`, say).
+  // `firstProviderError` is set by nothing but our engine, so it is
+  // unambiguous. Single-hop, not recursive: the engine's firstError is always
+  // a rung's own throw and never another aggregate, so one hop suffices — and
+  // not recursing removes an unbounded-recursion vector on a cyclic `.cause`.
+  const wrapped = (error as any)?.firstProviderError;
   if (wrapped && wrapped !== error) return normalizeDirectAssistError(wrapped);
 
   const candidate = error as any;
