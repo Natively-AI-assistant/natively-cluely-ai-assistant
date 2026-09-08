@@ -103,20 +103,24 @@ function normalizeReferenceFiles(
   files: readonly { fileName?: unknown; content?: unknown }[] | undefined,
 ): DirectAssistReferenceFile[] {
   if (!Array.isArray(files)) return [];
-  return files
-    .map((file) => {
-      const content = typeof file?.content === 'string' ? file.content.trim() : '';
-      return Object.freeze({
-        fileName: typeof file?.fileName === 'string' && file.fileName.trim()
-          ? file.fileName.trim()
-          : 'reference file',
-        content,
-        totalChars: typeof (file as { totalChars?: unknown })?.totalChars === 'number'
-          ? (file as { totalChars: number }).totalChars
-          : content.length,
-      });
-    })
-    .filter((file) => file.content.length > 0);
+  // One pass, not map().filter(): this runs over every attachment on the
+  // Electron main process for each request.
+  const normalized: DirectAssistReferenceFile[] = [];
+  for (const file of files) {
+    const content = typeof file?.content === 'string' ? file.content.trim() : '';
+    if (!content) continue;
+    const declared = (file as { totalChars?: unknown })?.totalChars;
+    normalized.push(Object.freeze({
+      fileName: typeof file?.fileName === 'string' && file.fileName.trim()
+        ? file.fileName.trim()
+        : 'reference file',
+      content,
+      // A caller that already sliced the file passes the size it sliced FROM.
+      // Never let it understate what is actually there.
+      totalChars: typeof declared === 'number' && declared > content.length ? declared : content.length,
+    }));
+  }
+  return normalized;
 }
 
 /**

@@ -1181,3 +1181,25 @@ test('the TRUNCATED notice quotes the file\'s real size, not the size after the 
   assert.match(prepared.userPrompt, new RegExp(`The file is ${real.length} characters long`));
   assert.doesNotMatch(prepared.userPrompt, /The file is 64000 characters long/);
 });
+
+test('a file the caller already sliced still reports the size it was sliced FROM', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  // main slices each attachment to DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS before
+  // handing it over. Reading the size off the SLICED content would make the
+  // notice announce a 590 KB file as 200 000 characters.
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    referenceFiles: [{ fileName: 'huge.md', content: 'Z'.repeat(200_000), totalChars: 589_503 }],
+  }));
+  assert.match(prepared.userPrompt, /The file is 589503 characters long/);
+  assert.doesNotMatch(prepared.userPrompt, /The file is 200000 characters long/);
+});
+
+test('a totalChars smaller than the content it arrives with is ignored, not trusted', async () => {
+  const { prepareDirectAssistPrompt } = await loadDirectAssist();
+  // Defensive: a wrong or stale count must never make the notice claim LESS
+  // material is missing than the prompt itself proves is there.
+  const prepared = prepareDirectAssistPrompt(baseInput({
+    referenceFiles: [{ fileName: 'odd.md', content: 'Y'.repeat(300_000), totalChars: 12 }],
+  }));
+  assert.match(prepared.userPrompt, /The file is 300000 characters long/);
+});

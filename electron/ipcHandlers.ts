@@ -6761,12 +6761,18 @@ export function initializeIpcHandlers(appState: AppState): void {
         referenceFiles = (ModesManager.getInstance().getReferenceFiles(activeModeId) as {
           fileName?: string;
           content?: string;
-        }[]).map((file) => ({
-          fileName: typeof file?.fileName === 'string' ? file.fileName : 'reference file',
-          content: typeof file?.content === 'string'
-            ? file.content.slice(0, DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS)
-            : '',
-        }));
+        }[]).map((file) => {
+          const content = typeof file?.content === 'string' ? file.content : '';
+          return {
+            fileName: typeof file?.fileName === 'string' ? file.fileName : 'reference file',
+            content: content.slice(0, DIRECT_ASSIST_MAX_CONTEXT_FIELD_CHARS),
+            // The TRUNCATED notice quotes this, so it has to be the size on
+            // disk. Reporting the sliced length would tell the model a 590 KB
+            // attachment was 200 000 characters — understating what is missing,
+            // which is the one thing that notice exists to prevent.
+            totalChars: content.length,
+          };
+        });
       }
     } catch (error) {
       console.warn('[direct-assist] reference files unavailable, proceeding without them:', (error as Error)?.message);
