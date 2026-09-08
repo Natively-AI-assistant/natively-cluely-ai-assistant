@@ -1523,3 +1523,13 @@ test('normalizeDirectAssistError still handles a bare provider error', async () 
   const normalized = normalizeDirectAssistError(Object.assign(new Error('nope'), { status: 429 }));
   assert.equal(normalized.code, 'RATE_LIMITED');
 });
+
+test('direct assist fallback config never hedges', async () => {
+  const { DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG, DIRECT_ASSIST_TOTAL_BUDGET_MS } = await loadDirectAssist();
+  // Hedging bills two providers per turn. Direct Assist is the path chosen for
+  // provider determinism, so this must stay off.
+  assert.equal(DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG.hedgeEnabled, false);
+  assert.equal(DEFAULT_DIRECT_ASSIST_FALLBACK_CONFIG.logPrefix, 'DirectAssist');
+  // The ladder must not outlive the per-attempt idle windows it contains.
+  assert.ok(DIRECT_ASSIST_TOTAL_BUDGET_MS >= 45_000 * 2);
+});
