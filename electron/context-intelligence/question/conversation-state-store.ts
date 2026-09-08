@@ -132,6 +132,21 @@ export function recordAnswerSummary(
     cur = { previousQuestion: question.trim(), turns: [] } as unknown as ConversationState;
   }
   if (!cur) return;
+  // THE question this answer answers, captured by the caller at turn time.
+  //
+  // `cur.previousQuestion` is read HERE, at write time, and that is wrong twice
+  // over. It is only ever updated by advance(), so on any path that does not
+  // reach orchestrate() it keeps the FIRST question forever — measured, three
+  // turns each passing their own question were all recorded under the first, so
+  // a screenshot attached on turn 3 reached the model as the answer to turn 1.
+  // And because the live writer defers behind an awaited transcription, a turn
+  // that lands after the NEXT turn has advanced the state would be filed under
+  // that later question instead.
+  //
+  // Falling back to previousQuestion keeps the typed-chat path byte-identical:
+  // it passes no question because advance() has already set the right one for
+  // this very turn.
+  const turnQuestion = question?.trim() || cur.previousQuestion || '';
   const text = String(answerText ?? '');
   s.set(sessionId, {
     ...cur,
@@ -141,7 +156,7 @@ export function recordAnswerSummary(
     // (rather than only overwriting a single slot) is what lets turn N see
     // turn N-2. A turn whose stream was truncated never reaches this call, so
     // it correctly leaves no half-turn behind.
-    turns: appendTurn(cur.turns ?? [], cur.previousQuestion ?? '', text, screenContext),
+    turns: appendTurn(cur.turns ?? [], turnQuestion, text, screenContext),
   });
 }
 

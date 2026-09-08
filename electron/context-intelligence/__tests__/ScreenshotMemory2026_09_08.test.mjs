@@ -503,3 +503,33 @@ test('the merge branch is budgeted, newest-first, like the ring branch beside it
   // survive even when it alone fills the allowance.
   assert.match(out.user, /\[screen attached that turn\] S/);
 });
+
+test('each recorded turn uses ITS OWN question, not the first one forever', async () => {
+  const { recordAnswerSummary, getConversationState, clearConversationState } =
+    await import(dist('context-intelligence/question/conversation-state-store.js'));
+
+  // cur.previousQuestion is only updated by advance(), so on any path that does
+  // not reach orchestrate() it kept the FIRST question forever. Measured before
+  // the fix: three turns each passing their own question were ALL recorded as
+  // {q: QUESTION-ONE}, so a screenshot attached on turn 3 reached the model as
+  // the answer to turn 1. The deferred live writer made it worse — landing
+  // after the next turn advanced the state filed it under that later question.
+  const SID = 'own-question';
+  clearConversationState(SID);
+  recordAnswerSummary(SID, 'answer one', undefined, 'QUESTION-ONE');
+  recordAnswerSummary(SID, 'answer two', undefined, 'QUESTION-TWO');
+  recordAnswerSummary(SID, 'answer three', 'SCREEN-THREE', 'QUESTION-THREE');
+
+  const turns = getConversationState(SID).turns;
+  assert.deepEqual(turns.map(t => t.q), ['QUESTION-ONE', 'QUESTION-TWO', 'QUESTION-THREE']);
+  assert.equal(turns[2].screen, 'SCREEN-THREE');
+
+  // A caller that supplies NO question still falls back to previousQuestion —
+  // typed chat relies on that, because advance() has already set the right one
+  // for this very turn.
+  const SID2 = 'fallback';
+  clearConversationState(SID2);
+  recordAnswerSummary(SID2, 'a1', undefined, 'SEEDED');
+  recordAnswerSummary(SID2, 'a2');
+  assert.equal(getConversationState(SID2).turns.at(-1).q, 'SEEDED');
+});

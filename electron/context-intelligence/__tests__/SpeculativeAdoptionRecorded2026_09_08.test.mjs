@@ -44,8 +44,14 @@ test('revealSpeculativeAnswer is the ONLY place an adopted answer surfaces', () 
 test('the adoption branches still cannot reach recordLiveTurn on their own', () => {
   // Documents WHY the fix lives in reveal rather than in the trigger handler.
   const sites = [...src.matchAll(/this\.recordLiveTurn\(/g)].length;
-  assert.equal(sites, 4, 'reveal + the three wrappers');
-  for (const m of ['async runWhatShouldISay(', 'async runAssistMode(', 'async runManualAnswer(']) {
+  // reveal + runWhatShouldISay + runManualAnswer. NOT runAssistMode: an assist
+  // insight is unprompted, so it has no question and no exchange to record —
+  // appending it filed the user's earlier question as answered by an insight
+  // they never asked for. Assist still READS the ring.
+  assert.equal(sites, 3, 'reveal + the two question-bearing wrappers');
+  for (const m of ['async runWhatShouldISay(', 'async runManualAnswer(']) {
     assert.ok(src.includes(m), `${m} must still exist as the wrapper that records`);
   }
+  const assist = src.slice(src.indexOf('async runAssistMode()'), src.indexOf('private async runAssistModeInner'));
+  assert.doesNotMatch(assist, /recordLiveTurn/, 'assist must not write a question-less turn');
 });
