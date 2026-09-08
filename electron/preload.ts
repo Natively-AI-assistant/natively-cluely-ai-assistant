@@ -2846,6 +2846,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('direct-assist-enabled-changed', subscription);
     };
   },
+  getDirectAssistFallbackEnabled: () => ipcRenderer.invoke('get-direct-assist-fallback-enabled'),
+  setDirectAssistFallbackEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('set-direct-assist-fallback-enabled', enabled),
+  onDirectAssistFallbackEnabledChanged: (callback: (enabled: boolean) => void) => {
+    const subscription = (_: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled);
+    ipcRenderer.on('direct-assist-fallback-enabled-changed', subscription);
+    return () => {
+      ipcRenderer.removeListener('direct-assist-fallback-enabled-changed', subscription);
+    };
+  },
   getCodeVerification: () => ipcRenderer.invoke('get-code-verification'),
   setCodeVerification: (enabled: boolean) => ipcRenderer.invoke('set-code-verification', enabled),
   getMeetingRetention: () => ipcRenderer.invoke('get-meeting-retention'),

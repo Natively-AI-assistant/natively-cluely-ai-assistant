@@ -2433,6 +2433,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [directAssistEnabled, setDirectAssistEnabled] = useState(false);
     const [directAssistBusy, setDirectAssistBusy] = useState(false);
     const [directAssistError, setDirectAssistError] = useState('');
+    // Persisted default is ON (see SettingsManager.getDirectAssistFallbackEnabled),
+    // so the local state starts true too — a slow/failed initial IPC read must
+    // not flash the toggle into an "off" state it does not actually have.
+    const [directAssistFallbackEnabled, setDirectAssistFallbackEnabled] = useState(true);
+    const [directAssistFallbackBusy, setDirectAssistFallbackBusy] = useState(false);
+    const [directAssistFallbackError, setDirectAssistFallbackError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
     const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
@@ -2627,6 +2633,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 const directEnabled = await window.electronAPI?.getDirectAssistEnabled?.();
                 setDirectAssistEnabled(directEnabled === true);
 
+                const directFallbackEnabled = await window.electronAPI?.getDirectAssistFallbackEnabled?.();
+                setDirectAssistFallbackEnabled(directFallbackEnabled !== false);
+
                 // Check Ollama
                 checkOllama();
 
@@ -2655,6 +2664,12 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             unsubs.push(window.electronAPI.onDirectAssistEnabledChanged((enabled: boolean) => {
                 setDirectAssistEnabled(enabled === true);
                 setDirectAssistError('');
+            }));
+        }
+        if (window.electronAPI?.onDirectAssistFallbackEnabledChanged) {
+            unsubs.push(window.electronAPI.onDirectAssistFallbackEnabledChanged((enabled: boolean) => {
+                setDirectAssistFallbackEnabled(enabled !== false);
+                setDirectAssistFallbackError('');
             }));
         }
         if (window.electronAPI?.onCredentialsChanged) {
@@ -3825,6 +3840,51 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 );
                             } finally {
                                 setDirectAssistBusy(false);
+                            }
+                        }}
+                    />
+                </div>
+
+            <div
+                    className={`aip-card p-5 flex items-center justify-between gap-4 ${!directAssistEnabled ? 'opacity-50 grayscale' : ''}`}
+                    title={!directAssistEnabled ? t('Requires Direct Assist to be enabled') : ''}
+                >
+                    <div className="flex-1 min-w-0">
+                        <label className="block text-xs font-medium uppercase tracking-wide mb-0 aip-hero">{t('Fall back to another provider')}</label>
+                        <p className="text-[10px] aip-muted mt-0.5">
+                            {t('If a Direct Assist provider fails, automatically retry with another configured provider instead of showing an error. Every switch is shown in the UI.')}
+                        </p>
+                        {!directAssistEnabled && (
+                            <p className="text-xs aip-warn-fg mt-0.5 font-medium">{t('Requires Direct Assist to be enabled.')}</p>
+                        )}
+                        {directAssistFallbackError && (
+                            <p className="text-[10px] aip-danger-fg mt-1" role="alert">{directAssistFallbackError}</p>
+                        )}
+                    </div>
+                    <AipSwitch
+                        checked={directAssistFallbackEnabled}
+                        disabled={directAssistFallbackBusy || !directAssistEnabled}
+                        label={t('Fall back to another provider')}
+                        onChange={async () => {
+                            if (directAssistFallbackBusy || !directAssistEnabled) return;
+                            const previous = directAssistFallbackEnabled;
+                            const next = !previous;
+                            setDirectAssistFallbackBusy(true);
+                            setDirectAssistFallbackError('');
+                            setDirectAssistFallbackEnabled(next);
+                            try {
+                                const result = await window.electronAPI?.setDirectAssistFallbackEnabled?.(next);
+                                if (!result?.success) {
+                                    setDirectAssistFallbackEnabled(previous);
+                                    setDirectAssistFallbackError(result?.error || t('Could not update Direct Assist fallback.'));
+                                }
+                            } catch (error) {
+                                setDirectAssistFallbackEnabled(previous);
+                                setDirectAssistFallbackError(
+                                    error instanceof Error ? error.message : t('Could not update Direct Assist fallback.'),
+                                );
+                            } finally {
+                                setDirectAssistFallbackBusy(false);
                             }
                         }}
                     />
