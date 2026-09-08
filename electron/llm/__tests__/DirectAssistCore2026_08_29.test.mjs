@@ -1502,3 +1502,24 @@ test('a MULTI-image turn is transcribed as one set, and none of its bytes are re
   assert.match(prepared.userPrompt, /USER \[attached 3 screenshots: transcribed below\]: Look at these\./);
   assert.match(prepared.userPrompt, /\[screen attached that turn\] Three terminal windows/);
 });
+
+test('normalizeDirectAssistError unwraps an engine aggregate to the first rung error', async () => {
+  const { normalizeDirectAssistError, DirectAssistError } = await loadDirectAssist();
+
+  const first = new DirectAssistError('CONNECT_TIMEOUT', 'The selected provider timed out.', true);
+  const aggregate = new Error('All providers failed: Natively attempt 3/3: timeout | Gemini attempt 1/2: auth');
+  aggregate.cause = first;
+  aggregate.firstProviderError = first;
+
+  const normalized = normalizeDirectAssistError(aggregate);
+  assert.equal(normalized.code, 'CONNECT_TIMEOUT');
+  assert.equal(normalized.retryable, true);
+  // The aggregate's prose names providers and must never reach the renderer.
+  assert.ok(!normalized.message.includes('Gemini'));
+});
+
+test('normalizeDirectAssistError still handles a bare provider error', async () => {
+  const { normalizeDirectAssistError } = await loadDirectAssist();
+  const normalized = normalizeDirectAssistError(Object.assign(new Error('nope'), { status: 429 }));
+  assert.equal(normalized.code, 'RATE_LIMITED');
+});
