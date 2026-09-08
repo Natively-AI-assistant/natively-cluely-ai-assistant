@@ -6,7 +6,6 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronsRight,
-  Clock,
   Layers,
   Loader2,
   Mic,
@@ -14,7 +13,6 @@ import {
   Search,
   Sparkles,
   Trash2,
-  Zap,
 } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../../i18n';
@@ -433,8 +431,12 @@ function PlanAllowances({ limits }: { limits: NativelyPlanLimits | undefined }) 
   );
 }
 
-// ─── Trial countdown (live, ticks every 500ms) ───────────────
-function TrialCountdown({ expiresAt }: { expiresAt: string }) {
+// ─── Trial countdown ─────────────────────────────────────────
+// A hook, not a component. This was an 11px clock chip in the section label's
+// `aside` — the right size for a status pill sitting beside three usage
+// meters. With the meters gone (see the active-trial card) the time IS the
+// card's statement, so the caller needs the value, not a rendering of it.
+function useTrialRemaining(expiresAt: string) {
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, new Date(expiresAt).getTime() - Date.now()),
   );
@@ -447,58 +449,85 @@ function TrialCountdown({ expiresAt }: { expiresAt: string }) {
   const totalSec = Math.ceil(remaining / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
-  const isWarning = remaining < 2 * 60 * 1000;
-  return (
-    <div
-      className={`flex items-center gap-1.5 ${isWarning ? 'text-amber-500' : 'text-text-tertiary'}`}
-    >
-      <Clock size={11} strokeWidth={2} />
-      <span className="text-[11px] font-medium tabular-nums">
-        {remaining === 0 ? 'Ended' : `${m}:${s.toString().padStart(2, '0')}`}
-      </span>
-    </div>
-  );
+  return {
+    /** `19:04`. Seconds are zero-padded so the string never changes width. */
+    clock: `${m}:${s.toString().padStart(2, '0')}`,
+    ended: remaining === 0,
+    /** The last two minutes, where the number stops being background. */
+    isWarning: remaining < 2 * 60 * 1000,
+  };
 }
 
-// ─── Trial usage pill ─────────────────────────────────────────
-function TrialUsagePill({
-  icon: Icon,
-  used,
-  limit,
-  label,
-  unit = '',
-  format,
-}: {
-  icon: React.ElementType;
-  used: number;
-  limit: number;
-  label: string;
-  unit?: string;
-  /** For meters whose raw numbers are unreadable at pill size — 60000 -> "60k". */
-  format?: (n: number) => string;
-}) {
-  // A zero or missing limit would make this NaN and blank the pill. The trial
-  // allowances arrive from the server now, so an absent one is a real state.
-  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
-  const isHigh = pct >= 80;
+// ─── Active trial card ───────────────────────────────────────
+// This card used to carry a three-up grid of usage meters — AI, Voice,
+// Research, each an icon, a label, a used-over-limit pair and a track. The
+// "Usage this trial" section at the foot of this panel renders THE SAME THREE
+// NUMBERS, forty pixels of scroll away, as ResourceMeter rows: the house row
+// idiom, with percentages, a Knowledge row, and a red over-limit state the
+// grid never had. Two renderings of one fact in two visual languages, and the
+// bespoke one was the weaker of the two.
+//
+// So the two surfaces split the trial's two resources instead of both trying
+// to show one of them: this card owns the TIME, and the usage table owns the
+// ALLOWANCE. Which also lets the clock stop being an 11px chip in the section
+// label and become the sentence the card is actually there to say.
+//
+// Anatomy is the offer card's, deliberately: one line of text on the left, one
+// compact control on the right, on the `natively-key-card` plaque. Two states
+// of one feature should not be two different shapes.
+function ActiveTrialCard({ expiresAt, onOptions }: { expiresAt: string; onOptions: () => void }) {
+  const { clock, ended, isWarning } = useTrialRemaining(expiresAt);
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Icon size={12} strokeWidth={2} className="text-text-tertiary" />
-          <span className="text-[12px] text-text-secondary">{label}</span>
+    <div>
+      <SectionLabel>Free trial active</SectionLabel>
+      <Card className="natively-key-card">
+        <div className="px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] font-medium text-text-primary tracking-[-0.01em]">
+                {ended ? (
+                  'Your free trial has ended'
+                ) : (
+                  <>
+                    {/* The clock is the only part that moves, so it is the
+                        only part that gets weight and colour. `tabular-nums`
+                        keeps the sentence from reflowing every second, which
+                        a proportional 4 -> 1 does at this size. Amber in the
+                        last two minutes: the same threshold and the same hue
+                        the usage rows use when an allowance runs low, so one
+                        colour means one thing across the panel. */}
+                    <span className={`tabular-nums ${isWarning ? 'text-amber-500' : ''}`}>{clock}</span>
+                    {' left in your free trial'}
+                  </>
+                )}
+              </p>
+              <p className="text-[12px] text-text-secondary mt-1 leading-snug">
+                {ended
+                  ? 'Add a key or choose a plan to keep going.'
+                  : 'Your usage so far is below.'}
+              </p>
+            </div>
+
+            {/* Same control as Activate and as Start free trial, in its
+                `secondary` state: an achromatic ghost at rest that takes the
+                READY material on hover — the periwinkle clay, the specular
+                inset, the lift and the glow (see .natively-key-cta in
+                index.css, where `secondary` joins the ready:hover selector
+                list rather than getting a copy of it).
+                Ghost at rest is deliberate: the plan list below is the primary
+                action on this screen, and two saturated pills in one viewport
+                is no hierarchy at all. */}
+            <button
+              onClick={onOptions}
+              data-state="secondary"
+              className="natively-key-cta shrink-0 h-9 px-5 flex items-center justify-center gap-1.5 text-[13px] font-medium select-none cursor-pointer"
+            >
+              See your options
+              <ArrowUpRight size={14} strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
-        <span className={`text-[12px] tabular-nums ${isHigh ? 'text-amber-500 font-medium' : 'text-text-tertiary'}`}>
-          {format ? format(used) : used}/{format ? format(limit) : limit}
-          {unit}
-        </span>
-      </div>
-      <div className="h-[3px] w-full bg-bg-input rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none ${isHigh ? 'bg-amber-500' : 'bg-accent-primary'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
+      </Card>
     </div>
   );
 }
@@ -1324,70 +1353,12 @@ export const NativelyApiSettings: React.FC<NativelyApiSettingsProps> = ({ initia
       )}
 
       {/* ── Active trial status card ──────────────────── */}
-      {trialState?.active &&
-        (() => {
-          const sttMin = (trialState.usage.stt_seconds / 60).toFixed(1);
-          return (
-            /* Ref B: instead of a hard gradient block, soft blurred colour
-               bleeds in from the card edges — a cool haze at the top, a warm
-               amber haze at the bottom-middle, both very diffuse, like light
-               behind frosted glass. It gives this transient state real warmth
-               and presence without introducing a competing hard-edged hue, and
-               without touching the trial state machine above it. */
-            <div>
-              <SectionLabel aside={<TrialCountdown expiresAt={trialState.expiresAt} />}>
-                Free trial active
-              </SectionLabel>
-              <div className="trial-bleed-card">
-                <div className="trial-bleed-content px-4 py-4 space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Product names, and limits from the server. "AI" is now
-                        token-denominated: the trial's request counter stopped
-                        being written when chat moved to a token meter, so a
-                        pill reading it would have sat at 0 for the whole
-                        trial. */}
-                    <TrialUsagePill
-                      icon={Zap}
-                      used={trialState.usage.ai_tokens ?? 0}
-                      limit={trialState.limits?.ai_tokens ?? TRIAL_FALLBACK_LIMITS.ai_tokens}
-                      label="AI"
-                      format={formatCompact}
-                    />
-                    <TrialUsagePill
-                      icon={Mic}
-                      used={Math.round(trialState.usage.stt_seconds / 60)}
-                      limit={trialState.limits?.stt_minutes ?? TRIAL_FALLBACK_LIMITS.stt_minutes}
-                      label="Voice"
-                      unit="m"
-                    />
-                    <TrialUsagePill
-                      icon={Search}
-                      used={trialState.usage.search}
-                      limit={trialState.limits?.search_requests ?? TRIAL_FALLBACK_LIMITS.search_requests}
-                      label="Research"
-                    />
-                  </div>
-
-                  {/* Secondary, not accent-filled: the plan list directly below
-                      is the primary action on this screen, and two full-width
-                      accent pills competing in one viewport is no hierarchy at
-                      all. */}
-                  <button
-                    onClick={() => setShowTrialModal(true)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-full text-[13px] font-medium bg-bg-input text-text-primary border border-border-muted hover:border-text-tertiary cursor-pointer active:scale-[0.985] transition-[border-color,transform] duration-150 ease-out motion-reduce:transition-none"
-                  >
-                    See your options
-                    <ArrowUpRight size={14} strokeWidth={2.2} />
-                  </button>
-                </div>
-              </div>
-              <p className="text-[11px] text-text-tertiary mt-2.5 px-1">
-                {formatCompact(trialState.usage.ai_tokens ?? 0)} AI tokens · {sttMin} min voice · {trialState.usage.search} research runs used
-                so far.
-              </p>
-            </div>
-          );
-        })()}
+      {trialState?.active && (
+        <ActiveTrialCard
+          expiresAt={trialState.expiresAt}
+          onOptions={() => setShowTrialModal(true)}
+        />
+      )}
 
       {/* ── Free trial start card (no key, no active trial) ── */}
       {!isLoading &&
