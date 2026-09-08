@@ -10687,6 +10687,7 @@ let isMultimodal = !!(imagePaths?.length);
   public streamDirectAssist(
     request: DirectAssistDispatchRequest,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown> {
     if (!request?.selection?.provider || !request.selection.model) {
       throw new DirectAssistError('NO_PROVIDER_CONFIGURED', 'Direct Assist requires a selected provider and model.');
@@ -10702,14 +10703,19 @@ let isMultimodal = !!(imagePaths?.length);
       userPrompt: request.userPrompt,
       imagePaths: Object.freeze([...request.imagePaths]),
     });
-    const custom = request.selection.provider === 'custom'
-      ? this.snapshotDirectCustomProvider(request.selection.model)
+    // The ladder decides WHO answers; request.selection stays the record of who
+    // the user picked (the `done` event and the terminal outcome still report
+    // the rung that actually answered, supplied by the caller).
+    const provider = rung?.provider ?? request.selection.provider;
+    const model = rung?.model ?? request.selection.model;
+    const custom = provider === 'custom'
+      ? this.snapshotDirectCustomProvider(model)
       : null;
-    const curl = request.selection.provider === 'curl' && this.activeCurlProvider?.id === request.selection.model
+    const curl = provider === 'curl' && this.activeCurlProvider?.id === model
       ? Object.freeze({ ...this.activeCurlProvider })
       : null;
 
-    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal);
+    return this.streamDirectAssistFrozen(frozenRequest, custom, curl, abortSignal, rung);
   }
 
   private snapshotDirectCustomProvider(modelId: string): CustomProvider | null {
@@ -10756,10 +10762,15 @@ let isMultimodal = !!(imagePaths?.length);
     custom: CustomProvider | null,
     curl: CurlProvider | null,
     abortSignal?: AbortSignal,
+    rung?: DirectAssistRung,
   ): AsyncGenerator<string, void, unknown> {
     if (abortSignal?.aborted) return;
 
-    const { provider, model } = request.selection;
+    // The ladder decides WHO answers; request.selection stays the record of who
+    // the user picked (the `done` event and the terminal outcome still report
+    // the rung that actually answered, supplied by the caller).
+    const provider = rung?.provider ?? request.selection.provider;
+    const model = rung?.model ?? request.selection.model;
     const imagePaths = [...request.imagePaths];
     for (const imagePath of imagePaths) {
       try {
@@ -10790,7 +10801,7 @@ let isMultimodal = !!(imagePaths?.length);
     if (this.isProviderDisabled(disabledFamily)) {
       throw new ProviderDisabledError(provider);
     }
-    if (!this.directSelectionSupportsImages(request.selection, custom, curl)) {
+    if (!this.directSelectionSupportsImages({ provider, model }, custom, curl)) {
       // Cleared BEFORE the throw below so a text-only turn on a text-only model
       // still answers instead of failing on an image the user did not attach.
       carriedImagePaths = [];

@@ -1687,3 +1687,23 @@ test('fallback disabled yields the selected rung alone', async () => {
   assert.equal(rungs.length, 1);
   assert.equal(rungs[0].provider, 'natively');
 });
+
+// ── Task 5: streamDirectAssist dispatches the SUPPLIED rung, not the selection ─
+
+test('streamDirectAssist honours the rung over request.selection', async () => {
+  const { LLMHelper } = require(path.resolve(root, 'dist-electron/electron/LLMHelper.js'));
+  const self = Object.create(LLMHelper.prototype);
+  let dispatched = null;
+  Object.assign(self, {
+    isLocalOnlyMode: false,
+    streamWithGeminiModel: async function* (_u, model) { dispatched = { provider: 'gemini', model }; yield 'ok'; },
+  });
+  const gen = LLMHelper.prototype.streamDirectAssist.call(
+    self,
+    { ...directAssistTextRequest, selection: { provider: 'natively', model: 'natively' } },
+    undefined,
+    { provider: 'gemini', model: 'gemini-3.7-flash', priority: 1, isFallback: true },
+  );
+  for await (const _ of gen) { /* drain */ }
+  assert.deepEqual(dispatched, { provider: 'gemini', model: 'gemini-3.7-flash' });
+});
