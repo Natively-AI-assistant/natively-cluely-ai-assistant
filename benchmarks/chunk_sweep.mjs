@@ -7,9 +7,9 @@ const ROOT='/Users/evin/natively-cluely-ai-assistant';
 const readEnv=(f,k)=>{const l=readFileSync(f,'utf8').split('\n').find(x=>x.startsWith(k+'='));return l?l.split('=').slice(1).join('=').trim().replace(/^["']|["']$/g,''):null};
 const KEY=readEnv(`${ROOT}/natively-api/.env`,'NATIVELY_API_KEY');
 const H={'Content-Type':'application/json','x-natively-key':KEY};
-let last=0; const GAP=680;
+let last=0; const GAP=Number(process.env.SWEEP_GAP_MS)||680;
 const paced=async fn=>{const w=Math.max(0,last+GAP-Date.now());last=Date.now()+w;if(w)await new Promise(r=>setTimeout(r,w));return fn()};
-async function api(p,body,tries=5){
+async function api(p,body,tries=Number(process.env.SWEEP_TRIES)||5){
   let lastErr=null;
   for(let a=1;a<=tries;a++){
     try{
@@ -37,7 +37,8 @@ console.log('PHASE 4 — chunk-size sweep (32k corpus, %d questions, top-%d -> r
 console.log('  target tok | chars | chunks | vec@1  vec@20 | rerank@1 | embed tokens | rerank p50');
 console.log('  -----------+-------+--------+---------------+----------+--------------+-----------');
 const out=[];
-for (const tok of [500, 800, 1000, 1200, 1500, 2000]) {
+const SIZES=(process.env.SWEEP_SIZES||'500,800,1000,1200,1500,2000').split(',').map(Number);
+for (const tok of SIZES) {
   const size = tok*4, overlap = Math.round(size*0.17);
   const chunks = chunkAt(corpus.text, size, overlap);
   const qs = buildQuestions({facts:corpus.facts, families:corpus.families, chunks, limit:N_Q});
@@ -68,5 +69,5 @@ for (const tok of [500, 800, 1000, 1200, 1500, 2000]) {
   out.push(row);
   console.log(`  ${String(tok).padStart(10)} | ${String(size).padStart(5)} | ${String(chunks.length).padStart(6)} | ${`${row.vec1.toFixed(1)}%`.padStart(6)} ${`${row.vecK.toFixed(1)}%`.padStart(6)} | ${`${row.rerank1.toFixed(1)}%`.padStart(8)} | ${String(embTok).padStart(12)} | ${String(row.rerankP50).padStart(9)}ms`);
 }
-writeFileSync(`${ROOT}/benchmarks/results/phase4-chunk-sweep.json`, JSON.stringify(out,null,1));
+writeFileSync(`${ROOT}/benchmarks/results/phase4-chunk-sweep${process.env.SWEEP_TAG||''}.json`, JSON.stringify(out,null,1));
 console.log('\nsaved benchmarks/results/phase4-chunk-sweep.json');

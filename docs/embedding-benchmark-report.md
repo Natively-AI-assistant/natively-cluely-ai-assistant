@@ -146,6 +146,48 @@ desktop client is an independent process with its own local queue, so there is n
 shared queue in which a large job could hold a place ahead of a small one. The
 only shared resource is the per-key request limit, and 120/min was not approached.
 
+## Phase 4 — chunk-size sweep
+
+Boundary strategy held constant; only the target size varies, so the effect
+measured is size alone. 32k corpus, 60 questions, top-20 -> rerank.
+
+| target | chars | chunks | vec@1 | vec@20 | rerank@1 | embed tokens | rerank p50 |
+|---|---|---|---|---|---|---|---|
+| 500 tok | 2000 | 77 | 50.0% | 96.7% | 96.7% | 34,067 | **822 ms** |
+| 800 tok | 3200 | 48 | 46.7% | 96.7% | 95.0% | 34,153 | 962 ms |
+| 1200 tok | 4800 | 32 | 46.7% | 100.0% | 98.3% | 33,944 | **2572 ms** |
+
+**Embedding cost is flat.** ~34,000 tokens at every size — it is the same text,
+merely partitioned differently. Chunk size is therefore NOT a cost lever for
+indexing, which is worth knowing before anyone tunes it to save money.
+
+**Rerank latency is where size shows up: 822 ms -> 2572 ms, a 3.1x increase for
+2.4x larger chunks.** Reranking processes (query x documents) + sum(documents),
+so at a fixed top-K the reranker's input grows linearly with chunk size. This is
+the strongest signal in the sweep and it favours smaller chunks.
+
+**The accuracy column should NOT be read as "bigger is better", and this is a
+flaw in the experiment worth stating rather than hiding.** At 1200 tokens the
+corpus is only 32 chunks, so a top-20 candidate set is 62% of the entire
+document — recall@20 is high because K covers most of the corpus, not because the
+chunking is better. At 500 tokens the same K covers 26% of 77 chunks. The sizes
+are therefore not being compared on equal terms, and the 3-point accuracy spread
+is not evidence for any size.
+
+What survives the confound: **flat cost, sharply rising rerank latency, and
+accuracy differences too small and too confounded to prefer larger chunks.**
+Production's semanticChunker targets ~350 tokens — smaller than every size tested
+— which this supports, and which the repo's own earlier measurement already found
+("budget-survival is 25/25 at every size up to 1250 tokens"; size was measured not
+to be the problem, boundaries were).
+
+**No change recommended.** A fair re-test would hold the retrieved *fraction* of
+the corpus constant rather than K.
+
+Sizes above 1200 could not be completed: they repeatedly hit OpenRouter's
+project-wide 12M tokens/min ceiling, which is itself the finding — larger chunks
+burn the shared token budget faster for the same corpus.
+
 ## Phase 29 — format matrix (real app, Natively API)
 
 Every format `SafeDocumentTextExtractor` accepts, each carrying the **same** facts
