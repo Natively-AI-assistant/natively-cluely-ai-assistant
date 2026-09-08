@@ -35,6 +35,17 @@ function safeMessage(error: unknown): string {
 export function normalizeDirectAssistError(error: unknown): DirectAssistError {
   if (error instanceof DirectAssistError) return error;
 
+  // The shared fallback engine throws an AGGREGATE when a multi-rung ladder is
+  // exhausted, and hangs the first rung's real error on `cause` /
+  // `firstProviderError` (streamFallbackEngine, "Carry the first error
+  // through"). Recurse into that instead of classifying the aggregate's prose:
+  // the sentence names every provider tried, which is exactly what this
+  // function exists to keep off the IPC contract, and its wording would fall
+  // through to a generic PROVIDER_ERROR. The FIRST rung is the right one to
+  // report — it is the provider the user actually selected.
+  const wrapped = (error as any)?.firstProviderError ?? (error as any)?.cause;
+  if (wrapped && wrapped !== error) return normalizeDirectAssistError(wrapped);
+
   const candidate = error as any;
   if (candidate?.name === 'AntigravityError') {
     if (candidate.code === 'cancelled') return new DirectAssistError('CANCELLED', 'The request was cancelled.');
