@@ -1729,14 +1729,50 @@ export class CredentialsManager {
         return this.credentials.trialClaimed === true;
     }
 
-    public setTrialToken(token: string, expiresAt: string, startedAt: string): void {
-        if (this.refuseWriteWhileDegraded('set trial token')) return;
+    /**
+     * Store a started trial.
+     *
+     * Returns whether the token reached DISK, which is not the same as whether
+     * the trial works. The two are separated because a trial is unlike every
+     * other credential here: the server has already burned this machine's
+     * one-per-HWID row by the time we are called, so a write we cannot perform
+     * must not also throw the trial away.
+     *
+     * What this used to do — `if (refuseWriteWhileDegraded(...)) return;` — was
+     * the exact shape of the "I pressed Start and got no trial" reports. In a
+     * degraded session (unreadable keyring, or this launch holding a different
+     * encryption key) it returned BEFORE assigning, so the token never reached
+     * memory either. `trial:start` ignored the void return and answered ok, the
+     * renderer then polled `trial:status`, CredentialsManager had no token, and
+     * the user was left with a spent trial and no sign of it.
+     *
+     * So: memory ALWAYS gets the token, disk only when the store is healthy.
+     * Memory-only still gives a working trial for this session, and the caller
+     * is told it will not survive a restart. The degraded guard still gates the
+     * WRITE, which is the part that could clobber intact stored keys with a
+     * partially-loaded object — that protection is untouched.
+     */
+    public setTrialToken(token: string, expiresAt: string, startedAt: string): { persisted: boolean } {
         this.credentials.trialToken = token;
         this.credentials.trialExpiresAt = expiresAt;
         this.credentials.trialStartedAt = startedAt;
         this.credentials.trialClaimed = true;
-        this.saveCredentials();
-        console.log('[CredentialsManager] Trial token stored, expires:', expiresAt);
+
+        if (this.refuseWriteWhileDegraded('persist trial token')) {
+            console.warn('[CredentialsManager] Trial token held in MEMORY ONLY — the credential store is degraded, '
+                + 'so this trial will not survive a restart. It remains valid on the server: pressing Start again '
+                + 'from a healthy session re-issues the same trial (the API is idempotent per hardware id).');
+            return { persisted: false };
+        }
+
+        const persisted = this.saveCredentials();
+        if (persisted) {
+            console.log('[CredentialsManager] Trial token stored, expires:', expiresAt);
+        } else {
+            console.error('[CredentialsManager] Trial token could NOT be written to disk. It is live for this '
+                + 'session only; the server still holds the trial and will re-issue the same one.');
+        }
+        return { persisted };
     }
 
     public clearTrialToken(): void {

@@ -8384,6 +8384,18 @@ export function initializeIpcHandlers(appState: AppState): void {
   safeHandle('reranker:set-hosted-key', async (_evt, provider: string, key: string) => {
     const { CredentialsManager } = require('./services/CredentialsManager');
     const cm = CredentialsManager.getInstance();
+    // Natively is not bring-your-own-key: it runs on the API key the user
+    // already configured for the app. Falling through here would have written
+    // that key into the OPENROUTER credential slot — silently replacing a real
+    // OpenRouter key with one that cannot authenticate to OpenRouter, and
+    // breaking BYOK reranking, embeddings and generation together.
+    if (provider === 'natively') {
+      return {
+        success: false,
+        error: 'not_byok',
+        message: 'The Natively reranker uses your Natively API key. Set it in the Natively API section.',
+      };
+    }
     const saved = provider === 'jina'
       ? cm.setJinaApiKey(key || '')
       : cm.setOpenrouterApiKey(key || '');
@@ -9481,7 +9493,19 @@ export function initializeIpcHandlers(appState: AppState): void {
   // ── Usage cache (60-second TTL, keyed by API key) ──────────────────────────
   const _usageCache = new Map<string, { data: any; ts: number }>();
   const USAGE_CACHE_TTL_MS = 60_000;
+  // The Natively API host. LLMHelper has honoured NATIVELY_API_URL since the
+  // chat endpoint was added; these seven call sites each hardcoded the
+  // production host instead, so the billing and trial surface was the one part
+  // of the app that could not be pointed at a local server. That is exactly the
+  // surface where "does the UI show what the server enforces?" needs answering
+  // before a release, not after.
+  const NATIVELY_API_BASE = (process.env.NATIVELY_API_URL || 'https://api.natively.software').replace(/\/+$/, '');
   const _pricingCache = new Map<string, { data: any; ts: number }>();
+  // The plan catalog. Unauthenticated and identical for every user, so it is
+  // cached per PROCESS rather than per key, and for far longer than usage —
+  // allowances change on a deploy, not on a request.
+  const _plansCache = new Map<string, { data: any; ts: number }>();
+  const PLANS_CACHE_TTL_MS = 15 * 60_000;
   const PRICING_CACHE_TTL_MS = 5 * 60_000;
 
   safeHandle('set-natively-api-key', async (_, apiKey: string) => {
@@ -9660,7 +9684,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return cached.data;
       }
 
-      const res = await fetch('https://api.natively.software/v1/pricing', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/pricing`, {
         signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) {
@@ -9672,6 +9696,44 @@ export function initializeIpcHandlers(appState: AppState): void {
       _pricingCache.set('pricing', { data: result, ts: Date.now() });
       return result;
     } catch (error: any) {
+      return { ok: false, error: error.message || 'network_error' };
+    }
+  });
+
+  // The plan catalog: allowances and prices, straight from the server.
+  //
+  // This exists so the plan table stops carrying its own copy of the numbers.
+  // Those copies had already drifted — the cards hardcoded the prices and a
+  // comment beside them listed allowances ("AI 500/1k/2k/3k, STT 200/500/1k/2k
+  // min") that no longer matched anything the server enforced. Fetching them
+  // means a server-side retune needs no app release, which was the original
+  // reason the figures were left out of the UI in the first place.
+  //
+  // NO KEY REQUIRED, deliberately: a visitor deciding which plan to buy has no
+  // key yet, and that is exactly who the table is for.
+  safeHandle('get-natively-plans', async () => {
+    try {
+      const cached = _plansCache.get('plans');
+      if (cached && Date.now() - cached.ts < PLANS_CACHE_TTL_MS) return cached.data;
+
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/plans`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as any;
+        return { ok: false, error: body.error || 'request_failed', status: res.status };
+      }
+      const data = (await res.json()) as any;
+      const result = { ok: true, ...data };
+      _plansCache.set('plans', { data: result, ts: Date.now() });
+      return result;
+    } catch (error: any) {
+      // Serve a stale catalog over an error: the table degrades to whatever it
+      // last knew, and the card falls back to qualitative copy if it knows
+      // nothing. Prices are not enforcement — showing a slightly old allowance
+      // beats showing an empty plan chooser.
+      const stale = _plansCache.get('plans');
+      if (stale) return { ...stale.data, stale: true };
       return { ok: false, error: error.message || 'network_error' };
     }
   });
@@ -9693,7 +9755,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return cached.data;
       }
 
-      const res = await fetch('https://api.natively.software/v1/usage', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/usage`, {
         headers: { 'x-natively-key': key },
         signal: AbortSignal.timeout(8000),
       });
@@ -9756,7 +9818,7 @@ export function initializeIpcHandlers(appState: AppState): void {
         return { ok: false, error: 'hardware_id_unavailable' };
       }
 
-      const res = await fetch('https://api.natively.software/v1/trial/start', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hwid }),
@@ -9770,8 +9832,14 @@ export function initializeIpcHandlers(appState: AppState): void {
 
       const data = (await res.json()) as any;
 
+      let persisted = true;
       if (data.ok && data.trial_token && !data.expired) {
-        cm.setTrialToken(data.trial_token, data.expires_at, data.started_at);
+        // The trial is already spent server-side by this point (one row per
+        // hwid), so a store that cannot write must not silently swallow it.
+        // setTrialToken keeps the token in memory regardless and reports
+        // whether it reached disk; the renderer surfaces that as a warning
+        // rather than the trial simply not appearing.
+        persisted = cm.setTrialToken(data.trial_token, data.expires_at, data.started_at).persisted;
 
         // Auto-configure natively as the model + STT provider during trial
         const prevSttProvider = cm.getSttProvider();
@@ -9785,7 +9853,10 @@ export function initializeIpcHandlers(appState: AppState): void {
       }
 
       const { trial_token, ...safeData } = data;
-      return { ok: true, ...safeData, hasToken: Boolean(data.trial_token) };
+      // `persisted:false` means "running now, gone after a restart" — a real
+      // state the UI has to be able to say out loud, and the reason the trial
+      // appeared not to start at all before.
+      return { ok: true, ...safeData, hasToken: Boolean(data.trial_token), persisted };
     } catch (error: any) {
       console.error('[IPC] trial:start failed:', error);
       return { ok: false, error: error.message || 'network_error' };
@@ -9799,7 +9870,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const token = CredentialsManager.getInstance().getTrialToken();
       if (!token) return { ok: false, error: 'no_trial_token' };
 
-      const res = await fetch('https://api.natively.software/v1/trial/status', {
+      const res = await fetch(`${NATIVELY_API_BASE}/v1/trial/status`, {
         headers: { 'x-trial-token': token },
         signal: AbortSignal.timeout(8_000),
       });
@@ -9843,7 +9914,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       const token = CredentialsManager.getInstance().getTrialToken();
       if (!token) return { ok: true }; // no token to report
 
-      await fetch('https://api.natively.software/v1/trial/convert', {
+      await fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
         body: JSON.stringify({ choice }),
@@ -10031,7 +10102,7 @@ export function initializeIpcHandlers(appState: AppState): void {
       // 1. Fire-and-forget analytics (non-blocking)
       const token = cm.getTrialToken();
       if (token) {
-        fetch('https://api.natively.software/v1/trial/convert', {
+        fetch(`${NATIVELY_API_BASE}/v1/trial/convert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-trial-token': token },
           body: JSON.stringify({ choice: 'byok' }),

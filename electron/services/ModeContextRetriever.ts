@@ -1750,9 +1750,9 @@ export class ModeContextRetriever {
     }
 
     /** Index status for the Modes Manager UI badge. */
-    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number } {
+    getReferenceFileIndexStatus(fileId: string): { status: string; chunkCount: number; embeddedChunkCount: number } {
         const retriever = this.ensureHybridRetriever();
-        if (!retriever) return { status: 'pending', chunkCount: 0 };
+        if (!retriever) return { status: 'pending', chunkCount: 0, embeddedChunkCount: 0 };
         return retriever.getFileIndexStatus(fileId);
     }
 

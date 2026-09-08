@@ -156,7 +156,7 @@ export interface AppSettings {
      * This file is plaintext on disk.
      */
     reranker?: {
-        provider?: 'local' | 'openrouter' | 'jina';
+        provider?: 'local' | 'natively' | 'openrouter' | 'jina';
         /**
          * A catalogue id from rag/rerankerModelCatalog.ts, or absent for the
          * bundled model (ms-marco-MiniLM-L-6-v2 as of 2026-09-04 — see
@@ -167,6 +167,12 @@ export interface AppSettings {
         openrouterModel?: string;
         /** Model id for the Jina AI hosted reranker (jina-reranker-v3.5 and friends). */
         jinaModel?: string;
+        /**
+         * Model id for the Natively-managed reranker. Absent means the one model
+         * the API serves — unlike the BYOK providers there is nothing to choose,
+         * so this exists only so a second managed model needs no migration.
+         */
+        nativelyModel?: string;
         candidateCount?: number;
         fallbackToLocal?: boolean;
         lastTest?: {

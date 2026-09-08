@@ -66,11 +66,12 @@ describe('Gemini', () => {
 
 describe('Natively', () => {
   test('exposes exactly the model the server pins, and it is not user-selectable', () => {
-    // The managed tier runs gemini-embedding-2 @768 server-side; offering a
-    // choice here would be a lie the client cannot honour.
+    // The managed tier runs voyage-4 @2048 server-side; offering a choice here
+    // would be a lie the client cannot honour — /v1/embed serves this build
+    // exactly one model, the one NativelyEmbeddingProvider asks for by name.
     const p = byId(buildEmbeddingCatalog({ hasNativelyKey: true }), 'natively');
-    assert.deepEqual(ids(p), ['gemini-embedding-2']);
-    assert.equal(p.models[0].dimensions, 3072);
+    assert.deepEqual(ids(p), ['voyage-4']);
+    assert.equal(p.models[0].dimensions, 2048);
     assert.equal(p.managed, true);
   });
 });
