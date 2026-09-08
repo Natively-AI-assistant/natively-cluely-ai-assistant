@@ -369,7 +369,12 @@ test('a screenshot that could not be transcribed is still recorded as having exi
 
   // The count must come from the ATTACHMENTS, not from the transcription —
   // reading it off the description is what produced the silent gap.
-  assert.match(engine, /screenText \|\| \(imageCount > 0 \? SCREEN_NOT_TRANSCRIBED : undefined\)/);
+  // "a screen was there" is now attachments OR a ScreenUnderstanding result —
+  // a turn answering from a periodic capture with no attachment recorded
+  // neither text nor the marker.
+  assert.match(engine, /screenText \|\| \(\(imageCount > 0 \|\| screenContext\) \? SCREEN_NOT_TRANSCRIBED : undefined\)/);
+  // And screenContext is a real fallback source, not an unread parameter.
+  assert.match(engine, /if \(!screenText && screenContext\) \{/);
   assert.match(engine, /this\.recordLiveTurn\(answer, options\?\.screenContext, question, imagePaths\?\.length \?\? 0, imagePaths\)/);
   // The recorded text is a DEDICATED transcription, not the answering call's
   // output — that reuse is what stored a paraphrase with no identifiers.
