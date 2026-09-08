@@ -116,6 +116,18 @@ test('provider_switch is forwarded in order without being swallowed into the ter
   // It must never touch lastSequence: a switch's sequence is a snapshot of
   // the delta counter (always 0), not a slot of its own.
   assert.doesNotMatch(switchBlock, /lastSequence\s*=/);
+  // The branch must forward streamEvent ITSELF, not a reconstructed object
+  // literal — the 'start' event's trimmedFields field (see the comment above,
+  // ~line 49-53) drifted undetected once before precisely because a copy
+  // diverged from the source shape. Passing streamEvent wholesale makes field
+  // preservation structural: `from`/`to` cannot be silently dropped or
+  // renamed without rewriting this call into an object literal, and that
+  // rewrite is exactly what this assertion catches.
+  assert.doesNotMatch(
+    switchBlock,
+    /sendDirectAssistEvent\([^)]*\{/,
+    'provider_switch must forward the streamEvent object itself, not a hand-rebuilt payload',
+  );
 });
 
 test('main resolves and strips enabled skills, including underscore IDs', () => {
