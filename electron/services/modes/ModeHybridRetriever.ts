@@ -728,8 +728,10 @@ export class ModeHybridRetriever {
         // already grades it unsupporting — but no vectors, no READY, and the
         // ingest event says exactly why the file cannot answer anything.
         if (isPlaceholderOnlyContent(content)) {
-            this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'ocr_required', null, 0);
+            const wrote = this.persistChunks(file.id, chunks, null, null);
+            // A failed write means the chunk TEXT is absent too, so even lexical
+            // retrieval has nothing. 'failed' is retried; 'ocr_required' is terminal.
+            this.updateIndexState(file.id, contentHash, chunks.length, wrote ? 'ocr_required' : 'failed', null, 0);
             console.warn(`[ModeHybridRetriever] "${file.fileName}": no searchable text extracted (image-only PDF?) — marked OCR_REQUIRED; the file cannot be searched until it has text.`);
             emitIngestDebug('ocr_required', 0, 'no searchable text extracted — image-only or scanned PDF');
             return;
@@ -738,8 +740,8 @@ export class ModeHybridRetriever {
         if (!this.isEmbeddingAvailable() || !activeSpace) {
             // No embedder: persist chunk TEXT (lexical retrieval still wins a
             // re-chunk per query) and mark lexical_only so prewarm retries later.
-            this.persistChunks(file.id, chunks, null, null);
-            this.updateIndexState(file.id, contentHash, chunks.length, 'lexical_only', null, 0);
+            const wrote = this.persistChunks(file.id, chunks, null, null);
+            this.updateIndexState(file.id, contentHash, chunks.length, wrote ? 'lexical_only' : 'failed', null, 0);
             emitIngestDebug('lexical_only', 0);
             return;
         }
@@ -771,9 +773,17 @@ export class ModeHybridRetriever {
             if (plan.length === 1) {
                 const result = await this.embedSubBatchWithRetry(chunks, file.fileName);
                 const embeddings = result.embeddings;
-                this.persistChunks(file.id, chunks, embeddings, result.space);
-                this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space, chunks.length);
-                emitIngestDebug('ready', chunks.length);
+                const wrote = this.persistChunks(file.id, chunks, embeddings, result.space);
+                // Derived from the rows, not from what the loop believed it had.
+                const stored = wrote ? this.countPersistedVectors(file.id, result.space) : 0;
+                if (!wrote || stored === 0) {
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                    emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    console.warn(`[ModeHybridRetriever] ${file.fileName}: embedding succeeded but persistence did not; marked failed so it is retried rather than reported ready over zero rows.`);
+                } else {
+                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', result.space, stored);
+                    emitIngestDebug('ready', stored);
+                }
             } else {
                 // FAULT-TOLERANT batched indexing: a mid-file sub-batch failure (429
                 // rotation exhausted, timeout) must NOT discard the chunks already
@@ -801,26 +811,41 @@ export class ModeHybridRetriever {
                 if (embeddedCount === 0) {
                     // Nothing embedded — lexical only, mark failed so a later prewarm retries.
                     this.persistChunks(file.id, chunks, null, null);
+                    // Already 'failed'; a persistence failure on top changes nothing.
                     this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
                     emitIngestDebug('failed', 0, `embedding failed at offset ${failedOffset}`);
                 } else if (embeddedCount === chunks.length) {
-                    this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, embeddedCount);
-                    emitIngestDebug('ready', embeddedCount);
+                    const wroteAll = this.persistChunks(file.id, chunks, embeddedVectors, embeddingSpace);
+                    const storedAll = wroteAll ? this.countPersistedVectors(file.id, embeddingSpace) : 0;
+                    if (storedAll === 0) {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                        emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    } else {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, storedAll);
+                        emitIngestDebug('ready', storedAll);
+                    }
                 } else {
                     // Partial: persist the embedded prefix WITH vectors, and the tail as
                     // lexical-only text. persistChunks reads embeddings[i] per row and
                     // stores a null blob where the vector is absent, so a padded array
                     // (vectors for the prefix, null for the tail) gives a mixed index.
                     const padded = chunks.map((_, i) => (i < embeddedCount ? embeddedVectors[i] : null)) as unknown as number[][];
-                    this.persistChunks(file.id, chunks, padded, embeddingSpace);
+                    const wrotePartial = this.persistChunks(file.id, chunks, padded, embeddingSpace);
+                    const storedPartial = wrotePartial ? this.countPersistedVectors(file.id, embeddingSpace) : 0;
                     // 'ready' — retrieval works over the embedded prefix + lexical
-                    // tail. Recording embeddedCount is what actually makes the
-                    // promised follow-up possible: the skip check above and
-                    // prewarmModeReferenceIndex both now see this file as unfinished.
-                    this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, embeddedCount);
-                    console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${embeddedCount}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
-                    emitIngestDebug('ready', embeddedCount, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
+                    // tail. Recording the DERIVED count is what makes the promised
+                    // follow-up possible: the skip check above and
+                    // prewarmModeReferenceIndex both then see this file as
+                    // unfinished. A failed write records nothing embedded, so the
+                    // file is retried rather than frozen mid-way.
+                    if (storedPartial === 0) {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'failed', null, 0);
+                        emitIngestDebug('failed', 0, 'chunk persistence failed — nothing was written');
+                    } else {
+                        this.updateIndexState(file.id, contentHash, chunks.length, 'ready', embeddingSpace, storedPartial);
+                        console.log(`[ModeHybridRetriever] ${file.fileName}: partial index READY (${storedPartial}/${chunks.length} vectors, tail lexical; failed@${failedOffset})`);
+                        emitIngestDebug('ready', storedPartial, `embedding stopped at offset ${failedOffset}; tail lexical-only`);
+                    }
                 }
             }
         } catch (e) {
@@ -832,7 +857,20 @@ export class ModeHybridRetriever {
         }
     }
 
-    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): void {
+    /**
+     * Write a file's chunks (and vectors, where present) in one transaction.
+     *
+     * Returns whether the write actually landed. It used to return void and
+     * swallow the exception, which meant a failed transaction — a locked
+     * database, a full disk — was followed immediately by updateIndexState
+     * marking the file `ready` with a full embedded count over ZERO rows. The
+     * file then reported itself completely indexed and retrieved nothing, and
+     * once the skip condition started checking embeddedChunkCount that lie
+     * satisfied it, so nothing ever revisited the file.
+     *
+     * The caller must not record success it did not get.
+     */
+    private persistChunks(fileId: string, chunks: string[], embeddings: number[][] | null, space: string | null): boolean {
         try {
             const del = this.db.prepare('DELETE FROM mode_reference_chunks WHERE file_id = ?');
             const ins = this.db.prepare(`
@@ -849,8 +887,36 @@ export class ModeHybridRetriever {
                 }
             });
             txn();
+            return true;
         } catch (e) {
             console.warn('[ModeHybridRetriever] persistChunks failed:', e);
+            return false;
+        }
+    }
+
+    /**
+     * How many of this file's chunks actually carry a usable vector, read from
+     * the ROWS rather than from anything we remembered writing.
+     *
+     * embedded_chunk_count is a cache of this query. A cache can drift from the
+     * thing it caches — that is the entire failure this closes — so the number
+     * persisted into the state row is derived here, after the write, instead of
+     * being the count the embedding loop believed it had.
+     *
+     * Filters on the space for the same reason retrieval does: a vector from a
+     * different embedding space is not a usable vector, so counting it would
+     * report a file as indexed for a space in which it cannot be searched.
+     */
+    private countPersistedVectors(fileId: string, space: string | null): number {
+        if (!space) return 0;
+        try {
+            const row = this.db.prepare(
+                'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL AND embedding_space = ?'
+            ).get(fileId, space) as { n?: number } | undefined;
+            return typeof row?.n === 'number' ? row.n : 0;
+        } catch (e) {
+            console.warn('[ModeHybridRetriever] countPersistedVectors failed:', e);
+            return 0;
         }
     }
 
