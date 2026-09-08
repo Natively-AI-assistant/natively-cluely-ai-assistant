@@ -443,9 +443,28 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
           const screensDenied = isScopeDenied('screenshots', readProviderScopePolicy());
           historyScreenWithheld = screensDenied;
           if (!screensDenied) {
+            // BUDGETED, newest-first — the same allowance the ring branch above
+            // enforces for the same content. Without it this mapped EVERY
+            // screen-bearing turn: measured, 10 turns at MAX_TURN_SCREEN_CHARS
+            // put 80,000 characters of screen text into an 83,072-character
+            // prompt, five times the allowance this file declares a few lines
+            // up, on every what-to-answer and assist turn of the session.
+            const screenBudgetChars = MAX_TURN_SCREEN_CHARS * 2;
+            let screenSpent = 0;
+            const keptScreens: Array<{ q: string; screen?: string }> = [];
+            for (let i = screenTurns.length - 1; i >= 0; i--) {
+              const t = screenTurns[i];
+              const cost = (t.screen?.length ?? 0) + (t.q?.length ?? 0) + 32;
+              // Always keep the most recent screen even if it alone overruns:
+              // dropping it would answer a follow-up about the screen the user
+              // is most likely to mean with nothing at all.
+              if (keptScreens.length && screenSpent + cost > screenBudgetChars) break;
+              screenSpent += cost;
+              keptScreens.unshift(t);
+            }
             // Same per-turn shape the ring branch renders, so the composer's
             // "[screen attached that turn]" exception recognizes both.
-            const merged = screenTurns.map((t: { q: string; screen?: string }) => [
+            const merged = keptScreens.map((t: { q: string; screen?: string }) => [
               `User: ${t.q}`,
               `[screen attached that turn] ${t.screen}`,
             ].join('\n')).join('\n\n');

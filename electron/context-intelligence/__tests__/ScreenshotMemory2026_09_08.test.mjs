@@ -481,3 +481,25 @@ test('EVERY ring reader derives its key from the shared resolver', () => {
   assert.match(ipc, /sessionId: v3ConversationSessionId\(appState, senderId\)/);
   assert.match(ipc, /recordAnswerSummary\(\s*\n\s*v3ConversationSessionId\(appState, senderId\)/);
 });
+
+test('the merge branch is budgeted, newest-first, like the ring branch beside it', async () => {
+  const SID = 'merge-budget';
+  const SPEECH = '[INTERVIEWER]: keep going\n[ME]: sure';
+  store.clearConversationState(SID);
+  // MAX_HISTORY_TURNS screen-bearing turns, each at the per-turn screen cap.
+  for (let i = 0; i < 10; i++) {
+    await askTurn(SID, `q${i}`, i, { conversationSummary: SPEECH, hasScreenContext: true });
+    store.recordAnswerSummary(SID, `answer ${i}`, 'S'.repeat(MAX_TURN_SCREEN_CHARS));
+  }
+  const out = await askTurn(SID, 'what did those screens show?', 99, { conversationSummary: SPEECH });
+
+  // BEFORE: every screen-bearing turn was mapped with no cap — measured at
+  // 80,000 chars of screen text in an 83,072-char prompt, on every live turn.
+  const screenChars = (out.user.match(/S{50,}/g) ?? []).reduce((n, s) => n + s.length, 0);
+  assert.ok(screenChars <= MAX_TURN_SCREEN_CHARS * 2,
+    `merged screen text ${screenChars} exceeds the ${MAX_TURN_SCREEN_CHARS * 2} allowance the ring branch enforces`);
+  assert.ok(out.user.length < 20_000, `prompt ${out.user.length} chars — the budget is not being applied`);
+  // The most recent screen is the one a follow-up most likely means, so it must
+  // survive even when it alone fills the allowance.
+  assert.match(out.user, /\[screen attached that turn\] S/);
+});
