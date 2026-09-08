@@ -257,3 +257,87 @@ describe('W3: fallback promotion (MEDIUM #5)', () => {
         assert.equal(chunks[0].embedding, null, 'no vector stored on double-failure');
     });
 });
+
+describe('W3: persistence failure must not be reported as a complete index', () => {
+    // persistChunks used to return void and swallow its exception, so a failed
+    // transaction (locked db, full disk) was followed straight away by
+    // updateIndexState marking the file `ready` with a FULL embedded count over
+    // ZERO rows. The file then reported itself completely indexed and retrieved
+    // nothing — and once the skip condition began checking embeddedChunkCount,
+    // that lie satisfied it, so nothing ever revisited the file.
+    //
+    // The count is now DERIVED from the rows rather than from what the embedding
+    // loop believed it had, which is why this cannot silently pass any more.
+    //
+    // Verified to have teeth: reverting BOTH the derived count and the boolean
+    // return makes the two tests below fail. Reverting only the boolean does
+    // not — the derived count closes the hole on its own, because a row count
+    // over an empty table is zero no matter what the writer claimed. The
+    // boolean is defence in depth, not the fix.
+
+    /** Make the chunk table un-writable, the way a real disk/lock failure looks. */
+    function breakChunkWrites(db) {
+        db.exec('DROP TABLE IF EXISTS mode_reference_chunks_broken');
+        db.exec('ALTER TABLE mode_reference_chunks RENAME TO mode_reference_chunks_broken');
+        // A table of the same name whose NOT NULL column the insert never supplies:
+        // every INSERT throws, exactly as a constraint/disk failure would.
+        db.exec(`CREATE TABLE mode_reference_chunks (
+            file_id TEXT, chunk_index INTEGER, text TEXT, embedding BLOB,
+            embedding_space TEXT, created_at INTEGER,
+            must_be_set TEXT NOT NULL
+        )`);
+    }
+
+    test('a failed chunk write is NOT recorded as ready', async () => {
+        const pipeline = makePipeline();
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        breakChunkWrites(db);
+
+        await r.indexFile(FILE);   // must never throw — indexing is best-effort
+
+        const st = r.getFileIndexStatus('f1');
+        assert.notEqual(st.status, 'ready',
+            'a file whose chunks were never written must not report ready');
+        assert.equal(st.embeddedChunkCount, 0,
+            'no rows were written, so no chunks may be counted as embedded');
+    });
+
+    test('the failed file is retried rather than frozen', async () => {
+        const pipeline = makePipeline();
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        breakChunkWrites(db);
+        await r.indexFile(FILE);
+
+        // Restore the real table and index again: the file must NOT be skipped.
+        db.exec('DROP TABLE mode_reference_chunks');
+        db.exec('ALTER TABLE mode_reference_chunks_broken RENAME TO mode_reference_chunks');
+        const before = pipeline.calls.batch.length;
+        await r.indexFile(FILE);
+        assert.ok(pipeline.calls.batch.length > before,
+            're-indexing must actually re-embed — the earlier failure left nothing to reuse');
+
+        const st = r.getFileIndexStatus('f1');
+        assert.equal(st.status, 'ready');
+        assert.equal(st.embeddedChunkCount, st.chunkCount, 'now genuinely complete');
+    });
+
+    test('the embedded count comes from the ROWS, not from the caller', async () => {
+        const pipeline = makePipeline();
+        const r = new ModeHybridRetriever(db, mockVectorStore, pipeline);
+        await r.indexFile(FILE);
+
+        const rows = db.prepare(
+            'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL'
+        ).get('f1').n;
+        assert.equal(r.getFileIndexStatus('f1').embeddedChunkCount, rows,
+            'the state row must agree with the vectors actually on disk');
+
+        // Delete a vector behind its back. A cached count would still claim
+        // completeness; a derived one cannot.
+        db.prepare('UPDATE mode_reference_chunks SET embedding = NULL WHERE file_id = ? AND chunk_index = 0').run('f1');
+        const after = db.prepare(
+            'SELECT COUNT(*) AS n FROM mode_reference_chunks WHERE file_id = ? AND embedding IS NOT NULL'
+        ).get('f1').n;
+        assert.equal(after, rows - 1, 'fixture check: one vector removed');
+    });
+});

@@ -49,14 +49,34 @@ describe('GAP-1 — a partial index is detectable and resumable', () => {
     assert.match(skip.slice(0, 600), /status === 'ready'[\s\S]{0,200}&& fullyEmbedded/);
   });
 
-  test('the partial branch persists the count that makes it resumable', () => {
-    const partial = SRC.slice(SRC.indexOf('const padded = chunks.map'));
-    assert.match(partial.slice(0, 900), /updateIndexState\([^)]*'ready', embeddingSpace, embeddedCount\)/);
+  test('the count written to the state row is DERIVED from the rows', () => {
+    // Stronger than the original assertion, which pinned the variable name
+    // `embeddedCount` — the count the embedding loop BELIEVED it had. That
+    // number is a claim; the rows are the fact. persistChunks can fail (a locked
+    // db, a full disk) and used to swallow it, after which the claim was written
+    // as truth over zero rows and the skip condition then accepted it forever.
+    assert.match(SRC, /private countPersistedVectors\(fileId: string, space: string \| null\): number/);
+    assert.match(SRC, /SELECT COUNT\(\*\) AS n FROM mode_reference_chunks WHERE file_id = \? AND embedding IS NOT NULL AND embedding_space = \?/);
+    // Every `ready` transition must record a derived count, never a claimed one.
+    // Anchored on `this.updateIndexState(` so the DECLARATION — whose signature
+    // carries `status: ModeReferenceIndexStatus = 'ready'` as its default — is
+    // not mistaken for a call site.
+    const readyCalls = [...SRC.matchAll(/this\.updateIndexState\([^;]*'ready'[^;]*\);/g)];
+    assert.ok(readyCalls.length >= 3, `expected the ready transitions, found ${readyCalls.length}`);
+    for (const m of readyCalls) {
+      assert.match(m[0], /\b(stored|storedAll|storedPartial)\)/,
+        `a 'ready' state recorded a count that was not derived from the rows: ${m[0]}`);
+    }
   });
 
-  test('a fully embedded file records its full count, so it is still skipped', () => {
-    // The fix must not cause healthy files to re-embed on every activation.
-    assert.match(SRC, /updateIndexState\(file\.id, contentHash, chunks\.length, 'ready', result\.space, chunks\.length\)/);
+  test('a failed chunk write is never recorded as ready', () => {
+    assert.match(SRC, /private persistChunks\([^)]*\): boolean/,
+      'persistChunks must report failure rather than swallow it');
+    // Each vector-bearing branch must fall back to 'failed' when nothing landed.
+    const body = SRC.slice(SRC.indexOf('private async indexFileInner'));
+    assert.match(body, /if \(!wrote \|\| stored === 0\)/);
+    assert.match(body, /if \(storedAll === 0\)/);
+    assert.match(body, /if \(storedPartial === 0\)/);
   });
 
   test('a partial file reports as pending so prewarm picks it up', () => {
@@ -78,11 +98,14 @@ describe('GAP-1 — a partial index is detectable and resumable', () => {
     // a hard failure wrote embedded_chunk_count via the default rather than
     // explicitly. Harmless there (the default is 0, which is correct), but the
     // point of the column is that every writer states its answer.
+    // These states may now be reached through a ternary — `wrote ? 'ocr_required'
+    // : 'failed'` — because a failed chunk write means even the lexical text is
+    // absent, so the file must be retried rather than left in a terminal state.
+    // What matters is that the call ends in an explicit 0, however the status
+    // was chosen.
     for (const st of ['ocr_required', 'lexical_only', 'failed']) {
-      assert.ok(
-        SRC.includes(`'${st}', null, 0)`),
-        `${st} must record 0 embedded chunks explicitly`,
-      );
+      const re = new RegExp(`'${st}'[^;]{0,40}, null, 0\\)`);
+      assert.match(SRC, re, `${st} must record 0 embedded chunks explicitly`);
     }
     assert.doesNotMatch(
       SRC,
