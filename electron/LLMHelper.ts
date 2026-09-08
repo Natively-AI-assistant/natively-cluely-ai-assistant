@@ -11002,15 +11002,36 @@ let isMultimodal = !!(imagePaths?.length);
       // the images without it hands the model unexplained pictures of a screen
       // from several turns ago, which it will answer from with confidence —
       // strictly worse than sending nothing.
-      if (deniedScopes.includes('transcript') || deniedScopes.includes('screenshots')) {
+      if (deniedScopes.includes('transcript')) {
         carriedImagePaths = [];
       } else if (!directProviderIsLocal) {
+        // RE-EVALUATE WITH THE CARRIED IMAGES IN THE SET.
+        //
+        // `deniedScopes` above was computed from `imagePaths`, and
+        // scopesForPayload only tags 'screenshots' when that array is non-empty.
+        // On a text-only follow-up carrying earlier screenshots it is empty, so
+        // 'screenshots' was never in deniedScopes and this guard passed on a
+        // decision made about a payload that did not contain the images.
+        // Measured with the scope denied: [] with the current-turn set, and
+        // ['screenshots'] once a carried image is included.
+        //
+        // The images were then pushed, and the per-streamer
+        // assertOutboundScopes saw them and THREW — turning an ordinary typed
+        // question into a hard failure, the opposite of the drop-never-fail
+        // contract this block documents.
+        const deniedWithCarried = this.getDeniedOutboundScopes(
+          request.userPrompt, [...imagePaths, ...carriedImagePaths], directScopes,
+        );
+        if (deniedWithCarried.includes('screenshots')) {
+          carriedImagePaths = [];
+        } else {
         // The current turn's images already passed this above; this covers a
         // turn that carries earlier ones and attaches none of its own.
-        try {
-          this.assertOutboundImagesAllowed(provider, true);
-        } catch {
-          carriedImagePaths = [];
+          try {
+            this.assertOutboundImagesAllowed(provider, true);
+          } catch {
+            carriedImagePaths = [];
+          }
         }
       }
     }
