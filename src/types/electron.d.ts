@@ -430,6 +430,7 @@ export interface ElectronAPI {
   // calibration" call: calibration is passive, so nothing can be billed.
   providerPerformanceGetDiagnostics?: () => Promise<any>;
   providerPerformanceReset?: (providerId?: string) => Promise<any>;
+  providerPerformanceCalibrate?: () => Promise<any>;
 
   knowledgeGetCardHistory: (cardId: string) => Promise<{ success: boolean; versions: any[]; error?: string }>
   modesGetNoteSections: (modeId: string) => Promise<Array<{ id: string; modeId: string; title: string; description: string; sortOrder: number }>>

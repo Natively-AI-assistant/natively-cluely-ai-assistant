@@ -426,7 +426,26 @@ export type IntelligenceFlagKey =
   | 'adaptiveTtft'
   // Surface calibration/performance state in Settings and in the diagnostics
   // dump. Read-only; no request behaviour attached. Default ON.
-  | 'providerPerformanceDiagnostics';
+  | 'providerPerformanceDiagnostics'
+  // ── The two BILLABLE flags. Default OFF, and that asymmetry against the four
+  //    above is the point: those cannot spend anything, these can. Phase 21 is
+  //    marked mandatory in a way Phase 5 is not, so the tie breaks toward
+  //    spending nothing until a human asks.
+  //
+  // Runs the 4K/12K/32K ladder through the real production request path. Manual
+  // trigger only — no provider-add hook, no launch hook, no staleness auto-run.
+  | 'calibration'
+  // Sends ONE 8x8 PNG to establish vision capability. A timeout NEVER yields
+  // UNSUPPORTED (rule 16); only an explicit provider rejection does.
+  | 'capabilityProbe'
+  // Widen-only connect timeout. Its own flag rather than riding on
+  // `adaptiveTtft`: those are two unrelated decisions, and coupling them meant
+  // disabling the first-token ceiling silently disabled connect widening too.
+  | 'adaptiveConnectTimeout'
+  // Downgrade the image-optimisation preset when a vision turn is predicted to
+  // blow its urgency budget. Default OFF — the only adaptive consumer that
+  // visibly DEGRADES output rather than being bounded so ON is safer or equal.
+  | 'adaptiveImageQuality';
 
 interface FlagSpec {
   /** env var name (NATIVELY_* convention). */
@@ -742,6 +761,10 @@ const FLAGS: Record<IntelligenceFlagKey, FlagSpec> = {
   adaptiveStreamIdle: { env: 'NATIVELY_ADAPTIVE_STREAM_IDLE', setting: 'adaptiveStreamIdleEnabled', default: true },
   adaptiveTtft: { env: 'NATIVELY_ADAPTIVE_TTFT', setting: 'adaptiveTtftEnabled', default: true },
   providerPerformanceDiagnostics: { env: 'NATIVELY_PROVIDER_PERFORMANCE_DIAGNOSTICS', setting: 'providerPerformanceDiagnosticsEnabled', default: true },
+  calibration: { env: 'NATIVELY_PROVIDER_CALIBRATION', setting: 'providerCalibrationEnabled', default: false },
+  capabilityProbe: { env: 'NATIVELY_CAPABILITY_PROBE', setting: 'capabilityProbeEnabled', default: false },
+  adaptiveConnectTimeout: { env: 'NATIVELY_ADAPTIVE_CONNECT_TIMEOUT', setting: 'adaptiveConnectTimeoutEnabled', default: true },
+  adaptiveImageQuality: { env: 'NATIVELY_ADAPTIVE_IMAGE_QUALITY', setting: 'adaptiveImageQualityEnabled', default: false },
 };
 
 const ON_VALUES = new Set(['1', 'true', 'on', 'enabled', 'yes']);

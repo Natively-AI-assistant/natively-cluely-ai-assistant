@@ -37,7 +37,7 @@ import { HARD_SYSTEM_PROMPT } from './llm/prompts';
 import type { ActiveModeInfo } from './llm/modeProfiles';
 import type { WhatToAnswerRequestSnapshot } from './llm/whatToAnswerRequestSnapshot';
 import { resolveCanonicalTurn } from './llm/resolveCanonicalTurn';
-import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver } from './llm/performance/wiring';
+import { performanceHooks, applyAdaptiveTtft, secondaryStreamObserver, slowWorkloadAdvice } from './llm/performance/wiring';
 import { estimateTokens } from './llm/modelCapabilities';
 import { mintTurnId } from './llm/turnIdentity';
 import { deriveRetrievalQuery } from './llm/retrievalQueryPolicy';
@@ -3964,6 +3964,31 @@ export class IntelligenceEngine extends EventEmitter {
             // (isVisionTurn) — passing a different one here would file a vision
             // turn's evidence under the text route, and the route is the thing
             // the whole table is keyed on.
+            // Phase 18: ask the profile whether this turn can land inside the
+            // moment. ADVISORY — it never shortens a deadline. On the live path
+            // an answer that takes 30s will very likely succeed and still be
+            // useless, so the right response is to send less, not to give up
+            // sooner; giving up sooner only converts a slow answer into none.
+            //
+            // Surfaced as a diagnostic here rather than wired into truncation:
+            // the retrieval and transcript budgets upstream have their own
+            // correctness contracts, and silently shrinking their input from a
+            // latency estimate would change what the model is asked without any
+            // of those contracts knowing. This makes the condition VISIBLE and
+            // leaves the reduction to the layers that own it.
+            try {
+                const _slow = slowWorkloadAdvice({
+                    llmHelper: this.llmHelper as any,
+                    hasImages: isVisionTurn,
+                    inputTokens: estimateTokens(`${preparedTranscript ?? ''}${candidateProfile ?? ''}`),
+                    streamRoute: 'wta_live',
+                });
+                // Logged, not traced: PiMilestone is a closed union owned by the
+                // latency tracer, and widening it for an advisory signal would
+                // put a performance hint into the milestone vocabulary that
+                // measures the answer pipeline itself.
+                if (_slow) console.log('[Perf] workload predicted too slow to be useful', _slow);
+            } catch { /* an advisory signal must never break a turn */ }
             const perf = performanceHooks({
                 llmHelper: this.llmHelper as any,
                 hasImages: isVisionTurn,

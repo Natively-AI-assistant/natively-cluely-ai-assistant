@@ -3022,6 +3022,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // the samples), so there is nothing to start and nothing to bill.
   providerPerformanceGetDiagnostics: () => ipcRenderer.invoke('provider-performance:get-diagnostics'),
   providerPerformanceReset: (providerId?: string) => ipcRenderer.invoke('provider-performance:reset', providerId),
+  // The one call in this feature that can bill the user. Both its flags default
+  // OFF; with them off this issues no request and reports why.
+  providerPerformanceCalibrate: () => ipcRenderer.invoke('provider-performance:calibrate'),
   knowledgeGetCardHistory: (cardId: string) => ipcRenderer.invoke('knowledge:get-card-history', cardId),
   onKnowledgeIndexProgress: (callback: (data: { fileId: string; status: string; startedAt?: number; finishedAt?: number; error?: string }) => void) => {
     const subscription = (_: any, data: any) => callback(data);

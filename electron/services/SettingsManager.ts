@@ -271,6 +271,12 @@ export interface AppSettings {
     adaptiveStreamIdleEnabled?: boolean;
     adaptiveTtftEnabled?: boolean;
     providerPerformanceDiagnosticsEnabled?: boolean;
+    // The two billable opt-ins. Default OFF in the flag registry; these exist so
+    // a user who turns calibration on in Settings keeps it on across restarts.
+    providerCalibrationEnabled?: boolean;
+    capabilityProbeEnabled?: boolean;
+    adaptiveConnectTimeoutEnabled?: boolean;
+    adaptiveImageQualityEnabled?: boolean;
 }
 
 export const VALID_CONTEXT_DEBUG_LEVELS = ['off', 'standard', 'verbose'] as const;

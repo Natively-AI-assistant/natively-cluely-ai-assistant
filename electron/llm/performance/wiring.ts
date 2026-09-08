@@ -18,7 +18,7 @@
 
 import type { StreamObservation } from '../liveDeadlines';
 import { LIVE_INTER_TOKEN_STALL_MS } from '../liveDeadlines';
-import { streamIdleTimeoutMs, adaptiveTtftCeilingMs, type DeadlineDecision } from './deadlines';
+import { streamIdleTimeoutMs, adaptiveTtftCeilingMs, connectTimeoutMs, type DeadlineDecision } from './deadlines';
 import { getProviderPerformanceStore } from './ProviderPerformanceStore';
 import { getRuntimeSignals } from './runtimeSignals';
 import {
@@ -40,7 +40,8 @@ export interface PerformanceIdentitySource {
 }
 
 function flagOn(
-  key: 'providerPerformanceProfile' | 'adaptiveStreamIdle' | 'adaptiveTtft',
+  key: 'providerPerformanceProfile' | 'adaptiveStreamIdle' | 'adaptiveTtft'
+    | 'adaptiveConnectTimeout' | 'adaptiveImageQuality',
 ): boolean {
   try {
     // Dynamic require, matching how liveDeadlines is imported inside LLMHelper:
@@ -444,13 +445,27 @@ export function imageProfileForTurn(
     // A screenshot of code is sent BECAUSE the text has to be readable. Trading
     // its legibility for latency answers a different question than the user
     // asked, so this preset is never downgraded.
+    // Its OWN flag, and the only one in this feature that defaults OFF among the
+    // adaptive set. Every other adaptive consumer is bounded so that ON can only
+    // be safer or equal — the stall guard can never wait longer than today, the
+    // TTFT and connect filters may only widen. This one is different in kind: it
+    // visibly DEGRADES output (1280px@q85 -> 1024px@q78), which is a trade, not
+    // a strict improvement. A user seeing blurrier screenshots deserves a switch.
+    if (!flagOn('adaptiveImageQuality')) return requested;
     if (requested === 'technical') return requested;
     if (requested === 'fast') return requested;
     const advice = slowWorkloadAdvice({
       llmHelper: opts.llmHelper,
       hasImages: true,
       inputTokens: opts.inputTokens,
-      streamRoute: opts.streamRoute,
+      // Defaults to INTERACTIVE, not to slowWorkloadAdvice's own `background`
+      // default. An image turn is user-facing by definition — nothing sends a
+      // screenshot to a background job — so inheriting the unbounded background
+      // budget would make this function silently never fire for any caller that
+      // omitted the route, which is a footgun rather than a safe default. The
+      // consequence of being wrong in this direction is a lower-quality image,
+      // not a failed turn.
+      streamRoute: opts.streamRoute ?? 'manual_chat_stream',
     });
     if (!advice || !advice.suggestions.includes('compress_image')) return requested;
     console.log('[Perf] downgrading image profile to fit the urgency budget', {
@@ -459,5 +474,70 @@ export function imageProfileForTurn(
     return 'fast';
   } catch {
     return requested;
+  }
+}
+
+
+/**
+ * Record one CONNECT observation (request start → response headers).
+ *
+ * Called from the one provider path that exposes the phase. Every other adapter
+ * hands us a generator and nothing about the socket underneath it, so this is
+ * deliberately narrow rather than a fiction spread across all of them — a
+ * connect number derived from "time to first yielded token" would be TTFT
+ * wearing a different label.
+ */
+export function recordConnectLatency(opts: {
+  llmHelper: PerformanceIdentitySource | null | undefined;
+  ms: number;
+}): void {
+  try {
+    if (!opts.llmHelper || typeof opts.llmHelper.performanceIdentity !== 'function') return;
+    if (!flagOn('providerPerformanceProfile')) return;
+    if (!Number.isFinite(opts.ms) || opts.ms < 0) return;
+    const identity = opts.llmHelper.performanceIdentity(false);
+    const network = getRuntimeSignals().network();
+    const store = getProviderPerformanceStore();
+    store.recordConnect(
+      identity.providerId, identity.modelId, network.id, identity.route, opts.ms,
+      // The wipe generation is read at the moment of writing rather than when
+      // the request opened. A connect sample is produced at response-headers
+      // time, which is the same instant this runs — there is no window between
+      // "opened" and "recorded" for a reset to land in, unlike a stream whose
+      // observation arrives seconds after it started.
+      store.currentGeneration(),
+    );
+  } catch { /* measurement must never break a request */ }
+}
+
+/**
+ * The connect timeout for this turn — the caller's shipped value, widened when
+ * this network has been measured to need it.
+ *
+ * Post-filter, same shape as {@link applyAdaptiveTtft}: deleting the call
+ * restores today's behaviour with no other edit.
+ */
+export function applyAdaptiveConnectTimeout(
+  shippedMs: number,
+  opts: { llmHelper: PerformanceIdentitySource | null | undefined },
+): number {
+  try {
+    if (!opts.llmHelper || typeof opts.llmHelper.performanceIdentity !== 'function') return shippedMs;
+    // Its OWN flag. Gating this on `adaptiveTtft` coupled two unrelated
+    // decisions: turning off "the first-token ceiling may move" silently also
+    // turned off connect widening, with no way to disable one without the
+    // other, and neither flag's documentation said so.
+    if (!flagOn('providerPerformanceProfile') || !flagOn('adaptiveConnectTimeout')) return shippedMs;
+    const identity = opts.llmHelper.performanceIdentity(false);
+    const network = getRuntimeSignals().network();
+    // connectEvidence, NOT lookup: connect is a property of THIS network, and
+    // the ladder would serve a sibling network's handshake time. It also does
+    // not gate on sampleCount (which counts latency samples), so the widening
+    // works on a fresh identity instead of waiting for an unrelated turn.
+    const profile = getProviderPerformanceStore()
+      .connectEvidence(identity.providerId, identity.modelId, network.id);
+    return connectTimeoutMs(profile, shippedMs).valueMs;
+  } catch {
+    return shippedMs;
   }
 }
