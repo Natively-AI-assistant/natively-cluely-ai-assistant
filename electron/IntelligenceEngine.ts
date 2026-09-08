@@ -1474,13 +1474,29 @@ export class IntelligenceEngine extends EventEmitter {
                 const { transcribeScreenForMemory } = require('./services/screen/screenTranscription');
                 screenText = await transcribeScreenForMemory(imagePaths, question);
             }
+            // FALLBACK to the caller's already-computed ScreenUnderstandingResult.
+            //
+            // `screenContext` was accepted and never read: the text came solely
+            // from imagePaths. Harmless only because every current caller that
+            // supplies one also supplies attachments — but a turn that answers
+            // from a periodic screen capture with no attachment would record
+            // neither screen text NOR the not-transcribed marker, silently
+            // losing a screen the model demonstrably saw. Its own answer is
+            // less faithful than a dedicated transcription, which is why it is
+            // the fallback rather than the source.
+            if (!screenText && screenContext) {
+                const { composeScreenDescription: compose } = require('./services/screen/screenDescription');
+                screenText = compose(screenContext as never) || '';
+            }
             recordAnswerSummary(
                 this.conversationSessionId(),
                 answer,
                 // A failed transcription still records that a screen was THERE.
                 // Recording nothing is what let a follow-up deny the screenshot
                 // ever existed, which is a worse answer than "I can't read it".
-                screenText || (imageCount > 0 ? SCREEN_NOT_TRANSCRIBED : undefined),
+                // A screen was THERE whenever attachments or a ScreenUnderstanding
+                // result existed, whether or not either yielded text.
+                screenText || ((imageCount > 0 || screenContext) ? SCREEN_NOT_TRANSCRIBED : undefined),
                 // Seeds state for a turn that never reached orchestrate() (V3
                 // off, or a legacy route). runAssistMode deliberately passes
                 // nothing: an unprompted insight has no question, and a
