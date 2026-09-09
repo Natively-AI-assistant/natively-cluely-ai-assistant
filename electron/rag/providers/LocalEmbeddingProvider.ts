@@ -33,6 +33,7 @@ import {
 } from '../../utils/onnxLoadSentinel';
 import { ProviderStatusRegistry } from '../../services/ProviderStatusRegistry';
 import type { LocalWorkerStatus } from '../../utils/workerStatus';
+import { resolveBundledScript } from '../resolveRagWorker';
 
 const WORKER_INIT_TIMEOUT_MS = 60_000; // model load (cold disk read + ORT session init)
 const WORKER_EMBED_TIMEOUT_MS = 30_000; // a single embed()/embedBatch() call
@@ -97,22 +98,24 @@ export class LocalEmbeddingProvider implements IEmbeddingProvider {
     return candidates.find(Boolean) || path.join(process.resourcesPath || '.', 'models');
   }
 
-  // Same candidate-search pattern as resolveModelPath, but for the worker
-  // script itself — the compiled `localEmbeddingWorker.js` sibling of this
-  // compiled provider file. Same shape as LocalReranker's getWorkerPath().
+  // The compiled `localEmbeddingWorker.js`, which ships at
+  // `electron/rag/providers/localEmbeddingWorker.js`. This used to be its own
+  // fixed 4-candidate list (mirroring resolveModelPath above), which only
+  // resolves when this class is inlined at exactly `electron/rag/providers`,
+  // `electron/rag`, `electron`, or the dist-electron root — build-electron.js
+  // gives every .ts file under electron/ its own esbuild entry point, so this
+  // class also gets inlined at OTHER depths (confirmed against a real build:
+  // `electron/services`, e.g. dist-electron/electron/services/
+  // StealthKeyboardManager.js and KeybindManager.js both carry this lookup
+  // and none of the 4 fixed candidates existed from there). LocalReranker and
+  // GgufReranker hit the exact same bug (see resolveRagWorker.ts) and were
+  // moved to an ascend-and-probe helper instead of guessing the depth; use
+  // the same helper here (`resolveBundledScript` rather than the narrower
+  // `resolveRagWorker`, since that one is hardcoded to a worker sitting
+  // directly under `rag/`, not `rag/providers/`).
   private getWorkerPath(): string {
-    const candidates = [
-      path.join(__dirname, 'localEmbeddingWorker.js'),
-      path.join(__dirname, 'providers', 'localEmbeddingWorker.js'),
-      path.join(__dirname, 'rag', 'providers', 'localEmbeddingWorker.js'),
-      path.join(__dirname, 'electron', 'rag', 'providers', 'localEmbeddingWorker.js'),
-    ];
-
-    let resolvedPath = candidates.find(p => fs.existsSync(p)) ?? candidates[0];
-    if (resolvedPath.includes('app.asar') && !resolvedPath.includes('app.asar.unpacked')) {
-      resolvedPath = resolvedPath.replace('app.asar', 'app.asar.unpacked');
-    }
-    return resolvedPath;
+    return resolveBundledScript(__dirname, ['rag', 'providers', 'localEmbeddingWorker.js'],
+      { unpackFromAsar: true });
   }
 
   private getWorker(): Worker {
