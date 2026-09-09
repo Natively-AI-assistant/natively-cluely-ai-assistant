@@ -9965,7 +9965,17 @@ let isMultimodal = !!(imagePaths?.length);
     }
 
     const streamAbort = new AbortController();
-    const streamTimeout = setTimeout(() => streamAbort.abort(), 30_000);
+    // 30s predates Direct Assist (v2.2.0) and is the right generous default
+    // for the legacy/general-purpose callers of this function. Direct Assist
+    // callers get the SAME per-path budget streamWithNatively already uses
+    // (DIRECT_ASSIST_CONNECT_TIMEOUT_MS/VISION_CONNECT_TIMEOUT_MS, LLMHelper.ts
+    // ~195-196) instead of always waiting the vision-sized window on a plain
+    // text turn — a stalled custom text endpoint now fails over in ~15s per
+    // attempt instead of ~30s.
+    const customConnectTimeoutMs = strictErrors
+      ? (imagePaths?.length ? DIRECT_ASSIST_VISION_CONNECT_TIMEOUT_MS : DIRECT_ASSIST_CONNECT_TIMEOUT_MS)
+      : 30_000;
+    const streamTimeout = setTimeout(() => streamAbort.abort(), customConnectTimeoutMs);
     // Forward the caller's user-cancel signal into the same controller so
     // the fetch socket closes immediately on supersession, freeing the
     // custom provider's quota and any rate-limiter slot.
@@ -10151,7 +10161,21 @@ let isMultimodal = !!(imagePaths?.length);
       // The per-chunk `if (abortSignal?.aborted) return` above already applies
       // this rule to the success path; the error path simply never learned it.
       if (abortSignal?.aborted) return;
-      if (strictErrors) throw e;
+      if (strictErrors) {
+        // Disambiguate OUR OWN internal stall guard (streamAbort, 30s above)
+        // from a genuine provider failure before it reaches
+        // normalizeDirectAssistError — that classifier maps every AbortError
+        // to CANCELLED, and streamAbort fires with no distinguishing info of
+        // its own, so a provider that connects and then goes silent was
+        // reported as if the request had been cancelled instead of timing
+        // out. The caller's own abortSignal was just checked above and is
+        // NOT aborted, so any abort observed here can only be streamAbort's,
+        // exactly like streamWithNatively's connect-timeout branch above.
+        if (streamAbort.signal.aborted) {
+          throw new DirectAssistError('CONNECT_TIMEOUT', 'The selected provider timed out.', true);
+        }
+        throw e;
+      }
       console.error("Custom streaming failed", e);
       // Same rule as the HTTP branch above: a failure must reach the caller AS a
       // failure. The user-facing sentence this used to yield now lives at the
