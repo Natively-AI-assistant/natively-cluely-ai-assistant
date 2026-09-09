@@ -230,6 +230,37 @@ jobs:
       - name: Verify packaged local fallback assets (source mode)
         run: npm run verify:packaged-local-assets
 
+      # 2026-09-09: source mode above only checks the repo tree + package.json
+      # config, which is identical on both legs and proves nothing OS-specific.
+      # release-macos.yml has a SECOND, packaged-mode gate that opens the real
+      # built .app and checks the native asarUnpack targets actually landed —
+      # exactly the gate that has caught real incidents before (ggufRerankerWorker.js
+      # and routerWorker.js both shipped missing from asarUnpack at some point,
+      # per this script's own history). Windows had no equivalent: a broken
+      # asarUnpack glob (e.g. one that stops matching on Windows path
+      # separators) would ship undetected. This is a `--dir` build (unpacked,
+      # unsigned, unnotarized) — proving the winCI leg's own build produces the
+      # asarUnpack layout Windows users actually get, and it is NOT a
+      # substitute for a real signed installer smoke test.
+      #
+      # UNVERIFIED: this step has not yet run on a real windows-latest runner.
+      # build-native.js already targets win32 (napi build, msvc), and
+      # verify-packaged-local-assets.mjs's REQUIRED_UNPACKED_NATIVE_WIN32 list
+      # was checked only against a hand-built fake directory tree on macOS —
+      # requires physical Windows verification before this can be trusted the
+      # way the macOS release gate is.
+      - name: Build native module (Windows)
+        if: runner.os == 'Windows'
+        run: npm run build:native
+
+      - name: Package app (Windows, unpacked, unsigned)
+        if: runner.os == 'Windows'
+        run: node scripts/package-app.js --win dir --x64
+
+      - name: Verify packaged local fallback assets (packaged mode, Windows)
+        if: runner.os == 'Windows'
+        run: node scripts/verify-packaged-local-assets.mjs --app release/win-unpacked --platform win32
+
       # Windows runs these ADVISORY (2026-08-10). Previously both steps were
       # skipped outright on Windows, which meant the windows-latest leg reported
       # green while running ZERO tests — its signal covered install and build
