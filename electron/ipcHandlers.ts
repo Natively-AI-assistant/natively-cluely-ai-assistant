@@ -13270,7 +13270,12 @@ export function initializeIpcHandlers(appState: AppState): void {
     'test-inject-transcript',
     async (_, segment: { speaker: string; text: string; timestamp?: number; final?: boolean }) => {
       try {
-        if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
+        // Both gates required, matching the sibling debug-inject-transcript
+        // handler above (structurally unreachable in any shipped build) — an
+        // env-only check is an environment-variable assumption, not a
+        // packaged-build guarantee.
+        const { app } = require('electron');
+        if (process.env.NODE_ENV !== 'test' || app.isPackaged) return { success: false, error: 'test_only' };
         const intelligenceManager = appState.getIntelligenceManager();
         intelligenceManager.addTranscript(
           {
@@ -13291,7 +13296,9 @@ export function initializeIpcHandlers(appState: AppState): void {
 
   safeHandle('test-get-mode-context', async () => {
     try {
-      if (process.env.NODE_ENV !== 'test') return { success: false, error: 'test_only' };
+      // Both gates required — see test-inject-transcript above.
+      const { app } = require('electron');
+      if (process.env.NODE_ENV !== 'test' || app.isPackaged) return { success: false, error: 'test_only' };
       const { ModesManager } = require('./services/ModesManager');
       const manager = ModesManager.getInstance();
       return {

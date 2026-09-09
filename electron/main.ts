@@ -3115,8 +3115,11 @@ export class AppState {
   public async checkForUpdates(): Promise<void> {
     console.log('[AutoUpdater] Manual check for updates requested')
     try {
-      // In development mode, use manual GitHub API check (electron-updater skips in dev)
-      if (process.env.NODE_ENV === "development") {
+      // Use app.isPackaged, not NODE_ENV, matching every other updater gate in
+      // this file (see canAutoInstall()) — a stray NODE_ENV=development in a
+      // packaged build's environment must not silently downgrade the real
+      // electron-updater flow to the manual GitHub-API-only check.
+      if (!app.isPackaged) {
         await this.checkForUpdatesManual()
       } else {
         await autoUpdater.checkForUpdatesAndNotify()
