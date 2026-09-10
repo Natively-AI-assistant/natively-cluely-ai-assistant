@@ -4,7 +4,8 @@ import {
     Command, Monitor, Mic, Settings, Zap, Key, User, Play, Image, ArrowUp, FileText, Sparkles, Search, ChevronUp, Copy,
     FileJson, MessageSquare, Briefcase, Eye, EyeOff, Ghost, ChevronDown, HelpCircle, Upload, CheckCircle2,
     RefreshCw, Trash2, Check, ExternalLink, Volume2, Globe, Brain, Cpu, Calendar, Star, CreditCard, X, Pencil, Lightbulb,
-    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, DollarSign, Building2
+    SlidersHorizontal, PointerOff, ArrowRight, LayoutGrid, Smartphone, Wifi, Lock, DollarSign, Building2,
+    AlertCircle, Keyboard
 } from 'lucide-react';
 import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { AccordionSection } from '../ui/AccordionSection';
@@ -613,7 +614,7 @@ const MockProviderSelectionAnim = () => {
     const selected = options[0];
 
     return (
-        <div className="flex justify-center flex-col items-center py-6 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[300px]">
+        <div className="flex justify-start flex-col items-center py-6 bg-bg-card rounded-xl border border-border-subtle relative overflow-hidden h-[300px]">
             <div className="w-[340px] flex flex-col gap-2 relative z-10 font-sans">
                 <label className="text-xs font-medium text-text-secondary">Speech Provider</label>
                 <div className="relative">
@@ -761,10 +762,10 @@ const ElevenLabsPermissionsMock = () => {
     );
 };
 
-const SetupGuide = () => {
+export const SetupGuide = ({ onNavigate }: { onNavigate?: (tab: string) => void } = {}) => {
     const cmd = getModifierSymbol('cmd');
     const shift = getModifierSymbol('shift');
-    const steps = [
+    const steps: Array<{ title: string; desc: string | null; settingsTab?: string; linkLabel?: string }> = [
         {
             title: 'Grant Permissions',
             desc: isMac
@@ -774,10 +775,14 @@ const SetupGuide = () => {
         {
             title: 'Set Up Audio',
             desc: 'Open Settings → Audio and select Natively API, or paste a Deepgram or Google key.',
+            settingsTab: 'audio',
+            linkLabel: 'Open Audio Settings',
         },
         {
             title: 'Connect an AI Model',
             desc: 'Open Settings → AI Providers and choose a built-in model, or add a Groq or OpenRouter key.',
+            settingsTab: 'ai-providers',
+            linkLabel: 'Open AI Providers',
         },
         {
             title: 'Personalize (Optional)',
@@ -786,6 +791,8 @@ const SetupGuide = () => {
         {
             title: "You're all set.",
             desc: null,
+            settingsTab: 'keybinds',
+            linkLabel: 'View Keyboard Shortcuts',
         },
     ];
 
@@ -801,6 +808,28 @@ const SetupGuide = () => {
                 <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Quick Start</h3>
                 <p className="text-[13px] text-text-tertiary mt-0.5">Get Natively running in four steps.</p>
             </div>
+
+            {onNavigate && (
+                <div
+                    onClick={() => onNavigate('plans')}
+                    className="mb-7 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
+                >
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
+                        <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">
+                            <Zap className="w-5 h-5 text-text-primary group-hover:text-white transition-colors" fill="currentColor" />
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="text-[14px] font-bold text-text-primary mb-0.5">Want to skip the manual setup?</h4>
+                            <p className="text-[13px] text-text-secondary">
+                                Use the <span className="font-semibold text-text-primary">Natively API</span> for an out-of-the-box experience. One-click zero-configuration usage.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="hidden sm:flex self-center ml-4 px-3 py-1.5 rounded-lg bg-text-primary text-bg-main text-[11px] font-bold items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity whitespace-nowrap shrink-0">
+                        Enable Now <ArrowRight size={12} />
+                    </div>
+                </div>
+            )}
 
             <div>
                 {steps.map((step, i) => {
@@ -823,6 +852,14 @@ const SetupGuide = () => {
                                 {step.desc && (
                                     <p className="text-[13px] text-text-secondary leading-relaxed mt-0.5">{step.desc}</p>
                                 )}
+                                {step.settingsTab && onNavigate && (
+                                    <button
+                                        onClick={() => onNavigate(step.settingsTab!)}
+                                        className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-primary hover:underline mt-1.5"
+                                    >
+                                        {step.linkLabel} <ArrowRight size={11} />
+                                    </button>
+                                )}
                                 {isLast && (
                                     <div className="flex items-center gap-4 mt-3 flex-wrap">
                                         {hotkeys.map((h, hi) => (
@@ -844,7 +881,34 @@ const SetupGuide = () => {
         </div>
     );
 };
-export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({ onNavigate }) => {
+export type HelpSection = 'permissions' | 'audio' | 'ai-providers' | 'features' | 'troubleshooting';
+
+const HELP_SECTION_COPY: Record<HelpSection, { title: string; description: string }> = {
+    permissions: {
+        title: 'Permissions',
+        description: isMac
+            ? 'Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
+            : 'Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.',
+    },
+    audio: {
+        title: 'Audio',
+        description: 'Connect a microphone and speaker transcription provider so Natively can hear what you say and what you hear.',
+    },
+    'ai-providers': {
+        title: 'AI Providers',
+        description: 'Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.',
+    },
+    features: {
+        title: 'Features',
+        description: 'How Natively\'s interface, meeting intelligence, search, and other features work day to day.',
+    },
+    troubleshooting: {
+        title: 'Troubleshooting',
+        description: 'Common problems and fixes for permissions, audio, AI responses, and hotkeys.',
+    },
+};
+
+export const HelpSettings: React.FC<{ section: HelpSection }> = ({ section }) => {
     const { shortcuts } = useShortcuts();
     const isLight = useResolvedTheme() === 'light';
 
@@ -854,9 +918,9 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
     return (
         <div className="w-full h-full flex flex-col animated fadeIn pb-10">
             <header className="mb-2 shrink-0">
-                <h3 className="text-lg font-bold text-text-primary mb-1">Help & Setup Guide</h3>
+                <h3 className="text-lg font-bold text-text-primary mb-1">{HELP_SECTION_COPY[section].title}</h3>
                 <p className="text-xs text-text-secondary mb-2">
-                    Learn how to deeply configure Natively. Everything from providing the right API scopes to executing conversational interviews seamlessly is covered below.
+                    {HELP_SECTION_COPY[section].description}
                 </p>
             </header>
 
@@ -868,123 +932,62 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                 accordion body, so nothing is mounted to collide with. */}
             <div className="flex-1 space-y-2" data-settings-stagger>
 
-                {onNavigate && (
-                    <div
-                        onClick={() => onNavigate('plans')}
-                        className="mb-6 group cursor-pointer bg-bg-card hover:bg-bg-item-surface border border-border-subtle hover:border-white transition-all rounded-2xl flex items-center justify-between p-4 px-5 shadow-sm hover:shadow-md"
-                    >
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 flex-1">
-                            <div className="w-10 h-10 shrink-0 rounded-xl bg-bg-item-surface border border-border-subtle flex items-center justify-center group-hover:bg-bg-elevated transition-colors">
-                                <Zap className="w-5 h-5 text-text-primary group-hover:text-white transition-colors" fill="currentColor" />
-                            </div>
-                            <div className="flex-1">
-                                <h4 className="text-[14px] font-bold text-text-primary mb-0.5">Want to skip the manual setup?</h4>
-                                <p className="text-[13px] text-text-secondary">
-                                    Use the <span className="font-semibold text-text-primary">Natively API</span> for an out-of-the-box experience. One-click zero-configuration usage.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="hidden sm:flex self-center ml-4 px-3 py-1.5 rounded-lg bg-text-primary text-bg-main text-[11px] font-bold items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity whitespace-nowrap shrink-0">
-                            Enable Now <ArrowRight size={12} />
-                        </div>
-                    </div>
-                )}
-
-                <SetupGuide />
-
-                <div className="h-10" />
-                <div className="mb-4 flex items-center gap-2 border-b border-border-subtle pb-3">
-                    <h3 className="text-[20px] font-bold text-text-primary tracking-tight leading-tight">Help Guide</h3>
-                </div>
-
-                <AccordionSection title="1. App Permissions Setup" icon={<Monitor className="w-4 h-4" />}>
-                    <div className="space-y-4">
-                        <p>
-                            {isMac
-                                ? 'Natively operates entirely on-device, but requires OS permissions to tap into your screen context and global keystrokes. Here is how your system should look:'
-                                : 'Natively operates entirely on-device. Windows will prompt you for microphone access the first time you start a meeting — no other OS permissions are required.'}
-                        </p>
+                {section === 'permissions' && (<>
                         {isMac && <MockPermissionsAnim />}
-                        <div className="space-y-3 mt-4">
-                            <h4 className="font-bold text-base text-text-primary border-b border-border-subtle pb-2">Hardware & Engine Configurations</h4>
-
-                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Mic size={14} className="text-accent-primary" /> Microphone & Speaker Loopback Selection
-                                </h5>
-                                <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
-                                </p>
-                            </div>
-
-                            {isMac && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                        <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                            <Monitor size={14} className="text-accent-primary" /> ScreenCaptureKit (SCK)
-                                        </h5>
-                                        <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.
-                                        </p>
-                                    </div>
-                                    <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                        <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                            <Volume2 size={14} className="text-orange-500" /> CoreAudio (Legacy)
-                                        </h5>
-                                        <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                            Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle space-y-2`}>
-                                <h5 className={`font-semibold text-[13px] text-text-primary flex items-center gap-2`}>
-                                    <Globe size={14} className="text-green-500" /> Language & Regional Accents
-                                </h5>
-                                <p className="text-[11px] opacity-90 leading-relaxed text-text-secondary">
-                                    Below the provider list, you must specify the <strong>Language</strong> you will be speaking (e.g., English). Most importantly, ensure you select your specific regional <span className={kbdClass}>Accent / Region</span> mapping (e.g., <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>) as STT backends use this map to vastly increase transcription accuracy logic based on regional inflections.
-                                </p>
-                            </div>
-                        </div>
 
                         {isMac ? (
-                            <div className="flex flex-col gap-3 mt-6">
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Monitor className="w-4 h-4 text-accent-primary" /> Screen Recording
-                                    </h4>
-                                    <p className="text-xs opacity-90 mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
-                                </div>
+                            <>
+                                <AccordionSection title="Screen Recording" icon={<Monitor className="w-4 h-4" />}>
+                                    <p className="mb-2">Provides Natively the ability to read your screen temporarily when you capture context.</p>
+                                    <p className="text-text-tertiary">System Settings &gt; Privacy & Security &gt; Screen Recording</p>
+                                </AccordionSection>
 
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Command className="w-4 h-4 text-purple-500" /> Accessibility
-                                    </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
-                                    <p className="text-[11px] text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
-                                </div>
-                            </div>
+                                <AccordionSection title="Accessibility" icon={<Command className="w-4 h-4" />}>
+                                    <p className="mb-2">Required for Natively to detect the global keyboard shortcuts below, regardless of what window is focused.</p>
+                                    <p className="text-text-tertiary">System Settings &gt; Privacy & Security &gt; Accessibility</p>
+                                </AccordionSection>
+                            </>
                         ) : (
-                            <div className="flex flex-col gap-3 mt-6">
-                                <div className={`p-4 rounded-xl border bg-bg-item-surface border-border-subtle`}>
-                                    <h4 className={`font-semibold text-sm mb-2 text-text-primary flex items-center gap-2`}>
-                                        <Mic className="w-4 h-4 text-accent-primary" /> Microphone
-                                    </h4>
-                                    <p className="text-xs opacity-90 mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
-                                    <p className="text-[11px] text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
-                                </div>
-                            </div>
+                            <AccordionSection title="Microphone" icon={<Mic className="w-4 h-4" />}>
+                                <p className="mb-2">Required to capture what you say during meetings. Windows prompts the first time you start a meeting.</p>
+                                <p className="text-text-tertiary">Settings &gt; Privacy &gt; Microphone</p>
+                            </AccordionSection>
                         )}
-                    </div>
-                </AccordionSection>
 
-                <AccordionSection title="2. Audio STT Providers Setup (Microphone)" icon={<Mic className="w-4 h-4" />}>
+                        <AccordionSection title="Microphone & Speaker Loopback Selection" icon={<Mic className="w-4 h-4" />}>
+                            <p>
+                                Natively can capture both what you say and what you hear globally. At the top of the Audio Settings, use the Dropdowns to explicitly select your hardware Input (e.g. your physical microphone) and Output capture (what the speakers play). By default, Natively utilizes the <strong>System Default</strong>, so audio routing will automatically follow your OS preferences.
+                            </p>
+                        </AccordionSection>
+
+                        {isMac && (
+                            <>
+                                <AccordionSection title="ScreenCaptureKit (SCK)" icon={<Monitor className="w-4 h-4" />}>
+                                    <p>The recommended backend for macOS 13.0+. Uses Apple's modern, highly optimized internal framework for 0-latency loopback speaker capture securely.</p>
+                                </AccordionSection>
+
+                                <AccordionSection title="CoreAudio (Legacy)" icon={<Volume2 className="w-4 h-4" />}>
+                                    <p>Fallback engine for older hardware. Relies on internal device aggregation to trap output audio. Only use this if SCK repeatedly drops speaker packets.</p>
+                                </AccordionSection>
+                            </>
+                        )}
+
+                        <AccordionSection title="Language & Regional Accents" icon={<Globe className="w-4 h-4" />}>
+                            <p>
+                                Below the provider list, you must specify the <strong>Language</strong> you will be speaking (e.g., English). Most importantly, ensure you select your specific regional <span className={kbdClass}>Accent / Region</span> mapping (e.g., <em>en-US</em> vs <em>en-GB</em> vs <em>en-IN</em>) as STT backends use this map to vastly increase transcription accuracy logic based on regional inflections.
+                            </p>
+                        </AccordionSection>
+                </>)}
+
+                {section === 'audio' && (<>
+                <div className="bg-bg-card rounded-xl border border-border-subtle shadow-sm overflow-hidden mb-4">
+                    <div className="p-5 text-sm leading-relaxed text-text-secondary">
                     <div className="space-y-6">
-                        <p>Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
-
-                        <MockProviderSelectionAnim />
+                        <div className="space-y-2">
+                            <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">Choose a Provider</h4>
+                            <p className="text-xs text-text-secondary">Natively supports over 8 different Audio engines to transcribe what you hear and say. From the Audio tab in settings, use the overarching dropdown to switch the active engine.</p>
+                            <MockProviderSelectionAnim />
+                        </div>
 
                         <div className="space-y-4 pt-2">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">API Keys & Testing</h4>
@@ -1095,12 +1098,14 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                     </div>
-                </AccordionSection>
+                    </div>
+                </div>
+                </>)}
 
-                <AccordionSection title="3. AI Providers & Prompt Engine" icon={<Key className="w-4 h-4" />}>
+                {section === 'ai-providers' && (<>
+                <div className="bg-bg-card rounded-xl border border-border-subtle shadow-sm overflow-hidden mb-4">
+                    <div className="p-5 text-sm leading-relaxed text-text-secondary">
                     <div className="space-y-4">
-                        <p className="text-sm">Natively uses Large Language Models (LLMs) to reason about your screen and audio context. You can configure cloud providers, local models, or fully custom endpoints.</p>
-
                         <div className="space-y-3 pt-2">
                             <h4 className="font-bold text-lg text-text-primary border-b border-border-subtle pb-2">1. Standard Cloud Providers</h4>
 
@@ -1207,9 +1212,12 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                         </div>
 
                     </div>
-                </AccordionSection>
+                    </div>
+                </div>
+                </>)}
 
-                <AccordionSection title="4. Natively Interface Operations" icon={<Monitor className="w-4 h-4" />}>
+                {section === 'features' && (<>
+                <AccordionSection title="Natively Interface Operations" icon={<Monitor className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">When initialized, Natively hides itself visually while remaining active as a persistent translucent overlay. This is your command center.</p>
 
@@ -1296,7 +1304,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="5. Meeting Intelligence" icon={<Calendar className="w-4 h-4" />}>
+                <AccordionSection title="Meeting Intelligence" icon={<Calendar className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">When an active session concludes, it gets saved directly to your local file system as a complete intelligence dossier spanning the transcript, AI token usage, and automated structural summaries.</p>
 
@@ -1362,7 +1370,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="6. Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
+                <AccordionSection title="Global Search & Shortcuts" icon={<Search className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">Hit <span className={kbdClass}>{isMac ? 'Cmd+K' : 'Ctrl+K'}</span> anywhere on your computer to invoke the Natively Global Palette. This acts as your Spotlight overlay for interacting directly with the system backbone.</p>
 
@@ -1459,7 +1467,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
 
 
 
-                <AccordionSection title="7. Pro Intelligence" icon={<Star className="w-4 h-4" />}>
+                <AccordionSection title="Pro Intelligence" icon={<Star className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Profile */}
                         <div>
@@ -1564,7 +1572,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="8. Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
+                <AccordionSection title="Modes Manager" icon={<LayoutGrid className="w-4 h-4" />}>
                     <div className="space-y-6">
                         <p className="text-[13px]">Modes let you assign a specialized AI persona to your session. Each mode has a tailored system prompt, a personal context area, reference files, and smart note template sections — so Natively behaves differently depending on whether you're in a sales call, a coding interview, or a team standup.</p>
 
@@ -1636,7 +1644,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="9. Miscellaneous" icon={<Settings className="w-4 h-4" />}>
+                <AccordionSection title="Miscellaneous" icon={<Settings className="w-4 h-4" />}>
                     <div className="space-y-6">
                         {/* Calendar */}
                         <div>
@@ -1703,7 +1711,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="10. Phone Mirror" icon={<Smartphone className="w-4 h-4" />}>
+                <AccordionSection title="Phone Mirror" icon={<Smartphone className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-sky-500/10 border border-sky-500/20 rounded-xl mb-2">
                             <h4 className="text-[13px] font-semibold text-sky-400 flex items-center gap-2 mb-1">
@@ -1743,7 +1751,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="11. Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
+                <AccordionSection title="Stealth & Window Control" icon={<Ghost className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
@@ -1801,7 +1809,7 @@ export const HelpSettings: React.FC<{ onNavigate?: (tab: string) => void }> = ({
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="12. Hindsight Long-Term Memory (LTM) Setup" icon={<Brain className="w-4 h-4" />}>
+                <AccordionSection title="Hindsight Long-Term Memory (LTM) Setup" icon={<Brain className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-purple-400 flex items-center gap-2 mb-1">
@@ -1888,7 +1896,7 @@ hindsight-api`}
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="13. Sandboxed Code Verification & Corrector" icon={<Cpu className="w-4 h-4" />}>
+                <AccordionSection title="Sandboxed Code Verification & Corrector" icon={<Cpu className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-emerald-500 flex items-center gap-2 mb-1">
@@ -1932,7 +1940,7 @@ hindsight-api`}
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="14. Companion Browser Extension Setup" icon={<Smartphone className="w-4 h-4" />}>
+                <AccordionSection title="Companion Browser Extension Setup" icon={<Smartphone className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-indigo-400 flex items-center gap-2 mb-1">
@@ -2008,7 +2016,7 @@ hindsight-api`}
                     </div>
                 </AccordionSection>
 
-                <AccordionSection title="15. Session Memory & Spoken Humanizer" icon={<Sparkles className="w-4 h-4" />}>
+                <AccordionSection title="Session Memory & Spoken Humanizer" icon={<Sparkles className="w-4 h-4" />}>
                     <div className="space-y-4">
                         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl mb-4">
                             <h4 className="text-[13px] font-semibold text-amber-500 flex items-center gap-2 mb-1">
@@ -2063,6 +2071,61 @@ hindsight-api`}
                         </div>
                     </div>
                 </AccordionSection>
+                </>)}
+
+                {section === 'troubleshooting' && (<>
+                        <AccordionSection title="Natively can't see my screen or hear my meeting" icon={<Monitor size={14} />}>
+                            <p>
+                                {isMac
+                                    ? 'Re-check System Settings > Privacy & Security > Screen Recording and Accessibility — Natively must be toggled on in both, and macOS sometimes needs an app restart after you grant a permission for it to take effect.'
+                                    : 'Confirm you approved the microphone prompt when you first started a meeting. If you dismissed it, remove and re-add the permission under Settings > Privacy > Microphone, then restart a meeting.'}
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="No transcript is showing up" icon={<Mic size={14} />}>
+                            <p>
+                                Open Audio Settings and confirm an Input device is selected and an STT provider is connected (use the built-in Natively API for zero-config, or test your own key with the built-in connection tester). Also double-check the Language/Accent mapping matches what you're actually speaking.
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="Natively isn't answering / responses fail" icon={<Zap size={14} />}>
+                            <p>
+                                Open Settings &gt; AI Providers and confirm a model is selected and, if using your own key, that it's valid and has remaining credits. A red error badge next to a key means the last connection test failed.
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="Global hotkeys don't do anything" icon={<Keyboard size={14} />}>
+                            <p>
+                                {isMac
+                                    ? "Global shortcuts require the Accessibility permission specifically (Screen Recording alone isn't enough) — check System Settings > Privacy & Security > Accessibility."
+                                    : 'Check Settings > Keybinds for the current bindings — another app may already be using the same combination on Windows. Reassign the conflicting shortcut there.'}
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="Interview or screen-share software can still see Natively" icon={<Ghost size={14} />}>
+                            <p>
+                                Open Settings &gt; General and confirm Content Protection / Stealth mode is enabled. Some screen-share pipelines (older capture APIs, certain virtual-machine setups) don't honor content-protection hints — if the window keeps appearing, try a different sharing method (e.g. share a specific app window instead of the whole screen).
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="Meeting notes or summary never showed up" icon={<Calendar size={14} />}>
+                            <p>
+                                Notes generate after the meeting ends and can take a minute on longer sessions. If it's been longer, check that the meeting actually reached "Processing" (not just closed abruptly) and that your AI Provider connection was valid during the call — a mid-meeting auth failure can leave a transcript without a generated summary.
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="Calendar events aren't appearing" icon={<Calendar size={14} />}>
+                            <p>
+                                Open Settings &gt; Calendar and confirm your Google Calendar is still connected — OAuth tokens can expire and need reconnecting. Also check the event isn't outside the sync window Natively pulls by default.
+                            </p>
+                        </AccordionSection>
+
+                        <AccordionSection title="Natively API says I'm out of credits" icon={<CreditCard size={14} />}>
+                            <p>
+                                Open Settings &gt; Plans &amp; Billing to check your remaining Natively API usage or upgrade. You can also switch any individual provider (AI, Audio) to your own API key at any time to bypass the built-in quota entirely.
+                            </p>
+                        </AccordionSection>
+                </>)}
 
             </div>
         </div>
