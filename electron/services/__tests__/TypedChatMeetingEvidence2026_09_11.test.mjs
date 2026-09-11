@@ -71,3 +71,29 @@ describe('manual-chat V3 meeting evidence', () => {
     assert.match(scope, /v3MeetingEvidence\.scopeMeetingId \? \{ meetingId: v3MeetingEvidence\.scopeMeetingId \} : \{\}/);
   });
 });
+
+describe('rag:query-live records its turn', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const live = between(ipc, "safeHandle('rag:query-live'", "safeHandle('rag:query-global'");
+  const helper = between(ipc, 'function recordLiveRagTurn(', '\n  }\n');
+  test('the streamed answer is accumulated and handed to the recorder on a clean completion', () => {
+    assert.match(live, /ragLiveAnswer \+= chunk/);
+    assert.match(live, /if \(!abortController\.signal\.aborted\) \{\s*event\.sender\.send\('rag:stream-complete', \{ live: true \}\);\s*recordLiveRagTurn\(event\.sender\.id, query, ragLiveAnswer\);/);
+  });
+  test('the recorder writes every history sink V3 writes', () => {
+    assert.match(helper, /recordAnswerSummary\(\s*v3ConversationSessionId\(appState, senderId\)/);
+    assert.match(helper, /addTranscript\?\.\(\{ text: query, speaker: 'user'/);
+    assert.match(helper, /addAssistantMessage\?\.\(ragLiveAnswer, undefined, 'manual_chat'\)/);
+    assert.match(helper, /_manualConversationMemory\.record\(\{/);
+    assert.match(helper, /logUsage\?\.\('rag_live', query, ragLiveAnswer\)/);
+  });
+  test('a truncated stream (RAGManager coda) records the user turn but not the answer', () => {
+    assert.match(helper, /ragLiveTruncated/);
+    assert.match(helper, /Answer incomplete/);
+    assert.ok(helper.indexOf('logUsage') < helper.indexOf('if (ragLiveTruncated)'), 'usage is logged before the truncation early-return');
+  });
+  test('the gate uses getLiveMeetingId, not the literal live id', () => {
+    assert.match(live, /ragManager\.getLiveMeetingId\(\)/);
+    assert.doesNotMatch(live, /'live-meeting-current'/);
+  });
+});
