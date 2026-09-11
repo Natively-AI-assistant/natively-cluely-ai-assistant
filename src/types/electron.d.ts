@@ -902,6 +902,12 @@ export interface ElectronAPI {
   setVerboseLogging: (enabled: boolean) => Promise<{ success: boolean }>;
   exportDebugLogs: () => Promise<{ success: boolean; path?: string; files?: string[]; error?: string }>;
 
+  // Windows shortcut guard — the always-on WH_KEYBOARD_LL hook that swallows
+  // and self-dispatches Natively's own chords. Default on; an explicit false is
+  // the opt-out for EDR/AV-sensitive setups. No-op off Windows.
+  getStealthShortcutGuard: () => Promise<boolean>;
+  setStealthShortcutGuard: (enabled: boolean) => Promise<{ success: boolean }>;
+
   // Ambient AI Chat — when enabled, meetings run without mic/system audio capture
   getAmbientChatEnabled: () => Promise<boolean>;
   setAmbientChatEnabled: (enabled: boolean) => Promise<{ success: boolean }>;

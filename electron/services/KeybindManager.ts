@@ -101,6 +101,7 @@ export class KeybindManager {
         this.activeMode = mode;
         console.log(`[KeybindManager] Mode changed to: ${mode}. Refreshing global shortcuts.`);
         this.registerGlobalShortcuts();
+        this.notifyChordsChanged();
     }
 
     private shouldRegister(actionId: string): boolean {
@@ -151,13 +152,15 @@ export class KeybindManager {
 
     /**
      * The app's global shortcuts as a Win32 chord table for the native stealth
-     * hook (Windows). Only the "printable-leak" subset survives the translation
-     * (Ctrl±Shift + letter/digit/Enter/Space); everything else is dropped and
-     * left to RegisterHotKey. Harmless to call on macOS (returns a table the
-     * macOS tap ignores). See winChord.ts and native-module/src/app_chord.rs.
+     * hook (Windows). The supported set is Ctrl-based letters, digits, Enter,
+     * Space, and arrow shortcuts; everything else stays with RegisterHotKey.
+     * Harmless on macOS (the macOS tap ignores this table). See winChord.ts and
+     * native-module/src/app_chord.rs.
      */
     public getGlobalChordTable(): Win32Chord[] {
-        return buildChordTable(Array.from(this.keybinds.values()));
+        return buildChordTable(
+            Array.from(this.keybinds.values()).filter(kb => this.shouldRegister(kb.id)),
+        );
     }
 
     /**
@@ -710,7 +713,7 @@ export class KeybindManager {
     }
 
     /**
-     * Tell the stealth shortcut-guard (Windows opt-in) that the chord table
+     * Tell the Windows stealth shortcut-guard that the chord table
      * changed, so an already-running guard re-arms with the new accelerators.
      * Lazy require() to avoid a StealthKeyboardManager ↔ KeybindManager import
      * cycle; no-op when the guard isn't running or off Windows.
