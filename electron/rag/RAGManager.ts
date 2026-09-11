@@ -497,6 +497,23 @@ export class RAGManager {
     }
 
     /**
+     * The live index id when JIT chunks are QUERYABLE, else null (issue #552).
+     *
+     * "Running" and "has chunks" are two different questions, and every
+     * caller that wants meeting evidence needs both answered together:
+     * a meeting port scoped to an id with zero embedded chunks retrieves
+     * nothing, and one scoped to the meeting-metadata id retrieves nothing
+     * either — JIT rows are stored under the id passed to startLiveIndexing
+     * (a constant in main.ts), not under any id the meeting itself carries.
+     * This is the single source of that id for the V3 surfaces and the
+     * rag:query-live gate.
+     */
+    getLiveMeetingId(): string | null {
+        if (!this.liveIndexer.isRunning() || !this.liveIndexer.hasIndexedChunks()) return null;
+        return this.liveIndexer.getActiveMeetingId();
+    }
+
+    /**
      * Whether this instance's connection can still serve statements. Mirrors
      * VectorStore.isDatabaseUsable() — see that method for the full rationale.
      */

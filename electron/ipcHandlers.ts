@@ -13646,12 +13646,13 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { fallback: true };
     }
 
-    // Check if JIT indexing is active AND has at least one embedded chunk.
-    // isLiveIndexingActive() only tells us the indexer is running — it may have
-    // received segments but not yet produced queryable embeddings. Calling
-    // queryMeeting() with zero chunks throws NO_MEETING_EMBEDDINGS, adding
-    // ~300ms of wasted try/catch overhead before the fallback fires.
-    if (!ragManager.isLiveIndexingActive('live-meeting-current') || !ragManager.hasLiveChunks()) {
+    // Gate on QUERYABLE chunks, not on "the indexer is running": calling
+    // queryMeeting() with zero embedded chunks throws NO_MEETING_EMBEDDINGS
+    // after ~300ms of wasted work. getLiveMeetingId() answers both questions
+    // and owns the live id, so this handler no longer repeats the literal
+    // that main.ts passes to startLiveIndexing (issue #552).
+    const liveMeetingId = ragManager.getLiveMeetingId();
+    if (!liveMeetingId) {
       return { fallback: true };
     }
 
@@ -13674,7 +13675,7 @@ export function initializeIpcHandlers(appState: AppState): void {
     activeRAGQueries.set(queryKey, abortController);
 
     try {
-      const stream = ragManager.queryMeeting('live-meeting-current', query, abortController.signal);
+      const stream = ragManager.queryMeeting(liveMeetingId, query, abortController.signal);
 
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
