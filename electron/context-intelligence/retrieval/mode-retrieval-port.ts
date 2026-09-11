@@ -22,6 +22,8 @@ export interface ModeRetrieverLike {
     query: string; topK: number; tokenBudget: number; allowRerank: boolean;
     forceDocumentGrounding?: boolean;
     rerankSurface?: 'live' | 'manual';
+    rerankPoolMultiplier?: number;
+    queryEmbedRetryBudgetMs?: number;
   }) => Promise<{ chunks?: Array<Record<string, unknown>> } | null | undefined>;
 }
 
@@ -235,7 +237,7 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
 
   return createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number; exhaustive?: boolean }) => {
+    retrieve: async (query: string, opts: { topK: number; timeoutMs?: number; exhaustive?: boolean }) => {
       if (!input.modeInfo || !input.files.length || !input.modesManager.retrieveHybridRaw) return [];
       // An exhaustive request (RetrievalPlan.exhaustive) needs the RETRIEVER
       // to hand back more than the plan's widened topK can hold at the normal
@@ -256,6 +258,14 @@ export function createModeRetrievalPort(input: ModePortInput): RetrievalPort {
         // → low-confidence only) and the budget follows the surface.
         allowRerank: true,
         rerankSurface: input.rerankSurface ?? 'live',
+        // The plan's retrieval budget reaches the query embed (2026-09-10). The
+        // legacy port has always passed `timeoutMs` here and this port ignored
+        // it, so the orchestrator's 1200 ms plan bounded nothing: a slow hosted
+        // embed route ran three 3 s attempts plus backoff (13.5 s measured)
+        // before the model was asked. Deliberately NOT rerankDeadlineMs — that
+        // would skip every rerank whose 3000 ms budget exceeds the 1200 ms plan
+        // and silently switch the selected reranker off on the V3 path.
+        ...(typeof opts.timeoutMs === 'number' ? { queryEmbedRetryBudgetMs: opts.timeoutMs } : {}),
         // CORRECTED 2026-08-28. This block used to say `deduplicateChunks` keeps
         // the highest-scoring chunk PER FILE by default, so that without this
         // flag a single 66-page reference file returned exactly ONE chunk. That

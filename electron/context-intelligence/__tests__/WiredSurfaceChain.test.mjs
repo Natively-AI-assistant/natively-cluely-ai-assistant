@@ -94,8 +94,10 @@ describe('unsupported-in-mode reaches the prompt as a gap, not a general answer'
   // reference side as an alternative in technical-interview (the mode gained a
   // reference pool). A meeting EVENT still has nothing but the transcript to
   // evidence it, so it remains the honest witness for this property.
-  test('a meeting question in technical-interview discloses rather than answering', async () => {
-    const { result, composed } = await chain('What did we decide in the standup?');
+  test('a résumé question in team-meet discloses rather than answering', async () => {
+    // UPDATED 2026-09-11: technical-interview now authorizes the transcript, so
+    // the witness moved to a résumé question in team-meet (no résumé pool).
+    const { result, composed } = await chain('What does my résumé say about Kubernetes?', { modeId: 'team-meet' });
     assert.notEqual(result.decision.retrievalPlan.path, 'FAST');
     assert.equal(result.trace.fallbackUsed, 'STRICT_NOT_FOUND');
     assert.ok(composed.sections.includes('no_evidence'),

@@ -446,8 +446,12 @@ const INTENT_RULES: IntentRule[] = [
     boosts: { requirements: 0.4, compensation: 0.3 } },
   { re: /\b(language|languages|programming|tech stack|technolog\w*|framework|tools?)\b/i,
     boosts: { skills: 0.4, requirements: 0.25 } },
-  { re: /\b(intro|introduce|elevator|pitch|tell me about (yourself|myself))\b/i,
-    boosts: { identity: 0.4, card_artifact_intro: 0.35 } },
+  // "self-introduction" / "introductory" / "walk us through your background"
+  // (2026-09-11): `intro\b` did not match "introduction", so "could you give
+  // us a quick self-introduction?" boosted nothing, the port returned one
+  // stray chunk and the persona said it could not pull the résumé.
+  { re: /\b(intro\w*|self-?intro\w*|introduce|elevator|pitch|tell me about (yourself|myself)|walk (?:me|us) through (?:your|my) (?:background|profile|r[ée]sum[ée]|cv|experience)|(?:your|my) background)\b/i,
+    boosts: { identity: 0.4, card_artifact_intro: 0.35, experience: 0.3 } },
   // IDENTITY & CONTACT LOOKUPS (2026-08-02 defect). The labelled identity
   // section now matches "name"/"email"/"phone" lexically, but the phrasings
   // people actually use in an interview overlay often name no field at all
@@ -586,7 +590,15 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
 
   return createLegacyRetrievalPort({
     registry: { sourceTypes, activeVersions, chunkVersions, sourceScopes },
-    retrieve: async (query: string, opts: { topK: number }): Promise<LegacyChunk[]> => {
+    retrieve: async (query: string, opts: { topK: number; sourceTypes?: readonly SourceType[] }): Promise<LegacyChunk[]> => {
+      // Only the PLANNED types compete for the top-k (2026-09-11). Measured in
+      // technical-interview: "Tell me about your education — degree, school,
+      // coursework" planned [RESUME, …] without JOB_DESCRIPTION, but the JD's
+      // requirement lines outscored the résumé's EDUCATION section on those
+      // very words, filled 13 of the 14 slots, were all rejected at the type
+      // gate — and the one résumé chunk that survived was the wrong one, so
+      // the persona said it had no education details in front of it.
+      const planned = opts.sourceTypes?.length ? new Set(opts.sourceTypes) : null;
       const index = new Bm25Index(chunks.map((c, i) => ({ id: String(i), text: `${c.section} ${c.text}` })), DEFAULT_BM25);
       const bm25ById = new Map(index.score(query).map((s) => [s.id, s.score]));
       const boosts = intentBoosts(query);
@@ -614,6 +626,7 @@ export function createProfileRetrievalPort(input: ProfilePortInput): RetrievalPo
           return { c, score };
         })
         .filter((s) => s.score > 0.05)
+        .filter((s) => !planned || planned.has(sourceTypes.get(s.c.sourceId) as SourceType))
         .sort((a, b) => b.score - a.score || a.c.chunkIndex - b.c.chunkIndex)
         .slice(0, Math.max(1, opts.topK))
         .map(({ c, score }) => ({

@@ -142,8 +142,17 @@ export function planNextAssistantAction(input: PlannerInput): PlannerDecision {
         // no current one, behaviour is UNCHANGED (still silent).
         const prevQ = (input.lastTriggerQuestion ?? '').trim();
         const currQ = (input.triggerQuestion ?? '').trim();
-        const sameUtterance = !prevQ || !currQ
-            || speculativeQuestionSimilarity(prevQ, currQ) >= SAME_UTTERANCE_SIMILARITY;
+        // No PREVIOUS question on record (2026-09-11): the last trigger stamped
+        // its time but carried no text — measured in a team-meet simulation
+        // where an automatic trigger with no resolved question was followed,
+        // inside the window, by "can you summarise the meeting so far", and
+        // the recap was silenced as a fragment of nothing. With no prior text
+        // to compare against, a current utterance that is itself question-
+        // shaped is a real turn; a bare fragment keeps the old silence.
+        const sameUtterance = !currQ
+            || (prevQ
+                ? speculativeQuestionSimilarity(prevQ, currQ) >= SAME_UTTERANCE_SIMILARITY
+                : !(hasQuestionSignal(currQ) && currQ.split(/\s+/).length >= 4));
         if (sameUtterance) {
             return { kind: 'silent', reason: 'cooldown', confidence };
         }

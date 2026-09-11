@@ -104,10 +104,14 @@ describe('the prompt reflects the decision', () => {
     // A real meeting EVENT is still wholly unsupported here — the transcript is
     // the only thing that can evidence it and the mode authorizes none — so the
     // flag keeps a genuine witness rather than being relaxed to fit.
-    setStoredAnswerPolicy('technical-interview', null, USERDATA);
+    // UPDATED 2026-09-11: technical-interview now authorizes MEETING_TRANSCRIPT
+    // (the interview conversation is a source), so a meeting event no longer
+    // witnesses this property. A RÉSUMÉ question in team-meet does: the mode
+    // authorizes no résumé/profile pool, and nothing else can evidence it.
+    setStoredAnswerPolicy('team-meet', null, USERDATA);
     const r = await buildV3Prompt({
-      surface: 'assist', question: 'What did we decide in the standup?',
-      modeTemplateType: 'technical-interview', modeUniqueId: 'technical-interview',
+      surface: 'assist', question: 'What does my résumé say about Kubernetes?',
+      modeTemplateType: 'team-meet', modeUniqueId: 'team-meet',
     });
     assert.equal(r.unsupportedInMode, true);
     assert.equal(r.fallbackUsed, 'STRICT_NOT_FOUND');
