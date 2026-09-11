@@ -30,18 +30,21 @@ describe('what-to-answer meeting evidence', () => {
     assert.doesNotMatch(engine, /getSessionTracker/);
   });
   test('the resolved scope id reaches the WTA turn scope', () => {
-    // The builder is ~150 lines; slice a generous window from its head rather
-    // than hunting for its closing brace.
-    const a = engine.indexOf('private v3ModeRetrievalContext(');
-    assert.ok(a >= 0, 'v3ModeRetrievalContext must exist');
-    const ctx = engine.slice(a, a + 14000);
+    // Sliced to the next method's signature (a unique, stable marker) rather
+    // than a fixed char count — a fixed window silently stops covering the
+    // block it means to pin if the builder grows past it (M7a, review).
+    const ctx = between(engine, 'private v3ModeRetrievalContext(', 'private async buildV3ForTranscriptSurface(');
     assert.match(ctx, /resolveMeetingEvidence\(\{/);
     assert.match(ctx, /scopeMeetingId = meeting\.scopeMeetingId/);
     assert.match(ctx, /meetingId: scopeMeetingId \?\? meetingId/);
   });
-  test('IntelligenceManager exposes a real getMeetingMetadata and the renamed provider', () => {
+  test('IntelligenceManager exposes the renamed provider, and dropped the dead getMeetingMetadata passthrough', () => {
     const im = read('electron/IntelligenceManager.ts');
-    assert.match(im, /getMeetingMetadata\(\): any \{\s*return this\.session\.getMeetingMetadata\(\);/);
+    // I3 (final review pass on #552): nothing called this passthrough — WTA
+    // reads `this.session.getMeetingMetadata()` directly, and manual-chat V3
+    // never needed a meeting-metadata id (resolveMeetingEvidence keys off the
+    // live JIT index id instead). Pinning dead API is how it comes back.
+    assert.doesNotMatch(im, /getMeetingMetadata\(\): any/);
     assert.match(im, /setMeetingRagProvider\(/);
     assert.doesNotMatch(im, /setRagRetrieverProvider/);
   });
@@ -76,9 +79,13 @@ describe('rag:query-live records its turn', () => {
   const ipc = read('electron/ipcHandlers.ts');
   const live = between(ipc, "safeHandle('rag:query-live'", "safeHandle('rag:query-global'");
   const helper = between(ipc, 'function recordLiveRagTurn(', '\n  }\n');
-  test('the streamed answer is accumulated and handed to the recorder on a clean completion', () => {
+  test('the streamed answer is accumulated and handed to the recorder on a clean completion, with the mode captured before streaming', () => {
     assert.match(live, /ragLiveAnswer \+= chunk/);
-    assert.match(live, /if \(!abortController\.signal\.aborted\) \{\s*event\.sender\.send\('rag:stream-complete', \{ live: true \}\);\s*recordLiveRagTurn\(event\.sender\.id, query, ragLiveAnswer\);/);
+    // C1 (final review pass on #552): the mode must be captured BEFORE the
+    // stream starts — a switch mid-stream must be detectable by comparing
+    // against a snapshot taken at request time, not at completion time.
+    assert.match(live, /const manualActiveMode = ModesManager\.getInstance\(\)\.getActiveMode\(\);/);
+    assert.match(live, /if \(!abortController\.signal\.aborted\) \{\s*event\.sender\.send\('rag:stream-complete', \{ live: true \}\);\s*recordLiveRagTurn\(event\.sender\.id, query, ragLiveAnswer, manualActiveMode\);/);
   });
   test('the recorder writes every history sink V3 writes', () => {
     assert.match(helper, /recordAnswerSummary\(\s*v3ConversationSessionId\(appState, senderId\)/);
@@ -89,8 +96,26 @@ describe('rag:query-live records its turn', () => {
   });
   test('a truncated stream (RAGManager coda) records the user turn but not the answer', () => {
     assert.match(helper, /ragLiveTruncated/);
-    assert.match(helper, /Answer incomplete/);
-    assert.ok(helper.indexOf('logUsage') < helper.indexOf('if (ragLiveTruncated)'), 'usage is logged before the truncation early-return');
+    // M6 (review): the helper detects truncation against the EXPORTED
+    // constant, not a re-typed copy of the string, so pin the constant name
+    // rather than the literal English text it happens to hold today.
+    assert.match(helper, /RAG_STREAM_INCOMPLETE_CODA/);
+    const logUsageIdx = helper.indexOf('logUsage');
+    const truncatedGuardIdx = helper.indexOf('if (ragLiveTruncated)');
+    // M7b (review): indexOf returns -1 on no match, and `-1 < -1` is false —
+    // a missing `logUsage` and a missing truncation guard would BOTH make
+    // this pass vacuously. Assert both markers actually exist first.
+    assert.ok(logUsageIdx >= 0, 'logUsage call must exist in the helper');
+    assert.ok(truncatedGuardIdx >= 0, 'the truncation early-return must exist in the helper');
+    assert.ok(logUsageIdx < truncatedGuardIdx, 'usage is logged before the truncation early-return');
+  });
+  test('the mode-bleeding guard skips answer-side sinks when the mode changed mid-stream', () => {
+    // C1 (BUG-MODE-BLEEDING): the same class of leak the V3 site was fixed
+    // for — modes:set-active clears memory/ring for the OUTGOING mode without
+    // aborting this stream, so recording after a switch must be gated the
+    // same way the V3 site gates it.
+    assert.match(helper, /liveModeIdAtRecord/);
+    assert.match(helper, /liveModeIdAtRecord !== \(manualActiveMode\?\.id \?\? null\)/);
   });
   test('the gate uses getLiveMeetingId, not the literal live id', () => {
     assert.match(live, /ragManager\.getLiveMeetingId\(\)/);

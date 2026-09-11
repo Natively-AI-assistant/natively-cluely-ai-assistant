@@ -92,7 +92,8 @@ describe('manual chat: the screen port and the request share one session key (20
     const i = src.indexOf('.createScreenRetrievalPort({');
     assert.ok(i > 0, 'manual chat builds a screen port');
     const block = src.slice(i, i + 900);
-    assert.match(block, /sessionId: v3ConversationSessionId\(appState, senderId\)/, 'the port scope must equal the request scope or every screen chunk is OUT_OF_SCOPE');
+    assert.match(block, /sessionId: v3ConversationKey,/, 'the port scope must equal the request scope or every screen chunk is OUT_OF_SCOPE');
+    assert.match(src, /const v3ConversationKey = v3ConversationSessionId\(appState, senderId\);/, 'the request scope the port must match');
     assert.doesNotMatch(block, /sessionId: String\(senderId\)/);
   });
 });
