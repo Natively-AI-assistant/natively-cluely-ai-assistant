@@ -8646,3 +8646,48 @@ html[data-platform="linux"][data-window="launcher"] body {
   .mn-line-guard { animation: none; }
   .mn-line-hold { opacity: 1; }
 }
+
+/* ── Stealth-typing caret ──────────────────────────────────────────────
+   On Windows the overlay is WS_EX_NOACTIVATE and the chat input is
+   readOnly while the hook is engaged, so the OS draws no caret: the box
+   looks dead even though keystrokes ARE being delivered through
+   StealthKeyboardManager. That ambiguity is the "it didn't take charge"
+   confusion. This mirrors the input's text invisibly (to occupy the same
+   width) and draws a blinking pipe right after it, so "Natively has your
+   keystrokes" is visible. macOS takes real DOM focus and gets the native
+   caret, so this only renders while stealthTapActive. */
+.nat-caret-mirror {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent; /* match the input's border box exactly */
+  border-radius: 0.75rem;        /* rounded-xl */
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+  font: inherit;
+}
+/* Takes width, paints nothing — the real input still renders the glyphs. */
+.nat-caret-mirror > .nat-caret-text {
+  visibility: hidden;
+  flex: none;
+}
+.nat-caret {
+  flex: none;
+  display: inline-block;
+  width: 1.5px;
+  height: 1.15em;
+  border-radius: 1px;
+  background: var(--accent-primary);
+  animation: nat-caret-blink 1.06s steps(1, end) infinite;
+}
+@keyframes nat-caret-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+/* A caret that never stops moving is a problem for vestibular sensitivity,
+   and a steady bar still communicates "input is live". */
+@media (prefers-reduced-motion: reduce) {
+  .nat-caret { animation: none; opacity: 1; }
+}

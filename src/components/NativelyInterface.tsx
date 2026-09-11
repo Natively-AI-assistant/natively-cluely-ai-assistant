@@ -10545,6 +10545,24 @@ Provide only the answer, nothing else.`;
                     style={appearance.inputStyle}
                   />
 
+                  {/* Stealth-typing caret. While the hook is engaged the input
+                      is readOnly and — on Windows — never DOM-focused, so the
+                      OS paints no caret and the box reads as dead even though
+                      keystrokes ARE arriving via StealthKeyboardManager. Mirror
+                      the text invisibly to occupy the same width, then draw a
+                      blinking pipe after it. Pointer-events:none so it can
+                      never intercept the click that engages the tap. */}
+                  {stealthTapActive && (
+                    <div
+                      aria-hidden="true"
+                      className="nat-caret-mirror pl-3 pr-10 py-2.5 text-[13px] leading-relaxed"
+                      style={appearance.inputStyle}
+                    >
+                      <span className="nat-caret-text">{inputValue}</span>
+                      <span className="nat-caret" />
+                    </div>
+                  )}
+
                   {/* Skill picker — portal so it escapes the overflow-hidden shell */}
                   {filteredSkills.length > 0 && skillPickerQuery !== null &&
                     createPortal(
