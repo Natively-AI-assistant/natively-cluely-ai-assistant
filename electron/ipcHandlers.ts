@@ -1614,6 +1614,13 @@ export function initializeIpcHandlers(appState: AppState): void {
               // as authoritative evidence. Manual chat has no periodic-capture OCR
               // object at all, so imagePaths is the only screen signal here.
               hasScreenContext: (imagePaths?.length ?? 0) > 0,
+              // Live meeting with transcript evidence available (issue #552,
+              // task 7b) — true only when resolveMeetingEvidence() actually
+              // built a port above, not merely "the mode allows it". Lets the
+              // classifier claim MEETING_TRANSCRIPT as an alternative for an
+              // unclassified factual question in General (see
+              // ClassificationInput.inLiveMeeting).
+              inLiveMeeting: v3MeetingEvidence.inLiveMeeting,
               // Settings > Intelligence > Memory > "Chat history". Read HERE, not
               // in the bridge: context-intelligence has no dependency on the flag
               // registry (see contracts/retrieval-flags.ts for what the first one
@@ -13778,6 +13785,13 @@ export function initializeIpcHandlers(appState: AppState): void {
         // Seeds state for a turn that never went through orchestrate(); see
         // recordAnswerSummary's `question` docblock.
         query,
+        // This turn completed synchronously and is certainly the newest —
+        // unlike the deferred what-to-answer writer, it cannot land after a
+        // later turn has already advanced the state. Anchoring moves
+        // `previousQuestion` so the NEXT typed follow-up ("expand on that")
+        // resolves against THIS voice turn instead of whatever typed question
+        // preceded it (task 7b, issue #552, live-verified).
+        { anchor: true },
       );
     } catch { /* continuity only */ }
     try {

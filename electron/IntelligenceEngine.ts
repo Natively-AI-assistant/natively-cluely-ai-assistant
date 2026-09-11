@@ -3591,6 +3591,11 @@ export class IntelligenceEngine extends EventEmitter {
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
                         extraAllowedSourceTypes: _ctx.extraAllowedSourceTypes as never[],
+                        // See ClassificationInput.inLiveMeeting (task 7b, issue
+                        // #552): true only when resolveMeetingEvidence() built a
+                        // meeting port for this turn — every buildV3Prompt call
+                        // built from v3ModeRetrievalContext() passes this through.
+                        inLiveMeeting: _ctx.inLiveMeeting,
                         // sessionId scopes the V3 conversation-state store. Left
                         // unset it fell back to the literal 'engine', so every
                         // WTA turn across every meeting shared one key.
@@ -6455,6 +6460,10 @@ export class IntelligenceEngine extends EventEmitter {
         profileSourceCount: number;
         resolvedProfileSources: Array<{ role: string; id: string }>;
         extraAllowedSourceTypes: string[];
+        /** From resolveMeetingEvidence() — see ClassificationInput.inLiveMeeting
+         *  (task 7b, issue #552). False when the try block below failed, same
+         *  as every other meeting-evidence field this context exposes. */
+        inLiveMeeting: boolean;
         port: unknown; conversationWindow: (sec: number) => string;
     } | null {
         try {
@@ -6525,6 +6534,11 @@ export class IntelligenceEngine extends EventEmitter {
             const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
             let port: unknown = modePort;
             let scopeMeetingId: string | null = null;
+            // False when the try block below fails, exactly like scopeMeetingId
+            // (task 7b, issue #552) — an additive failure here must degrade to
+            // the mode's ordinary primary-source routing, never to "in a live
+            // meeting" by default.
+            let inLiveMeeting = false;
             try {
                 const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
                 const { resolveMeetingEvidence } = require('./context-intelligence/retrieval/meeting-evidence');
@@ -6540,6 +6554,7 @@ export class IntelligenceEngine extends EventEmitter {
                 });
                 ports.push(...meeting.ports);
                 scopeMeetingId = meeting.scopeMeetingId;
+                inLiveMeeting = meeting.inLiveMeeting;
                 // The user's SCREEN, as evidence (2026-09-11). Manual chat has built a
                 // screen port from the understanding pre-pass since Phase 6; the live
                 // surface only ever passed `hasScreenContext`, so SCREEN_CONTEXT was
@@ -6572,6 +6587,7 @@ export class IntelligenceEngine extends EventEmitter {
                 profileSourceCount,
                 resolvedProfileSources,
                 extraAllowedSourceTypes: extraSourceTypes,
+                inLiveMeeting,
                 port,
                 // Bounded live-transcript window for the composer's labelled
                 // "Conversation so far" section. This is NOT the §32.16 raw-blob
@@ -6655,6 +6671,10 @@ export class IntelligenceEngine extends EventEmitter {
                 profileSourceCount: ctx.profileSourceCount,
                 resolvedProfileSources: ctx.resolvedProfileSources,
                 extraAllowedSourceTypes: ctx.extraAllowedSourceTypes as never[],
+                // See ClassificationInput.inLiveMeeting (task 7b, issue #552):
+                // true only when resolveMeetingEvidence() actually built a
+                // meeting port for this turn.
+                inLiveMeeting: ctx.inLiveMeeting,
                 requestSequence: this.currentGenerationId,
                 scope: {
                     meetingId: ctx.meetingId ?? undefined,
@@ -7138,6 +7158,10 @@ export class IntelligenceEngine extends EventEmitter {
                         attachedSourceCount: _ctx.attachedSourceCount,
                         profileSourceCount: _ctx.profileSourceCount,
                         resolvedProfileSources: _ctx.resolvedProfileSources,
+                        // See ClassificationInput.inLiveMeeting (task 7b, issue
+                        // #552) — every buildV3Prompt call built from
+                        // v3ModeRetrievalContext() passes this through.
+                        inLiveMeeting: _ctx.inLiveMeeting,
                         requestSequence: this.currentGenerationId,
                         // T7 (2026-08-28): `sessionId` was MISSING here while both
                         // sibling call sites (:5517 and the WTA snapshot) set it

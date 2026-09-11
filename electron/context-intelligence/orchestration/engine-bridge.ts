@@ -85,6 +85,9 @@ export interface BridgeInput {
   requestSequence?: number;
   isFollowUp?: boolean;
   hasScreenContext?: boolean;
+  /** The turn is inside a live meeting with transcript evidence available
+   *  (issue #552, task 7b) — see ClassificationInput.inLiveMeeting. */
+  inLiveMeeting?: boolean;
   /**
    * Where `question` came from. Defaults to 'manual' — correct for the manual
    * chat and typed-question call sites, which is what every caller was before
@@ -258,6 +261,7 @@ export async function buildV3Prompt(input: BridgeInput): Promise<BridgeResult | 
       userAnswerPolicy,
       isFollowUp: input.isFollowUp,
       hasScreenContext: input.hasScreenContext,
+      inLiveMeeting: input.inLiveMeeting,
       // Definite value lookups ground only where documents exist (deep-test D2).
       hasAttachedDocuments: (input.attachedSourceCount ?? 0) > 0
         || (input.profileSourceCount ?? 0) > 0,

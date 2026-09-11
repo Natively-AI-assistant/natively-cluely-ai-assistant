@@ -28,6 +28,18 @@
 // carry that same id. `scopeMeetingId` is how the caller learns it; putting
 // anything else (or nothing) on the turn's scope makes every JIT chunk
 // OUT_OF_SCOPE. The test file proves admission end to end.
+//
+// inLiveMeeting (task 7b, issue #552 live-verification)
+// Building at least one port here proves the turn is genuinely inside a live
+// meeting with something the transcript could answer — a live run showed the
+// JIT and live-transcript ports both admitting the right chunk for "what did
+// jonas say about the elasticsearch window" in General mode while the
+// classifier never PLANNED MEETING_TRANSCRIPT at all, because General's
+// primary source is REFERENCE_FILE and no attribution wording matched. The
+// deleted typed-chat RAG pre-flight used to cover this; `inLiveMeeting` lets
+// the classifier claim the transcript as an ALTERNATIVE for an unclassified
+// factual question without forcing every mode, in or out of a meeting, to
+// always plan MEETING_TRANSCRIPT.
 
 import type { SourceType } from '../contracts/types';
 import type { RetrievalPort } from '../orchestration/orchestrator';
@@ -57,11 +69,22 @@ export interface MeetingEvidence {
   ports: RetrievalPort[];
   /** Put on the turn's scope.meetingId so containment admits the JIT chunks. Null when there is no JIT port. */
   scopeMeetingId: string | null;
+  /**
+   * True when at least one meeting port was actually built — the JIT port,
+   * the live-transcript port, or both (issue #552, task 7b). This is NOT the
+   * same question as "does the mode allow MEETING_TRANSCRIPT": a mode can
+   * authorize the source with nothing spoken yet and no JIT chunks embedded,
+   * in which case this is false. The turn-classifier uses it to decide
+   * whether an unclassified factual question in a document-primary mode
+   * (General) can ALSO be answered by what was just said — see
+   * ClassificationInput.inLiveMeeting.
+   */
+  inLiveMeeting: boolean;
 }
 
 export function resolveMeetingEvidence(input: MeetingEvidenceInput): MeetingEvidence {
   if (!input.allowedSourceTypes.includes('MEETING_TRANSCRIPT')) {
-    return { ports: [], scopeMeetingId: null };
+    return { ports: [], scopeMeetingId: null, inLiveMeeting: false };
   }
 
   const ports: RetrievalPort[] = [];
@@ -98,5 +121,5 @@ export function resolveMeetingEvidence(input: MeetingEvidenceInput): MeetingEvid
     console.warn('[meeting-evidence] live transcript port unavailable:', (e as Error)?.message ?? e);
   }
 
-  return { ports, scopeMeetingId };
+  return { ports, scopeMeetingId, inLiveMeeting: ports.length > 0 };
 }
