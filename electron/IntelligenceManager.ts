@@ -59,8 +59,8 @@ export class IntelligenceManager extends EventEmitter {
      * Called from main.ts AFTER RAGManager exists — this manager is constructed
      * first, so a provider is passed rather than the instance.
      */
-    setRagRetrieverProvider(provider: (() => unknown) | null): void {
-        this.engine.setRagRetrieverProvider(provider);
+    setMeetingRagProvider(provider: (() => unknown) | null): void {
+        this.engine.setMeetingRagProvider(provider);
     }
 
     /**
@@ -119,6 +119,16 @@ export class IntelligenceManager extends EventEmitter {
 
     setMeetingMetadata(metadata: any): void {
         this.session.setMeetingMetadata(metadata);
+    }
+
+    /**
+     * Real accessor (issue #552). ipcHandlers used to reach this through
+     * `getSessionTracker()`, a method that never existed — `as any` plus
+     * optional chaining turned it into a silent `undefined`, so manual chat's
+     * V3 meeting evidence was dead code.
+     */
+    getMeetingMetadata(): any {
+        return this.session.getMeetingMetadata();
     }
 
     addTranscript(segment: import('./SessionTracker').TranscriptSegment, skipRefinementCheck: boolean = false): void {

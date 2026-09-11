@@ -358,7 +358,8 @@ export class IntelligenceEngine extends EventEmitter {
      * forever and a later re-init would never be picked up. The engine keeps no
      * RAG import — it only calls what it is handed.
      */
-    private ragRetrieverProvider: (() => unknown) | null = null;
+    /** The RAG manager (structurally: MeetingRagLike), injected by IntelligenceManager once the RAG stack is up. */
+    private meetingRagProvider: (() => import('./context-intelligence/retrieval/meeting-evidence').MeetingRagLike | null) | null = null;
 
     private lastTranscriptTime: number = 0;
     private lastTriggerTime: number = 0;
@@ -6436,9 +6437,21 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 3: Follow-Up (Refinement)
      * Modify the last assistant message
      */
-    /** Injected by IntelligenceManager once the RAG stack is up. */
-    setRagRetrieverProvider(provider: (() => unknown) | null): void {
-        this.ragRetrieverProvider = provider;
+    /**
+     * Injected by IntelligenceManager once the RAG stack is up.
+     *
+     * The param is `unknown` rather than `MeetingRagLike` at this boundary:
+     * the real argument is RAGManager, which satisfies MeetingRagLike
+     * BEHAVIORALLY (getRetriever/getLiveMeetingId), but its retriever's
+     * `retrieve()` resolves `ScoredChunk[]` — an interface with no string
+     * index signature — where MeetingRetrieverLike's structural type asks for
+     * `Record<string, unknown>[]`. TS refuses that assignment even though
+     * every call site already re-casts each chunk (see
+     * meeting-retrieval-port.ts). Casting once here, at the field, is
+     * narrower than loosening the shared port contract for every caller.
+     */
+    setMeetingRagProvider(provider: (() => unknown) | null): void {
+        this.meetingRagProvider = provider as (() => import('./context-intelligence/retrieval/meeting-evidence').MeetingRagLike | null) | null;
     }
 
     // ── CONTEXT INTELLIGENCE V3 — shared adoption plumbing (Phase 6) ─────────
@@ -6512,44 +6525,33 @@ export class IntelligenceEngine extends EventEmitter {
                 console.warn('[V3] profile hydration failed — continuing with mode attachments only:', (profErr as Error)?.message ?? profErr);
             }
 
-            // Meeting evidence, when this turn is INSIDE a meeting and the mode
-            // authorizes transcripts. Without it a live meeting question found
-            // only reference files and disclosed a gap for something that had
-            // just been said aloud. Cross-meeting isolation is the scope
-            // filter's job, not this call site's (06 §4).
+            // Meeting evidence (issue #552). One resolver, shared with the
+            // manual-chat site: the JIT semantic port scoped to the LIVE index
+            // id plus the BM25 port over raw speech. The old block scoped the
+            // meeting port by getMeetingMetadata().id, which no normal meeting
+            // sets — so the JIT embeddings were never evidence here — and only
+            // built the live port when that id was absent. Cross-meeting
+            // isolation is still the scope filter's job (06 §4): the resolver
+            // returns the id the turn's scope must carry for that filter to
+            // admit the JIT chunks.
             const meetingId = (this.session as any)?.getMeetingMetadata?.()?.id ?? null;
             let port: unknown = modePort;
+            let scopeMeetingId: string | null = null;
             try {
                 const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+                const { resolveMeetingEvidence } = require('./context-intelligence/retrieval/meeting-evidence');
                 const ports: unknown[] = [modePort, ...(profilePort ? [profilePort] : [])];
-                const retriever = this.ragRetrieverProvider?.();
-                if (retriever && meetingId && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')) {
-                    const { createMeetingRetrievalPort } =
-                        require('./context-intelligence/retrieval/meeting-retrieval-port');
-                    ports.push(createMeetingRetrievalPort({
-                        retriever, currentMeetingId: meetingId, userId: 'local',
-                        tokenBudget: policy.contextBudget.evidenceTokens,
-                    }));
-                }
-                // The LIVE transcript, as evidence (2026-09-11). The meeting port
-                // above needs a persisted meeting; a session that is merely
-                // listening (no meeting metadata, or an injected transcript) had
-                // only the 90-second conversation window, so "did anyone mention
-                // the elasticsearch window" was answered "I don't have anything on
-                // that" three minutes after Jonas said it. Same fail-closed scope
-                // and type filtering; a mode that does not authorize
-                // MEETING_TRANSCRIPT admits nothing from it.
-                if (!meetingId && policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')) {
-                    const segments = (this.session as any)?.getFullTranscript?.() ?? [];
-                    if (Array.isArray(segments) && segments.length) {
-                        const { createLiveTranscriptRetrievalPort } = require('./context-intelligence/retrieval/live-transcript-port');
-                        const livePort = createLiveTranscriptRetrievalPort({
-                            segments, userId: 'local', sessionId: this.conversationSessionId(),
-                            roleOf: (sp: string) => this.session.mapSpeakerToRole(sp),
-                        });
-                        if (livePort) ports.push(livePort);
-                    }
-                }
+                const meeting = resolveMeetingEvidence({
+                    rag: this.meetingRagProvider?.() ?? null,
+                    segments: (this.session as any)?.getFullTranscript?.() ?? [],
+                    allowedSourceTypes: policy.allowedSourceTypes,
+                    userId: 'local',
+                    sessionId: this.conversationSessionId(),
+                    tokenBudget: policy.contextBudget.evidenceTokens,
+                    roleOf: (sp: string) => this.session.mapSpeakerToRole(sp),
+                });
+                ports.push(...meeting.ports);
+                scopeMeetingId = meeting.scopeMeetingId;
                 // The user's SCREEN, as evidence (2026-09-11). Manual chat has built a
                 // screen port from the understanding pre-pass since Phase 6; the live
                 // surface only ever passed `hasScreenContext`, so SCREEN_CONTEXT was
@@ -6574,7 +6576,9 @@ export class IntelligenceEngine extends EventEmitter {
                 raw,
                 modeUniqueId: (_mi as any)?.id ?? null,
                 modeName: (_mi as any)?.name ?? null,
-                meetingId,
+                // The scope id the evidence needs, falling back to the metadata
+                // id for a meeting that carries one but has no JIT chunks yet.
+                meetingId: scopeMeetingId ?? meetingId,
                 attachedSourceCount: _files.length,
                 attachedFileNames: (_files as Array<{ fileName?: string }>).map((f) => f.fileName ?? '').filter(Boolean),
                 profileSourceCount,

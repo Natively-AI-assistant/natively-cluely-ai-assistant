@@ -103,10 +103,18 @@ describe('the live transcript answers questions about what was said', () => {
 });
 
 describe('the live path wires the port (source pins)', () => {
-  test('IntelligenceEngine adds the live port when no meeting id exists and the mode authorizes transcripts', async () => {
+  // Superseded by issue #552 (Task 3): the engine no longer builds this port
+  // itself — it hands the session's transcript to resolveMeetingEvidence(),
+  // which builds BOTH the JIT and live-transcript ports from one shared
+  // resolver (see meeting-evidence.ts and MeetingEvidence2026_09_11.test.mjs,
+  // whose test 8 pins the port's own construction). What's left to pin here
+  // is only the handover: the engine still passes its OWN transcript and
+  // conversation session id into that resolver.
+  test('IntelligenceEngine hands its own transcript and session id to the meeting-evidence resolver', async () => {
     const fs = await import('node:fs');
     const src = fs.readFileSync(path.resolve(process.cwd(), 'electron/IntelligenceEngine.ts'), 'utf8');
-    assert.match(src, /if \(!meetingId && policy\.allowedSourceTypes\.includes\('MEETING_TRANSCRIPT'\)\) \{\s*\n\s*const segments = \(this\.session as any\)\?\.getFullTranscript\?\.\(\) \?\? \[\];/);
-    assert.match(src, /createLiveTranscriptRetrievalPort\(\{\s*\n\s*segments, userId: 'local', sessionId: this\.conversationSessionId\(\),/);
+    assert.match(src, /resolveMeetingEvidence\(\{/);
+    assert.match(src, /segments: \(this\.session as any\)\?\.getFullTranscript\?\.\(\) \?\? \[\]/);
+    assert.match(src, /sessionId: this\.conversationSessionId\(\)/);
   });
 });
