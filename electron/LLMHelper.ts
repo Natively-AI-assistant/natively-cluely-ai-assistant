@@ -8976,7 +8976,15 @@ let isMultimodal = !!(imagePaths?.length);
       // we don't leak DOM event subscriptions on long-lived AbortSignals
       // (e.g., the IPC handler's per-stream controller is short-lived, but a
       // future caller might reuse a single signal across many calls).
-      try { reader.cancel(); } catch { }
+      // reader.cancel() returns a Promise: when the stream was torn down by an
+      // abort (streamFallbackEngine's finally calls ctrl.abort() on every exit
+      // path), it REJECTS with that AbortError. A sync try/catch cannot catch
+      // that, so the rejection reached process.on('unhandledRejection') in
+      // main.ts — and five of those inside 60s trip the crash-loop guard and
+      // terminate the app. Switching AI actions quickly (Ctrl+1 then Ctrl+2 …)
+      // aborts one stream per switch, so this was reachable in normal use.
+      // Same idiom as CodexCliService/OllamaBootstrap.
+      try { reader.cancel().catch(() => { /* already torn down */ }); } catch { }
       abortSignal?.removeEventListener('abort', onCallerAbort);
     }
   }
