@@ -54,12 +54,17 @@ export class IntelligenceManager extends EventEmitter {
     }
 
     /**
-     * Give the engine lazy access to the meeting-RAG retriever.
+     * Give the engine lazy access to the RAG manager, for live-meeting
+     * evidence (issue #552's resolveMeetingEvidence — the JIT semantic port
+     * plus the BM25 live-transcript port).
      *
-     * Called from main.ts AFTER RAGManager exists — this manager is constructed
-     * first, so a provider is passed rather than the instance.
+     * Called from main.ts AFTER RAGManager exists — this manager is
+     * constructed first, so a provider closure is passed rather than the
+     * instance. `RAGManager` satisfies `MeetingRagLike` structurally
+     * (getRetriever/getLiveMeetingId); the engine keeps no RAG import of its
+     * own, so it is typed here instead.
      */
-    setMeetingRagProvider(provider: (() => unknown) | null): void {
+    setMeetingRagProvider(provider: (() => import('./context-intelligence/retrieval/meeting-evidence').MeetingRagLike | null) | null): void {
         this.engine.setMeetingRagProvider(provider);
     }
 

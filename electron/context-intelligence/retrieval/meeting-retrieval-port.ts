@@ -31,9 +31,15 @@ import { createLegacyRetrievalPort } from './legacy-retrieval-port';
 import { isRetrievalFixEnabled } from '../contracts/retrieval-flags';
 
 /** The slice of RAGRetriever this port uses. Structural — no legacy import. */
+// `object`, not `Record<string, unknown>`: the real retriever returns an
+// interface type, `ScoredChunk`, and TS never assigns an interface to an
+// index-signature type — so `RAGManager` can satisfy this port structurally
+// without a cast. Every field is still read defensively below via
+// `(c as Record<string, unknown>)`, so this loosens only the declared shape,
+// not what the port actually trusts at runtime.
 export interface MeetingRetrieverLike {
   retrieve?: (query: string, options: { meetingId?: string; topK?: number; maxTokens?: number }) => Promise<{
-    chunks?: Array<Record<string, unknown>>;
+    chunks?: ReadonlyArray<object>;
   } | null | undefined>;
 }
 

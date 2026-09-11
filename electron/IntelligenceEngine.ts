@@ -6437,21 +6437,9 @@ export class IntelligenceEngine extends EventEmitter {
      * MODE 3: Follow-Up (Refinement)
      * Modify the last assistant message
      */
-    /**
-     * Injected by IntelligenceManager once the RAG stack is up.
-     *
-     * The param is `unknown` rather than `MeetingRagLike` at this boundary:
-     * the real argument is RAGManager, which satisfies MeetingRagLike
-     * BEHAVIORALLY (getRetriever/getLiveMeetingId), but its retriever's
-     * `retrieve()` resolves `ScoredChunk[]` — an interface with no string
-     * index signature — where MeetingRetrieverLike's structural type asks for
-     * `Record<string, unknown>[]`. TS refuses that assignment even though
-     * every call site already re-casts each chunk (see
-     * meeting-retrieval-port.ts). Casting once here, at the field, is
-     * narrower than loosening the shared port contract for every caller.
-     */
-    setMeetingRagProvider(provider: (() => unknown) | null): void {
-        this.meetingRagProvider = provider as (() => import('./context-intelligence/retrieval/meeting-evidence').MeetingRagLike | null) | null;
+    /** Injected by IntelligenceManager once the RAG stack is up. */
+    setMeetingRagProvider(provider: (() => import('./context-intelligence/retrieval/meeting-evidence').MeetingRagLike | null) | null): void {
+        this.meetingRagProvider = provider;
     }
 
     // ── CONTEXT INTELLIGENCE V3 — shared adoption plumbing (Phase 6) ─────────
