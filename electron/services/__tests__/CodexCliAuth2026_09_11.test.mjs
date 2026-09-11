@@ -28,7 +28,7 @@ process.env.CODEX_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'natively-codex-h
 const dist = (p) => pathToFileURL(path.join(root, 'dist-electron/electron/services', p)).href;
 const { parseCodexAuthJson, readCodexCliAuth, resetCodexCliAuthCache, CODEX_CLI_TOKEN_SKEW_MS } = await import(dist('CodexCliAuth.js'));
 const {
-  getCodexAuthStatus, codexSignedOutMessage, isCodexAuthError,
+  CodexCliService, getCodexAuthStatus, codexSignedOutMessage, isCodexAuthError,
   CODEX_NOT_SIGNED_IN_MESSAGE, CODEX_CLI_LOGIN_EXPIRED_MESSAGE,
 } = await import(dist('CodexCliService.js'));
 const { CodexOAuthService } = await import(dist('CodexOAuthService.js'));
@@ -119,6 +119,18 @@ describe('readCodexCliAuth', () => {
     assert.equal(s.status, 'missing');
   });
 
+  test('force re-reads even when size and mtime are unchanged', () => {
+    let reads = 0;
+    const opts = {
+      env: {}, homeDir: '/Users/ana', pathImpl: path.posix, now: () => NOW, statSync: stat,
+      readFileSync: () => { reads++; return authJson(); },
+    };
+    readCodexCliAuth(opts); readCodexCliAuth(opts);
+    assert.equal(reads, 1);
+    readCodexCliAuth({ ...opts, force: true });
+    assert.equal(reads, 2);
+  });
+
   test('re-reads only when the file changes; expiry is re-checked every call', () => {
     let reads = 0; let mtimeMs = 1; let now = NOW;
     const opts = {
@@ -168,6 +180,56 @@ describe('getCodexAuthStatus (what routing and the renderer see)', () => {
   test('every Codex sign-in message is recognised as an actionable auth error (shown verbatim in chat)', () => {
     assert.ok(isCodexAuthError(new Error(CODEX_CLI_LOGIN_EXPIRED_MESSAGE)));
     assert.ok(isCodexAuthError(new Error(CODEX_NOT_SIGNED_IN_MESSAGE)));
+  });
+});
+
+describe('a 401 on the CLI session', () => {
+  // PR #563 review: the metadata cache keys on mtime+size. A CLI refresh that
+  // writes a same-length token within the timestamp resolution leaves both
+  // unchanged, so the post-401 re-read must bypass the cache or it reuses the
+  // rejected token and wrongly reports the fresh login as expired.
+  test('a rotation that keeps size and mtime is picked up: the retry sends the new token', async () => {
+    CodexOAuthService.getInstance().signOut();
+    resetCodexCliAuthCache();
+    const file = path.join(process.env.CODEX_HOME, 'auth.json');
+    const exp = Math.floor((Date.now() + 5 * 86400e3) / 1000);
+    const tokenFor = (jti) => jwt({ exp, jti, 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-123' } });
+    const fileFor = (jti) => JSON.stringify({
+      auth_mode: 'chatgpt', OPENAI_API_KEY: null,
+      tokens: { id_token: idToken, access_token: tokenFor(jti), refresh_token: 'rt', account_id: 'acct-123' },
+      last_refresh: '2026-09-10T00:00:00Z',
+    });
+    assert.equal(fileFor('A').length, fileFor('B').length, 'same-length rotation');
+    const pinned = new Date('2026-01-01T00:00:00Z');
+    fs.writeFileSync(file, fileFor('A'));
+    fs.utimesSync(file, pinned, pinned);
+    assert.equal(readCodexCliAuth().status, 'ok', 'cache warmed with token A');
+
+    const sent = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, init) => {
+      sent.push(String(init.headers.Authorization).replace(/^Bearer /, ''));
+      if (sent.length === 1) {
+        // The CLI refreshed its session while this request was in flight.
+        fs.writeFileSync(file, fileFor('B'));
+        fs.utimesSync(file, pinned, pinned);
+        return new Response('{"detail":"token expired"}', { status: 401 });
+      }
+      return new Response(
+        'data: {"type":"response.output_text.delta","delta":"ok"}\n\n'
+        + 'data: {"type":"response.completed","response":{}}\n\n',
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    };
+    try {
+      const out = await CodexCliService.run('', { prompt: 'hi', model: 'gpt-5.5', timeoutMs: 5_000 });
+      assert.equal(out, 'ok');
+      assert.deepEqual(sent, [tokenFor('A'), tokenFor('B')]);
+    } finally {
+      globalThis.fetch = realFetch;
+      fs.rmSync(file, { force: true });
+      resetCodexCliAuthCache();
+    }
   });
 });
 
