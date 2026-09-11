@@ -123,6 +123,17 @@ describe('rag:query-live records its turn', () => {
   });
 });
 
+describe('debug-inject-transcript feeds the JIT live indexer too (A1, final review pass)', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const inject = between(ipc, "safeHandle('debug-inject-transcript'", "safeHandle('get-recent-meetings'");
+  test('every injected segment also reaches RAGManager.feedLiveTranscript, mirroring the real STT handler', () => {
+    // Without this, im.addTranscript() alone never produced JIT chunks, so a
+    // test run could never exercise the semantic meeting port half of
+    // resolveMeetingEvidence — only the BM25 live-transcript port.
+    assert.match(inject, /feedLiveTranscript\(/);
+  });
+});
+
 describe('renderer typed chat', () => {
   const ui = read('src/components/NativelyInterface.tsx');
   const submit = between(ui, 'const handleManualSubmit = async () => {', '// Refresh the latest-handler ref on every render');

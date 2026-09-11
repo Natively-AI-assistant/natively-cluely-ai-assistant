@@ -12259,6 +12259,17 @@ export function initializeIpcHandlers(appState: AppState): void {
   // stay truthful end-to-end. isMemoryEligibleSegment treats 'test' as eligible
   // only under the same env gate, so meeting memory/summary/RAG behave as they
   // would for real speech in a test run while production remains airtight.
+  //
+  // A1 (final review pass on #552): also feeds RAGManager.feedLiveTranscript,
+  // the same call the real STT handler makes for every final segment
+  // (main.ts's `if (segment.isFinal && this.ragManager)` block). Without this,
+  // im.addTranscript() alone put injected speech into the session transcript
+  // and meeting memory but NEVER into the JIT live indexer — no test run
+  // could ever produce embedded chunks, so the JIT meeting port half of
+  // resolveMeetingEvidence (the semantic port, as opposed to the BM25
+  // live-transcript port) was permanently unexercisable outside a real
+  // microphone session. Still unreachable in packaged builds (same two gates
+  // above cover this call too).
   safeHandle('debug-inject-transcript', async (_event, segments: unknown) => {
     const { app } = require('electron');
     if (process.env.NATIVELY_TEST_TRANSCRIPT_INJECTION !== '1' || app.isPackaged) {
@@ -12274,16 +12285,24 @@ export function initializeIpcHandlers(appState: AppState): void {
       const s = raw as { speaker?: unknown; text?: unknown; timestamp?: unknown; confidence?: unknown };
       const text = String(s?.text ?? '').slice(0, 4000).trim();
       if (!text) continue;
+      const speaker = String(s?.speaker ?? 'Speaker');
+      const timestamp = typeof s?.timestamp === 'number' ? s.timestamp : Date.now();
       im.addTranscript({
-        speaker: String(s?.speaker ?? 'Speaker'),
+        speaker,
         text,
-        timestamp: typeof s?.timestamp === 'number' ? s.timestamp : Date.now(),
+        timestamp,
         final: true,
         // Real STT confidence is always < 1; injected segments mimic that so
         // legacy consumers behave identically, but origin is what gates them.
         confidence: typeof s?.confidence === 'number' ? s.confidence : 0.95,
         origin: 'test',
       }, true);
+      // Parity with the STT path (main.ts's `if (segment.isFinal && this.ragManager)`
+      // block) — every injected segment here is final, so every one feeds the
+      // JIT indexer too. Feeding must never fail the injection itself.
+      try {
+        appState.getRAGManager?.()?.feedLiveTranscript([{ speaker, text, timestamp }]);
+      } catch { /* JIT feed only — injection still counts */ }
       injected++;
     }
     console.log(`[TestInjection] Injected ${injected} transcript segment(s) with origin 'test'.`);
