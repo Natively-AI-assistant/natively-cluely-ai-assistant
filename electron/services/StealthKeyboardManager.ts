@@ -300,6 +300,7 @@ export class StealthKeyboardManager {
      * through the permission flow in that case.
      */
     public start(): boolean {
+        console.log(`[StealthDiag] start() called: tap=${!!this.tap} active=${this.active} guardRunning=${this.guardRunning} guardEnabled=${this.shortcutGuardEnabled} overlayVisible=${!!this.overlayWindow && !this.overlayWindow.isDestroyed() && this.overlayWindow.isVisible()}`);
         if (!this.tap) return false;
         if (this.active) return true;
 
@@ -364,8 +365,10 @@ export class StealthKeyboardManager {
             this.active = false;
             // Override the optimistic active=true with the failure reason.
             this.broadcastState({ active: false, reason: 'permission' });
+            console.log('[StealthDiag] start() FAILED: tap.start returned false');
             return false;
         }
+        console.log('[StealthDiag] start() OK: full typing engaged (shortcutOnly=false)');
 
         // ROUND 4 FIX (#3): hide aux windows that are still visible. With
         // panel-nonactivating, NSPanel blur fires unreliably so Settings /
@@ -463,6 +466,7 @@ export class StealthKeyboardManager {
                 this.handleCapturedKey(ev);
             }, appChords, /* shortcutOnly */ true, /* overlayBounds */ null);
             this.guardRunning = !!ok;
+            console.log(`[StealthDiag] maybeStartGuard(): tap.start(shortcutOnly=true) -> ${ok}, chords=${appChords.length}`);
             if (!ok) console.warn('[StealthKeyboardManager] shortcut-guard failed to engage (hook blocked?)');
         } catch (e) {
             this.guardRunning = false;
@@ -472,6 +476,7 @@ export class StealthKeyboardManager {
 
     /** Stop the shortcut-guard if running. Safe to call any time. */
     private stopGuard(): void {
+        console.log(`[StealthDiag] stopGuard(): guardRunning=${this.guardRunning} -> ${this.guardRunning && this.tap ? 'STOPPING' : 'SKIPPED'}`);
         if (!this.guardRunning || !this.tap) return;
         try {
             this.tap.stop();
