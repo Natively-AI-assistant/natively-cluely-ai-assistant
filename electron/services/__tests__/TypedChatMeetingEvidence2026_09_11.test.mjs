@@ -51,3 +51,21 @@ describe('what-to-answer meeting evidence', () => {
     assert.doesNotMatch(main, /setRagRetrieverProvider/);
   });
 });
+
+describe('manual-chat V3 meeting evidence', () => {
+  const ipc = read('electron/ipcHandlers.ts');
+  const v3 = between(ipc, '// ── CONTEXT INTELLIGENCE V3 — wired manual-chat surface', 'const composed = await buildV3Prompt({');
+  test('the phantom getSessionTracker chain is gone from the whole file', () => {
+    assert.doesNotMatch(ipc, /getSessionTracker/);
+  });
+  test('the V3 block resolves meeting evidence through the shared resolver with the ring session id', () => {
+    assert.match(v3, /resolveMeetingEvidence\(\{/);
+    assert.match(v3, /sessionId: v3ConversationSessionId\(appState, senderId\)/);
+    assert.match(v3, /segments: .*getCurrentMeetingTranscript/);
+    assert.doesNotMatch(v3, /wantsMeeting/, 'the availability flag that was always false must not survive');
+  });
+  test('the resolved scope id is what the turn scope carries', () => {
+    const scope = between(ipc, 'const composed = await buildV3Prompt({', 'retrieval: port,');
+    assert.match(scope, /v3MeetingEvidence\.scopeMeetingId \? \{ meetingId: v3MeetingEvidence\.scopeMeetingId \} : \{\}/);
+  });
+});

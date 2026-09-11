@@ -1383,7 +1383,7 @@ export function initializeIpcHandlers(appState: AppState): void {
             // security-relevant construction is how the tokenizer copies
             // drifted, and this one decides what evidence a turn may see.
             const { createModeRetrievalPort, attachmentSourceTypeExtensions } = require('./context-intelligence/retrieval/mode-retrieval-port');
-            const { createMeetingRetrievalPort, combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
+            const { combineRetrievalPorts } = require('./context-intelligence/retrieval/meeting-retrieval-port');
             // Custom/general modes gain the source types their OWN attachments
             // evidence (deep-test D10): a candidate résumé + JD attached to an
             // "Untitled" custom mode planned [] for every job question because
@@ -1424,21 +1424,30 @@ export function initializeIpcHandlers(appState: AppState): void {
               userId: V3_USER_ID,
             });
 
-            // Meeting evidence, when this turn happens inside a meeting and the
-            // mode authorizes transcripts. Without it a MEETING_STATEMENT
-            // question composed an honest but useless no-evidence disclosure
-            // even when the answer had been said out loud a minute earlier.
-            //
-            // Cross-meeting isolation is NOT re-implemented here: the port
-            // declares each chunk's scope as its own meeting, so the adapter's
-            // existing scope containment rejects a foreign meeting OUT_OF_SCOPE
-            // — one filter, already measured, rather than a second copy of the
-            // rule (06 §4).
-            const v3MeetingId = (appState.getIntelligenceManager?.() as any)
-              ?.getSessionTracker?.()?.getMeetingMetadata?.()?.id ?? null;
-            const ragForV3 = appState.getRAGManager?.();
-            const wantsMeeting = policy.allowedSourceTypes.includes('MEETING_TRANSCRIPT')
-              && Boolean(v3MeetingId) && Boolean(ragForV3?.getRetriever);
+            // Meeting evidence (issue #552): the JIT semantic port scoped to the
+            // LIVE index id plus the BM25 port over raw speech, from the same
+            // resolver what-to-answer uses. This block used to read the meeting
+            // id through a session-tracker accessor that IntelligenceManager
+            // never had — `as any` + optional chaining made it a silent
+            // undefined, so the meeting-port gate was always false and the
+            // meeting port below was never built. Even a real accessor would
+            // not have helped: no normal meeting sets a metadata id, and JIT
+            // chunks live under the live index id anyway. The RAG pre-flight
+            // in the renderer was the only transcript grounding typed chat
+            // had, and it carried no conversation history. Cross-meeting
+            // isolation is still the scope filter's job (06 §4) — the
+            // resolver returns the id the turn's scope must carry for that
+            // filter to admit the JIT chunks.
+            const { resolveMeetingEvidence } = require('./context-intelligence/retrieval/meeting-evidence');
+            const v3ConversationKey = v3ConversationSessionId(appState, senderId);
+            const v3MeetingEvidence = resolveMeetingEvidence({
+              rag: appState.getRAGManager?.() ?? null,
+              segments: appState.getIntelligenceManager?.()?.getCurrentMeetingTranscript?.() ?? [],
+              allowedSourceTypes: policy.allowedSourceTypes,
+              userId: V3_USER_ID,
+              sessionId: v3ConversationKey,
+              tokenBudget: policy.contextBudget.evidenceTokens,
+            });
 
             // Profile Intelligence hydration (2026-07-31 source-routing fix).
             // The user's active résumé/target JD, uploaded ONCE in Profile
@@ -1582,12 +1591,7 @@ export function initializeIpcHandlers(appState: AppState): void {
               modePort,
               ...(v3ScreenPort ? [v3ScreenPort] : []),
               ...(v3ProfilePort ? [v3ProfilePort] : []),
-              ...(wantsMeeting ? [createMeetingRetrievalPort({
-                retriever: ragForV3!.getRetriever(),
-                currentMeetingId: v3MeetingId,
-                userId: V3_USER_ID,
-                tokenBudget: policy.contextBudget.evidenceTokens,
-              })] : []),
+              ...v3MeetingEvidence.ports,
             ];
             const port = v3Ports.length > 1 ? combineRetrievalPorts(v3Ports as never[]) : modePort;
 
@@ -1653,8 +1657,11 @@ export function initializeIpcHandlers(appState: AppState): void {
                 // This was String(senderId) while what-to-answer read the ring
                 // under the meeting id, so the two surfaces kept separate
                 // histories and neither could see the other's screenshots.
-                sessionId: v3ConversationSessionId(appState, senderId),
-                ...(v3MeetingId ? { meetingId: v3MeetingId } : {}),
+                sessionId: v3ConversationKey,
+                // The live index id when JIT chunks are queryable — the meeting
+                // port declares its chunks under that id, and scopeAdmits
+                // rejects anything the turn does not carry (issue #552).
+                ...(v3MeetingEvidence.scopeMeetingId ? { meetingId: v3MeetingEvidence.scopeMeetingId } : {}),
               },
               retrieval: port,
               // Natively persona + typed-chat layout for the V3-owned surface
@@ -1696,11 +1703,12 @@ export function initializeIpcHandlers(appState: AppState): void {
                 if (isBareCodeRequest(v3Question) || isCodingContinuation(v3Question)) {
                   try {
                     // IntelligenceManager exposes getLastAssistantMessage()
-                    // directly (it owns a PRIVATE SessionTracker and has no
-                    // getSessionTracker accessor) — the old chained form was a
-                    // phantom method that `as any` + optional chaining made
-                    // silently return undefined, so this whole guard was dead
-                    // code and every continuation was answered context-free.
+                    // directly (its session tracker is PRIVATE with no public
+                    // accessor) — the old chained form reached for a method
+                    // that did not exist, and `as any` + optional chaining
+                    // made that silently return undefined, so this whole guard
+                    // was dead code and every continuation was answered
+                    // context-free.
                     // No surface argument: "anywhere" is the point, so an
                     // overlay answer can ground a chat follow-up.
                     const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
@@ -2522,9 +2530,10 @@ export function initializeIpcHandlers(appState: AppState): void {
         if (isBareCodeRequest(message) || isCodingContinuation(message)) {
           try {
             // Phantom-method fix (code review 2026-08-19): IntelligenceManager
-            // exposes getLastAssistantMessage() directly; getSessionTracker()
-            // does not exist, so the old chained form silently returned
-            // undefined and this guard never ran. See the V3 twin above.
+            // exposes getLastAssistantMessage() directly; the old chained form
+            // reached for a session-tracker accessor that does not exist, so
+            // it silently returned undefined and this guard never ran. See
+            // the V3 twin above.
             const lastAnywhere = appState.getIntelligenceManager?.()?.getLastAssistantMessage?.();
             const bare = isBareCodeRequest(message);
             if (typeof lastAnywhere === 'string' && lastAnywhere.trim().length > 40
