@@ -633,6 +633,19 @@ interface ElectronAPI {
     serviceTier?: string;
     modelReasoningEffort?: string;
   }>;
+  getCodexCliModels: () => Promise<{
+    success: boolean;
+    models: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      hidden?: boolean;
+      supportedReasoningEfforts?: string[];
+      defaultReasoningEffort?: string;
+      inputModalities?: string[];
+    }>;
+    error?: string;
+  }>;
   setCodexCliConfig: (config: {
     enabled: boolean;
     path: string;
@@ -2307,6 +2320,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getGroqFastTextMode: () => ipcRenderer.invoke('get-groq-fast-text-mode'),
   setGroqFastTextMode: (enabled: boolean) => ipcRenderer.invoke('set-groq-fast-text-mode', enabled),
   getCodexCliConfig: () => ipcRenderer.invoke('get-codex-cli-config'),
+  getCodexCliModels: () => ipcRenderer.invoke('get-codex-cli-models'),
   setCodexCliConfig: (config: {
     enabled: boolean;
     path: string;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, isModelAllowed, litellmModelLabel, mergeCodexCliModelOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -118,6 +118,16 @@ const ModelSelectorWindow = () => {
 
                 // 3. Codex CLI
                 const codexCliConfig = await window.electronAPI?.getCodexCliConfig?.();
+                let codexCliModels: unknown[] = [];
+                if (codexCliConfig?.enabled) {
+                    try {
+                        const result = await window.electronAPI?.getCodexCliModels?.();
+                        if (result?.success) codexCliModels = result.models || [];
+                    } catch {
+                        // The static presets below keep the picker usable with an
+                        // older CLI or while app-server is unavailable.
+                    }
+                }
 
                 // 4. Ollama
                 let ollamaModels: string[] = [];
@@ -187,9 +197,9 @@ const ModelSelectorWindow = () => {
                 // Codex CLI
                 if (codexCliConfig?.enabled) {
                     models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, type: 'codex-cli', provider: 'codex-cli' });
-                    CODEX_CLI_MODEL_PRESETS.forEach(model => {
+                    mergeCodexCliModelOptions(codexCliModels, [codexCliConfig.model, codexCliConfig.fastModel]).forEach(model => {
                         const id = codexCliSelectorId(model.id);
-                        models.push({ id, name: getCodexCliModelDisplayName(id) || model.name, type: 'codex-cli', provider: 'codex-cli' });
+                        models.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}`, type: 'codex-cli', provider: 'codex-cli' });
                     });
                 }
 

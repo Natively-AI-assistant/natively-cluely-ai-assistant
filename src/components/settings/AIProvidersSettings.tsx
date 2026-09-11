@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, isModelAllowed, isOptInModelProvider, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, isModelAllowed, isOptInModelProvider, litellmModelLabel, mergeCodexCliModelOptions, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -1768,7 +1768,7 @@ const CODEX_SERVICE_TIERS = ['default', 'fast', 'flex'] as const;
 // Must mirror CodexCliService.CODEX_MODEL_REASONING_EFFORTS in
 // electron/services/CodexCliService.ts. Kept in sync manually because the
 // Settings UI runs in the renderer (no direct module access to main).
-const CODEX_MODEL_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh'] as const;
+const CODEX_MODEL_REASONING_EFFORTS = ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
 
 // Per-model valid reasoning-effort sets (mirrors CodexCliService's
 // CODEX_MODEL_REASONING_SETS). Longest-match wins so gpt-5.4-codex beats
@@ -1784,6 +1784,7 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5.2',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4',          ['none', 'low', 'medium', 'high', 'xhigh']],
     ['gpt-5.5',          ['none', 'low', 'medium', 'high', 'xhigh']],
+    ['gpt-6',            ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']],
     ['gpt-5.5-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.4-codex',    ['low', 'medium', 'high', 'xhigh']],
     ['gpt-5.3-codex-spark', ['low', 'medium', 'high']],
@@ -1793,7 +1794,12 @@ const CODEX_MODEL_REASONING_SETS: ReadonlyArray<readonly [string, readonly strin
     ['gpt-5-codex',      ['low', 'medium', 'high']],
 ];
 
-function getValidCodexReasoningEfforts(modelId: string): readonly string[] {
+function getValidCodexReasoningEfforts(
+    modelId: string,
+    catalog: readonly { id: string; supportedReasoningEfforts?: string[] }[] = [],
+): readonly string[] {
+    const live = catalog.find(model => model.id === modelId)?.supportedReasoningEfforts;
+    if (live?.length) return live;
     const id = (modelId || '').toLowerCase();
     let best: readonly [string, readonly string[]] | null = null;
     for (const entry of CODEX_MODEL_REASONING_SETS) {
@@ -1906,28 +1912,23 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
  * which showed the same id twice — once as editable text, once as the dropdown's
  * value. The dropdown is now the whole control.
  *
- * Trade-off, deliberate: typing an id outside CODEX_CLI_MODEL_PRESETS is no longer
- * possible. A model already persisted from elsewhere still renders and stays
- * selected (it is prepended to the option list below), so no existing
- * configuration breaks — but a NEW arbitrary id can't be entered here any more.
- * Add it to CODEX_CLI_MODEL_PRESETS in src/utils/modelUtils.ts instead.
+ * The live list comes from `codex app-server model/list`; the static presets
+ * remain as an offline fallback. A model already persisted from elsewhere is
+ * kept selectable so a catalogue refresh never breaks an existing config.
  */
 const CodexCliModelField: React.FC<{
     label: string;
     value: string;
+    models: ReturnType<typeof mergeCodexCliModelOptions>;
     onSelect: (value: string) => void;
-}> = ({ label, value, onSelect }) => {
+}> = ({ label, value, models, onSelect }) => {
     const t = useT();
     return (
     <label className="space-y-1 block min-w-0">
         <span className="aip-label">{label}</span>
         <ModelSelect
             value={value}
-            options={value && !CODEX_CLI_MODEL_PRESETS.some(option => option.id === value)
-                // Keep a value that came from a previous build or a hand-edited
-                // config selectable rather than silently dropping it.
-                ? [{ id: value, name: prettifyModelId(value) }, ...CODEX_CLI_MODEL_PRESETS]
-                : CODEX_CLI_MODEL_PRESETS}
+            options={models}
             onChange={onSelect}
             placeholder={t("Select a model")}
         />
@@ -2369,17 +2370,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
 
     // --- Local (Codex CLI) ---
     const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.4', fastModel: 'gpt-5.3-codex-spark', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
+    const [codexCliModels, setCodexCliModels] = useState(() => mergeCodexCliModelOptions(CODEX_CLI_MODEL_PRESETS));
     const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [codexCliError, setCodexCliError] = useState('');
     const [codexAuthAction, setCodexAuthAction] = useState<'idle' | 'status' | 'logout' | 'login' | 'doctor'>('idle');
     const [codexAuthStatus, setCodexAuthStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [codexAuthMessage, setCodexAuthMessage] = useState('');
 
-    // --- ChatGPT OAuth (new — replaces `codex login` CLI subprocess) ---
-    // The OAuth flow runs entirely in the main process; the renderer just
-    // kicks it off and listens for IPC events. We keep the auth state
-    // visible so the user can see who's signed in and re-auth / sign out
-    // without leaving Settings.
+    // --- Legacy in-app ChatGPT OAuth state ---
+    // Kept for backwards-compatible IPC/event handling. Codex CLI requests
+    // use the account authenticated by the local `codex login` command.
     const [codexOauthStatus, setCodexOauthStatus] = useState<{ signedIn: boolean; email?: string; expiresAt?: number }>({ signedIn: false });
     const [codexOauthInProgress, setCodexOauthInProgress] = useState(false);
     const [antigravityStatus, setAntigravityStatus] = useState({ signedIn: false, inProgress: false, expiresAt: undefined as number | undefined });
@@ -2441,7 +2441,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     const [directAssistFallbackError, setDirectAssistFallbackError] = useState('');
     const [fastResponseMode, setFastResponseMode] = useState(false);
     const [credentialsLoaded, setCredentialsLoaded] = useState(false);
-    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || (codexCliConfig.enabled && codexOauthStatus.signedIn));
+    const canUseFastMode = !!(hasStoredKey.groq || hasStoredKey.natively || codexCliConfig.enabled);
 
     // --- Dynamic Model Discovery ---
     const [preferredModels, setPreferredModels] = useState<Record<string, string>>({});
@@ -2601,8 +2601,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
                 if (cliConfig) setCodexCliConfig(cliConfig as typeof codexCliConfig);
 
-                // Codex OAuth status — read once on mount so the Settings UI
-                // shows the right state without waiting for a user click.
+                // Read the legacy OAuth status for backwards-compatible event
+                // handling; it does not gate the local CLI model or answer path.
                 // @ts-ignore
                 const oauthStatus = await window.electronAPI?.codexLoginStatus?.();
                 if (oauthStatus?.success) {
@@ -2681,7 +2681,31 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         return () => { unsubs.forEach(unsub => unsub?.()); };
     }, []);
 
-    const isCodexReady = codexCliConfig.enabled && codexOauthStatus.signedIn;
+    // Discover models whenever the local CLI becomes active or its executable
+    // changes. This also covers the first click on "Enable Codex CLI" when the
+    // settings window opened with the provider disabled.
+    useEffect(() => {
+        let cancelled = false;
+        const currentIds = [codexCliConfig.model, codexCliConfig.fastModel].filter(Boolean);
+        if (!codexCliConfig.enabled) {
+            setCodexCliModels(mergeCodexCliModelOptions([], currentIds));
+            return () => { cancelled = true; };
+        }
+
+        const loadCodexCliModels = async () => {
+            try {
+                const result = await window.electronAPI?.getCodexCliModels?.();
+                if (cancelled) return;
+                setCodexCliModels(mergeCodexCliModelOptions(result?.success ? result.models : [], currentIds));
+            } catch {
+                if (!cancelled) setCodexCliModels(mergeCodexCliModelOptions([], currentIds));
+            }
+        };
+        void loadCodexCliModels();
+        return () => { cancelled = true; };
+    }, [codexCliConfig.enabled, codexCliConfig.path]);
+
+    const isCodexReady = codexCliConfig.enabled;
 
     // Mirrors modelAvailable() in ipcHandlers.ts. Both surfaces must agree: this
     // one decides what the user can pick, that one decides what routing will
@@ -2767,7 +2791,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         }
         if (isCodexReady && isProviderEnabled('codex-cli')) {
             opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
-            CODEX_CLI_MODEL_PRESETS.forEach(model => {
+            mergeCodexCliModelOptions(codexCliModels, [codexCliConfig.model, codexCliConfig.fastModel]).forEach(model => {
                 const id = codexCliSelectorId(model.id);
                 if (!opts.find(o => o.id === id)) {
                     opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
@@ -2812,7 +2836,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined) || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexCliModels, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -3093,10 +3117,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         return () => clearInterval(interval);
     }, []);
 
-    // Wire up Codex OAuth IPC events. The main process emits these as
-    // login progresses (or fails, or refreshes in the background) and
-    // we mirror the state into the React tree. Each subscription
-    // returns an unsubscribe function; clean up on unmount.
+    // Keep legacy Codex OAuth IPC events wired for older settings state. The
+    // local CLI transport itself reads authentication from the CLI process.
     useEffect(() => {
         const api = window.electronAPI as any;
         const unsubs: Array<() => void> = [];
@@ -3107,7 +3129,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setCodexOauthStatus(prev => ({ ...prev, signedIn: true, email: info?.email || prev.email }));
                     setCodexAuthStatus('success');
                     setCodexAuthMessage(`${t('Signed in to ChatGPT')}${info?.email ? ` ${t('as')} ${info.email}` : ''}.`);
-                    // Auto-enable codex now that we're signed in.
+                    // Preserve the old OAuth auto-enable behavior for existing
+                    // installations; new users can enable the CLI directly.
                     setCodexCliConfig(prev => {
                         const next = { ...prev, enabled: true };
                         window.electronAPI?.setCodexCliConfig?.(next);
@@ -3288,8 +3311,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
     const saveCodexCliConfig = async (next = codexCliConfig) => {
-        // Auto-enable when signed in; no manual toggle needed.
-        const enabled = codexOauthStatus.signedIn || next.enabled;
+        // Preserve the current enabled value; local CLI authentication is not
+        // inferred from Natively's separate OAuth store.
+        const enabled = next.enabled;
         const normalized = { ...next, enabled, timeoutMs: Number(next.timeoutMs) || 60000 };
         setCodexCliConfig(normalized);
         const result = await window.electronAPI?.setCodexCliConfig?.(normalized);
@@ -4194,7 +4218,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {antigravityError && <p className="text-xs aip-warn-fg" role="alert">{antigravityError}</p>}
             </div>
 
-            {/* Codex — ChatGPT subscription proxy.
+            {/* Codex — local CLI transport.
 
                 Same card shape as Google Antigravity above: ONE aip-card that owns
                 its provider header (mark + title + description + switch), then a
@@ -4211,8 +4235,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     <div className="flex gap-3 min-w-0">
                         <AipProviderMark provider="codex" name="OpenAI Codex" className="mt-0.5" />
                         <div className="min-w-0">
-                            <h3 className="text-sm font-bold aip-hero mb-1">OpenAI Codex</h3>
-                            <p className="text-xs aip-muted">{t('Use your ChatGPT Plus/Pro subscription as an AI provider.')}</p>
+                            <h3 className="text-sm font-bold aip-hero mb-1">OpenAI Codex CLI</h3>
+                            <p className="text-xs aip-muted">{t('Use the Codex CLI installed on this computer. It uses the account from codex login.')}</p>
                         </div>
                     </div>
                     <AipSwitch
@@ -4224,39 +4248,34 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 </div>
 
                 {/* Mounted-but-hidden live region, same reasoning as Antigravity's. */}
-                <p className="text-xs aip-muted" role="status" hidden={!codexOauthInProgress && !codexOauthStatus.signedIn}>
+                <p className="text-xs aip-muted" role="status" hidden={!codexCliConfig.enabled && !codexOauthInProgress}>
                     {codexOauthInProgress ? t('Waiting for browser…')
-                        : codexOauthStatus.signedIn
-                            ? `${t('Codex connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
-                            : ''}
+                        : `${t('Codex CLI configured')} · ${codexCliConfig.path}`}
                 </p>
 
                 <div className="flex flex-wrap gap-2">
-                    {!codexOauthStatus.signedIn ? (
-                        /* Full-width row, and NEUTRAL: data-variant="accent" tints it
-                           periwinkle, which the Antigravity bar deliberately does not do. */
+                    {!codexCliConfig.enabled ? (
                         <button
                             type="button"
-                            onClick={() => handleCodexAuthAction('login')}
-                            disabled={codexOauthInProgress || codexAuthAction !== 'idle'}
+                            onClick={() => void saveCodexCliConfig({ ...codexCliConfig, enabled: true })}
                             className="aip-btn flex-1"
                             data-size="row"
                         >
-                            {codexOauthInProgress || codexAuthAction === 'login'
-                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Waiting for browser…')}</>
-                                : <><ExternalLink size={13} strokeWidth={1.75} /> {t('Sign in with ChatGPT')}</>}
+                            <Laptop size={13} strokeWidth={1.75} /> {t('Enable Codex CLI')}
                         </button>
-                    ) : <>
-                        {/* Plain aip-btn in a wrap row, matching Antigravity's
-                            Reload models / Disconnect pair. Glyphs kept: they cost
-                            nothing here and the two actions are easy to confuse. */}
-                        <button type="button" onClick={handleCodexRefresh} disabled={codexOauthInProgress} className="aip-btn" title={t("Refresh session")}>
-                            <RefreshCw size={13} strokeWidth={1.75} /> {t('Refresh')}
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => void handleTestCodexCli()}
+                            disabled={codexCliStatus === 'testing'}
+                            className="aip-btn flex-1"
+                            data-size="row"
+                        >
+                            {codexCliStatus === 'testing'
+                                ? <><Loader2 size={13} strokeWidth={1.75} className="aip-spinner" /> {t('Testing…')}</>
+                                : t('Test Codex CLI')}
                         </button>
-                        <button type="button" onClick={handleCodexSignOut} disabled={codexOauthInProgress} className="aip-btn">
-                            <LogOut size={13} strokeWidth={1.75} /> {t('Sign out')}
-                        </button>
-                    </>}
+                    )}
                 </div>
 
                 {codexAuthMessage && (
@@ -4265,13 +4284,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </p>
                 )}
 
-                {/* Model + settings — only shown once signed in */}
-                {codexOauthStatus.signedIn && (
+                {/* Model + settings — shown once the local CLI is enabled */}
+                {codexCliConfig.enabled && (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
                                     label={t("Model")}
                                     value={codexCliConfig.model}
+                                    models={codexCliModels}
                                     onSelect={(model) => {
                                         setCodexCliConfig(prev => ({ ...prev, model }));
                                         saveCodexCliConfig({ ...codexCliConfig, model });
@@ -4280,6 +4300,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <CodexCliModelField
                                     label={t("Fast Mode Model")}
                                     value={codexCliConfig.fastModel}
+                                    models={codexCliModels}
                                     onSelect={(fastModel) => {
                                         setCodexCliConfig(prev => ({ ...prev, fastModel }));
                                         saveCodexCliConfig({ ...codexCliConfig, fastModel });
@@ -4289,14 +4310,14 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                     <span className="aip-label">{t('Reasoning Effort')}</span>
                                     <ModelSelect
                                         value={(() => {
-                                            const valid = getValidCodexReasoningEfforts(codexCliConfig.model);
+                                            const valid = getValidCodexReasoningEfforts(codexCliConfig.model, codexCliModels);
                                             if (!codexCliConfig.modelReasoningEffort) return '';
                                             return valid.includes(codexCliConfig.modelReasoningEffort)
                                                 ? codexCliConfig.modelReasoningEffort
                                                 : '';
                                         })()}
                                         options={(() => {
-                                            const valid = getValidCodexReasoningEfforts(codexCliConfig.model);
+                                            const valid = getValidCodexReasoningEfforts(codexCliConfig.model, codexCliModels);
                                             return [
                                                 { id: '', name: t('None (default)') },
                                                 ...CODEX_MODEL_REASONING_EFFORTS
@@ -4308,7 +4329,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                         placeholder={t("None (default)")}
                                     />
                                     {(() => {
-                                        const valid = getValidCodexReasoningEfforts(codexCliConfig.model);
+                                        const valid = getValidCodexReasoningEfforts(codexCliConfig.model, codexCliModels);
                                         const saved = codexCliConfig.modelReasoningEffort;
                                         if (saved && !valid.includes(saved)) {
                                             return (
