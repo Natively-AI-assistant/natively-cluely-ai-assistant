@@ -24,7 +24,7 @@ import { SkillsSettings } from './settings/SkillsSettings';
 import { LocalWhisperModelPanel, type ChannelConfig as LocalWhisperChannelConfig } from './LocalWhisperModelPanel';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useShortcuts } from '../hooks/useShortcuts';
-import { isMac } from '../utils/platformUtils';
+import { isMac, isWindows } from '../utils/platformUtils';
 import { SettingsToggle } from './settings/SettingsToggle';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import {
@@ -567,6 +567,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
     const [isMousePassthrough, setIsMousePassthrough] = useState(false);
     const [disguiseMode, setDisguiseMode] = useState<'terminal' | 'settings' | 'activity' | 'none'>('none');
     const [openOnLogin, setOpenOnLogin] = useState(false);
+    // Windows-only. Defaults to true to match the main-process policy (unset ⟹
+    // on), so the toggle doesn't flash off before the IPC read lands.
+    const [shortcutGuard, setShortcutGuard] = useState(true);
     const [themeMode, setThemeMode] = useState<'system' | 'light' | 'dark'>('system');
     const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
     const [isAiLangDropdownOpen, setIsAiLangDropdownOpen] = useState(false);
@@ -1639,6 +1642,9 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
             if (window.electronAPI?.getOpenAtLogin) {
                 window.electronAPI.getOpenAtLogin().then(setOpenOnLogin);
             }
+            if (isWindows && window.electronAPI?.getStealthShortcutGuard) {
+                window.electronAPI.getStealthShortcutGuard().then(setShortcutGuard).catch(() => { });
+            }
             if (window.electronAPI?.getThemeMode) {
                 window.electronAPI.getThemeMode().then(({ mode }) => setThemeMode(mode));
             }
@@ -2089,6 +2095,44 @@ const SettingsOverlay: React.FC<SettingsOverlayProps> = ({
                                                         className={openOnLogin ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
                                                     />
                                                 </div>
+
+                                                {/* Shortcut guard — Windows only. The macOS build has no
+                                                    equivalent: RegisterHotKey is the Windows API that silently
+                                                    drops registrations, so there is nothing to guard against on
+                                                    macOS and no toggle to show. */}
+                                                {isWindows && (
+                                                    <div className="flex items-center justify-between px-4 py-3">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-bg-item-surface rounded-lg border border-border-subtle text-text-primary flex items-center justify-center shrink-0">
+                                                                <Keyboard size={20} />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="text-sm font-bold text-text-primary">{t('Protect Natively shortcuts')}</h3>
+                                                                <p className="text-xs text-text-secondary mt-0.5">{t('Stops a Natively shortcut from typing into the app underneath. Turn off if your antivirus flags the keyboard hook.')}</p>
+                                                            </div>
+                                                        </div>
+                                                        <SettingsToggle
+                                                            checked={shortcutGuard}
+                                                            label={t('Protect Natively shortcuts')}
+                                                            onChange={async () => {
+                                                                const previous = shortcutGuard;
+                                                                const newState = !previous;
+                                                                setShortcutGuard(newState); // Optimistic
+                                                                try {
+                                                                    const result = await window.electronAPI?.setStealthShortcutGuard?.(newState);
+                                                                    if (result && !result.success) {
+                                                                        setShortcutGuard(previous);
+                                                                        console.error('[Settings] Failed to set shortcut guard');
+                                                                    }
+                                                                } catch (err) {
+                                                                    setShortcutGuard(previous);
+                                                                    console.error('[Settings] Exception setting shortcut guard:', err);
+                                                                }
+                                                            }}
+                                                            className={shortcutGuard ? 'bg-accent-primary border border-transparent' : 'bg-bg-toggle-switch border border-border-muted'}
+                                                        />
+                                                    </div>
+                                                )}
 
                                                 {/* Ambient AI Chat */}
                                                 <div className="flex items-center justify-between px-4 py-3">

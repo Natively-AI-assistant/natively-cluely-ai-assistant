@@ -40,12 +40,13 @@ test('the hook swallows a matching app chord and self-dispatches it (never passe
   );
   assert.ok(inner.length > 0, 'keyboard_hook_inner() not found');
 
-  // Gated to Ctrl key-downs with Win excluded. Alt is accepted only for arrow
-  // chords by match_app_chord, so printable AltGr text remains ineligible.
+  // Gated to Ctrl key-downs; Win combos have already returned via win_held().
+  // Alt is accepted only for arrow chords by match_app_chord, so printable
+  // AltGr text remains ineligible.
   assert.match(
     inner,
-    /if is_key_down && ctrl && !win \{/,
-    'BUG: the app-chord swallow must be gated on `is_key_down && ctrl && !win`.',
+    /if is_key_down && ctrl \{/,
+    'BUG: the app-chord swallow must be gated on `is_key_down && ctrl`.',
   );
   assert.match(
     inner,
@@ -54,7 +55,7 @@ test('the hook swallows a matching app chord and self-dispatches it (never passe
   );
   // On a match: deliver tagged with the action id, remember the vk, and SWALLOW.
   // Checked as separate robust substrings rather than one long span.
-  const matchBranch = inner.slice(inner.indexOf('if is_key_down && ctrl && !win {'));
+  const matchBranch = inner.slice(inner.indexOf('if is_key_down && ctrl {'));
   assert.match(matchBranch, /app_chord_id: id,/, 'BUG: a matched chord must be delivered tagged with the action id.');
   assert.match(matchBranch, /swallowed_ups[\s\S]{0,120}\.insert\(vk\)/, 'BUG: the swallowed down-vk must be recorded so its up is swallowed too.');
   assert.match(matchBranch, /return LRESULT\(1\)/, 'BUG: a matched chord key-down must be swallowed (LRESULT(1)), never passed through.');
@@ -69,30 +70,39 @@ test('the matching key-UP is swallowed too (no half a sequence reaches the app)'
   );
 });
 
-test('the swallow excludes Win combos and runs before the Ctrl/Alt pass-through', () => {
+test('the swallow runs AFTER the Win-combo pass-through and BEFORE the Ctrl/Alt pass-through', () => {
+  // Ordering matters: Win combos must still pass (returned above), and the
+  // swallow must intercept the Ctrl chord before the blanket `(ctrl||alt)` pass
+  // hands it to the OS. Assert the app-chord block sits between the two.
   const rust = read(HOOK);
-  const swallow = rust.indexOf('if is_key_down && ctrl && !win {');
+  const winPass = rust.indexOf('if win_held() {');
+  const swallow = rust.indexOf('if is_key_down && ctrl {');
   const ctrlPass = rust.indexOf('if (ctrl || alt) && !altgr {');
-  assert.ok(swallow >= 0 && ctrlPass >= 0, 'expected both markers present');
+  assert.ok(winPass >= 0 && swallow >= 0 && ctrlPass >= 0, 'expected all three markers present');
   assert.ok(
-    swallow < ctrlPass,
-    'BUG: app-chord swallow must run before the (ctrl||alt) pass.',
+    winPass < swallow && swallow < ctrlPass,
+    'BUG: app-chord swallow must be ordered after win_held() pass and before the (ctrl||alt) pass.',
   );
 });
 
-test('Ctrl down and up are swallowed while the overlay is visible, without replay', () => {
+test('the hook never swallows a bare modifier, only completed app chords', () => {
+  // REGRESSION GUARD. A previous revision swallowed every Ctrl key-down while
+  // the overlay was visible. The overlay is shown with showInactive() +
+  // WS_EX_NOACTIVATE precisely so the user's app keeps focus, so that made
+  // Ctrl+C/V/S dead in the foreground app and turned Ctrl+<letter> into a
+  // literal letter. It also ate the synthetic Left-Ctrl that Windows injects
+  // for AltGr, breaking @ € { } on EU layouts. The ONLY key the hook may
+  // swallow outside full stealth typing is one that completed an app chord.
   const rust = read(HOOK);
-  assert.match(
-    rust,
-    /ctrl_bit\(vk,[\s\S]*ctrl_down\.fetch_or\(ctrl_mask[\s\S]*ctrl_down\.fetch_and\(!ctrl_mask[\s\S]*suppress_ctrl\.load[\s\S]*return LRESULT\(1\)[\s\S]*let ctrl = state\.ctrl_down[\s\S]*pub fn set_ctrl_suppressed[\s\S]*suppress_ctrl\.store/,
-    'the native visibility switch must swallow Ctrl while tracking both Ctrl keys for app chords.',
-  );
-  assert.doesNotMatch(rust, /SendInput|deferred_ctrl_vk|REPLAYED_CTRL_MARKER|replay_ctrl/,
-    'suppressed Ctrl must never be replayed into the foreground app.');
-});
-
-test('the generated native declaration exposes Ctrl suppression', () => {
-  assert.match(read('native-module/index.d.ts'), /setCtrlSuppressed\(suppressed: boolean\): void/);
+  assert.doesNotMatch(rust, /suppress_ctrl|set_ctrl_suppressed|ctrl_down/,
+    'BUG: bare-Ctrl suppression must not come back — swallow completed chords, not modifiers.');
+  // `ctrl` must be read live from the OS, never from sticky hook-local state:
+  // a missed key-up (UAC secure desktop, Win+L, LowLevelHooksTimeout) would
+  // otherwise pin it true forever and make the typing filter pass every
+  // keystroke through to the foreground app — the exact leak this module exists
+  // to prevent.
+  assert.match(rust, /let ctrl = modifier_held\(VK_CONTROL\);/,
+    'BUG: ctrl must come from GetAsyncKeyState so a lost key-up self-heals.');
 });
 
 test('an empty chord table leaves the hook fully inert (no behaviour change)', () => {
@@ -122,7 +132,7 @@ test('shortcut-guard mode: hook passes ordinary typing through and installs no a
   // The gate must sit AFTER the app-chord swallow (so chords are still caught)
   // and BEFORE the typing-swallow filter.
   const gate = inner.indexOf('if state.shortcut_only.load');
-  const swallow = inner.indexOf('if is_key_down && ctrl && !win {');
+  const swallow = inner.indexOf('if is_key_down && ctrl {');
   const typingFilter = inner.indexOf('if (ctrl || alt) && !altgr {');
   assert.ok(swallow >= 0 && gate > swallow && gate < typingFilter,
     'BUG: shortcut-guard pass-gate must be between the app-chord swallow and the typing filter.');
