@@ -1427,18 +1427,19 @@ export function initializeIpcHandlers(appState: AppState): void {
             // Meeting evidence (issue #552): the JIT semantic port scoped to the
             // LIVE index id plus the BM25 port over raw speech, from the same
             // resolver what-to-answer uses. This block used to read the meeting
-            // id through a session-tracker accessor that IntelligenceManager
-            // never had — `as any` + optional chaining made it a silent
-            // undefined, so the meeting-port gate was always false and the
-            // meeting port below was never built. Even a real accessor would
-            // not have helped: no normal meeting sets a metadata id, and JIT
-            // chunks live under the live index id anyway. The RAG pre-flight
-            // in the renderer was the only transcript grounding typed chat
-            // had, and it carried no conversation history. Cross-meeting
-            // isolation is still the scope filter's job (06 §4) — the
-            // resolver returns the id the turn's scope must carry for that
-            // filter to admit the JIT chunks.
-            const { resolveMeetingEvidence } = require('./context-intelligence/retrieval/meeting-evidence');
+            // id through an accessor for IntelligenceManager's PRIVATE
+            // `SessionTracker` that was never exposed publicly — `as any` +
+            // optional chaining made that silently return undefined, so the
+            // meeting-port gate was always false and the meeting port below
+            // was never built. Even a real accessor would not have helped: no
+            // normal meeting sets a metadata id, and JIT chunks live under the
+            // live index id anyway. The RAG pre-flight in the renderer was the
+            // only transcript grounding typed chat had, and it carried no
+            // conversation history. Cross-meeting isolation is still the scope
+            // filter's job (06 §4) — the resolver returns the id the turn's
+            // scope must carry for that filter to admit the JIT chunks.
+            const { resolveMeetingEvidence } = require('./context-intelligence/retrieval/meeting-evidence') as
+              typeof import('./context-intelligence/retrieval/meeting-evidence');
             const v3ConversationKey = v3ConversationSessionId(appState, senderId);
             const v3MeetingEvidence = resolveMeetingEvidence({
               rag: appState.getRAGManager?.() ?? null,
