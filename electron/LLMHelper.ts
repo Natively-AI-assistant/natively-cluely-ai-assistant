@@ -1031,13 +1031,26 @@ export class LLMHelper {
   /** Live, fail-OPEN: a credential-store failure must not start refusing turns
    *  that would otherwise have been answered. */
   private anyVisionProviderAvailable(): boolean {
-    if (!this.isProviderDisabled('antigravity') && AntigravityService.getInstance().getStatus().signedIn) return true;
+    if (!this.isProviderDisabled('antigravity') && this.antigravitySignedIn()) return true;
     try {
       const { CredentialsManager } = require('./services/CredentialsManager');
       const cm = CredentialsManager.getInstance();
       return cm.anyVisionProviderConfigured?.() ?? true;
     } catch {
       return true;
+    }
+  }
+
+  /** Antigravity's status reads its tokens from the credential store. If that
+   *  throws, Antigravity is unusable, which says nothing about the other
+   *  providers: answer false and let anyVisionProviderAvailable's own
+   *  credential check (fail-open by itself) decide. Throwing skipped that check
+   *  and failed the whole turn; returning true would skip it too. */
+  private antigravitySignedIn(): boolean {
+    try {
+      return AntigravityService.getInstance().getStatus().signedIn;
+    } catch {
+      return false;
     }
   }
 
