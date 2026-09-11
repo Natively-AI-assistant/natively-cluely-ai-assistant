@@ -43,6 +43,8 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { CodexOAuthService } from './CodexOAuthService';
+import { isChatGptUnsupportedCodexModel } from './CodexModelCatalog';
+import { readCodexCliAuth, type CodexCliAuthState } from './CodexCliAuth';
 
 // Extension → MIME for the RAW fallback path only (the normal path re-encodes
 // to JPEG via sharp, so its MIME is fixed). PNG/JPEG/WebP/GIF are the four
@@ -72,17 +74,65 @@ const RAW_IMAGE_MIN_BYTES = 64;
 // matched via isCodexAuthError() rather than re-typed as string literals at
 // each call site — a reword here would otherwise silently stop matching and
 // users would be back to the generic text with no test catching it.
+// Either sign-in works: Natively's own, or the Codex CLI's `codex login`
+// session (read-only — see CodexCliAuth). Name both, since the CLI one is the
+// first thing a Codex CLI user will try (issue #558).
 export const CODEX_NOT_SIGNED_IN_MESSAGE =
-  'Not signed in to ChatGPT. Please complete Codex OAuth login from Settings → AI Providers.';
+  'Not signed in to ChatGPT. Sign in from Settings → AI Providers → OpenAI Codex, or run `codex login` in your terminal.';
 export const CODEX_SESSION_EXPIRED_MESSAGE =
   'Codex session expired. Please sign in again from Settings → AI Providers.';
+// Natively never refreshes the CLI's session (that would sign the CLI out), so
+// the fix is on the CLI side: any `codex` command refreshes it.
+export const CODEX_CLI_LOGIN_EXPIRED_MESSAGE =
+  'Your Codex CLI login has expired. Run any `codex` command to refresh it, or sign in with ChatGPT from Settings → AI Providers → OpenAI Codex.';
 
 /** True when `err` is one of the actionable Codex auth failures above. */
 export function isCodexAuthError(err: unknown): boolean {
   const message = (err as { message?: unknown } | null | undefined)?.message;
   if (typeof message !== 'string') return false;
   return message.includes(CODEX_NOT_SIGNED_IN_MESSAGE)
-    || message.includes(CODEX_SESSION_EXPIRED_MESSAGE);
+    || message.includes(CODEX_SESSION_EXPIRED_MESSAGE)
+    || message.includes(CODEX_CLI_LOGIN_EXPIRED_MESSAGE);
+}
+
+/**
+ * Which ChatGPT sign-in Codex requests would use, WITHOUT the token — this is
+ * the shape the renderer and routing predicates see. Natively's own sign-in
+ * wins when both exist: the user chose it inside the app.
+ */
+export interface CodexAuthStatus {
+  signedIn: boolean;
+  source: 'natively' | 'codex-cli' | null;
+  email?: string;
+  expiresAt?: number;
+  /** State of the Codex CLI's `codex login` session, whichever source wins. */
+  cliLogin: CodexCliAuthState['status'];
+}
+
+export function getCodexAuthStatus(readCli: () => CodexCliAuthState = readCodexCliAuth): CodexAuthStatus {
+  const cli = readCli();
+  const natively = CodexOAuthService.getInstance().getStatus();
+  if (natively.signedIn) {
+    return { signedIn: true, source: 'natively', email: natively.email, expiresAt: natively.expiresAt, cliLogin: cli.status };
+  }
+  if (cli.status === 'ok') {
+    return { signedIn: true, source: 'codex-cli', email: cli.email, expiresAt: cli.expiresAt, cliLogin: 'ok' };
+  }
+  if (cli.status === 'expired') {
+    return { signedIn: false, source: null, email: cli.email, expiresAt: cli.expiresAt, cliLogin: 'expired' };
+  }
+  return { signedIn: false, source: null, cliLogin: cli.status };
+}
+
+/** The actionable message for "no usable sign-in". */
+export function codexSignedOutMessage(status: Pick<CodexAuthStatus, 'cliLogin'>): string {
+  return status.cliLogin === 'expired' ? CODEX_CLI_LOGIN_EXPIRED_MESSAGE : CODEX_NOT_SIGNED_IN_MESSAGE;
+}
+
+interface CodexCredential {
+  source: 'natively' | 'codex-cli';
+  accessToken: string;
+  accountId?: string;
 }
 
 export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
@@ -208,18 +258,33 @@ export interface CodexCliRunOptions {
   sessionId?: string;
 }
 
-// Default fast model: gpt-5.3-codex works with both ChatGPT-account and API-key
-// auth. The faster gpt-5.3-codex-spark is API-key-only and 400s on ChatGPT auth.
+// Defaults must work with a ChatGPT sign-in (issue #558: the previous
+// gpt-5.4 / gpt-5.3-codex pair is now rejected — see
+// CHATGPT_UNSUPPORTED_CODEX_MODELS). gpt-5.5 for both: live on 2026-09-11 it had
+// the lowest and steadiest time-to-first-token of the models that work
+// (~1.7-2.0s vs 3-10s for gpt-5.6-terra / gpt-5.6-luna).
 export const DEFAULT_CODEX_CLI_CONFIG: CodexCliConfig = {
   enabled: false,
   path: 'codex', // deprecated — kept so older settings round-trip without resetting
-  model: 'gpt-5.4',
-  fastModel: 'gpt-5.3-codex',
+  model: 'gpt-5.5',
+  fastModel: 'gpt-5.5',
   timeoutMs: 60_000,
   sandboxMode: 'read-only', // deprecated
   serviceTier: 'default',
   modelReasoningEffort: undefined,
 };
+
+/**
+ * The model to send: `value`, unless it is empty or one the backend rejects for
+ * a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS). Earlier builds persisted
+ * such models as defaults, so they are replaced rather than left to fail every
+ * call.
+ */
+export function chatGptCompatibleModel(value: string | undefined, fallback: string): string {
+  const model = (value || '').trim();
+  if (!model || isChatGptUnsupportedCodexModel(model)) return fallback;
+  return model;
+}
 
 // Codex backend endpoint. ChatGPT-subscription OAuth bearer tokens issued by
 // `https://auth.openai.com/oauth/token` are routed to ChatGPT's own backend,
@@ -301,7 +366,7 @@ export class CodexCliService {
     if (config.modelReasoningEffort && (CODEX_MODEL_REASONING_EFFORTS as readonly string[]).includes(config.modelReasoningEffort)) {
       modelReasoningEffort = config.modelReasoningEffort;
     }
-    const modelName = (config.model || DEFAULT_CODEX_CLI_CONFIG.model).trim() || DEFAULT_CODEX_CLI_CONFIG.model;
+    const modelName = chatGptCompatibleModel(config.model, DEFAULT_CODEX_CLI_CONFIG.model);
     modelReasoningEffort = resolveCodexReasoningEffort(modelName, modelReasoningEffort);
     return {
       enabled: !!config.enabled,
@@ -309,7 +374,7 @@ export class CodexCliService {
       // may still display it). New HTTP-direct code does not use it.
       path: (config.path || DEFAULT_CODEX_CLI_CONFIG.path).trim() || DEFAULT_CODEX_CLI_CONFIG.path,
       model: modelName,
-      fastModel: (config.fastModel || DEFAULT_CODEX_CLI_CONFIG.fastModel).trim() || DEFAULT_CODEX_CLI_CONFIG.fastModel,
+      fastModel: chatGptCompatibleModel(config.fastModel, DEFAULT_CODEX_CLI_CONFIG.fastModel),
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_CODEX_CLI_CONFIG.timeoutMs,
       sandboxMode,
       serviceTier,
@@ -341,16 +406,16 @@ export class CodexCliService {
   public static async *stream(_path: string, options: CodexCliRunOptions): AsyncGenerator<string, void, unknown> {
     if (options.signal?.aborted) throw new Error('Codex request aborted before start.');
 
-    const oauth = CodexOAuthService.getInstance();
-    const status = oauth.getStatus();
+    const status = getCodexAuthStatus();
     if (!status.signedIn) {
-      throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
+      throw new Error(codexSignedOutMessage(status));
     }
 
     // Build the request body ONCE outside the retry loop — refreshing
-    // tokens doesn't change the prompt.
+    // tokens doesn't change the prompt. Auth headers are minted per attempt
+    // in fetchDeltas (resolveCredential), so they are not built here.
     const body = await this.buildRequestBody(options);
-    const headers = this.buildHeaders();
+    const headers: Record<string, string> = {};
 
     // Idle-timeout guard: aborts the HTTP connection if no bytes arrive for
     // `timeoutMs` ms. The timer RESETS on every yielded delta, so a long
@@ -566,17 +631,29 @@ export class CodexCliService {
   }
 
   /**
-   * Build the request headers. Pulls the bearer token from CodexOAuthService
-   * and adds the standard identity headers the Codex backend expects
-   * (mirrors open-sse codex.js buildHeaders at codex.md:220-231).
+   * The bearer to send: Natively's own sign-in first (refreshed proactively by
+   * CodexOAuthService), else the Codex CLI's `codex login` session read from
+   * disk. The CLI session is used as-is and never refreshed — see CodexCliAuth.
    */
-  private static async buildHeadersAsync(): Promise<Record<string, string>> {
+  private static async resolveCredential(): Promise<CodexCredential> {
     const oauth = CodexOAuthService.getInstance();
-    const accessToken = await oauth.getAccessToken();
-    if (!accessToken) {
-      throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
+    if (oauth.getStatus().signedIn) {
+      const accessToken = await oauth.getAccessToken();
+      if (!accessToken) throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
+      return { source: 'natively', accessToken, accountId: oauth.getCachedTokens()?.accountId };
     }
-    const tokens = oauth.getCachedTokens();
+    const cli = readCodexCliAuth();
+    if (cli.status === 'ok') return { source: 'codex-cli', accessToken: cli.accessToken, accountId: cli.accountId };
+    throw new Error(codexSignedOutMessage({ cliLogin: cli.status }));
+  }
+
+  /**
+   * Build the request headers for a credential and add the standard identity
+   * headers the Codex backend expects (mirrors open-sse codex.js buildHeaders
+   * at codex.md:220-231).
+   */
+  private static headersFor(credential: CodexCredential): Record<string, string> {
+    const { accessToken } = credential;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
@@ -594,31 +671,7 @@ export class CodexCliService {
     };
     // Workspace binding header — improves account scope + cache affinity
     // (codex.md:226-229).
-    if (tokens?.accountId) headers['chatgpt-account-id'] = tokens.accountId;
-    return headers;
-  }
-
-  /**
-   * Sync wrapper for callers that already have a token in hand. Most
-   * callers should use the async builder; this exists so the retry loop
-   * can refresh-and-retry without re-awaiting the same access token
-   * check twice in a row.
-   */
-  private static buildHeaders(): Record<string, string> {
-    const oauth = CodexOAuthService.getInstance();
-    const tokens = oauth.getCachedTokens();
-    if (!tokens || !tokens.accessToken) {
-      throw new Error(CODEX_NOT_SIGNED_IN_MESSAGE);
-    }
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      Authorization: `Bearer ${tokens.accessToken}`,
-      originator: 'codex_cli_rs',
-      // Stable session id (see buildHeadersAsync for the rationale).
-      'session_id': CodexCliService.SESSION_ID,
-    };
-    if (tokens.accountId) headers['chatgpt-account-id'] = tokens.accountId;
+    if (credential.accountId) headers['chatgpt-account-id'] = credential.accountId;
     return headers;
   }
 
@@ -649,7 +702,8 @@ export class CodexCliService {
 
       // Re-mint headers on each attempt so a 401-retry uses the FRESH
       // access token (after the refresh succeeded, not before).
-      const currentHeaders = await this.buildHeadersAsync();
+      const credential = await this.resolveCredential();
+      const currentHeaders = this.headersFor(credential);
       // Merge session-stateful headers (Bearer, account id) with the
       // per-attempt computed ones. Callers may have passed static
       // Content-Type/originator in `headers`; the async builder
@@ -683,6 +737,19 @@ export class CodexCliService {
         await sleepWithJitter(attempt);
         attempt++;
         continue;
+      }
+
+      if (response.status === 401 && credential.source === 'codex-cli') {
+        // Never refresh the CLI's session (that would sign the CLI out). The
+        // CLI may have refreshed it on disk since this request started, so
+        // retry once if the token changed; otherwise the user has to refresh
+        // it from the CLI side.
+        const reread = readCodexCliAuth();
+        if (!refreshedOnce && reread.status === 'ok' && reread.accessToken !== credential.accessToken) {
+          refreshedOnce = true;
+          continue;
+        }
+        throw new Error(CODEX_CLI_LOGIN_EXPIRED_MESSAGE);
       }
 
       if (response.status === 401 && !refreshedOnce) {

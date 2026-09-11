@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Check, Loader2 } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, getCodexCliModelDisplayName, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, isModelAllowed, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../utils/modelUtils';
 import { useResolvedTheme } from '../hooks/useResolvedTheme';
 import { getMeetingInterfaceTheme, type MeetingInterfaceTheme } from '../lib/meetingInterfaceTheme';
 import {
@@ -118,6 +118,17 @@ const ModelSelectorWindow = () => {
 
                 // 3. Codex CLI
                 const codexCliConfig = await window.electronAPI?.getCodexCliConfig?.();
+                // Codex is only offered with a usable ChatGPT sign-in (Natively's
+                // own or `codex login`) — the same gate Settings applies. Listing
+                // it regardless let a signed-out user pick a model that routing
+                // then silently answered from another provider (issue #558).
+                const codexSignedIn = codexCliConfig?.enabled
+                    ? !!(await window.electronAPI?.codexLoginStatus?.().catch(() => null))?.signedIn
+                    : false;
+                // The installed Codex CLI's own model list; presets when there is none.
+                const codexModels = codexSignedIn
+                    ? codexModelOptions(await window.electronAPI?.getCodexCliModels?.().catch(() => undefined))
+                    : [];
 
                 // 4. Ollama
                 let ollamaModels: string[] = [];
@@ -185,11 +196,11 @@ const ModelSelectorWindow = () => {
                 });
 
                 // Codex CLI
-                if (codexCliConfig?.enabled) {
-                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})`, type: 'codex-cli', provider: 'codex-cli' });
-                    CODEX_CLI_MODEL_PRESETS.forEach(model => {
-                        const id = codexCliSelectorId(model.id);
-                        models.push({ id, name: getCodexCliModelDisplayName(id) || model.name, type: 'codex-cli', provider: 'codex-cli' });
+                if (codexCliConfig?.enabled && codexSignedIn) {
+                    const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
+                    models.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})`, type: 'codex-cli', provider: 'codex-cli' });
+                    codexModels.forEach(model => {
+                        models.push({ id: codexCliSelectorId(model.id), name: model.name, type: 'codex-cli', provider: 'codex-cli' });
                     });
                 }
 

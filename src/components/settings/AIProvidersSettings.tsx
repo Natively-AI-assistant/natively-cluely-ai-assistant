@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useT } from '../../i18n';
 import { Plus, Trash2, Edit2, AlertCircle, Save, ChevronDown, Check, RefreshCw, ExternalLink, Loader2, LogOut, Cloud, Server, Eye, Info, MessageSquare, Image, FileText, User, Boxes, ClipboardList, Laptop } from 'lucide-react';
-import { CODEX_CLI_MODEL, CODEX_CLI_MODEL_PRESETS, codexCliSelectorId, isModelAllowed, isOptInModelProvider, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
+import { CODEX_CLI_MODEL, codexCliSelectorId, codexModelOptions, type CodexModelCatalogResult, isModelAllowed, isOptInModelProvider, litellmModelLabel, STANDARD_CLOUD_MODELS, prettifyModelId } from '../../utils/modelUtils';
 import { validateCurl } from '../../lib/curl-validator';
 import { ProviderCard } from './ProviderCard';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -1906,28 +1906,30 @@ const ModelSelect: React.FC<ModelSelectProps> = ({ value, options, onChange, pla
  * which showed the same id twice — once as editable text, once as the dropdown's
  * value. The dropdown is now the whole control.
  *
- * Trade-off, deliberate: typing an id outside CODEX_CLI_MODEL_PRESETS is no longer
- * possible. A model already persisted from elsewhere still renders and stays
- * selected (it is prepended to the option list below), so no existing
- * configuration breaks — but a NEW arbitrary id can't be entered here any more.
- * Add it to CODEX_CLI_MODEL_PRESETS in src/utils/modelUtils.ts instead.
+ * `options` is the installed Codex CLI's catalogue when one exists, otherwise
+ * the built-in presets (codexModelOptions). A model already persisted from
+ * elsewhere still renders and stays selected (it is prepended), so no existing
+ * configuration breaks. When the list came from the CLI, such a value is marked
+ * as not in it — the CLI dropping a model is the best signal we have that the
+ * backend no longer offers it. Without a CLI list there is nothing to compare
+ * against, so no marker.
  */
 const CodexCliModelField: React.FC<{
     label: string;
     value: string;
+    options: { id: string; name: string }[];
+    fromCodexCli: boolean;
     onSelect: (value: string) => void;
-}> = ({ label, value, onSelect }) => {
+}> = ({ label, value, options, fromCodexCli, onSelect }) => {
     const t = useT();
     return (
     <label className="space-y-1 block min-w-0">
         <span className="aip-label">{label}</span>
         <ModelSelect
             value={value}
-            options={value && !CODEX_CLI_MODEL_PRESETS.some(option => option.id === value)
-                // Keep a value that came from a previous build or a hand-edited
-                // config selectable rather than silently dropping it.
-                ? [{ id: value, name: prettifyModelId(value) }, ...CODEX_CLI_MODEL_PRESETS]
-                : CODEX_CLI_MODEL_PRESETS}
+            options={value && !options.some(option => option.id === value)
+                ? [{ id: value, name: fromCodexCli ? `${prettifyModelId(value)} (${t('not in your Codex CLI list')})` : prettifyModelId(value) }, ...options]
+                : options}
             onChange={onSelect}
             placeholder={t("Select a model")}
         />
@@ -2368,7 +2370,11 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     };
 
     // --- Local (Codex CLI) ---
-    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.4', fastModel: 'gpt-5.3-codex-spark', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
+    const [codexCliConfig, setCodexCliConfig] = useState({ enabled: false, path: 'codex', model: 'gpt-5.5', fastModel: 'gpt-5.5', timeoutMs: 60000, sandboxMode: 'read-only' as string, serviceTier: 'default', modelReasoningEffort: undefined as string | undefined });
+    // The installed Codex CLI's model list (models_cache.json); null until read.
+    const [codexModelCatalog, setCodexModelCatalog] = useState<CodexModelCatalogResult | null>(null);
+    const codexModels = codexModelOptions(codexModelCatalog);
+    const codexModelsFromCli = codexModelCatalog?.source === 'codex-cli' && codexModelCatalog.models.length > 0;
     const [codexCliStatus, setCodexCliStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
     const [codexCliError, setCodexCliError] = useState('');
     const [codexAuthAction, setCodexAuthAction] = useState<'idle' | 'status' | 'logout' | 'login' | 'doctor'>('idle');
@@ -2380,7 +2386,16 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
     // kicks it off and listens for IPC events. We keep the auth state
     // visible so the user can see who's signed in and re-auth / sign out
     // without leaving Settings.
-    const [codexOauthStatus, setCodexOauthStatus] = useState<{ signedIn: boolean; email?: string; expiresAt?: number }>({ signedIn: false });
+    // Unified Codex sign-in: Natively's own (source 'natively') or the Codex
+    // CLI's `codex login`, used read-only (source 'codex-cli'). `cliLogin` is the
+    // CLI session's state either way, for the expired-login hint.
+    type CodexSignInStatus = { signedIn: boolean; source?: 'natively' | 'codex-cli' | null; cliLogin?: string; email?: string; expiresAt?: number };
+    const [codexOauthStatus, setCodexOauthStatus] = useState<CodexSignInStatus>({ signedIn: false });
+    const readCodexSignInStatus = async (): Promise<CodexSignInStatus | null> => {
+        const status = await window.electronAPI?.codexLoginStatus?.().catch(() => null);
+        if (!status?.success) return null;
+        return { signedIn: !!status.signedIn, source: status.source ?? null, cliLogin: status.cliLogin, email: status.email, expiresAt: status.expiresAt };
+    };
     const [codexOauthInProgress, setCodexOauthInProgress] = useState(false);
     const [antigravityStatus, setAntigravityStatus] = useState({ signedIn: false, inProgress: false, expiresAt: undefined as number | undefined });
     const [antigravityModels, setAntigravityModels] = useState<{ id: string; label: string }[]>([]);
@@ -2600,17 +2615,22 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 // @ts-ignore
                 const cliConfig = await window.electronAPI?.getCodexCliConfig?.();
                 if (cliConfig) setCodexCliConfig(cliConfig as typeof codexCliConfig);
+                const cliCatalog = await window.electronAPI?.getCodexCliModels?.().catch(() => null);
+                if (cliCatalog) setCodexModelCatalog(cliCatalog);
 
                 // Codex OAuth status — read once on mount so the Settings UI
                 // shows the right state without waiting for a user click.
-                // @ts-ignore
-                const oauthStatus = await window.electronAPI?.codexLoginStatus?.();
-                if (oauthStatus?.success) {
-                    setCodexOauthStatus({
-                        signedIn: !!oauthStatus.signedIn,
-                        email: oauthStatus.email,
-                        expiresAt: oauthStatus.expiresAt,
-                    });
+                const signIn = await readCodexSignInStatus();
+                if (signIn) {
+                    setCodexOauthStatus(signIn);
+                    // A `codex login` session makes Codex usable with no sign-in
+                    // step in Natively, so nothing else would flip `enabled` on
+                    // (Natively's own sign-in does it in onCodexLoginComplete).
+                    // The provider switch on the card stays the user's off switch.
+                    if (signIn.source === 'codex-cli' && cliConfig && !cliConfig.enabled) {
+                        const result = await window.electronAPI?.setCodexCliConfig?.({ ...cliConfig, enabled: true });
+                        if (result?.config) setCodexCliConfig(result.config as typeof codexCliConfig);
+                    }
                 }
 
                 const fastMode = await window.electronAPI?.getGroqFastTextMode();
@@ -2766,8 +2786,9 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             }
         }
         if (isCodexReady && isProviderEnabled('codex-cli')) {
-            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${prettifyModelId(codexCliConfig.model)})` });
-            CODEX_CLI_MODEL_PRESETS.forEach(model => {
+            const configuredName = codexModels.find(model => model.id === codexCliConfig.model)?.name || prettifyModelId(codexCliConfig.model);
+            opts.push({ id: CODEX_CLI_MODEL.id, name: `${CODEX_CLI_MODEL.name} (${configuredName})` });
+            codexModels.forEach(model => {
                 const id = codexCliSelectorId(model.id);
                 if (!opts.find(o => o.id === id)) {
                     opts.push({ id, name: `${CODEX_CLI_MODEL.name}: ${model.name}` });
@@ -2808,11 +2829,17 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
         if (defaultModel.startsWith('antigravity:') && antigravityStatus.signedIn && antigravityError) return;
         const opts = buildAvailableModelOptions();
         if (!defaultModel || opts.some(o => o.id === defaultModel) || opts.length === 0) return;
+        // A Codex model that is no longer offered (the CLI catalogue dropped it,
+        // or it was a preset the ChatGPT backend now rejects) falls back to the
+        // Codex entry itself — never to whichever provider happens to be first.
         const next = (defaultModel.startsWith('antigravity:')
-            ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined) || opts[0].id;
+            ? opts.find(option => option.id.startsWith('antigravity:'))?.id : undefined)
+            || (defaultModel.startsWith(`${CODEX_CLI_MODEL.id}:`)
+                ? opts.find(option => option.id === CODEX_CLI_MODEL.id)?.id : undefined)
+            || opts[0].id;
         setDefaultModel(next);
         window.electronAPI?.setDefaultModel?.(next).catch(console.error);
-    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
+    }, [credentialsLoaded, defaultModel, hasStoredKey, preferredModels, isCodexReady, codexCliConfig.model, codexModelCatalog, customProviders, ollamaModels, litellmModels, disabledProviders, cloudEnabledModels, antigravityStatus.signedIn, antigravityModels, antigravityError]);
 
     // Load LiteLLM model IDs only when the proxy is configured. The active-model
     // selector should not expose stale `litellm/...` choices after the proxy is
@@ -3104,7 +3131,7 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
             if (api?.onCodexLoginComplete) {
                 unsubs.push(api.onCodexLoginComplete((info: any) => {
                     setCodexOauthInProgress(false);
-                    setCodexOauthStatus(prev => ({ ...prev, signedIn: true, email: info?.email || prev.email }));
+                    setCodexOauthStatus(prev => ({ ...prev, signedIn: true, source: 'natively', email: info?.email || prev.email }));
                     setCodexAuthStatus('success');
                     setCodexAuthMessage(`${t('Signed in to ChatGPT')}${info?.email ? ` ${t('as')} ${info.email}` : ''}.`);
                     // Auto-enable codex now that we're signed in.
@@ -3127,6 +3154,10 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     setCodexOauthStatus({ signedIn: false });
                     setCodexAuthStatus('idle');
                     setCodexAuthMessage(t('Signed out of ChatGPT.'));
+                    // A valid `codex login` session keeps Codex usable after
+                    // signing out of Natively's own — re-read so the card says so
+                    // instead of showing a sign-out that did not take effect.
+                    readCodexSignInStatus().then(status => { if (status) setCodexOauthStatus(status); });
                 }));
             }
             if (api?.onCodexTokensRefreshed) {
@@ -3366,10 +3397,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 setCodexAuthMessage(result.output || `Codex ${action} succeeded.`);
                 // Sync OAuth status after status/logout IPCs.
                 if (action === 'status' || action === 'logout') {
-                    const status = await api?.codexLoginStatus?.();
-                    if (status?.success) {
-                        setCodexOauthStatus({ signedIn: !!status.signedIn, email: status.email, expiresAt: status.expiresAt });
-                    }
+                    const status = await readCodexSignInStatus();
+                    if (status) setCodexOauthStatus(status);
                 }
             } else {
                 setCodexAuthStatus('error');
@@ -4227,12 +4256,15 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 <p className="text-xs aip-muted" role="status" hidden={!codexOauthInProgress && !codexOauthStatus.signedIn}>
                     {codexOauthInProgress ? t('Waiting for browser…')
                         : codexOauthStatus.signedIn
-                            ? `${t('Codex connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
+                            ? `${codexOauthStatus.source === 'codex-cli' ? t('Using your Codex CLI login') : t('Codex connected')}${codexOauthStatus.email ? ` · ${codexOauthStatus.email}` : ''}`
                             : ''}
                 </p>
 
                 <div className="flex flex-wrap gap-2">
-                    {!codexOauthStatus.signedIn ? (
+                    {/* Refresh / Sign out act on Natively's own tokens only, so a
+                        `codex login` session gets the sign-in button instead —
+                        signing in here takes precedence over the CLI login. */}
+                    {!codexOauthStatus.signedIn || codexOauthStatus.source === 'codex-cli' ? (
                         /* Full-width row, and NEUTRAL: data-variant="accent" tints it
                            periwinkle, which the Antigravity bar deliberately does not do. */
                         <button
@@ -4259,6 +4291,24 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                     </>}
                 </div>
 
+                {/* The Codex CLI's `codex login` works too, read-only: Natively
+                    never refreshes it (that would sign the CLI out), so an
+                    expired one is refreshed from the CLI side. */}
+                {!codexOauthStatus.signedIn && (
+                    <p className="text-xs aip-muted">
+                        {codexOauthStatus.cliLogin === 'expired'
+                            ? t('Your Codex CLI login has expired — run any `codex` command to refresh it, or sign in with ChatGPT here.')
+                            : codexOauthStatus.cliLogin === 'api-key'
+                                ? t('Your Codex CLI is logged in with an API key, which Codex here cannot use — sign in with ChatGPT here, or run `codex login` with your ChatGPT account.')
+                                : t('Or run `codex login` in a terminal — Natively can use that ChatGPT login too.')}
+                    </p>
+                )}
+                {codexOauthStatus.signedIn && codexOauthStatus.source === 'codex-cli' && (
+                    <p className="text-xs aip-muted">
+                        {t('Natively uses this login read-only. When it expires, run any `codex` command to refresh it.')}
+                    </p>
+                )}
+
                 {codexAuthMessage && (
                     <p className={`text-xs ${codexAuthStatus === 'error' ? 'aip-danger-fg' : 'aip-ok-fg'}`} role="alert">
                         {codexAuthMessage}
@@ -4268,10 +4318,20 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                 {/* Model + settings — only shown once signed in */}
                 {codexOauthStatus.signedIn && (
                         <>
+                            {codexModelsFromCli && (
+                                <p className="text-xs aip-muted">
+                                    {t('Model list from your Codex CLI')}
+                                    {codexModelCatalog?.fetchedAt && !Number.isNaN(Date.parse(codexModelCatalog.fetchedAt))
+                                        ? ` · ${t('updated')} ${new Date(codexModelCatalog.fetchedAt).toLocaleDateString()}`
+                                        : ''}
+                                </p>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <CodexCliModelField
                                     label={t("Model")}
                                     value={codexCliConfig.model}
+                                    options={codexModels}
+                                    fromCodexCli={codexModelsFromCli}
                                     onSelect={(model) => {
                                         setCodexCliConfig(prev => ({ ...prev, model }));
                                         saveCodexCliConfig({ ...codexCliConfig, model });
@@ -4280,6 +4340,8 @@ export const AIProvidersSettings: React.FC<AIProvidersSettingsProps> = ({
                                 <CodexCliModelField
                                     label={t("Fast Mode Model")}
                                     value={codexCliConfig.fastModel}
+                                    options={codexModels}
+                                    fromCodexCli={codexModelsFromCli}
                                     onSelect={(fastModel) => {
                                         setCodexCliConfig(prev => ({ ...prev, fastModel }));
                                         saveCodexCliConfig({ ...codexCliConfig, fastModel });

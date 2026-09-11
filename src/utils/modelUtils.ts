@@ -73,18 +73,47 @@ export const STANDARD_CLOUD_MODELS: Record<string, {
     },
 };
 
+// The id stays 'codex-cli' (persisted in settings and routing), but the provider
+// is not a CLI: Natively calls the ChatGPT Codex backend with its own ChatGPT
+// sign-in and never runs the `codex` binary (issue #558).
 export const CODEX_CLI_MODEL = {
     id: 'codex-cli',
-    name: 'Codex CLI',
-    desc: 'Local CLI transport',
+    name: 'OpenAI Codex',
+    desc: 'ChatGPT sign-in',
 };
 
+/**
+ * Built-in Codex models, used when the user has no Codex CLI catalogue to read
+ * (see codexModelOptions) — which is most users, since Natively does not need
+ * the CLI. Also the name source for surfaces that only have a selector id
+ * (getCodexCliModelDisplayName).
+ *
+ * Each one answered a live request with a ChatGPT sign-in on 2026-09-11. The
+ * previous gpt-5.4 / gpt-5.3-codex / gpt-5.3-codex-spark presets are rejected
+ * for a ChatGPT account (CHATGPT_UNSUPPORTED_CODEX_MODELS in
+ * electron/services/CodexModelCatalog.ts); a test keeps the two apart.
+ */
 export const CODEX_CLI_MODEL_PRESETS = [
     { id: 'gpt-5.5', name: 'ChatGPT 5.5' },
-    { id: 'gpt-5.3-codex', name: 'Codex 5.3' },
-    { id: 'gpt-5.3-codex-spark', name: 'Codex Spark 5.3' },
-    { id: 'gpt-5.4', name: 'ChatGPT 5.4' },
+    { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra' },
+    { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna' },
 ];
+
+/** Result of the `codex-cli:models` IPC — CodexModelCatalog in the main process. */
+export interface CodexModelCatalogResult {
+    source: 'codex-cli' | 'unavailable';
+    models: { id: string; name: string }[];
+    fetchedAt?: string;
+    clientVersion?: string;
+}
+
+/**
+ * The Codex models to offer: the installed Codex CLI's own catalogue when one
+ * was found, otherwise the built-in presets. `undefined`/`null` covers an older
+ * preload without the IPC.
+ */
+export const codexModelOptions = (catalog: CodexModelCatalogResult | null | undefined): { id: string; name: string }[] =>
+    catalog?.source === 'codex-cli' && catalog.models.length > 0 ? catalog.models : CODEX_CLI_MODEL_PRESETS;
 
 export const codexCliSelectorId = (modelId: string): string => `codex-cli:${modelId}`;
 
